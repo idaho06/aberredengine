@@ -5,7 +5,9 @@ mod systems;
 
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::worldtime::WorldTime;
 use crate::systems::render::render_pass;
+use crate::systems::time::update_world_time;
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
 
@@ -20,6 +22,7 @@ fn main() {
 
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
+    world.insert_resource(WorldTime::default());
     world.insert_resource(ScreenSize {
         w: rl.get_screen_width(),
         h: rl.get_screen_height(),
@@ -31,6 +34,8 @@ fn main() {
     // --------------- Main loop ---------------
     while !rl.window_should_close() {
         // call all the systems except render
+        let dt = rl.get_frame_time();
+        update_world_time(&mut world, dt);
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::BLACK);
