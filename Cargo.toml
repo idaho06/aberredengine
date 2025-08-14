@@ -1,0 +1,9 @@
+[package]
+name = "aberredengine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy_ecs = "0.16.1"
+raylib = { version = "5.5.1", features = ["wayland"] }
+rhai = "1.22.2"
