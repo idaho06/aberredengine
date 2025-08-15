@@ -3,6 +3,7 @@ use raylib::prelude::*;
 use std::collections::HashMap;
 
 // Import component/resource types from modules
+use crate::components::boxcollider::BoxCollider;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
@@ -56,6 +57,13 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             height: player_tex_height as f32,
             offset_x: 0.0,
             offset_y: 0.0,
+        },
+        BoxCollider {
+            size: Vector2 {
+                x: player_tex_width as f32,
+                y: player_tex_height as f32,
+            },
+            offset: Vector2::zero(),
         },
     ));
 
