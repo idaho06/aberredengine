@@ -16,7 +16,7 @@ use rand::Rng;
 pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     // Create and insert Camera2D resource (centered to current window size)
     let camera = Camera2D {
-        target: Vector2 { x: 0.0, y: 0.0 },
+        target: Vector2 { x: 400.0, y: 225.0 },
         offset: Vector2 {
             x: rl.get_screen_width() as f32 * 0.5,
             y: rl.get_screen_height() as f32 * 0.5,
@@ -49,7 +49,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
 
     // Player
     world.spawn((
-        MapPosition::new(0.0, 0.0),
+        MapPosition::new(40.0, 40.0),
         ZIndex(0),
         Sprite {
             tex_key: "player",
@@ -75,7 +75,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         let vy = rng.gen_range(-20.0f32..20.0f32);
 
         world.spawn((
-            MapPosition::new(200.0 + i as f32 * 24.0, 32.0 + (i as f32 * 6.0)),
+            MapPosition::new(50.0 + i as f32 * 24.0, 64.0 + (i as f32 * 6.0)),
             ZIndex(i % 5),
             Sprite {
                 tex_key: "enemy",
@@ -88,6 +88,13 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 let mut rb = RigidBody::new();
                 rb.set_velocity(Vector2 { x: vx, y: vy });
                 rb
+            },
+            BoxCollider {
+                size: Vector2 {
+                    x: enemy_tex_width as f32,
+                    y: enemy_tex_height as f32,
+                },
+                offset: Vector2::zero(),
             },
         ));
     }
