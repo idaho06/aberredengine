@@ -20,11 +20,13 @@ impl RigidBody {
     }
 
     /// Get the current velocity.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn velocity(&self) -> Vector2 {
         self.velocity
     }
 
     /// Translate the RigidBody by a delta vector.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn translate(&mut self, dx: f32, dy: f32) {
         self.velocity.x += dx;
         self.velocity.y += dy;

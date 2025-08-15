@@ -10,6 +10,7 @@ pub struct BoxCollider {
 
 impl BoxCollider {
     /// Create a BoxCollider with given size
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(width: f32, height: f32) -> Self {
         Self {
             size: Vector2::new(width, height),
@@ -18,6 +19,7 @@ impl BoxCollider {
     }
 
     /// Modify BoxCollider with given size and offset
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_offset(mut self, offset: Vector2) -> Self {
         self.offset = offset;
         self
@@ -43,6 +45,7 @@ impl BoxCollider {
     }
 
     /// Point containment in world space.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn contains_point(&self, position: Vector2, point: Vector2) -> bool {
         let (min, max) = self.aabb(position);
         point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
