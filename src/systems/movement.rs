@@ -7,10 +7,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::resources::worldtime::WorldTime;
 
-pub fn movement_system(
-    mut query: Query<(Entity, &mut MapPosition, &RigidBody)>,
-    time: Res<WorldTime>,
-) {
+pub fn movement(mut query: Query<(Entity, &mut MapPosition, &RigidBody)>, time: Res<WorldTime>) {
     for (_entity, mut position, rigidbody) in query.iter_mut() {
         //position.x += rigidbody.velocity.x * time.delta_seconds();
         //position.y += rigidbody.velocity.y * time.delta_seconds();

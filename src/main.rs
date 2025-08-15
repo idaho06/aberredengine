@@ -6,7 +6,8 @@ mod systems;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
-use crate::systems::movement::movement_system;
+use crate::systems::collision::collision;
+use crate::systems::movement::movement;
 use crate::systems::render::render_pass;
 use crate::systems::time::update_world_time;
 use bevy_ecs::prelude::*;
@@ -33,7 +34,8 @@ fn main() {
     game::setup(&mut world, &mut rl, &thread);
 
     let mut update = Schedule::default();
-    update.add_systems(movement_system);
+    update.add_systems(movement);
+    update.add_systems(collision);
     update
         .initialize(&mut world)
         .expect("Failed to initialize schedule");
