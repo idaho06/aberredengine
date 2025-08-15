@@ -4,10 +4,12 @@ use std::collections::HashMap;
 
 // Import component/resource types from modules
 use crate::components::mapposition::MapPosition;
+use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::texturestore::TextureStore;
+use rand::Rng;
 
 /// Load textures, register resources, and spawn initial entities for the demo.
 pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
@@ -58,7 +60,12 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     ));
 
     // Enemies
+    let mut rng = rand::thread_rng();
     for i in 0..30 {
+        // Random velocity components in a small range
+        let vx = rng.gen_range(-40.0f32..40.0f32);
+        let vy = rng.gen_range(-20.0f32..20.0f32);
+
         world.spawn((
             MapPosition::new(200.0 + i as f32 * 24.0, 32.0 + (i as f32 * 6.0)),
             ZIndex(i % 5),
@@ -68,6 +75,11 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 height: enemy_tex_height as f32,
                 offset_x: 0.0,
                 offset_y: 0.0,
+            },
+            {
+                let mut rb = RigidBody::new();
+                rb.set_velocity(Vector2 { x: vx, y: vy });
+                rb
             },
         ));
     }

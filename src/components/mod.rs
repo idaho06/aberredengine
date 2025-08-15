@@ -1,3 +1,4 @@
 pub mod mapposition;
-pub mod zindex;
+pub mod rigidbody;
 pub mod sprite;
+pub mod zindex;

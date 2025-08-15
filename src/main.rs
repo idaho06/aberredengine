@@ -6,6 +6,7 @@ mod systems;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::movement::movement_system;
 use crate::systems::render::render_pass;
 use crate::systems::time::update_world_time;
 use bevy_ecs::prelude::*;
@@ -31,11 +32,21 @@ fn main() {
     // Load textures, create camera, create resources and spawn some example sprites
     game::setup(&mut world, &mut rl, &thread);
 
+    let mut update = Schedule::default();
+    update.add_systems(movement_system);
+    update
+        .initialize(&mut world)
+        .expect("Failed to initialize schedule");
+
     // --------------- Main loop ---------------
     while !rl.window_should_close() {
         // call all the systems except render
         let dt = rl.get_frame_time();
         update_world_time(&mut world, dt);
+
+        update.run(&mut world);
+
+        world.clear_trackers(); // Clear changed components for next frame
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::BLACK);
