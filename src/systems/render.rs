@@ -49,12 +49,12 @@ pub fn render_pass(
                 let half_w = s.width * 0.5;
                 let half_h = s.height * 0.5;
                 let min = Vector2 {
-                    x: p.x - half_w,
-                    y: p.y - half_h,
+                    x: p.pos.x - half_w,
+                    y: p.pos.y - half_h,
                 };
                 let max = Vector2 {
-                    x: p.x + half_w,
-                    y: p.y + half_h,
+                    x: p.pos.x + half_w,
+                    y: p.pos.y + half_h,
                 };
 
                 // Cull against camera's world rect
@@ -77,19 +77,29 @@ pub fn render_pass(
 
     for (sprite, pos, _z) in to_draw.iter() {
         if let Some(tex) = textures.map.get(sprite.tex_key) {
-            let draw_x = pos.x - sprite.width * 0.5;
-            let draw_y = pos.y - sprite.height * 0.5;
+            // Source rect selects a frame from the spritesheet
+            let src = Rectangle {
+                x: sprite.offset_x,
+                y: sprite.offset_y,
+                width: sprite.width,
+                height: sprite.height,
+            };
 
-            d2.draw_texture_ex(
-                tex,
-                Vector2 {
-                    x: draw_x,
-                    y: draw_y,
-                },
-                0.0, // rotation
-                1.0, // scale
-                Color::WHITE,
-            );
+            // Destination rect places and scales the sprite in world coords
+            let dest = Rectangle {
+                x: pos.pos.x,
+                y: pos.pos.y,
+                width: sprite.width,
+                height: sprite.height,
+            };
+
+            // Center origin so position is at sprite center
+            let origin = Vector2 {
+                x: sprite.width * 0.5,
+                y: sprite.height * 0.5,
+            };
+
+            d2.draw_texture_pro(tex, src, dest, origin, 0.0, Color::WHITE);
         }
     }
 }

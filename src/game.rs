@@ -46,27 +46,28 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
 
     // Player
     world.spawn((
-        MapPosition { x: 0.0, y: 0.0 },
+        MapPosition::new(0.0, 0.0),
         ZIndex(0),
         Sprite {
             tex_key: "player",
             width: player_tex_width as f32,
             height: player_tex_height as f32,
+            offset_x: 0.0,
+            offset_y: 0.0,
         },
     ));
 
     // Enemies
     for i in 0..30 {
         world.spawn((
-            MapPosition {
-                x: 200.0 + i as f32 * 24.0,
-                y: 32.0 + (i as f32 * 6.0),
-            },
+            MapPosition::new(200.0 + i as f32 * 24.0, 32.0 + (i as f32 * 6.0)),
             ZIndex(i % 5),
             Sprite {
                 tex_key: "enemy",
                 width: enemy_tex_width as f32,
                 height: enemy_tex_height as f32,
+                offset_x: 0.0,
+                offset_y: 0.0,
             },
         ));
     }
