@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 // Import component/resource types from modules
 use crate::components::boxcollider::BoxCollider;
+use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
@@ -49,6 +50,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
 
     // Player
     world.spawn((
+        Group("player"),
         MapPosition::new(40.0, 40.0),
         ZIndex(0),
         Sprite {
@@ -75,7 +77,8 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         let vy = rng.gen_range(-20.0f32..20.0f32);
 
         world.spawn((
-            MapPosition::new(50.0 + i as f32 * 24.0, 64.0 + (i as f32 * 6.0)),
+            Group("enemy"),
+            MapPosition::new(50.0 + (i as f32 * 64.0), 164.0 + (i as f32 * 16.0)),
             ZIndex(i % 5),
             Sprite {
                 tex_key: "enemy",

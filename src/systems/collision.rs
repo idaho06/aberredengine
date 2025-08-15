@@ -2,9 +2,13 @@ use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::mapposition::MapPosition;
+use crate::events::collision::CollisionEvent;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
-pub fn collision(mut query: Query<(Entity, &mut MapPosition, &BoxCollider)>) {
+pub fn collision(
+    mut query: Query<(Entity, &mut MapPosition, &BoxCollider)>,
+    mut commands: Commands,
+) {
     // first we create a Vector of pairs of entities
     let mut pairs: Vec<(Entity, Entity)> = Vec::new();
 
@@ -21,13 +25,15 @@ pub fn collision(mut query: Query<(Entity, &mut MapPosition, &BoxCollider)>) {
         }
     }
 
-    // TODO: for each pair of entities, we emit a collision event
+    // Trigger a CollisionEvent for each pair. Observers will run immediately when commands flush.
     for (entity_a, entity_b) in pairs {
-        // Here you would typically emit a collision event
-        // For now, we just print the entities involved in the collision
         println!(
-            "Collision detected between {:?} and {:?}",
+            "Triggering CollisionEvent between {:?} and {:?}",
             entity_a, entity_b
         );
+        commands.trigger(CollisionEvent {
+            a: entity_a,
+            b: entity_b,
+        });
     }
 }
