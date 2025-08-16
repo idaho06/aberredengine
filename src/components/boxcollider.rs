@@ -37,6 +37,11 @@ impl BoxCollider {
         (min, max)
     }
 
+    pub fn get_aabb(&self, position: Vector2) -> (f32, f32, f32, f32) {
+        let (min, max) = self.aabb(position);
+        (min.x, min.y, max.x - min.x, max.y - min.y)
+    }
+
     /// AABB vs AABB overlap test against another BoxCollider at a different entity position.
     pub fn overlaps(&self, position: Vector2, other: &Self, other_position: Vector2) -> bool {
         let (min_a, max_a) = self.aabb(position);

@@ -10,7 +10,6 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
-use crate::resources::debugmode::DebugMode;
 use crate::resources::texturestore::TextureStore;
 use rand::Rng;
 
@@ -58,8 +57,8 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             tex_key: "player",
             width: player_tex_width as f32,
             height: player_tex_height as f32,
-            offset_x: 0.0,
-            offset_y: 0.0,
+            offset: Vector2::zero(),
+            origin: Vector2::zero(),
         },
         BoxCollider {
             size: Vector2 {
@@ -85,8 +84,8 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 tex_key: "enemy",
                 width: enemy_tex_width as f32,
                 height: enemy_tex_height as f32,
-                offset_x: 0.0,
-                offset_y: 0.0,
+                offset: Vector2::zero(),
+                origin: Vector2::zero(),
             },
             {
                 let mut rb = RigidBody::new();

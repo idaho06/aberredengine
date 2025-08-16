@@ -1,10 +1,12 @@
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
 
+use crate::components::boxcollider::BoxCollider;
 use crate::components::mapposition::MapPosition;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::debugmode::DebugMode;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::texturestore::TextureStore;
 
@@ -45,16 +47,15 @@ pub fn render_pass(
         let mut q = world.query::<(&Sprite, &MapPosition, &ZIndex)>();
         q.iter(world)
             .filter_map(|(s, p, z)| {
-                // World-space sprite AABB centered on Position
-                let half_w = s.width * 0.5;
-                let half_h = s.height * 0.5;
+                // World-space sprite AABB with MapPosition representing the pivot (origin)
+                // The AABB min/max are computed from the position minus origin to position minus origin plus size.
                 let min = Vector2 {
-                    x: p.pos.x - half_w,
-                    y: p.pos.y - half_h,
+                    x: p.pos.x - s.origin.x,
+                    y: p.pos.y - s.origin.y,
                 };
                 let max = Vector2 {
-                    x: p.pos.x + half_w,
-                    y: p.pos.y + half_h,
+                    x: min.x + s.width,
+                    y: min.y + s.height,
                 };
 
                 // Cull against camera's world rect
@@ -79,13 +80,13 @@ pub fn render_pass(
         if let Some(tex) = textures.map.get(sprite.tex_key) {
             // Source rect selects a frame from the spritesheet
             let src = Rectangle {
-                x: sprite.offset_x,
-                y: sprite.offset_y,
+                x: sprite.offset.x,
+                y: sprite.offset.y,
                 width: sprite.width,
                 height: sprite.height,
             };
 
-            // Destination rect places and scales the sprite in world coords
+            // Destination rect places sprite so that MapPosition is the pivot (origin)
             let dest = Rectangle {
                 x: pos.pos.x,
                 y: pos.pos.y,
@@ -93,13 +94,35 @@ pub fn render_pass(
                 height: sprite.height,
             };
 
-            // Center origin so position is at sprite center
-            let origin = Vector2 {
-                x: sprite.width * 0.5,
-                y: sprite.height * 0.5,
-            };
+            // Use Sprite.origin directly for rendering pivot
+            d2.draw_texture_pro(tex, src, dest, sprite.origin, 0.0, Color::WHITE);
+        }
+    }
 
-            d2.draw_texture_pro(tex, src, dest, origin, 0.0, Color::WHITE);
+    if world.contains_resource::<DebugMode>() {
+        // Render debug UI elements
+        // query for all BoxColliders and their MapPositions
+        let mut colliders = world.query::<(&BoxCollider, &MapPosition)>();
+        for (collider, position) in colliders.iter(world) {
+            // Draw the collider's AABB
+            let (x, y, w, h) = collider.get_aabb(position.pos);
+
+            d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
+            // Draw a small cross in the MapPosition
+            d2.draw_line(
+                position.pos.x as i32 - 5,
+                position.pos.y as i32,
+                position.pos.x as i32 + 5,
+                position.pos.y as i32,
+                Color::GREEN,
+            );
+            d2.draw_line(
+                position.pos.x as i32,
+                position.pos.y as i32 - 5,
+                position.pos.x as i32,
+                position.pos.y as i32 + 5,
+                Color::GREEN,
+            );
         }
     }
 }
