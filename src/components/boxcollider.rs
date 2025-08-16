@@ -5,6 +5,9 @@ use raylib::prelude::Vector2;
 pub struct BoxCollider {
     pub size: Vector2,
     pub offset: Vector2,
+    /// Pivot point relative to the collider's local top-left (usually the same as Sprite.origin).
+    /// MapPosition represents this pivot; AABB is computed from (position - origin + offset).
+    pub origin: Vector2,
     // pub is_trigger: bool, // maybe we will use this
 }
 
@@ -15,6 +18,7 @@ impl BoxCollider {
         Self {
             size: Vector2::new(width, height),
             offset: Vector2::zero(),
+            origin: Vector2::zero(),
         }
     }
 
@@ -25,12 +29,18 @@ impl BoxCollider {
         self
     }
 
+    /// Modify BoxCollider with an explicit origin.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn with_origin(mut self, origin: Vector2) -> Self {
+        self.origin = origin;
+        self
+    }
+
     /// Returns (min, max) of the collider AABB for a given entity position.
     /// Handles negative size by normalizing to proper min/max.
     pub fn aabb(&self, position: Vector2) -> (Vector2, Vector2) {
-        // let min = position + self.offset;
-        // let max = min + self.size;
-        let p0 = position + self.offset;
+        // World-space min corner from MapPosition (pivot) minus origin, plus collider offset
+        let p0 = position - self.origin + self.offset;
         let p1 = p0 + self.size;
         let min = Vector2::new(p0.x.min(p1.x), p0.y.min(p1.y));
         let max = Vector2::new(p0.x.max(p1.x), p0.y.max(p1.y));

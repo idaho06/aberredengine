@@ -58,14 +58,25 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             width: player_tex_width as f32,
             height: player_tex_height as f32,
             offset: Vector2::zero(),
-            origin: Vector2::zero(),
+            origin: Vector2 {
+                x: player_tex_width as f32 * 0.5,
+                y: player_tex_height as f32,
+            }, // origin at the feet of the player sprite
         },
         BoxCollider {
             size: Vector2 {
-                x: player_tex_width as f32,
+                x: player_tex_width as f32 * 0.5,
+                y: player_tex_height as f32 * 0.5,
+            },
+            offset: Vector2 {
+                x: player_tex_width as f32 * 0.25,
+                y: player_tex_height as f32 * 0.25,
+            },
+            // Match collider pivot to sprite's origin (feet) to align positions
+            origin: Vector2 {
+                x: player_tex_width as f32 * 0.5,
                 y: player_tex_height as f32,
             },
-            offset: Vector2::zero(),
         },
     ));
 
@@ -98,6 +109,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                     y: enemy_tex_height as f32,
                 },
                 offset: Vector2::zero(),
+                origin: Vector2::zero(),
             },
         ));
     }
