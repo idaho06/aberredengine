@@ -1,8 +1,9 @@
 use bevy_ecs::prelude::*;
 
+use crate::events::switchdebug::SwitchDebugEvent;
 use crate::resources::input::InputState;
 
-pub fn keyboard_input(_commands: Commands, input: Res<InputState>) {
+pub fn keyboard_input(mut commands: Commands, input: Res<InputState>) {
     // React to the input resource this frame
     if input.w_pressed {
         println!("W key pressed");
@@ -39,6 +40,7 @@ pub fn keyboard_input(_commands: Commands, input: Res<InputState>) {
     }
     if input.f11_pressed {
         println!("F11 pressed");
+        commands.trigger(SwitchDebugEvent {});
     }
     if input.f12_pressed {
         println!("F12 pressed");

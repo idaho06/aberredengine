@@ -5,6 +5,7 @@ mod resources;
 mod systems;
 
 use crate::events::collision::observe_kill_on_collision;
+use crate::events::switchdebug::observe_switch_debug_event;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::{InputState, update_input_state};
 use crate::resources::screensize::ScreenSize;
@@ -44,6 +45,7 @@ fn main() {
 
     // Register a global observer for CollisionEvent that despawns both entities.
     world.spawn(Observer::new(observe_kill_on_collision));
+    world.spawn(Observer::new(observe_switch_debug_event));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
@@ -77,6 +79,7 @@ fn main() {
         // d2 dropped here -> EndMode2D()
 
         // You can draw screen-space UI with `d` after this point.
+        //render_debug_ui(&mut world, &mut d);
 
         // d dropped here -> EndDrawing()
     }

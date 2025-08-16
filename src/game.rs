@@ -10,6 +10,7 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::debugmode::DebugMode;
 use crate::resources::texturestore::TextureStore;
 use rand::Rng;
 

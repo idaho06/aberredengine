@@ -27,10 +27,10 @@ pub fn collision(
 
     // Trigger a CollisionEvent for each pair. Observers will run immediately when commands flush.
     for (entity_a, entity_b) in pairs {
-        println!(
-            "Triggering CollisionEvent between {:?} and {:?}",
-            entity_a, entity_b
-        );
+        // println!(
+        //     "Triggering CollisionEvent between {:?} and {:?}",
+        //     entity_a, entity_b
+        // );
         commands.trigger(CollisionEvent {
             a: entity_a,
             b: entity_b,
