@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
+//use std::collections::HashMap;
 
 // Import component/resource types from modules
 use crate::components::boxcollider::BoxCollider;
@@ -42,7 +43,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
 
     // Insert TextureStore resource
     let mut tex_store = TextureStore {
-        map: HashMap::new(),
+        map: FxHashMap::default(),
     };
     tex_store.map.insert("player", player_tex);
     tex_store.map.insert("enemy", enemy_tex);
