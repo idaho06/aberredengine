@@ -7,7 +7,7 @@ use raylib::prelude::Vector2;
 /// used for placement/rotation/scaling when rendering.
 #[derive(Component, Clone, Debug)]
 pub struct Sprite {
-    pub tex_key: &'static str,
+    pub tex_key: String,
     pub width: f32,
     pub height: f32,
     pub offset: Vector2,

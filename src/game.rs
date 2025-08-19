@@ -45,17 +45,19 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     let mut tex_store = TextureStore {
         map: FxHashMap::default(),
     };
-    tex_store.map.insert("player", player_tex);
-    tex_store.map.insert("enemy", enemy_tex);
+    //tex_store.map.insert("player".into(), player_tex);
+    //tex_store.map.insert("enemy".into(), enemy_tex);
+    tex_store.insert("player", player_tex);
+    tex_store.insert("enemy", enemy_tex);
     world.insert_resource(tex_store);
 
     // Player
     world.spawn((
-        Group("player"),
+        Group::new("player"),
         MapPosition::new(40.0, 40.0),
         ZIndex(0),
         Sprite {
-            tex_key: "player",
+            tex_key: "player".into(),
             width: player_tex_width as f32,
             height: player_tex_height as f32,
             offset: Vector2::zero(),
@@ -89,11 +91,11 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         let vy = rng.gen_range(-20.0f32..20.0f32);
 
         world.spawn((
-            Group("enemy"),
+            Group::new("enemy"),
             MapPosition::new(50.0 + (i as f32 * 64.0), 164.0 + (i as f32 * 16.0)),
             ZIndex(i % 5),
             Sprite {
-                tex_key: "enemy",
+                tex_key: "enemy".into(),
                 width: enemy_tex_width as f32,
                 height: enemy_tex_height as f32,
                 offset: Vector2::zero(),

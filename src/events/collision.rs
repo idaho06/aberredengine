@@ -23,7 +23,8 @@ pub fn observe_kill_on_collision(
     let is_player = |e: Entity| {
         groups
             .get(e)
-            .map(|g| *g == Group("player"))
+            //.map(|g| *g == Group("player"))
+            .map(|g| g.name() == "player") // Use the string directly
             .unwrap_or(false)
     };
     if !is_player(a) && !is_player(b) {

@@ -77,7 +77,8 @@ pub fn render_pass(
     let textures = world.resource::<TextureStore>();
 
     for (sprite, pos, _z) in to_draw.iter() {
-        if let Some(tex) = textures.map.get(sprite.tex_key) {
+        //if let Some(tex) = textures.map.get(sprite.tex_key.as_str()) {
+        if let Some(tex) = textures.get(sprite.tex_key.clone()) {
             // Source rect selects a frame from the spritesheet
             let src = Rectangle {
                 x: sprite.offset.x,
