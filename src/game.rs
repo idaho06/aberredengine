@@ -4,12 +4,15 @@ use rustc_hash::FxHashMap;
 //use std::collections::HashMap;
 
 // Import component/resource types from modules
+use crate::components::animation::AnimationComponent;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
+use crate::resources::animationstore::Animation;
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::texturestore::TextureStore;
 use rand::Rng;
@@ -24,7 +27,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             y: rl.get_screen_height() as f32 * 0.5,
         },
         rotation: 0.0,
-        zoom: 1.0,
+        zoom: 2.0,
     };
     world.insert_resource(Camera2DRes(camera));
 
@@ -41,15 +44,35 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     let enemy_tex_width = enemy_tex.width;
     let enemy_tex_height = enemy_tex.height;
 
+    let player_sheet_tex = rl
+        .load_texture(thread, "./assets/textures/WarriorMan-Sheet.png")
+        .expect("load assets/WarriorMan-Sheet.png");
+
     // Insert TextureStore resource
     let mut tex_store = TextureStore {
         map: FxHashMap::default(),
     };
-    //tex_store.map.insert("player".into(), player_tex);
-    //tex_store.map.insert("enemy".into(), enemy_tex);
+    tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("player", player_tex);
     tex_store.insert("enemy", enemy_tex);
     world.insert_resource(tex_store);
+
+    // Animations
+    let mut anim_store = AnimationStore {
+        animations: FxHashMap::default(),
+    };
+    anim_store.animations.insert(
+        "player_idle".into(),
+        Animation {
+            tex_key: "player-sheet".into(),
+            position: Vector2 { x: 0.0, y: 16.0 },
+            displacement: 80.0, // width of each frame in the spritesheet
+            frame_count: 8,
+            fps: 6.0, // speed of the animation
+            looped: true,
+        },
+    );
+    world.insert_resource(anim_store);
 
     // Player
     world.spawn((
@@ -80,6 +103,25 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 x: player_tex_width as f32 * 0.5,
                 y: player_tex_height as f32,
             },
+        },
+    ));
+
+    // Player animations
+    world.spawn((
+        Group::new("player-animation"),
+        MapPosition::new(400.0, 225.0),
+        ZIndex(1),
+        Sprite {
+            tex_key: "player-sheet".into(),
+            width: 80.0, // width of the sprite frame in the spritesheet
+            height: 32.0,
+            offset: Vector2 { x: 0.0, y: 16.0 }, // offset to match the sprite frame in the spritesheet
+            origin: Vector2 { x: 40.0, y: 32.0 },
+        },
+        AnimationComponent {
+            animation_key: "player_idle".into(),
+            frame_index: 0,
+            elapsed_time: 0.0,
         },
     ));
 

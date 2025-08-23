@@ -1,3 +1,4 @@
+pub mod animationstore;
 pub mod camera2d;
 pub mod debugmode;
 pub mod input;

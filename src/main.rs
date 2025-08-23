@@ -10,6 +10,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::{InputState, update_input_state};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::animation::animation;
 use crate::systems::collision::collision;
 use crate::systems::input::keyboard_input;
 use crate::systems::movement::movement;
@@ -53,6 +54,7 @@ fn main() {
     update.add_systems(keyboard_input);
     update.add_systems(movement);
     update.add_systems(collision);
+    update.add_systems(animation);
 
     update
         .initialize(&mut world)

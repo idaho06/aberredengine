@@ -102,13 +102,16 @@ pub fn render_pass(
 
     if world.contains_resource::<DebugMode>() {
         // Render debug UI elements
-        // query for all BoxColliders and their MapPositions
+        // query for all BoxColliders
         let mut colliders = world.query::<(&BoxCollider, &MapPosition)>();
         for (collider, position) in colliders.iter(world) {
             // Draw the collider's AABB
             let (x, y, w, h) = collider.get_aabb(position.pos);
 
             d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
+        }
+        let mut positions = world.query::<&MapPosition>();
+        for position in positions.iter(world) {
             // Draw a small cross in the MapPosition
             d2.draw_line(
                 position.pos.x as i32 - 5,

@@ -16,3 +16,9 @@ impl Default for WorldTime {
         }
     }
 }
+
+impl WorldTime {
+    /* pub fn delta_seconds(&self) -> f32 {
+        self.delta * self.time_scale
+    } */
+}

@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod boxcollider;
 pub mod group;
 pub mod mapposition;
