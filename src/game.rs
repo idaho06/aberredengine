@@ -15,7 +15,23 @@ use crate::resources::animationstore::Animation;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::tilemap::Tilemap;
 use rand::Rng;
+
+/// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
+fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Texture2D, Tilemap) {
+    let dirname = path.split('/').last().expect("Not a valid dir path.");
+    let json_path = format!("{}/{}.txt", path, dirname);
+    let png_path = format!("{}/{}.png", path, dirname);
+
+    let texture = rl
+        .load_texture(thread, &png_path)
+        .expect("Failed to load tilemap texture");
+    let json_string = std::fs::read_to_string(json_path).expect("Failed to load tilemap JSON");
+    let tilemap: Tilemap =
+        serde_json::from_str(&json_string).expect("Failed to parse tilemap JSON");
+    (texture, tilemap)
+}
 
 /// Load textures, register resources, and spawn initial entities for the demo.
 pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
@@ -27,7 +43,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             y: rl.get_screen_height() as f32 * 0.5,
         },
         rotation: 0.0,
-        zoom: 2.0,
+        zoom: 1.0,
     };
     world.insert_resource(Camera2DRes(camera));
 
@@ -48,6 +64,10 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         .load_texture(thread, "./assets/textures/WarriorMan-Sheet.png")
         .expect("load assets/WarriorMan-Sheet.png");
 
+    // Load tilemap
+    let (tilemap_tex, tilemap) = load_tilemap(rl, thread, "./assets/tilemaps/maptest04");
+    let tilemap_tex_width = tilemap_tex.width;
+
     // Insert TextureStore resource
     let mut tex_store = TextureStore {
         map: FxHashMap::default(),
@@ -55,6 +75,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("player", player_tex);
     tex_store.insert("enemy", enemy_tex);
+    tex_store.insert("tilemap", tilemap_tex);
     world.insert_resource(tex_store);
 
     // Animations
@@ -62,13 +83,57 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         animations: FxHashMap::default(),
     };
     anim_store.animations.insert(
-        "player_idle".into(),
+        "player_tired".into(),
         Animation {
             tex_key: "player-sheet".into(),
             position: Vector2 { x: 0.0, y: 16.0 },
             displacement: 80.0, // width of each frame in the spritesheet
             frame_count: 8,
             fps: 6.0, // speed of the animation
+            looped: true,
+        },
+    );
+    anim_store.animations.insert(
+        "player_stand".into(),
+        Animation {
+            tex_key: "player-sheet".into(),
+            position: Vector2 { x: 0.0, y: 80.0 },
+            displacement: 80.0, // width of each frame in the spritesheet
+            frame_count: 8,
+            fps: 6.0, // speed of the animation
+            looped: true,
+        },
+    );
+    anim_store.animations.insert(
+        "player_walk".into(),
+        Animation {
+            tex_key: "player-sheet".into(),
+            position: Vector2 { x: 0.0, y: 144.0 },
+            displacement: 80.0, // width of each frame in the spritesheet
+            frame_count: 8,
+            fps: 6.0, // speed of the animation
+            looped: true,
+        },
+    );
+    anim_store.animations.insert(
+        "player_run".into(),
+        Animation {
+            tex_key: "player-sheet".into(),
+            position: Vector2 { x: 0.0, y: 208.0 },
+            displacement: 80.0, // width of each frame in the spritesheet
+            frame_count: 8,
+            fps: 6.0, // speed of the animation
+            looped: true,
+        },
+    );
+    anim_store.animations.insert(
+        "player_jump".into(),
+        Animation {
+            tex_key: "player-sheet".into(),
+            position: Vector2 { x: 0.0, y: 272.0 },
+            displacement: 80.0, // width of each frame in the spritesheet
+            frame_count: 8 + 3,
+            fps: 12.0, // speed of the animation
             looped: true,
         },
     );
@@ -119,7 +184,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             origin: Vector2 { x: 40.0, y: 32.0 },
         },
         AnimationComponent {
-            animation_key: "player_idle".into(),
+            animation_key: "player_jump".into(),
             frame_index: 0,
             elapsed_time: 0.0,
         },
@@ -157,5 +222,68 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 origin: Vector2::zero(),
             },
         ));
+    }
+
+    // Create map tiles as spawns of MapPosition, Zindex, and Sprite
+    spawn_tilemaps(world, "tilemap", tilemap_tex_width, tilemap);
+}
+
+fn spawn_tilemaps(
+    world: &mut World,
+    tilemap_key: impl Into<String>,
+    tex_width: i32,
+    tilemap: Tilemap,
+) {
+    let tilemap_key: String = tilemap_key.into();
+
+    // texture size in pixels
+    let tex_w = tex_width as f32;
+
+    let tile_size = tilemap.tile_size as f32;
+
+    // how many tiles per row in the texture
+    let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
+
+    let layer_count = tilemap.layers.len() as i32;
+    // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
+    for (layer_index, layer) in tilemap.layers.into_iter().enumerate() {
+        let z = -(layer_count - (layer_index as i32));
+
+        for pos in layer.positions.into_iter() {
+            // world position = tile coords * tile_size
+            let wx = pos.x as f32 * tile_size;
+            let wy = pos.y as f32 * tile_size;
+
+            // compute sprite offset in the tileset texture based on id (left-to-right, top-to-bottom)
+            // id is assumed zero-based index
+            let id = pos.id;
+            let col = id % tiles_per_row;
+            let row = id / tiles_per_row;
+
+            let offset_x = col as f32 * tile_size;
+            let offset_y = row as f32 * tile_size;
+
+            // Sprite origin is the center of the sprite (in pixels)
+            let origin = Vector2 {
+                x: tile_size * 0.5,
+                y: tile_size * 0.5,
+            };
+
+            world.spawn((
+                Group::new("tiles"),
+                MapPosition::new(wx, wy),
+                ZIndex(z),
+                Sprite {
+                    tex_key: tilemap_key.clone(),
+                    width: tile_size,
+                    height: tile_size,
+                    offset: Vector2 {
+                        x: offset_x,
+                        y: offset_y,
+                    },
+                    origin,
+                },
+            ));
+        }
     }
 }
