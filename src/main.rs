@@ -14,7 +14,7 @@ use crate::systems::animation::animation;
 use crate::systems::collision::collision;
 use crate::systems::input::keyboard_input;
 use crate::systems::movement::movement;
-use crate::systems::render::render_pass;
+use crate::systems::render::{render_debug_ui, render_pass};
 use crate::systems::time::update_world_time;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
@@ -76,12 +76,14 @@ fn main() {
         d.clear_background(Color::GRAY);
 
         // Draw in world coordinates using Camera2D.
-        let mut d2 = d.begin_mode2D(world.resource::<Camera2DRes>().0);
-        render_pass(&mut world, &mut d2);
-        // d2 dropped here -> EndMode2D()
+        {
+            let mut d2 = d.begin_mode2D(world.resource::<Camera2DRes>().0);
+            render_pass(&mut world, &mut d2);
+            // d2 dropped here at end of this block -> EndMode2D()
+        }
 
         // You can draw screen-space UI with `d` after this point.
-        //render_debug_ui(&mut world, &mut d);
+        render_debug_ui(&mut world, &mut d);
 
         // d dropped here -> EndDrawing()
     }

@@ -37,7 +37,11 @@ fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Te
 pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     // Create and insert Camera2D resource (centered to current window size)
     let camera = Camera2D {
-        target: Vector2 { x: 400.0, y: 225.0 },
+        target: Vector2 {
+            //x: 400.0, y: 225.0
+            x: 0.0,
+            y: 0.0,
+        },
         offset: Vector2 {
             x: rl.get_screen_width() as f32 * 0.5,
             y: rl.get_screen_height() as f32 * 0.5,

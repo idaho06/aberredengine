@@ -87,6 +87,13 @@ pub fn render_pass(
                 height: sprite.height,
             };
 
+            // Displace x to the right and set width to negative to flip the sprite horizontally
+            // src.x += src.width;
+            // src.width = -src.width;
+            // src.y += src.height;
+            // src.height = -src.height;
+            // TODO: This works, but it messes up the animation. Study a way to fix this.
+
             // Destination rect places sprite so that MapPosition is the pivot (origin)
             let dest = Rectangle {
                 x: pos.pos.x,
@@ -94,6 +101,10 @@ pub fn render_pass(
                 width: sprite.width,
                 height: sprite.height,
             };
+
+            // dest.x += dest.width;
+            // dest.width = -dest.width;
+            // This does not work for horizontal flipping
 
             // Use Sprite.origin directly for rendering pivot
             d2.draw_texture_pro(tex, src, dest, sprite.origin, 0.0, Color::WHITE);
@@ -128,5 +139,50 @@ pub fn render_pass(
                 Color::GREEN,
             );
         }
+    }
+}
+
+pub fn render_debug_ui(world: &mut World, d: &mut RaylibDrawHandle) {
+    if world.contains_resource::<DebugMode>() {
+        let screen = *world.resource::<ScreenSize>();
+
+        let debug_text = "DEBUG MODE (press F11 to toggle)";
+
+        let fps = d.get_fps();
+        let text = format!("{} | FPS: {}", debug_text, fps);
+        d.draw_text(&text, 10, 10, 10, Color::BLACK);
+
+        let entity_count = world.iter_entities().count();
+        let text = format!("Entities: {}", entity_count);
+        d.draw_text(&text, 10, 30, 10, Color::BLACK);
+
+        let cam = world.resource::<Camera2DRes>().0;
+        let cam_text = format!(
+            "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
+            cam.target.x, cam.target.y, cam.zoom
+        );
+        d.draw_text(&cam_text, 10, (screen.h - 30) as i32, 10, Color::BLACK);
+
+        //d.gui_window_box(Rectangle::new(10.0, 50.0, 200.0, 100.0), "Debug Info");
+
+        let mouse_pos = d.get_mouse_position();
+        let mouse_world = d.get_screen_to_world2D(mouse_pos, cam);
+
+        let mouse_text = format!(
+            "Mouse screen: ({:.1}, {:.1}) World: ({:.1}, {:.1})",
+            mouse_pos.x, mouse_pos.y, mouse_world.x, mouse_world.y
+        );
+
+        // d.gui_panel(Rectangle::new(10.0, 50.0, 300.0, 100.0), "Debug Info");
+
+        d.draw_text(&mouse_text, 10, 70, 10, Color::BLACK);
+
+        // let mut forceSquaredChecked = &mut false;
+
+        // d.gui_check_box(
+        //     Rectangle::new(25.0, 108.0, 15.0, 15.0),
+        //     "FORCE CHECK!",
+        //     &mut forceSquaredChecked,
+        // );
     }
 }
