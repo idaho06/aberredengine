@@ -12,4 +12,6 @@ pub struct Sprite {
     pub height: f32,
     pub offset: Vector2,
     pub origin: Vector2,
+    pub flip_h: bool,
+    pub flip_v: bool,
 }

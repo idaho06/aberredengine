@@ -80,19 +80,18 @@ pub fn render_pass(
         //if let Some(tex) = textures.map.get(sprite.tex_key.as_str()) {
         if let Some(tex) = textures.get(sprite.tex_key.clone()) {
             // Source rect selects a frame from the spritesheet
-            let src = Rectangle {
+            let mut src = Rectangle {
                 x: sprite.offset.x,
                 y: sprite.offset.y,
                 width: sprite.width,
                 height: sprite.height,
             };
-
-            // Displace x to the right and set width to negative to flip the sprite horizontally
-            // src.x += src.width;
-            // src.width = -src.width;
-            // src.y += src.height;
-            // src.height = -src.height;
-            // TODO: This works, but it messes up the animation. Study a way to fix this.
+            if sprite.flip_h {
+                src.width = -src.width;
+            }
+            if sprite.flip_v {
+                src.height = -src.height;
+            }
 
             // Destination rect places sprite so that MapPosition is the pivot (origin)
             let dest = Rectangle {

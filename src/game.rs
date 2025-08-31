@@ -38,9 +38,9 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     // Create and insert Camera2D resource (centered to current window size)
     let camera = Camera2D {
         target: Vector2 {
-            //x: 400.0, y: 225.0
-            x: 0.0,
-            y: 0.0,
+            x: 400.0,
+            y: 225.0, //x: 0.0,
+                      //y: 0.0,
         },
         offset: Vector2 {
             x: rl.get_screen_width() as f32 * 0.5,
@@ -157,6 +157,8 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 x: player_tex_width as f32 * 0.5,
                 y: player_tex_height as f32,
             }, // origin at the feet of the player sprite
+            flip_h: false,
+            flip_v: false,
         },
         BoxCollider {
             size: Vector2 {
@@ -186,9 +188,30 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             height: 32.0,
             offset: Vector2 { x: 0.0, y: 16.0 }, // offset to match the sprite frame in the spritesheet
             origin: Vector2 { x: 40.0, y: 32.0 },
+            flip_h: false,
+            flip_v: true,
         },
         AnimationComponent {
-            animation_key: "player_jump".into(),
+            animation_key: "player_walk".into(),
+            frame_index: 0,
+            elapsed_time: 0.0,
+        },
+    ));
+    world.spawn((
+        Group::new("player-animation"),
+        MapPosition::new(400.0, 190.0),
+        ZIndex(1),
+        Sprite {
+            tex_key: "player-sheet".into(),
+            width: 80.0, // width of the sprite frame in the spritesheet
+            height: 32.0,
+            offset: Vector2 { x: 0.0, y: 16.0 }, // offset to match the sprite frame in the spritesheet
+            origin: Vector2 { x: 40.0, y: 32.0 },
+            flip_h: false,
+            flip_v: false,
+        },
+        AnimationComponent {
+            animation_key: "player_walk".into(),
             frame_index: 0,
             elapsed_time: 0.0,
         },
@@ -201,6 +224,8 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         let vx = rng.gen_range(-40.0f32..40.0f32);
         let vy = rng.gen_range(-20.0f32..20.0f32);
 
+        let flip_h = vx < 0.0;
+
         world.spawn((
             Group::new("enemy"),
             MapPosition::new(50.0 + (i as f32 * 64.0), 164.0 + (i as f32 * 16.0)),
@@ -211,6 +236,8 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
                 height: enemy_tex_height as f32,
                 offset: Vector2::zero(),
                 origin: Vector2::zero(),
+                flip_h: flip_h,
+                flip_v: false,
             },
             {
                 let mut rb = RigidBody::new();
@@ -286,6 +313,8 @@ fn spawn_tilemaps(
                         y: offset_y,
                     },
                     origin,
+                    flip_h: false,
+                    flip_v: false,
                 },
             ));
         }
