@@ -1,4 +1,5 @@
 pub mod animationstore;
+pub mod audio;
 pub mod camera2d;
 pub mod debugmode;
 pub mod input;

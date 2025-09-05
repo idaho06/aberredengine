@@ -1,4 +1,5 @@
 pub mod animation;
+pub mod audio;
 pub mod collision;
 pub mod input;
 pub mod movement;

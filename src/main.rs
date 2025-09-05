@@ -6,11 +6,13 @@ mod systems;
 
 use crate::events::collision::observe_kill_on_collision;
 use crate::events::switchdebug::observe_switch_debug_event;
+use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::{InputState, update_input_state};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
+use crate::systems::audio::{poll_audio_events, update_bevy_audio_events};
 use crate::systems::collision::collision;
 use crate::systems::input::keyboard_input;
 use crate::systems::movement::movement;
@@ -41,7 +43,12 @@ fn main() {
     });
     world.insert_resource(InputState::default());
 
+    // Init audio
+    setup_audio(&mut world); // sets up AudioBridge and Events<AudioEvent> as resources
+    // it must go before the game setup!!
+
     // Load textures, create camera, create resources and spawn some example sprites
+    // Also loads musics and starts playback
     game::setup(&mut world, &mut rl, &thread);
 
     // Register a global observer for CollisionEvent that despawns both entities.
@@ -51,6 +58,14 @@ fn main() {
     world.flush();
 
     let mut update = Schedule::default();
+    update.add_systems(
+        (
+            update_bevy_audio_events,
+            // on_audio_event,
+            poll_audio_events,
+        )
+            .chain(),
+    );
     update.add_systems(keyboard_input);
     update.add_systems(movement);
     update.add_systems(collision);
@@ -62,6 +77,7 @@ fn main() {
 
     // --------------- Main loop ---------------
     while !rl.window_should_close() {
+        // game_music.update_stream();
         // call all the systems except render
         let dt = rl.get_frame_time();
         update_world_time(&mut world, dt);
@@ -87,4 +103,5 @@ fn main() {
 
         // d dropped here -> EndDrawing()
     }
+    shutdown_audio(&mut world);
 }

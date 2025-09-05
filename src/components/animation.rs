@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_variables)]
 use bevy_ecs::prelude::Component;
 
 #[derive(Debug, Clone, Component)]

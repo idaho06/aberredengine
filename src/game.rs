@@ -11,8 +11,10 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
+use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::Animation;
 use crate::resources::animationstore::AnimationStore;
+use crate::resources::audio::AudioBridge;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemap::Tilemap;
@@ -257,6 +259,36 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
 
     // Create map tiles as spawns of MapPosition, Zindex, and Sprite
     spawn_tilemaps(world, "tilemap", tilemap_tex_width, tilemap);
+
+    // If the AudioBridge is present, send messages to load musics
+    if let Some(bridge) = world.get_resource::<AudioBridge>() {
+        let _ = bridge.tx_cmd.send(AudioCmd::Load {
+            id: "music1".into(),
+            path: "./assets/audio/chiptun1.mod".into(),
+        });
+        let _ = bridge.tx_cmd.send(AudioCmd::Load {
+            id: "music2".into(),
+            path: "./assets/audio/mini1111.xm".into(),
+        });
+    }
+
+    // TODO: music_load(world, "music1".into(), "./assets/audio/chiptun1.mod".into());
+    // TODO: music_load(world, "music2".into(), "./assets/audio/mini1111.xm".into());
+
+    // block until both audio files are loaded
+    if let Some(audio_bridge) = world.get_resource::<AudioBridge>() {
+        let _ = audio_bridge.rx_evt.recv();
+        let _ = audio_bridge.rx_evt.recv();
+    }
+
+    // play music2 looped
+    if let Some(audio_bridge) = world.get_resource::<AudioBridge>() {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::Play {
+            id: "music2".into(),
+            looped: true,
+        });
+    }
+    // TODO: music_play(world, "music2".into(), true);
 }
 
 fn spawn_tilemaps(
