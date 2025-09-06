@@ -7,13 +7,14 @@ Built with:
 - bevy_ecs for the Entity-Component-System architecture
 - rhai planned for scripting (work-in-progress)
 
-## Current status (2025-08-31)
+## Current status (2025-09-07)
 
-- Playable prototype / engine scaffold
+- Playable prototype / engine scaffold (active development)
 - Core subsystems implemented: rendering, input, movement, collision events, animation system, tilemap loading, and a 2D camera resource
+- Basic audio support present (playback resources and systems for simple sounds/music)
 - ECS-driven: components include `MapPosition`, `Sprite`, `RigidBody`, `BoxCollider`, `ZIndex`, `Animation` and grouping utilities
 - Resource containers: `TextureStore`, `AnimationStore`, `Camera2DRes`, `ScreenSize`, `Input` and `WorldTime`
-- Systems: input handling, movement, collision detection/dispatch, animation updates, render pass, and timing
+- Systems: input handling, movement, collision detection/dispatch, animation updates, audio, render pass, and timing
 - Debug utilities: debug-mode toggle, collision events, and simple on-screen diagnostics
 - Packaging: no installers; runnable via `cargo run`. Release builds available with `--release`.
 
