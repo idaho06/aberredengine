@@ -16,6 +16,7 @@ use crate::resources::animationstore::Animation;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::audio::AudioBridge;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemap::Tilemap;
 use rand::Rng;
@@ -35,9 +36,77 @@ fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Te
     (texture, tilemap)
 }
 
-/// Load textures, register resources, and spawn initial entities for the demo.
-pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
-    // Create and insert Camera2D resource (centered to current window size)
+fn spawn_tilemaps(
+    commands: &mut Commands,
+    tilemap_key: impl Into<String>,
+    tex_width: i32,
+    tilemap: Tilemap,
+) {
+    let tilemap_key: String = tilemap_key.into();
+
+    // texture size in pixels
+    let tex_w = tex_width as f32;
+
+    let tile_size = tilemap.tile_size as f32;
+
+    // how many tiles per row in the texture
+    let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
+
+    let layer_count = tilemap.layers.len() as i32;
+    // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
+    for (layer_index, layer) in tilemap.layers.into_iter().enumerate() {
+        let z = -(layer_count - (layer_index as i32));
+
+        for pos in layer.positions.into_iter() {
+            // world position = tile coords * tile_size
+            let wx = pos.x as f32 * tile_size;
+            let wy = pos.y as f32 * tile_size;
+
+            // compute sprite offset in the tileset texture based on id (left-to-right, top-to-bottom)
+            // id is assumed zero-based index
+            let id = pos.id;
+            let col = id % tiles_per_row;
+            let row = id / tiles_per_row;
+
+            let offset_x = col as f32 * tile_size;
+            let offset_y = row as f32 * tile_size;
+
+            // Sprite origin is the center of the sprite (in pixels)
+            let origin = Vector2 {
+                x: tile_size * 0.5,
+                y: tile_size * 0.5,
+            };
+
+            commands.spawn((
+                Group::new("tiles"),
+                MapPosition::new(wx, wy),
+                ZIndex(z),
+                Sprite {
+                    tex_key: tilemap_key.clone(),
+                    width: tile_size,
+                    height: tile_size,
+                    offset: Vector2 {
+                        x: offset_x,
+                        y: offset_y,
+                    },
+                    origin,
+                    flip_h: false,
+                    flip_v: false,
+                },
+            ));
+        }
+    }
+}
+
+pub fn setup(
+    mut commands: &mut Commands,
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    audio_bridge: &mut AudioBridge,
+    next_state: &mut NextGameState,
+) {
+    eprintln!("Game setup_with_commands()");
+
     let camera = Camera2D {
         target: Vector2 {
             x: 400.0,
@@ -51,7 +120,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         rotation: 0.0,
         zoom: 1.0,
     };
-    world.insert_resource(Camera2DRes(camera));
+    commands.insert_resource(Camera2DRes(camera));
 
     // Load textures
     let player_tex = rl
@@ -70,7 +139,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
         .load_texture(thread, "./assets/textures/WarriorMan-Sheet.png")
         .expect("load assets/WarriorMan-Sheet.png");
 
-    // Load tilemap
+    // Load tilemap textures and data
     let (tilemap_tex, tilemap) = load_tilemap(rl, thread, "./assets/tilemaps/maptest04");
     let tilemap_tex_width = tilemap_tex.width;
 
@@ -82,7 +151,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     tex_store.insert("player", player_tex);
     tex_store.insert("enemy", enemy_tex);
     tex_store.insert("tilemap", tilemap_tex);
-    world.insert_resource(tex_store);
+    commands.insert_resource(tex_store);
 
     // Animations
     let mut anim_store = AnimationStore {
@@ -143,10 +212,10 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             looped: true,
         },
     );
-    world.insert_resource(anim_store);
+    commands.insert_resource(anim_store);
 
     // Player
-    world.spawn((
+    commands.spawn((
         Group::new("player"),
         MapPosition::new(40.0, 40.0),
         ZIndex(0),
@@ -180,7 +249,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     ));
 
     // Player animations
-    world.spawn((
+    commands.spawn((
         Group::new("player-animation"),
         MapPosition::new(400.0, 225.0),
         ZIndex(1),
@@ -199,7 +268,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
             elapsed_time: 0.0,
         },
     ));
-    world.spawn((
+    commands.spawn((
         Group::new("player-animation"),
         MapPosition::new(400.0, 190.0),
         ZIndex(1),
@@ -228,7 +297,7 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
 
         let flip_h = vx < 0.0;
 
-        world.spawn((
+        commands.spawn((
             Group::new("enemy"),
             MapPosition::new(50.0 + (i as f32 * 64.0), 164.0 + (i as f32 * 16.0)),
             ZIndex(i % 5),
@@ -258,15 +327,15 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     }
 
     // Create map tiles as spawns of MapPosition, Zindex, and Sprite
-    spawn_tilemaps(world, "tilemap", tilemap_tex_width, tilemap);
+    spawn_tilemaps(&mut commands, "tilemap", tilemap_tex_width, tilemap);
 
-    // If the AudioBridge is present, send messages to load musics
-    if let Some(bridge) = world.get_resource::<AudioBridge>() {
-        let _ = bridge.tx_cmd.send(AudioCmd::Load {
+    // Send messages to load musics
+    {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
             id: "music1".into(),
             path: "./assets/audio/chiptun1.mod".into(),
         });
-        let _ = bridge.tx_cmd.send(AudioCmd::Load {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
             id: "music2".into(),
             path: "./assets/audio/mini1111.xm".into(),
         });
@@ -276,79 +345,21 @@ pub fn setup(world: &mut World, rl: &mut RaylibHandle, thread: &RaylibThread) {
     // TODO: music_load(world, "music2".into(), "./assets/audio/mini1111.xm".into());
 
     // block until both audio files are loaded
-    if let Some(audio_bridge) = world.get_resource::<AudioBridge>() {
+    {
         let _ = audio_bridge.rx_evt.recv();
         let _ = audio_bridge.rx_evt.recv();
     }
 
     // play music2 looped
-    if let Some(audio_bridge) = world.get_resource::<AudioBridge>() {
+    {
         let _ = audio_bridge.tx_cmd.send(AudioCmd::Play {
             id: "music2".into(),
             looped: true,
         });
     }
     // TODO: music_play(world, "music2".into(), true);
-}
 
-fn spawn_tilemaps(
-    world: &mut World,
-    tilemap_key: impl Into<String>,
-    tex_width: i32,
-    tilemap: Tilemap,
-) {
-    let tilemap_key: String = tilemap_key.into();
-
-    // texture size in pixels
-    let tex_w = tex_width as f32;
-
-    let tile_size = tilemap.tile_size as f32;
-
-    // how many tiles per row in the texture
-    let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
-
-    let layer_count = tilemap.layers.len() as i32;
-    // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
-    for (layer_index, layer) in tilemap.layers.into_iter().enumerate() {
-        let z = -(layer_count - (layer_index as i32));
-
-        for pos in layer.positions.into_iter() {
-            // world position = tile coords * tile_size
-            let wx = pos.x as f32 * tile_size;
-            let wy = pos.y as f32 * tile_size;
-
-            // compute sprite offset in the tileset texture based on id (left-to-right, top-to-bottom)
-            // id is assumed zero-based index
-            let id = pos.id;
-            let col = id % tiles_per_row;
-            let row = id / tiles_per_row;
-
-            let offset_x = col as f32 * tile_size;
-            let offset_y = row as f32 * tile_size;
-
-            // Sprite origin is the center of the sprite (in pixels)
-            let origin = Vector2 {
-                x: tile_size * 0.5,
-                y: tile_size * 0.5,
-            };
-
-            world.spawn((
-                Group::new("tiles"),
-                MapPosition::new(wx, wy),
-                ZIndex(z),
-                Sprite {
-                    tex_key: tilemap_key.clone(),
-                    width: tile_size,
-                    height: tile_size,
-                    offset: Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    origin,
-                    flip_h: false,
-                    flip_v: false,
-                },
-            ));
-        }
-    }
+    // Change GameState to Playing
+    next_state.set(GameStates::Playing);
+    eprintln!("Game setup_with_commands() done, next state set to Playing");
 }

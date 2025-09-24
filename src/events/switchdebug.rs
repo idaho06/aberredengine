@@ -18,9 +18,9 @@ pub fn observe_switch_debug_event(
     if debug_mode.is_some() {
         // If it exists, we remove it
         commands.remove_resource::<DebugMode>();
-        println!("Debug mode disabled");
+        eprintln!("Debug mode disabled");
     } else {
-        println!("Debug mode resource not found, creating new one");
+        eprintln!("Debug mode resource not found, creating new one");
         commands.insert_resource(DebugMode {});
     }
 }

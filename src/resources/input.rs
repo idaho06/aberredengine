@@ -23,21 +23,46 @@ pub struct InputState {
 
 /// Update the InputState resource from the current Raylib keyboard state.
 /// Call this once per frame before running the ECS update schedule.
-pub fn update_input_state(world: &mut World, rl: &RaylibHandle) {
+pub fn update_input_state(world: &mut World) {
+    // Snapshot keyboard state first to end the immutable borrow before mutably borrowing InputState.
+    let (w, a, s, d, up, down, left, right, esc, space, enter, f11, f12) = {
+        let rl = world.non_send_resource::<RaylibHandle>();
+        (
+            rl.is_key_down(KeyboardKey::KEY_W),
+            rl.is_key_down(KeyboardKey::KEY_A),
+            rl.is_key_down(KeyboardKey::KEY_S),
+            rl.is_key_down(KeyboardKey::KEY_D),
+            // Arrow keys
+            rl.is_key_down(KeyboardKey::KEY_UP),
+            rl.is_key_down(KeyboardKey::KEY_DOWN),
+            rl.is_key_down(KeyboardKey::KEY_LEFT),
+            rl.is_key_down(KeyboardKey::KEY_RIGHT),
+            // Control keys
+            rl.is_key_pressed(KeyboardKey::KEY_ESCAPE),
+            rl.is_key_pressed(KeyboardKey::KEY_SPACE),
+            rl.is_key_pressed(KeyboardKey::KEY_ENTER),
+            rl.is_key_pressed(KeyboardKey::KEY_F11),
+            rl.is_key_pressed(KeyboardKey::KEY_F12),
+        )
+    };
+
     let mut input = world.resource_mut::<InputState>();
-    input.w_pressed = rl.is_key_down(KeyboardKey::KEY_W);
-    input.a_pressed = rl.is_key_down(KeyboardKey::KEY_A);
-    input.s_pressed = rl.is_key_down(KeyboardKey::KEY_S);
-    input.d_pressed = rl.is_key_down(KeyboardKey::KEY_D);
+    input.w_pressed = w;
+    input.a_pressed = a;
+    input.s_pressed = s;
+    input.d_pressed = d;
     // Arrow keys
-    input.up_pressed = rl.is_key_down(KeyboardKey::KEY_UP);
-    input.down_pressed = rl.is_key_down(KeyboardKey::KEY_DOWN);
-    input.left_pressed = rl.is_key_down(KeyboardKey::KEY_LEFT);
-    input.right_pressed = rl.is_key_down(KeyboardKey::KEY_RIGHT);
+    input.up_pressed = up;
+    input.down_pressed = down;
+    input.left_pressed = left;
+    input.right_pressed = right;
     // Control keys
-    input.esc_pressed = rl.is_key_pressed(KeyboardKey::KEY_ESCAPE);
-    input.space_pressed = rl.is_key_pressed(KeyboardKey::KEY_SPACE);
-    input.enter_pressed = rl.is_key_pressed(KeyboardKey::KEY_ENTER);
-    input.f11_pressed = rl.is_key_pressed(KeyboardKey::KEY_F11);
-    input.f12_pressed = rl.is_key_pressed(KeyboardKey::KEY_F12);
+    input.esc_pressed = esc;
+    input.space_pressed = space;
+    input.enter_pressed = enter;
+    input.f11_pressed = f11;
+    input.f12_pressed = f12;
 }
+
+//TODO: Create a proper system for input state to be added to the update schedule
+// pub fn input_system(mut input: ResMut<InputState>, rl: NonSendMut<raylib::RaylibHandle>) {
