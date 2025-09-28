@@ -12,6 +12,7 @@ use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::input::{InputState, update_input_state};
 use crate::resources::screensize::ScreenSize;
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
 use crate::systems::audio::{poll_audio_events, update_bevy_audio_events};
@@ -55,6 +56,12 @@ fn main() {
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
     world.spawn(Observer::new(observe_gamestate_change_event));
+
+    let setup_system_id = world.register_system(game::setup_system);
+    let mut systems_store = SystemsStore::new();
+    systems_store.insert("setup", setup_system_id);
+    world.insert_resource(systems_store);
+
     world.flush();
 
     // Set next GameState to Setup

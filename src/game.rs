@@ -98,12 +98,12 @@ fn spawn_tilemaps(
     }
 }
 
-pub fn setup(
-    mut commands: &mut Commands,
-    rl: &mut RaylibHandle,
-    thread: &RaylibThread,
-    audio_bridge: &mut AudioBridge,
-    next_state: &mut NextGameState,
+pub fn setup_system(
+    mut commands: Commands,
+    mut next_state: ResMut<NextGameState>,
+    mut rl: NonSendMut<raylib::RaylibHandle>,
+    th: NonSend<raylib::RaylibThread>,
+    audio_bridge: ResMut<AudioBridge>,
 ) {
     eprintln!("Game setup_with_commands()");
 
@@ -124,23 +124,23 @@ pub fn setup(
 
     // Load textures
     let player_tex = rl
-        .load_texture(thread, "./assets/textures/player.png")
+        .load_texture(&th, "./assets/textures/player.png")
         .expect("load assets/player.png");
     let player_tex_width = player_tex.width;
     let player_tex_height = player_tex.height;
 
     let enemy_tex = rl
-        .load_texture(thread, "./assets/textures/enemy.png")
+        .load_texture(&th, "./assets/textures/enemy.png")
         .expect("load assets/enemy.png");
     let enemy_tex_width = enemy_tex.width;
     let enemy_tex_height = enemy_tex.height;
 
     let player_sheet_tex = rl
-        .load_texture(thread, "./assets/textures/WarriorMan-Sheet.png")
+        .load_texture(&th, "./assets/textures/WarriorMan-Sheet.png")
         .expect("load assets/WarriorMan-Sheet.png");
 
     // Load tilemap textures and data
-    let (tilemap_tex, tilemap) = load_tilemap(rl, thread, "./assets/tilemaps/maptest04");
+    let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/maptest04");
     let tilemap_tex_width = tilemap_tex.width;
 
     // Insert TextureStore resource

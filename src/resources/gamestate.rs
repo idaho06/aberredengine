@@ -1,5 +1,6 @@
 use bevy_ecs::prelude::Resource;
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum GameStates {
     #[default]
