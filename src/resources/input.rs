@@ -1,68 +1,98 @@
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
 
+#[derive(Debug, Clone, Copy)]
+pub struct BoolState {
+    pub state: bool,
+    pub key_binding: KeyboardKey,
+}
+
 /// Resource capturing per-frame keyboard state we care about.
-#[derive(Resource, Default, Debug, Clone, Copy)]
+#[derive(Resource, Debug, Clone)]
 pub struct InputState {
-    pub w_pressed: bool,
-    pub a_pressed: bool,
-    pub s_pressed: bool,
-    pub d_pressed: bool,
+    pub maindirection_up: BoolState,
+    pub maindirection_left: BoolState,
+    pub maindirection_down: BoolState,
+    pub maindirection_right: BoolState,
     // Arrow keys
-    pub up_pressed: bool,
-    pub down_pressed: bool,
-    pub left_pressed: bool,
-    pub right_pressed: bool,
-    // Common control keys
-    pub esc_pressed: bool,
-    pub space_pressed: bool,
-    pub enter_pressed: bool,
-    pub f11_pressed: bool,
-    pub f12_pressed: bool,
+    pub secondarydirection_up: BoolState,
+    pub secondarydirection_down: BoolState,
+    pub secondarydirection_left: BoolState,
+    pub secondarydirection_right: BoolState,
+    // Action special keys
+    pub action_back: BoolState,
+    pub action_1: BoolState,
+    pub action_2: BoolState,
+    pub mode_debug: BoolState,
+    pub action_special: BoolState,
 }
 
-/// Update the InputState resource from the current Raylib keyboard state.
-/// Call this once per frame before running the ECS update schedule.
-pub fn update_input_state(world: &mut World) {
-    // Snapshot keyboard state first to end the immutable borrow before mutably borrowing InputState.
-    let (w, a, s, d, up, down, left, right, esc, space, enter, f11, f12) = {
-        let rl = world.non_send_resource::<RaylibHandle>();
-        (
-            rl.is_key_down(KeyboardKey::KEY_W),
-            rl.is_key_down(KeyboardKey::KEY_A),
-            rl.is_key_down(KeyboardKey::KEY_S),
-            rl.is_key_down(KeyboardKey::KEY_D),
+impl Default for BoolState {
+    fn default() -> Self {
+        Self {
+            state: false,
+            key_binding: KeyboardKey::KEY_NULL,
+        }
+    }
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
+            maindirection_up: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_W,
+            },
+            maindirection_left: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_A,
+            },
+            maindirection_down: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_S,
+            },
+            maindirection_right: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_D,
+            },
             // Arrow keys
-            rl.is_key_down(KeyboardKey::KEY_UP),
-            rl.is_key_down(KeyboardKey::KEY_DOWN),
-            rl.is_key_down(KeyboardKey::KEY_LEFT),
-            rl.is_key_down(KeyboardKey::KEY_RIGHT),
+            secondarydirection_up: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_UP,
+            },
+            secondarydirection_down: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_DOWN,
+            },
+            secondarydirection_left: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_LEFT,
+            },
+            secondarydirection_right: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_RIGHT,
+            },
             // Control keys
-            rl.is_key_pressed(KeyboardKey::KEY_ESCAPE),
-            rl.is_key_pressed(KeyboardKey::KEY_SPACE),
-            rl.is_key_pressed(KeyboardKey::KEY_ENTER),
-            rl.is_key_pressed(KeyboardKey::KEY_F11),
-            rl.is_key_pressed(KeyboardKey::KEY_F12),
-        )
-    };
-
-    let mut input = world.resource_mut::<InputState>();
-    input.w_pressed = w;
-    input.a_pressed = a;
-    input.s_pressed = s;
-    input.d_pressed = d;
-    // Arrow keys
-    input.up_pressed = up;
-    input.down_pressed = down;
-    input.left_pressed = left;
-    input.right_pressed = right;
-    // Control keys
-    input.esc_pressed = esc;
-    input.space_pressed = space;
-    input.enter_pressed = enter;
-    input.f11_pressed = f11;
-    input.f12_pressed = f12;
+            action_back: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_ESCAPE,
+            },
+            action_1: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_SPACE,
+            },
+            action_2: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_ENTER,
+            },
+            mode_debug: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_F11,
+            },
+            action_special: BoolState {
+                state: false,
+                key_binding: KeyboardKey::KEY_F12,
+            },
+        }
+    }
 }
-
-//TODO: Create a proper system for input state to be added to the update schedule
-// pub fn input_system(mut input: ResMut<InputState>, rl: NonSendMut<raylib::RaylibHandle>) {

@@ -10,7 +10,7 @@ use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::observe_switch_debug_event;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
-use crate::resources::input::{InputState, update_input_state};
+use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldtime::WorldTime;
@@ -18,7 +18,8 @@ use crate::systems::animation::animation;
 use crate::systems::audio::{poll_audio_events, update_bevy_audio_events};
 use crate::systems::collision::collision;
 use crate::systems::gamestate::check_pending_state;
-use crate::systems::input::keyboard_input;
+use crate::systems::input::check_input;
+use crate::systems::input::update_input_state;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
 use crate::systems::time::update_world_time;
@@ -78,6 +79,7 @@ fn main() {
     world.flush();
 
     let mut update = Schedule::default();
+    update.add_systems(update_input_state);
     update.add_systems(check_pending_state);
     update.add_systems(
         (
@@ -87,7 +89,7 @@ fn main() {
         )
             .chain(),
     );
-    update.add_systems(keyboard_input);
+    update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
     update.add_systems(movement);
     update.add_systems(collision);
     update.add_systems(animation);
@@ -106,8 +108,6 @@ fn main() {
             .non_send_resource::<raylib::RaylibHandle>()
             .get_frame_time();
         update_world_time(&mut world, dt);
-        // poll input for this frame
-        update_input_state(&mut world); // TODO: make it a system
 
         update.run(&mut world);
 
