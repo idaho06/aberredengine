@@ -58,9 +58,15 @@ fn main() {
     world.insert_non_send_resource(thread);
     world.spawn(Observer::new(observe_gamestate_change_event));
 
-    let setup_system_id = world.register_system(game::setup_system);
+    // Game state systems store
     let mut systems_store = SystemsStore::new();
+
+    let setup_system_id = world.register_system(game::setup);
     systems_store.insert("setup", setup_system_id);
+
+    let enter_play_system_id = world.register_system(game::enter_play);
+    systems_store.insert("enter_play", enter_play_system_id);
+
     world.insert_resource(systems_store);
 
     world.flush();

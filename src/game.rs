@@ -18,7 +18,7 @@ use crate::resources::audio::AudioBridge;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemap::Tilemap;
+use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use rand::Rng;
 
 /// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
@@ -36,13 +36,13 @@ fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Te
     (texture, tilemap)
 }
 
-fn spawn_tilemaps(
+fn spawn_tiles(
     commands: &mut Commands,
-    tilemap_key: impl Into<String>,
-    tex_width: i32,
-    tilemap: Tilemap,
+    tilemap_tex_key: impl Into<String>,
+    tex_width: i32, // We assume square tiles, so only width is needed
+    tilemap: &Tilemap,
 ) {
-    let tilemap_key: String = tilemap_key.into();
+    let tilemap_tex_key: String = tilemap_tex_key.into();
 
     // texture size in pixels
     let tex_w = tex_width as f32;
@@ -54,10 +54,10 @@ fn spawn_tilemaps(
 
     let layer_count = tilemap.layers.len() as i32;
     // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
-    for (layer_index, layer) in tilemap.layers.into_iter().enumerate() {
+    for (layer_index, layer) in tilemap.layers.iter().enumerate() {
         let z = -(layer_count - (layer_index as i32));
 
-        for pos in layer.positions.into_iter() {
+        for pos in layer.positions.iter() {
             // world position = tile coords * tile_size
             let wx = pos.x as f32 * tile_size;
             let wy = pos.y as f32 * tile_size;
@@ -82,7 +82,7 @@ fn spawn_tilemaps(
                 MapPosition::new(wx, wy),
                 ZIndex(z),
                 Sprite {
-                    tex_key: tilemap_key.clone(),
+                    tex_key: tilemap_tex_key.clone(),
                     width: tile_size,
                     height: tile_size,
                     offset: Vector2 {
@@ -98,14 +98,14 @@ fn spawn_tilemaps(
     }
 }
 
-pub fn setup_system(
+pub fn setup(
     mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
     audio_bridge: ResMut<AudioBridge>,
 ) {
-    eprintln!("Game setup_with_commands()");
+    // This function sets up the game world, loading resources
 
     let camera = Camera2D {
         target: Vector2 {
@@ -126,14 +126,10 @@ pub fn setup_system(
     let player_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
         .expect("load assets/player.png");
-    let player_tex_width = player_tex.width;
-    let player_tex_height = player_tex.height;
 
     let enemy_tex = rl
         .load_texture(&th, "./assets/textures/enemy.png")
         .expect("load assets/enemy.png");
-    let enemy_tex_width = enemy_tex.width;
-    let enemy_tex_height = enemy_tex.height;
 
     let player_sheet_tex = rl
         .load_texture(&th, "./assets/textures/WarriorMan-Sheet.png")
@@ -141,12 +137,13 @@ pub fn setup_system(
 
     // Load tilemap textures and data
     let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/maptest04");
-    let tilemap_tex_width = tilemap_tex.width;
+    //let tilemap_tex_width = tilemap_tex.width;
+    let mut tilemaps_store = TilemapStore::new();
+    tilemaps_store.insert("tilemap", tilemap);
+    commands.insert_resource(tilemaps_store);
 
     // Insert TextureStore resource
-    let mut tex_store = TextureStore {
-        map: FxHashMap::default(),
-    };
+    let mut tex_store = TextureStore::new();
     tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("player", player_tex);
     tex_store.insert("enemy", enemy_tex);
@@ -213,6 +210,56 @@ pub fn setup_system(
         },
     );
     commands.insert_resource(anim_store);
+
+    // Send messages to load musics
+    {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
+            id: "music1".into(),
+            path: "./assets/audio/chiptun1.mod".into(),
+        });
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
+            id: "music2".into(),
+            path: "./assets/audio/mini1111.xm".into(),
+        });
+    }
+
+    // TODO: music_load(world, "music1".into(), "./assets/audio/chiptun1.mod".into());
+    // TODO: music_load(world, "music2".into(), "./assets/audio/mini1111.xm".into());
+
+    // block until both audio files are loaded
+    {
+        let _ = audio_bridge.rx_evt.recv();
+        let _ = audio_bridge.rx_evt.recv();
+    }
+
+    // Change GameState to Playing
+    next_state.set(GameStates::Playing);
+    eprintln!("Game setup_with_commands() done, next state set to Playing");
+}
+
+pub fn enter_play(
+    mut commands: Commands,
+    //mut next_state: ResMut<NextGameState>,
+    //mut rl: NonSendMut<raylib::RaylibHandle>,
+    //th: NonSend<raylib::RaylibThread>,
+    audio_bridge: ResMut<AudioBridge>,
+    tex_store: Res<TextureStore>,
+    tilemaps_store: Res<TilemapStore>, // TODO: Make it optional
+) {
+    // Get Texture sizes
+    let player_tex = tex_store.get("player").expect("player texture not found");
+    let player_tex_width = player_tex.width;
+    let player_tex_height = player_tex.height;
+
+    let enemy_tex = tex_store.get("enemy").expect("enemy texture not found");
+    let enemy_tex_width = enemy_tex.width;
+    let enemy_tex_height = enemy_tex.height;
+
+    let tilemap_tex = tex_store.get("tilemap").expect("tilemap texture not found");
+    let tilemap_tex_width = tilemap_tex.width;
+    let tilemap = tilemaps_store
+        .get("tilemap")
+        .expect("tilemap info not found");
 
     // Player
     commands.spawn((
@@ -327,28 +374,7 @@ pub fn setup_system(
     }
 
     // Create map tiles as spawns of MapPosition, Zindex, and Sprite
-    spawn_tilemaps(&mut commands, "tilemap", tilemap_tex_width, tilemap);
-
-    // Send messages to load musics
-    {
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
-            id: "music1".into(),
-            path: "./assets/audio/chiptun1.mod".into(),
-        });
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
-            id: "music2".into(),
-            path: "./assets/audio/mini1111.xm".into(),
-        });
-    }
-
-    // TODO: music_load(world, "music1".into(), "./assets/audio/chiptun1.mod".into());
-    // TODO: music_load(world, "music2".into(), "./assets/audio/mini1111.xm".into());
-
-    // block until both audio files are loaded
-    {
-        let _ = audio_bridge.rx_evt.recv();
-        let _ = audio_bridge.rx_evt.recv();
-    }
+    spawn_tiles(&mut commands, "tilemap", tilemap_tex_width, tilemap);
 
     // play music2 looped
     {
@@ -358,8 +384,4 @@ pub fn setup_system(
         });
     }
     // TODO: music_play(world, "music2".into(), true);
-
-    // Change GameState to Playing
-    next_state.set(GameStates::Playing);
-    eprintln!("Game setup_with_commands() done, next state set to Playing");
 }

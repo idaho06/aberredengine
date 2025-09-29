@@ -7,5 +7,5 @@ pub mod input;
 pub mod screensize;
 pub mod systemsstore;
 pub mod texturestore;
-pub mod tilemap;
+pub mod tilemapstore;
 pub mod worldtime;

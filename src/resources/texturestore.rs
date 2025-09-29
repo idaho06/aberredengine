@@ -9,6 +9,11 @@ pub struct TextureStore {
 }
 
 impl TextureStore {
+    pub fn new() -> Self {
+        TextureStore {
+            map: FxHashMap::default(),
+        }
+    }
     /// Get a texture by its key.
     pub fn get(&self, key: impl Into<String>) -> Option<&Texture2D> {
         self.map.get(&key.into())
