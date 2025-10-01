@@ -1,4 +1,4 @@
-use bevy_ecs::observer::Trigger;
+use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 
 use crate::components::group::Group;
@@ -12,7 +12,7 @@ pub struct CollisionEvent {
 
 /// Global observer that despawns both collided entities when a CollisionEvent is triggered.
 pub fn observe_kill_on_collision(
-    trigger: Trigger<CollisionEvent>,
+    trigger: On<CollisionEvent>,
     mut commands: Commands,
     groups: Query<&Group>,
 ) {

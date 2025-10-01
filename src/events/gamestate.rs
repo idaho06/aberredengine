@@ -1,14 +1,14 @@
 use crate::resources::gamestate::NextGameStates::{Pending, Unchanged};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::systemsstore::SystemsStore;
-use bevy_ecs::observer::Trigger;
+use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 
 #[derive(Event, Debug, Clone, Copy)]
 pub struct GameStateChangedEvent {}
 
 pub fn observe_gamestate_change_event(
-    _trigger: Trigger<GameStateChangedEvent>,
+    _trigger: On<GameStateChangedEvent>,
     mut commands: Commands, // for spawning/despawning entities and triggering events
     mut next_game_state: Option<ResMut<NextGameState>>,
     mut game_state: Option<ResMut<GameState>>,

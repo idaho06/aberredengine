@@ -1,18 +1,18 @@
-use crate::events::audio::{AudioCmd, AudioEvent};
+use crate::events::audio::{AudioCmd, AudioMessage};
 use crate::systems::audio::audio_thread;
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 
 #[derive(Resource)]
 pub struct AudioBridge {
-    pub tx_cmd: Sender<AudioCmd>,     // Bevy_ecs -> audio thread
-    pub rx_evt: Receiver<AudioEvent>, // audio thread -> Bevy_ecs
+    pub tx_cmd: Sender<AudioCmd>,       // Bevy_ecs -> audio thread
+    pub rx_evt: Receiver<AudioMessage>, // audio thread -> Bevy_ecs
     pub handle: std::thread::JoinHandle<()>,
 }
 
 pub fn setup_audio(world: &mut World) {
     let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
-    let (tx_evt, rx_evt) = unbounded::<AudioEvent>();
+    let (tx_evt, rx_evt) = unbounded::<AudioMessage>();
 
     let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_evt));
 
@@ -21,7 +21,7 @@ pub fn setup_audio(world: &mut World) {
         rx_evt,
         handle,
     });
-    world.insert_resource(Events::<AudioEvent>::default());
+    world.insert_resource(Messages::<AudioMessage>::default());
 }
 
 pub fn shutdown_audio(world: &mut World) {

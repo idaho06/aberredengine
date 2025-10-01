@@ -1,25 +1,25 @@
 use core::panic;
 
-use crate::events::audio::{AudioCmd, AudioEvent};
+use crate::events::audio::{AudioCmd, AudioMessage};
 use crate::resources::audio::AudioBridge;
-use bevy_ecs::event::Events;
+use bevy_ecs::prelude::Messages;
 use bevy_ecs::{
-    prelude::{EventWriter, Res},
+    prelude::{MessageWriter, Res},
     system::ResMut,
 };
 use crossbeam_channel::{Receiver, Sender};
 use raylib::core::audio::{Music, RaylibAudio};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-pub fn poll_audio_events(bridge: Res<AudioBridge>, mut writer: EventWriter<AudioEvent>) {
+pub fn poll_audio_events(bridge: Res<AudioBridge>, mut writer: MessageWriter<AudioMessage>) {
     writer.write_batch(bridge.rx_evt.try_iter());
 }
 
-pub fn update_bevy_audio_events(mut events: ResMut<Events<AudioEvent>>) {
+pub fn update_bevy_audio_events(mut events: ResMut<Messages<AudioMessage>>) {
     events.update();
 }
 
-pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
+pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let audio = match RaylibAudio::init_audio_device() {
         Ok(device) => device,
         Err(e) => {
@@ -45,14 +45,14 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                         // log then insert/send
                         eprintln!("[audio] loaded id='{}' path='{}'", id, path);
                         musics.insert(id.clone(), music);
-                        let _ = tx_evt.send(AudioEvent::Loaded { id });
+                        let _ = tx_evt.send(AudioMessage::Loaded { id });
                     }
                     Err(e) => {
                         eprintln!(
                             "[audio] load failed id='{}' path='{}' error='{}'",
                             id, path, e
                         );
-                        let _ = tx_evt.send(AudioEvent::LoadFailed {
+                        let _ = tx_evt.send(AudioMessage::LoadFailed {
                             id,
                             error: e.to_string(),
                         });
@@ -72,7 +72,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                         } else {
                             looped.remove(&id);
                         }
-                        let _ = tx_evt.send(AudioEvent::PlayStarted { id });
+                        let _ = tx_evt.send(AudioMessage::PlayStarted { id });
                     }
                 }
                 AudioCmd::Stop { id } => {
@@ -81,7 +81,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                         music.stop_stream();
                         playing.remove(&id);
                         looped.remove(&id);
-                        let _ = tx_evt.send(AudioEvent::Stopped { id });
+                        let _ = tx_evt.send(AudioMessage::Stopped { id });
                     }
                 }
                 AudioCmd::Pause { id } => {
@@ -89,7 +89,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                         eprintln!("[audio] pause id='{}'", id);
                         music.pause_stream();
                         playing.remove(&id);
-                        let _ = tx_evt.send(AudioEvent::Stopped { id });
+                        let _ = tx_evt.send(AudioMessage::Stopped { id });
                     }
                 }
                 AudioCmd::Resume { id } => {
@@ -97,21 +97,21 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                         eprintln!("[audio] resume id='{}'", id);
                         music.resume_stream();
                         playing.insert(id.clone());
-                        let _ = tx_evt.send(AudioEvent::PlayStarted { id });
+                        let _ = tx_evt.send(AudioMessage::PlayStarted { id });
                     }
                 }
                 AudioCmd::Volume { id, vol } => {
                     if let Some(music) = musics.get(&id) {
                         eprintln!("[audio] volume id='{}' vol={}", id, vol);
                         music.set_volume(vol);
-                        let _ = tx_evt.send(AudioEvent::VolumeChanged { id, vol });
+                        let _ = tx_evt.send(AudioMessage::VolumeChanged { id, vol });
                     }
                 }
                 AudioCmd::Unload { id } => {
                     if let Some(music) = musics.remove(&id) {
                         eprintln!("[audio] unload id='{}'", id);
                         drop(music);
-                        let _ = tx_evt.send(AudioEvent::Unloaded { id });
+                        let _ = tx_evt.send(AudioMessage::Unloaded { id });
                     }
                 }
                 AudioCmd::UnloadAll => {
@@ -119,7 +119,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                     musics.clear();
                     playing.clear();
                     looped.clear();
-                    let _ = tx_evt.send(AudioEvent::UnloadedAll);
+                    let _ = tx_evt.send(AudioMessage::UnloadedAll);
                 }
                 AudioCmd::Shutdown => {
                     eprintln!("[audio] shutdown requested");
@@ -128,7 +128,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                     musics.clear();
                     playing.clear();
                     looped.clear();
-                    let _ = tx_evt.send(AudioEvent::UnloadedAll);
+                    let _ = tx_evt.send(AudioMessage::UnloadedAll);
                     break 'run;
                 }
             }
@@ -159,12 +159,12 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioEvent>) {
                     eprintln!("[audio] restarting looped id='{}'", id);
                     music.seek_stream(0.0);
                     music.play_stream();
-                    let _ = tx_evt.send(AudioEvent::PlayStarted { id: id.clone() });
+                    let _ = tx_evt.send(AudioMessage::PlayStarted { id: id.clone() });
                 }
             } else {
                 eprintln!("[audio] finished id='{}'", id);
                 playing.remove(id);
-                let _ = tx_evt.send(AudioEvent::Finished { id: id.clone() });
+                let _ = tx_evt.send(AudioMessage::Finished { id: id.clone() });
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
