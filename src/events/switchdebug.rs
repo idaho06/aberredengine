@@ -1,12 +1,12 @@
 use crate::resources::debugmode::DebugMode;
-use bevy_ecs::observer::Trigger;
+use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 
 #[derive(Event, Debug, Clone, Copy)]
 pub struct SwitchDebugEvent {}
 
 pub fn observe_switch_debug_event(
-    _trigger: Trigger<SwitchDebugEvent>,
+    _trigger: On<SwitchDebugEvent>,
     mut commands: Commands,
     debug_mode: Option<Res<DebugMode>>,
 ) {

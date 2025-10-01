@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables)]
 
-use bevy_ecs::prelude::Event;
+use bevy_ecs::message::Message;
 
 /// Commands set *to* the audio thread
 #[derive(Debug)]
@@ -17,8 +17,8 @@ pub enum AudioCmd {
 }
 
 /// Events sent *back* from the audio thread
-#[derive(Event, Debug, Clone)]
-pub enum AudioEvent {
+#[derive(Message, Debug, Clone)]
+pub enum AudioMessage {
     Loaded { id: String },
     Unloaded { id: String },
     UnloadedAll,
