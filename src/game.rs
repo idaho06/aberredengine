@@ -213,11 +213,11 @@ pub fn setup(
 
     // Send messages to load musics
     {
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::LoadMusic {
             id: "music1".into(),
             path: "./assets/audio/chiptun1.mod".into(),
         });
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::Load {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::LoadMusic {
             id: "music2".into(),
             path: "./assets/audio/mini1111.xm".into(),
         });
@@ -378,7 +378,7 @@ pub fn enter_play(
 
     // play music2 looped
     {
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::Play {
+        let _ = audio_bridge.tx_cmd.send(AudioCmd::PlayMusic {
             id: "music2".into(),
             looped: true,
         });
