@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::events::audio::{AudioCmd, AudioMessage};
 use crate::resources::audio::AudioBridge;
 use bevy_ecs::prelude::Messages;
@@ -8,8 +6,14 @@ use bevy_ecs::{
     system::ResMut,
 };
 use crossbeam_channel::{Receiver, Sender};
-use raylib::core::audio::{Music, RaylibAudio};
+use raylib::core::audio::{Music, RaylibAudio, Sound};
 use rustc_hash::{FxHashMap, FxHashSet};
+
+#[derive(Clone, Copy, Debug, Default)]
+struct FxPlayingState {
+    observed_start: bool,
+    silent_polls: u32,
+}
 
 pub fn poll_audio_events(bridge: Res<AudioBridge>, mut writer: MessageWriter<AudioMessage>) {
     writer.write_batch(bridge.rx_evt.try_iter());
@@ -35,30 +39,32 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let mut musics: FxHashMap<String, Music> = FxHashMap::default();
     let mut playing: FxHashSet<String> = FxHashSet::default();
     let mut looped: FxHashSet<String> = FxHashSet::default();
+    let mut sounds: FxHashMap<String, Sound> = FxHashMap::default();
+    let mut fx_playing: FxHashMap<String, FxPlayingState> = FxHashMap::default();
 
     'run: loop {
         // 1) Drain commands
         for cmd in rx_cmd.try_iter() {
             match cmd {
-                AudioCmd::Load { id, path } => match audio.new_music(&path) {
+                AudioCmd::LoadMusic { id, path } => match audio.new_music(&path) {
                     Ok(music) => {
                         // log then insert/send
                         eprintln!("[audio] loaded id='{}' path='{}'", id, path);
                         musics.insert(id.clone(), music);
-                        let _ = tx_evt.send(AudioMessage::Loaded { id });
+                        let _ = tx_evt.send(AudioMessage::MusicLoaded { id });
                     }
                     Err(e) => {
                         eprintln!(
                             "[audio] load failed id='{}' path='{}' error='{}'",
                             id, path, e
                         );
-                        let _ = tx_evt.send(AudioMessage::LoadFailed {
+                        let _ = tx_evt.send(AudioMessage::MusicLoadFailed {
                             id,
                             error: e.to_string(),
                         });
                     }
                 },
-                AudioCmd::Play {
+                AudioCmd::PlayMusic {
                     id,
                     looped: want_loop,
                 } => {
@@ -72,54 +78,94 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                         } else {
                             looped.remove(&id);
                         }
-                        let _ = tx_evt.send(AudioMessage::PlayStarted { id });
+                        let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id });
                     }
                 }
-                AudioCmd::Stop { id } => {
+                AudioCmd::StopMusic { id } => {
                     if let Some(music) = musics.get(&id) {
                         eprintln!("[audio] stop id='{}'", id);
                         music.stop_stream();
                         playing.remove(&id);
                         looped.remove(&id);
-                        let _ = tx_evt.send(AudioMessage::Stopped { id });
+                        let _ = tx_evt.send(AudioMessage::MusicStopped { id });
                     }
                 }
-                AudioCmd::Pause { id } => {
+                AudioCmd::PauseMusic { id } => {
                     if let Some(music) = musics.get(&id) {
                         eprintln!("[audio] pause id='{}'", id);
                         music.pause_stream();
                         playing.remove(&id);
-                        let _ = tx_evt.send(AudioMessage::Stopped { id });
+                        let _ = tx_evt.send(AudioMessage::MusicStopped { id });
                     }
                 }
-                AudioCmd::Resume { id } => {
+                AudioCmd::ResumeMusic { id } => {
                     if let Some(music) = musics.get(&id) {
                         eprintln!("[audio] resume id='{}'", id);
                         music.resume_stream();
                         playing.insert(id.clone());
-                        let _ = tx_evt.send(AudioMessage::PlayStarted { id });
+                        let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id });
                     }
                 }
-                AudioCmd::Volume { id, vol } => {
+                AudioCmd::VolumeMusic { id, vol } => {
                     if let Some(music) = musics.get(&id) {
                         eprintln!("[audio] volume id='{}' vol={}", id, vol);
                         music.set_volume(vol);
-                        let _ = tx_evt.send(AudioMessage::VolumeChanged { id, vol });
+                        let _ = tx_evt.send(AudioMessage::MusicVolumeChanged { id, vol });
                     }
                 }
-                AudioCmd::Unload { id } => {
+                AudioCmd::UnloadMusic { id } => {
                     if let Some(music) = musics.remove(&id) {
                         eprintln!("[audio] unload id='{}'", id);
                         drop(music);
-                        let _ = tx_evt.send(AudioMessage::Unloaded { id });
+                        let _ = tx_evt.send(AudioMessage::MusicUnloaded { id });
                     }
                 }
-                AudioCmd::UnloadAll => {
+                AudioCmd::UnloadAllMusic => {
                     eprintln!("[audio] unload all");
                     musics.clear();
                     playing.clear();
                     looped.clear();
-                    let _ = tx_evt.send(AudioMessage::UnloadedAll);
+                    let _ = tx_evt.send(AudioMessage::MusicUnloadedAll);
+                }
+                AudioCmd::LoadFx { id, path } => match audio.new_sound(&path) {
+                    Ok(sound) => {
+                        eprintln!("[audio] fx loaded id='{}' path='{}'", id, path);
+                        sounds.insert(id.clone(), sound);
+                        let _ = tx_evt.send(AudioMessage::FxLoaded { id });
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[audio] fx load failed id='{}' path='{}' error='{}'",
+                            id, path, e
+                        );
+                        let _ = tx_evt.send(AudioMessage::FxLoadFailed {
+                            id,
+                            error: e.to_string(),
+                        });
+                    }
+                },
+                AudioCmd::PlayFx { id } => {
+                    if let Some(sound) = sounds.get(&id) {
+                        eprintln!("[audio] fx play id='{}'", id);
+                        audio.play_sound(sound);
+                        fx_playing.insert(id.clone(), FxPlayingState::default());
+                    } else {
+                        eprintln!("[audio] fx play failed id='{}' reason='not loaded'", id);
+                    }
+                }
+                AudioCmd::UnloadFx { id } => {
+                    if let Some(sound) = sounds.remove(&id) {
+                        eprintln!("[audio] fx unload id='{}'", id);
+                        drop(sound);
+                        fx_playing.remove(&id);
+                        let _ = tx_evt.send(AudioMessage::FxUnloaded { id });
+                    }
+                }
+                AudioCmd::UnloadAllFx => {
+                    eprintln!("[audio] fx unload all");
+                    sounds.clear();
+                    fx_playing.clear();
+                    let _ = tx_evt.send(AudioMessage::FxUnloadedAll);
                 }
                 AudioCmd::Shutdown => {
                     eprintln!("[audio] shutdown requested");
@@ -128,7 +174,10 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     musics.clear();
                     playing.clear();
                     looped.clear();
-                    let _ = tx_evt.send(AudioMessage::UnloadedAll);
+                    let _ = tx_evt.send(AudioMessage::MusicUnloadedAll);
+                    sounds.clear();
+                    fx_playing.clear();
+                    let _ = tx_evt.send(AudioMessage::FxUnloadedAll);
                     break 'run;
                 }
             }
@@ -159,13 +208,37 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     eprintln!("[audio] restarting looped id='{}'", id);
                     music.seek_stream(0.0);
                     music.play_stream();
-                    let _ = tx_evt.send(AudioMessage::PlayStarted { id: id.clone() });
+                    let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id: id.clone() });
                 }
             } else {
                 eprintln!("[audio] finished id='{}'", id);
                 playing.remove(id);
-                let _ = tx_evt.send(AudioMessage::Finished { id: id.clone() });
+                let _ = tx_evt.send(AudioMessage::MusicFinished { id: id.clone() });
             }
+        }
+
+        let mut fx_ended: Vec<String> = Vec::new();
+        for (id, state) in fx_playing.iter_mut() {
+            let is_playing = sounds
+                .get(id)
+                .map(|sound| audio.is_sound_playing(sound))
+                .unwrap_or(false);
+
+            if is_playing {
+                state.observed_start = true;
+                state.silent_polls = 0;
+            } else {
+                state.silent_polls = state.silent_polls.saturating_add(1);
+                if state.observed_start || state.silent_polls > 5 {
+                    fx_ended.push(id.clone());
+                }
+            }
+        }
+
+        for id in fx_ended.iter() {
+            eprintln!("[audio] fx finished id='{}'", id);
+            fx_playing.remove(id);
+            let _ = tx_evt.send(AudioMessage::FxFinished { id: id.clone() });
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     } // 'run

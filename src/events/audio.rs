@@ -5,26 +5,35 @@ use bevy_ecs::message::Message;
 /// Commands set *to* the audio thread
 #[derive(Debug)]
 pub enum AudioCmd {
-    Load { id: String, path: String },
-    Unload { id: String },
-    UnloadAll,
-    Play { id: String, looped: bool },
-    Stop { id: String },
-    Pause { id: String },
-    Resume { id: String },
-    Volume { id: String, vol: f32 },
+    LoadMusic { id: String, path: String },
+    UnloadMusic { id: String },
+    UnloadAllMusic,
+    PlayMusic { id: String, looped: bool },
+    StopMusic { id: String },
+    PauseMusic { id: String },
+    ResumeMusic { id: String },
+    VolumeMusic { id: String, vol: f32 },
+    LoadFx { id: String, path: String },
+    PlayFx { id: String },
+    UnloadFx { id: String },
+    UnloadAllFx,
     Shutdown,
 }
 
 /// Events sent *back* from the audio thread
 #[derive(Message, Debug, Clone)]
 pub enum AudioMessage {
-    Loaded { id: String },
-    Unloaded { id: String },
-    UnloadedAll,
-    LoadFailed { id: String, error: String },
-    PlayStarted { id: String },
-    Stopped { id: String },
-    Finished { id: String }, // reached end for non looping
-    VolumeChanged { id: String, vol: f32 },
+    MusicLoaded { id: String },
+    MusicUnloaded { id: String },
+    MusicUnloadedAll,
+    MusicLoadFailed { id: String, error: String },
+    MusicPlayStarted { id: String },
+    MusicStopped { id: String },
+    MusicFinished { id: String }, // reached end for non looping
+    MusicVolumeChanged { id: String, vol: f32 },
+    FxLoaded { id: String },
+    FxUnloaded { id: String },
+    FxUnloadedAll,
+    FxLoadFailed { id: String, error: String },
+    FxFinished { id: String },
 }
