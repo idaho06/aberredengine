@@ -1,3 +1,29 @@
+//! Audio system implementation backed by a dedicated thread and Raylib.
+//!
+//! This module hosts the background audio thread and the systems that bridge
+//! it with the ECS world:
+//! - [`audio_thread`] runs on its own OS thread, owns the Raylib audio device,
+//!   and processes [`AudioCmd`](crate::events::audio::AudioCmd) messages,
+//!   emitting [`AudioMessage`](crate::events::audio::AudioMessage) responses.
+//! - [`poll_audio_events`] non-blockingly drains the audio thread's event
+//!   receiver into Bevy ECS' message queue each frame.
+//! - [`update_bevy_audio_events`] advances the ECS message queue so newly
+//!   written messages become readable by message subscribers.
+//!
+//! The design keeps Raylib audio API calls isolated to a single thread, while
+//! the main game thread communicates via lock-free channels.
+//!
+//! Notes
+//! - The audio thread must be created once via
+//!   [`crate::resources::audio::setup_audio`] and joined/terminated via
+//!   [`crate::resources::audio::shutdown_audio`].
+//! - All file I/O (load) and control (play/stop/pause/volume) happen on the
+//!   audio thread in response to commands.
+//! - Music streaming requires periodic `update_stream()` calls; this loop takes
+//!   care of it while tracks are playing.
+//!
+//! See also: [`crate::events::audio`] and [`crate::resources::audio`].
+
 use crate::events::audio::{AudioCmd, AudioMessage};
 use crate::resources::audio::AudioBridge;
 use bevy_ecs::prelude::Messages;
@@ -15,14 +41,61 @@ struct FxPlayingState {
     silent_polls: u32,
 }
 
-pub fn poll_audio_events(bridge: Res<AudioBridge>, mut writer: MessageWriter<AudioMessage>) {
-    writer.write_batch(bridge.rx_evt.try_iter());
+/// Drain any pending events from the audio thread and enqueue them into the
+/// ECS [`Messages<AudioMessage>`] mailbox.
+///
+/// This is a non-blocking system function intended to run each frame on the
+/// main thread. It ensures that messages produced by the audio thread become
+/// available to ECS message readers and systems that consume
+/// [`AudioMessage`].
+///
+/// It does not mutate world state beyond writing messages.
+pub fn poll_audio_messages(bridge: Res<AudioBridge>, mut writer: MessageWriter<AudioMessage>) {
+    writer.write_batch(bridge.rx_msg.try_iter());
 }
 
-pub fn update_bevy_audio_events(mut events: ResMut<Messages<AudioMessage>>) {
+/// Advance the ECS message queue for [`AudioMessage`].
+///
+/// Bevy ECS' [`Messages`] API requires calling `update()` once per frame to
+/// make messages written this frame visible to readers in the same frame.
+/// Run this after [`poll_audio_messages`] in your schedule.
+pub fn update_bevy_audio_messages(mut events: ResMut<Messages<AudioMessage>>) {
     events.update();
 }
 
+/// Forward ECS AudioCmd messages to the audio thread via the AudioBridge sender.
+pub fn forward_audio_cmds(
+    bridge: Res<AudioBridge>,
+    mut reader: bevy_ecs::prelude::MessageReader<AudioCmd>,
+) {
+    for cmd in reader.read() {
+        // Forward clone to crossbeam channel; ignore send error on shutdown
+        let _ = bridge.tx_cmd.send(cmd.clone());
+    }
+}
+
+/// Advance the ECS message queue for AudioCmd so same-frame readers can observe writes.
+pub fn update_bevy_audio_cmds(mut msgs: ResMut<Messages<AudioCmd>>) {
+    msgs.update();
+}
+
+/// Entry point of the dedicated audio thread.
+///
+/// Responsibilities:
+/// - Initialize the Raylib audio device once for the life of the thread.
+/// - Own all `Music` and `Sound` handles, preventing use from other threads.
+/// - React to [`AudioCmd`] inputs to load/unload and control playback.
+/// - Emit [`AudioMessage`] outputs for state changes (loaded, started,
+///   finished, etc.).
+/// - Periodically pump music streams and detect when playback finishes.
+///
+/// Concurrency model:
+/// - Uses `crossbeam_channel` for lock-free message passing.
+/// - The loop non-blockingly drains commands, performs required Raylib calls,
+///   and sleeps briefly between iterations to avoid busy-waiting.
+///
+/// This function blocks until it receives [`AudioCmd::Shutdown`], at which
+/// point it unloads resources and exits cleanly.
 pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let audio = match RaylibAudio::init_audio_device() {
         Ok(device) => device,
@@ -147,7 +220,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 AudioCmd::PlayFx { id } => {
                     if let Some(sound) = sounds.get(&id) {
                         eprintln!("[audio] fx play id='{}'", id);
-                        audio.play_sound(sound);
+                        sound.play();
                         fx_playing.insert(id.clone(), FxPlayingState::default());
                     } else {
                         eprintln!("[audio] fx play failed id='{}' reason='not loaded'", id);
@@ -221,7 +294,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
         for (id, state) in fx_playing.iter_mut() {
             let is_playing = sounds
                 .get(id)
-                .map(|sound| audio.is_sound_playing(sound))
+                .map(|sound| sound.is_playing())
                 .unwrap_or(false);
 
             if is_playing {
@@ -248,5 +321,5 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
         std::thread::current().id()
     );
 
-    // On exit, musics drop before `audio`, satisfying lifetimes
+    // On exit, musics and sounds drop before `audio`, satisfying lifetimes
 }

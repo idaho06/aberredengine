@@ -14,7 +14,6 @@ use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::Animation;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::audio::AudioBridge;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::texturestore::TextureStore;
@@ -103,7 +102,8 @@ pub fn setup(
     mut next_state: ResMut<NextGameState>,
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
-    audio_bridge: ResMut<AudioBridge>,
+    // audio_bridge: ResMut<AudioBridge>,
+    mut audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
     // This function sets up the game world, loading resources
 
@@ -211,26 +211,21 @@ pub fn setup(
     );
     commands.insert_resource(anim_store);
 
-    // Send messages to load musics
-    {
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::LoadMusic {
-            id: "music1".into(),
-            path: "./assets/audio/chiptun1.mod".into(),
-        });
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::LoadMusic {
-            id: "music2".into(),
-            path: "./assets/audio/mini1111.xm".into(),
-        });
-    }
+    // Send messages to load musics and sound effects via ECS Messages<AudioCmd>
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "music1".into(),
+        path: "./assets/audio/chiptun1.mod".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "music2".into(),
+        path: "./assets/audio/mini1111.xm".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadFx {
+        id: "growl".into(),
+        path: "./assets/audio/growl.wav".into(),
+    });
 
-    // TODO: music_load(world, "music1".into(), "./assets/audio/chiptun1.mod".into());
-    // TODO: music_load(world, "music2".into(), "./assets/audio/mini1111.xm".into());
-
-    // block until both audio files are loaded
-    {
-        let _ = audio_bridge.rx_evt.recv();
-        let _ = audio_bridge.rx_evt.recv();
-    }
+    // Don't block; the audio thread will emit load messages which are polled by systems.
 
     // Change GameState to Playing
     next_state.set(GameStates::Playing);
@@ -242,7 +237,8 @@ pub fn enter_play(
     //mut next_state: ResMut<NextGameState>,
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     //th: NonSend<raylib::RaylibThread>,
-    audio_bridge: ResMut<AudioBridge>,
+    // audio_bridge: ResMut<AudioBridge>,
+    mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     tex_store: Res<TextureStore>,
     tilemaps_store: Res<TilemapStore>, // TODO: Make it optional
 ) {
@@ -346,7 +342,7 @@ pub fn enter_play(
 
         commands.spawn((
             Group::new("enemy"),
-            MapPosition::new(50.0 + (i as f32 * 64.0), 164.0 + (i as f32 * 16.0)),
+            MapPosition::new(50.0 + (i as f32 * 16.0), 164.0 + (i as f32 * 16.0)),
             ZIndex(i % 5),
             Sprite {
                 tex_key: "enemy".into(),
@@ -376,12 +372,10 @@ pub fn enter_play(
     // Create map tiles as spawns of MapPosition, Zindex, and Sprite
     spawn_tiles(&mut commands, "tilemap", tilemap_tex_width, tilemap);
 
-    // play music2 looped
-    {
-        let _ = audio_bridge.tx_cmd.send(AudioCmd::PlayMusic {
-            id: "music2".into(),
-            looped: true,
-        });
-    }
+    // play music2 looped via ECS messages
+    audio_cmd_writer.write(AudioCmd::PlayMusic {
+        id: "music2".into(),
+        looped: true,
+    });
     // TODO: music_play(world, "music2".into(), true);
 }
