@@ -6,7 +6,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
-use crate::resources::camera2d::Camera2DRes;
+use crate::events::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
 
@@ -14,7 +14,7 @@ pub fn movement(
     mut query: Query<(Entity, &mut MapPosition, &mut RigidBody)>,
     time: Res<WorldTime>,
     screensize: Res<ScreenSize>,
-    _camera: Res<Camera2DRes>,
+    mut audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
     for (_entity, mut position, mut rigidbody) in query.iter_mut() {
         // If the entity is going to be outside the camera bounds, bounce the borders
@@ -31,9 +31,13 @@ pub fn movement(
         if outside_x || outside_y {
             if outside_x {
                 rigidbody.velocity.x = -rigidbody.velocity.x;
+                // Play a sound effect on bounce
+                let _ = audio_cmd_writer.write(AudioCmd::PlayFx { id: "growl".into() });
             }
             if outside_y {
                 rigidbody.velocity.y = -rigidbody.velocity.y;
+                // Play a sound effect on bounce
+                let _ = audio_cmd_writer.write(AudioCmd::PlayFx { id: "growl".into() });
             }
         }
 

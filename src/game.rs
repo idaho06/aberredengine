@@ -333,7 +333,7 @@ pub fn enter_play(
 
     // Enemies
     let mut rng = rand::thread_rng();
-    for i in 0..30 {
+    for i in 0..16 {
         // Random velocity components in a small range
         let vx = rng.gen_range(-40.0f32..40.0f32);
         let vy = rng.gen_range(-20.0f32..20.0f32);
