@@ -35,11 +35,7 @@ use crossbeam_channel::{Receiver, Sender};
 use raylib::core::audio::{Music, RaylibAudio, Sound};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-#[derive(Clone, Copy, Debug, Default)]
-struct FxPlayingState {
-    observed_start: bool,
-    silent_polls: u32,
-}
+// FxPlayingState removed; we now track only the set of FX ids considered playing.
 
 /// Drain any pending events from the audio thread and enqueue them into the
 /// ECS [`Messages<AudioMessage>`] mailbox.
@@ -113,7 +109,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let mut playing: FxHashSet<String> = FxHashSet::default();
     let mut looped: FxHashSet<String> = FxHashSet::default();
     let mut sounds: FxHashMap<String, Sound> = FxHashMap::default();
-    let mut fx_playing: FxHashMap<String, FxPlayingState> = FxHashMap::default();
+    let mut fx_playing: FxHashSet<String> = FxHashSet::default();
 
     'run: loop {
         // 1) Drain commands
@@ -221,7 +217,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     if let Some(sound) = sounds.get(&id) {
                         eprintln!("[audio] fx play id='{}'", id);
                         sound.play();
-                        fx_playing.insert(id.clone(), FxPlayingState::default());
+                        fx_playing.insert(id.clone());
                     } else {
                         eprintln!("[audio] fx play failed id='{}' reason='not loaded'", id);
                     }
@@ -290,21 +286,17 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
             }
         }
 
+        // FX end detection: if an id is tracked as playing and Raylib reports it
+        // is no longer playing (or the sound handle is missing), emit FxFinished
+        // once and stop tracking it.
         let mut fx_ended: Vec<String> = Vec::new();
-        for (id, state) in fx_playing.iter_mut() {
-            let is_playing = sounds
+        for id in fx_playing.iter() {
+            let still_playing = sounds
                 .get(id)
                 .map(|sound| sound.is_playing())
                 .unwrap_or(false);
-
-            if is_playing {
-                state.observed_start = true;
-                state.silent_polls = 0;
-            } else {
-                state.silent_polls = state.silent_polls.saturating_add(1);
-                if state.observed_start || state.silent_polls > 5 {
-                    fx_ended.push(id.clone());
-                }
+            if !still_playing {
+                fx_ended.push(id.clone());
             }
         }
 
