@@ -15,7 +15,9 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
-use crate::systems::audio::{poll_audio_events, update_bevy_audio_events};
+use crate::systems::audio::{
+    forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
+};
 use crate::systems::collision::collision;
 use crate::systems::gamestate::check_pending_state;
 use crate::systems::input::check_input;
@@ -88,10 +90,15 @@ fn main() {
     update.add_systems(update_input_state);
     update.add_systems(check_pending_state);
     update.add_systems(
+        // audio systems must be together
         (
-            update_bevy_audio_events,
+            // First, advance AudioCmd messages and forward them to the audio thread
+            update_bevy_audio_cmds,
+            forward_audio_cmds,
+            // Then, pull audio thread messages and advance them
+            poll_audio_messages,
+            update_bevy_audio_messages,
             // on_audio_event,
-            poll_audio_events,
         )
             .chain(),
     );
