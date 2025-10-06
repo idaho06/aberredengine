@@ -55,8 +55,8 @@ pub fn poll_audio_messages(bridge: Res<AudioBridge>, mut writer: MessageWriter<A
 /// Bevy ECS' [`Messages`] API requires calling `update()` once per frame to
 /// make messages written this frame visible to readers in the same frame.
 /// Run this after [`poll_audio_messages`] in your schedule.
-pub fn update_bevy_audio_messages(mut events: ResMut<Messages<AudioMessage>>) {
-    events.update();
+pub fn update_bevy_audio_messages(mut msgs: ResMut<Messages<AudioMessage>>) {
+    msgs.update();
 }
 
 /// Forward ECS AudioCmd messages to the audio thread via the AudioBridge sender.
