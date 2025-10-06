@@ -18,6 +18,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
+use crate::resources::worldtime::WorldTime;
 use rand::Rng;
 
 /// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
@@ -378,4 +379,46 @@ pub fn enter_play(
         looped: true,
     });
     // TODO: music_play(world, "music2".into(), true);
+}
+
+pub fn update(
+    time: Res<WorldTime>,
+    // mut _query_rb: Query<(&mut MapPosition, &mut RigidBody, &BoxCollider), With<Group>>,
+    mut query_enemies: Query<(&mut Sprite, &RigidBody), With<Group>>,
+    //mut query_player: Query<(&mut Sprite, &RigidBody), With<Group>>,
+) {
+    let _delta_sec = time.delta;
+
+    /*     // Update positions based on velocity
+       for (mut map_pos, mut rb, _collider) in query_rb.iter_mut() {
+
+           // Update position based on velocity
+           map_pos.x += rb.velocity.x * delta_sec;
+           map_pos.y += rb.velocity.y * delta_sec;
+
+           // Simple boundary collision with screen edges (assuming 800x450 screen size)
+           if map_pos.x < 0.0 {
+               map_pos.x = 0.0;
+               rb.velocity.x = -rb.velocity.x; // Reverse X velocity
+           } else if map_pos.x > 800.0 {
+               map_pos.x = 800.0;
+               rb.velocity.x = -rb.velocity.x; // Reverse X velocity
+           }
+           if map_pos.y < 0.0 {
+               map_pos.y = 0.0;
+               rb.velocity.y = -rb.velocity.y; // Reverse Y velocity
+           } else if map_pos.y > 450.0 {
+               map_pos.y = 450.0;
+               rb.velocity.y = -rb.velocity.y; // Reverse Y velocity
+           }
+       }
+    */
+    // Update enemy sprites based on their velocity (flip horizontally)
+    for (mut sprite, rb) in query_enemies.iter_mut() {
+        if rb.velocity.x < 0.0 {
+            sprite.flip_h = true;
+        } else if rb.velocity.x > 0.0 {
+            sprite.flip_h = false;
+        }
+    }
 }

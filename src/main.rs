@@ -19,7 +19,7 @@ use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
 use crate::systems::collision::collision;
-use crate::systems::gamestate::check_pending_state;
+use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::input::check_input;
 use crate::systems::input::update_input_state;
 use crate::systems::movement::movement;
@@ -106,6 +106,11 @@ fn main() {
     update.add_systems(movement);
     update.add_systems(collision);
     update.add_systems(animation);
+    update.add_systems(
+        (game::update)
+            .run_if(state_is_playing)
+            .after(check_pending_state),
+    );
     update.add_systems(render_system);
 
     update
