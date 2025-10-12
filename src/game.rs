@@ -7,6 +7,7 @@ use rustc_hash::FxHashMap;
 use crate::components::animation::AnimationComponent;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
+use crate::components::inputcontrolled::InputControlled;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
@@ -290,6 +291,13 @@ pub fn enter_play(
                 y: player_tex_height as f32,
             },
         },
+        RigidBody::default(),
+        InputControlled::new(
+            Vector2 { x: 0.0, y: -100.0 }, // up
+            Vector2 { x: 0.0, y: 100.0 },  // down
+            Vector2 { x: -100.0, y: 0.0 }, // left
+            Vector2 { x: 100.0, y: 0.0 },  // right
+        ),
     ));
 
     // Player animations

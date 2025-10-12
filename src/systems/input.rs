@@ -9,63 +9,63 @@ pub fn update_input_state(mut input: ResMut<InputState>, rl: NonSendMut<raylib::
     let is_key_down = |key: KeyboardKey| rl.is_key_down(key);
     let is_key_pressed = |key: KeyboardKey| rl.is_key_pressed(key);
 
-    input.maindirection_up.state = is_key_down(input.maindirection_up.key_binding);
-    input.maindirection_left.state = is_key_down(input.maindirection_left.key_binding);
-    input.maindirection_down.state = is_key_down(input.maindirection_down.key_binding);
-    input.maindirection_right.state = is_key_down(input.maindirection_right.key_binding);
+    input.maindirection_up.active = is_key_down(input.maindirection_up.key_binding);
+    input.maindirection_left.active = is_key_down(input.maindirection_left.key_binding);
+    input.maindirection_down.active = is_key_down(input.maindirection_down.key_binding);
+    input.maindirection_right.active = is_key_down(input.maindirection_right.key_binding);
     // Arrow keys
-    input.secondarydirection_up.state = is_key_down(input.secondarydirection_up.key_binding);
-    input.secondarydirection_down.state = is_key_down(input.secondarydirection_down.key_binding);
-    input.secondarydirection_left.state = is_key_down(input.secondarydirection_left.key_binding);
-    input.secondarydirection_right.state = is_key_down(input.secondarydirection_right.key_binding);
+    input.secondarydirection_up.active = is_key_down(input.secondarydirection_up.key_binding);
+    input.secondarydirection_down.active = is_key_down(input.secondarydirection_down.key_binding);
+    input.secondarydirection_left.active = is_key_down(input.secondarydirection_left.key_binding);
+    input.secondarydirection_right.active = is_key_down(input.secondarydirection_right.key_binding);
     // Action special keys
-    input.action_back.state = is_key_pressed(input.action_back.key_binding);
-    input.action_1.state = is_key_pressed(input.action_1.key_binding);
-    input.action_2.state = is_key_pressed(input.action_2.key_binding);
-    input.mode_debug.state = is_key_pressed(input.mode_debug.key_binding);
-    input.action_special.state = is_key_pressed(input.action_special.key_binding);
+    input.action_back.active = is_key_pressed(input.action_back.key_binding);
+    input.action_1.active = is_key_pressed(input.action_1.key_binding);
+    input.action_2.active = is_key_pressed(input.action_2.key_binding);
+    input.mode_debug.active = is_key_pressed(input.mode_debug.key_binding);
+    input.action_special.active = is_key_pressed(input.action_special.key_binding);
 }
 
 pub fn check_input(mut commands: Commands, input: Res<InputState>) {
     // React to the input resource this frame
-    if input.maindirection_up.state {
+    if input.maindirection_up.active {
         println!("W key pressed");
     }
-    if input.maindirection_down.state {
+    if input.maindirection_down.active {
         println!("S key pressed");
     }
-    if input.maindirection_left.state {
+    if input.maindirection_left.active {
         println!("A key pressed");
     }
-    if input.maindirection_right.state {
+    if input.maindirection_right.active {
         println!("D key pressed");
     }
-    if input.secondarydirection_up.state {
+    if input.secondarydirection_up.active {
         println!("Up arrow pressed");
     }
-    if input.secondarydirection_down.state {
+    if input.secondarydirection_down.active {
         println!("Down arrow pressed");
     }
-    if input.secondarydirection_left.state {
+    if input.secondarydirection_left.active {
         println!("Left arrow pressed");
     }
-    if input.secondarydirection_right.state {
+    if input.secondarydirection_right.active {
         println!("Right arrow pressed");
     }
-    if input.action_back.state {
+    if input.action_back.active {
         println!("Esc pressed");
     }
-    if input.action_1.state {
+    if input.action_1.active {
         println!("Space pressed");
     }
-    if input.action_2.state {
+    if input.action_2.active {
         println!("Enter pressed");
     }
-    if input.mode_debug.state {
+    if input.mode_debug.active {
         println!("F11 pressed");
         commands.trigger(SwitchDebugEvent {});
     }
-    if input.action_special.state {
+    if input.action_special.active {
         println!("F12 pressed");
     }
 }

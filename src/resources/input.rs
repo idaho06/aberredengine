@@ -3,7 +3,7 @@ use raylib::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BoolState {
-    pub state: bool,
+    pub active: bool,
     pub key_binding: KeyboardKey,
 }
 
@@ -30,7 +30,7 @@ pub struct InputState {
 impl Default for BoolState {
     fn default() -> Self {
         Self {
-            state: false,
+            active: false,
             key_binding: KeyboardKey::KEY_NULL,
         }
     }
@@ -40,57 +40,57 @@ impl Default for InputState {
     fn default() -> Self {
         Self {
             maindirection_up: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_W,
             },
             maindirection_left: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_A,
             },
             maindirection_down: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_S,
             },
             maindirection_right: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_D,
             },
             // Arrow keys
             secondarydirection_up: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_UP,
             },
             secondarydirection_down: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_DOWN,
             },
             secondarydirection_left: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_LEFT,
             },
             secondarydirection_right: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_RIGHT,
             },
             // Control keys
             action_back: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_ESCAPE,
             },
             action_1: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_SPACE,
             },
             action_2: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_ENTER,
             },
             mode_debug: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_F11,
             },
             action_special: BoolState {
-                state: false,
+                active: false,
                 key_binding: KeyboardKey::KEY_F12,
             },
         }
