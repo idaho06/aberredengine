@@ -1,13 +1,13 @@
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
 
-use crate::components::animation::AnimationComponent;
+use crate::components::animation::Animation;
 use crate::components::sprite::Sprite;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::worldtime::WorldTime;
 
 pub fn animation(
-    mut query: Query<(&mut AnimationComponent, &mut Sprite)>,
+    mut query: Query<(&mut Animation, &mut Sprite)>,
     animation_store: Res<AnimationStore>,
     time: Res<WorldTime>,
 ) {
@@ -25,6 +25,7 @@ pub fn animation(
                         anim_comp.frame_index = 0;
                     } else {
                         anim_comp.frame_index = animation.frame_count - 1; // stay on last frame
+                        // TODO: Trigger animation end event
                     }
                 }
             }

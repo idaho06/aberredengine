@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 //use std::collections::HashMap;
 
 // Import component/resource types from modules
-use crate::components::animation::AnimationComponent;
+use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
@@ -13,7 +13,7 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::animationstore::Animation;
+use crate::resources::animationstore::AnimationResource;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::gamestate::{GameStates, NextGameState};
@@ -125,7 +125,7 @@ pub fn setup(
     commands.insert_resource(Camera2DRes(camera));
 
     // Load textures
-    let player_tex = rl
+    let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
         .expect("load assets/player.png");
 
@@ -147,7 +147,7 @@ pub fn setup(
     // Insert TextureStore resource
     let mut tex_store = TextureStore::new();
     tex_store.insert("player-sheet", player_sheet_tex);
-    tex_store.insert("player", player_tex);
+    tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
     tex_store.insert("tilemap", tilemap_tex);
     commands.insert_resource(tex_store);
@@ -158,7 +158,7 @@ pub fn setup(
     };
     anim_store.animations.insert(
         "player_tired".into(),
-        Animation {
+        AnimationResource {
             tex_key: "player-sheet".into(),
             position: Vector2 { x: 0.0, y: 16.0 },
             displacement: 80.0, // width of each frame in the spritesheet
@@ -169,7 +169,7 @@ pub fn setup(
     );
     anim_store.animations.insert(
         "player_stand".into(),
-        Animation {
+        AnimationResource {
             tex_key: "player-sheet".into(),
             position: Vector2 { x: 0.0, y: 80.0 },
             displacement: 80.0, // width of each frame in the spritesheet
@@ -180,7 +180,7 @@ pub fn setup(
     );
     anim_store.animations.insert(
         "player_walk".into(),
-        Animation {
+        AnimationResource {
             tex_key: "player-sheet".into(),
             position: Vector2 { x: 0.0, y: 144.0 },
             displacement: 80.0, // width of each frame in the spritesheet
@@ -191,7 +191,7 @@ pub fn setup(
     );
     anim_store.animations.insert(
         "player_run".into(),
-        Animation {
+        AnimationResource {
             tex_key: "player-sheet".into(),
             position: Vector2 { x: 0.0, y: 208.0 },
             displacement: 80.0, // width of each frame in the spritesheet
@@ -202,7 +202,7 @@ pub fn setup(
     );
     anim_store.animations.insert(
         "player_jump".into(),
-        Animation {
+        AnimationResource {
             tex_key: "player-sheet".into(),
             position: Vector2 { x: 0.0, y: 272.0 },
             displacement: 80.0, // width of each frame in the spritesheet
@@ -245,9 +245,9 @@ pub fn enter_play(
     tilemaps_store: Res<TilemapStore>, // TODO: Make it optional
 ) {
     // Get Texture sizes
-    let player_tex = tex_store.get("player").expect("player texture not found");
-    let player_tex_width = player_tex.width;
-    let player_tex_height = player_tex.height;
+    let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
+    let dummy_tex_width = dummy_tex.width;
+    let dummy_tex_height = dummy_tex.height;
 
     let enemy_tex = tex_store.get("enemy").expect("enemy texture not found");
     let enemy_tex_width = enemy_tex.width;
@@ -259,48 +259,42 @@ pub fn enter_play(
         .get("tilemap")
         .expect("tilemap info not found");
 
-    // Player
+    // Dummy player
     commands.spawn((
-        Group::new("player"),
+        Group::new("dummy"),
         MapPosition::new(40.0, 40.0),
         ZIndex(0),
         Sprite {
-            tex_key: "player".into(),
-            width: player_tex_width as f32,
-            height: player_tex_height as f32,
+            tex_key: "dummy".into(),
+            width: dummy_tex_width as f32,
+            height: dummy_tex_height as f32,
             offset: Vector2::zero(),
             origin: Vector2 {
-                x: player_tex_width as f32 * 0.5,
-                y: player_tex_height as f32,
-            }, // origin at the feet of the player sprite
+                x: dummy_tex_width as f32 * 0.5,
+                y: dummy_tex_height as f32,
+            }, // origin at the feet of the dummy sprite
             flip_h: false,
             flip_v: false,
         },
         BoxCollider {
             size: Vector2 {
-                x: player_tex_width as f32 * 0.5,
-                y: player_tex_height as f32 * 0.5,
+                x: dummy_tex_width as f32 * 0.5,
+                y: dummy_tex_height as f32 * 0.5,
             },
             offset: Vector2 {
-                x: player_tex_width as f32 * 0.25,
-                y: player_tex_height as f32 * 0.25,
+                x: dummy_tex_width as f32 * 0.25,
+                y: dummy_tex_height as f32 * 0.25,
             },
             // Match collider pivot to sprite's origin (feet) to align positions
             origin: Vector2 {
-                x: player_tex_width as f32 * 0.5,
-                y: player_tex_height as f32,
+                x: dummy_tex_width as f32 * 0.5,
+                y: dummy_tex_height as f32,
             },
         },
         RigidBody::default(),
-        InputControlled::new(
-            Vector2 { x: 0.0, y: -100.0 }, // up
-            Vector2 { x: 0.0, y: 100.0 },  // down
-            Vector2 { x: -100.0, y: 0.0 }, // left
-            Vector2 { x: 100.0, y: 0.0 },  // right
-        ),
     ));
 
-    // Player animations
+    // Player animation flipped
     commands.spawn((
         Group::new("player-animation"),
         MapPosition::new(400.0, 225.0),
@@ -314,12 +308,13 @@ pub fn enter_play(
             flip_h: false,
             flip_v: true,
         },
-        AnimationComponent {
+        Animation {
             animation_key: "player_walk".into(),
             frame_index: 0,
             elapsed_time: 0.0,
         },
     ));
+    // Player animation controlled
     commands.spawn((
         Group::new("player-animation"),
         MapPosition::new(400.0, 190.0),
@@ -333,11 +328,18 @@ pub fn enter_play(
             flip_h: false,
             flip_v: false,
         },
-        AnimationComponent {
-            animation_key: "player_walk".into(),
+        Animation {
+            animation_key: "player_stand".into(),
             frame_index: 0,
             elapsed_time: 0.0,
         },
+        InputControlled::new(
+            Vector2 { x: 0.0, y: -32.0 }, // up
+            Vector2 { x: 0.0, y: 32.0 },  // down
+            Vector2 { x: -32.0, y: 0.0 }, // left
+            Vector2 { x: 32.0, y: 0.0 },  // right
+        ),
+        RigidBody::default(),
     ));
 
     // Enemies

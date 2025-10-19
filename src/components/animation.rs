@@ -1,13 +1,14 @@
 #![allow(dead_code, unused_variables)]
 use bevy_ecs::prelude::Component;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Component)]
-pub struct AnimationComponent {
+pub struct Animation {
     pub animation_key: String,
     pub frame_index: usize,
     pub elapsed_time: f32,
 }
-impl AnimationComponent {
+impl Animation {
     pub fn new(animation_key: impl Into<String>) -> Self {
         Self {
             animation_key: animation_key.into(),
@@ -20,4 +21,11 @@ impl AnimationComponent {
         self.frame_index =
             ((self.frame_index as f32 + delta_time * self.speed) as usize) % self.frame_count;
     } */
+}
+
+// Animation state machine that defines transitions between animations
+#[derive(Debug, Clone, Component)]
+pub struct AnimationStateMachine {
+    pub current_state: String,
+    pub states: FxHashMap<String, Vec<String>>, // state -> possible next states
 }
