@@ -10,6 +10,7 @@ use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
+use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
@@ -317,6 +318,7 @@ pub fn enter_play(
     // Player animation controlled
     commands.spawn((
         Group::new("player-animation"),
+        Signals::default(),
         MapPosition::new(400.0, 190.0),
         ZIndex(1),
         Sprite {

@@ -3,6 +3,7 @@ use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::mapposition::MapPosition;
+use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
@@ -16,7 +17,7 @@ pub fn render_system(
     camera: Res<Camera2DRes>,
     querysprites: Query<(&Sprite, &MapPosition, &ZIndex)>,
     querycolliders: Query<(&BoxCollider, &MapPosition)>,
-    querypositions: Query<&MapPosition>,
+    querypositions: Query<(&MapPosition, Option<&Signals>)>,
     screensize: Res<ScreenSize>,
     textures: Res<TextureStore>,
     isdebug: Option<Res<DebugMode>>,
@@ -96,7 +97,7 @@ pub fn render_system(
 
                 d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
             }
-            for position in querypositions.iter() {
+            for (position, maybe_signals) in querypositions.iter() {
                 d2.draw_line(
                     position.pos.x as i32 - 5,
                     position.pos.y as i32,
@@ -111,6 +112,44 @@ pub fn render_system(
                     position.pos.y as i32 + 5,
                     Color::GREEN,
                 );
+                if let Some(signals) = maybe_signals {
+                    let mut y_offset = 10;
+                    let font_size = 10;
+                    let font_color = Color::YELLOW;
+                    for flag in signals.get_flags() {
+                        let text = format!("Flag: {}", flag);
+                        d2.draw_text(
+                            &text,
+                            position.pos.x as i32 + 10,
+                            position.pos.y as i32 + y_offset,
+                            font_size,
+                            font_color,
+                        );
+                        y_offset += 12;
+                    }
+                    for (key, value) in signals.get_scalars() {
+                        let text = format!("Scalar: {} = {:.2}", key, value);
+                        d2.draw_text(
+                            &text,
+                            position.pos.x as i32 + 10,
+                            position.pos.y as i32 + y_offset,
+                            font_size,
+                            font_color,
+                        );
+                        y_offset += 12;
+                    }
+                    for (key, value) in signals.get_integers() {
+                        let text = format!("Integer: {} = {}", key, value);
+                        d2.draw_text(
+                            &text,
+                            position.pos.x as i32 + 10,
+                            position.pos.y as i32 + y_offset,
+                            font_size,
+                            font_color,
+                        );
+                        y_offset += 12;
+                    }
+                }
             }
         } // End debug drawing
     } // End Camera2D mode

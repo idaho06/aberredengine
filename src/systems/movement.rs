@@ -6,19 +6,26 @@ use bevy_ecs::prelude::*;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
+use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
 
 pub fn movement(
-    mut query: Query<(Entity, &mut MapPosition, &mut RigidBody)>,
+    mut query: Query<(
+        Entity,
+        &mut MapPosition,
+        &mut RigidBody,
+        Option<&mut Signals>,
+    )>,
     time: Res<WorldTime>,
     screensize: Res<ScreenSize>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
-    for (_entity, mut position, mut rigidbody) in query.iter_mut() {
+    for (_entity, mut position, mut rigidbody, mut maybe_signals) in query.iter_mut() {
         // If the entity is going to be outside the camera bounds, bounce the borders
         // by inverting the velocity
+        // This is temporal for the demo purposes
 
         let x_min = 0.0_f32;
         let y_min = 0.0_f32;
@@ -58,5 +65,14 @@ pub fn movement(
             entity_index, position.pos
         );
         */
+        if let Some(signals) = maybe_signals.as_mut() {
+            let speed = rigidbody.velocity.length();
+            if speed > 0.0 {
+                signals.set_flag("moving");
+            } else {
+                signals.clear_flag("moving");
+            }
+            signals.set_scalar("speed", speed);
+        }
     }
 }
