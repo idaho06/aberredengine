@@ -15,6 +15,7 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
+use crate::systems::animation::animation_controller;
 use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
@@ -106,6 +107,7 @@ fn main() {
     update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
     update.add_systems(movement);
     update.add_systems(collision);
+    update.add_systems(animation_controller);
     update.add_systems(animation);
     update.add_systems(
         (game::update)

@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 
 // Import component/resource types from modules
 use crate::components::animation::Animation;
+use crate::components::animation::{AnimationController, CmpOp, Condition};
 use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
@@ -335,11 +336,38 @@ pub fn enter_play(
             frame_index: 0,
             elapsed_time: 0.0,
         },
+        AnimationController::new("player_stand")
+            // Idle
+            .with_rule(
+                Condition::LacksFlag {
+                    key: "moving".into(),
+                },
+                "player_stand",
+            )
+            // Walking
+            .with_rule(
+                Condition::ScalarRange {
+                    key: "speed".into(),
+                    min: 5.0,
+                    max: 50.0,
+                    inclusive: true,
+                },
+                "player_walk",
+            )
+            // Running
+            .with_rule(
+                Condition::ScalarCmp {
+                    key: "speed".into(),
+                    op: CmpOp::Gt,
+                    value: 50.0,
+                },
+                "player_run",
+            ),
         InputControlled::new(
             Vector2 { x: 0.0, y: -32.0 }, // up
             Vector2 { x: 0.0, y: 32.0 },  // down
             Vector2 { x: -32.0, y: 0.0 }, // left
-            Vector2 { x: 32.0, y: 0.0 },  // right
+            Vector2 { x: 64.0, y: 0.0 },  // right
         ),
         RigidBody::default(),
     ));
