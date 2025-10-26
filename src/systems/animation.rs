@@ -8,11 +8,11 @@ use crate::resources::animationstore::AnimationStore;
 use crate::resources::worldtime::WorldTime;
 
 pub fn animation(
-    mut query: Query<(&mut Animation, &mut Sprite)>,
+    mut query: Query<(&mut Animation, &mut Sprite, Option<&mut Signals>)>,
     animation_store: Res<AnimationStore>,
     time: Res<WorldTime>,
 ) {
-    for (mut anim_comp, mut sprite) in query.iter_mut() {
+    for (mut anim_comp, mut sprite, mut maybe_signals) in query.iter_mut() {
         if let Some(animation) = animation_store.animations.get(&anim_comp.animation_key) {
             anim_comp.elapsed_time += time.delta;
 
@@ -26,7 +26,15 @@ pub fn animation(
                         anim_comp.frame_index = 0;
                     } else {
                         anim_comp.frame_index = animation.frame_count - 1; // stay on last frame
-                        // TODO: Trigger animation end event or put signal
+                        if let Some(signals) = maybe_signals.as_mut() {
+                            signals.set_flag("animation_ended");
+                        }
+                        // TODO: Trigger animation end event
+                        break;
+                    }
+                } else {
+                    if let Some(signals) = maybe_signals.as_mut() {
+                        signals.clear_flag("animation_ended");
                     }
                 }
             }
