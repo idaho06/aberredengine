@@ -12,15 +12,15 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 
 /// Shared bridge between the ECS world and the audio thread.
 ///
-/// - `tx_cmd`: sender for [`AudioCmd`] to control playback and resources.
-/// - `rx_msg`: receiver for [`AudioMessage`] produced by the audio thread.
-/// - `handle`: join handle for the background thread.
-///
-/// This resource is created by [`setup_audio`].
+/// This resource is created by [`setup_audio`]. Systems can send commands via
+/// [`AudioBridge::tx_cmd`] and poll for events via [`AudioBridge::rx_msg`].
 #[derive(Resource)]
 pub struct AudioBridge {
-    pub tx_cmd: Sender<AudioCmd>,       // Bevy_ecs -> audio thread
-    pub rx_msg: Receiver<AudioMessage>, // audio thread -> Bevy_ecs
+    /// Sender for [`AudioCmd`] messages (ECS -> audio thread).
+    pub tx_cmd: Sender<AudioCmd>,
+    /// Receiver for [`AudioMessage`] messages (audio thread -> ECS).
+    pub rx_msg: Receiver<AudioMessage>,
+    /// Join handle for the background audio thread.
     pub handle: std::thread::JoinHandle<()>,
 }
 

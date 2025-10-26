@@ -1,3 +1,10 @@
+//! Collision detection system.
+//!
+//! Performs pairwise AABB overlap checks between entities that carry a
+//! [`BoxCollider`](crate::components::boxcollider::BoxCollider) and a
+//! [`MapPosition`](crate::components::mapposition::MapPosition). For every
+//! overlapping pair it triggers a [`CollisionEvent`](crate::events::collision::CollisionEvent).
+
 use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
@@ -5,6 +12,11 @@ use crate::components::mapposition::MapPosition;
 use crate::events::collision::CollisionEvent;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
+/// Broad-phase pairwise overlap test with event emission.
+///
+/// Uses ECS `iter_combinations_mut()` to efficiently iterate unique pairs,
+/// checks overlap, and triggers an event for each collision. Observers can
+/// react to despawn, apply damage, or play sounds.
 pub fn collision(
     mut query: Query<(Entity, &mut MapPosition, &BoxCollider)>,
     mut commands: Commands,

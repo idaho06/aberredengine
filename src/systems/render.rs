@@ -1,3 +1,8 @@
+//! Rendering system using Raylib.
+//!
+//! Draws sprites, optional debug overlays, and basic diagnostics each frame.
+//! World-space rendering uses the shared [`Camera2DRes`] to transform between
+//! world and screen coordinates.
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
 
@@ -11,6 +16,13 @@ use crate::resources::debugmode::DebugMode;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::texturestore::TextureStore;
 
+/// Main render pass.
+///
+/// Contract
+/// - Begins/ends Raylib drawing for the frame.
+/// - Uses `Camera2D` for world rendering, then overlays UI/debug in screen space.
+/// - When `DebugMode` is present, draws additional information (entity counts,
+///   camera parameters, and optional collider boxes/signals).
 pub fn render_system(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,

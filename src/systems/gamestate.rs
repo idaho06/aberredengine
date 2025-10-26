@@ -1,7 +1,16 @@
+//! Game state systems.
+//!
+//! - [`check_pending_state`] monitors [`NextGameState`] and triggers a
+//!   [`GameStateChangedEvent`](crate::events::gamestate::GameStateChangedEvent)
+//!   when a transition is requested.
+//! - [`state_is_playing`] helper for run conditions that returns true when the
+//!   current state is [`GameStates::Playing`].
+
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use bevy_ecs::prelude::*;
 
+/// If a state transition is pending, trigger a `GameStateChangedEvent`.
 pub fn check_pending_state(
     mut commands: Commands,
     //game_state: ResMut<crate::resources::gamestate::GameState>,
@@ -14,6 +23,7 @@ pub fn check_pending_state(
     }
 }
 
+/// Returns true when the current game state is `Playing`.
 pub fn state_is_playing(state: Res<GameState>) -> bool {
     matches!(state.get(), GameStates::Playing)
 }

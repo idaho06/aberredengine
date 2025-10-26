@@ -1,12 +1,44 @@
-// Signals for communication between components
+//! Lightweight per-entity signal storage for cross-system communication.
+//!
+//! The [`Signals`] component provides three small maps you can use to share
+//! numeric and boolean state between systems without introducing tight
+//! coupling:
+//! - floating-point scalars (`scalars`)
+//! - 32-bit integers (`integers`)
+//! - string flags (`flags`)
+//!
+//! Keys are `String`s, allowing you to standardize on a small set of names
+//! across your game (e.g. "hp", "is_running"). Accessors are provided to set,
+//! query, and read views of each collection.
+//!
+//! Example:
+//! ```rust
+//! use aberredengine::components::signals::Signals;
+//!
+//! let mut s = Signals::default();
+//! s.set_scalar("hp", 100.0);
+//! s.set_integer("coins", 5);
+//! s.set_flag("is_running");
+//!
+//! assert_eq!(s.get_scalar("hp"), Some(100.0));
+//! assert!(s.has_flag("is_running"));
+//! ```
 
 use bevy_ecs::prelude::Component;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Debug, Clone, Component)]
+/// Bag-of-signals component used by systems to exchange simple values.
+///
+/// This component is intended to be attached to an entity and updated by
+/// various systems. Consider clearing or normalizing your signals in a
+/// dedicated system each tick if they represent transient state.
 pub struct Signals {
+    /// Floating-point numeric signals addressed by string keys.
     pub scalars: FxHashMap<String, f32>,
+    /// Integer numeric signals addressed by string keys.
     pub integers: FxHashMap<String, i32>,
+    /// Presence-only boolean flags; a key being present means "true".
     pub flags: FxHashSet<String>,
 }
 
@@ -21,33 +53,43 @@ impl Default for Signals {
 }
 
 impl Signals {
+    /// Set a floating-point signal value.
     pub fn set_scalar(&mut self, key: impl Into<String>, value: f32) {
         self.scalars.insert(key.into(), value);
     }
+    /// Get a floating-point signal by key.
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
         self.scalars.get(key).copied()
     }
+    /// Read-only view of all scalar signals.
     pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
         &self.scalars
     }
+    /// Set an integer signal value.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         self.integers.insert(key.into(), value);
     }
+    /// Get an integer signal by key.
     pub fn get_integer(&self, key: &str) -> Option<i32> {
         self.integers.get(key).copied()
     }
+    /// Read-only view of all integer signals.
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers
     }
+    /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
     }
+    /// Remove a flag (make it false/absent).
     pub fn clear_flag(&mut self, key: &str) {
         self.flags.remove(key);
     }
+    /// Check whether a flag is present/true.
     pub fn has_flag(&self, key: &str) -> bool {
         self.flags.contains(key)
     }
+    /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
     }

@@ -1,9 +1,16 @@
+//! Input systems.
+//!
+//! - [`update_input_state`] reads hardware input from Raylib each frame and
+//!   writes the results into [`crate::resources::input::InputState`].
+//! - [`check_input`] demonstrates reacting to input by emitting events (e.g.,
+//!   toggling debug mode) or driving game logic.
 use bevy_ecs::prelude::*;
 use raylib::ffi::KeyboardKey;
 
 use crate::events::switchdebug::SwitchDebugEvent;
 use crate::resources::input::InputState;
 
+/// Poll Raylib for keyboard input and update the `InputState` resource.
 pub fn update_input_state(mut input: ResMut<InputState>, rl: NonSendMut<raylib::RaylibHandle>) {
     // Update the input resource each frame
     let is_key_down = |key: KeyboardKey| rl.is_key_down(key);
@@ -26,6 +33,10 @@ pub fn update_input_state(mut input: ResMut<InputState>, rl: NonSendMut<raylib::
     input.action_special.active = is_key_pressed(input.action_special.key_binding);
 }
 
+/// Example system that reacts to the current input state.
+///
+/// This can be used as a place to trigger events such as
+/// [`SwitchDebugEvent`] when certain keys are pressed.
 pub fn check_input(mut commands: Commands, input: Res<InputState>) {
     // React to the input resource this frame
     if input.maindirection_up.active {

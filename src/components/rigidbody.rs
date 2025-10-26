@@ -2,6 +2,10 @@ use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
 #[derive(Component, Clone, Copy, Debug, Default)]
+/// Simple kinematic body storing per-entity velocity.
+///
+/// Intended to be updated by input/physics systems and consumed by movement
+/// systems to update [`MapPosition`](super::mapposition::MapPosition).
 pub struct RigidBody {
     pub velocity: Vector2,
     // pub mass: f32, // for the future

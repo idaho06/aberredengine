@@ -5,9 +5,47 @@
 //! resource lifetime, while events are emitted back to report results and
 //! state changes.
 //!
-//! See [`crate::resources::audio`] for the bridge that wires channels and
-//! spawns the thread, and [`crate::systems::audio`] for the thread
-//! implementation and polling systems.
+//! Typical flow
+//! - Load long-lived streams (music) with [`AudioCmd::LoadMusic`], then start
+//!   playback with [`AudioCmd::PlayMusic`]. Use [`AudioCmd::VolumeMusic`] and
+//!   [`AudioCmd::StopMusic`] to control runtime behavior.
+//! - Play short, one-shot effects by first loading them with
+//!   [`AudioCmd::LoadFx`] and triggering playback with [`AudioCmd::PlayFx`].
+//! - Subscribe/poll for [`AudioMessage`] values to react to success/failure
+//!   and lifecycle events (e.g. [`AudioMessage::MusicFinished`]).
+//!
+//! Notes
+//! - The audio thread owns the actual decoder/stream handles; the main world
+//!   communicates exclusively via these messages.
+//! - Volume is linear in the `[0.0, 1.0]` range and may be clamped by the
+//!   backend.
+//! - Identifiers (`id`) are arbitrary strings chosen by gameplay code and are
+//!   used to correlate commands and events.
+//!
+//! Examples
+//!
+//! ```ignore
+//! // Pseudocode outline – see `crate::resources::audio` for the bridge wiring.
+//! use aberredengine::events::audio::{AudioCmd, AudioMessage};
+//!
+//! // 1) Send commands to load and play a music track
+//! audio_tx.send(AudioCmd::LoadMusic { id: "bgm".into(), path: "assets/audio/mini1111.xm".into() })?;
+//! audio_tx.send(AudioCmd::PlayMusic { id: "bgm".into(), looped: true })?;
+//!
+//! // 2) Handle events coming back from the audio thread
+//! while let Ok(msg) = audio_rx.try_recv() {
+//!     match msg {
+//!         AudioMessage::MusicLoaded { id } => log::info!("Loaded {id}"),
+//!         AudioMessage::MusicPlayStarted { id } => log::info!("Playing {id}"),
+//!         AudioMessage::MusicFinished { id } => log::info!("Finished {id}"),
+//!         _ => {}
+//!     }
+//! }
+//! ```
+//!
+//! For the concrete bridge and polling systems, see
+//! - [`crate::resources::audio`]: channel resources made available to systems
+//! - [`crate::systems::audio`]: audio thread implementation and event polling
 #![allow(dead_code, unused_variables)]
 
 use bevy_ecs::message::Message;

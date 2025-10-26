@@ -1,10 +1,23 @@
+//! Event and observer to toggle debug visualization and diagnostics.
+//!
+//! Emitting a [`SwitchDebugEvent`] flips the presence of the [`DebugMode`]
+//! resource. Systems that render overlays or print extra diagnostics can gate
+//! their behavior on this resource.
 use crate::resources::debugmode::DebugMode;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 
+/// Event used to toggle the [`DebugMode`] resource on/off.
+///
+/// This carries no data; the observer simply switches the presence of the
+/// resource.
 #[derive(Event, Debug, Clone, Copy)]
 pub struct SwitchDebugEvent {}
 
+/// Observer that toggles the [`DebugMode`] resource.
+///
+/// - If `DebugMode` is present, it is removed (debug disabled).
+/// - If absent, it is inserted (debug enabled).
 pub fn observe_switch_debug_event(
     _trigger: On<SwitchDebugEvent>,
     mut commands: Commands,

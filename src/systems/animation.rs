@@ -1,3 +1,10 @@
+//! Animation systems.
+//!
+//! - [`animation`] advances animations based on elapsed time and updates the
+//!   visible sprite frame. It also emits optional signals as frames change.
+//! - [`animation_controller`] selects which animation should be active based
+//!   on a set of rule conditions evaluated against entity signals.
+
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
 
@@ -7,6 +14,13 @@ use crate::components::sprite::Sprite;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::worldtime::WorldTime;
 
+/// Advance animation playback and update the sprite frame.
+///
+/// Contract
+/// - Reads [`WorldTime`] for the unscaled delta.
+/// - Looks up animation data from [`AnimationStore`].
+/// - Mutates [`Animation`] component state and [`Sprite`] frame index.
+/// - Optionally writes signal flags/scalars for transitions.
 pub fn animation(
     mut query: Query<(&mut Animation, &mut Sprite, Option<&mut Signals>)>,
     animation_store: Res<AnimationStore>,
@@ -54,7 +68,7 @@ pub fn animation(
     }
 }
 
-// Evaluate a condition against the current signals
+/// Evaluate a controller condition against an entity's current signals.
 fn evaluate_condition(signals: &Signals, condition: &Condition) -> bool {
     match condition {
         Condition::ScalarCmp { key, op, value } => {
@@ -129,6 +143,11 @@ fn evaluate_condition(signals: &Signals, condition: &Condition) -> bool {
     }
 }
 
+/// Select the active animation track according to controller rules.
+///
+/// The first matching rule wins. If no rules match, the controller's default
+/// target is used. When the selected key differs from the current one, the
+/// animation state is reset.
 pub fn animation_controller(
     mut query: Query<(&mut AnimationController, &mut Animation, &Signals)>,
 ) {

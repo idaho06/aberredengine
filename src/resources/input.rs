@@ -1,13 +1,24 @@
+//! Per-frame keyboard input resource.
+//!
+//! Captures the subset of keyboard state the game cares about and exposes it
+//! to systems via the [`InputState`] resource. Defaults use WASD for primary
+//! movement and arrow keys for secondary directions.
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
+/// Boolean key state with an associated keyboard binding.
 pub struct BoolState {
+    /// Whether the key is currently active/pressed this frame.
     pub active: bool,
+    /// The key bound to this action.
     pub key_binding: KeyboardKey,
 }
 
-/// Resource capturing per-frame keyboard state we care about.
+/// Resource capturing the per-frame keyboard state relevant to gameplay.
+///
+/// Fields are grouped by purpose: main movement (WASD), secondary movement
+/// (arrow keys), and actions (escape/space/enter/F-keys).
 #[derive(Resource, Debug, Clone)]
 pub struct InputState {
     pub maindirection_up: BoolState,

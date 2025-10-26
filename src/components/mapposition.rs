@@ -2,7 +2,13 @@ use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
 #[derive(Component, Clone, Copy, Debug)]
+/// World-space position (pivot) for an entity.
+///
+/// This position commonly represents the pivot used by other components such
+/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
+/// to compute rendering and collision bounds.
 pub struct MapPosition {
+    /// 2D coordinates in world units.
     pub pos: Vector2,
 }
 

@@ -1,9 +1,15 @@
+//! Loaded texture store.
+//!
+//! A thin wrapper around a hash map that stores `raylib::prelude::Texture2D`
+//! objects keyed by string IDs. Insert textures during setup and read them in
+//! render systems.
 use bevy_ecs::prelude::Resource;
 use raylib::prelude::Texture2D;
 use rustc_hash::FxHashMap;
 // use std::collections::HashMap;
 
 #[derive(Resource)]
+/// Map of texture keys to loaded textures.
 pub struct TextureStore {
     pub map: FxHashMap<String, Texture2D>,
 }

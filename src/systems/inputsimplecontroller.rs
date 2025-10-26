@@ -1,3 +1,9 @@
+//! Simple input-to-velocity controller.
+//!
+//! Reads the shared [`InputState`](crate::resources::input::InputState) and
+//! applies directional velocities to entities with an
+//! [`InputControlled`](crate::components::inputcontrolled::InputControlled)
+//! component. Diagonal movement is normalized to maintain constant speed.
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
 
@@ -5,6 +11,7 @@ use crate::components::inputcontrolled::InputControlled;
 use crate::components::rigidbody::RigidBody;
 use crate::resources::input::InputState;
 
+/// Update each controlled entity's `RigidBody` velocity based on input.
 pub fn input_simple_controller(
     mut query: Query<(&InputControlled, &mut RigidBody)>,
     input_state: Res<InputState>,

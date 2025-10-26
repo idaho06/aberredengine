@@ -2,8 +2,16 @@ use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Component)]
+/// Axis-aligned rectangular collider in local space.
+///
+/// The collider is defined by a `size` (width, height), an `offset` from the
+/// entity's pivot, and an `origin` representing that pivot relative to the
+/// collider's local top-left. World AABBs can be computed using
+/// [`MapPosition`](super::mapposition::MapPosition) as the pivot position.
 pub struct BoxCollider {
+    /// Size of the box in world units.
     pub size: Vector2,
+    /// Offset from the entity's pivot (positive moves the box down-right).
     pub offset: Vector2,
     /// Pivot point relative to the collider's local top-left (usually the same as Sprite.origin).
     /// MapPosition represents this pivot; AABB is computed from (position - origin + offset).

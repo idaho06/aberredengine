@@ -1,3 +1,8 @@
+//! Movement system.
+//!
+//! Integrates entity positions from their current rigid body velocities and
+//! the world's unscaled delta time. As a temporary demo behavior, entities
+//! bounce off the screen edges by inverting velocity when they leave bounds.
 //use std::ops::Add;
 
 use bevy_ecs::prelude::*;
@@ -11,6 +16,9 @@ use crate::events::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
 
+/// Apply velocity to `MapPosition` using the frame's delta time.
+///
+/// Also emits optional audio and signal updates when bouncing or moving.
 pub fn movement(
     mut query: Query<(
         Entity,
