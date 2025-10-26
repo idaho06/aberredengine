@@ -1,8 +1,9 @@
 #![allow(dead_code, unused_variables)]
 use bevy_ecs::prelude::Component;
+use serde::{Deserialize, Serialize};
 //use rustc_hash::FxHashMap;
 
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone, Component, Serialize, Deserialize)]
 pub struct Animation {
     pub animation_key: String,
     pub frame_index: usize,
@@ -16,17 +17,12 @@ impl Animation {
             elapsed_time: 0.0,
         }
     }
-
-    /* pub fn update(&mut self, delta_time: f32) {
-        self.frame_index =
-            ((self.frame_index as f32 + delta_time * self.speed) as usize) % self.frame_count;
-    } */
 }
 
 // Animation Controller Component
 
 // Generic, data-driven conditions over Signals
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CmpOp {
     Lt,
     Le,
@@ -37,7 +33,7 @@ pub enum CmpOp {
 }
 
 // Condition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Condition {
     ScalarCmp {
         key: String,
@@ -72,14 +68,14 @@ pub enum Condition {
     Not(Box<Condition>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimRule {
     pub when: Condition,
     pub set_key: String,
 }
 
 //Animation State Machine that defines transitions between animations
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone, Component, Serialize, Deserialize)]
 pub struct AnimationController {
     pub current_key: String,
     pub rules: Vec<AnimRule>,
@@ -103,3 +99,7 @@ impl AnimationController {
         self
     }
 }
+
+/*
+TODO: Create methods to load/save AnimationController and Animation from/to JSON or other formats
+*/
