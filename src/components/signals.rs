@@ -24,8 +24,8 @@ impl Signals {
     pub fn set_scalar(&mut self, key: impl Into<String>, value: f32) {
         self.scalars.insert(key.into(), value);
     }
-    pub fn get_scalar(&self, key: impl Into<String>) -> Option<f32> {
-        self.scalars.get(&key.into()).copied()
+    pub fn get_scalar(&self, key: &str) -> Option<f32> {
+        self.scalars.get(key).copied()
     }
     pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
         &self.scalars
@@ -33,8 +33,8 @@ impl Signals {
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         self.integers.insert(key.into(), value);
     }
-    pub fn get_integer(&self, key: impl Into<String>) -> Option<i32> {
-        self.integers.get(&key.into()).copied()
+    pub fn get_integer(&self, key: &str) -> Option<i32> {
+        self.integers.get(key).copied()
     }
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers
@@ -42,11 +42,11 @@ impl Signals {
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
     }
-    pub fn clear_flag(&mut self, key: impl Into<String>) {
-        self.flags.remove(&key.into());
+    pub fn clear_flag(&mut self, key: &str) {
+        self.flags.remove(key);
     }
-    pub fn has_flag(&self, key: impl Into<String>) -> bool {
-        self.flags.contains(&key.into())
+    pub fn has_flag(&self, key: &str) -> bool {
+        self.flags.contains(key)
     }
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
