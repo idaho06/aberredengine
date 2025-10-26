@@ -66,6 +66,7 @@ impl Signals {
         &self.scalars
     }
     /// Set an integer signal value.
+    #[allow(dead_code)]
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         self.integers.insert(key.into(), value);
     }
