@@ -23,7 +23,7 @@ use crate::systems::collision::collision;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::input::check_input;
 use crate::systems::input::update_input_state;
-use crate::systems::inputsimplecontroller::input_simple_cotroller;
+use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
 use crate::systems::time::update_world_time;
@@ -105,16 +105,16 @@ fn main() {
             .chain(),
     );
     update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
+    update.add_systems(input_simple_controller);
     update.add_systems(movement);
     update.add_systems(collision);
     update.add_systems(animation_controller);
-    update.add_systems(animation);
+    update.add_systems(animation.after(animation_controller));
     update.add_systems(
         (game::update)
             .run_if(state_is_playing)
             .after(check_pending_state),
     );
-    update.add_systems(input_simple_cotroller);
     update.add_systems(render_system);
 
     update

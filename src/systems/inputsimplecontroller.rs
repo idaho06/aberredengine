@@ -5,7 +5,7 @@ use crate::components::inputcontrolled::InputControlled;
 use crate::components::rigidbody::RigidBody;
 use crate::resources::input::InputState;
 
-pub fn input_simple_cotroller(
+pub fn input_simple_controller(
     mut query: Query<(&InputControlled, &mut RigidBody)>,
     input_state: Res<InputState>,
 ) {
