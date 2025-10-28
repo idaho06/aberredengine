@@ -13,6 +13,7 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
@@ -46,6 +47,7 @@ fn main() {
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
     world.insert_resource(WorldTime::default());
+    world.insert_resource(WorldSignals::default());
     world.insert_resource(ScreenSize {
         w: rl.get_screen_width(),
         h: rl.get_screen_height(),

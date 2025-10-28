@@ -27,4 +27,5 @@ pub mod screensize;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod tilemapstore;
+pub mod worldsignals;
 pub mod worldtime;
