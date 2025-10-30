@@ -9,6 +9,7 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::observe_switch_debug_event;
 use crate::resources::audio::{setup_audio, shutdown_audio};
+use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
@@ -62,6 +63,7 @@ fn main() {
     world.insert_resource(NextGameState::new());
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
+    world.insert_non_send_resource(FontStore::new());
     world.spawn(Observer::new(observe_gamestate_change_event));
 
     // Game state systems store

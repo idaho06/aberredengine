@@ -21,6 +21,7 @@ pub mod animationstore;
 pub mod audio;
 pub mod camera2d;
 pub mod debugmode;
+pub mod fontstore;
 pub mod gamestate;
 pub mod input;
 pub mod screensize;

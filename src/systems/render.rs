@@ -3,16 +3,20 @@
 //! Draws sprites, optional debug overlays, and basic diagnostics each frame.
 //! World-space rendering uses the shared [`Camera2DRes`] to transform between
 //! world and screen coordinates.
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, query};
+use raylib::ffi;
 use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
+use crate::components::dynamictext::DynamicText;
 use crate::components::mapposition::MapPosition;
+use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
+use crate::resources::fontstore::FontStore;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::texturestore::TextureStore;
 
@@ -27,11 +31,14 @@ pub fn render_system(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
     camera: Res<Camera2DRes>,
-    querysprites: Query<(&Sprite, &MapPosition, &ZIndex)>,
-    querycolliders: Query<(&BoxCollider, &MapPosition)>,
-    querypositions: Query<(&MapPosition, Option<&Signals>)>,
+    query_sprites: Query<(&Sprite, &MapPosition, &ZIndex)>,
+    query_colliders: Query<(&BoxCollider, &MapPosition)>,
+    query_positions: Query<(&MapPosition, Option<&Signals>)>,
+    query_map_dynamic_texts: Query<(&DynamicText, &MapPosition, &ZIndex)>,
+    query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition)>,
     screensize: Res<ScreenSize>,
-    textures: Res<TextureStore>,
+    textures: Res<TextureStore>, // TODO: move TextureStore resource creation out of setup system
+    fonts: NonSend<FontStore>,
     isdebug: Option<Res<DebugMode>>,
 ) {
     let mut d = rl.begin_drawing(&th);
@@ -58,7 +65,7 @@ pub fn render_system(
             y: tl.y.max(br.y),
         };
 
-        let mut to_draw: Vec<(&Sprite, &MapPosition, &ZIndex)> = querysprites
+        let mut to_draw: Vec<(&Sprite, &MapPosition, &ZIndex)> = query_sprites
             .iter()
             .filter_map(|(s, p, z)| {
                 let min = Vector2 {
@@ -102,14 +109,61 @@ pub fn render_system(
 
                 d2.draw_texture_pro(tex, src, dest, sprite.origin, 0.0, Color::WHITE);
             }
-        } // End sprite drawing
+        } // End sprite drawing in camera space
+        let mut text_to_draw: Vec<(&DynamicText, &MapPosition, &ZIndex)> = query_map_dynamic_texts
+            .iter()
+            .filter_map(|(t, p, z)| {
+                //let text_width = d2.measure_text(&t.content, t.font_size as i32) as f32;
+                //let text_height = t.font_size;
+                let text_size = unsafe {
+                    ffi::MeasureTextEx(
+                        **fonts
+                            .get(t.font.clone().as_str())
+                            .expect("Font name must be valid!!"),
+                        t.content.as_ptr() as *const i8,
+                        t.font_size,
+                        1.0,
+                    )
+                };
+                let text_width = text_size.x;
+                let text_height = text_size.y;
+
+                let min = Vector2 {
+                    x: p.pos.x,
+                    y: p.pos.y,
+                };
+                let max = Vector2 {
+                    x: min.x + text_width,
+                    y: min.y + text_height,
+                };
+
+                let overlap = !(max.x < view_min.x
+                    || min.x > view_max.x
+                    || max.y < view_min.y
+                    || min.y > view_max.y);
+                if overlap { Some((t, p, z)) } else { None }
+            })
+            .collect();
+        text_to_draw.sort_by_key(|(_, _, z)| *z);
+        for (text, pos, _z) in text_to_draw.iter() {
+            if let Some(font) = fonts.get(text.font.clone().as_str()) {
+                d2.draw_text_ex(
+                    font,
+                    &text.content,
+                    pos.pos,
+                    text.font_size,
+                    1.0,
+                    text.color,
+                );
+            }
+        }
         if isdebug.is_some() {
-            for (collider, position) in querycolliders.iter() {
+            for (collider, position) in query_colliders.iter() {
                 let (x, y, w, h) = collider.get_aabb(position.pos);
 
                 d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
             }
-            for (position, maybe_signals) in querypositions.iter() {
+            for (position, maybe_signals) in query_positions.iter() {
                 d2.draw_line(
                     position.pos.x as i32 - 5,
                     position.pos.y as i32,
@@ -165,6 +219,19 @@ pub fn render_system(
             }
         } // End debug drawing
     } // End Camera2D mode
+    // Draw in screen coordinates (UI layer).
+    for (text, pos) in query_screen_dynamic_texts.iter() {
+        if let Some(font) = fonts.get(text.font.clone().as_str()) {
+            d.draw_text_ex(
+                font,
+                &text.content,
+                pos.pos,
+                text.font_size,
+                1.0,
+                text.color,
+            );
+        }
+    }
     if isdebug.is_some() {
         let debug_text = "DEBUG MODE (press F11 to toggle)";
 
@@ -172,9 +239,9 @@ pub fn render_system(
         let text = format!("{} | FPS: {}", debug_text, fps);
         d.draw_text(&text, 10, 10, 10, Color::BLACK);
 
-        let entity_count = querysprites.iter().count()
-            + querycolliders.iter().count()
-            + querypositions.iter().count();
+        let entity_count = query_sprites.iter().count()
+            + query_colliders.iter().count()
+            + query_positions.iter().count();
         let text = format!("Entities: {}", entity_count);
         d.draw_text(&text, 10, 30, 10, Color::BLACK);
 

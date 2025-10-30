@@ -7,10 +7,12 @@ use rustc_hash::FxHashMap;
 use crate::components::animation::Animation;
 use crate::components::animation::{AnimationController, CmpOp, Condition};
 use crate::components::boxcollider::BoxCollider;
+use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
+use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
@@ -18,6 +20,7 @@ use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationResource;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -106,7 +109,7 @@ pub fn setup(
     mut next_state: ResMut<NextGameState>,
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
-    // audio_bridge: ResMut<AudioBridge>,
+    mut fonts: NonSendMut<FontStore>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
     // This function sets up the game world, loading resources
@@ -230,6 +233,20 @@ pub fn setup(
     });
 
     // Don't block; the audio thread will emit load messages which are polled by systems.
+
+    // Load fonts
+    let font = rl
+        .load_font(&th, "./assets/fonts/Arcade_Cabinet.ttf")
+        .expect("Failed to load font 'arcade'");
+    fonts.add("arcade", font);
+
+    let font = rl
+        .load_font(&th, "./assets/fonts/Formal_Future.ttf")
+        .expect("Failed to load font 'future'");
+    fonts.add("future", font);
+
+    //let font = rl.get_font_default();
+    //fonts.add("default", font); // This is a WeakFont
 
     // Change GameState to Playing
     next_state.set(GameStates::Playing);
@@ -418,7 +435,32 @@ pub fn enter_play(
         id: "music2".into(),
         looped: true,
     });
-    // TODO: music_play(world, "music2".into(), true);
+
+    // Create a couple of texts using DynamicText component
+    commands.spawn((
+        Group::new("texts"),
+        MapPosition::new(200.0, 90.0),
+        ZIndex(10),
+        DynamicText::new("Hello, World!", "arcade", 12.0, Color::WHITE),
+    ));
+
+    commands.spawn((
+        Group::new("texts"),
+        MapPosition::new(100.0, 50.0),
+        ZIndex(10),
+        DynamicText::new("Aberred Engine!!", "future", 32.0, Color::YELLOW),
+        {
+            let mut rb = RigidBody::new();
+            rb.set_velocity(Vector2 { x: 10.0, y: 10.0 });
+            rb
+        },
+    ));
+
+    commands.spawn((
+        Group::new("texts"),
+        ScreenPosition::new(10.0, 20.0),
+        DynamicText::new("Screen Text Example", "future", 24.0, Color::GREEN),
+    ));
 }
 
 pub fn update(

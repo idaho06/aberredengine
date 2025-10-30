@@ -1,9 +1,11 @@
 pub mod animation;
 pub mod boxcollider;
+pub mod dynamictext;
 pub mod group;
 pub mod inputcontrolled;
 pub mod mapposition;
 pub mod rigidbody;
+pub mod screenposition;
 pub mod signals;
 pub mod sprite;
 pub mod zindex;
