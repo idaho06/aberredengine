@@ -61,9 +61,9 @@ fn main() {
 
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
+    world.insert_non_send_resource(FontStore::new());
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
-    world.insert_non_send_resource(FontStore::new());
     world.spawn(Observer::new(observe_gamestate_change_event));
 
     // Game state systems store
@@ -143,5 +143,4 @@ fn main() {
         world.clear_trackers(); // Clear changed components for next frame
     }
     shutdown_audio(&mut world);
-    world.non_send_resource_mut::<FontStore>().clear();
 }

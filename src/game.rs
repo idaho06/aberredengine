@@ -1,4 +1,7 @@
+use std::ffi::CString;
+
 use bevy_ecs::prelude::*;
+use raylib::ffi;
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 //use std::collections::HashMap;
@@ -26,6 +29,25 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldtime::WorldTime;
 use rand::Rng;
+
+/// Helper function to create a Texture2D from a text string, font, size, and color
+fn load_texture_from_text(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    font: &Font,
+    text: &str,
+    font_size: f32,
+    spacing: f32,
+    color: Color,
+) -> Option<Texture2D> {
+    let c_text = CString::new(text).ok()?;
+    let image = unsafe {
+        let raw = ffi::ImageTextEx(**font, c_text.as_ptr(), font_size, spacing, color.into());
+        Image::from_raw(raw)
+    };
+    let texture = rl.load_texture_from_image(thread, &image).ok()?;
+    Some(texture)
+}
 
 /// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
 fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Texture2D, Tilemap) {
@@ -129,6 +151,17 @@ pub fn setup(
     };
     commands.insert_resource(Camera2DRes(camera));
 
+    // Load fonts
+    let font = rl
+        .load_font(&th, "./assets/fonts/Arcade_Cabinet.ttf")
+        .expect("Failed to load font 'arcade'");
+    fonts.add("arcade", font);
+
+    let font = rl
+        .load_font(&th, "./assets/fonts/Formal_Future.ttf")
+        .expect("Failed to load font 'future'");
+    fonts.add("future", font);
+
     // Load textures
     let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
@@ -149,12 +182,28 @@ pub fn setup(
     tilemaps_store.insert("tilemap", tilemap);
     commands.insert_resource(tilemaps_store);
 
+    // Create textures from texts, fonts, and sizes for static texts
+    let arcade_font = fonts
+        .get("arcade")
+        .expect("Font 'arcade' not found in FontStore");
+    let billboard_tex = load_texture_from_text(
+        &mut rl,
+        &th,
+        arcade_font,
+        "Static Billboard!",
+        32.0,
+        1.0,
+        Color::RED,
+    )
+    .expect("Failed to create texture from text");
+
     // Insert TextureStore resource
     let mut tex_store = TextureStore::new();
     tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
     tex_store.insert("tilemap", tilemap_tex);
+    tex_store.insert("billboard", billboard_tex);
     commands.insert_resource(tex_store);
 
     // Animations
@@ -233,20 +282,6 @@ pub fn setup(
     });
 
     // Don't block; the audio thread will emit load messages which are polled by systems.
-
-    // Load fonts
-    let font = rl
-        .load_font(&th, "./assets/fonts/Arcade_Cabinet.ttf")
-        .expect("Failed to load font 'arcade'");
-    fonts.add("arcade", font);
-
-    let font = rl
-        .load_font(&th, "./assets/fonts/Formal_Future.ttf")
-        .expect("Failed to load font 'future'");
-    fonts.add("future", font);
-
-    //let font = rl.get_font_default();
-    //fonts.add("default", font); // This is a WeakFont
 
     // Change GameState to Playing
     next_state.set(GameStates::Playing);
@@ -452,6 +487,29 @@ pub fn enter_play(
         {
             let mut rb = RigidBody::new();
             rb.set_velocity(Vector2 { x: 10.0, y: 10.0 });
+            rb
+        },
+    ));
+
+    let billboard_tex = tex_store
+        .get("billboard")
+        .expect("billboard texture not found");
+    commands.spawn((
+        Group::new("texts"),
+        MapPosition::new(100.0, 50.0),
+        ZIndex(10),
+        Sprite {
+            tex_key: "billboard".into(),
+            width: billboard_tex.width as f32,
+            height: billboard_tex.height as f32,
+            offset: Vector2::zero(),
+            origin: Vector2::zero(),
+            flip_h: false,
+            flip_v: false,
+        },
+        {
+            let mut rb = RigidBody::new();
+            rb.set_velocity(Vector2 { x: -10.0, y: -10.0 });
             rb
         },
     ));
