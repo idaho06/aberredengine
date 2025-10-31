@@ -504,3 +504,9 @@ pub fn update(
         }
     }
 }
+
+pub fn clean_all_entities(mut commands: Commands, query: Query<Entity>) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+    }
+}

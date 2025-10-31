@@ -75,6 +75,9 @@ fn main() {
     let enter_play_system_id = world.register_system(game::enter_play);
     systems_store.insert("enter_play", enter_play_system_id);
 
+    let clean_all_entities_system_id = world.register_system(game::clean_all_entities);
+    systems_store.insert("clean_all_entities", clean_all_entities_system_id);
+
     world.insert_resource(systems_store);
 
     world.flush();
