@@ -140,4 +140,5 @@ fn main() {
         world.clear_trackers(); // Clear changed components for next frame
     }
     shutdown_audio(&mut world);
+    world.non_send_resource_mut::<FontStore>().clear();
 }

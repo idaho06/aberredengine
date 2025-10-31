@@ -21,4 +21,8 @@ impl FontStore {
     pub fn get(&self, id: &str) -> Option<&Font> {
         self.fonts.get(id)
     }
+
+    pub fn clear(&mut self) {
+        self.fonts.clear();
+    }
 }
