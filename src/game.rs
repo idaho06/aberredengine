@@ -27,6 +27,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
+use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use rand::Rng;
 
@@ -138,9 +139,9 @@ pub fn setup(
 
     let camera = Camera2D {
         target: Vector2 {
-            x: 400.0,
-            y: 225.0, //x: 0.0,
-                      //y: 0.0,
+            x: 0.0,
+            y: 0.0, //x: 0.0,
+                    //y: 0.0,
         },
         offset: Vector2 {
             x: rl.get_screen_width() as f32 * 0.5,
@@ -163,7 +164,15 @@ pub fn setup(
     fonts.add("future", font);
 
     // Load textures
-    let dummy_tex = rl
+    let title_tex = rl
+        .load_texture(&th, "./assets/textures/title.png")
+        .expect("load assets/title.png");
+
+    let background_tex = rl
+        .load_texture(&th, "./assets/textures/background01.png")
+        .expect("load assets/background01.png");
+
+    /* let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
         .expect("load assets/player.png");
 
@@ -173,17 +182,16 @@ pub fn setup(
 
     let player_sheet_tex = rl
         .load_texture(&th, "./assets/textures/WarriorMan-Sheet.png")
-        .expect("load assets/WarriorMan-Sheet.png");
+        .expect("load assets/WarriorMan-Sheet.png"); */
 
     // Load tilemap textures and data
-    let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/maptest04");
-    //let tilemap_tex_width = tilemap_tex.width;
+    //let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/maptest04");
     let mut tilemaps_store = TilemapStore::new();
-    tilemaps_store.insert("tilemap", tilemap);
+    //tilemaps_store.insert("tilemap", tilemap);
     commands.insert_resource(tilemaps_store);
 
     // Create textures from texts, fonts, and sizes for static texts
-    let arcade_font = fonts
+    /* let arcade_font = fonts
         .get("arcade")
         .expect("Font 'arcade' not found in FontStore");
     let billboard_tex = load_texture_from_text(
@@ -195,22 +203,24 @@ pub fn setup(
         1.0,
         Color::RED,
     )
-    .expect("Failed to create texture from text");
+    .expect("Failed to create texture from text"); */
 
     // Insert TextureStore resource
     let mut tex_store = TextureStore::new();
-    tex_store.insert("player-sheet", player_sheet_tex);
+    tex_store.insert("title", title_tex);
+    tex_store.insert("background", background_tex);
+    /* tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
     tex_store.insert("tilemap", tilemap_tex);
-    tex_store.insert("billboard", billboard_tex);
+    tex_store.insert("billboard", billboard_tex); */
     commands.insert_resource(tex_store);
 
     // Animations
     let mut anim_store = AnimationStore {
         animations: FxHashMap::default(),
     };
-    anim_store.animations.insert(
+    /* anim_store.animations.insert(
         "player_tired".into(),
         AnimationResource {
             tex_key: "player-sheet".into(),
@@ -264,17 +274,37 @@ pub fn setup(
             fps: 12.0, // speed of the animation
             looped: true,
         },
-    );
+    ); */
     commands.insert_resource(anim_store);
 
     // Send messages to load musics and sound effects via ECS Messages<AudioCmd>
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
+    /* audio_cmd_writer.write(AudioCmd::LoadMusic {
         id: "music1".into(),
         path: "./assets/audio/chiptun1.mod".into(),
     });
     audio_cmd_writer.write(AudioCmd::LoadMusic {
         id: "music2".into(),
         path: "./assets/audio/mini1111.xm".into(),
+    }); */
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "boss_fight".into(),
+        path: "./assets/audio/boss_fight.xm".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "journey_begins".into(),
+        path: "./assets/audio/journey_begins.xm".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "player_ready".into(),
+        path: "./assets/audio/player_ready.xm".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "success".into(),
+        path: "./assets/audio/success.xm".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadMusic {
+        id: "main_theme".into(),
+        path: "./assets/audio/woffy_-_arkanoid_cover.xm".into(),
     });
     audio_cmd_writer.write(AudioCmd::LoadFx {
         id: "growl".into(),
@@ -293,13 +323,13 @@ pub fn enter_play(
     //mut next_state: ResMut<NextGameState>,
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     //th: NonSend<raylib::RaylibThread>,
-    // audio_bridge: ResMut<AudioBridge>,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     tex_store: Res<TextureStore>,
-    tilemaps_store: Res<TilemapStore>, // TODO: Make it optional
+    tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
+    mut worldsignals: ResMut<WorldSignals>,
 ) {
     // Get Texture sizes
-    let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
+    /* let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
     let dummy_tex_width = dummy_tex.width;
     let dummy_tex_height = dummy_tex.height;
 
@@ -311,10 +341,10 @@ pub fn enter_play(
     let tilemap_tex_width = tilemap_tex.width;
     let tilemap = tilemaps_store
         .get("tilemap")
-        .expect("tilemap info not found");
+        .expect("tilemap info not found"); */
 
     // Dummy player
-    commands.spawn((
+    /* commands.spawn((
         Group::new("dummy"),
         MapPosition::new(40.0, 40.0),
         ZIndex(0),
@@ -346,10 +376,10 @@ pub fn enter_play(
             },
         },
         RigidBody::default(),
-    ));
+    )); */
 
     // Player animation flipped
-    commands.spawn((
+    /* commands.spawn((
         Group::new("player-animation"),
         MapPosition::new(400.0, 225.0),
         ZIndex(1),
@@ -367,9 +397,9 @@ pub fn enter_play(
             frame_index: 0,
             elapsed_time: 0.0,
         },
-    ));
+    )); */
     // Player animation controlled
-    commands.spawn((
+    /* commands.spawn((
         Group::new("player-animation"),
         Signals::default(),
         MapPosition::new(400.0, 190.0),
@@ -422,10 +452,10 @@ pub fn enter_play(
             Vector2 { x: 64.0, y: 0.0 },  // right
         ),
         RigidBody::default(),
-    ));
+    )); */
 
     // Enemies
-    let mut rng = rand::thread_rng();
+    /* let mut rng = rand::thread_rng();
     for i in 0..16 {
         // Random velocity components in a small range
         let vx = rng.gen_range(-40.0f32..40.0f32);
@@ -460,19 +490,19 @@ pub fn enter_play(
                 origin: Vector2::zero(),
             },
         ));
-    }
+    } */
 
     // Create map tiles as spawns of MapPosition, Zindex, and Sprite
-    spawn_tiles(&mut commands, "tilemap", tilemap_tex_width, tilemap);
+    // spawn_tiles(&mut commands, "tilemap", tilemap_tex_width, tilemap);
 
-    // play music2 looped via ECS messages
-    audio_cmd_writer.write(AudioCmd::PlayMusic {
-        id: "music2".into(),
+    // play main_theme looped via ECS messages
+    /* audio_cmd_writer.write(AudioCmd::PlayMusic {
+        id: "main_theme".into(),
         looped: true,
-    });
+    }); */
 
     // Create a couple of texts using DynamicText component
-    commands.spawn((
+    /* commands.spawn((
         Group::new("texts"),
         MapPosition::new(200.0, 90.0),
         ZIndex(10),
@@ -489,9 +519,9 @@ pub fn enter_play(
             rb.set_velocity(Vector2 { x: 10.0, y: 10.0 });
             rb
         },
-    ));
+    )); */
 
-    let billboard_tex = tex_store
+    /* let billboard_tex = tex_store
         .get("billboard")
         .expect("billboard texture not found");
     commands.spawn((
@@ -512,13 +542,27 @@ pub fn enter_play(
             rb.set_velocity(Vector2 { x: -10.0, y: -10.0 });
             rb
         },
-    ));
+    )); */
 
-    commands.spawn((
+    /* commands.spawn((
         Group::new("texts"),
         ScreenPosition::new(10.0, 20.0),
         DynamicText::new("Screen Text Example", "future", 24.0, Color::GREEN),
-    ));
+    )); */
+
+    // Setup initial status of the game in the WorldSignals resource
+    // integer for current score
+    // integer for high score
+    // integer for remaining lives
+    // integer for current level
+    // string for scene ("menu", "playing", "gameover", etc.)
+    worldsignals.set_integer("score", 0);
+    worldsignals.set_integer("high_score", 0);
+    worldsignals.set_integer("lives", 3);
+    worldsignals.set_integer("level", 1);
+    worldsignals.set_string("scene", "menu");
+
+    // TODO: Create a system for switching scenes and levels based on WorldSignals values
 }
 
 pub fn update(
@@ -554,13 +598,13 @@ pub fn update(
        }
     */
     // Update enemy sprites based on their velocity (flip horizontally)
-    for (mut sprite, rb) in query_enemies.iter_mut() {
+    /* for (mut sprite, rb) in query_enemies.iter_mut() {
         if rb.velocity.x < 0.0 {
             sprite.flip_h = true;
         } else if rb.velocity.x > 0.0 {
             sprite.flip_h = false;
         }
-    }
+    } */
 }
 
 pub fn clean_all_entities(mut commands: Commands, query: Query<Entity>) {

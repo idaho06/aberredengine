@@ -7,6 +7,8 @@ pub struct WorldSignals {
     pub scalars: FxHashMap<String, f32>,
     /// Integer numeric signals addressed by string keys.
     pub integers: FxHashMap<String, i32>,
+    /// String signals addressed by string keys.
+    pub strings: FxHashMap<String, String>,
     /// Presence-only boolean flags; a key being present means "true".
     pub flags: FxHashSet<String>,
 }
@@ -15,6 +17,7 @@ impl Default for WorldSignals {
         Self {
             scalars: FxHashMap::default(),
             integers: FxHashMap::default(),
+            strings: FxHashMap::default(),
             flags: FxHashSet::default(),
         }
     }
@@ -39,6 +42,15 @@ impl WorldSignals {
     /// Get an integer signal by key.
     pub fn get_integer(&self, key: &str) -> Option<i32> {
         self.integers.get(key).copied()
+    }
+    /// Set a string signal value.
+    pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.strings.insert(key.into(), value.into());
+    }
+    /// Get a string signal by key.
+    /// It's recommended to clone the String if you need ownership.
+    pub fn get_string(&self, key: &str) -> Option<&String> {
+        self.strings.get(key)
     }
     /// Read-only view of all integer signals.
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {

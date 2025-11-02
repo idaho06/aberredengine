@@ -37,8 +37,8 @@ fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
     let (rl, thread) = raylib::init()
-        .size(800, 450)
-        .title("Aberred Engine")
+        .size(224 * 3, 256 * 3)
+        .title("Aberred Engine - Arkanoid")
         .vsync()
         .build();
 
