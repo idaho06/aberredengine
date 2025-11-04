@@ -1,4 +1,5 @@
 use std::ffi::CString;
+use std::panic;
 
 use bevy_ecs::prelude::*;
 use raylib::ffi;
@@ -14,6 +15,7 @@ use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::mapposition::MapPosition;
+use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
@@ -25,6 +27,8 @@ use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
+use crate::resources::input::InputState;
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
@@ -303,7 +307,7 @@ pub fn setup(
         path: "./assets/audio/success.xm".into(),
     });
     audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "main_theme".into(),
+        id: "menu".into(),
         path: "./assets/audio/woffy_-_arkanoid_cover.xm".into(),
     });
     audio_cmd_writer.write(AudioCmd::LoadFx {
@@ -327,6 +331,7 @@ pub fn enter_play(
     tex_store: Res<TextureStore>,
     tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
     mut worldsignals: ResMut<WorldSignals>,
+    systems_store: Res<SystemsStore>,
 ) {
     // Get Texture sizes
     /* let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
@@ -562,7 +567,12 @@ pub fn enter_play(
     worldsignals.set_integer("level", 1);
     worldsignals.set_string("scene", "menu");
 
-    // TODO: Create a system for switching scenes and levels based on WorldSignals values
+    commands.run_system(
+        systems_store
+            .get("switch_scene")
+            .expect("switch_scene system not found")
+            .clone(),
+    );
 }
 
 pub fn update(
@@ -570,6 +580,9 @@ pub fn update(
     // mut _query_rb: Query<(&mut MapPosition, &mut RigidBody, &BoxCollider), With<Group>>,
     mut query_enemies: Query<(&mut Sprite, &RigidBody), With<Group>>,
     //mut query_player: Query<(&mut Sprite, &RigidBody), With<Group>>,
+    input: Res<InputState>,
+    mut commands: Commands,
+    systems_store: Res<SystemsStore>,
 ) {
     let _delta_sec = time.delta;
 
@@ -605,10 +618,89 @@ pub fn update(
             sprite.flip_h = false;
         }
     } */
+
+    // Handle player input
+    if input.action_1.active {
+        eprintln!("Action 1 pressed!");
+        commands.run_system(
+            systems_store
+                .get("switch_scene")
+                .expect("switch_scene system not found")
+                .clone(),
+        );
+    }
 }
 
-pub fn clean_all_entities(mut commands: Commands, query: Query<Entity>) {
-    for entity in query.iter() {
+pub fn clean_all_entities(
+    mut commands: Commands,
+    query: Query<(Entity, &Sprite), Without<Persistent>>,
+) {
+    for (entity, sprite) in query.iter() {
+        eprintln!("Despawning entity: {:?}, sprite: {:?}", entity, sprite);
         commands.entity(entity).despawn();
     }
+}
+
+pub fn switch_scene(
+    mut commands: Commands,
+    mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
+    worldsignals: ResMut<WorldSignals>,
+    systems_store: Res<SystemsStore>,
+) {
+    audio_cmd_writer.write(AudioCmd::StopAllMusic);
+    commands.run_system(
+        systems_store
+            .get("clean_all_entities")
+            .expect("clean_all_entities system not found")
+            .clone(),
+    );
+
+    let scene = worldsignals
+        .get_string("scene")
+        .cloned()
+        .unwrap_or_else(|| "menu".to_string());
+
+    match scene.as_str() {
+        "menu" => {
+            commands.spawn((
+                MapPosition::new(0.0, 0.0),
+                ZIndex(0),
+                Sprite {
+                    tex_key: "background".into(),
+                    width: 672.0,
+                    height: 768.0,
+                    origin: Vector2 { x: 336.0, y: 384.0 },
+                    offset: Vector2 { x: 0.0, y: 0.0 },
+                    flip_h: false,
+                    flip_v: false,
+                },
+            ));
+            commands.spawn((
+                MapPosition::new(0.0, 0.0),
+                ZIndex(1),
+                Sprite {
+                    tex_key: "title".into(),
+                    width: 672.0,
+                    height: 198.0,
+                    origin: Vector2 { x: 336.0, y: 99.0 },
+                    offset: Vector2 { x: 0.0, y: 0.0 },
+                    flip_h: false,
+                    flip_v: false,
+                },
+            ));
+            // Play menu music
+            audio_cmd_writer.write(AudioCmd::PlayMusic {
+                id: "menu".into(),
+                looped: true,
+            });
+        }
+        "level01" => {}
+        "level02" => {}
+        _ => {
+            eprintln!("Unknown scene: {}", scene);
+            panic!("Unknown scene");
+        }
+    }
+
+    // Stop any playing music when switching scenes
 }

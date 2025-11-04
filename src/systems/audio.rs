@@ -159,6 +159,16 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                         let _ = tx_evt.send(AudioMessage::MusicStopped { id });
                     }
                 }
+                AudioCmd::StopAllMusic => {
+                    eprintln!("[audio] stop all");
+                    for id in playing.drain() {
+                        if let Some(music) = musics.get(&id) {
+                            music.stop_stream();
+                            let _ = tx_evt.send(AudioMessage::MusicStopped { id: id.clone() });
+                        }
+                    }
+                    looped.clear();
+                }
                 AudioCmd::PauseMusic { id } => {
                     if let Some(music) = musics.get(&id) {
                         eprintln!("[audio] pause id='{}'", id);

@@ -4,6 +4,7 @@ mod game;
 mod resources;
 mod systems;
 
+use crate::components::persistent::Persistent;
 use crate::events::collision::observe_kill_on_collision;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
@@ -64,7 +65,7 @@ fn main() {
     world.insert_non_send_resource(FontStore::new());
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
-    world.spawn(Observer::new(observe_gamestate_change_event));
+    world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
     // Game state systems store
     let mut systems_store = SystemsStore::new();
@@ -78,6 +79,9 @@ fn main() {
     let clean_all_entities_system_id = world.register_system(game::clean_all_entities);
     systems_store.insert("clean_all_entities", clean_all_entities_system_id);
 
+    let switch_scene_system_id = world.register_system(game::switch_scene);
+    systems_store.insert("switch_scene", switch_scene_system_id);
+
     world.insert_resource(systems_store);
 
     world.flush();
@@ -90,8 +94,8 @@ fn main() {
     world.trigger(GameStateChangedEvent {}); // Call inmediatly to enter Setup state
 
     // Register a global observer for CollisionEvent that despawns both entities.
-    world.spawn(Observer::new(observe_kill_on_collision));
-    world.spawn(Observer::new(observe_switch_debug_event));
+    //world.spawn(Observer::new(observe_kill_on_collision));
+    world.spawn((Observer::new(observe_switch_debug_event), Persistent));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
