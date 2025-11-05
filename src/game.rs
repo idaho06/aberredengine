@@ -19,6 +19,7 @@ use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
+use crate::components::sprite;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
@@ -631,12 +632,9 @@ pub fn update(
     }
 }
 
-pub fn clean_all_entities(
-    mut commands: Commands,
-    query: Query<(Entity, &Sprite), Without<Persistent>>,
-) {
-    for (entity, sprite) in query.iter() {
-        eprintln!("Despawning entity: {:?}, sprite: {:?}", entity, sprite);
+pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<Persistent>>) {
+    for entity in query.iter() {
+        eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
 }
@@ -646,14 +644,21 @@ pub fn switch_scene(
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     worldsignals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
+    entities_to_clean: Query<Entity, Without<Persistent>>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
-    commands.run_system(
+    // Race condition for cleaning entities and spawning new ones?
+    /* commands.run_system(
         systems_store
             .get("clean_all_entities")
             .expect("clean_all_entities system not found")
             .clone(),
-    );
+    ); */
+    for entity in entities_to_clean.iter() {
+        commands.entity(entity).log_components();
+        eprintln!("Despawning entity: {:?}", entity);
+        commands.entity(entity).despawn();
+    }
 
     let scene = worldsignals
         .get_string("scene")
