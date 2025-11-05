@@ -579,11 +579,12 @@ pub fn enter_play(
 pub fn update(
     time: Res<WorldTime>,
     // mut _query_rb: Query<(&mut MapPosition, &mut RigidBody, &BoxCollider), With<Group>>,
-    mut query_enemies: Query<(&mut Sprite, &RigidBody), With<Group>>,
+    // mut query_enemies: Query<(&mut Sprite, &RigidBody), With<Group>>,
     //mut query_player: Query<(&mut Sprite, &RigidBody), With<Group>>,
     input: Res<InputState>,
     mut commands: Commands,
     systems_store: Res<SystemsStore>,
+    world_signals: Res<WorldSignals>,
 ) {
     let _delta_sec = time.delta;
 
@@ -620,15 +621,34 @@ pub fn update(
         }
     } */
 
-    // Handle player input
-    if input.action_1.active {
-        eprintln!("Action 1 pressed!");
-        commands.run_system(
-            systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone(),
-        );
+    let scene = world_signals
+        .get_string("scene")
+        .cloned()
+        .unwrap_or("menu".to_string());
+
+    match scene.as_str() {
+        "menu" => {
+            // Menu-specific updates
+            // Handle player input
+            if input.action_1.active {
+                eprintln!("Action 1 pressed!");
+                commands.run_system(
+                    systems_store
+                        .get("switch_scene")
+                        .expect("switch_scene system not found")
+                        .clone(),
+                );
+            }
+        }
+        "level01" => {
+            // Level 1 specific updates
+        }
+        "level02" => {
+            // Level 2 specific updates
+        }
+        _ => {
+            // Default or unknown scene updates
+        }
     }
 }
 
@@ -681,7 +701,7 @@ pub fn switch_scene(
                 },
             ));
             commands.spawn((
-                MapPosition::new(0.0, 0.0),
+                MapPosition::new(0.0, 384.0),
                 ZIndex(1),
                 Sprite {
                     tex_key: "title".into(),
@@ -691,6 +711,9 @@ pub fn switch_scene(
                     offset: Vector2 { x: 0.0, y: 0.0 },
                     flip_h: false,
                     flip_v: false,
+                },
+                RigidBody {
+                    velocity: Vector2 { x: 0.0, y: -300.0 },
                 },
             ));
             // Play menu music

@@ -237,20 +237,26 @@ pub fn render_system(
 
         let fps = d.get_fps();
         let text = format!("{} | FPS: {}", debug_text, fps);
-        d.draw_text(&text, 10, 10, 10, Color::BLACK);
+        d.draw_text(&text, 10, 10, 10, Color::GREENYELLOW);
 
         let entity_count = query_sprites.iter().count()
             + query_colliders.iter().count()
             + query_positions.iter().count();
         let text = format!("Entities: {}", entity_count);
-        d.draw_text(&text, 10, 30, 10, Color::BLACK);
+        d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
 
         let cam = &camera.0;
         let cam_text = format!(
             "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
             cam.target.x, cam.target.y, cam.zoom
         );
-        d.draw_text(&cam_text, 10, (screensize.h - 30) as i32, 10, Color::BLACK);
+        d.draw_text(
+            &cam_text,
+            10,
+            (screensize.h - 30) as i32,
+            10,
+            Color::GREENYELLOW,
+        );
 
         let mouse_pos = d.get_mouse_position();
         let mouse_world = d.get_screen_to_world2D(mouse_pos, &camera.0);
@@ -260,6 +266,6 @@ pub fn render_system(
             mouse_pos.x, mouse_pos.y, mouse_world.x, mouse_world.y
         );
 
-        d.draw_text(&mouse_text, 10, 70, 10, Color::BLACK);
+        d.draw_text(&mouse_text, 10, 70, 10, Color::GREENYELLOW);
     }
 }
