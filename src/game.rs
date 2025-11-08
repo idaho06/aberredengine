@@ -1,6 +1,7 @@
 use std::ffi::CString;
 use std::panic;
 
+use bevy_ecs::event::Trigger;
 use bevy_ecs::prelude::*;
 use raylib::ffi;
 use raylib::prelude::*;
@@ -21,8 +22,10 @@ use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
+use crate::components::timer::Timer;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
+use crate::events::timer::TimerEvent;
 use crate::resources::animationstore::AnimationResource;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
@@ -132,6 +135,7 @@ fn spawn_tiles(
     }
 }
 
+// This function is meant to load all resources
 pub fn setup(
     mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
@@ -323,6 +327,7 @@ pub fn setup(
     eprintln!("Game setup_with_commands() done, next state set to Playing");
 }
 
+// Create initial state of the game and observers
 pub fn enter_play(
     mut commands: Commands,
     //mut next_state: ResMut<NextGameState>,
@@ -568,6 +573,24 @@ pub fn enter_play(
     worldsignals.set_integer("level", 1);
     worldsignals.set_string("scene", "menu");
 
+    // Observer for TimerEvent
+    commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
+        match trigger.signal.as_str() {
+            "stop_title" => {
+                //commands.entity(trigger.entity).remove::<RigidBody>();
+                commands.entity(trigger.entity).insert(RigidBody {
+                    velocity: Vector2 { x: 0.0, y: 0.0 },
+                });
+                commands.entity(trigger.entity).remove::<Timer>();
+                commands.entity(trigger.entity).insert(MapPosition {
+                    pos: Vector2 { x: 0.0, y: -220.0 },
+                });
+            }
+            _ => (),
+        }
+    });
+
+    // Finally, run the switch_scene system to spawn initial scene entities
     commands.run_system(
         systems_store
             .get("switch_scene")
@@ -715,6 +738,7 @@ pub fn switch_scene(
                 RigidBody {
                     velocity: Vector2 { x: 0.0, y: -300.0 },
                 },
+                Timer::new(2.0, "stop_title"),
             ));
             // Play menu music
             audio_cmd_writer.write(AudioCmd::PlayMusic {

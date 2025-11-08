@@ -9,4 +9,5 @@ pub mod rigidbody;
 pub mod screenposition;
 pub mod signals;
 pub mod sprite;
+pub mod timer;
 pub mod zindex;

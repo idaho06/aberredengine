@@ -29,6 +29,7 @@ use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
+use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
@@ -121,6 +122,7 @@ fn main() {
     update.add_systems(collision);
     update.add_systems(animation_controller);
     update.add_systems(animation.after(animation_controller));
+    update.add_systems(update_timers);
     update.add_systems(
         (game::update)
             .run_if(state_is_playing)

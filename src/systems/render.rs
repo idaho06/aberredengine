@@ -3,7 +3,7 @@
 //! Draws sprites, optional debug overlays, and basic diagnostics each frame.
 //! World-space rendering uses the shared [`Camera2DRes`] to transform between
 //! world and screen coordinates.
-use bevy_ecs::{prelude::*, query};
+use bevy_ecs::prelude::*;
 use raylib::ffi;
 use raylib::prelude::*;
 
@@ -36,6 +36,7 @@ pub fn render_system(
     query_positions: Query<(&MapPosition, Option<&Signals>)>,
     query_map_dynamic_texts: Query<(&DynamicText, &MapPosition, &ZIndex)>,
     query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition)>,
+    //query_observers: Query<&Observer>,
     screensize: Res<ScreenSize>,
     textures: Res<TextureStore>, // TODO: move TextureStore resource creation out of setup system
     fonts: NonSend<FontStore>,
@@ -244,6 +245,10 @@ pub fn render_system(
             + query_positions.iter().count();
         let text = format!("Entities: {}", entity_count);
         d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
+
+        /* let observer_count = query_observers.into_iter().count();
+        let text = format!("Observers: {}", observer_count);
+        d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW); */
 
         let cam = &camera.0;
         let cam_text = format!(
