@@ -30,4 +30,8 @@ impl WorldTime {
     /* pub fn delta_seconds(&self) -> f32 {
         self.delta * self.time_scale
     } */
+    pub fn with_time_scale(mut self, scale: f32) -> Self {
+        self.time_scale = scale;
+        self
+    }
 }

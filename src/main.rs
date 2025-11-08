@@ -49,7 +49,7 @@ fn main() {
 
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
-    world.insert_resource(WorldTime::default());
+    world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(WorldSignals::default());
     world.insert_resource(ScreenSize {
         w: rl.get_screen_width(),
