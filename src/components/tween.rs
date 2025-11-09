@@ -97,3 +97,43 @@ impl TweenRotation {
         self
     }
 }
+
+#[derive(Component, Clone, Debug)]
+pub struct TweenScale {
+    pub from: Vector2,
+    pub to: Vector2,
+    pub duration: f32,
+    pub easing: Easing,
+    pub loop_mode: LoopMode,
+    pub playing: bool,
+    pub time: f32,
+    pub forward: bool,
+}
+
+impl TweenScale {
+    pub fn new(from: Vector2, to: Vector2, duration: f32) -> Self {
+        TweenScale {
+            from,
+            to,
+            duration,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+            playing: true,
+            time: 0.0,
+            forward: true,
+        }
+    }
+    pub fn with_easing(mut self, easing: Easing) -> Self {
+        self.easing = easing;
+        self
+    }
+    pub fn with_loop_mode(mut self, loop_mode: LoopMode) -> Self {
+        self.loop_mode = loop_mode;
+        self
+    }
+    pub fn with_backwards(mut self) -> Self {
+        self.time = self.duration;
+        self.forward = false;
+        self
+    }
+}

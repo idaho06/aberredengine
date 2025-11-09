@@ -19,13 +19,13 @@ use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
+use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
 use crate::components::timer::Timer;
-use crate::components::tween::TweenRotation;
-use crate::components::tween::{Easing, LoopMode, TweenPosition};
+use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::events::timer::TimerEvent;
@@ -725,6 +725,9 @@ pub fn switch_scene(
                     flip_h: false,
                     flip_v: false,
                 },
+                Scale {
+                    scale: Vector2 { x: 3.0, y: 3.0 },
+                },
             ));
             commands.spawn((
                 MapPosition::new(0.0, 384.0),
@@ -738,7 +741,10 @@ pub fn switch_scene(
                     flip_h: false,
                     flip_v: false,
                 },
-                Rotation { degrees: -10.0 },
+                Rotation { degrees: 0.0 },
+                Scale {
+                    scale: Vector2 { x: 1.0, y: 1.0 },
+                },
                 /* RigidBody {
                     velocity: Vector2 { x: 0.0, y: -300.0 },
                 },
@@ -750,7 +756,10 @@ pub fn switch_scene(
                 )
                 .with_easing(Easing::QuadOut)
                 .with_loop_mode(LoopMode::Once),
-                TweenRotation::new(-10.0, 10.0, 1.0)
+                TweenRotation::new(-10.0, 10.0, 2.0)
+                    .with_easing(Easing::QuadInOut)
+                    .with_loop_mode(LoopMode::PingPong),
+                TweenScale::new(Vector2 { x: 0.9, y: 0.9 }, Vector2 { x: 1.1, y: 1.1 }, 1.0)
                     .with_easing(Easing::QuadInOut)
                     .with_loop_mode(LoopMode::PingPong),
             ));

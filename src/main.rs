@@ -33,6 +33,7 @@ use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
+use crate::systems::tween::tween_scale_system;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 //use raylib::prelude::*;
@@ -122,6 +123,7 @@ fn main() {
     update.add_systems(input_simple_controller);
     update.add_systems(tween_mapposition_system);
     update.add_systems(tween_rotation_system);
+    update.add_systems(tween_scale_system);
     update.add_systems(movement);
     update.add_systems(collision);
     update.add_systems(animation_controller);

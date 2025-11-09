@@ -7,6 +7,7 @@ pub mod mapposition;
 pub mod persistent;
 pub mod rigidbody;
 pub mod rotation;
+pub mod scale;
 pub mod screenposition;
 pub mod signals;
 pub mod sprite;

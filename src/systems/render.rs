@@ -11,6 +11,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
+use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
@@ -32,7 +33,13 @@ pub fn render_system(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
     camera: Res<Camera2DRes>,
-    query_sprites: Query<(&Sprite, &MapPosition, &ZIndex, Option<&Rotation>)>,
+    query_sprites: Query<(
+        &Sprite,
+        &MapPosition,
+        &ZIndex,
+        Option<&Scale>,
+        Option<&Rotation>,
+    )>,
     query_colliders: Query<(&BoxCollider, &MapPosition)>,
     query_positions: Query<(&MapPosition, Option<&Signals>)>,
     query_map_dynamic_texts: Query<(&DynamicText, &MapPosition, &ZIndex)>,
@@ -67,9 +74,15 @@ pub fn render_system(
             y: tl.y.max(br.y),
         };
 
-        let mut to_draw: Vec<(&Sprite, &MapPosition, &ZIndex, Option<&Rotation>)> = query_sprites
+        let mut to_draw: Vec<(
+            &Sprite,
+            &MapPosition,
+            &ZIndex,
+            Option<&Scale>,
+            Option<&Rotation>,
+        )> = query_sprites
             .iter()
-            .filter_map(|(s, p, z, maybe_rot)| {
+            .filter_map(|(s, p, z, maybe_scale, maybe_rot)| {
                 let min = Vector2 {
                     x: p.pos.x - s.origin.x,
                     y: p.pos.y - s.origin.y,
@@ -84,14 +97,14 @@ pub fn render_system(
                     || max.y < view_min.y
                     || min.y > view_max.y);
                 if overlap {
-                    Some((s, p, z, maybe_rot))
+                    Some((s, p, z, maybe_scale, maybe_rot))
                 } else {
                     None
                 }
             })
             .collect();
-        to_draw.sort_by_key(|(_, _, z, _)| *z);
-        for (sprite, pos, _z, maybe_rot) in to_draw.iter() {
+        to_draw.sort_by_key(|(_, _, z, _, _)| *z);
+        for (sprite, pos, _z, maybe_scale, maybe_rot) in to_draw.iter() {
             if let Some(tex) = textures.get(sprite.tex_key.clone()) {
                 let mut src = Rectangle {
                     x: sprite.offset.x,
@@ -106,12 +119,25 @@ pub fn render_system(
                     src.height = -src.height;
                 }
 
-                let dest = Rectangle {
+                let mut dest = Rectangle {
                     x: pos.pos.x,
                     y: pos.pos.y,
                     width: sprite.width,
                     height: sprite.height,
                 };
+
+                if let Some(scale) = maybe_scale {
+                    dest.width *= scale.scale.x;
+                    dest.height *= scale.scale.y;
+                }
+                let mut origin_scaled = Vector2 {
+                    x: sprite.origin.x,
+                    y: sprite.origin.y,
+                };
+                if let Some(scale) = maybe_scale {
+                    origin_scaled.x *= scale.scale.x;
+                    origin_scaled.y *= scale.scale.y;
+                }
 
                 let rotation = if let Some(rot) = maybe_rot {
                     rot.degrees
@@ -119,7 +145,7 @@ pub fn render_system(
                     0.0
                 };
 
-                d2.draw_texture_pro(tex, src, dest, sprite.origin, rotation, Color::WHITE);
+                d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
             }
         } // End sprite drawing in camera space
         let mut text_to_draw: Vec<(&DynamicText, &MapPosition, &ZIndex)> = query_map_dynamic_texts
