@@ -22,3 +22,4 @@ pub mod inputsimplecontroller;
 pub mod movement;
 pub mod render;
 pub mod time;
+pub mod tween;

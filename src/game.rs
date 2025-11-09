@@ -23,6 +23,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
 use crate::components::timer::Timer;
+use crate::components::tween::{Easing, LoopMode, TweenPosition};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::events::timer::TimerEvent;
@@ -735,10 +736,17 @@ pub fn switch_scene(
                     flip_h: false,
                     flip_v: false,
                 },
-                RigidBody {
+                /* RigidBody {
                     velocity: Vector2 { x: 0.0, y: -300.0 },
                 },
-                Timer::new(2.0, "stop_title"),
+                Timer::new(2.0, "stop_title"), */
+                TweenPosition::new(
+                    Vector2 { x: 0.0, y: 384.0 },
+                    Vector2 { x: 0.0, y: -220.0 },
+                    2.0,
+                )
+                .with_easing(Easing::QuadOut)
+                .with_loop_mode(LoopMode::Once),
             ));
             // Play menu music
             audio_cmd_writer.write(AudioCmd::PlayMusic {
