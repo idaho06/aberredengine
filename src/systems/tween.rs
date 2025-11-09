@@ -1,5 +1,6 @@
 use crate::components::mapposition::MapPosition;
-use crate::components::tween::{Easing, LoopMode, TweenPosition};
+use crate::components::rotation::Rotation;
+use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation};
 use crate::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 use raylib::math::Vector2;
@@ -97,5 +98,29 @@ pub fn tween_mapposition_system(
         let t = ease(tw.easing, tw.time / duration);
         let new_pos = lerp_v2(tw.from, tw.to, t);
         mp.pos = new_pos;
+    }
+}
+
+pub fn tween_rotation_system(
+    world_time: Res<WorldTime>,
+    mut query: Query<(&mut Rotation, &mut TweenRotation)>,
+) {
+    let dt = world_time.delta.max(0.0);
+    for (mut rot, mut tw) in query.iter_mut() {
+        if !tw.playing {
+            continue;
+        }
+        let duration = tw.duration;
+        let loop_mode = tw.loop_mode;
+        let mut t = tw.time;
+        let mut forward = tw.forward;
+        let mut playing = tw.playing;
+        advance(&mut t, duration, &mut forward, &mut playing, loop_mode, dt);
+        tw.time = t;
+        tw.forward = forward;
+        tw.playing = playing;
+        let t = ease(tw.easing, tw.time / duration);
+        let new_rot = lerp_f32(tw.from, tw.to, t);
+        rot.degrees = new_rot;
     }
 }

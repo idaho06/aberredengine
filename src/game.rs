@@ -18,11 +18,13 @@ use crate::components::inputcontrolled::InputControlled;
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
+use crate::components::rotation::Rotation;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
 use crate::components::timer::Timer;
+use crate::components::tween::TweenRotation;
 use crate::components::tween::{Easing, LoopMode, TweenPosition};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
@@ -736,6 +738,7 @@ pub fn switch_scene(
                     flip_h: false,
                     flip_v: false,
                 },
+                Rotation { degrees: -10.0 },
                 /* RigidBody {
                     velocity: Vector2 { x: 0.0, y: -300.0 },
                 },
@@ -747,6 +750,9 @@ pub fn switch_scene(
                 )
                 .with_easing(Easing::QuadOut)
                 .with_loop_mode(LoopMode::Once),
+                TweenRotation::new(-10.0, 10.0, 1.0)
+                    .with_easing(Easing::QuadInOut)
+                    .with_loop_mode(LoopMode::PingPong),
             ));
             // Play menu music
             audio_cmd_writer.write(AudioCmd::PlayMusic {

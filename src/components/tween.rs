@@ -58,3 +58,42 @@ impl TweenPosition {
         self
     }
 }
+
+#[derive(Component, Clone, Debug)]
+pub struct TweenRotation {
+    pub from: f32,
+    pub to: f32,
+    pub duration: f32,
+    pub easing: Easing,
+    pub loop_mode: LoopMode,
+    pub playing: bool,
+    pub time: f32,
+    pub forward: bool,
+}
+impl TweenRotation {
+    pub fn new(from: f32, to: f32, duration: f32) -> Self {
+        TweenRotation {
+            from,
+            to,
+            duration,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+            playing: true,
+            time: 0.0,
+            forward: true,
+        }
+    }
+    pub fn with_easing(mut self, easing: Easing) -> Self {
+        self.easing = easing;
+        self
+    }
+    pub fn with_loop_mode(mut self, loop_mode: LoopMode) -> Self {
+        self.loop_mode = loop_mode;
+        self
+    }
+    pub fn with_backwards(mut self) -> Self {
+        self.time = self.duration;
+        self.forward = false;
+        self
+    }
+}
