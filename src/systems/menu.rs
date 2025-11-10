@@ -7,6 +7,7 @@ use crate::components::zindex::ZIndex;
 use crate::events::input::{InputAction, InputEvent};
 use crate::resources::fontstore::FontStore;
 use crate::resources::input::InputState;
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
 use bevy_ecs::prelude::*;
@@ -101,6 +102,7 @@ pub fn menu_controller_observer(
     trigger: On<InputEvent>,
     mut query: Query<(&mut Menu,)>,
     mut commands: Commands,
+    systems_store: Res<SystemsStore>,
 ) {
     for (mut menu,) in query.iter_mut() {
         if !menu.active {
@@ -124,6 +126,19 @@ pub fn menu_controller_observer(
             InputAction::SecondaryDirectionDown => {
                 menu.selected_index = (menu.selected_index + 1) % menu.items.len();
                 changed_selection = true;
+            }
+            InputAction::Action1 => {
+                // Activate selected menu item
+                let selected_item = &menu.items[menu.selected_index];
+                eprintln!("Menu item selected: {}", selected_item.id);
+
+                // TODO: Temporal, restart the scene
+                commands.run_system(
+                    systems_store
+                        .get("switch_scene")
+                        .expect("switch_scene system not found")
+                        .clone(),
+                );
             }
             _ => {}
         }

@@ -671,7 +671,7 @@ pub fn update(
         "menu" => {
             // Menu-specific updates
             // Handle player input
-            if input.action_1.active {
+            /* if input.action_1.active {
                 eprintln!("Action 1 pressed!");
                 commands.run_system(
                     systems_store
@@ -679,7 +679,7 @@ pub fn update(
                         .expect("switch_scene system not found")
                         .clone(),
                 );
-            }
+            } */
         }
         "level01" => {
             // Level 1 specific updates
