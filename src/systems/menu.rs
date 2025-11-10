@@ -4,7 +4,9 @@ use crate::components::menu::Menu;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
+use crate::events::input::{InputAction, InputEvent};
 use crate::resources::fontstore::FontStore;
+use crate::resources::input::InputState;
 use crate::resources::texturestore::TextureStore;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
 use bevy_ecs::prelude::*;
@@ -90,6 +92,55 @@ pub fn menu_spawn_system(
                     pos: cursor_position,
                 });
                 commands.entity(cursor_entity).insert(ZIndex(23));
+            }
+        }
+    }
+}
+
+pub fn menu_controller_observer(
+    trigger: On<InputEvent>,
+    mut query: Query<(&mut Menu,)>,
+    mut commands: Commands,
+) {
+    for (mut menu,) in query.iter_mut() {
+        if !menu.active {
+            continue;
+        }
+
+        if !trigger.event().pressed {
+            continue; // Only handle key press, not release
+        }
+
+        let mut changed_selection = false;
+        match trigger.event().action {
+            InputAction::SecondaryDirectionUp => {
+                if menu.selected_index == 0 {
+                    menu.selected_index = menu.items.len() - 1;
+                } else {
+                    menu.selected_index -= 1;
+                }
+                changed_selection = true;
+            }
+            InputAction::SecondaryDirectionDown => {
+                menu.selected_index = (menu.selected_index + 1) % menu.items.len();
+                changed_selection = true;
+            }
+            _ => {}
+        }
+
+        // Update cursor position if applicable
+        if changed_selection {
+            if let Some(cursor_entity) = menu.cursor_entity {
+                let cursor_position = menu.items[menu.selected_index].position;
+                if menu.use_screen_space {
+                    commands.entity(cursor_entity).insert(ScreenPosition {
+                        pos: cursor_position,
+                    });
+                } else {
+                    commands.entity(cursor_entity).insert(MapPosition {
+                        pos: cursor_position,
+                    });
+                }
             }
         }
     }

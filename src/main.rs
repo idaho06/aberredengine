@@ -24,10 +24,9 @@ use crate::systems::audio::{
 };
 use crate::systems::collision::collision;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
-use crate::systems::input::check_input;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
-use crate::systems::menu::menu_spawn_system;
+use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
 use crate::systems::time::update_timers;
@@ -101,6 +100,7 @@ fn main() {
     // Register a global observer for CollisionEvent that despawns both entities.
     //world.spawn(Observer::new(observe_kill_on_collision));
     world.spawn((Observer::new(observe_switch_debug_event), Persistent));
+    world.spawn(Observer::new(menu_controller_observer));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
@@ -121,7 +121,7 @@ fn main() {
         )
             .chain(),
     );
-    update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
+    //update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
     update.add_systems(input_simple_controller);
     update.add_systems(tween_mapposition_system);
     update.add_systems(tween_rotation_system);

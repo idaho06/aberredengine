@@ -13,6 +13,7 @@ pub struct MenuItem {
 
 #[derive(Component, Clone, Debug)]
 pub struct Menu {
+    pub active: bool,
     pub items: Vec<MenuItem>,
     pub selected_index: usize,
     pub font: String,
@@ -50,6 +51,7 @@ impl Menu {
             })
             .collect();
         Self {
+            active: true,
             items: options,
             selected_index: 0,
             font: font.into(),
