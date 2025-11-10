@@ -3,6 +3,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::menu::Menu;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::sprite::Sprite;
+use crate::components::zindex::ZIndex;
 use crate::resources::fontstore::FontStore;
 use crate::resources::texturestore::TextureStore;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
@@ -25,7 +26,7 @@ pub fn menu_spawn_system(
         let normal_color = menu.normal_color;
         let use_screen_space = menu.use_screen_space;
 
-        // Spawn DynamicText for each menu item if needed
+        // Spawn DynamicText or Sprite for each menu item if needed
         for item in menu.items.iter_mut() {
             let mut ecmd = commands.spawn_empty();
             if item.dynamic_text {
@@ -70,10 +71,26 @@ pub fn menu_spawn_system(
                 ecmd.insert(ScreenPosition { pos: item.position });
             } else {
                 ecmd.insert(MapPosition { pos: item.position });
+                ecmd.insert(ZIndex(23));
             }
             let text_entity = ecmd.id();
             ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             item.entity = Some(text_entity);
+        }
+
+        // Spawn cursor entity if needed
+        if let Some(cursor_entity) = menu.cursor_entity {
+            let cursor_position = menu.items[menu.selected_index].position; // make sure sprite has correct origin
+            if use_screen_space {
+                commands.entity(cursor_entity).insert(ScreenPosition {
+                    pos: cursor_position,
+                });
+            } else {
+                commands.entity(cursor_entity).insert(MapPosition {
+                    pos: cursor_position,
+                });
+                commands.entity(cursor_entity).insert(ZIndex(23));
+            }
         }
     }
 }

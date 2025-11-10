@@ -194,6 +194,10 @@ pub fn setup(
         .load_texture(&th, "./assets/textures/background01.png")
         .expect("load assets/background01.png");
 
+    let cursor_tex = rl
+        .load_texture(&th, "./assets/textures/cursor.png")
+        .expect("load assets/cursor.png");
+
     /* let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
         .expect("load assets/player.png");
@@ -231,6 +235,7 @@ pub fn setup(
     let mut tex_store = TextureStore::new();
     tex_store.insert("title", title_tex);
     tex_store.insert("background", background_tex);
+    tex_store.insert("cursor", cursor_tex);
     /* tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
@@ -774,6 +779,17 @@ pub fn switch_scene(
                     .with_loop_mode(LoopMode::PingPong),
             ));
             // Menu
+            let cursor_entity = commands
+                .spawn(Sprite {
+                    tex_key: "cursor".into(),
+                    width: 48.0,
+                    height: 48.0,
+                    origin: Vector2 { x: 56.0, y: 0.0 },
+                    offset: Vector2 { x: 0.0, y: 0.0 },
+                    flip_h: false,
+                    flip_v: false,
+                })
+                .id();
             commands.spawn((
                 Menu::new(
                     &[
@@ -788,7 +804,8 @@ pub fn switch_scene(
                     true,
                 )
                 .with_colors(Color::YELLOW, Color::WHITE)
-                .with_dynamic_text(true),
+                .with_dynamic_text(true)
+                .with_cursor(cursor_entity),
                 Group::new("main_menu"),
             ));
             // Play menu music
