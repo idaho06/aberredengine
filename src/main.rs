@@ -27,6 +27,7 @@ use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::input::check_input;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::menu::menu_spawn_system;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
 use crate::systems::time::update_timers;
@@ -104,6 +105,7 @@ fn main() {
     world.flush();
 
     let mut update = Schedule::default();
+    update.add_systems(menu_spawn_system);
     update.add_systems(update_input_state);
     update.add_systems(check_pending_state);
     update.add_systems(

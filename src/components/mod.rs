@@ -4,6 +4,7 @@ pub mod dynamictext;
 pub mod group;
 pub mod inputcontrolled;
 pub mod mapposition;
+pub mod menu;
 pub mod persistent;
 pub mod rigidbody;
 pub mod rotation;

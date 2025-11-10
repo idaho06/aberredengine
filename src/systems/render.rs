@@ -33,7 +33,7 @@ pub fn render_system(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
     camera: Res<Camera2DRes>,
-    query_sprites: Query<(
+    query_map_sprites: Query<(
         &Sprite,
         &MapPosition,
         &ZIndex,
@@ -44,7 +44,7 @@ pub fn render_system(
     query_positions: Query<(&MapPosition, Option<&Signals>)>,
     query_map_dynamic_texts: Query<(&DynamicText, &MapPosition, &ZIndex)>,
     query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition)>,
-    //query_observers: Query<&Observer>,
+    query_screen_sprites: Query<(&Sprite, &ScreenPosition)>,
     screensize: Res<ScreenSize>,
     textures: Res<TextureStore>, // TODO: move TextureStore resource creation out of setup system
     fonts: NonSend<FontStore>,
@@ -80,7 +80,7 @@ pub fn render_system(
             &ZIndex,
             Option<&Scale>,
             Option<&Rotation>,
-        )> = query_sprites
+        )> = query_map_sprites
             .iter()
             .filter_map(|(s, p, z, maybe_scale, maybe_rot)| {
                 let min = Vector2 {
@@ -258,6 +258,50 @@ pub fn render_system(
         } // End debug drawing
     } // End Camera2D mode
     // Draw in screen coordinates (UI layer).
+    for (sprite, pos) in query_screen_sprites.iter() {
+        if let Some(tex) = textures.get(sprite.tex_key.clone()) {
+            let mut src = Rectangle {
+                x: sprite.offset.x,
+                y: sprite.offset.y,
+                width: sprite.width,
+                height: sprite.height,
+            };
+            if sprite.flip_h {
+                src.width = -src.width;
+            }
+            if sprite.flip_v {
+                src.height = -src.height;
+            }
+
+            let dest = Rectangle {
+                x: pos.pos.x,
+                y: pos.pos.y,
+                width: sprite.width,
+                height: sprite.height,
+            };
+
+            d.draw_texture_pro(
+                tex,
+                src,
+                dest,
+                Vector2 {
+                    x: sprite.origin.x,
+                    y: sprite.origin.y,
+                },
+                0.0,
+                Color::WHITE,
+            );
+        }
+        if isdebug.is_some() {
+            d.draw_rectangle_lines(
+                pos.pos.x as i32,
+                pos.pos.y as i32,
+                sprite.width as i32,
+                sprite.height as i32,
+                Color::PURPLE,
+            );
+        }
+    }
     for (text, pos) in query_screen_dynamic_texts.iter() {
         if let Some(font) = fonts.get(text.font.clone().as_str()) {
             d.draw_text_ex(
@@ -268,6 +312,15 @@ pub fn render_system(
                 1.0,
                 text.color,
             );
+            if isdebug.is_some() {
+                d.draw_rectangle_lines(
+                    pos.pos.x as i32,
+                    pos.pos.y as i32,
+                    d.measure_text(&text.content, text.font_size as i32),
+                    text.font_size as i32,
+                    Color::ORANGE,
+                );
+            }
         }
     }
     if isdebug.is_some() {
@@ -277,15 +330,19 @@ pub fn render_system(
         let text = format!("{} | FPS: {}", debug_text, fps);
         d.draw_text(&text, 10, 10, 10, Color::GREENYELLOW);
 
-        let entity_count = query_sprites.iter().count()
+        let entity_count = query_map_sprites.iter().count()
             + query_colliders.iter().count()
             + query_positions.iter().count();
-        let text = format!("Entities: {}", entity_count);
+        let text = format!("Map Sprites+colliders+positions: {}", entity_count);
         d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
 
-        /* let observer_count = query_observers.into_iter().count();
-        let text = format!("Observers: {}", observer_count);
-        d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW); */
+        let textures_count = textures.map.len();
+        let text = format!("Loaded Textures: {}", textures_count);
+        d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW);
+
+        let fonts_count = fonts.len();
+        let text = format!("Loaded Fonts: {}", fonts_count);
+        d.draw_text(&text, 10, 70, 10, Color::GREENYELLOW);
 
         let cam = &camera.0;
         let cam_text = format!(
@@ -308,6 +365,6 @@ pub fn render_system(
             mouse_pos.x, mouse_pos.y, mouse_world.x, mouse_world.y
         );
 
-        d.draw_text(&mouse_text, 10, 70, 10, Color::GREENYELLOW);
+        d.draw_text(&mouse_text, 10, 90, 10, Color::GREENYELLOW);
     }
 }

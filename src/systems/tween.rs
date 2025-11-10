@@ -31,7 +31,7 @@ fn ease(e: Easing, t: f32) -> f32 {
                 let p = 2.0 * t - 2.0;
                 0.5 * p * p * p + 1.0
             }
-        }
+        } // TODO: sine, elastic, bounce, etc.
     }
 }
 

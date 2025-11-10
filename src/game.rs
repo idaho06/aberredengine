@@ -4,6 +4,7 @@ use std::panic;
 use bevy_ecs::event::Trigger;
 use bevy_ecs::prelude::*;
 use raylib::ffi;
+use raylib::ffi::TextureFilter::{TEXTURE_FILTER_ANISOTROPIC_8X, TEXTURE_FILTER_BILINEAR};
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 //use std::collections::HashMap;
@@ -16,6 +17,7 @@ use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::mapposition::MapPosition;
+use crate::components::menu::Menu;
 use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -40,10 +42,10 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use rand::Rng;
+//use rand::Rng;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
-fn load_texture_from_text(
+pub fn load_texture_from_text(
     rl: &mut RaylibHandle,
     thread: &RaylibThread,
     font: &Font,
@@ -59,6 +61,18 @@ fn load_texture_from_text(
     };
     let texture = rl.load_texture_from_image(thread, &image).ok()?;
     Some(texture)
+}
+
+/// Load a font with mipmaps and anisotropic filtering
+fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
+    let mut font = rl
+        .load_font_ex(th, path, size, None)
+        .expect(&format!("Failed to load font '{}'", path));
+    unsafe {
+        ffi::GenTextureMipmaps(&mut font.texture);
+        ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    font
 }
 
 /// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
@@ -165,14 +179,10 @@ pub fn setup(
     commands.insert_resource(Camera2DRes(camera));
 
     // Load fonts
-    let font = rl
-        .load_font(&th, "./assets/fonts/Arcade_Cabinet.ttf")
-        .expect("Failed to load font 'arcade'");
+    let font = load_font_with_mipmaps(&mut rl, &th, "./assets/fonts/Arcade_Cabinet.ttf", 128);
     fonts.add("arcade", font);
 
-    let font = rl
-        .load_font(&th, "./assets/fonts/Formal_Future.ttf")
-        .expect("Failed to load font 'future'");
+    let font = load_font_with_mipmaps(&mut rl, &th, "./assets/fonts/Formal_Future.ttf", 128);
     fonts.add("future", font);
 
     // Load textures
@@ -762,6 +772,24 @@ pub fn switch_scene(
                 TweenScale::new(Vector2 { x: 0.9, y: 0.9 }, Vector2 { x: 1.1, y: 1.1 }, 1.0)
                     .with_easing(Easing::QuadInOut)
                     .with_loop_mode(LoopMode::PingPong),
+            ));
+            // Menu
+            commands.spawn((
+                Menu::new(
+                    &[
+                        ("start_game", "Start Game"),
+                        ("options", "Options"),
+                        ("exit", "Exit"),
+                    ],
+                    Vector2 { x: 250.0, y: 350.0 },
+                    "arcade",
+                    48.0,
+                    48.0 + 16.0,
+                    true,
+                )
+                .with_colors(Color::YELLOW, Color::WHITE)
+                .with_dynamic_text(true),
+                Group::new("main_menu"),
             ));
             // Play menu music
             audio_cmd_writer.write(AudioCmd::PlayMusic {

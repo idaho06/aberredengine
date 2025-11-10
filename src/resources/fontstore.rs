@@ -25,4 +25,8 @@ impl FontStore {
     pub fn clear(&mut self) {
         self.fonts.clear();
     }
+
+    pub fn len(&self) -> usize {
+        self.fonts.len()
+    }
 }
