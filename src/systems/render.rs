@@ -294,10 +294,24 @@ pub fn render_system(
         }
         if isdebug.is_some() {
             d.draw_rectangle_lines(
-                pos.pos.x as i32,
-                pos.pos.y as i32,
+                pos.pos.x as i32 - sprite.origin.x as i32,
+                pos.pos.y as i32 - sprite.origin.y as i32,
                 sprite.width as i32,
                 sprite.height as i32,
+                Color::PURPLE,
+            );
+            d.draw_line(
+                pos.pos.x as i32 - 6,
+                pos.pos.y as i32 - 6,
+                pos.pos.x as i32 + 6,
+                pos.pos.y as i32 + 6,
+                Color::PURPLE,
+            );
+            d.draw_line(
+                pos.pos.x as i32 + 6,
+                pos.pos.y as i32 - 6,
+                pos.pos.x as i32 - 6,
+                pos.pos.y as i32 + 6,
                 Color::PURPLE,
             );
         }
