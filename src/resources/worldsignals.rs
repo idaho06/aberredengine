@@ -52,6 +52,10 @@ impl WorldSignals {
     pub fn get_string(&self, key: &str) -> Option<&String> {
         self.strings.get(key)
     }
+    /// Remove a string signal by key.
+    pub fn remove_string(&mut self, key: &str) -> Option<String> {
+        self.strings.remove(key)
+    }
     /// Read-only view of all integer signals.
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers

@@ -345,6 +345,19 @@ pub fn setup(
     eprintln!("Game setup_with_commands() done, next state set to Playing");
 }
 
+pub fn quit_game(
+    //mut commands: Commands,
+    //mut rl: NonSendMut<raylib::RaylibHandle>,
+    mut world_signals: ResMut<WorldSignals>,
+) {
+    eprintln!("Quitting game...");
+
+    // Perform any necessary cleanup here
+
+    // Optionally, set a signal to indicate the game should exit
+    world_signals.set_flag("quit_game");
+}
+
 // Create initial state of the game and observers
 pub fn enter_play(
     mut commands: Commands,
@@ -625,7 +638,8 @@ pub fn update(
     input: Res<InputState>,
     mut commands: Commands,
     systems_store: Res<SystemsStore>,
-    world_signals: Res<WorldSignals>,
+    mut world_signals: ResMut<WorldSignals>,
+    mut next_game_state: ResMut<NextGameState>,
 ) {
     let _delta_sec = time.delta;
 
@@ -669,17 +683,33 @@ pub fn update(
 
     match scene.as_str() {
         "menu" => {
-            // Menu-specific updates
-            // Handle player input
-            /* if input.action_1.active {
-                eprintln!("Action 1 pressed!");
-                commands.run_system(
-                    systems_store
-                        .get("switch_scene")
-                        .expect("switch_scene system not found")
-                        .clone(),
-                );
-            } */
+            // Look inside world signals for option selected
+            let mut menu_selected_option: Option<String> = None;
+            if let Some(selected_item) = world_signals.remove_string("selected_item") {
+                menu_selected_option = Some(selected_item.clone());
+            }
+            if let Some(option) = menu_selected_option {
+                match option.as_str() {
+                    "start_game" => {
+                        // Switch to level 1
+                        world_signals.set_string("scene", "level01");
+                        commands.run_system(
+                            systems_store
+                                .get("switch_scene")
+                                .expect("switch_scene system not found")
+                                .clone(),
+                        );
+                    }
+                    "options" => {
+                        // Handle options menu (not implemented)
+                    }
+                    "exit" => {
+                        // Exit the game
+                        next_game_state.set(GameStates::Quitting);
+                    }
+                    _ => {}
+                }
+            }
         }
         "level01" => {
             // Level 1 specific updates

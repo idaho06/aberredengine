@@ -2,6 +2,7 @@ use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::Menu;
 use crate::components::screenposition::ScreenPosition;
+use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::input::{InputAction, InputEvent};
@@ -9,8 +10,9 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::input::InputState;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::worldsignals::WorldSignals;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, world};
 use raylib::prelude::{Color, Font, Vector2};
 use raylib::texture;
 
@@ -79,7 +81,12 @@ pub fn menu_spawn_system(
             let text_entity = ecmd.id();
             ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             item.entity = Some(text_entity);
-        }
+        } // end for each menu item
+
+        // Add a signals component to the menu entity for state tracking
+        commands
+            .entity(entity)
+            .insert(Signals::default().with_flag("waiting_selection"));
 
         // Spawn cursor entity if needed
         if let Some(cursor_entity) = menu.cursor_entity {
@@ -100,11 +107,12 @@ pub fn menu_spawn_system(
 
 pub fn menu_controller_observer(
     trigger: On<InputEvent>,
-    mut query: Query<(&mut Menu,)>,
+    mut query: Query<(&mut Menu, &mut Signals)>,
     mut commands: Commands,
     systems_store: Res<SystemsStore>,
+    mut world_signals: ResMut<WorldSignals>,
 ) {
-    for (mut menu,) in query.iter_mut() {
+    for (mut menu, mut signals) in query.iter_mut() {
         if !menu.active {
             continue;
         }
@@ -127,18 +135,15 @@ pub fn menu_controller_observer(
                 menu.selected_index = (menu.selected_index + 1) % menu.items.len();
                 changed_selection = true;
             }
-            InputAction::Action1 => {
+            InputAction::Action1 | InputAction::Action2 => {
                 // Activate selected menu item
-                let selected_item = &menu.items[menu.selected_index];
-                eprintln!("Menu item selected: {}", selected_item.id);
+                let selected_id = menu.items[menu.selected_index].id.clone();
+                eprintln!("Menu item selected: {}", selected_id);
 
-                // TODO: Temporal, restart the scene
-                commands.run_system(
-                    systems_store
-                        .get("switch_scene")
-                        .expect("switch_scene system not found")
-                        .clone(),
-                );
+                // Remove "waiting_selection" flag and set string to selected item id in world signals
+                signals.clear_flag("waiting_selection");
+                menu.active = false;
+                world_signals.set_string("selected_item", selected_id);
             }
             _ => {}
         }

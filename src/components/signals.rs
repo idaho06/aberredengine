@@ -40,6 +40,8 @@ pub struct Signals {
     pub integers: FxHashMap<String, i32>,
     /// Presence-only boolean flags; a key being present means "true".
     pub flags: FxHashSet<String>,
+    /// String signals addressed by string keys.
+    pub strings: FxHashMap<String, String>,
 }
 
 impl Default for Signals {
@@ -48,6 +50,7 @@ impl Default for Signals {
             scalars: FxHashMap::default(),
             integers: FxHashMap::default(),
             flags: FxHashSet::default(),
+            strings: FxHashMap::default(),
         }
     }
 }
@@ -78,6 +81,11 @@ impl Signals {
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers
     }
+    /// Create a Signals with a single flag set.
+    pub fn with_flag(mut self, key: impl Into<String>) -> Self {
+        self.set_flag(key);
+        self
+    }
     /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
@@ -93,5 +101,13 @@ impl Signals {
     /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
+    }
+    /// Set a string signal value.
+    pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.strings.insert(key.into(), value.into());
+    }
+    /// Get a string signal by key.
+    pub fn get_string(&self, key: &str) -> Option<&String> {
+        self.strings.get(key)
     }
 }
