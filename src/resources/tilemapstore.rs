@@ -58,4 +58,9 @@ impl TilemapStore {
     pub fn insert(&mut self, key: impl Into<String>, tilemap: Tilemap) {
         self.map.insert(key.into(), tilemap);
     }
+
+    /// Clear all loaded tilemaps.
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
 }

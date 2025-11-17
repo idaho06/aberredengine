@@ -735,7 +735,11 @@ pub fn switch_scene(
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     worldsignals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
+    mut tilemaps_store: ResMut<TilemapStore>,
+    mut tex_store: ResMut<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
+    mut rl: NonSendMut<raylib::RaylibHandle>,
+    th: NonSend<raylib::RaylibThread>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
@@ -750,6 +754,8 @@ pub fn switch_scene(
         eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
+
+    tilemaps_store.clear();
 
     let scene = worldsignals
         .get_string("scene")
@@ -844,7 +850,32 @@ pub fn switch_scene(
                 looped: true,
             });
         }
-        "level01" => {}
+        "level01" => {
+            // Load tilemap for level 1
+            let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
+            tilemaps_store.insert("level01", tilemap);
+            let tiles_width = tilemap_tex.width;
+            let tiles_height = tilemap_tex.height;
+            tex_store.insert("level01", tilemap_tex);
+            // Spawn tiles
+            let tilemap_info = tilemaps_store
+                .get("level01")
+                .expect("tilemap info not found for level01");
+            spawn_tiles(&mut commands, "level01", tiles_width, tilemap_info);
+            // Move camera to the center of the level
+            commands.insert_resource(Camera2DRes(Camera2D {
+                target: Vector2 {
+                    x: (tilemap_info.tile_size as f32 * (tilemap_info.map_width - 1) as f32 * 0.5),
+                    y: (tilemap_info.tile_size as f32 * (tilemap_info.map_height - 1) as f32 * 0.5),
+                },
+                offset: Vector2 {
+                    x: rl.get_screen_width() as f32 * 0.5,
+                    y: rl.get_screen_height() as f32 * 0.5,
+                },
+                rotation: 0.0,
+                zoom: 1.0,
+            }));
+        }
         "level02" => {}
         _ => {
             eprintln!("Unknown scene: {}", scene);

@@ -24,7 +24,7 @@ impl TextureStore {
     pub fn get(&self, key: impl Into<String>) -> Option<&Texture2D> {
         self.map.get(&key.into())
     }
-    /// Insert a texture with a specific key.
+    /// Insert or replace a texture with a specific key.
     pub fn insert(&mut self, key: impl Into<String>, texture: Texture2D) {
         self.map.insert(key.into(), texture);
     }

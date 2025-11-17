@@ -105,11 +105,30 @@ pub fn menu_spawn_system(
     }
 }
 
+pub fn menu_despawn(mut commands: Commands, query: Query<(Entity, &Menu)>) {
+    for (entity, menu) in query.iter() {
+        // Despawn menu item entities
+        for item in menu.items.iter() {
+            if let Some(item_entity) = item.entity {
+                commands.entity(item_entity).despawn();
+            }
+        }
+
+        // Despawn cursor entity if applicable
+        if let Some(cursor_entity) = menu.cursor_entity {
+            commands.entity(cursor_entity).despawn();
+        }
+
+        // Finally despawn the menu entity itself
+        commands.entity(entity).despawn();
+    }
+}
+
 pub fn menu_controller_observer(
     trigger: On<InputEvent>,
     mut query: Query<(&mut Menu, &mut Signals)>,
     mut commands: Commands,
-    systems_store: Res<SystemsStore>,
+    //systems_store: Res<SystemsStore>,
     mut world_signals: ResMut<WorldSignals>,
 ) {
     for (mut menu, mut signals) in query.iter_mut() {
