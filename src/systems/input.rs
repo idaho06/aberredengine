@@ -45,148 +45,220 @@ pub fn update_input_state(
     }
 
     if is_key_pressed(input.action_special.key_binding) {
+        input.action_special.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Special,
             pressed: true,
         });
+    } else {
+        input.action_special.just_pressed = false;
     }
     if is_key_released(input.action_special.key_binding) {
+        input.action_special.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Special,
             pressed: false,
         });
+    } else {
+        input.action_special.just_released = false;
     }
     if is_key_pressed(input.action_1.key_binding) {
+        input.action_1.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Action1,
             pressed: true,
         });
+    } else {
+        input.action_1.just_pressed = false;
     }
     if is_key_released(input.action_1.key_binding) {
+        input.action_1.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Action1,
             pressed: false,
         });
+    } else {
+        input.action_1.just_released = false;
     }
     if is_key_pressed(input.action_2.key_binding) {
+        input.action_2.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Action2,
             pressed: true,
         });
+    } else {
+        input.action_2.just_pressed = false;
     }
     if is_key_released(input.action_2.key_binding) {
+        input.action_2.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Action2,
             pressed: false,
         });
+    } else {
+        input.action_2.just_released = false;
     }
     if is_key_pressed(input.action_back.key_binding) {
+        input.action_back.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Back,
             pressed: true,
         });
+    } else {
+        input.action_back.just_pressed = false;
     }
     if is_key_released(input.action_back.key_binding) {
+        input.action_back.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Back,
             pressed: false,
         });
+    } else {
+        input.action_back.just_released = false;
     }
     if is_key_pressed(input.maindirection_up.key_binding) {
+        input.maindirection_up.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionUp,
             pressed: true,
         });
+    } else {
+        input.maindirection_up.just_pressed = false;
     }
     if is_key_released(input.maindirection_up.key_binding) {
+        input.maindirection_up.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionUp,
             pressed: false,
         });
+    } else {
+        input.maindirection_up.just_released = false;
     }
     if is_key_pressed(input.maindirection_down.key_binding) {
+        input.maindirection_down.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionDown,
             pressed: true,
         });
+    } else {
+        input.maindirection_down.just_pressed = false;
     }
     if is_key_released(input.maindirection_down.key_binding) {
+        input.maindirection_down.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionDown,
             pressed: false,
         });
+    } else {
+        input.maindirection_down.just_released = false;
     }
     if is_key_pressed(input.maindirection_left.key_binding) {
+        input.maindirection_left.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionLeft,
             pressed: true,
         });
+    } else {
+        input.maindirection_left.just_pressed = false;
     }
     if is_key_released(input.maindirection_left.key_binding) {
+        input.maindirection_left.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionLeft,
             pressed: false,
         });
+    } else {
+        input.maindirection_left.just_released = false;
     }
     if is_key_pressed(input.maindirection_right.key_binding) {
+        input.maindirection_right.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionRight,
             pressed: true,
         });
+    } else {
+        input.maindirection_right.just_pressed = false;
     }
     if is_key_released(input.maindirection_right.key_binding) {
+        input.maindirection_right.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::MainDirectionRight,
             pressed: false,
         });
+    } else {
+        input.maindirection_right.just_released = false;
     }
     if is_key_pressed(input.secondarydirection_up.key_binding) {
+        input.secondarydirection_up.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionUp,
             pressed: true,
         });
+    } else {
+        input.secondarydirection_up.just_pressed = false;
     }
     if is_key_released(input.secondarydirection_up.key_binding) {
+        input.secondarydirection_up.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionUp,
             pressed: false,
         });
+    } else {
+        input.secondarydirection_up.just_released = false;
     }
     if is_key_pressed(input.secondarydirection_down.key_binding) {
+        input.secondarydirection_down.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionDown,
             pressed: true,
         });
+    } else {
+        input.secondarydirection_down.just_pressed = false;
     }
     if is_key_released(input.secondarydirection_down.key_binding) {
+        input.secondarydirection_down.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionDown,
             pressed: false,
         });
+    } else {
+        input.secondarydirection_down.just_released = false;
     }
     if is_key_pressed(input.secondarydirection_left.key_binding) {
+        input.secondarydirection_left.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionLeft,
             pressed: true,
         });
+    } else {
+        input.secondarydirection_left.just_pressed = false;
     }
     if is_key_released(input.secondarydirection_left.key_binding) {
+        input.secondarydirection_left.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionLeft,
             pressed: false,
         });
+    } else {
+        input.secondarydirection_left.just_released = false;
     }
     if is_key_pressed(input.secondarydirection_right.key_binding) {
+        input.secondarydirection_right.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionRight,
             pressed: true,
         });
+    } else {
+        input.secondarydirection_right.just_pressed = false;
     }
     if is_key_released(input.secondarydirection_right.key_binding) {
+        input.secondarydirection_right.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::SecondaryDirectionRight,
             pressed: false,
         });
+    } else {
+        input.secondarydirection_right.just_released = false;
     }
 }
 

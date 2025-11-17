@@ -710,9 +710,23 @@ pub fn update(
                     _ => {}
                 }
             }
+            // If action_back is pressed, exit game
+            if input.action_back.just_pressed {
+                next_game_state.set(GameStates::Quitting);
+            }
         }
         "level01" => {
             // Level 1 specific updates
+            // If action_back is pressed, go back to menu
+            if input.action_back.just_pressed {
+                world_signals.set_string("scene", "menu");
+                commands.run_system(
+                    systems_store
+                        .get("switch_scene")
+                        .expect("switch_scene system not found")
+                        .clone(),
+                );
+            }
         }
         "level02" => {
             // Level 2 specific updates
@@ -764,6 +778,20 @@ pub fn switch_scene(
 
     match scene.as_str() {
         "menu" => {
+            let camera = Camera2D {
+                target: Vector2 {
+                    x: 0.0,
+                    y: 0.0, //x: 0.0,
+                            //y: 0.0,
+                },
+                offset: Vector2 {
+                    x: rl.get_screen_width() as f32 * 0.5,
+                    y: rl.get_screen_height() as f32 * 0.5,
+                },
+                rotation: 0.0,
+                zoom: 1.0,
+            };
+            commands.insert_resource(Camera2DRes(camera));
             commands.spawn((
                 MapPosition::new(0.0, 0.0),
                 ZIndex(0),
