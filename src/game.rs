@@ -127,8 +127,10 @@ fn spawn_tiles(
 
             // Sprite origin is the center of the sprite (in pixels)
             let origin = Vector2 {
-                x: tile_size * 0.5,
-                y: tile_size * 0.5,
+                //x: tile_size * 0.5,
+                //y: tile_size * 0.5,
+                x: 0.0,
+                y: 0.0,
             };
 
             commands.spawn((
@@ -197,6 +199,9 @@ pub fn setup(
     let cursor_tex = rl
         .load_texture(&th, "./assets/textures/cursor.png")
         .expect("load assets/cursor.png");
+    let vaus_tex = rl
+        .load_texture(&th, "./assets/textures/vaus.png")
+        .expect("load assets/vaus.png");
 
     /* let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
@@ -236,6 +241,7 @@ pub fn setup(
     tex_store.insert("title", title_tex);
     tex_store.insert("background", background_tex);
     tex_store.insert("cursor", cursor_tex);
+    tex_store.insert("vaus", vaus_tex);
     /* tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
@@ -779,11 +785,7 @@ pub fn switch_scene(
     match scene.as_str() {
         "menu" => {
             let camera = Camera2D {
-                target: Vector2 {
-                    x: 0.0,
-                    y: 0.0, //x: 0.0,
-                            //y: 0.0,
-                },
+                target: Vector2 { x: 0.0, y: 0.0 },
                 offset: Vector2 {
                     x: rl.get_screen_width() as f32 * 0.5,
                     y: rl.get_screen_height() as f32 * 0.5,
@@ -890,11 +892,30 @@ pub fn switch_scene(
                 .get("level01")
                 .expect("tilemap info not found for level01");
             spawn_tiles(&mut commands, "level01", tiles_width, tilemap_info);
+            // The Vaus. The player paddle
+            commands.spawn((
+                Group::new("player"),
+                MapPosition::new(
+                    400.0,
+                    (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0,
+                ),
+                ZIndex(10),
+                Sprite {
+                    tex_key: "vaus".into(),
+                    width: 96.0,
+                    height: 24.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2 { x: 48.0, y: 24.0 },
+                    flip_h: false,
+                    flip_v: false,
+                },
+                //RigidBody::default(),
+            ));
             // Move camera to the center of the level
             commands.insert_resource(Camera2DRes(Camera2D {
                 target: Vector2 {
-                    x: (tilemap_info.tile_size as f32 * (tilemap_info.map_width - 1) as f32 * 0.5),
-                    y: (tilemap_info.tile_size as f32 * (tilemap_info.map_height - 1) as f32 * 0.5),
+                    x: (tilemap_info.tile_size as f32 * (tilemap_info.map_width) as f32 * 0.5),
+                    y: (tilemap_info.tile_size as f32 * (tilemap_info.map_height) as f32 * 0.5),
                 },
                 offset: Vector2 {
                     x: rl.get_screen_width() as f32 * 0.5,
