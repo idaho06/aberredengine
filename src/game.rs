@@ -919,6 +919,48 @@ pub fn switch_scene(
                     origin: Vector2 { x: 48.0, y: 24.0 },
                 },
             ));
+            commands.spawn((
+                Group::new("walls"),
+                MapPosition::new(0.0, tilemap_info.tile_size as f32 * 2.0),
+                BoxCollider {
+                    size: Vector2 {
+                        x: tilemap_info.tile_size as f32 * 1.0,
+                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
+                    },
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                },
+            ));
+            commands.spawn((
+                Group::new("walls"),
+                MapPosition::new(
+                    (tilemap_info.tile_size as f32 * (tilemap_info.map_width - 1) as f32),
+                    tilemap_info.tile_size as f32 * 2.0,
+                ),
+                BoxCollider {
+                    size: Vector2 {
+                        x: tilemap_info.tile_size as f32 * 1.0,
+                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
+                    },
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                },
+            ));
+            commands.spawn((
+                Group::new("walls"),
+                MapPosition::new(
+                    tilemap_info.tile_size as f32 * 1.0,
+                    tilemap_info.tile_size as f32 * 2.0,
+                ),
+                BoxCollider {
+                    size: Vector2 {
+                        x: tilemap_info.tile_size as f32 * (tilemap_info.map_width - 2) as f32,
+                        y: tilemap_info.tile_size as f32 * 1.0,
+                    },
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                },
+            ));
             // Move camera to the center of the level
             commands.insert_resource(Camera2DRes(Camera2D {
                 target: Vector2 {
