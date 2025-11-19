@@ -29,3 +29,18 @@ impl InputControlled {
         }
     }
 }
+#[derive(Component, Clone, Copy, Debug)]
+pub struct MouseControlled {
+    /// Follow mouse X axis.
+    pub follow_x: bool,
+    /// Follow mouse Y axis.
+    pub follow_y: bool,
+}
+
+impl MouseControlled {
+    pub fn new(follow_x: bool, follow_y: bool) -> Self {
+        Self { follow_x, follow_y }
+    }
+}
+
+// TODO: MouseDeltaControlled component for relative mouse movement (e.g., for camera control)

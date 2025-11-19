@@ -16,6 +16,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
+use crate::components::inputcontrolled::MouseControlled;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::Menu;
 use crate::components::persistent::Persistent;
@@ -910,6 +911,13 @@ pub fn switch_scene(
                     flip_v: false,
                 },
                 //RigidBody::default(),
+                MouseControlled::new(true, false),
+                Signals::default(),
+                BoxCollider {
+                    size: Vector2 { x: 96.0, y: 24.0 },
+                    offset: Vector2::zero(),
+                    origin: Vector2 { x: 48.0, y: 24.0 },
+                },
             ));
             // Move camera to the center of the level
             commands.insert_resource(Camera2DRes(Camera2D {

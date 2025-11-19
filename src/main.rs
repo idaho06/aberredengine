@@ -27,6 +27,7 @@ use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
+use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
 use crate::systems::time::update_timers;
@@ -126,6 +127,7 @@ fn main() {
     );
     //update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
     update.add_systems(input_simple_controller);
+    update.add_systems(mouse_controller);
     update.add_systems(tween_mapposition_system);
     update.add_systems(tween_rotation_system);
     update.add_systems(tween_scale_system);
