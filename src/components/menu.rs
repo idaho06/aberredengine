@@ -1,5 +1,6 @@
 use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::{Color, Vector2};
+use rustc_hash::FxHashMap;
 
 #[derive(Clone, Debug)]
 pub struct MenuItem {
@@ -78,5 +79,33 @@ impl Menu {
             item.dynamic_text = dynamic;
         }
         self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum MenuAction {
+    SetScene(String),
+    QuitGame,
+    ShowSubMenu(String),
+    Noop,
+}
+
+#[derive(Component, Default, Clone, Debug)]
+pub struct MenuActions {
+    pub map: FxHashMap<String, MenuAction>, // item_id -> action
+}
+
+impl MenuActions {
+    pub fn new() -> Self {
+        Self {
+            map: FxHashMap::default(),
+        }
+    }
+    pub fn with(mut self, item_id: impl Into<String>, action: MenuAction) -> Self {
+        self.map.insert(item_id.into(), action);
+        self
+    }
+    pub fn get(&self, item_id: &str) -> MenuAction {
+        self.map.get(item_id).cloned().unwrap_or(MenuAction::Noop)
     }
 }

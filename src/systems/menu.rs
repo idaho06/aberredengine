@@ -1,20 +1,21 @@
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
-use crate::components::menu::Menu;
+use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::input::{InputAction, InputEvent};
+use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
-use crate::resources::input::InputState;
+use crate::resources::gamestate::GameStates::Quitting;
+use crate::resources::gamestate::NextGameState;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
-use bevy_ecs::{prelude::*, world};
+use bevy_ecs::prelude::*;
 use raylib::prelude::{Color, Font, Vector2};
-use raylib::texture;
 
 pub fn menu_spawn_system(
     mut commands: Commands,
@@ -32,12 +33,12 @@ pub fn menu_spawn_system(
         let use_screen_space = menu.use_screen_space;
 
         // Spawn DynamicText or Sprite for each menu item if needed
-        for item in menu.items.iter_mut() {
+        for menu_item in menu.items.iter_mut() {
             let mut ecmd = commands.spawn_empty();
-            if item.dynamic_text {
+            if menu_item.dynamic_text {
                 // Dynamic text will be updated each frame
                 ecmd.insert(DynamicText::new(
-                    &item.label,
+                    &menu_item.label,
                     font_string.clone(),
                     font_size,
                     normal_color,
@@ -52,7 +53,7 @@ pub fn menu_spawn_system(
                     &mut rl,
                     &th,
                     font_handle,
-                    &item.label,
+                    &menu_item.label,
                     font_size,
                     1.0,
                     normal_color,
@@ -60,9 +61,10 @@ pub fn menu_spawn_system(
                 .expect("Failed to create texture from text");
                 let width = texture_handle.width as f32;
                 let height = texture_handle.height as f32;
-                texture_store.insert(&format!("menu_{}", item.id), texture_handle);
+                let key = format!("menu_{}", menu_item.id);
+                texture_store.insert(&key, texture_handle);
                 ecmd.insert(Sprite {
-                    tex_key: format!("menu_{}", item.id),
+                    tex_key: key,
                     width,
                     height,
                     offset: Vector2 { x: 0.0, y: 0.0 },
@@ -73,14 +75,18 @@ pub fn menu_spawn_system(
             }
 
             if use_screen_space {
-                ecmd.insert(ScreenPosition { pos: item.position });
+                ecmd.insert(ScreenPosition {
+                    pos: menu_item.position,
+                });
             } else {
-                ecmd.insert(MapPosition { pos: item.position });
+                ecmd.insert(MapPosition {
+                    pos: menu_item.position,
+                });
                 ecmd.insert(ZIndex(23));
             }
             let text_entity = ecmd.id();
             ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
-            item.entity = Some(text_entity);
+            menu_item.entity = Some(text_entity);
         } // end for each menu item
 
         // Add a signals component to the menu entity for state tracking
@@ -126,49 +132,53 @@ pub fn menu_despawn(mut commands: Commands, query: Query<(Entity, &Menu)>) {
 
 pub fn menu_controller_observer(
     trigger: On<InputEvent>,
-    mut query: Query<(&mut Menu, &mut Signals)>,
+    mut query: Query<(Entity, &mut Menu, &mut Signals)>,
     mut commands: Commands,
-    //systems_store: Res<SystemsStore>,
-    mut world_signals: ResMut<WorldSignals>,
 ) {
-    for (mut menu, mut signals) in query.iter_mut() {
+    for (entity, mut menu, mut signals) in query.iter_mut() {
         if !menu.active {
             continue;
         }
-
-        if !trigger.event().pressed {
+        let event = trigger.event();
+        if !event.pressed {
             continue; // Only handle key press, not release
         }
 
         let mut changed_selection = false;
-        match trigger.event().action {
+        match event.action {
             InputAction::SecondaryDirectionUp => {
-                if menu.selected_index == 0 {
-                    menu.selected_index = menu.items.len() - 1;
-                } else {
-                    menu.selected_index -= 1;
+                if !menu.items.is_empty() {
+                    menu.selected_index =
+                        (menu.selected_index + menu.items.len() - 1) % menu.items.len();
+                    changed_selection = true;
                 }
-                changed_selection = true;
             }
             InputAction::SecondaryDirectionDown => {
-                menu.selected_index = (menu.selected_index + 1) % menu.items.len();
-                changed_selection = true;
+                if !menu.items.is_empty() {
+                    menu.selected_index = (menu.selected_index + 1) % menu.items.len();
+                    changed_selection = true;
+                }
             }
             InputAction::Action1 | InputAction::Action2 => {
-                // Activate selected menu item
-                let selected_id = menu.items[menu.selected_index].id.clone();
-                eprintln!("Menu item selected: {}", selected_id);
-
-                // Remove "waiting_selection" flag and set string to selected item id in world signals
-                signals.clear_flag("waiting_selection");
-                menu.active = false;
-                world_signals.set_string("selected_item", selected_id);
+                if let Some(item) = menu.items.get(menu.selected_index) {
+                    let selected_id = item.id.clone();
+                    signals.clear_flag("waiting_selection");
+                    menu.active = false;
+                    signals.set_string("selected_item", selected_id.clone());
+                    commands.trigger(MenuSelectionEvent {
+                        menu: entity,
+                        item_id: selected_id,
+                    });
+                }
             }
             _ => {}
         }
 
         // Update cursor position if applicable
         if changed_selection {
+            // TODO: change colors of selected/unselected items
+            // TODO: sounds
+            // TODO: Use Tween for cursor movement
             if let Some(cursor_entity) = menu.cursor_entity {
                 let cursor_position = menu.items[menu.selected_index].position;
                 if menu.use_screen_space {
@@ -181,6 +191,45 @@ pub fn menu_controller_observer(
                     });
                 }
             }
+        }
+    }
+}
+
+pub fn menu_selection_observer(
+    trigger: On<MenuSelectionEvent>,
+    mut commands: Commands,
+    menus: Query<&MenuActions>,
+    mut world_signals: ResMut<WorldSignals>,
+    mut next_game_state: ResMut<NextGameState>,
+    systems_store: Res<SystemsStore>,
+) {
+    let event = trigger.event();
+    let Ok(menu_actions) = menus.get(event.menu) else {
+        eprintln!(
+            "menu_selection_observer: No MenuActions found for menu entity {:?}, item_id {:?}",
+            event.menu, event.item_id
+        );
+        return;
+    };
+    match menu_actions.get(&event.item_id) {
+        MenuAction::SetScene(scene_name) => {
+            world_signals.set_string("scene", scene_name.clone());
+            commands.run_system(
+                systems_store
+                    .get("switch_scene")
+                    .expect("switch_scene system not found")
+                    .clone(),
+            );
+        }
+        MenuAction::ShowSubMenu(submenu_name) => {
+            world_signals.set_string("show_submenu", submenu_name.clone());
+            // TODO: trigger submenu display system
+        }
+        MenuAction::QuitGame => {
+            next_game_state.set(Quitting);
+        }
+        MenuAction::Noop => {
+            // Do nothing
         }
     }
 }

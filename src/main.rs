@@ -26,6 +26,7 @@ use crate::systems::collision::collision;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
@@ -105,6 +106,7 @@ fn main() {
     //world.spawn(Observer::new(observe_kill_on_collision));
     world.spawn((Observer::new(observe_switch_debug_event), Persistent));
     world.spawn(Observer::new(menu_controller_observer));
+    world.spawn(Observer::new(menu_selection_observer));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 

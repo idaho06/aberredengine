@@ -18,7 +18,7 @@ use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::inputcontrolled::MouseControlled;
 use crate::components::mapposition::MapPosition;
-use crate::components::menu::Menu;
+use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -650,39 +650,6 @@ pub fn update(
 ) {
     let _delta_sec = time.delta;
 
-    /*     // Update positions based on velocity
-       for (mut map_pos, mut rb, _collider) in query_rb.iter_mut() {
-
-           // Update position based on velocity
-           map_pos.x += rb.velocity.x * delta_sec;
-           map_pos.y += rb.velocity.y * delta_sec;
-
-           // Simple boundary collision with screen edges (assuming 800x450 screen size)
-           if map_pos.x < 0.0 {
-               map_pos.x = 0.0;
-               rb.velocity.x = -rb.velocity.x; // Reverse X velocity
-           } else if map_pos.x > 800.0 {
-               map_pos.x = 800.0;
-               rb.velocity.x = -rb.velocity.x; // Reverse X velocity
-           }
-           if map_pos.y < 0.0 {
-               map_pos.y = 0.0;
-               rb.velocity.y = -rb.velocity.y; // Reverse Y velocity
-           } else if map_pos.y > 450.0 {
-               map_pos.y = 450.0;
-               rb.velocity.y = -rb.velocity.y; // Reverse Y velocity
-           }
-       }
-    */
-    // Update enemy sprites based on their velocity (flip horizontally)
-    /* for (mut sprite, rb) in query_enemies.iter_mut() {
-        if rb.velocity.x < 0.0 {
-            sprite.flip_h = true;
-        } else if rb.velocity.x > 0.0 {
-            sprite.flip_h = false;
-        }
-    } */
-
     let scene = world_signals
         .get_string("scene")
         .cloned()
@@ -690,34 +657,7 @@ pub fn update(
 
     match scene.as_str() {
         "menu" => {
-            // Look inside world signals for option selected
-            let mut menu_selected_option: Option<String> = None;
-            if let Some(selected_item) = world_signals.remove_string("selected_item") {
-                menu_selected_option = Some(selected_item.clone());
-            }
-            if let Some(option) = menu_selected_option {
-                match option.as_str() {
-                    "start_game" => {
-                        // Switch to level 1
-                        world_signals.set_string("scene", "level01");
-                        commands.run_system(
-                            systems_store
-                                .get("switch_scene")
-                                .expect("switch_scene system not found")
-                                .clone(),
-                        );
-                    }
-                    "options" => {
-                        // Handle options menu (not implemented)
-                    }
-                    "exit" => {
-                        // Exit the game
-                        next_game_state.set(GameStates::Quitting);
-                    }
-                    _ => {}
-                }
-            }
-            // If action_back is pressed, exit game
+            // Menu specific updates
             if input.action_back.just_pressed {
                 next_game_state.set(GameStates::Quitting);
             }
@@ -857,6 +797,12 @@ pub fn switch_scene(
                     flip_v: false,
                 })
                 .id();
+
+            let actions = MenuActions::new()
+                .with("start_game", MenuAction::SetScene("level01".into()))
+                .with("options", MenuAction::ShowSubMenu("options".into()))
+                .with("exit", MenuAction::QuitGame);
+
             commands.spawn((
                 Menu::new(
                     &[
@@ -873,6 +819,7 @@ pub fn switch_scene(
                 .with_colors(Color::YELLOW, Color::WHITE)
                 .with_dynamic_text(true)
                 .with_cursor(cursor_entity),
+                actions,
                 Group::new("main_menu"),
             ));
             // Play menu music
