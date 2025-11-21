@@ -13,6 +13,7 @@ use rustc_hash::FxHashMap;
 use crate::components::animation::Animation;
 use crate::components::animation::{AnimationController, CmpOp, Condition};
 use crate::components::boxcollider::BoxCollider;
+use crate::components::collision::{CollisionCallback, CollisionRule};
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
@@ -686,7 +687,7 @@ pub fn update(
 
 pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<Persistent>>) {
     for entity in query.iter() {
-        eprintln!("Despawning entity: {:?}", entity);
+        //eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
 }
@@ -712,7 +713,7 @@ pub fn switch_scene(
     ); */
     for entity in entities_to_clean.iter() {
         commands.entity(entity).log_components();
-        eprintln!("Despawning entity: {:?}", entity);
+        //eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
 
@@ -829,6 +830,44 @@ pub fn switch_scene(
             });
         }
         "level01" => {
+            // callback for player-wall collision
+            fn player_wall_collision_callback(
+                a: Entity,
+                b: Entity,
+                mut _commands: &mut Commands,
+                groups: &Query<&Group>,
+                positions: &mut Query<&mut MapPosition>,
+                mut _rigidbodies: &mut Query<&mut RigidBody>,
+            ) {
+                //eprintln!("player_wall_collision_callback: Player collided with wall!");
+                // Identify which entity is the player and which is the wall
+                let (player_entity, _wall_entity) = match (groups.get(a), groups.get(b)) {
+                    (Ok(group_a), Ok(group_b))
+                        if group_a.name() == "player" && group_b.name() == "walls" =>
+                    {
+                        (a, b)
+                    }
+                    (Ok(group_a), Ok(group_b))
+                        if group_a.name() == "walls" && group_b.name() == "player" =>
+                    {
+                        (b, a)
+                    }
+                    _ => return,
+                };
+                // Stop the player's movement upon collision with the wall
+                if let Ok(mut pos) = positions.get_mut(player_entity) {
+                    pos.pos.x = pos.pos.x.max(72.0).min(600.0);
+                    //eprintln!("Corrected player X position to: {}", pos.pos.x);
+                }
+            }
+            commands.spawn((
+                CollisionRule::new(
+                    "player",
+                    "walls",
+                    player_wall_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
             // Load tilemap for level 1
             let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
             tilemaps_store.insert("level01", tilemap);

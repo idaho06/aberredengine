@@ -133,7 +133,7 @@ fn main() {
     update.add_systems(tween_rotation_system);
     update.add_systems(tween_scale_system);
     update.add_systems(movement);
-    update.add_systems(collision_detector);
+    update.add_systems(collision_detector.after(mouse_controller));
     update.add_systems(animation_controller);
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
@@ -142,7 +142,7 @@ fn main() {
             .run_if(state_is_playing)
             .after(check_pending_state),
     );
-    update.add_systems(render_system);
+    update.add_systems(render_system.after(collision_detector));
 
     update
         .initialize(&mut world)

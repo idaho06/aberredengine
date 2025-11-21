@@ -8,8 +8,10 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
+use crate::components::collision::CollisionRule;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
+use crate::components::rigidbody::RigidBody;
 use crate::events::collision::CollisionEvent;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
@@ -57,9 +59,39 @@ pub fn collision_observer(
     trigger: On<CollisionEvent>,
     mut commands: Commands,
     groups: Query<&Group>,
+    rules: Query<&CollisionRule>,
+    mut positions: Query<&mut MapPosition>,
+    mut rigidbodies: Query<&mut RigidBody>,
 ) {
     let a = trigger.event().a;
     let b = trigger.event().b;
 
-    eprintln!("Collision detected: {:?} and {:?}", a, b);
+    //eprintln!("Collision detected: {:?} and {:?}", a, b);
+    let ga = if let Ok(group) = groups.get(a) {
+        group.name()
+    } else {
+        return;
+    };
+    let gb = if let Ok(group) = groups.get(b) {
+        group.name()
+    } else {
+        return;
+    };
+
+    for rule in rules.iter() {
+        if rule.matches(ga, gb) {
+            //eprintln!(
+            //    "Collision rule matched for groups '{}' and '{}'",
+            //    ga, gb
+            //);
+            (rule.callback)(
+                a,
+                b,
+                &mut commands,
+                &groups,
+                &mut positions,
+                &mut rigidbodies,
+            );
+        }
+    }
 }

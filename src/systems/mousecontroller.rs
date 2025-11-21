@@ -15,10 +15,14 @@ pub fn mouse_controller(
     let world_position = rl.get_screen_to_world2D(mouse_position, camera_res.0);
     for (mouse_controlled, mut map_position) in query.iter_mut() {
         if mouse_controlled.follow_x {
+            //eprintln!("Position before: {:?}", map_position.pos);
             map_position.pos.x = world_position.x;
+            //eprintln!("Position after: {:?}", map_position.pos);
         }
         if mouse_controlled.follow_y {
+            //eprintln!("Position before: {:?}", map_position.pos);
             map_position.pos.y = world_position.y;
+            //eprintln!("Position after: {:?}", map_position.pos);
         }
     }
 }
