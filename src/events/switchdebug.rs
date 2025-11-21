@@ -18,7 +18,7 @@ pub struct SwitchDebugEvent {}
 ///
 /// - If `DebugMode` is present, it is removed (debug disabled).
 /// - If absent, it is inserted (debug enabled).
-pub fn observe_switch_debug_event(
+pub fn switch_debug_observer(
     _trigger: On<SwitchDebugEvent>,
     mut commands: Commands,
     debug_mode: Option<Res<DebugMode>>,

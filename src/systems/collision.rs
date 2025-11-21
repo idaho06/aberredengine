@@ -8,6 +8,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
+use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::events::collision::CollisionEvent;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
@@ -17,7 +18,7 @@ use crate::events::collision::CollisionEvent;
 /// Uses ECS `iter_combinations_mut()` to efficiently iterate unique pairs,
 /// checks overlap, and triggers an event for each collision. Observers can
 /// react to despawn, apply damage, or play sounds.
-pub fn collision(
+pub fn collision_detector(
     mut query: Query<(Entity, &mut MapPosition, &BoxCollider)>,
     mut commands: Commands,
 ) {
@@ -48,4 +49,17 @@ pub fn collision(
             b: entity_b,
         });
     }
+}
+
+/// Global observer when a CollisionEvent is triggered.
+///
+pub fn collision_observer(
+    trigger: On<CollisionEvent>,
+    mut commands: Commands,
+    groups: Query<&Group>,
+) {
+    let a = trigger.event().a;
+    let b = trigger.event().b;
+
+    eprintln!("Collision detected: {:?} and {:?}", a, b);
 }

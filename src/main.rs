@@ -5,10 +5,9 @@ mod resources;
 mod systems;
 
 use crate::components::persistent::Persistent;
-use crate::events::collision::observe_kill_on_collision;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
-use crate::events::switchdebug::observe_switch_debug_event;
+use crate::events::switchdebug::switch_debug_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
@@ -22,7 +21,8 @@ use crate::systems::animation::animation_controller;
 use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
-use crate::systems::collision::collision;
+use crate::systems::collision::collision_detector;
+use crate::systems::collision::collision_observer;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
@@ -102,11 +102,10 @@ fn main() {
     }
     world.trigger(GameStateChangedEvent {}); // Call inmediatly to enter Setup state
 
-    // Register a global observer for CollisionEvent that despawns both entities.
-    //world.spawn(Observer::new(observe_kill_on_collision));
-    world.spawn((Observer::new(observe_switch_debug_event), Persistent));
-    world.spawn(Observer::new(menu_controller_observer));
-    world.spawn(Observer::new(menu_selection_observer));
+    world.add_observer(collision_observer);
+    world.add_observer(switch_debug_observer);
+    world.add_observer(menu_controller_observer);
+    world.add_observer(menu_selection_observer);
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
@@ -134,7 +133,7 @@ fn main() {
     update.add_systems(tween_rotation_system);
     update.add_systems(tween_scale_system);
     update.add_systems(movement);
-    update.add_systems(collision);
+    update.add_systems(collision_detector);
     update.add_systems(animation_controller);
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
