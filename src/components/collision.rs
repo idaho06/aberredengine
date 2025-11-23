@@ -5,15 +5,21 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::events::collision::CollisionEvent;
 
-/// Callback signature for collision components.
-pub type CollisionCallback = fn(
-    a: Entity,
-    b: Entity,
-    commands: &mut Commands,
-    groups: &Query<&Group>,
-    positions: &mut Query<&mut MapPosition>,
-    rigidbodies: &mut Query<&mut RigidBody>,
-);
+/// Context passed into collision callbacks to access world state.
+///
+/// Extend this struct as new queries/resources are needed by callbacks.
+pub struct CollisionContext<'a, 'w, 's> {
+    pub commands: &'a mut Commands<'w, 's>,
+    pub groups: &'a Query<'w, 's, &'static Group>,
+    pub positions: &'a mut Query<'w, 's, &'static mut MapPosition>,
+    pub rigidbodies: &'a mut Query<'w, 's, &'static mut RigidBody>,
+    // TODO: Add more parameters as needed. They come from the `collision_observer` function,
+    // pub signals: &'w mut Query<'w, 's, &'static mut Signal>,
+}
+
+/// Callback signature for collision components using a grouped context.
+pub type CollisionCallback =
+    for<'a, 'w, 's> fn(a: Entity, b: Entity, ctx: &mut CollisionContext<'a, 'w, 's>);
 
 #[derive(Component)]
 pub struct CollisionRule {

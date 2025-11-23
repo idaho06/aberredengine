@@ -6,9 +6,10 @@
 //! overlapping pair it triggers a [`CollisionEvent`](crate::events::collision::CollisionEvent).
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemParam;
 
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::CollisionRule;
+use crate::components::collision::{CollisionContext, CollisionRule};
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -55,43 +56,50 @@ pub fn collision_detector(
 
 /// Global observer when a CollisionEvent is triggered.
 ///
-pub fn collision_observer(
-    trigger: On<CollisionEvent>,
-    mut commands: Commands,
-    groups: Query<&Group>,
-    rules: Query<&CollisionRule>,
-    mut positions: Query<&mut MapPosition>,
-    mut rigidbodies: Query<&mut RigidBody>,
-) {
+#[derive(SystemParam)]
+pub struct CollisionObserverParams<'w, 's> {
+    pub commands: Commands<'w, 's>,
+    pub groups: Query<'w, 's, &'static Group>,
+    pub rules: Query<'w, 's, &'static CollisionRule>,
+    pub positions: Query<'w, 's, &'static mut MapPosition>,
+    pub rigidbodies: Query<'w, 's, &'static mut RigidBody>,
+    // pub signals: Query<'w, 's, &'static mut Signal>,
+}
+
+pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObserverParams) {
     let a = trigger.event().a;
     let b = trigger.event().b;
 
     //eprintln!("Collision detected: {:?} and {:?}", a, b);
-    let ga = if let Ok(group) = groups.get(a) {
+    let ga = if let Ok(group) = params.groups.get(a) {
         group.name()
     } else {
         return;
     };
-    let gb = if let Ok(group) = groups.get(b) {
+    let gb = if let Ok(group) = params.groups.get(b) {
         group.name()
     } else {
         return;
     };
 
-    for rule in rules.iter() {
+    for rule in params.rules.iter() {
         if rule.matches(ga, gb) {
             //eprintln!(
             //    "Collision rule matched for groups '{}' and '{}'",
             //    ga, gb
             //);
-            (rule.callback)(
-                a,
-                b,
-                &mut commands,
-                &groups,
-                &mut positions,
-                &mut rigidbodies,
-            );
+            {
+                let callback = rule.callback;
+                let mut ctx = CollisionContext {
+                    commands: &mut params.commands,
+                    groups: &params.groups,
+                    positions: &mut params.positions,
+                    rigidbodies: &mut params.rigidbodies,
+                    // signals: &mut params.signals,
+                };
+                callback(a, b, &mut ctx);
+            }
+            break; // ensure borrows end before next iteration
         }
     }
 }

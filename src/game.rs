@@ -13,7 +13,7 @@ use rustc_hash::FxHashMap;
 use crate::components::animation::Animation;
 use crate::components::animation::{AnimationController, CmpOp, Condition};
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{CollisionCallback, CollisionRule};
+use crate::components::collision::{CollisionCallback, CollisionContext, CollisionRule};
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
@@ -831,17 +831,10 @@ pub fn switch_scene(
         }
         "level01" => {
             // callback for player-wall collision
-            fn player_wall_collision_callback(
-                a: Entity,
-                b: Entity,
-                mut _commands: &mut Commands,
-                groups: &Query<&Group>,
-                positions: &mut Query<&mut MapPosition>,
-                mut _rigidbodies: &mut Query<&mut RigidBody>,
-            ) {
+            fn player_wall_collision_callback(a: Entity, b: Entity, ctx: &mut CollisionContext) {
                 //eprintln!("player_wall_collision_callback: Player collided with wall!");
                 // Identify which entity is the player and which is the wall
-                let (player_entity, _wall_entity) = match (groups.get(a), groups.get(b)) {
+                let (player_entity, _wall_entity) = match (ctx.groups.get(a), ctx.groups.get(b)) {
                     (Ok(group_a), Ok(group_b))
                         if group_a.name() == "player" && group_b.name() == "walls" =>
                     {
@@ -855,7 +848,7 @@ pub fn switch_scene(
                     _ => return,
                 };
                 // Stop the player's movement upon collision with the wall
-                if let Ok(mut pos) = positions.get_mut(player_entity) {
+                if let Ok(mut pos) = ctx.positions.get_mut(player_entity) {
                     pos.pos.x = pos.pos.x.max(72.0).min(600.0);
                     //eprintln!("Corrected player X position to: {}", pos.pos.x);
                 }
