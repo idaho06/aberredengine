@@ -42,8 +42,19 @@ impl CollisionRule {
             callback,
         }
     }
-    pub fn matches(&self, group_a: &str, group_b: &str) -> bool {
-        (self.group_a == group_a && self.group_b == group_b)
-            || (self.group_a == group_b && self.group_b == group_a)
+    pub fn match_and_order(
+        &self,
+        ent_a: Entity,
+        ent_b: Entity,
+        group_a: &str,
+        group_b: &str,
+    ) -> Option<(Entity, Entity)> {
+        if self.group_a == group_a && self.group_b == group_b {
+            Some((ent_a, ent_b))
+        } else if self.group_a == group_b && self.group_b == group_a {
+            Some((ent_b, ent_a))
+        } else {
+            None
+        }
     }
 }

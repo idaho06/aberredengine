@@ -83,7 +83,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
     };
 
     for rule in params.rules.iter() {
-        if rule.matches(ga, gb) {
+        if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
             //eprintln!(
             //    "Collision rule matched for groups '{}' and '{}'",
             //    ga, gb
@@ -97,7 +97,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                     rigid_bodies: &mut params.rigidbodies,
                     // signals: &mut params.signals,
                 };
-                callback(a, b, &mut ctx);
+                callback(ent_a, ent_b, &mut ctx);
             }
             break; // ensure borrows end before next iteration
         }

@@ -835,22 +835,12 @@ pub fn switch_scene(
         }
         "level01" => {
             // callback for player-wall collision
-            fn player_wall_collision_callback(a: Entity, b: Entity, ctx: &mut CollisionContext) {
+            fn player_wall_collision_callback(
+                player_entity: Entity,
+                _wall_entity: Entity,
+                ctx: &mut CollisionContext,
+            ) {
                 //eprintln!("player_wall_collision_callback: Player collided with wall!");
-                // Identify which entity is the player and which is the wall
-                let (player_entity, _wall_entity) = match (ctx.groups.get(a), ctx.groups.get(b)) {
-                    (Ok(group_a), Ok(group_b))
-                        if group_a.name() == "player" && group_b.name() == "walls" =>
-                    {
-                        (a, b)
-                    }
-                    (Ok(group_a), Ok(group_b))
-                        if group_a.name() == "walls" && group_b.name() == "player" =>
-                    {
-                        (b, a)
-                    }
-                    _ => return,
-                };
                 // Stop the player's movement upon collision with the wall
                 if let Ok(mut pos) = ctx.positions.get_mut(player_entity) {
                     pos.pos.x = pos.pos.x.max(72.0).min(600.0);
@@ -866,22 +856,12 @@ pub fn switch_scene(
                 Group::new("collision_rules"),
             ));
             // Callback for ball-wall collision
-            fn ball_wall_collision_callback(a: Entity, b: Entity, ctx: &mut CollisionContext) {
+            fn ball_wall_collision_callback(
+                ball_entity: Entity,
+                wall_entity: Entity,
+                ctx: &mut CollisionContext,
+            ) {
                 // eprintln!("ball_wall_collision_callback: Ball collided with wall!");
-                // Identify which entity is the ball and which is the wall
-                let (ball_entity, wall_entity) = match (ctx.groups.get(a), ctx.groups.get(b)) {
-                    (Ok(group_a), Ok(group_b))
-                        if group_a.name() == "ball" && group_b.name() == "walls" =>
-                    {
-                        (a, b)
-                    }
-                    (Ok(group_a), Ok(group_b))
-                        if group_a.name() == "walls" && group_b.name() == "ball" =>
-                    {
-                        (b, a)
-                    }
-                    _ => return,
-                };
                 // Get the relative position of the ball to the wall to determine bounce direction
                 if let (Ok(ball_pos), Ok(wall_pos)) = (
                     ctx.positions.get(ball_entity),
@@ -926,23 +906,14 @@ pub fn switch_scene(
                 Group::new("collision_rules"),
             ));
             // Callback for ball-player collision
-            fn ball_player_collision_callback(a: Entity, b: Entity, ctx: &mut CollisionContext) {
-                // eprintln!("ball_player_collision_callback: Ball collided with player!");
-                // Identify which entity is the ball and which is the player
-                let (ball_entity, player_entity) = match (ctx.groups.get(a), ctx.groups.get(b)) {
-                    (Ok(group_a), Ok(group_b))
-                        if group_a.name() == "ball" && group_b.name() == "player" =>
-                    {
-                        (a, b)
-                    }
-                    (Ok(group_a), Ok(group_b))
-                        if group_a.name() == "player" && group_b.name() == "ball" =>
-                    {
-                        (b, a)
-                    }
-                    _ => return,
-                };
+            fn ball_player_collision_callback(
+                ball_entity: Entity,
+                player_entity: Entity,
+                ctx: &mut CollisionContext,
+            ) {
                 // Reflect the ball's velocity based on where it hit the player paddle
+                // We know that the ball_entity and player_entity are correct from the `collision_observer`
+                // `collision_observer` ensures ball_entity is "ball" group and player_entity is "player" group because of the alphabetical order of the names
                 if let (Ok(ball_pos), Ok(player_pos), Ok(mut ball_rb)) = (
                     ctx.positions.get(ball_entity),
                     ctx.positions.get(player_entity),
