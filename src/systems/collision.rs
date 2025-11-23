@@ -94,7 +94,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                     commands: &mut params.commands,
                     groups: &params.groups,
                     positions: &mut params.positions,
-                    rigidbodies: &mut params.rigidbodies,
+                    rigid_bodies: &mut params.rigidbodies,
                     // signals: &mut params.signals,
                 };
                 callback(a, b, &mut ctx);

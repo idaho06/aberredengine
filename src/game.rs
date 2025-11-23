@@ -204,6 +204,9 @@ pub fn setup(
     let vaus_tex = rl
         .load_texture(&th, "./assets/textures/vaus.png")
         .expect("load assets/vaus.png");
+    let ball_tex = rl
+        .load_texture(&th, "./assets/textures/ball_12.png")
+        .expect("load assets/ball_12.png");
 
     /* let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
@@ -244,6 +247,7 @@ pub fn setup(
     tex_store.insert("background", background_tex);
     tex_store.insert("cursor", cursor_tex);
     tex_store.insert("vaus", vaus_tex);
+    tex_store.insert("ball", ball_tex);
     /* tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
@@ -861,6 +865,106 @@ pub fn switch_scene(
                 ),
                 Group::new("collision_rules"),
             ));
+            // Callback for ball-wall collision
+            fn ball_wall_collision_callback(a: Entity, b: Entity, ctx: &mut CollisionContext) {
+                // eprintln!("ball_wall_collision_callback: Ball collided with wall!");
+                // Identify which entity is the ball and which is the wall
+                let (ball_entity, wall_entity) = match (ctx.groups.get(a), ctx.groups.get(b)) {
+                    (Ok(group_a), Ok(group_b))
+                        if group_a.name() == "ball" && group_b.name() == "walls" =>
+                    {
+                        (a, b)
+                    }
+                    (Ok(group_a), Ok(group_b))
+                        if group_a.name() == "walls" && group_b.name() == "ball" =>
+                    {
+                        (b, a)
+                    }
+                    _ => return,
+                };
+                // Get the relative position of the ball to the wall to determine bounce direction
+                if let (Ok(ball_pos), Ok(wall_pos)) = (
+                    ctx.positions.get(ball_entity),
+                    ctx.positions.get(wall_entity),
+                ) {
+                    // positions of the lateral walls are at the bottom left/right corners
+                    // and position of the top wall is at its center top
+                    // If ball is bellow the wall, collision is from top
+                    // and y velocity should be changed to positive (down)
+                    if wall_pos.pos.y < ball_pos.pos.y {
+                        // Collision with top wall
+                        if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                            ball_rb.velocity.y = ball_rb.velocity.y.abs();
+                        }
+                    }
+                    // If ball is above the wall, collision is one of the lateral walls
+                    // If ball is to the left of the wall, collision is from right
+                    // and x velocity should be changed to negative (go left)
+                    // If ball is to the right of the wall, collision is from left
+                    // and x velocity should be changed to positive (go right)
+                    else {
+                        if ball_pos.pos.x < wall_pos.pos.x {
+                            // Collision with right wall
+                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                                ball_rb.velocity.x = -ball_rb.velocity.x.abs();
+                            }
+                        } else {
+                            // Collision with left wall
+                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                                ball_rb.velocity.x = ball_rb.velocity.x.abs();
+                            }
+                        }
+                    }
+                }
+            }
+            commands.spawn((
+                CollisionRule::new(
+                    "ball",
+                    "walls",
+                    ball_wall_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
+            // Callback for ball-player collision
+            fn ball_player_collision_callback(a: Entity, b: Entity, ctx: &mut CollisionContext) {
+                // eprintln!("ball_player_collision_callback: Ball collided with player!");
+                // Identify which entity is the ball and which is the player
+                let (ball_entity, player_entity) = match (ctx.groups.get(a), ctx.groups.get(b)) {
+                    (Ok(group_a), Ok(group_b))
+                        if group_a.name() == "ball" && group_b.name() == "player" =>
+                    {
+                        (a, b)
+                    }
+                    (Ok(group_a), Ok(group_b))
+                        if group_a.name() == "player" && group_b.name() == "ball" =>
+                    {
+                        (b, a)
+                    }
+                    _ => return,
+                };
+                // Reflect the ball's velocity based on where it hit the player paddle
+                if let (Ok(ball_pos), Ok(player_pos), Ok(mut ball_rb)) = (
+                    ctx.positions.get(ball_entity),
+                    ctx.positions.get(player_entity),
+                    ctx.rigid_bodies.get_mut(ball_entity),
+                ) {
+                    let hit_pos = ball_pos.pos.x - player_pos.pos.x;
+                    let paddle_width = 96.0; // Width of the player paddle
+                    let relative_hit_pos = (hit_pos / paddle_width) - 0.5;
+                    let bounce_angle = relative_hit_pos * std::f32::consts::FRAC_PI_3; // Max 60 degrees
+                    let speed = (ball_rb.velocity.x.powi(2) + ball_rb.velocity.y.powi(2)).sqrt();
+                    ball_rb.velocity.x = speed * bounce_angle.sin();
+                    ball_rb.velocity.y = -speed * bounce_angle.cos();
+                }
+            }
+            commands.spawn((
+                CollisionRule::new(
+                    "ball",
+                    "player",
+                    ball_player_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
             // Load tilemap for level 1
             let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
             tilemaps_store.insert("level01", tilemap);
@@ -898,23 +1002,42 @@ pub fn switch_scene(
                     origin: Vector2 { x: 48.0, y: 24.0 },
                 },
             ));
+            // The Ball
             commands.spawn((
-                Group::new("walls"),
-                MapPosition::new(0.0, tilemap_info.tile_size as f32 * 2.0),
-                BoxCollider {
-                    size: Vector2 {
-                        x: tilemap_info.tile_size as f32 * 1.0,
-                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
-                    },
+                Group::new("ball"),
+                MapPosition::new(400.0, 300.0),
+                ZIndex(10),
+                Sprite {
+                    tex_key: "ball".into(),
+                    width: 12.0,
+                    height: 12.0,
                     offset: Vector2::zero(),
-                    origin: Vector2::zero(),
+                    origin: Vector2 { x: 6.0, y: 6.0 },
+                    flip_h: false,
+                    flip_v: false,
                 },
+                RigidBody {
+                    velocity: Vector2 {
+                        x: 200.0,
+                        y: -200.0,
+                    },
+                },
+                BoxCollider {
+                    size: Vector2 { x: 12.0, y: 12.0 },
+                    offset: Vector2::zero(),
+                    origin: Vector2 { x: 6.0, y: 6.0 },
+                },
+                Signals::default(),
             ));
+
+            // Create walls as BoxColliders
             commands.spawn((
+                // Left wall
                 Group::new("walls"),
                 MapPosition::new(
-                    (tilemap_info.tile_size as f32 * (tilemap_info.map_width - 1) as f32),
-                    tilemap_info.tile_size as f32 * 2.0,
+                    // position is at left, bottom of the map
+                    0.0,
+                    (tilemap_info.tile_size * tilemap_info.map_height) as f32,
                 ),
                 BoxCollider {
                     size: Vector2 {
@@ -922,13 +1045,38 @@ pub fn switch_scene(
                         y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
                     },
                     offset: Vector2::zero(),
-                    origin: Vector2::zero(),
+                    origin: Vector2 {
+                        x: 0.0,
+                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
+                    },
                 },
             ));
             commands.spawn((
+                // Right wall
                 Group::new("walls"),
                 MapPosition::new(
-                    tilemap_info.tile_size as f32 * 1.0,
+                    // position is at right, bottom of the map
+                    (tilemap_info.tile_size * tilemap_info.map_width) as f32,
+                    (tilemap_info.tile_size * tilemap_info.map_height) as f32,
+                ),
+                BoxCollider {
+                    size: Vector2 {
+                        x: tilemap_info.tile_size as f32 * 1.0,
+                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
+                    },
+                    offset: Vector2::zero(),
+                    origin: Vector2 {
+                        x: tilemap_info.tile_size as f32 * 1.0,
+                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
+                    },
+                },
+            ));
+            commands.spawn((
+                // Top wall
+                Group::new("walls"),
+                MapPosition::new(
+                    // position is at center top of the map
+                    (tilemap_info.tile_size * (tilemap_info.map_width)) as f32 * 0.5,
                     tilemap_info.tile_size as f32 * 2.0,
                 ),
                 BoxCollider {
@@ -937,7 +1085,12 @@ pub fn switch_scene(
                         y: tilemap_info.tile_size as f32 * 1.0,
                     },
                     offset: Vector2::zero(),
-                    origin: Vector2::zero(),
+                    origin: Vector2 {
+                        x: tilemap_info.tile_size as f32
+                            * (tilemap_info.map_width - 2) as f32
+                            * 0.5,
+                        y: tilemap_info.tile_size as f32 * 0.0,
+                    },
                 },
             ));
             // Move camera to the center of the level
