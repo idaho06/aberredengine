@@ -1,7 +1,20 @@
+//! Dynamic text component for runtime text rendering.
+//!
+//! The [`DynamicText`] component allows rendering text that can change at
+//! runtime. It references a font by key and stores the text content, size,
+//! and color.
+//!
+//! Position the text using [`MapPosition`](super::mapposition::MapPosition)
+//! for world-space or [`ScreenPosition`](super::screenposition::ScreenPosition)
+//! for UI/screen-space rendering.
+
 use bevy_ecs::prelude::Component;
 
-#[derive(Component, Clone, Debug)]
 /// Dynamic text component for rendering variable strings in the world or screen.
+///
+/// Unlike static sprite-based text, this component's content can be modified
+/// at runtime via [`set_content`](DynamicText::set_content).
+#[derive(Component, Clone, Debug)]
 pub struct DynamicText {
     /// The text content to render.
     pub content: String,

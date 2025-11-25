@@ -2,8 +2,8 @@
 //!
 //! - [`update_input_state`] reads hardware input from Raylib each frame and
 //!   writes the results into [`crate::resources::input::InputState`].
-//! - [`check_input`] demonstrates reacting to input by emitting events (e.g.,
-//!   toggling debug mode) or driving game logic.
+//! - Input events are emitted for key presses/releases (e.g., toggling debug
+//!   mode via [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent)).
 use bevy_ecs::prelude::*;
 use raylib::ffi::KeyboardKey;
 

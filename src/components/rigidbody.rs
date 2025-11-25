@@ -1,8 +1,20 @@
+//! Simple kinematic body component.
+//!
+//! The [`RigidBody`] component stores velocity for an entity. Movement systems
+//! integrate position from velocity each frame. Input systems can set velocity
+//! directly.
+//!
+//! For physics-based simulation, extend this with mass, forces, or use a
+//! dedicated physics library.
+
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
-#[derive(Component, Clone, Copy, Debug, Default)]
 /// Simple kinematic body storing per-entity velocity.
+///
+/// Intended to be updated by input/physics systems and consumed by movement
+/// systems to update [`MapPosition`](super::mapposition::MapPosition).
+#[derive(Component, Clone, Copy, Debug, Default)]
 ///
 /// Intended to be updated by input/physics systems and consumed by movement
 /// systems to update [`MapPosition`](super::mapposition::MapPosition).

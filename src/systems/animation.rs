@@ -69,6 +69,9 @@ pub fn animation(
 }
 
 /// Evaluate a controller condition against an entity's current signals.
+///
+/// Recursively evaluates conditions including `All`, `Any`, and `Not`
+/// combinators. Returns true if the condition is satisfied.
 fn evaluate_condition(signals: &Signals, condition: &Condition) -> bool {
     match condition {
         Condition::ScalarCmp { key, op, value } => {

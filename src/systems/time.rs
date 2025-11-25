@@ -19,6 +19,11 @@ pub fn update_world_time(world: &mut World, dt: f32) {
     wt.delta = scaled_dt;
 }
 
+/// Update all timer components and emit events when they expire.
+///
+/// Accumulates delta time on each [`Timer`](crate::components::timer::Timer)
+/// and triggers a [`TimerEvent`](crate::events::timer::TimerEvent) when
+/// `elapsed >= duration`. The timer resets after firing.
 pub fn update_timers(
     world_time: Res<WorldTime>,
     mut query: Query<(Entity, &mut Timer)>,

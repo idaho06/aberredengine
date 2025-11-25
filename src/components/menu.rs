@@ -1,7 +1,21 @@
+//! Interactive menu components.
+//!
+//! This module provides components for building in-game menus:
+//! - [`Menu`] – holds a list of menu items and selection state
+//! - [`MenuItem`] – describes a single menu entry (label, position, etc.)
+//! - [`MenuActions`] – maps menu item IDs to actions like scene switching
+//! - [`MenuAction`] – the action to perform when a menu item is selected
+//!
+//! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
+
 use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::{Color, Vector2};
 use rustc_hash::FxHashMap;
 
+/// A single item within a [`Menu`].
+///
+/// Stores the item's identifier, display label, position, and optional entity
+/// reference for rendering.
 #[derive(Clone, Debug)]
 pub struct MenuItem {
     pub id: String,
@@ -12,18 +26,34 @@ pub struct MenuItem {
     pub entity: Option<Entity>, // If not dynamic_text, the entity holding the text sprite
 }
 
+/// Interactive menu component.
+///
+/// Holds the menu's display state, items, selection index, and visual
+/// configuration. Use with [`MenuActions`] to define what happens when
+/// items are selected.
 #[derive(Component, Clone, Debug)]
 pub struct Menu {
+    /// Whether the menu is currently active and responding to input.
     pub active: bool,
+    /// List of menu items.
     pub items: Vec<MenuItem>,
+    /// Currently selected item index.
     pub selected_index: usize,
+    /// Font key for rendering menu text.
     pub font: String,
+    /// Font size in pixels.
     pub font_size: f32,
+    /// Vertical spacing between menu items.
     pub item_spacing: f32,
+    /// Color for unselected items.
     pub normal_color: Color,
+    /// Color for the selected item.
     pub selected_color: Color,
-    pub cursor_entity: Option<Entity>, // Sprite of a pointer or highlight
+    /// Optional cursor/pointer entity.
+    pub cursor_entity: Option<Entity>,
+    /// Origin position of the menu.
     pub origin: Vector2,
+    /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
 }
 
@@ -82,17 +112,27 @@ impl Menu {
     }
 }
 
+/// Action to perform when a menu item is selected.
 #[derive(Clone, Debug)]
 pub enum MenuAction {
+    /// Switch to a different scene by name.
     SetScene(String),
+    /// Quit the game.
     QuitGame,
+    /// Show a sub-menu by name.
     ShowSubMenu(String),
+    /// Do nothing (placeholder or disabled item).
     Noop,
 }
 
+/// Maps menu item IDs to their corresponding actions.
+///
+/// Attach this component alongside [`Menu`] to define what happens when
+/// each item is selected.
 #[derive(Component, Default, Clone, Debug)]
 pub struct MenuActions {
-    pub map: FxHashMap<String, MenuAction>, // item_id -> action
+    /// Map from item ID to action.
+    pub map: FxHashMap<String, MenuAction>,
 }
 
 impl MenuActions {

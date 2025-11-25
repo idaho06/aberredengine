@@ -3,11 +3,10 @@
 //! This module hosts the background audio thread and the systems that bridge
 //! it with the ECS world:
 //! - [`audio_thread`] runs on its own OS thread, owns the Raylib audio device,
-//!   and processes [`AudioCmd`](crate::events::audio::AudioCmd) messages,
-//!   emitting [`AudioMessage`](crate::events::audio::AudioMessage) responses.
-//! - [`poll_audio_events`] non-blockingly drains the audio thread's event
+//!   and processes [`AudioCmd`] messages, emitting [`AudioMessage`] responses.
+//! - [`poll_audio_messages`] non-blockingly drains the audio thread's event
 //!   receiver into Bevy ECS' message queue each frame.
-//! - [`update_bevy_audio_events`] advances the ECS message queue so newly
+//! - [`update_bevy_audio_messages`] advances the ECS message queue so newly
 //!   written messages become readable by message subscribers.
 //!
 //! The design keeps Raylib audio API calls isolated to a single thread, while

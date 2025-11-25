@@ -1,8 +1,21 @@
+//! Screen-space position component.
+//!
+//! The [`ScreenPosition`] component stores an entity's position in screen
+//! (pixel) coordinates. Use this for UI elements that should not move with
+//! the camera.
+//!
+//! For world-space entities, see
+//! [`MapPosition`](super::mapposition::MapPosition).
+
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
-#[derive(Component, Clone, Copy, Debug)]
 /// Screen-space position (pivot) for an entity.
+///
+/// This position commonly represents the pivot used by other components such
+/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
+/// to compute rendering and collision bounds.
+#[derive(Component, Clone, Copy, Debug)]
 ///
 /// This position commonly represents the pivot used by other components such
 /// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)

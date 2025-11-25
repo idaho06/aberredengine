@@ -1,3 +1,14 @@
+//! Menu systems.
+//!
+//! This module provides systems for interactive menus:
+//! - [`menu_spawn_system`] – spawns menu item entities when a [`Menu`] is added
+//! - [`menu_despawn`] – despawns menu entities and their items
+//! - [`menu_controller_observer`] – handles input to navigate and select items
+//! - [`menu_selection_observer`] – performs actions when items are selected
+//!
+//! Menus can render in world-space or screen-space depending on the
+//! `use_screen_space` flag.
+
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
@@ -17,6 +28,11 @@ use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
 use bevy_ecs::prelude::*;
 use raylib::prelude::{Color, Font, Vector2};
 
+/// Spawns entities for newly added [`Menu`] components.
+///
+/// For each menu item, spawns a text entity (either [`DynamicText`] or a
+/// static sprite) and positions it in world or screen space. Also spawns
+/// the cursor entity if configured.
 pub fn menu_spawn_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Menu), Added<Menu>>,
@@ -111,6 +127,9 @@ pub fn menu_spawn_system(
     }
 }
 
+/// Despawns all menu-related entities.
+///
+/// Removes menu item entities, cursor entity, and the menu entity itself.
 pub fn menu_despawn(mut commands: Commands, query: Query<(Entity, &Menu)>) {
     for (entity, menu) in query.iter() {
         // Despawn menu item entities
@@ -130,6 +149,11 @@ pub fn menu_despawn(mut commands: Commands, query: Query<(Entity, &Menu)>) {
     }
 }
 
+/// Handles input events to navigate menus and confirm selections.
+///
+/// Responds to secondary direction inputs (arrow keys) to move selection
+/// and action buttons to confirm. Triggers [`MenuSelectionEvent`] when
+/// an item is selected.
 pub fn menu_controller_observer(
     trigger: On<InputEvent>,
     mut query: Query<(Entity, &mut Menu, &mut Signals)>,
@@ -195,6 +219,13 @@ pub fn menu_controller_observer(
     }
 }
 
+/// Executes the action associated with a selected menu item.
+///
+/// Looks up the [`MenuAction`] for the selected item and performs it:
+/// - [`MenuAction::SetScene`] – triggers scene switch
+/// - [`MenuAction::QuitGame`] – transitions to quitting state
+/// - [`MenuAction::ShowSubMenu`] – displays a sub-menu (TODO)
+/// - [`MenuAction::Noop`] – does nothing
 pub fn menu_selection_observer(
     trigger: On<MenuSelectionEvent>,
     mut commands: Commands,

@@ -1,3 +1,14 @@
+//! Tween animation systems.
+//!
+//! These systems update entity properties over time based on tween components:
+//! - [`tween_mapposition_system`] – animates [`MapPosition`](crate::components::mapposition::MapPosition)
+//! - [`tween_rotation_system`] – animates [`Rotation`](crate::components::rotation::Rotation)
+//! - [`tween_scale_system`] – animates [`Scale`](crate::components::scale::Scale)
+//!
+//! Each tween component specifies start/end values, duration, easing function,
+//! and loop mode. The systems read delta time from [`WorldTime`](crate::resources::worldtime::WorldTime)
+//! and interpolate the property accordingly.
+
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -6,6 +17,10 @@ use crate::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 use raylib::math::Vector2;
 
+/// Apply an easing function to a normalized time value.
+///
+/// The input `t` is clamped to [0.0, 1.0] and transformed according to the
+/// easing curve.
 fn ease(e: Easing, t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     match e {
@@ -35,6 +50,7 @@ fn ease(e: Easing, t: f32) -> f32 {
     }
 }
 
+/// Linearly interpolate between two 2D vectors.
 fn lerp_v2(a: Vector2, b: Vector2, t: f32) -> Vector2 {
     Vector2 {
         x: a.x + (b.x - a.x) * t,
@@ -42,10 +58,12 @@ fn lerp_v2(a: Vector2, b: Vector2, t: f32) -> Vector2 {
     }
 }
 
+/// Linearly interpolate between two floats.
 fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
+/// Advance tween time and handle looping/completion.
 fn advance(
     time: &mut f32,
     duration: f32,
@@ -78,6 +96,7 @@ fn advance(
     }
 }
 
+/// Animate entity positions based on [`TweenPosition`] components.
 pub fn tween_mapposition_system(
     world_time: Res<WorldTime>,
     mut query: Query<(&mut MapPosition, &mut TweenPosition)>,
@@ -102,6 +121,7 @@ pub fn tween_mapposition_system(
     }
 }
 
+/// Animate entity rotations based on [`TweenRotation`] components.
 pub fn tween_rotation_system(
     world_time: Res<WorldTime>,
     mut query: Query<(&mut Rotation, &mut TweenRotation)>,
@@ -126,6 +146,7 @@ pub fn tween_rotation_system(
     }
 }
 
+/// Animate entity scales based on [`TweenScale`] components.
 pub fn tween_scale_system(
     world_time: Res<WorldTime>,
     mut query: Query<(&mut Scale, &mut TweenScale)>,

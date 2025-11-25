@@ -1,6 +1,22 @@
+//! Global signal storage resource.
+//!
+//! The [`WorldSignals`] resource provides a world-wide signal map for
+//! cross-system communication. Unlike per-entity
+//! [`Signals`](crate::components::signals::Signals), these signals are
+//! global and accessible from any system.
+//!
+//! Use cases include:
+//! - Storing the current scene name
+//! - Global flags like "game_paused" or "player_dead"
+//! - Passing data between unrelated systems
+
 use bevy_ecs::prelude::Resource;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+/// Global signal storage for cross-system communication.
+///
+/// Provides maps for scalars, integers, strings, and flags accessible from
+/// any system without entity queries.
 #[derive(Debug, Clone, Resource)]
 pub struct WorldSignals {
     /// Floating-point numeric signals addressed by string keys.

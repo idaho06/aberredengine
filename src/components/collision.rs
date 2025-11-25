@@ -1,3 +1,11 @@
+//! Collision rule component and callback context.
+//!
+//! This module provides the [`CollisionRule`] component which defines how
+//! collisions between entity groups should be handled, and [`CollisionContext`]
+//! which provides access to world state within collision callbacks.
+//!
+//! See [`crate::systems::collision`] for the collision detection system.
+
 use bevy_ecs::prelude::*;
 
 use crate::components::group::Group;
@@ -21,6 +29,11 @@ pub struct CollisionContext<'a, 'w, 's> {
 pub type CollisionCallback =
     for<'a, 'w, 's> fn(a: Entity, b: Entity, ctx: &mut CollisionContext<'a, 'w, 's>);
 
+/// Defines how collisions between two entity groups should be handled.
+///
+/// When a collision is detected between entities with groups matching
+/// `group_a` and `group_b`, the `callback` function is invoked with
+/// the entities and a [`CollisionContext`].
 #[derive(Component)]
 pub struct CollisionRule {
     pub group_a: String,
@@ -31,6 +44,7 @@ pub struct CollisionRule {
 // use a closure that can capture additional context if needed.
 
 impl CollisionRule {
+    /// Create a new collision rule for two groups with a callback.
     pub fn new(
         group_a: impl Into<String>,
         group_b: impl Into<String>,
@@ -42,6 +56,11 @@ impl CollisionRule {
             callback,
         }
     }
+
+    /// Check if this rule matches the given groups and return entities in order.
+    ///
+    /// Returns `Some((entity_a, entity_b))` if the rule matches, with entities
+    /// ordered to match `group_a` and `group_b` respectively.
     pub fn match_and_order(
         &self,
         ent_a: Entity,
