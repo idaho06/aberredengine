@@ -21,6 +21,7 @@ pub mod animation;
 pub mod audio;
 pub mod collision;
 pub mod gamestate;
+pub mod gridlayout;
 pub mod input;
 pub mod inputsimplecontroller;
 pub mod menu;

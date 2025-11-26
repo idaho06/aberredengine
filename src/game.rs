@@ -15,6 +15,7 @@ use crate::components::animation::{AnimationController, CmpOp, Condition};
 use crate::components::boxcollider::BoxCollider;
 use crate::components::collision::{CollisionCallback, CollisionContext, CollisionRule};
 use crate::components::dynamictext::DynamicText;
+use crate::components::gridlayout::GridLayout;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::inputcontrolled::MouseControlled;
@@ -207,6 +208,24 @@ pub fn setup(
     let ball_tex = rl
         .load_texture(&th, "./assets/textures/ball_12.png")
         .expect("load assets/ball_12.png");
+    let brick_red_tex = rl
+        .load_texture(&th, "./assets/textures/brick_red.png")
+        .expect("load assets/brick_red.png");
+    let brick_green_tex = rl
+        .load_texture(&th, "./assets/textures/brick_green.png")
+        .expect("load assets/brick_green.png");
+    let brick_blue_tex = rl
+        .load_texture(&th, "./assets/textures/brick_blue.png")
+        .expect("load assets/brick_blue.png");
+    let brick_yellow_tex = rl
+        .load_texture(&th, "./assets/textures/brick_yellow.png")
+        .expect("load assets/brick_yellow.png");
+    let brick_purple_tex = rl
+        .load_texture(&th, "./assets/textures/brick_purple.png")
+        .expect("load assets/brick_purple.png");
+    let brick_silver_tex = rl
+        .load_texture(&th, "./assets/textures/brick_silver.png")
+        .expect("load assets/brick_silver.png");
 
     /* let dummy_tex = rl
         .load_texture(&th, "./assets/textures/player.png")
@@ -248,6 +267,12 @@ pub fn setup(
     tex_store.insert("cursor", cursor_tex);
     tex_store.insert("vaus", vaus_tex);
     tex_store.insert("ball", ball_tex);
+    tex_store.insert("brick_red", brick_red_tex);
+    tex_store.insert("brick_green", brick_green_tex);
+    tex_store.insert("brick_blue", brick_blue_tex);
+    tex_store.insert("brick_yellow", brick_yellow_tex);
+    tex_store.insert("brick_purple", brick_purple_tex);
+    tex_store.insert("brick_silver", brick_silver_tex);
     /* tex_store.insert("player-sheet", player_sheet_tex);
     tex_store.insert("dummy", dummy_tex);
     tex_store.insert("enemy", enemy_tex);
@@ -1064,6 +1089,8 @@ pub fn switch_scene(
                     },
                 },
             ));
+            // Bricks
+            commands.spawn((GridLayout::new("./assets/levels/level01.json", "brick", 5),));
             // Move camera to the center of the level
             commands.insert_resource(Camera2DRes(Camera2D {
                 target: Vector2 {

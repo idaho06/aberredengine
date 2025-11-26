@@ -24,6 +24,7 @@ use crate::systems::audio::{
 use crate::systems::collision::collision_detector;
 use crate::systems::collision::collision_observer;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
+use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::menu::menu_selection_observer;
@@ -111,6 +112,7 @@ fn main() {
 
     let mut update = Schedule::default();
     update.add_systems(menu_spawn_system);
+    update.add_systems(gridlayout_spawn_system);
     update.add_systems(update_input_state);
     update.add_systems(check_pending_state);
     update.add_systems(

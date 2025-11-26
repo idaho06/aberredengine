@@ -28,6 +28,7 @@ pub mod animation;
 pub mod boxcollider;
 pub mod collision;
 pub mod dynamictext;
+pub mod gridlayout;
 pub mod group;
 pub mod inputcontrolled;
 pub mod mapposition;
