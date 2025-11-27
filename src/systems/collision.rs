@@ -13,6 +13,7 @@ use crate::components::collision::{CollisionContext, CollisionRule};
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
+use crate::components::signals::Signals;
 use crate::events::collision::CollisionEvent;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
@@ -36,7 +37,12 @@ pub fn collision_detector(
         ],
     ) = combos.fetch_next()
     {
-        if collider_a.overlaps(position_a.pos, collider_b, position_b.pos) {
+        /* if collider_a.overlaps(position_a.pos, collider_b, position_b.pos) {
+            pairs.push((entity_a, entity_b));
+        } */
+        let rect_a = collider_a.as_rectangle(position_a.pos);
+        let rect_b = collider_b.as_rectangle(position_b.pos);
+        if rect_a.check_collision_recs(&rect_b) {
             pairs.push((entity_a, entity_b));
         }
     }
@@ -62,8 +68,9 @@ pub struct CollisionObserverParams<'w, 's> {
     pub groups: Query<'w, 's, &'static Group>,
     pub rules: Query<'w, 's, &'static CollisionRule>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
-    pub rigidbodies: Query<'w, 's, &'static mut RigidBody>,
-    // pub signals: Query<'w, 's, &'static mut Signal>,
+    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
+    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
+    pub signals: Query<'w, 's, &'static mut Signals>,
 }
 
 pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObserverParams) {
@@ -88,18 +95,17 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             //    "Collision rule matched for groups '{}' and '{}'",
             //    ga, gb
             //);
-            {
-                let callback = rule.callback;
-                let mut ctx = CollisionContext {
-                    commands: &mut params.commands,
-                    groups: &params.groups,
-                    positions: &mut params.positions,
-                    rigid_bodies: &mut params.rigidbodies,
-                    // signals: &mut params.signals,
-                };
-                callback(ent_a, ent_b, &mut ctx);
-            }
-            break; // ensure borrows end before next iteration
+            let callback = rule.callback;
+            let mut ctx = CollisionContext {
+                commands: &mut params.commands,
+                groups: &params.groups,
+                positions: &mut params.positions,
+                rigid_bodies: &mut params.rigid_bodies,
+                box_colliders: &params.box_colliders,
+                signals: &mut params.signals,
+            };
+            callback(ent_a, ent_b, &mut ctx);
+            break;
         }
     }
 }

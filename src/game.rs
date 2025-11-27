@@ -13,7 +13,9 @@ use rustc_hash::FxHashMap;
 use crate::components::animation::Animation;
 use crate::components::animation::{AnimationController, CmpOp, Condition};
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{CollisionCallback, CollisionContext, CollisionRule};
+use crate::components::collision::{
+    BoxSide, CollisionCallback, CollisionContext, CollisionRule, get_colliding_sides,
+};
 use crate::components::dynamictext::DynamicText;
 use crate::components::gridlayout::GridLayout;
 use crate::components::group::Group;
@@ -961,6 +963,80 @@ pub fn switch_scene(
                 ),
                 Group::new("collision_rules"),
             ));
+            // Callback for ball-brick collision
+            fn ball_brick_collision_callback(
+                ball_entity: Entity,
+                brick_entity: Entity,
+                ctx: &mut CollisionContext,
+            ) {
+                // Reflect the ball's velocity based on where it hit the brick
+                let position = ctx.positions.get(ball_entity).unwrap().pos();
+                let ball_rect = ctx
+                    .box_colliders
+                    .get(ball_entity)
+                    .unwrap()
+                    .as_rectangle(position);
+                let position = ctx.positions.get(brick_entity).unwrap().pos();
+                let brick_rect = ctx
+                    .box_colliders
+                    .get(brick_entity)
+                    .unwrap()
+                    .as_rectangle(position);
+                let Some((colliding_sides_ball, colliding_sides_brick)) =
+                    get_colliding_sides(&ball_rect, &brick_rect)
+                else {
+                    return;
+                };
+                for brick_side in colliding_sides_brick {
+                    match brick_side {
+                        BoxSide::Top => {
+                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                                ball_rb.velocity.y = -ball_rb.velocity.y.abs();
+                            }
+                        }
+                        BoxSide::Bottom => {
+                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                                ball_rb.velocity.y = ball_rb.velocity.y.abs();
+                            }
+                        }
+                        BoxSide::Left => {
+                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                                ball_rb.velocity.x = -ball_rb.velocity.x.abs();
+                            }
+                        }
+                        BoxSide::Right => {
+                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                                ball_rb.velocity.x = ball_rb.velocity.x.abs();
+                            }
+                        }
+                    }
+                }
+                // substract 1 hit point from the brick's Signals
+                if let Ok(mut signals) = ctx.signals.get_mut(brick_entity) {
+                    let hit_points = signals.get_integer("hp").unwrap_or(1);
+                    if hit_points > 1 {
+                        signals.set_integer("hp", hit_points - 1);
+                    } else {
+                        // Mark brick for removal
+                        // signals.set_flag("destroy");
+                        // Increment score
+                        /* if let Some(score) = ctx.world_signals.get_integer("score") {
+                            ctx.world_signals.set_integer("score", score + 100);
+                        } */
+                        // despawn brick entity
+                        ctx.commands.entity(brick_entity).despawn();
+                    }
+                }
+            }
+            commands.spawn((
+                CollisionRule::new(
+                    "ball",
+                    "brick",
+                    ball_brick_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
+
             // Load tilemap for level 1
             let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
             tilemaps_store.insert("level01", tilemap);

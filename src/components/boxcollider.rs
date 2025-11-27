@@ -8,7 +8,7 @@
 //! to compute world-space AABBs for overlap testing.
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use raylib::prelude::{Rectangle, Vector2};
 
 /// Axis-aligned rectangular collider in local space.
 ///
@@ -86,5 +86,12 @@ impl BoxCollider {
     pub fn contains_point(&self, position: Vector2, point: Vector2) -> bool {
         let (min, max) = self.aabb(position);
         point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
+    }
+
+    /// Get the collider as a Raylib Rectangle given the entity position.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn as_rectangle(&self, position: Vector2) -> Rectangle {
+        let (x, y, w, h) = self.get_aabb(position);
+        Rectangle::new(x, y, w, h)
     }
 }
