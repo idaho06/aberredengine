@@ -373,8 +373,16 @@ pub fn setup(
         path: "./assets/audio/woffy_-_arkanoid_cover.xm".into(),
     });
     audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "growl".into(),
-        path: "./assets/audio/growl.wav".into(),
+        id: "ding".into(),
+        path: "./assets/audio/ding.wav".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadFx {
+        id: "ping".into(),
+        path: "./assets/audio/ping.wav".into(),
+    });
+    audio_cmd_writer.write(AudioCmd::LoadFx {
+        id: "option".into(),
+        path: "./assets/audio/option.wav".into(),
     });
 
     // Don't block; the audio thread will emit load messages which are polled by systems.
@@ -954,6 +962,7 @@ pub fn switch_scene(
                     ball_rb.velocity.x = speed * bounce_angle.sin();
                     ball_rb.velocity.y = -speed * bounce_angle.cos();
                 }
+                ctx.audio_cmds.write(AudioCmd::PlayFx { id: "ping".into() });
             }
             commands.spawn((
                 CollisionRule::new(
@@ -982,7 +991,7 @@ pub fn switch_scene(
                     .get(brick_entity)
                     .unwrap()
                     .as_rectangle(position);
-                let Some((colliding_sides_ball, colliding_sides_brick)) =
+                let Some((_colliding_sides_ball, colliding_sides_brick)) =
                     get_colliding_sides(&ball_rect, &brick_rect)
                 else {
                     return;
@@ -1017,16 +1026,17 @@ pub fn switch_scene(
                     if hit_points > 1 {
                         signals.set_integer("hp", hit_points - 1);
                     } else {
-                        // Mark brick for removal
-                        // signals.set_flag("destroy");
                         // Increment score
-                        /* if let Some(score) = ctx.world_signals.get_integer("score") {
-                            ctx.world_signals.set_integer("score", score + 100);
-                        } */
+                        if let Some(points) = signals.get_integer("points") {
+                            let current_score = ctx.world_signals.get_integer("score").unwrap_or(0);
+                            ctx.world_signals
+                                .set_integer("score", current_score + points);
+                        }
                         // despawn brick entity
                         ctx.commands.entity(brick_entity).despawn();
                     }
                 }
+                ctx.audio_cmds.write(AudioCmd::PlayFx { id: "ding".into() });
             }
             commands.spawn((
                 CollisionRule::new(
@@ -1090,8 +1100,8 @@ pub fn switch_scene(
                 },
                 RigidBody {
                     velocity: Vector2 {
-                        x: 200.0,
-                        y: -200.0,
+                        x: 300.0,
+                        y: -300.0,
                     },
                 },
                 BoxCollider {

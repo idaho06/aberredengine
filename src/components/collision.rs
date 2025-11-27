@@ -14,7 +14,9 @@ use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
+use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
+use crate::resources::worldsignals::WorldSignals;
 
 /// Context passed into collision callbacks to access world state.
 ///
@@ -26,7 +28,8 @@ pub struct CollisionContext<'a, 'w, 's> {
     pub rigid_bodies: &'a mut Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: &'a Query<'w, 's, &'static BoxCollider>,
     pub signals: &'a mut Query<'w, 's, &'static mut Signals>,
-    // TODO: Add more parameters as needed. They come from the `collision_observer` function,
+    pub world_signals: &'a mut ResMut<'w, WorldSignals>,
+    pub audio_cmds: &'a mut MessageWriter<'w, AudioCmd>,
 }
 
 /// Callback signature for collision components using a grouped context.

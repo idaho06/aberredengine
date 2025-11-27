@@ -14,7 +14,9 @@ use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
+use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
+use crate::resources::worldsignals::WorldSignals;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
 /// Broad-phase pairwise overlap test with event emission.
@@ -71,6 +73,8 @@ pub struct CollisionObserverParams<'w, 's> {
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub signals: Query<'w, 's, &'static mut Signals>,
+    pub world_signals: ResMut<'w, WorldSignals>,
+    pub audio_cmds: MessageWriter<'w, AudioCmd>,
 }
 
 pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObserverParams) {
@@ -103,6 +107,8 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 rigid_bodies: &mut params.rigid_bodies,
                 box_colliders: &params.box_colliders,
                 signals: &mut params.signals,
+                world_signals: &mut params.world_signals,
+                audio_cmds: &mut params.audio_cmds,
             };
             callback(ent_a, ent_b, &mut ctx);
             break;

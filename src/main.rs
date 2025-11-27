@@ -47,9 +47,9 @@ fn main() {
     let (mut rl, thread) = raylib::init()
         .size(224 * 3, 256 * 3)
         .title("Aberred Engine - Arkanoid")
-        .vsync()
+        //.vsync()
         .build();
-
+    rl.set_target_fps(60);
     // Disable ESC to exit
     rl.set_exit_key(None);
 
