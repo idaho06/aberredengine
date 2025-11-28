@@ -950,18 +950,41 @@ pub fn switch_scene(
                 // Reflect the ball's velocity based on where it hit the player paddle
                 // We know that the ball_entity and player_entity are correct from the `collision_observer`
                 // `collision_observer` ensures ball_entity is "ball" group and player_entity is "player" group because of the alphabetical order of the names
-                if let (Ok(ball_pos), Ok(player_pos), Ok(mut ball_rb)) = (
-                    ctx.positions.get(ball_entity),
-                    ctx.positions.get(player_entity),
+
+                // First, get the player position immutably
+                let player_pos = if let Ok(player_pos) = ctx.positions.get(player_entity) {
+                    player_pos.pos
+                } else {
+                    return;
+                };
+
+                let player_height =
+                    if let Ok(player_collider) = ctx.box_colliders.get(player_entity) {
+                        player_collider.size.y
+                    } else {
+                        return;
+                    };
+
+                let ball_height = if let Ok(ball_collider) = ctx.box_colliders.get(ball_entity) {
+                    ball_collider.size.y
+                } else {
+                    return;
+                };
+
+                // Now we can borrow ball_pos mutably and ball_rb mutably
+                if let (Ok(mut ball_pos), Ok(mut ball_rb)) = (
+                    ctx.positions.get_mut(ball_entity),
                     ctx.rigid_bodies.get_mut(ball_entity),
                 ) {
-                    let hit_pos = ball_pos.pos.x - player_pos.pos.x;
-                    let paddle_width = 96.0; // Width of the player paddle
-                    let relative_hit_pos = (hit_pos / paddle_width) - 0.5;
+                    let hit_pos = ball_pos.pos.x - player_pos.x;
+                    let paddle_half_width = 96.0 * 0.5;
+                    let relative_hit_pos = hit_pos / paddle_half_width;
                     let bounce_angle = relative_hit_pos * std::f32::consts::FRAC_PI_3; // Max 60 degrees
                     let speed = (ball_rb.velocity.x.powi(2) + ball_rb.velocity.y.powi(2)).sqrt();
                     ball_rb.velocity.x = speed * bounce_angle.sin();
                     ball_rb.velocity.y = -speed * bounce_angle.cos();
+                    // Fix ball position to be just above the paddle to prevent more collisions in the next frame
+                    ball_pos.pos.y = player_pos.y - player_height - (ball_height * 0.5);
                 }
                 ctx.audio_cmds.write(AudioCmd::PlayFx { id: "ping".into() });
             }
