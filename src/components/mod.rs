@@ -9,6 +9,7 @@
 //! - [`boxcollider`] – axis-aligned rectangular collider for collision detection
 //! - [`collision`] – collision callback rules and context for collision observers
 //! - [`dynamictext`] – text component for rendering variable strings
+//! - [`gridlayout`] – data-driven grid spawner for tile-based layouts
 //! - [`group`] – tag component for grouping entities by name
 //! - [`inputcontrolled`] – input-driven movement intent for keyboard and mouse
 //! - [`mapposition`] – world-space position (pivot) for an entity

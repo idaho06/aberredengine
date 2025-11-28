@@ -858,7 +858,8 @@ pub fn switch_scene(
                 )
                 .with_colors(Color::YELLOW, Color::WHITE)
                 .with_dynamic_text(true)
-                .with_cursor(cursor_entity),
+                .with_cursor(cursor_entity)
+                .with_selection_sound("option"),
                 actions,
                 Group::new("main_menu"),
             ));

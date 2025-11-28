@@ -8,10 +8,7 @@ use bevy_ecs::prelude::Component;
 
 /// Rendering order hint for 2D drawing.
 ///
-/// Higher values are drawn later (on top). Your renderer can sort by
+/// Higher values are drawn later (on top). The renderer sorts by
 /// `ZIndex` to achieve a painter's algorithm.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-///
-/// Higher values are drawn later (on top). Your renderer can sort by
-/// `ZIndex` to achieve a painter's algorithm.
 pub struct ZIndex(pub i32);

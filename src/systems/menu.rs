@@ -16,6 +16,7 @@ use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
+use crate::events::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
@@ -26,6 +27,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
 use bevy_ecs::prelude::*;
+use raylib::audio;
 use raylib::prelude::{Color, Font, Vector2};
 
 /// Spawns entities for newly added [`Menu`] components.
@@ -158,6 +160,7 @@ pub fn menu_controller_observer(
     trigger: On<InputEvent>,
     mut query: Query<(Entity, &mut Menu, &mut Signals)>,
     mut commands: Commands,
+    mut audio_cmds: MessageWriter<AudioCmd>,
 ) {
     for (entity, mut menu, mut signals) in query.iter_mut() {
         if !menu.active {
@@ -214,6 +217,12 @@ pub fn menu_controller_observer(
                         pos: cursor_position,
                     });
                 }
+            }
+            // Play selection change sound if configured
+            if let Some(sound_key) = &menu.selection_change_sound {
+                audio_cmds.write(AudioCmd::PlayFx {
+                    id: sound_key.clone(),
+                });
             }
         }
     }

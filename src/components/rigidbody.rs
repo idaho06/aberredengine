@@ -15,9 +15,6 @@ use raylib::prelude::Vector2;
 /// Intended to be updated by input/physics systems and consumed by movement
 /// systems to update [`MapPosition`](super::mapposition::MapPosition).
 #[derive(Component, Clone, Copy, Debug, Default)]
-///
-/// Intended to be updated by input/physics systems and consumed by movement
-/// systems to update [`MapPosition`](super::mapposition::MapPosition).
 pub struct RigidBody {
     pub velocity: Vector2,
     // pub mass: f32, // for the future

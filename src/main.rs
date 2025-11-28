@@ -49,7 +49,7 @@ fn main() {
         .title("Aberred Engine - Arkanoid")
         //.vsync()
         .build();
-    rl.set_target_fps(60);
+    rl.set_target_fps(180);
     // Disable ESC to exit
     rl.set_exit_key(None);
 

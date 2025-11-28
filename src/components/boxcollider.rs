@@ -17,11 +17,6 @@ use raylib::prelude::{Rectangle, Vector2};
 /// collider's local top-left. World AABBs can be computed using
 /// [`MapPosition`](super::mapposition::MapPosition) as the pivot position.
 #[derive(Debug, Clone, Copy, PartialEq, Component)]
-///
-/// The collider is defined by a `size` (width, height), an `offset` from the
-/// entity's pivot, and an `origin` representing that pivot relative to the
-/// collider's local top-left. World AABBs can be computed using
-/// [`MapPosition`](super::mapposition::MapPosition) as the pivot position.
 pub struct BoxCollider {
     /// Size of the box in world units.
     pub size: Vector2,

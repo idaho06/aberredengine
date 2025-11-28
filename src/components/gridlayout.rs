@@ -1,3 +1,14 @@
+//! Grid layout component for data-driven entity spawning.
+//!
+//! The [`GridLayout`] component references a JSON file describing a grid of
+//! cells. When the component is added, the
+//! [`gridlayout_spawn_system`](crate::systems::gridlayout::gridlayout_spawn_system)
+//! reads the file and spawns entities for each non-empty cell with the
+//! specified texture, group, and custom properties.
+//!
+//! This is useful for tile-based games where level layouts are defined
+//! externally (e.g., Arkanoid brick patterns, puzzle grids).
+
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};

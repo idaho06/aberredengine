@@ -1,3 +1,10 @@
+//! Grid layout spawning system.
+//!
+//! The [`gridlayout_spawn_system`] processes newly added [`GridLayout`]
+//! components, loads their JSON data, and spawns child entities for each
+//! cell. Spawned entities receive [`MapPosition`], [`Sprite`], [`BoxCollider`],
+//! [`Signals`], [`Group`], and [`ZIndex`] components based on the layout data.
+
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
 

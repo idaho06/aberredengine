@@ -1,11 +1,12 @@
 //! Lightweight per-entity signal storage for cross-system communication.
 //!
-//! The [`Signals`] component provides three small maps you can use to share
-//! numeric and boolean state between systems without introducing tight
+//! The [`Signals`] component provides four small maps you can use to share
+//! numeric, string, and boolean state between systems without introducing tight
 //! coupling:
 //! - floating-point scalars (`scalars`)
 //! - 32-bit integers (`integers`)
-//! - string flags (`flags`)
+//! - string values (`strings`)
+//! - boolean flags (`flags`)
 //!
 //! Keys are `String`s, allowing you to standardize on a small set of names
 //! across your game (e.g. "hp", "is_running"). Accessors are provided to set,

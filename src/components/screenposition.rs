@@ -12,16 +12,11 @@ use raylib::prelude::Vector2;
 
 /// Screen-space position (pivot) for an entity.
 ///
-/// This position commonly represents the pivot used by other components such
-/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
-/// to compute rendering and collision bounds.
+/// Used for UI elements that should remain fixed on screen regardless of
+/// camera movement. The render system draws these after the world pass.
 #[derive(Component, Clone, Copy, Debug)]
-///
-/// This position commonly represents the pivot used by other components such
-/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
-/// to compute rendering and collision bounds.
 pub struct ScreenPosition {
-    /// 2D coordinates in world units.
+    /// 2D coordinates in screen pixels.
     pub pos: Vector2,
 }
 

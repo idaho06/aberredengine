@@ -51,6 +51,8 @@ pub struct Menu {
     pub selected_color: Color,
     /// Optional cursor/pointer entity.
     pub cursor_entity: Option<Entity>,
+    /// Optional sound to play on selection change.
+    pub selection_change_sound: Option<String>,
     /// Origin position of the menu.
     pub origin: Vector2,
     /// Whether to use screen-space positioning (true) or world-space (false).
@@ -91,6 +93,7 @@ impl Menu {
             normal_color: Color::WHITE,
             selected_color: Color::YELLOW,
             cursor_entity: None,
+            selection_change_sound: None,
             origin,
             use_screen_space,
         }
@@ -108,6 +111,10 @@ impl Menu {
         for item in &mut self.items {
             item.dynamic_text = dynamic;
         }
+        self
+    }
+    pub fn with_selection_sound(mut self, sound_key: impl Into<String>) -> Self {
+        self.selection_change_sound = Some(sound_key.into());
         self
     }
 }

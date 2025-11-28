@@ -8,6 +8,7 @@
 //! - [`audio`] – bridge with the audio thread (poll/update message queues)
 //! - [`collision`] – broad/simple overlap checks and event emission
 //! - [`gamestate`] – check for pending state transitions and trigger events
+//! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
 //! - [`inputsimplecontroller`] – translate input state into velocity on entities
 //! - [`menu`] – menu spawning, input handling, and selection

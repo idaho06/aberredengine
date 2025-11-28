@@ -16,10 +16,6 @@ use raylib::prelude::Vector2;
 /// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
 /// to compute rendering and collision bounds.
 #[derive(Component, Clone, Copy, Debug)]
-///
-/// This position commonly represents the pivot used by other components such
-/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
-/// to compute rendering and collision bounds.
 pub struct MapPosition {
     /// 2D coordinates in world units.
     pub pos: Vector2,

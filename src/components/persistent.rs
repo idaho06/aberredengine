@@ -10,5 +10,4 @@ use bevy_ecs::prelude::Component;
 ///
 /// Entities with this component will not be despawned when switching scenes.
 #[derive(Component, Clone, Debug)]
-/// Entities with this component will not be despawned when switching scenes.
 pub struct Persistent;
