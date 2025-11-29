@@ -15,6 +15,7 @@
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
 //! - [`render`] – draw world and debug overlays using Raylib
+//! - [`signalbinding`] – update DynamicText components based on signal values
 //! - [`time`] – update simulation time and delta, process timers
 //! - [`tween`] – animate position, rotation, and scale over time
 

@@ -19,6 +19,7 @@
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
 //! - [`screenposition`] – screen-space position for UI elements
+//! - [`signalbinding`] – binds UI text to signal values for reactive updates
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component
 //! - [`timer`] – countdown timer that emits events when finished
