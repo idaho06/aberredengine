@@ -32,6 +32,7 @@ use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
+use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
 use crate::systems::tween::tween_mapposition_system;
@@ -47,9 +48,9 @@ fn main() {
     let (mut rl, thread) = raylib::init()
         .size(224 * 3, 256 * 3)
         .title("Aberred Engine - Arkanoid")
-        //.vsync()
+        .vsync()
         .build();
-    rl.set_target_fps(180);
+    rl.set_target_fps(120);
     // Disable ESC to exit
     rl.set_exit_key(None);
 
@@ -139,6 +140,7 @@ fn main() {
     update.add_systems(animation_controller);
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
+    update.add_systems(update_world_signals_binding_system);
     update.add_systems(
         (game::update)
             .run_if(state_is_playing)

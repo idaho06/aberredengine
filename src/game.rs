@@ -28,6 +28,7 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
+use crate::components::signalbinding::SignalBinding;
 use crate::components::signals::Signals;
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
@@ -734,7 +735,7 @@ pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<P
 pub fn switch_scene(
     mut commands: Commands,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
-    worldsignals: ResMut<WorldSignals>,
+    mut worldsignals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
     mut tilemaps_store: ResMut<TilemapStore>,
     mut tex_store: ResMut<TextureStore>,
@@ -1082,6 +1083,12 @@ pub fn switch_scene(
                             ctx.world_signals
                                 .set_integer("score", current_score + points);
                         }
+                        // Update high score if necessary
+                        let current_score = ctx.world_signals.get_integer("score").unwrap_or(0);
+                        let high_score = ctx.world_signals.get_integer("high_score").unwrap_or(0);
+                        if current_score > high_score {
+                            ctx.world_signals.set_integer("high_score", current_score);
+                        }
                         // despawn brick entity
                         ctx.commands.entity(brick_entity).despawn();
                     }
@@ -1096,6 +1103,8 @@ pub fn switch_scene(
                 ),
                 Group::new("collision_rules"),
             ));
+            // reset score to 0
+            worldsignals.set_integer("score", 0);
 
             // Load tilemap for level 1
             let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
@@ -1225,8 +1234,63 @@ pub fn switch_scene(
                     },
                 },
             ));
+            // Out of bounds (bottom) wall
+            commands.spawn((
+                Group::new("oob_wall"),
+                MapPosition::new(
+                    // position is at left, bottom of the map
+                    -((tilemap_info.tile_size * 5) as f32),
+                    (tilemap_info.tile_size * tilemap_info.map_height) as f32,
+                ),
+                BoxCollider {
+                    size: Vector2 {
+                        x: tilemap_info.tile_size as f32 * (tilemap_info.map_width + 10) as f32,
+                        y: tilemap_info.tile_size as f32 * 10.0,
+                    },
+                    offset: Vector2::zero(),
+                    origin: Vector2 { x: 0.0, y: 0.0 },
+                },
+            ));
             // Bricks
             commands.spawn((GridLayout::new("./assets/levels/level01.json", "brick", 5),));
+            // Score Text
+            commands.spawn((
+                Group::new("ui"),
+                DynamicText::new(
+                    "1UP   HIGH SCORE",
+                    "arcade",
+                    tilemap_info.tile_size as f32,
+                    Color::RED,
+                ),
+                MapPosition::new((tilemap_info.tile_size * 3) as f32, 0.0),
+                ZIndex(20),
+            ));
+            commands.spawn((
+                Group::new("player_score"),
+                DynamicText::new("0", "arcade", tilemap_info.tile_size as f32, Color::WHITE),
+                MapPosition::new(
+                    (tilemap_info.tile_size * 3) as f32,
+                    tilemap_info.tile_size as f32,
+                ),
+                ZIndex(20),
+                SignalBinding::new("score"),
+            ));
+            commands.spawn((
+                Group::new("high_score"),
+                DynamicText::new(
+                    format!("{}", worldsignals.get_integer("high_score").unwrap_or(0)),
+                    "arcade",
+                    tilemap_info.tile_size as f32,
+                    Color::WHITE,
+                ),
+                MapPosition::new(
+                    (tilemap_info.tile_size * 10) as f32,
+                    tilemap_info.tile_size as f32,
+                ),
+                ZIndex(20),
+                SignalBinding::new("high_score"),
+            ));
+
             // Move camera to the center of the level
             commands.insert_resource(Camera2DRes(Camera2D {
                 target: Vector2 {
