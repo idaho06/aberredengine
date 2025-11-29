@@ -898,20 +898,36 @@ pub fn switch_scene(
                 ctx: &mut CollisionContext,
             ) {
                 // eprintln!("ball_wall_collision_callback: Ball collided with wall!");
-                // Get the relative position of the ball to the wall to determine bounce direction
-                if let (Ok(ball_pos), Ok(wall_pos)) = (
-                    ctx.positions.get(ball_entity),
-                    ctx.positions.get(wall_entity),
+                let (mut ball_pos, mut ball_rb) = match (
+                    ctx.positions.get_mut(ball_entity),
+                    ctx.rigid_bodies.get_mut(ball_entity),
                 ) {
+                    (Ok(pos), Ok(rb)) => (pos.pos, rb),
+                    _ => return,
+                };
+                let ball_size = if let Ok(ball_collider) = ctx.box_colliders.get(ball_entity) {
+                    ball_collider.size
+                } else {
+                    return;
+                };
+                // Get the relative position of the ball to the wall to determine bounce direction
+                if let Ok(wall_pos) = ctx.positions.get(wall_entity) {
                     // positions of the lateral walls are at the bottom left/right corners
                     // and position of the top wall is at its center top
                     // If ball is bellow the wall, collision is from top
                     // and y velocity should be changed to positive (down)
-                    if wall_pos.pos.y < ball_pos.pos.y {
+                    if wall_pos.pos.y < ball_pos.y {
                         // Collision with top wall
-                        if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                            ball_rb.velocity.y = ball_rb.velocity.y.abs();
-                        }
+                        ball_rb.velocity.y = ball_rb.velocity.y.abs();
+
+                        // fix ball position to be just below the wall to prevent more collisions in the next frame
+                        let wall_height =
+                            if let Ok(wall_collider) = ctx.box_colliders.get(wall_entity) {
+                                wall_collider.size.y
+                            } else {
+                                0.0
+                            };
+                        ball_pos.y = wall_pos.pos.y + wall_height + (ball_size.y * 0.5);
                     }
                     // If ball is above the wall, collision is one of the lateral walls
                     // If ball is to the left of the wall, collision is from right
@@ -919,16 +935,22 @@ pub fn switch_scene(
                     // If ball is to the right of the wall, collision is from left
                     // and x velocity should be changed to positive (go right)
                     else {
-                        if ball_pos.pos.x < wall_pos.pos.x {
+                        let wall_width =
+                            if let Ok(wall_collider) = ctx.box_colliders.get(wall_entity) {
+                                wall_collider.size.x
+                            } else {
+                                0.0
+                            };
+                        if ball_pos.x < wall_pos.pos.x {
                             // Collision with right wall
-                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                                ball_rb.velocity.x = -ball_rb.velocity.x.abs();
-                            }
+                            ball_rb.velocity.x = -ball_rb.velocity.x.abs();
+                            // fix ball position to be just left of the wall to prevent more collisions in the next frame
+                            ball_pos.x = wall_pos.pos.x - wall_width - (ball_size.x * 0.5);
                         } else {
                             // Collision with left wall
-                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                                ball_rb.velocity.x = ball_rb.velocity.x.abs();
-                            }
+                            ball_rb.velocity.x = ball_rb.velocity.x.abs();
+                            // fix ball position to be just right of the wall to prevent more collisions in the next frame
+                            ball_pos.x = wall_pos.pos.x + wall_width + (ball_size.x * 0.5);
                         }
                     }
                 }
@@ -1020,27 +1042,31 @@ pub fn switch_scene(
                 else {
                     return;
                 };
+                let (mut ball_rb, mut ball_pos) = match (
+                    ctx.rigid_bodies.get_mut(ball_entity),
+                    ctx.positions.get_mut(ball_entity),
+                ) {
+                    (Ok(rb), Ok(pos)) => (rb, pos.pos()),
+                    _ => return,
+                };
                 for brick_side in colliding_sides_brick {
                     match brick_side {
                         BoxSide::Top => {
-                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                                ball_rb.velocity.y = -ball_rb.velocity.y.abs();
-                            }
+                            ball_rb.velocity.y = -ball_rb.velocity.y.abs();
+                            ball_pos.y = brick_rect.y - (ball_rect.height * 0.5);
                         }
                         BoxSide::Bottom => {
-                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                                ball_rb.velocity.y = ball_rb.velocity.y.abs();
-                            }
+                            ball_rb.velocity.y = ball_rb.velocity.y.abs();
+                            ball_pos.y =
+                                brick_rect.y + brick_rect.height + (ball_rect.height * 0.5);
                         }
                         BoxSide::Left => {
-                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                                ball_rb.velocity.x = -ball_rb.velocity.x.abs();
-                            }
+                            ball_rb.velocity.x = -ball_rb.velocity.x.abs();
+                            ball_pos.x = brick_rect.x - (ball_rect.width * 0.5);
                         }
                         BoxSide::Right => {
-                            if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                                ball_rb.velocity.x = ball_rb.velocity.x.abs();
-                            }
+                            ball_rb.velocity.x = ball_rb.velocity.x.abs();
+                            ball_pos.x = brick_rect.x + brick_rect.width + (ball_rect.width * 0.5);
                         }
                     }
                 }

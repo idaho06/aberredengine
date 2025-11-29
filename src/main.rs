@@ -135,7 +135,7 @@ fn main() {
     update.add_systems(tween_rotation_system);
     update.add_systems(tween_scale_system);
     update.add_systems(movement);
-    update.add_systems(collision_detector.after(mouse_controller));
+    update.add_systems(collision_detector.after(mouse_controller).after(movement));
     update.add_systems(animation_controller);
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
