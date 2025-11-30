@@ -32,6 +32,7 @@ use crate::components::signalbinding::SignalBinding;
 use crate::components::signals::Signals;
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
+use crate::components::stuckto::StuckTo;
 use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
@@ -669,6 +670,45 @@ pub fn enter_play(
         }
     });
 
+    // Observer to remove the "sticky" flag from the entity (meant to be used by the "player" or "ball" entity)
+    commands.add_observer(
+        |trigger: On<TimerEvent>, mut signals: Query<&mut Signals>, mut commands: Commands| {
+            let entity = trigger.entity;
+            let signal = &trigger.signal;
+
+            if signal == "remove_sticky" {
+                if let Ok(mut sigs) = signals.get_mut(entity) {
+                    sigs.clear_flag("sticky");
+                }
+                commands.entity(entity).remove::<Timer>();
+            }
+        },
+    );
+
+    // Observer to remove StuckTo component and restore velocity
+    commands.add_observer(
+        |trigger: On<TimerEvent>,
+         stuck_to_query: Query<&StuckTo>,
+         mut rigid_body: Query<&mut RigidBody>,
+         mut commands: Commands| {
+            let entity = trigger.entity;
+            let signal = &trigger.signal;
+
+            if signal == "remove_stuck_to" {
+                // Restore stored velocity from StuckTo component before removing it
+                if let Ok(stuck_to) = stuck_to_query.get(entity) {
+                    if let Some(stored_velocity) = stuck_to.stored_velocity {
+                        if let Ok(mut rb) = rigid_body.get_mut(entity) {
+                            rb.velocity = stored_velocity;
+                        }
+                    }
+                }
+                commands.entity(entity).remove::<StuckTo>();
+                commands.entity(entity).remove::<Timer>();
+            }
+        },
+    );
+
     // Finally, run the switch_scene system to spawn initial scene entities
     commands.run_system(
         systems_store
@@ -993,7 +1033,6 @@ pub fn switch_scene(
                 } else {
                     return;
                 };
-
                 // Now we can borrow ball_pos mutably and ball_rb mutably
                 if let (Ok(mut ball_pos), Ok(mut ball_rb)) = (
                     ctx.positions.get_mut(ball_entity),
@@ -1008,6 +1047,42 @@ pub fn switch_scene(
                     ball_rb.velocity.y = -speed * bounce_angle.cos();
                     // Fix ball position to be just above the paddle to prevent more collisions in the next frame
                     ball_pos.pos.y = player_pos.y - player_height - (ball_height * 0.5);
+                }
+                // If the player is sticky, set the ball's velocity to zero and stuck it to the player
+                if let Ok(player_signals) = ctx.signals.get(player_entity) {
+                    if player_signals.has_flag("sticky") {
+                        // Get current velocity to store in StuckTo component
+                        let stored_velocity =
+                            ctx.rigid_bodies.get(ball_entity).map(|rb| rb.velocity).ok();
+
+                        // Calculate offset: ball position relative to player position
+                        let offset_x = if let Ok(ball_pos) = ctx.positions.get(ball_entity) {
+                            ball_pos.pos.x - player_pos.x
+                        } else {
+                            0.0
+                        };
+
+                        // Stop the ball
+                        if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
+                            ball_rb.velocity = Vector2 { x: 0.0, y: 0.0 };
+                        }
+
+                        // Attach ball to player using StuckTo component (follow X only, with offset)
+                        let mut stuck_to =
+                            StuckTo::follow_x_only(player_entity).with_offset(Vector2 {
+                                x: offset_x,
+                                y: 0.0,
+                            });
+                        if let Some(vel) = stored_velocity {
+                            stuck_to = stuck_to.with_stored_velocity(vel);
+                        }
+                        ctx.commands.entity(ball_entity).insert(stuck_to);
+
+                        // Set timer to remove StuckTo after 2.0 seconds
+                        ctx.commands
+                            .entity(ball_entity)
+                            .insert(Timer::new(2.0, "remove_stuck_to"));
+                    }
                 }
                 ctx.audio_cmds.write(AudioCmd::PlayFx { id: "ping".into() });
             }
@@ -1118,31 +1193,37 @@ pub fn switch_scene(
                 .expect("tilemap info not found for level01");
             spawn_tiles(&mut commands, "level01", tiles_width, tilemap_info);
             // The Vaus. The player paddle
-            commands.spawn((
-                Group::new("player"),
-                MapPosition::new(
-                    400.0,
-                    (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0,
-                ),
-                ZIndex(10),
-                Sprite {
-                    tex_key: "vaus".into(),
-                    width: 96.0,
-                    height: 24.0,
-                    offset: Vector2::zero(),
-                    origin: Vector2 { x: 48.0, y: 24.0 },
-                    flip_h: false,
-                    flip_v: false,
-                },
-                //RigidBody::default(),
-                MouseControlled::new(true, false),
-                Signals::default(),
-                BoxCollider {
-                    size: Vector2 { x: 96.0, y: 24.0 },
-                    offset: Vector2::zero(),
-                    origin: Vector2 { x: 48.0, y: 24.0 },
-                },
-            ));
+            let mut player_signals = Signals::default();
+            player_signals.set_flag("sticky");
+            let player_entity = commands
+                .spawn((
+                    Group::new("player"),
+                    MapPosition::new(
+                        400.0,
+                        (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0,
+                    ),
+                    ZIndex(10),
+                    Sprite {
+                        tex_key: "vaus".into(),
+                        width: 96.0,
+                        height: 24.0,
+                        offset: Vector2::zero(),
+                        origin: Vector2 { x: 48.0, y: 24.0 },
+                        flip_h: false,
+                        flip_v: false,
+                    },
+                    //RigidBody::default(),
+                    MouseControlled::new(true, false),
+                    player_signals,
+                    BoxCollider {
+                        size: Vector2 { x: 96.0, y: 24.0 },
+                        offset: Vector2::zero(),
+                        origin: Vector2 { x: 48.0, y: 24.0 },
+                    },
+                    Timer::new(4.0, "remove_sticky"),
+                ))
+                .id();
+            worldsignals.set_entity("player", player_entity);
             // The Ball
             commands.spawn((
                 Group::new("ball"),

@@ -10,7 +10,7 @@
 //! - Global flags like "game_paused" or "player_dead"
 //! - Passing data between unrelated systems
 
-use bevy_ecs::prelude::Resource;
+use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Global signal storage for cross-system communication.
@@ -27,6 +27,8 @@ pub struct WorldSignals {
     pub strings: FxHashMap<String, String>,
     /// Presence-only boolean flags; a key being present means "true".
     pub flags: FxHashSet<String>,
+    /// Map of entities of interest for the current game state.
+    pub entities: FxHashMap<String, Entity>,
 }
 impl Default for WorldSignals {
     fn default() -> Self {
@@ -35,6 +37,7 @@ impl Default for WorldSignals {
             integers: FxHashMap::default(),
             strings: FxHashMap::default(),
             flags: FxHashSet::default(),
+            entities: FxHashMap::default(),
         }
     }
 }
@@ -91,5 +94,17 @@ impl WorldSignals {
     /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
+    }
+    /// Get an entity by key.
+    pub fn get_entity(&self, key: &str) -> Option<&Entity> {
+        self.entities.get(key)
+    }
+    /// Set an entity by key.
+    pub fn set_entity(&mut self, key: impl Into<String>, entity: Entity) {
+        self.entities.insert(key.into(), entity);
+    }
+    /// Remove an entity by key. Returns the removed entity if it existed.
+    pub fn remove_entity(&mut self, key: &str) -> Option<Entity> {
+        self.entities.remove(key)
     }
 }

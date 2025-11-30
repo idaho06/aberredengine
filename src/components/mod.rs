@@ -43,6 +43,7 @@ pub mod screenposition;
 pub mod signalbinding;
 pub mod signals;
 pub mod sprite;
+pub mod stuckto;
 pub mod timer;
 pub mod tween;
 pub mod zindex;
