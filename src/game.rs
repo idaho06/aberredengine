@@ -43,6 +43,7 @@ use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
+use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
@@ -417,6 +418,7 @@ pub fn enter_play(
     tex_store: Res<TextureStore>,
     tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
     mut worldsignals: ResMut<WorldSignals>,
+    mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
 ) {
     // Get Texture sizes
@@ -653,6 +655,10 @@ pub fn enter_play(
     worldsignals.set_integer("level", 1);
     worldsignals.set_string("scene", "menu");
 
+    // Initialize tracked groups resource
+    tracked_groups.add_group("ball");
+    tracked_groups.add_group("brick");
+
     // Observer for TimerEvent
     commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
         match trigger.signal.as_str() {
@@ -745,16 +751,19 @@ pub fn update(
         }
         "level01" => {
             // Level 1 specific updates
+            let switch_scene_system = systems_store
+                .get("switch_scene")
+                .expect("switch_scene system not found")
+                .clone();
             // If action_back is pressed, go back to menu
             if input.action_back.just_pressed {
                 world_signals.set_string("scene", "menu");
-                commands.run_system(
-                    systems_store
-                        .get("switch_scene")
-                        .expect("switch_scene system not found")
-                        .clone(),
-                );
+                commands.run_system(switch_scene_system);
+                return;
             }
+            let ball_count = world_signals.get_integer("group_count:ball").unwrap_or(0);
+            let brick_count = world_signals.get_integer("group_count:brick").unwrap_or(0);
+            eprintln!("Ball count: {}, Brick count: {}", ball_count, brick_count);
         }
         "level02" => {
             // Level 2 specific updates
@@ -1178,6 +1187,50 @@ pub fn switch_scene(
                 ),
                 Group::new("collision_rules"),
             ));
+            // Callback for ball-oob_wall collision (bottom wall)
+            fn ball_oob_wall_collision_callback(
+                ball_entity: Entity,
+                oob_wall_entity: Entity,
+                ctx: &mut CollisionContext,
+            ) {
+                // eprintln!("ball_oob_wall_collision_callback: Ball collided with oob wall!");
+                // Despawn the ball if the ball collider is inside the oob wall collider
+                let (ball_pos, wall_pos) = match (
+                    ctx.positions.get(ball_entity),
+                    ctx.positions.get(oob_wall_entity),
+                ) {
+                    (Ok(pos), Ok(wpos)) => (pos.pos, wpos.pos),
+                    _ => return,
+                };
+                let (ball_rect, wall_rect) = match (
+                    ctx.box_colliders.get(ball_entity),
+                    ctx.box_colliders.get(oob_wall_entity),
+                ) {
+                    (Ok(bcollider), Ok(wcollider)) => (
+                        bcollider.as_rectangle(ball_pos),
+                        wcollider.as_rectangle(wall_pos),
+                    ),
+                    _ => return,
+                };
+                let Some((colliding_sides_ball, _colliding_sides_wall)) =
+                    get_colliding_sides(&ball_rect, &wall_rect)
+                else {
+                    return;
+                };
+                if colliding_sides_ball.len() == 4 {
+                    // All sides are colliding, meaning ball is fully inside the oob wall
+                    // Despawn the ball
+                    ctx.commands.entity(ball_entity).despawn();
+                }
+            }
+            commands.spawn((
+                CollisionRule::new(
+                    "ball",
+                    "oob_wall",
+                    ball_oob_wall_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
             // reset score to 0
             worldsignals.set_integer("score", 0);
 
@@ -1354,7 +1407,7 @@ pub fn switch_scene(
                     tilemap_info.tile_size as f32,
                 ),
                 ZIndex(20),
-                SignalBinding::new("score"),
+                SignalBinding::new("score"), // updates with "score" signal
             ));
             commands.spawn((
                 Group::new("high_score"),
@@ -1383,7 +1436,7 @@ pub fn switch_scene(
                     y: rl.get_screen_height() as f32 * 0.5,
                 },
                 rotation: 0.0,
-                zoom: 1.0,
+                zoom: 0.75,
             }));
         }
         "level02" => {}

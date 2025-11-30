@@ -11,6 +11,7 @@ use crate::events::switchdebug::switch_debug_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
+use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
@@ -25,6 +26,7 @@ use crate::systems::collision::collision_detector;
 use crate::systems::collision::collision_observer;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::gridlayout::gridlayout_spawn_system;
+use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::menu::menu_selection_observer;
@@ -60,6 +62,7 @@ fn main() {
     let mut world = World::new();
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(TrackedGroups::default());
     world.insert_resource(ScreenSize {
         w: rl.get_screen_width(),
         h: rl.get_screen_height(),
@@ -118,6 +121,7 @@ fn main() {
     update.add_systems(gridlayout_spawn_system);
     update.add_systems(update_input_state);
     update.add_systems(check_pending_state);
+    update.add_systems(update_group_counts_system);
     update.add_systems(
         // audio systems must be together
         (

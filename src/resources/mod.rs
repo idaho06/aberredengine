@@ -12,6 +12,7 @@
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`fontstore`] – loaded fonts keyed by string IDs
 //! - [`gamestate`] – authoritative and pending high-level game state
+//! - [`group`] – set of group names tracked for entity counting
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`screensize`] – current framebuffer dimensions in pixels
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
@@ -26,6 +27,7 @@ pub mod camera2d;
 pub mod debugmode;
 pub mod fontstore;
 pub mod gamestate;
+pub mod group;
 pub mod input;
 pub mod screensize;
 pub mod systemsstore;
