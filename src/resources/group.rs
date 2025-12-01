@@ -56,6 +56,11 @@ impl TrackedGroups {
         self.groups.remove(group_name);
     }
 
+    /// Clears all tracked group names.
+    pub fn clear(&mut self) {
+        self.groups.clear();
+    }
+
     /// Returns an iterator over all tracked group names.
     pub fn iter(&self) -> impl Iterator<Item = &String> {
         self.groups.iter()

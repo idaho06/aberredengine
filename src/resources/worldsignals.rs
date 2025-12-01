@@ -62,6 +62,27 @@ impl WorldSignals {
     pub fn get_integer(&self, key: &str) -> Option<i32> {
         self.integers.get(key).copied()
     }
+    /// Get a group count by the name of the group.
+    pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
+        let key = format!("group_count:{}", group_name);
+        self.get_integer(&key)
+    }
+    /// Remove all integer signals whose keys start with a given prefix.
+    pub fn clear_integer_prefix(&mut self, prefix: &str) {
+        let keys_to_remove: Vec<String> = self
+            .integers
+            .keys()
+            .filter(|k| k.starts_with(prefix))
+            .cloned()
+            .collect();
+        for key in keys_to_remove {
+            self.integers.remove(&key);
+        }
+    }
+    /// Remove integer signals for group counting.
+    pub fn clear_group_counts(&mut self) {
+        self.clear_integer_prefix("group_count:");
+    }
     /// Set a string signal value.
     pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.strings.insert(key.into(), value.into());

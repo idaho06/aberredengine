@@ -655,10 +655,6 @@ pub fn enter_play(
     worldsignals.set_integer("level", 1);
     worldsignals.set_string("scene", "menu");
 
-    // Initialize tracked groups resource
-    tracked_groups.add_group("ball");
-    tracked_groups.add_group("brick");
-
     // Observer for TimerEvent
     commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
         match trigger.signal.as_str() {
@@ -761,9 +757,29 @@ pub fn update(
                 commands.run_system(switch_scene_system);
                 return;
             }
-            let ball_count = world_signals.get_integer("group_count:ball").unwrap_or(0);
-            let brick_count = world_signals.get_integer("group_count:brick").unwrap_or(0);
-            eprintln!("Ball count: {}, Brick count: {}", ball_count, brick_count);
+            if let Some(0) = world_signals.get_group_count("ball") {
+                // All balls lost, substract a life
+                eprintln!("All balls lost!");
+                let lives = world_signals.get_integer("lives").unwrap_or(0);
+                if lives > 1 {
+                    world_signals.set_integer("lives", lives - 1);
+                    // restart scene without changing bricks
+                    // TODO: implement
+                } else {
+                    // Game over, go to menu
+                    eprintln!("Game over!");
+                    world_signals.set_string("scene", "menu");
+                    commands.run_system(switch_scene_system);
+                    return;
+                }
+            }
+            if let Some(0) = world_signals.get_group_count("brick") {
+                eprintln!("Level cleared!");
+                // Level cleared, go to next level
+                /* world_signals.set_string("scene", "level02");
+                commands.run_system(switch_scene_system);
+                return; */
+            }
         }
         "level02" => {
             // Level 2 specific updates
@@ -789,6 +805,7 @@ pub fn switch_scene(
     mut tilemaps_store: ResMut<TilemapStore>,
     mut tex_store: ResMut<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
+    mut tracked_groups: ResMut<TrackedGroups>,
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
 ) {
@@ -807,6 +824,9 @@ pub fn switch_scene(
     }
 
     tilemaps_store.clear();
+
+    tracked_groups.clear();
+    worldsignals.clear_group_counts();
 
     let scene = worldsignals
         .get_string("scene")
@@ -1245,6 +1265,8 @@ pub fn switch_scene(
                 .get("level01")
                 .expect("tilemap info not found for level01");
             spawn_tiles(&mut commands, "level01", tiles_width, tilemap_info);
+            // Bricks
+            commands.spawn((GridLayout::new("./assets/levels/level01.json", "brick", 5),));
             // The Vaus. The player paddle
             let mut player_signals = Signals::default();
             player_signals.set_flag("sticky");
@@ -1385,8 +1407,6 @@ pub fn switch_scene(
                     origin: Vector2 { x: 0.0, y: 0.0 },
                 },
             ));
-            // Bricks
-            commands.spawn((GridLayout::new("./assets/levels/level01.json", "brick", 5),));
             // Score Text
             commands.spawn((
                 Group::new("ui"),
@@ -1438,6 +1458,9 @@ pub fn switch_scene(
                 rotation: 0.0,
                 zoom: 0.75,
             }));
+            // Initialize tracked groups resource
+            tracked_groups.add_group("ball");
+            tracked_groups.add_group("brick");
         }
         "level02" => {}
         _ => {
