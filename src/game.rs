@@ -1456,7 +1456,7 @@ pub fn switch_scene(
                     y: rl.get_screen_height() as f32 * 0.5,
                 },
                 rotation: 0.0,
-                zoom: 0.75,
+                zoom: 1.0,
             }));
             // Initialize tracked groups resource
             tracked_groups.add_group("ball");

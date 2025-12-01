@@ -6,9 +6,18 @@ edition = "2024"
 [dependencies]
 bevy_ecs = "0.17.2"
 raylib = { version = "5.5.1", features = ["wayland","noscreenshot"] }
-rhai = "1.23.4"
-rand = "0.8"
+# rhai = "1.23.4"
+# rand = "0.8"
 rustc-hash = "2.1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crossbeam-channel = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true 
+
+# RUSTFLAGS="-C target-cpu=native" cargo build --release
