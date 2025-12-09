@@ -782,16 +782,8 @@ pub fn update(
                 return;
             }
 
-            // NOTE: Ball loss and life management is now handled by the Phase system
-            // (see "playing" on_update and "lose_life" on_enter callbacks)
-
-            if let Some(0) = world_signals.get_group_count("brick") {
-                eprintln!("Level cleared!");
-                // Level cleared, go to next level
-                /* world_signals.set_string("scene", "level02");
-                commands.run_system(switch_scene_system);
-                return; */
-            }
+            // NOTE: Ball loss, life management, and level cleared are now handled
+            // by the Phase system (see phase callbacks in switch_scene)
         }
         "level02" => {
             // Level 2 specific updates
@@ -1040,16 +1032,23 @@ pub fn switch_scene(
 
             /// on_update callback for "playing" phase
             /// - If no balls remain (after the first frame), transition to "lose_life"
+            /// - If no bricks remain, transition to "level_cleared"
             fn playing_on_update(
                 _entity: Entity,
                 time: f32,
                 _previous: Option<String>,
                 ctx: &mut PhaseContext,
             ) -> Option<String> {
-                // Skip the first frame to allow the ball group count to update
+                // Skip the first frame to allow the ball/brick group counts to update
                 if time < 0.1 {
                     return None;
                 }
+                // Check for level cleared (no bricks)
+                if let Some(0) = ctx.world_signals.get_group_count("brick") {
+                    eprintln!("All bricks destroyed, level cleared!");
+                    return Some("level_cleared".into());
+                }
+                // Check for ball lost
                 if let Some(0) = ctx.world_signals.get_group_count("ball") {
                     eprintln!("No balls remain, go to lose_life.");
                     return Some("lose_life".into());
@@ -1116,6 +1115,48 @@ pub fn switch_scene(
                 None
             }
 
+            /// on_enter callback for "level_cleared" phase
+            /// - Plays "success" music (no loop)
+            /// - Spawns "LEVEL CLEARED" text centered on screen
+            fn level_cleared_on_enter(
+                _entity: Entity,
+                _time: f32,
+                _previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                eprintln!("Level cleared! Spawning level cleared text.");
+                // Play success music
+                ctx.audio_cmds.write(AudioCmd::PlayMusic {
+                    id: "success".into(),
+                    looped: false,
+                });
+                // Spawn "LEVEL CLEARED" text using ScreenPosition (centered)
+                ctx.commands.spawn((
+                    Group::new("level_cleared_text"),
+                    ScreenPosition::new(150.0, 350.0), // Approximate center
+                    ZIndex(100),
+                    DynamicText::new("LEVEL CLEARED", "future", 48.0, Color::GREEN),
+                ));
+                None
+            }
+
+            /// on_update callback for "level_cleared" phase
+            /// - After 4 seconds, change scene to "menu" (TODO: go to next level)
+            fn level_cleared_on_update(
+                _entity: Entity,
+                time: f32,
+                _previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                if time >= 4.0 {
+                    // TODO: Go to next level instead of menu
+                    ctx.world_signals.set_string("scene", "menu");
+                    ctx.world_signals.set_flag("switch_scene");
+                    eprintln!("Level cleared time exceeded 4 seconds, switching to menu.");
+                }
+                None
+            }
+
             // Spawn the scene phase entity with all callbacks
             // Start in "init" phase which immediately transitions to "get_started"
             // This ensures the on_enter callback for "get_started" runs on the first frame
@@ -1137,7 +1178,9 @@ pub fn switch_scene(
                     .on_update("playing", playing_on_update as PhaseCallback)
                     .on_update("lose_life", lose_life_on_update as PhaseCallback)
                     .on_enter("game_over", game_over_on_enter as PhaseCallback)
-                    .on_update("game_over", game_over_on_update as PhaseCallback),
+                    .on_update("game_over", game_over_on_update as PhaseCallback)
+                    .on_enter("level_cleared", level_cleared_on_enter as PhaseCallback)
+                    .on_update("level_cleared", level_cleared_on_update as PhaseCallback),
             ));
 
             // ==================== COLLISION CALLBACKS ====================
