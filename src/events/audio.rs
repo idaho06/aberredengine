@@ -64,6 +64,8 @@ pub enum AudioCmd {
     PlayMusic { id: String, looped: bool },
     /// Stop playback and reset the stream position for `id`.
     StopMusic { id: String },
+    /// Stop all music playback and reset all stream positions.
+    StopAllMusic,
     /// Pause playback for `id` (can be resumed).
     PauseMusic { id: String },
     /// Resume playback for a previously paused `id`.

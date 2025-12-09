@@ -9,10 +9,19 @@
 //! - [`audio`] – commands and messages for the background audio thread
 //! - [`collision`] – collision notifications emitted by the physics/collision system
 //! - [`gamestate`] – state transition notifications for the high-level game flow
+//! - [`input`] – input action events (key press/release)
+//! - [`menu`] – menu selection events
+//! - [`phase`] – phase transition events for state machine components
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off
+//! - [`timer`] – timer expiration events
 //!
 //! See each submodule for concrete event data, semantics, and example usage.
+
 pub mod audio;
 pub mod collision;
 pub mod gamestate;
+pub mod input;
+pub mod menu;
+pub mod phase;
 pub mod switchdebug;
+pub mod timer;

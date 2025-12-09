@@ -1,13 +1,36 @@
-use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+//! Axis-aligned box collider component.
+//!
+//! Provides a simple AABB (Axis-Aligned Bounding Box) collider that can be
+//! attached to entities for collision detection. The collider is defined by a
+//! size, an offset from the entity's pivot, and an origin point.
+//!
+//! Use in combination with [`MapPosition`](super::mapposition::MapPosition)
+//! to compute world-space AABBs for overlap testing.
+//!
+//! # Coordinate System
+//!
+//! - `size` – width and height of the collider box
+//! - `offset` – displacement from the entity's pivot (positive moves down-right)
+//! - `origin` – pivot point relative to the box's top-left (usually matches [`Sprite`](super::sprite::Sprite) origin)
+//!
+//! The AABB is computed as: `(position - origin + offset)` to `(position - origin + offset + size)`
+//!
+//! # Related
+//!
+//! - [`crate::systems::collision`] – collision detection systems
+//! - [`crate::components::collision::CollisionRule`] – defines collision handlers
+//! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
 
-#[derive(Debug, Clone, Copy, PartialEq, Component)]
+use bevy_ecs::prelude::Component;
+use raylib::prelude::{Rectangle, Vector2};
+
 /// Axis-aligned rectangular collider in local space.
 ///
 /// The collider is defined by a `size` (width, height), an `offset` from the
 /// entity's pivot, and an `origin` representing that pivot relative to the
 /// collider's local top-left. World AABBs can be computed using
 /// [`MapPosition`](super::mapposition::MapPosition) as the pivot position.
+#[derive(Debug, Clone, Copy, PartialEq, Component)]
 pub struct BoxCollider {
     /// Size of the box in world units.
     pub size: Vector2,
@@ -72,5 +95,12 @@ impl BoxCollider {
     pub fn contains_point(&self, position: Vector2, point: Vector2) -> bool {
         let (min, max) = self.aabb(position);
         point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
+    }
+
+    /// Get the collider as a Raylib Rectangle given the entity position.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn as_rectangle(&self, position: Vector2) -> Rectangle {
+        let (x, y, w, h) = self.get_aabb(position);
+        Rectangle::new(x, y, w, h)
     }
 }

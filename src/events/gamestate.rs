@@ -99,7 +99,12 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
             commands.run_system(enter_play_system_id.clone());
         }
         GameStates::Paused => eprintln!("Entered Paused state"),
-        GameStates::Quitting => eprintln!("Entered Quitting state"),
+        GameStates::Quitting => {
+            let quit_game_system_id = systems_store
+                .get("quit_game")
+                .expect("QuitGame system not found in SystemsStore");
+            commands.run_system(quit_game_system_id.clone());
+        }
     }
 }
 

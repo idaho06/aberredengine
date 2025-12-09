@@ -4,48 +4,66 @@ mod game;
 mod resources;
 mod systems;
 
-use crate::events::collision::observe_kill_on_collision;
+use crate::components::persistent::Persistent;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
-use crate::events::switchdebug::observe_switch_debug_event;
+use crate::events::switchdebug::switch_debug_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
+use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
+use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
 use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
-use crate::systems::collision::collision;
+use crate::systems::collision::collision_detector;
+use crate::systems::collision::collision_observer;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
-use crate::systems::input::check_input;
+use crate::systems::gridlayout::gridlayout_spawn_system;
+use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::menu::menu_selection_observer;
+use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
+use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
+use crate::systems::phase::{phase_change_detector, phase_update_system};
 use crate::systems::render::render_system;
+use crate::systems::signalbinding::update_world_signals_binding_system;
+use crate::systems::stuckto::stuck_to_entity_system;
+use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
+use crate::systems::tween::tween_mapposition_system;
+use crate::systems::tween::tween_rotation_system;
+use crate::systems::tween::tween_scale_system;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
+use raylib::collision;
 //use raylib::prelude::*;
 
 fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
-    let (rl, thread) = raylib::init()
-        .size(800, 450)
-        .title("Aberred Engine")
+    let (mut rl, thread) = raylib::init()
+        .size(224 * 3, 256 * 3)
+        .title("Aberred Engine - Arkanoid")
         .vsync()
         .build();
-
+    rl.set_target_fps(120);
     // Disable ESC to exit
-    // rl.set_exit_key(None);
+    rl.set_exit_key(None);
 
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
-    world.insert_resource(WorldTime::default());
+    world.insert_resource(WorldTime::default().with_time_scale(1.0));
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(TrackedGroups::default());
     world.insert_resource(ScreenSize {
         w: rl.get_screen_width(),
         h: rl.get_screen_height(),
@@ -58,9 +76,10 @@ fn main() {
 
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
+    world.insert_non_send_resource(FontStore::new());
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
-    world.spawn(Observer::new(observe_gamestate_change_event));
+    world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
     // Game state systems store
     let mut systems_store = SystemsStore::new();
@@ -70,6 +89,15 @@ fn main() {
 
     let enter_play_system_id = world.register_system(game::enter_play);
     systems_store.insert("enter_play", enter_play_system_id);
+
+    let quit_game_system_id = world.register_system(game::quit_game);
+    systems_store.insert("quit_game", quit_game_system_id);
+
+    let clean_all_entities_system_id = world.register_system(game::clean_all_entities);
+    systems_store.insert("clean_all_entities", clean_all_entities_system_id);
+
+    let switch_scene_system_id = world.register_system(game::switch_scene);
+    systems_store.insert("switch_scene", switch_scene_system_id);
 
     world.insert_resource(systems_store);
 
@@ -82,15 +110,21 @@ fn main() {
     }
     world.trigger(GameStateChangedEvent {}); // Call inmediatly to enter Setup state
 
-    // Register a global observer for CollisionEvent that despawns both entities.
-    world.spawn(Observer::new(observe_kill_on_collision));
-    world.spawn(Observer::new(observe_switch_debug_event));
+    world.add_observer(collision_observer);
+    world.add_observer(switch_debug_observer);
+    world.add_observer(menu_controller_observer);
+    world.add_observer(menu_selection_observer);
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
     let mut update = Schedule::default();
+    update.add_systems(phase_change_detector);
+    update.add_systems(phase_update_system.after(phase_change_detector));
+    update.add_systems(menu_spawn_system);
+    update.add_systems(gridlayout_spawn_system);
     update.add_systems(update_input_state);
     update.add_systems(check_pending_state);
+    update.add_systems(update_group_counts_system);
     update.add_systems(
         // audio systems must be together
         (
@@ -104,18 +138,25 @@ fn main() {
         )
             .chain(),
     );
-    update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
+    //update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
     update.add_systems(input_simple_controller);
+    update.add_systems(mouse_controller);
+    update.add_systems(stuck_to_entity_system.after(collision_detector));
+    update.add_systems(tween_mapposition_system);
+    update.add_systems(tween_rotation_system);
+    update.add_systems(tween_scale_system);
     update.add_systems(movement);
-    update.add_systems(collision);
+    update.add_systems(collision_detector.after(mouse_controller).after(movement));
     update.add_systems(animation_controller);
     update.add_systems(animation.after(animation_controller));
+    update.add_systems(update_timers);
+    update.add_systems(update_world_signals_binding_system);
     update.add_systems(
         (game::update)
             .run_if(state_is_playing)
             .after(check_pending_state),
     );
-    update.add_systems(render_system);
+    update.add_systems(render_system.after(collision_detector));
 
     update
         .initialize(&mut world)
@@ -125,6 +166,7 @@ fn main() {
     while !world
         .non_send_resource::<raylib::RaylibHandle>()
         .window_should_close()
+        && !world.resource::<WorldSignals>().has_flag("quit_game")
     {
         let dt = world
             .non_send_resource::<raylib::RaylibHandle>()

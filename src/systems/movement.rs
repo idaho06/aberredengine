@@ -35,7 +35,7 @@ pub fn movement(
         // by inverting the velocity
         // This is temporal for the demo purposes
 
-        let x_min = 0.0_f32;
+        /* let x_min = 0.0_f32;
         let y_min = 0.0_f32;
         let x_max = screensize.w as f32;
         let y_max = screensize.h as f32;
@@ -54,7 +54,7 @@ pub fn movement(
                 // Play a sound effect on bounce
                 let _ = audio_cmd_writer.write(AudioCmd::PlayFx { id: "growl".into() });
             }
-        }
+        } */
 
         //position.x += rigidbody.velocity.x * time.delta_seconds();
         //position.y += rigidbody.velocity.y * time.delta_seconds();

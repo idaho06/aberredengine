@@ -1,12 +1,21 @@
+//! World-space position component.
+//!
+//! The [`MapPosition`] component stores an entity's position in world
+//! coordinates. It serves as the pivot point used by rendering and collision
+//! systems.
+//!
+//! For screen-space UI elements, see
+//! [`ScreenPosition`](super::screenposition::ScreenPosition).
+
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
-#[derive(Component, Clone, Copy, Debug)]
 /// World-space position (pivot) for an entity.
 ///
 /// This position commonly represents the pivot used by other components such
 /// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
 /// to compute rendering and collision bounds.
+#[derive(Component, Clone, Copy, Debug)]
 pub struct MapPosition {
     /// 2D coordinates in world units.
     pub pos: Vector2,

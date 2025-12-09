@@ -11,6 +11,11 @@ use raylib::prelude::*;
 pub struct BoolState {
     /// Whether the key is currently active/pressed this frame.
     pub active: bool,
+    /// Whether the key was just pressed this frame.
+    pub just_pressed: bool,
+    /// Whether the key was just released this frame.
+    pub just_released: bool,
+
     /// The key bound to this action.
     pub key_binding: KeyboardKey,
 }
@@ -42,6 +47,8 @@ impl Default for BoolState {
     fn default() -> Self {
         Self {
             active: false,
+            just_pressed: false,
+            just_released: false,
             key_binding: KeyboardKey::KEY_NULL,
         }
     }
@@ -52,56 +59,82 @@ impl Default for InputState {
         Self {
             maindirection_up: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_W,
             },
             maindirection_left: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_A,
             },
             maindirection_down: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_S,
             },
             maindirection_right: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_D,
             },
             // Arrow keys
             secondarydirection_up: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_UP,
             },
             secondarydirection_down: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_DOWN,
             },
             secondarydirection_left: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_LEFT,
             },
             secondarydirection_right: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_RIGHT,
             },
             // Control keys
             action_back: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_ESCAPE,
             },
             action_1: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_SPACE,
             },
             action_2: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_ENTER,
             },
             mode_debug: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_F11,
             },
             action_special: BoolState {
                 active: false,
+                just_pressed: false,
+                just_released: false,
                 key_binding: KeyboardKey::KEY_F12,
             },
         }
