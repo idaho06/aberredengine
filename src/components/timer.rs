@@ -2,9 +2,39 @@
 //!
 //! The [`Timer`] component counts elapsed time each frame. When the
 //! accumulated time exceeds `duration`, a [`TimerEvent`](crate::events::timer::TimerEvent)
-//! is emitted carrying the specified signal name, and the timer resets.
+//! is triggered on the entity, and the timer resets.
 //!
-//! See [`crate::systems::time::update_timers`] for the update logic.
+//! # Usage with Observers
+//!
+//! Subscribe to [`TimerEvent`](crate::events::timer::TimerEvent) with an observer
+//! to react when timers expire. The `signal` field helps identify which timer
+//! fired when an entity has multiple timer uses.
+//!
+//! # Common Patterns
+//!
+//! - Remove [`StuckTo`](super::stuckto::StuckTo) after a delay (signal: `"remove_stuck_to"`)
+//! - Clear a flag from [`Signals`](super::signals::Signals) (signal: `"remove_sticky"`)
+//! - Trigger phase transitions or spawn effects
+//!
+//! # Example
+//!
+//! ```ignore
+//! // Set up a timer
+//! commands.entity(ball).insert(Timer::new(2.0, "remove_stuck_to"));
+//!
+//! // Add an observer to handle the event
+//! commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
+//!     if trigger.signal == "remove_stuck_to" {
+//!         commands.entity(trigger.entity).remove::<StuckTo>();
+//!         commands.entity(trigger.entity).remove::<Timer>();
+//!     }
+//! });
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::systems::time::update_timers`] – the system that updates and triggers timers
+//! - [`crate::events::timer::TimerEvent`] – the event emitted when a timer expires
 
 use bevy_ecs::prelude::Component;
 

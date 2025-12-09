@@ -4,6 +4,28 @@
 //! components, loads their JSON data, and spawns child entities for each
 //! cell. Spawned entities receive [`MapPosition`], [`Sprite`], [`BoxCollider`],
 //! [`Signals`], [`Group`], and [`ZIndex`] components based on the layout data.
+//!
+//! # JSON Format
+//!
+//! The JSON file defines a grid with a legend mapping characters to cell types:
+//!
+//! ```json
+//! {
+//!   "offset_x": 48.0,
+//!   "offset_y": 80.0,
+//!   "cell_width": 56.0,
+//!   "cell_height": 24.0,
+//!   "grid": ["RRGGBB", "YYPPMM"],
+//!   "legend": {
+//!     "R": { "texture_key": "brick_red", "properties": { "hp": 1, "points": 10 } }
+//!   }
+//! }
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::components::gridlayout::GridLayout`] – the trigger component
+//! - [`crate::components::gridlayout::GridLayoutData`] – the parsed JSON structure
 
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;

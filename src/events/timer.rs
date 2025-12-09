@@ -1,8 +1,27 @@
 //! Timer expiration events.
 //!
 //! When a [`Timer`](crate::components::timer::Timer) component reaches its
-//! duration, a [`TimerEvent`] is triggered containing the entity and signal
-//! name.
+//! duration, a [`TimerEvent`] is triggered on the entity. Observers can
+//! subscribe to this event to perform actions like removing components or
+//! changing entity state.
+//!
+//! # Example
+//!
+//! ```ignore
+//! commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
+//!     match trigger.signal.as_str() {
+//!         "remove_sticky" => {
+//!             // Clear flag, remove timer, etc.
+//!         }
+//!         _ => {}
+//!     }
+//! });
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::components::timer::Timer`] – the timer component
+//! - [`crate::systems::time::update_timers`] – the system that emits these events
 
 use bevy_ecs::prelude::*;
 

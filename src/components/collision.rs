@@ -4,7 +4,30 @@
 //! collisions between entity groups should be handled, and [`CollisionContext`]
 //! which provides access to world state within collision callbacks.
 //!
-//! See [`crate::systems::collision`] for the collision detection system.
+//! # Group-Based Collision
+//!
+//! Collision rules match entities by their [`Group`](super::group::Group)
+//! component. When two entities collide, the system looks up rules that match
+//! both groups and invokes the corresponding callback.
+//!
+//! # Example
+//!
+//! ```ignore
+//! fn ball_brick_callback(ball: Entity, brick: Entity, ctx: &mut CollisionContext) {
+//!     // Reflect ball, damage brick, play sound, etc.
+//! }
+//!
+//! commands.spawn((
+//!     CollisionRule::new("ball", "brick", ball_brick_callback as CollisionCallback),
+//!     Group::new("collision_rules"),
+//! ));
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::systems::collision`] – collision detection and observer systems
+//! - [`crate::events::collision::CollisionEvent`] – event emitted on collisions
+//! - [`super::group::Group`] – group tag used for rule matching
 
 use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;

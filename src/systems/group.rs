@@ -3,12 +3,29 @@
 //! This module provides a system that counts entities belonging to tracked
 //! groups and publishes the counts as integer signals in [`WorldSignals`].
 //!
-//! This enables game logic to react to group population changes, such as:
-//! - Detecting when all "ball" entities are gone (lose a life)
-//! - Detecting when all "brick" entities are destroyed (level complete)
+//! # Purpose
 //!
-//! The system is engine-agnostic: it does not know about specific group names.
-//! Games configure which groups to track via the [`TrackedGroups`] resource.
+//! This enables game logic (especially [`Phase`](crate::components::phase::Phase) callbacks)
+//! to react to group population changes, such as:
+//! - Detecting when all "ball" entities are gone → lose a life
+//! - Detecting when all "brick" entities are destroyed → level complete
+//!
+//! # Engine-Agnostic Design
+//!
+//! The system does not know about specific group names. Games configure which
+//! groups to track via the [`TrackedGroups`] resource, keeping the engine
+//! decoupled from game-specific logic.
+//!
+//! # Signal Keys
+//!
+//! Counts are stored with the key format `"group_count:{name}"`. Use
+//! `world_signals.get_group_count("name")` for convenient access.
+//!
+//! # Related
+//!
+//! - [`TrackedGroups`](crate::resources::group::TrackedGroups) – configures which groups to count
+//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) – where counts are published
+//! - [`Group`](crate::components::group::Group) – the group tag component
 
 use crate::components::group::Group;
 use crate::resources::group::TrackedGroups;

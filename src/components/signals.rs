@@ -12,7 +12,22 @@
 //! across your game (e.g. "hp", "is_running"). Accessors are provided to set,
 //! query, and read views of each collection.
 //!
-//! Example:
+//! # Entity vs World Signals
+//!
+//! - [`Signals`] – per-entity signals, attached to specific entities
+//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) – global signals accessible from any system
+//!
+//! Use entity signals for per-entity state (health, sticky flag) and world
+//! signals for global state (score, scene name, tracked entity counts).
+//!
+//! # Integration with Other Components
+//!
+//! - [`AnimationController`](super::animation::AnimationController) – reads signals for animation rule conditions
+//! - [`Phase`](super::phase::Phase) – callbacks can read/write signals via [`PhaseContext`](super::phase::PhaseContext)
+//! - [`CollisionRule`](super::collision::CollisionRule) – callbacks access signals via [`CollisionContext`](super::collision::CollisionContext)
+//!
+//! # Example
+//!
 //! ```rust
 //! use aberredengine::components::signals::Signals;
 //!

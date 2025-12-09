@@ -4,6 +4,18 @@
 //! monitored by the [`update_group_counts_system`](crate::systems::group::update_group_counts_system).
 //! This keeps the engine decoupled from game-specific group names.
 //!
+//! # How It Works
+//!
+//! 1. Register groups to track via `tracked_groups.add_group("ball")`
+//! 2. The group counting system queries all entities with matching [`Group`](crate::components::group::Group) components
+//! 3. Entity counts are published to [`WorldSignals`](crate::resources::worldsignals::WorldSignals) as `"group_count:{name}"`
+//!
+//! # Integration with Phases
+//!
+//! Phase callbacks can check group counts to detect game state changes:
+//! - No balls remaining → lose a life
+//! - No bricks remaining → level complete
+//!
 //! # Usage
 //!
 //! ```ignore
@@ -14,7 +26,18 @@
 //! // The system will then update WorldSignals with:
 //! // - "group_count:ball" → number of ball entities
 //! // - "group_count:brick" → number of brick entities
+//!
+//! // In phase callback:
+//! if let Some(0) = ctx.world_signals.get_group_count("ball") {
+//!     return Some("lose_life".into());
+//! }
 //! ```
+//!
+//! # Related
+//!
+//! - [`crate::systems::group::update_group_counts_system`] – the counting system
+//! - [`crate::resources::worldsignals::WorldSignals`] – where counts are published
+//! - [`crate::components::group::Group`] – the group tag component
 
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashSet;

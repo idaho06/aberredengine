@@ -2,6 +2,17 @@
 //!
 //! This system updates the position of entities with the [`StuckTo`] component
 //! to follow their target entity's position.
+//!
+//! # Use Cases
+//!
+//! - Ball stuck to paddle at game start (follows X only)
+//! - Objects attached to moving platforms
+//! - Temporary "sticky" effects with auto-release via [`Timer`](crate::components::timer::Timer)
+//!
+//! # Related
+//!
+//! - [`StuckTo`](crate::components::stuckto::StuckTo) – the attachment component
+//! - [`Timer`](crate::components::timer::Timer) – can auto-remove `StuckTo` after a delay
 
 use bevy_ecs::prelude::*;
 

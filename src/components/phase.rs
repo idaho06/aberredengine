@@ -15,6 +15,15 @@
 //! - **Transition requests** – set `next` to trigger a transition on the next frame
 //! - **Time tracking** – `time_in_phase` tracks how long the entity has been in the current phase
 //!
+//! # Integration with Signals
+//!
+//! Phase callbacks receive a [`PhaseContext`] which provides access to:
+//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) for global state (scene name, score, etc.)
+//! - [`Signals`](crate::components::signals::Signals) query for per-entity signals
+//! - Audio commands, positions, rigid bodies, and more
+//!
+//! This allows phases to read/write game state and coordinate with other systems.
+//!
 //! # Example
 //!
 //! ```ignore
@@ -36,6 +45,8 @@
 //!
 //! - [`crate::systems::phase`] – systems that process phase transitions and callbacks
 //! - [`crate::events::phase::PhaseChangeEvent`] – event emitted on phase transitions
+//! - [`crate::resources::worldsignals::WorldSignals`] – global signals accessible in callbacks
+//! - [`crate::components::signals::Signals`] – per-entity signals accessible in callbacks
 
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;

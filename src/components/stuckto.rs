@@ -1,12 +1,37 @@
 //! Component for attaching an entity's position to another entity.
 //!
-//! When an entity has the [`StuckTo`] component, a system will update its
-//! position to follow the target entity's position, optionally with an offset.
+//! When an entity has the [`StuckTo`] component, the
+//! [`stuck_to_entity_system`](crate::systems::stuckto::stuck_to_entity_system)
+//! will update its position to follow the target entity's position, optionally
+//! with an offset.
 //!
 //! This is useful for:
 //! - Attaching projectiles to moving platforms
-//! - Making objects follow other entities
+//! - Making objects follow other entities (e.g., ball stuck to paddle)
 //! - Temporary "sticky" effects in games
+//!
+//! # Integration with Timer
+//!
+//! Combine with [`Timer`](super::timer::Timer) to automatically release the
+//! stuck entity after a duration. The `stored_velocity` field can preserve the
+//! entity's velocity to restore when unstuck.
+//!
+//! # Example
+//!
+//! ```ignore
+//! // Attach ball to player, release after 2 seconds
+//! commands.entity(ball).insert((
+//!     StuckTo::follow_x_only(player_entity)
+//!         .with_offset(Vector2 { x: 0.0, y: -12.0 })
+//!         .with_stored_velocity(Vector2 { x: 300.0, y: -300.0 }),
+//!     Timer::new(2.0, "remove_stuck_to"),
+//! ));
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::systems::stuckto::stuck_to_entity_system`] – the system that updates positions
+//! - [`super::timer::Timer`] – can be used to auto-remove `StuckTo` after a delay
 
 use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::Vector2;

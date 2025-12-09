@@ -1,9 +1,33 @@
-//! Collision detection system.
+//! Collision detection and handling systems.
 //!
-//! Performs pairwise AABB overlap checks between entities that carry a
-//! [`BoxCollider`](crate::components::boxcollider::BoxCollider) and a
-//! [`MapPosition`](crate::components::mapposition::MapPosition). For every
-//! overlapping pair it triggers a [`CollisionEvent`](crate::events::collision::CollisionEvent).
+//! This module provides two main systems:
+//!
+//! - [`collision_detector`] – pairwise AABB overlap checks, emits [`CollisionEvent`](crate::events::collision::CollisionEvent)
+//! - [`collision_observer`] – receives collision events and dispatches to [`CollisionRule`](crate::components::collision::CollisionRule) callbacks
+//!
+//! # Collision Flow
+//!
+//! 1. `collision_detector` iterates all entity pairs with [`BoxCollider`](crate::components::boxcollider::BoxCollider) + [`MapPosition`](crate::components::mapposition::MapPosition)
+//! 2. For each overlap, triggers a `CollisionEvent`
+//! 3. `collision_observer` looks up matching `CollisionRule` components by [`Group`](crate::components::group::Group) names
+//! 4. Invokes the rule's callback with both entities and a [`CollisionContext`](crate::components::collision::CollisionContext)
+//!
+//! # Defining Collision Rules
+//!
+//! Collision rules are defined in game code and spawned as entities:
+//!
+//! ```ignore
+//! commands.spawn((
+//!     CollisionRule::new("ball", "brick", ball_brick_callback as CollisionCallback),
+//!     Group::new("collision_rules"),
+//! ));
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::components::collision::CollisionRule`] – defines collision handlers
+//! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
+//! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;

@@ -1,8 +1,24 @@
-//! Collision event types and a simple observer.
+//! Collision event types.
 //!
 //! The collision system emits [`CollisionEvent`] whenever two entities with
-//! compatible colliders overlap. Observers can subscribe to this event to
-//! react in a decoupled manner (damage, sound, despawn, etc.).
+//! compatible colliders overlap. This event is primarily consumed by the
+//! [`collision_observer`](crate::systems::collision::collision_observer), which
+//! looks up matching [`CollisionRule`](crate::components::collision::CollisionRule)
+//! components and invokes their callbacks.
+//!
+//! # Flow
+//!
+//! 1. [`collision_detector`](crate::systems::collision::collision_detector) detects overlaps
+//! 2. Emits `CollisionEvent` for each collision
+//! 3. [`collision_observer`](crate::systems::collision::collision_observer) receives the event
+//! 4. Finds matching `CollisionRule` by group names
+//! 5. Invokes the rule's callback with both entities
+//!
+//! # Related
+//!
+//! - [`crate::systems::collision`] – detection and observer systems
+//! - [`crate::components::collision::CollisionRule`] – defines collision handlers
+//! - [`crate::components::boxcollider::BoxCollider`] – the collider component
 
 use bevy_ecs::prelude::*;
 

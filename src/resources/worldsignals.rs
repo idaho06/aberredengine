@@ -5,10 +5,34 @@
 //! [`Signals`](crate::components::signals::Signals), these signals are
 //! global and accessible from any system.
 //!
-//! Use cases include:
-//! - Storing the current scene name
-//! - Global flags like "game_paused" or "player_dead"
-//! - Passing data between unrelated systems
+//! # Use Cases
+//!
+//! - Storing the current scene name (`"scene"`)
+//! - Global flags like `"game_paused"` or `"switch_scene"`
+//! - Game state values (score, lives, high score)
+//! - Entity references for quick lookup (`"player"`, `"ball"`)
+//! - Group entity counts (published by [`update_group_counts_system`](crate::systems::group::update_group_counts_system))
+//!
+//! # Integration with Other Systems
+//!
+//! - [`Phase`](crate::components::phase::Phase) callbacks receive `WorldSignals` via [`PhaseContext`](crate::components::phase::PhaseContext)
+//! - [`CollisionRule`](crate::components::collision::CollisionRule) callbacks access it via [`CollisionContext`](crate::components::collision::CollisionContext)
+//! - [`SignalBinding`](crate::components::signalbinding::SignalBinding) binds UI text to world signal values
+//! - [`TrackedGroups`](crate::resources::group::TrackedGroups) + group system publish entity counts here
+//!
+//! # Example
+//!
+//! ```ignore
+//! // In game setup
+//! world_signals.set_string("scene", "menu");
+//! world_signals.set_integer("score", 0);
+//! world_signals.set_integer("lives", 3);
+//!
+//! // In phase callback
+//! if let Some(0) = ctx.world_signals.get_group_count("ball") {
+//!     return Some("lose_life".into());
+//! }
+//! ```
 
 use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::{FxHashMap, FxHashSet};

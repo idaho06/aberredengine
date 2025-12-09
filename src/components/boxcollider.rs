@@ -6,6 +6,20 @@
 //!
 //! Use in combination with [`MapPosition`](super::mapposition::MapPosition)
 //! to compute world-space AABBs for overlap testing.
+//!
+//! # Coordinate System
+//!
+//! - `size` – width and height of the collider box
+//! - `offset` – displacement from the entity's pivot (positive moves down-right)
+//! - `origin` – pivot point relative to the box's top-left (usually matches [`Sprite`](super::sprite::Sprite) origin)
+//!
+//! The AABB is computed as: `(position - origin + offset)` to `(position - origin + offset + size)`
+//!
+//! # Related
+//!
+//! - [`crate::systems::collision`] – collision detection systems
+//! - [`crate::components::collision::CollisionRule`] – defines collision handlers
+//! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
 
 use bevy_ecs::prelude::Component;
 use raylib::prelude::{Rectangle, Vector2};

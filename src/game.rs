@@ -1,3 +1,34 @@
+//! Game-specific logic and scene management.
+//!
+//! This module contains the game's setup, update loop, and scene switching
+//! logic. It demonstrates how to use the engine's components and systems
+//! to build an Arkanoid-style game.
+//!
+//! # Key Functions
+//!
+//! - [`setup`] – loads resources (textures, fonts, audio) during `Setup` state
+//! - [`enter_play`] – initializes world signals and observers when entering `Playing` state
+//! - [`switch_scene`] – handles scene transitions (menu, level01, etc.)
+//! - [`update`] – per-frame game logic for each scene
+//!
+//! # Scene Architecture
+//!
+//! Scenes are managed via the `"scene"` string in [`WorldSignals`](crate::resources::worldsignals::WorldSignals).
+//! Setting the `"switch_scene"` flag triggers [`switch_scene`] to despawn non-persistent
+//! entities and spawn the new scene's entities.
+//!
+//! # Phase Callbacks
+//!
+//! The `level01` scene uses [`Phase`](crate::components::phase::Phase) with callbacks:
+//! - `init` → `get_started` → `playing` → `lose_life`/`level_cleared`/`game_over`
+//!
+//! These callbacks manage ball spawning, life tracking, and win/lose conditions.
+//!
+//! # Collision Callbacks
+//!
+//! [`CollisionRule`](crate::components::collision::CollisionRule) components define how
+//! entities interact: ball-wall bounce, ball-player reflection, ball-brick destruction.
+
 use std::ffi::CString;
 use std::panic;
 

@@ -4,9 +4,38 @@
 //! runtime. It references a font by key and stores the text content, size,
 //! and color.
 //!
-//! Position the text using [`MapPosition`](super::mapposition::MapPosition)
-//! for world-space or [`ScreenPosition`](super::screenposition::ScreenPosition)
-//! for UI/screen-space rendering.
+//! # Positioning
+//!
+//! Position the text using one of:
+//! - [`MapPosition`](super::mapposition::MapPosition) for world-space (moves with camera)
+//! - [`ScreenPosition`](super::screenposition::ScreenPosition) for UI/screen-space (fixed on screen)
+//!
+//! # Reactive Updates
+//!
+//! Combine with [`SignalBinding`](super::signalbinding::SignalBinding) to automatically
+//! update text content when signal values change (e.g., score, lives).
+//!
+//! # Example
+//!
+//! ```ignore
+//! // Static UI text
+//! commands.spawn((
+//!     ScreenPosition::new(10.0, 20.0),
+//!     DynamicText::new("Score:", "arcade", 24.0, Color::WHITE),
+//! ));
+//!
+//! // Reactive score display
+//! commands.spawn((
+//!     ScreenPosition::new(100.0, 20.0),
+//!     DynamicText::new("0", "arcade", 24.0, Color::WHITE),
+//!     SignalBinding::new("score"),
+//! ));
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::components::signalbinding::SignalBinding`] – binds text to signal values
+//! - [`crate::resources::fontstore::FontStore`] – font registry
 
 use bevy_ecs::prelude::Component;
 

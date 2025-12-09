@@ -23,6 +23,7 @@
 //! - [`signalbinding`] – binds UI text to signal values for reactive updates
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component
+//! - [`stuckto`] – attaches an entity's position to another entity
 //! - [`timer`] – countdown timer that emits events when finished
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`zindex`] – rendering order hint for 2D drawing

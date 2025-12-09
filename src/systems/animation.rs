@@ -3,7 +3,20 @@
 //! - [`animation`] advances animations based on elapsed time and updates the
 //!   visible sprite frame. It also emits optional signals as frames change.
 //! - [`animation_controller`] selects which animation should be active based
-//!   on a set of rule conditions evaluated against entity signals.
+//!   on a set of rule conditions evaluated against entity [`Signals`](crate::components::signals::Signals).
+//!
+//! # Animation Flow
+//!
+//! 1. Animation data is defined in [`AnimationStore`](crate::resources::animationstore::AnimationStore)
+//! 2. Entities have an [`Animation`](crate::components::animation::Animation) component pointing to a key
+//! 3. The `animation` system advances frames based on `fps` and updates [`Sprite`](crate::components::sprite::Sprite) offset
+//! 4. The `animation_controller` system evaluates rules against signals to switch animations
+//!
+//! # Related
+//!
+//! - [`crate::components::animation::Animation`] – per-entity animation state
+//! - [`crate::components::animation::AnimationController`] – rule-based animation selection
+//! - [`crate::resources::animationstore::AnimationStore`] – animation definitions
 
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;

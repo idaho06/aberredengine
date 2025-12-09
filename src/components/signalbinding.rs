@@ -2,6 +2,45 @@
 //!
 //! This module provides a declarative way to bind [`DynamicText`](super::dynamictext::DynamicText)
 //! components to signal values, enabling automatic text updates when signals change.
+//!
+//! # Signal Sources
+//!
+//! Bindings can read from two sources:
+//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) (default) – global signals like score, lives
+//! - [`Signals`](super::signals::Signals) – per-entity signals from a specific entity
+//!
+//! # Supported Signal Types
+//!
+//! The binding system checks signal types in order: integer, scalar, string, flag.
+//! Flags display as `"true"` when present.
+//!
+//! # Example
+//!
+//! ```ignore
+//! // Display score from WorldSignals
+//! commands.spawn((
+//!     DynamicText::new("0", "arcade", 16.0, Color::WHITE),
+//!     SignalBinding::new("score"),
+//! ));
+//!
+//! // Display with custom format
+//! commands.spawn((
+//!     DynamicText::new("", "arcade", 16.0, Color::WHITE),
+//!     SignalBinding::new("health").with_format("HP: {}"),
+//! ));
+//!
+//! // Display from a specific entity's Signals
+//! commands.spawn((
+//!     DynamicText::new("", "arcade", 16.0, Color::WHITE),
+//!     SignalBinding::new("hp").with_source_entity(player_entity),
+//! ));
+//! ```
+//!
+//! # Related
+//!
+//! - [`crate::systems::signalbinding::update_world_signals_binding_system`] – the update system
+//! - [`crate::resources::worldsignals::WorldSignals`] – global signal storage
+//! - [`super::signals::Signals`] – per-entity signal storage
 
 use bevy_ecs::prelude::{Component, Entity};
 
