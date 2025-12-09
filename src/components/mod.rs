@@ -15,6 +15,7 @@
 //! - [`mapposition`] – world-space position (pivot) for an entity
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
+//! - [`phase`] – state machine component with enter/update/exit callbacks
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
@@ -36,6 +37,7 @@ pub mod inputcontrolled;
 pub mod mapposition;
 pub mod menu;
 pub mod persistent;
+pub mod phase;
 pub mod rigidbody;
 pub mod rotation;
 pub mod scale;

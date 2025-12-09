@@ -24,6 +24,7 @@ use crate::components::inputcontrolled::MouseControlled;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::persistent::Persistent;
+use crate::components::phase::{Phase, PhaseCallback, PhaseContext};
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -940,6 +941,28 @@ pub fn switch_scene(
             });
         }
         "level01" => {
+            // test callback for phase "get_ready" of the scene
+            fn level01_get_ready_callback(
+                entity: Entity,
+                time: f32,
+                previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                eprintln!(
+                    "level01_get_ready_callback: Entity {:?} updating 'get_ready' phase!",
+                    entity
+                );
+                // after 3 seconds, switch to "playing" phase
+                if time >= 3.0 {
+                    return Some("playing".into());
+                }
+                None
+            }
+            commands.spawn((
+                Group::new("scene_phases"),
+                Phase::new("get_ready")
+                    .on_update("get_ready", level01_get_ready_callback as PhaseCallback),
+            ));
             // callback for player-wall collision
             fn player_wall_collision_callback(
                 player_entity: Entity,
@@ -1270,13 +1293,12 @@ pub fn switch_scene(
             // The Vaus. The player paddle
             let mut player_signals = Signals::default();
             player_signals.set_flag("sticky");
+            let y = (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0;
+            let player_pos = MapPosition::new(400.0, y);
             let player_entity = commands
                 .spawn((
                     Group::new("player"),
-                    MapPosition::new(
-                        400.0,
-                        (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0,
-                    ),
+                    player_pos.clone(),
                     ZIndex(10),
                     Sprite {
                         tex_key: "vaus".into(),
@@ -1300,9 +1322,10 @@ pub fn switch_scene(
                 .id();
             worldsignals.set_entity("player", player_entity);
             // The Ball
+            let y = player_pos.pos().y - 24.0 - 6.0;
             commands.spawn((
                 Group::new("ball"),
-                MapPosition::new(400.0, 300.0),
+                MapPosition::new(400.0, y),
                 ZIndex(10),
                 Sprite {
                     tex_key: "ball".into(),

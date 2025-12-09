@@ -15,6 +15,7 @@
 //! - [`menu`] – menu spawning, input handling, and selection
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
+//! - [`phase`] – process phase state machine transitions and callbacks
 //! - [`render`] – draw world and debug overlays using Raylib
 //! - [`signalbinding`] – update DynamicText components based on signal values
 //! - [`stuckto`] – keep entities attached to other entities
@@ -32,6 +33,7 @@ pub mod inputsimplecontroller;
 pub mod menu;
 pub mod mousecontroller;
 pub mod movement;
+pub mod phase;
 pub mod render;
 pub mod signalbinding;
 pub mod stuckto;

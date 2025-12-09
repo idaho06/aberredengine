@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy_ecs = "0.17.2"
+bevy_ecs = "0.17.3"
 raylib = { version = "5.5.1", features = ["wayland","noscreenshot"] }
 # rhai = "1.23.4"
 # rand = "0.8"

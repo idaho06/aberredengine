@@ -33,6 +33,7 @@ use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
+use crate::systems::phase::{phase_change_detector, phase_update_system};
 use crate::systems::render::render_system;
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
@@ -117,6 +118,8 @@ fn main() {
     world.flush();
 
     let mut update = Schedule::default();
+    update.add_systems(phase_change_detector);
+    update.add_systems(phase_update_system.after(phase_change_detector));
     update.add_systems(menu_spawn_system);
     update.add_systems(gridlayout_spawn_system);
     update.add_systems(update_input_state);
