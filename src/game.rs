@@ -745,6 +745,19 @@ pub fn update(
             if input.action_back.just_pressed {
                 next_game_state.set(GameStates::Quitting);
             }
+            let switch_scene_system = systems_store
+                .get("switch_scene")
+                .expect("switch_scene system not found")
+                .clone();
+
+            // Check if a phase callback requested a scene switch
+            //eprintln!("Checking world signals for scene switch...");
+            if world_signals.has_flag("switch_scene") {
+                eprintln!("Scene switch requested in world signals.");
+                world_signals.clear_flag("switch_scene");
+                commands.run_system(switch_scene_system);
+                return;
+            }
         }
         "level01" => {
             // Level 1 specific updates
@@ -752,28 +765,26 @@ pub fn update(
                 .get("switch_scene")
                 .expect("switch_scene system not found")
                 .clone();
+
+            // Check if a phase callback requested a scene switch
+            //eprintln!("Checking world signals for scene switch...");
+            if world_signals.has_flag("switch_scene") {
+                eprintln!("Scene switch requested in world signals.");
+                world_signals.clear_flag("switch_scene");
+                commands.run_system(switch_scene_system);
+                return;
+            }
+
             // If action_back is pressed, go back to menu
             if input.action_back.just_pressed {
                 world_signals.set_string("scene", "menu");
                 commands.run_system(switch_scene_system);
                 return;
             }
-            if let Some(0) = world_signals.get_group_count("ball") {
-                // All balls lost, substract a life
-                eprintln!("All balls lost!");
-                let lives = world_signals.get_integer("lives").unwrap_or(0);
-                if lives > 1 {
-                    world_signals.set_integer("lives", lives - 1);
-                    // restart scene without changing bricks
-                    // TODO: implement
-                } else {
-                    // Game over, go to menu
-                    eprintln!("Game over!");
-                    world_signals.set_string("scene", "menu");
-                    commands.run_system(switch_scene_system);
-                    return;
-                }
-            }
+
+            // NOTE: Ball loss and life management is now handled by the Phase system
+            // (see "playing" on_update and "lose_life" on_enter callbacks)
+
             if let Some(0) = world_signals.get_group_count("brick") {
                 eprintln!("Level cleared!");
                 // Level cleared, go to next level
@@ -941,28 +952,196 @@ pub fn switch_scene(
             });
         }
         "level01" => {
-            // test callback for phase "get_ready" of the scene
-            fn level01_get_ready_callback(
-                entity: Entity,
-                time: f32,
-                previous: Option<String>,
+            // ==================== PHASE CALLBACKS ====================
+
+            /// on_enter callback for "get_started" phase
+            /// - Plays "player_ready" music (no loop)
+            /// - Spawns the ball attached to the player with StuckTo
+            fn get_started_on_enter(
+                _entity: Entity,
+                _time: f32,
+                _previous: Option<String>,
                 ctx: &mut PhaseContext,
             ) -> Option<String> {
-                eprintln!(
-                    "level01_get_ready_callback: Entity {:?} updating 'get_ready' phase!",
-                    entity
-                );
-                // after 3 seconds, switch to "playing" phase
-                if time >= 3.0 {
-                    return Some("playing".into());
+                // Play "player_ready" music (no loop)
+                ctx.audio_cmds.write(AudioCmd::PlayMusic {
+                    id: "player_ready".into(),
+                    looped: false,
+                });
+
+                // Get player entity and position from world_signals
+                let player_entity = match ctx.world_signals.get_entity("player") {
+                    Some(e) => *e,
+                    None => return None,
+                };
+                let player_y = ctx.world_signals.get_scalar("player_y").unwrap_or(700.0);
+
+                // Get current player X position
+                let player_x = if let Ok(pos) = ctx.positions.get(player_entity) {
+                    pos.pos.x
+                } else {
+                    400.0
+                };
+
+                // Ball Y position: above the player paddle
+                let ball_y = player_y - 24.0 - 6.0;
+
+                // Spawn the ball with StuckTo component
+                let ball_entity = ctx
+                    .commands
+                    .spawn((
+                        Group::new("ball"),
+                        MapPosition::new(player_x, ball_y),
+                        ZIndex(10),
+                        Sprite {
+                            tex_key: "ball".into(),
+                            width: 12.0,
+                            height: 12.0,
+                            offset: Vector2::zero(),
+                            origin: Vector2 { x: 6.0, y: 6.0 },
+                            flip_h: false,
+                            flip_v: false,
+                        },
+                        RigidBody {
+                            velocity: Vector2 { x: 0.0, y: 0.0 }, // Start with no velocity
+                        },
+                        BoxCollider {
+                            size: Vector2 { x: 12.0, y: 12.0 },
+                            offset: Vector2::zero(),
+                            origin: Vector2 { x: 6.0, y: 6.0 },
+                        },
+                        Signals::default(),
+                        // Attach ball to player (follow X only)
+                        StuckTo::follow_x_only(player_entity)
+                            .with_offset(Vector2 { x: 0.0, y: 0.0 })
+                            .with_stored_velocity(Vector2 {
+                                x: 300.0,
+                                y: -300.0,
+                            }),
+                        // Timer to release the ball
+                        Timer::new(2.0, "remove_stuck_to"),
+                    ))
+                    .id();
+                ctx.world_signals.set_entity("ball", ball_entity);
+
+                None
+            }
+
+            /// on_update callback for "get_started" phase
+            /// - Immediately transitions to "playing"
+            fn get_started_on_update(
+                _entity: Entity,
+                _time: f32,
+                _previous: Option<String>,
+                _ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                Some("playing".into())
+            }
+
+            /// on_update callback for "playing" phase
+            /// - If no balls remain (after the first frame), transition to "lose_life"
+            fn playing_on_update(
+                _entity: Entity,
+                time: f32,
+                _previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                // Skip the first frame to allow the ball group count to update
+                if time < 0.1 {
+                    return None;
+                }
+                if let Some(0) = ctx.world_signals.get_group_count("ball") {
+                    eprintln!("No balls remain, go to lose_life.");
+                    return Some("lose_life".into());
                 }
                 None
             }
+
+            /// on_update callback for "lose_life" phase
+            /// - Subtracts one life
+            /// - If lives < 1, transition to "game_over"
+            /// - Otherwise, transition to "get_started"
+            fn lose_life_on_update(
+                _entity: Entity,
+                _time: f32,
+                _previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                eprintln!("Player lost a life!");
+                let lives = ctx.world_signals.get_integer("lives").unwrap_or(0);
+                ctx.world_signals.set_integer("lives", lives - 1);
+
+                if lives - 1 < 1 {
+                    Some("game_over".into())
+                } else {
+                    Some("get_started".into())
+                }
+            }
+
+            /// on_enter callback for "game_over" phase
+            /// - Spawns "Game Over" text centered on screen
+            fn game_over_on_enter(
+                _entity: Entity,
+                _time: f32,
+                _previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                // Spawn "Game Over" text using ScreenPosition (centered)
+                // Screen size is 672x768, so center is around (336, 384)
+                // With font size 48, offset by half the text width/height
+                eprintln!("Game Over! Spawning game over text.");
+                ctx.commands.spawn((
+                    Group::new("game_over_text"),
+                    ScreenPosition::new(200.0, 350.0), // Approximate center
+                    ZIndex(100),
+                    DynamicText::new("GAME OVER", "future", 48.0, Color::RED),
+                ));
+                None
+            }
+
+            /// on_update callback for "game_over" phase
+            /// - After 4 seconds, change scene to "menu"
+            fn game_over_on_update(
+                _entity: Entity,
+                time: f32,
+                _previous: Option<String>,
+                ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                //eprintln!("In game_over phase, time elapsed: {:.2}", time);
+                if time >= 3.0 {
+                    ctx.world_signals.set_string("scene", "menu");
+                    ctx.world_signals.set_flag("switch_scene");
+                    eprintln!("Game over time exceeded 3 seconds, switching to menu.");
+                }
+                None
+            }
+
+            // Spawn the scene phase entity with all callbacks
+            // Start in "init" phase which immediately transitions to "get_started"
+            // This ensures the on_enter callback for "get_started" runs on the first frame
+            fn init_on_update(
+                _entity: Entity,
+                _time: f32,
+                _previous: Option<String>,
+                _ctx: &mut PhaseContext,
+            ) -> Option<String> {
+                Some("get_started".into())
+            }
+
             commands.spawn((
                 Group::new("scene_phases"),
-                Phase::new("get_ready")
-                    .on_update("get_ready", level01_get_ready_callback as PhaseCallback),
+                Phase::new("init")
+                    .on_update("init", init_on_update as PhaseCallback)
+                    .on_enter("get_started", get_started_on_enter as PhaseCallback)
+                    .on_update("get_started", get_started_on_update as PhaseCallback)
+                    .on_update("playing", playing_on_update as PhaseCallback)
+                    .on_update("lose_life", lose_life_on_update as PhaseCallback)
+                    .on_enter("game_over", game_over_on_enter as PhaseCallback)
+                    .on_update("game_over", game_over_on_update as PhaseCallback),
             ));
+
+            // ==================== COLLISION CALLBACKS ====================
+
             // callback for player-wall collision
             fn player_wall_collision_callback(
                 player_entity: Entity,
@@ -1274,8 +1453,14 @@ pub fn switch_scene(
                 ),
                 Group::new("collision_rules"),
             ));
+            // ==================== WORLDSIGNALS SETUP ====================
             // reset score to 0
             worldsignals.set_integer("score", 0);
+
+            // reset lives to 3
+            worldsignals.set_integer("lives", 3);
+
+            // ==================== SCENE SETUP ====================
 
             // Load tilemap for level 1
             let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
@@ -1293,8 +1478,8 @@ pub fn switch_scene(
             // The Vaus. The player paddle
             let mut player_signals = Signals::default();
             player_signals.set_flag("sticky");
-            let y = (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0;
-            let player_pos = MapPosition::new(400.0, y);
+            let player_y = (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0;
+            let player_pos = MapPosition::new(400.0, player_y);
             let player_entity = commands
                 .spawn((
                     Group::new("player"),
@@ -1317,38 +1502,13 @@ pub fn switch_scene(
                         offset: Vector2::zero(),
                         origin: Vector2 { x: 48.0, y: 24.0 },
                     },
-                    Timer::new(4.0, "remove_sticky"),
+                    Timer::new(3.0, "remove_sticky"),
                 ))
                 .id();
             worldsignals.set_entity("player", player_entity);
-            // The Ball
-            let y = player_pos.pos().y - 24.0 - 6.0;
-            commands.spawn((
-                Group::new("ball"),
-                MapPosition::new(400.0, y),
-                ZIndex(10),
-                Sprite {
-                    tex_key: "ball".into(),
-                    width: 12.0,
-                    height: 12.0,
-                    offset: Vector2::zero(),
-                    origin: Vector2 { x: 6.0, y: 6.0 },
-                    flip_h: false,
-                    flip_v: false,
-                },
-                RigidBody {
-                    velocity: Vector2 {
-                        x: 300.0,
-                        y: -300.0,
-                    },
-                },
-                BoxCollider {
-                    size: Vector2 { x: 12.0, y: 12.0 },
-                    offset: Vector2::zero(),
-                    origin: Vector2 { x: 6.0, y: 6.0 },
-                },
-                Signals::default(),
-            ));
+            worldsignals.set_scalar("player_y", player_y);
+
+            // NOTE: Ball is now spawned by the "get_started" phase on_enter callback
 
             // Create walls as BoxColliders
             commands.spawn((
