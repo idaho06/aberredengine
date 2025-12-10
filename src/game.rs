@@ -773,57 +773,57 @@ pub fn update(
         .unwrap_or("menu".to_string());
 
     match scene.as_str() {
-        /* "menu" => {
-            // Menu specific updates
-            if input.action_back.just_pressed {
-                next_game_state.set(GameStates::Quitting);
-            }
-            let switch_scene_system = systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone();
-
-            // Check if a phase callback requested a scene switch
-            //eprintln!("Checking world signals for scene switch...");
-            if world_signals.has_flag("switch_scene") {
-                eprintln!("Scene switch requested in world signals.");
-                world_signals.clear_flag("switch_scene");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-        }
-        "level01" => {
-            // Level 1 specific updates
-            let switch_scene_system = systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone();
-
-            // Check if a phase callback requested a scene switch
-            //eprintln!("Checking world signals for scene switch...");
-            if world_signals.has_flag("switch_scene") {
-                eprintln!("Scene switch requested in world signals.");
-                world_signals.clear_flag("switch_scene");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-
-            // If action_back is pressed, go back to menu
-            if input.action_back.just_pressed {
-                world_signals.set_string("scene", "menu");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-
-            // NOTE: Ball loss, life management, and level cleared are now handled
-            // by the Phase system (see phase callbacks in switch_scene)
-        }
-        "level02" => {
-            // Level 2 specific updates
-        } */
+        "intro" => {}
         _ => {
             // Default or unknown scene updates
-        }
+        } /* "menu" => {
+              // Menu specific updates
+              if input.action_back.just_pressed {
+                  next_game_state.set(GameStates::Quitting);
+              }
+              let switch_scene_system = systems_store
+                  .get("switch_scene")
+                  .expect("switch_scene system not found")
+                  .clone();
+
+              // Check if a phase callback requested a scene switch
+              //eprintln!("Checking world signals for scene switch...");
+              if world_signals.has_flag("switch_scene") {
+                  eprintln!("Scene switch requested in world signals.");
+                  world_signals.clear_flag("switch_scene");
+                  commands.run_system(switch_scene_system);
+                  return;
+              }
+          }
+          "level01" => {
+              // Level 1 specific updates
+              let switch_scene_system = systems_store
+                  .get("switch_scene")
+                  .expect("switch_scene system not found")
+                  .clone();
+
+              // Check if a phase callback requested a scene switch
+              //eprintln!("Checking world signals for scene switch...");
+              if world_signals.has_flag("switch_scene") {
+                  eprintln!("Scene switch requested in world signals.");
+                  world_signals.clear_flag("switch_scene");
+                  commands.run_system(switch_scene_system);
+                  return;
+              }
+
+              // If action_back is pressed, go back to menu
+              if input.action_back.just_pressed {
+                  world_signals.set_string("scene", "menu");
+                  commands.run_system(switch_scene_system);
+                  return;
+              }
+
+              // NOTE: Ball loss, life management, and level cleared are now handled
+              // by the Phase system (see phase callbacks in switch_scene)
+          }
+          "level02" => {
+              // Level 2 specific updates
+          } */
     }
 }
 
