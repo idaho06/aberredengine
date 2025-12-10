@@ -51,13 +51,14 @@ fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
     let (mut rl, thread) = raylib::init()
-        .size(224 * 3, 256 * 3)
-        .title("Aberred Engine - Arkanoid")
+        .size(960, 540)
+        .title("XMas Demo 2025 - Aberred Engine")
         .vsync()
+        //.fullscreen()
         .build();
     rl.set_target_fps(120);
     // Disable ESC to exit
-    rl.set_exit_key(None);
+    //rl.set_exit_key(None);
 
     // --------------- ECS world + resources ---------------
     let mut world = World::new();

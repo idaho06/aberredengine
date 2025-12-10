@@ -51,7 +51,7 @@ pub fn render_system(
     isdebug: Option<Res<DebugMode>>,
 ) {
     let mut d = rl.begin_drawing(&th);
-    d.clear_background(Color::DARKGRAY);
+    d.clear_background(Color::BLACK);
 
     {
         // Draw in world coordinates using Camera2D.
