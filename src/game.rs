@@ -38,6 +38,7 @@ use raylib::ffi;
 use raylib::ffi::TextureFilter::{TEXTURE_FILTER_ANISOTROPIC_8X, TEXTURE_FILTER_BILINEAR};
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
+use serde_json::Map;
 //use std::collections::HashMap;
 
 // Import component/resource types from modules
@@ -207,9 +208,9 @@ pub fn setup(
 
     let camera = Camera2D {
         target: Vector2 {
-            x: 0.0,
-            y: 0.0, //x: 0.0,
-                    //y: 0.0,
+            x: rl.get_screen_width() as f32 * 0.5,
+            y: rl.get_screen_height() as f32 * 0.5, //x: 0.0,
+                                                    //y: 0.0,
         },
         offset: Vector2 {
             x: rl.get_screen_width() as f32 * 0.5,
@@ -217,7 +218,8 @@ pub fn setup(
         },
         rotation: 0.0,
         zoom: 1.0,
-    };
+    }; // This camera matches the map coordinates to screen coordinates
+    // (0,0) at top-left, (screen_width, screen_height) at bottom-right
     commands.insert_resource(Camera2DRes(camera));
 
     // Load fonts
@@ -744,6 +746,14 @@ pub fn enter_play(
         },
     ); */
 
+    let text = r"This is a test of the scrolling text system.
+It should display this text character by character, moving from right to left across the screen. ";
+
+    let one_line_text = text.replace('\n', " ");
+
+    worldsignals.set_string("scrolling_text", one_line_text); // The text to show in the scrolling text
+    worldsignals.set_integer("char_pos", 0); // The next character to spawn in the scrolling text
+    worldsignals.set_flag("spawn_char");
     // Finally, run the switch_scene system to spawn initial scene entities
     worldsignals.set_string("scene", "intro");
     commands.run_system(
@@ -764,6 +774,7 @@ pub fn update(
     systems_store: Res<SystemsStore>,
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
+    font_store: NonSend<FontStore>,
 ) {
     let _delta_sec = time.delta;
 
@@ -773,7 +784,75 @@ pub fn update(
         .unwrap_or("menu".to_string());
 
     match scene.as_str() {
-        "intro" => {}
+        "intro" => {
+            // check for flag "spawn_char" in world_signals
+            // if set, spawn next character in scrolling text
+            // update "char_pos" integer in world_signals
+            // remove "spawn_char" flag when done
+            // spawn a timer to set "spawn_char" flag again after a short delay
+            if world_signals.has_flag("spawn_char") {
+                let Some(scrolling_text) = world_signals.get_string("scrolling_text") else {
+                    world_signals.clear_flag("spawn_char");
+                    return;
+                };
+                let scrolling_text_lenght = scrolling_text.chars().count();
+                let Some(char_pos) = world_signals.get_integer("char_pos") else {
+                    world_signals.clear_flag("spawn_char");
+                    return;
+                };
+                let char_to_spawn = scrolling_text
+                    .chars()
+                    .nth(char_pos as usize % scrolling_text_lenght)
+                    .unwrap_or('\0');
+                // spwan a DynamicText entity for the character at the middle right of the screen
+                if char_to_spawn != '\0' {
+                    let char_c_string = std::ffi::CString::new(char_to_spawn.to_string())
+                        .expect("Failed to create CString from char");
+                    let font_size = 136.0;
+                    let font = font_store
+                        .get("extra_thick")
+                        .expect("Font 'extra_thick' not found");
+                    let text_width = unsafe {
+                        ffi::MeasureTextEx(
+                            **font,
+                            char_c_string.as_ptr() as *const i8,
+                            font_size,
+                            0.0,
+                        )
+                    };
+                    let collision_width = text_width.x;
+                    let collision_height = text_width.y;
+                    let mut signals = Signals::default();
+                    signals.set_flag("last");
+                    let letter_spawn_x = world_signals
+                        .get_scalar("letter_spawn_x")
+                        .unwrap_or(960.0 + 201.0);
+                    commands.spawn((
+                        Group::new("letters_scroller"),
+                        MapPosition::new(letter_spawn_x, 225.0),
+                        ZIndex(20),
+                        DynamicText::new(
+                            &char_to_spawn.to_string(),
+                            "extra_thick",
+                            font_size,
+                            Color::WHITE,
+                        ),
+                        BoxCollider::new(collision_width, collision_height),
+                        RigidBody {
+                            velocity: Vector2 { x: -400.0, y: 0.0 },
+                        },
+                        signals,
+                    ));
+                    // update char_pos
+                    world_signals.set_integer("char_pos", char_pos + 1);
+                    // spawn timer to set "spawn_char" flag again after 0.1 seconds
+                    // commands.spawn((Timer::new(0.1, "next_spawn_char"),));
+                }
+                // clear the flag
+                world_signals.clear_flag("spawn_char");
+                // done spawning all characters
+            }
+        }
         _ => {
             // Default or unknown scene updates
         } /* "menu" => {
@@ -872,10 +951,90 @@ pub fn switch_scene(
 
     match scene.as_str() {
         "intro" => {
+            // box colliders to control spawning of scrolling text characters
+            // one on the left side of the screen to despawn characters
+            // one on the right side of the screen to spawn next characters
+            let screen_width = rl.get_screen_width() as f32;
+            let screen_height = rl.get_screen_height() as f32;
+            commands.spawn((
+                Group::new("walls_scroller"),
+                MapPosition::new(-200.0, 0.0),
+                ZIndex(5),
+                BoxCollider::new(200.0, screen_height),
+            ));
+            commands.spawn((
+                Group::new("walls_scroller"),
+                MapPosition::new(screen_width, 0.0),
+                ZIndex(5),
+                BoxCollider::new(200.0, screen_height),
+            ));
+            worldsignals.set_scalar("letter_spawn_x", screen_width + 201.0);
             audio_cmd_writer.write(AudioCmd::PlayMusic {
                 id: "xmas_song".into(),
                 looped: true,
             });
+
+            // collision rules for scrolling text
+            fn letter_wall_collision_callback(
+                letter: Entity,
+                wall: Entity,
+                ctx: &mut CollisionContext,
+            ) {
+                //eprintln!("letter_wall_collision_callback: Letter collided with wall!");
+                // depending of the possition of the letter, either despawn it or set the flag to spawn the next one
+                let letter_pos = ctx
+                    .positions
+                    .get(letter)
+                    .cloned()
+                    .unwrap_or(MapPosition::new(0.0, 0.0));
+                let letter_rectangle = ctx
+                    .box_colliders
+                    .get(letter)
+                    .unwrap()
+                    .as_rectangle(letter_pos.pos);
+                // get position and rectangle of the wall
+                let wall_pos = ctx
+                    .positions
+                    .get(wall)
+                    .cloned()
+                    .unwrap_or(MapPosition::new(0.0, 0.0));
+                let wall_rectangle = ctx
+                    .box_colliders
+                    .get(wall)
+                    .unwrap()
+                    .as_rectangle(wall_pos.pos);
+                // check if letter is fully inside the wall rectangle
+                let Some((colliding_sides_letter, _colliding_sides_wall)) =
+                    get_colliding_sides(&letter_rectangle, &wall_rectangle)
+                else {
+                    return;
+                };
+                if colliding_sides_letter.len() != 4 {
+                    return;
+                }
+
+                if letter_pos.pos.x < 100.0 {
+                    // despawn the letter
+                    ctx.commands.entity(letter).despawn();
+                } else if letter_pos.pos.x > 760.0 {
+                    // check if the letter has the "last" flag in Signals component
+                    let mut letter_signals = ctx.signals.get_mut(letter).unwrap();
+                    if letter_signals.has_flag("last") {
+                        // set the flag to spawn the next character
+                        ctx.world_signals.set_flag("spawn_char");
+                        // remove the "last" flag from the letter's Signals component
+                        letter_signals.clear_flag("last");
+                    }
+                }
+            }
+            commands.spawn((
+                CollisionRule::new(
+                    "letters_scroller",
+                    "walls_scroller",
+                    letter_wall_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
         }
         _ => {
             eprintln!("Unknown scene: {}", scene);
