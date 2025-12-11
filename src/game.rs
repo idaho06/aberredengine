@@ -1022,6 +1022,10 @@ pub fn switch_scene(
                     if letter_signals.has_flag("last") {
                         // set the flag to spawn the next character
                         ctx.world_signals.set_flag("spawn_char");
+                        // adjust letter_spawn_x to letter's current position + letter width
+                        let letter_width = letter_rectangle.width;
+                        ctx.world_signals
+                            .set_scalar("letter_spawn_x", letter_pos.pos.x + letter_width + 1.0);
                         // remove the "last" flag from the letter's Signals component
                         letter_signals.clear_flag("last");
                     }
