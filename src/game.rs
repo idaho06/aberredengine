@@ -77,6 +77,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -452,7 +453,19 @@ pub fn enter_play(
     mut worldsignals: ResMut<WorldSignals>,
     mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
+    // Call Lua on_enter_play function if it exists
+    if lua_runtime.has_function("on_enter_play") {
+        match lua_runtime.call_function::<_, String>("on_enter_play", ()) {
+            Ok(result) => {
+                eprintln!("[Rust] Lua on_enter_play returned: {}", result);
+            }
+            Err(e) => {
+                eprintln!("[Rust] Error calling on_enter_play: {}", e);
+            }
+        }
+    }
     // Get Texture sizes
     /* let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
     let dummy_tex_width = dummy_tex.width;

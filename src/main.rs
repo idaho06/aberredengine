@@ -13,6 +13,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -77,6 +78,14 @@ fn main() {
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_non_send_resource(FontStore::new());
+
+    // Initialize Lua runtime and load main script
+    let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
+    if let Err(e) = lua_runtime.run_script("./assets/scripts/main.lua") {
+        eprintln!("Failed to load main.lua: {}", e);
+    }
+    world.insert_non_send_resource(lua_runtime);
+
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
     world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
