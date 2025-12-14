@@ -217,7 +217,7 @@ pub fn setup(
             y: rl.get_screen_height() as f32 * 0.5,
         },
         rotation: 0.0,
-        zoom: 0.5,
+        zoom: 1.0,
     }; // This camera matches the map coordinates to screen coordinates
     // (0,0) at top-left, (screen_width, screen_height) at bottom-right
     commands.insert_resource(Camera2DRes(camera));
@@ -768,7 +768,7 @@ It should display this text character by character, moving from right to left ac
     );
 }
 
-/// on_update callback for "bouncing" phase
+/// on_update callback for "bouncing" phase of the letters
 fn bouncing_on_update(
     entity: Entity,
     time: f32,
@@ -781,7 +781,7 @@ fn bouncing_on_update(
     } */
     // change y position of the entity based on a sine wave function over time
     let amplitude = 20.0;
-    let frequency = 2.0; // oscillations per second
+    let frequency = 1.0; // oscillations per second
     let new_y = 425.0 + amplitude * (frequency * time * std::f32::consts::TAU).sin();
     let mut pos = ctx
         .positions
