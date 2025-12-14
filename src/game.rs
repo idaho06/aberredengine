@@ -33,7 +33,7 @@ use std::ffi::CString;
 use std::panic;
 
 use bevy_ecs::event::Trigger;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, world};
 use raylib::ffi;
 use raylib::ffi::TextureFilter::{TEXTURE_FILTER_ANISOTROPIC_8X, TEXTURE_FILTER_BILINEAR};
 use raylib::prelude::*;
@@ -62,7 +62,7 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signalbinding::SignalBinding;
-use crate::components::signals::Signals;
+use crate::components::signals::{self, Signals};
 use crate::components::sprite;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
@@ -217,7 +217,7 @@ pub fn setup(
             y: rl.get_screen_height() as f32 * 0.5,
         },
         rotation: 0.0,
-        zoom: 1.0,
+        zoom: 0.5,
     }; // This camera matches the map coordinates to screen coordinates
     // (0,0) at top-left, (screen_width, screen_height) at bottom-right
     commands.insert_resource(Camera2DRes(camera));
@@ -227,6 +227,9 @@ pub fn setup(
     fonts.add("extra_thick", font);
 
     // Load textures
+    let snowflake_tex = rl
+        .load_texture(&th, "./assets/textures/snowflake01.png")
+        .expect("load assets/textures/snowflake01.png");
     /* let title_tex = rl
         .load_texture(&th, "./assets/textures/title.png")
         .expect("load assets/title.png");
@@ -314,6 +317,7 @@ pub fn setup(
     tex_store.insert("enemy", enemy_tex);
     tex_store.insert("tilemap", tilemap_tex);
     tex_store.insert("billboard", billboard_tex); */
+    tex_store.insert("snowflake", snowflake_tex);
     commands.insert_resource(tex_store);
 
     // Animations
@@ -764,6 +768,151 @@ It should display this text character by character, moving from right to left ac
     );
 }
 
+/// on_update callback for "bouncing" phase
+fn bouncing_on_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    /* // Skip the first frame to allow the letters group count to update
+    if time < 0.1 {
+        return None;
+    } */
+    // change y position of the entity based on a sine wave function over time
+    let amplitude = 20.0;
+    let frequency = 2.0; // oscillations per second
+    let new_y = 425.0 + amplitude * (frequency * time * std::f32::consts::TAU).sin();
+    let mut pos = ctx
+        .positions
+        .get_mut(entity)
+        .expect("Map position not found!");
+    pos.pos.y = new_y;
+    None
+}
+
+// snow emitter
+fn snow_emitter_on_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    let mut signals = ctx.signals.get_mut(entity).unwrap();
+    let last_time = signals.get_scalar("time_last_emission").unwrap_or(0.0);
+    let emit_interval = signals.get_scalar("emission_interval").unwrap_or(0.1);
+    let num_snowflakes = signals.get_integer("particles_per_emission").unwrap_or(100);
+    let current_time = ctx.world_time.elapsed;
+    if current_time - last_time >= emit_interval {
+        // get size of the collider from the entity
+        let collider = ctx.box_colliders.get(entity).unwrap();
+        let position = ctx.positions.get(entity).unwrap();
+        let collider_rectangle = collider.as_rectangle(position.pos);
+        // emit snowflakes
+        for _ in 0..num_snowflakes {
+            // spawn snowflake entity from inside the collider rectangle
+            let spawn_x = rand::random::<f32>() * collider_rectangle.width + collider_rectangle.x;
+            let spawn_y = rand::random::<f32>() * collider_rectangle.height + collider_rectangle.y;
+
+            let size = 4.0 + rand::random::<f32>() * 32.0;
+            // sprite is 256x256, calculate Scale to match size
+            let scale = size / 256.0;
+            let fall_speed = 50.0 + rand::random::<f32>() * 100.0;
+            ctx.commands.spawn((
+                Group::new("snowflake"),
+                MapPosition::new(spawn_x, spawn_y),
+                ZIndex(15),
+                Sprite {
+                    tex_key: "snowflake".into(),
+                    width: 256.0,
+                    height: 256.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale::new(scale, scale),
+                RigidBody {
+                    velocity: Vector2 {
+                        x: 0.0,
+                        y: fall_speed,
+                    },
+                },
+                BoxCollider::new(size, size),
+            ));
+        }
+        // update last emission time
+        signals.set_scalar("time_last_emission", current_time);
+    }
+
+    None
+}
+
+// Collision rule for despawning snowflakes when they collide with the bottom wall
+fn snowflake_snow_destroyer_collision_callback(
+    snowflake: Entity,
+    wall: Entity,
+    ctx: &mut CollisionContext,
+) {
+    //eprintln!("snowflake_snow_destroyer_collision_callback: Snowflake collided with snow destroyer!");
+    // despawn the snowflake
+    ctx.commands.entity(snowflake).despawn();
+}
+
+// collision rules for scrolling text
+fn letter_wall_collision_callback(letter: Entity, wall: Entity, ctx: &mut CollisionContext) {
+    //eprintln!("letter_wall_collision_callback: Letter collided with wall!");
+    // depending of the possition of the letter, either despawn it or set the flag to spawn the next one
+    let letter_pos = ctx
+        .positions
+        .get(letter)
+        .cloned()
+        .unwrap_or(MapPosition::new(0.0, 0.0));
+    let letter_rectangle = ctx
+        .box_colliders
+        .get(letter)
+        .unwrap()
+        .as_rectangle(letter_pos.pos);
+    // get position and rectangle of the wall
+    let wall_pos = ctx
+        .positions
+        .get(wall)
+        .cloned()
+        .unwrap_or(MapPosition::new(0.0, 0.0));
+    let wall_rectangle = ctx
+        .box_colliders
+        .get(wall)
+        .unwrap()
+        .as_rectangle(wall_pos.pos);
+    // check if letter is fully inside the wall rectangle
+    let Some((colliding_sides_letter, _colliding_sides_wall)) =
+        get_colliding_sides(&letter_rectangle, &wall_rectangle)
+    else {
+        return;
+    };
+    if colliding_sides_letter.len() != 4 {
+        return;
+    }
+
+    if letter_pos.pos.x < 100.0 {
+        // despawn the letter
+        ctx.commands.entity(letter).despawn();
+    } else if letter_pos.pos.x > 760.0 {
+        // check if the letter has the "last" flag in Signals component
+        let mut letter_signals = ctx.signals.get_mut(letter).unwrap();
+        if letter_signals.has_flag("last") {
+            // set the flag to spawn the next character
+            ctx.world_signals.set_flag("spawn_char");
+            // adjust letter_spawn_x to letter's current position + letter width
+            let letter_width = letter_rectangle.width;
+            ctx.world_signals
+                .set_scalar("letter_spawn_x", letter_pos.pos.x + letter_width + 1.0);
+            // remove the "last" flag from the letter's Signals component
+            letter_signals.clear_flag("last");
+        }
+    }
+}
+
 pub fn update(
     time: Res<WorldTime>,
     // mut _query_rb: Query<(&mut MapPosition, &mut RigidBody, &BoxCollider), With<Group>>,
@@ -776,7 +925,7 @@ pub fn update(
     mut next_game_state: ResMut<NextGameState>,
     font_store: NonSend<FontStore>,
 ) {
-    let _delta_sec = time.delta;
+    let delta_sec = time.delta;
 
     let scene = world_signals
         .get_string("scene")
@@ -829,7 +978,7 @@ pub fn update(
                         .unwrap_or(960.0 + 201.0);
                     commands.spawn((
                         Group::new("letters_scroller"),
-                        MapPosition::new(letter_spawn_x, 225.0),
+                        MapPosition::new(letter_spawn_x, 425.0),
                         ZIndex(20),
                         DynamicText::new(
                             &char_to_spawn.to_string(),
@@ -842,6 +991,7 @@ pub fn update(
                             velocity: Vector2 { x: -400.0, y: 0.0 },
                         },
                         signals,
+                        Phase::new("bouncing").on_update("bouncing", bouncing_on_update),
                     ));
                     // update char_pos
                     world_signals.set_integer("char_pos", char_pos + 1);
@@ -924,6 +1074,7 @@ pub fn switch_scene(
     mut tracked_groups: ResMut<TrackedGroups>,
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
+    world_time: Res<WorldTime>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
@@ -958,79 +1109,47 @@ pub fn switch_scene(
             let screen_height = rl.get_screen_height() as f32;
             commands.spawn((
                 Group::new("walls_scroller"),
-                MapPosition::new(-200.0, 0.0),
+                MapPosition::new(-200.0, -200.0),
                 ZIndex(5),
-                BoxCollider::new(200.0, screen_height),
+                BoxCollider::new(200.0, screen_height + 400.0),
             ));
             commands.spawn((
                 Group::new("walls_scroller"),
-                MapPosition::new(screen_width, 0.0),
+                MapPosition::new(screen_width, -200.0),
                 ZIndex(5),
-                BoxCollider::new(200.0, screen_height),
+                BoxCollider::new(200.0, screen_height + 400.0),
             ));
+            let mut signals = Signals::default();
+            signals.set_scalar("time_last_emission", world_time.elapsed);
+            signals.set_scalar("emission_interval", 0.5);
+            signals.set_integer("particles_per_emission", 4);
+            commands.spawn((
+                Group::new("snow_emitter"),
+                MapPosition::new(0.0, -100.0),
+                BoxCollider::new(screen_width, 100.0),
+                signals,
+                Phase::new("snow_emission").on_update("snow_emission", snow_emitter_on_update),
+            ));
+            commands.spawn((
+                Group::new("wall_snow_destroyer"),
+                MapPosition::new(-200.0, screen_height + 100.0),
+                BoxCollider::new(screen_width + 400.0, 200.0),
+            ));
+            commands.spawn((
+                CollisionRule::new(
+                    "snowflake",
+                    "wall_snow_destroyer",
+                    snowflake_snow_destroyer_collision_callback as CollisionCallback,
+                ),
+                Group::new("collision_rules"),
+            ));
+
             worldsignals.set_scalar("letter_spawn_x", screen_width + 201.0);
             audio_cmd_writer.write(AudioCmd::PlayMusic {
                 id: "xmas_song".into(),
                 looped: true,
             });
 
-            // collision rules for scrolling text
-            fn letter_wall_collision_callback(
-                letter: Entity,
-                wall: Entity,
-                ctx: &mut CollisionContext,
-            ) {
-                //eprintln!("letter_wall_collision_callback: Letter collided with wall!");
-                // depending of the possition of the letter, either despawn it or set the flag to spawn the next one
-                let letter_pos = ctx
-                    .positions
-                    .get(letter)
-                    .cloned()
-                    .unwrap_or(MapPosition::new(0.0, 0.0));
-                let letter_rectangle = ctx
-                    .box_colliders
-                    .get(letter)
-                    .unwrap()
-                    .as_rectangle(letter_pos.pos);
-                // get position and rectangle of the wall
-                let wall_pos = ctx
-                    .positions
-                    .get(wall)
-                    .cloned()
-                    .unwrap_or(MapPosition::new(0.0, 0.0));
-                let wall_rectangle = ctx
-                    .box_colliders
-                    .get(wall)
-                    .unwrap()
-                    .as_rectangle(wall_pos.pos);
-                // check if letter is fully inside the wall rectangle
-                let Some((colliding_sides_letter, _colliding_sides_wall)) =
-                    get_colliding_sides(&letter_rectangle, &wall_rectangle)
-                else {
-                    return;
-                };
-                if colliding_sides_letter.len() != 4 {
-                    return;
-                }
-
-                if letter_pos.pos.x < 100.0 {
-                    // despawn the letter
-                    ctx.commands.entity(letter).despawn();
-                } else if letter_pos.pos.x > 760.0 {
-                    // check if the letter has the "last" flag in Signals component
-                    let mut letter_signals = ctx.signals.get_mut(letter).unwrap();
-                    if letter_signals.has_flag("last") {
-                        // set the flag to spawn the next character
-                        ctx.world_signals.set_flag("spawn_char");
-                        // adjust letter_spawn_x to letter's current position + letter width
-                        let letter_width = letter_rectangle.width;
-                        ctx.world_signals
-                            .set_scalar("letter_spawn_x", letter_pos.pos.x + letter_width + 1.0);
-                        // remove the "last" flag from the letter's Signals component
-                        letter_signals.clear_flag("last");
-                    }
-                }
-            }
             commands.spawn((
                 CollisionRule::new(
                     "letters_scroller",
