@@ -818,6 +818,20 @@ fn snow_emitter_on_update(
             // sprite is 256x256, calculate Scale to match size
             let scale = size / 256.0;
             let fall_speed = 50.0 + rand::random::<f32>() * 100.0;
+
+            // Create signals for jiggle parameters
+            let mut snowflake_signals = Signals::default();
+            // Random jiggle frequency (oscillations per second)
+            let jiggle_frequency = 0.05 + rand::random::<f32>() * 0.8;
+            // Random jiggle amplitude (pixels)
+            let jiggle_amplitude = 10.0 + rand::random::<f32>() * 30.0;
+            // Random phase offset so snowflakes don't all jiggle in sync
+            let jiggle_phase_offset = rand::random::<f32>() * std::f32::consts::TAU;
+            snowflake_signals.set_scalar("jiggle_frequency", jiggle_frequency);
+            snowflake_signals.set_scalar("jiggle_amplitude", jiggle_amplitude);
+            snowflake_signals.set_scalar("jiggle_phase_offset", jiggle_phase_offset);
+            snowflake_signals.set_scalar("base_x", spawn_x);
+
             ctx.commands.spawn((
                 Group::new("snowflake"),
                 MapPosition::new(spawn_x, spawn_y),
@@ -839,10 +853,41 @@ fn snow_emitter_on_update(
                     },
                 },
                 BoxCollider::new(size, size),
+                snowflake_signals,
+                Phase::new("falling").on_update("falling", snowflake_falling_on_update),
             ));
         }
         // update last emission time
         signals.set_scalar("time_last_emission", current_time);
+    }
+
+    None
+}
+
+// Phase callback for snowflakes falling - adds horizontal jiggle effect
+fn snowflake_falling_on_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    // Get the snowflake's signals for jiggle parameters
+    let Ok(signals) = ctx.signals.get(entity) else {
+        return None;
+    };
+
+    let jiggle_frequency = signals.get_scalar("jiggle_frequency").unwrap_or(2.0);
+    let jiggle_amplitude = signals.get_scalar("jiggle_amplitude").unwrap_or(20.0);
+    let jiggle_phase_offset = signals.get_scalar("jiggle_phase_offset").unwrap_or(0.0);
+    let base_x = signals.get_scalar("base_x").unwrap_or(0.0);
+
+    // Calculate horizontal offset using sine wave
+    let jiggle_offset = jiggle_amplitude
+        * (jiggle_frequency * time * std::f32::consts::TAU + jiggle_phase_offset).sin();
+
+    // Update the x position with jiggle
+    if let Ok(mut pos) = ctx.positions.get_mut(entity) {
+        pos.pos.x = base_x + jiggle_offset;
     }
 
     None
