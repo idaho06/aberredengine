@@ -1,10 +1,13 @@
 -- main.lua
 -- Entry point for game scripts
--- This file is loaded when the game enters the Playing state
+-- This file is loaded when the engine starts
 
 engine.log("===========================================")
 engine.log("  Aberred Engine - Lua Scripting Active!")
 engine.log("===========================================")
+
+-- Load modules
+local setup = require("setup")
 
 -- Game configuration table
 game = {
@@ -12,6 +15,13 @@ game = {
     version = "0.1.0",
     author = "Idaho",
 }
+
+--- Called during Setup state to load all assets.
+--- This is called before entering the Playing state.
+function on_setup()
+    engine.log_info("on_setup() called from Lua!")
+    setup.load_assets()
+end
 
 --- Called when the game enters the Playing state.
 --- Use this to initialize game-specific Lua state.

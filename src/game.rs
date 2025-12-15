@@ -203,8 +203,10 @@ pub fn setup(
     th: NonSend<raylib::RaylibThread>,
     mut fonts: NonSendMut<FontStore>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
     // This function sets up the game world, loading resources
+    use crate::resources::lua_runtime::AssetCmd;
 
     let camera = Camera2D {
         target: Vector2 {
@@ -221,211 +223,64 @@ pub fn setup(
     };
     commands.insert_resource(Camera2DRes(camera));
 
-    // Load fonts
-    let font = load_font_with_mipmaps(&mut rl, &th, "./assets/fonts/Arcade_Cabinet.ttf", 128);
-    fonts.add("arcade", font);
+    // Call Lua on_setup function to queue asset loading commands
+    if lua_runtime.has_function("on_setup") {
+        if let Err(e) = lua_runtime.call_function::<_, ()>("on_setup", ()) {
+            eprintln!("[Rust] Error calling on_setup: {}", e);
+        }
+    }
 
-    let font = load_font_with_mipmaps(&mut rl, &th, "./assets/fonts/Formal_Future.ttf", 128);
-    fonts.add("future", font);
+    // Initialize stores
+    let mut tex_store = TextureStore::new();
+    let tilemaps_store = TilemapStore::new();
 
-    // Load textures
-    let title_tex = rl
-        .load_texture(&th, "./assets/textures/title.png")
-        .expect("load assets/title.png");
+    // Process asset commands queued by Lua
+    for cmd in lua_runtime.drain_asset_commands() {
+        match cmd {
+            AssetCmd::LoadTexture { id, path } => match rl.load_texture(&th, &path) {
+                Ok(tex) => {
+                    eprintln!("[Rust] Loaded texture '{}' from '{}'", id, path);
+                    tex_store.insert(&id, tex);
+                }
+                Err(e) => {
+                    eprintln!("[Rust] Failed to load texture '{}': {}", path, e);
+                }
+            },
+            AssetCmd::LoadFont { id, path, size } => {
+                let font = load_font_with_mipmaps(&mut rl, &th, &path, size);
+                eprintln!("[Rust] Loaded font '{}' from '{}'", id, path);
+                fonts.add(&id, font);
+            }
+            AssetCmd::LoadMusic { id, path } => {
+                eprintln!("[Rust] Queuing music '{}' from '{}'", id, path);
+                audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
+            }
+            AssetCmd::LoadSound { id, path } => {
+                eprintln!("[Rust] Queuing sound '{}' from '{}'", id, path);
+                audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
+            }
+            AssetCmd::LoadTilemap { id, path } => {
+                eprintln!(
+                    "[Rust] Tilemap loading '{}' from '{}' not yet implemented",
+                    id, path
+                );
+                // TODO: Implement tilemap loading
+            }
+        }
+    }
 
-    let background_tex = rl
-        .load_texture(&th, "./assets/textures/background01.png")
-        .expect("load assets/background01.png");
-
-    let cursor_tex = rl
-        .load_texture(&th, "./assets/textures/cursor.png")
-        .expect("load assets/cursor.png");
-    let vaus_tex = rl
-        .load_texture(&th, "./assets/textures/vaus.png")
-        .expect("load assets/vaus.png");
-    let ball_tex = rl
-        .load_texture(&th, "./assets/textures/ball_12.png")
-        .expect("load assets/ball_12.png");
-    let brick_red_tex = rl
-        .load_texture(&th, "./assets/textures/brick_red.png")
-        .expect("load assets/brick_red.png");
-    let brick_green_tex = rl
-        .load_texture(&th, "./assets/textures/brick_green.png")
-        .expect("load assets/brick_green.png");
-    let brick_blue_tex = rl
-        .load_texture(&th, "./assets/textures/brick_blue.png")
-        .expect("load assets/brick_blue.png");
-    let brick_yellow_tex = rl
-        .load_texture(&th, "./assets/textures/brick_yellow.png")
-        .expect("load assets/brick_yellow.png");
-    let brick_purple_tex = rl
-        .load_texture(&th, "./assets/textures/brick_purple.png")
-        .expect("load assets/brick_purple.png");
-    let brick_silver_tex = rl
-        .load_texture(&th, "./assets/textures/brick_silver.png")
-        .expect("load assets/brick_silver.png");
-
-    /* let dummy_tex = rl
-        .load_texture(&th, "./assets/textures/player.png")
-        .expect("load assets/player.png");
-
-    let enemy_tex = rl
-        .load_texture(&th, "./assets/textures/enemy.png")
-        .expect("load assets/enemy.png");
-
-    let player_sheet_tex = rl
-        .load_texture(&th, "./assets/textures/WarriorMan-Sheet.png")
-        .expect("load assets/WarriorMan-Sheet.png"); */
-
-    // Load tilemap textures and data
-    //let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/maptest04");
-    let mut tilemaps_store = TilemapStore::new();
-    //tilemaps_store.insert("tilemap", tilemap);
+    commands.insert_resource(tex_store);
     commands.insert_resource(tilemaps_store);
 
-    // Create textures from texts, fonts, and sizes for static texts
-    /* let arcade_font = fonts
-        .get("arcade")
-        .expect("Font 'arcade' not found in FontStore");
-    let billboard_tex = load_texture_from_text(
-        &mut rl,
-        &th,
-        arcade_font,
-        "Static Billboard!",
-        32.0,
-        1.0,
-        Color::RED,
-    )
-    .expect("Failed to create texture from text"); */
-
-    // Insert TextureStore resource
-    let mut tex_store = TextureStore::new();
-    tex_store.insert("title", title_tex);
-    tex_store.insert("background", background_tex);
-    tex_store.insert("cursor", cursor_tex);
-    tex_store.insert("vaus", vaus_tex);
-    tex_store.insert("ball", ball_tex);
-    tex_store.insert("brick_red", brick_red_tex);
-    tex_store.insert("brick_green", brick_green_tex);
-    tex_store.insert("brick_blue", brick_blue_tex);
-    tex_store.insert("brick_yellow", brick_yellow_tex);
-    tex_store.insert("brick_purple", brick_purple_tex);
-    tex_store.insert("brick_silver", brick_silver_tex);
-    /* tex_store.insert("player-sheet", player_sheet_tex);
-    tex_store.insert("dummy", dummy_tex);
-    tex_store.insert("enemy", enemy_tex);
-    tex_store.insert("tilemap", tilemap_tex);
-    tex_store.insert("billboard", billboard_tex); */
-    commands.insert_resource(tex_store);
-
-    // Animations
-    let mut anim_store = AnimationStore {
+    // Animations (empty for now, will be moved to Lua later)
+    let anim_store = AnimationStore {
         animations: FxHashMap::default(),
     };
-    /* anim_store.animations.insert(
-        "player_tired".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 16.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_stand".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 80.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_walk".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 144.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_run".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 208.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_jump".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 272.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8 + 3,
-            fps: 12.0, // speed of the animation
-            looped: true,
-        },
-    ); */
     commands.insert_resource(anim_store);
-
-    // Send messages to load musics and sound effects via ECS Messages<AudioCmd>
-    /* audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "music1".into(),
-        path: "./assets/audio/chiptun1.mod".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "music2".into(),
-        path: "./assets/audio/mini1111.xm".into(),
-    }); */
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "boss_fight".into(),
-        path: "./assets/audio/boss_fight.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "journey_begins".into(),
-        path: "./assets/audio/journey_begins.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "player_ready".into(),
-        path: "./assets/audio/player_ready.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "success".into(),
-        path: "./assets/audio/success.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "menu".into(),
-        path: "./assets/audio/woffy_-_arkanoid_cover.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "ding".into(),
-        path: "./assets/audio/ding.wav".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "ping".into(),
-        path: "./assets/audio/ping.wav".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "option".into(),
-        path: "./assets/audio/option.wav".into(),
-    });
-
-    // Don't block; the audio thread will emit load messages which are polled by systems.
 
     // Change GameState to Playing
     next_state.set(GameStates::Playing);
-    eprintln!("Game setup_with_commands() done, next state set to Playing");
+    eprintln!("Game setup() done, next state set to Playing");
 }
 
 pub fn quit_game(
