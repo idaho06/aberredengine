@@ -35,6 +35,8 @@ pub mod dynamictext;
 pub mod gridlayout;
 pub mod group;
 pub mod inputcontrolled;
+pub mod luacollision;
+pub mod luaphase;
 pub mod mapposition;
 pub mod menu;
 pub mod persistent;

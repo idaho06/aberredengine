@@ -30,6 +30,7 @@ use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::luaphase::lua_phase_system;
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
@@ -129,6 +130,7 @@ fn main() {
     let mut update = Schedule::default();
     update.add_systems(phase_change_detector);
     update.add_systems(phase_update_system.after(phase_change_detector));
+    update.add_systems(lua_phase_system.after(phase_update_system));
     update.add_systems(menu_spawn_system);
     update.add_systems(gridlayout_spawn_system);
     update.add_systems(update_input_state);

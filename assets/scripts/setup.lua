@@ -38,6 +38,9 @@ function M.load_assets()
     engine.load_sound("ping", "./assets/audio/ping.wav")
     engine.load_sound("option", "./assets/audio/option.wav")
 
+    -- Tilemaps (loads both texture atlas and JSON metadata)
+    engine.load_tilemap("level01", "./assets/tilemaps/level01")
+
     engine.log_info("Assets queued for loading!")
 end
 

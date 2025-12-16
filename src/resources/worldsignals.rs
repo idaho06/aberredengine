@@ -152,4 +152,36 @@ impl WorldSignals {
     pub fn remove_entity(&mut self, key: &str) -> Option<Entity> {
         self.entities.remove(key)
     }
+
+    /// Read-only view of all scalar signals (for caching).
+    pub fn scalars(&self) -> &FxHashMap<String, f32> {
+        &self.scalars
+    }
+
+    /// Read-only view of all integer signals (for caching).
+    pub fn integers(&self) -> &FxHashMap<String, i32> {
+        &self.integers
+    }
+
+    /// Read-only view of all string signals (for caching).
+    pub fn strings(&self) -> &FxHashMap<String, String> {
+        &self.strings
+    }
+
+    /// Read-only view of all flags (for caching).
+    pub fn flags(&self) -> &FxHashSet<String> {
+        &self.flags
+    }
+
+    /// Get a map of group counts (for caching).
+    /// Returns a map from group name to count.
+    pub fn group_counts(&self) -> FxHashMap<String, u32> {
+        self.integers
+            .iter()
+            .filter_map(|(k, v)| {
+                k.strip_prefix("group_count:")
+                    .map(|group| (group.to_string(), *v as u32))
+            })
+            .collect()
+    }
 }

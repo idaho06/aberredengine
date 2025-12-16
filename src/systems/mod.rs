@@ -30,6 +30,7 @@ pub mod gridlayout;
 pub mod group;
 pub mod input;
 pub mod inputsimplecontroller;
+pub mod luaphase;
 pub mod menu;
 pub mod mousecontroller;
 pub mod movement;

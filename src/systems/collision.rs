@@ -33,13 +33,17 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{CollisionContext, CollisionRule};
+use crate::components::collision::{CollisionContext, CollisionRule, get_colliding_sides};
 use crate::components::group::Group;
+use crate::components::luacollision::LuaCollisionRule;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
+use crate::components::stuckto::StuckTo;
+use crate::components::timer::Timer;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
+use crate::resources::lua_runtime::{AudioLuaCmd, CollisionEntityCmd, LuaRuntime, SignalCmd};
 use crate::resources::worldsignals::WorldSignals;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
@@ -93,12 +97,14 @@ pub struct CollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
     pub rules: Query<'w, 's, &'static CollisionRule>,
+    pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub signals: Query<'w, 's, &'static mut Signals>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
+    pub lua_runtime: NonSend<'w, LuaRuntime>,
 }
 
 pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObserverParams) {
@@ -117,6 +123,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
         return;
     };
 
+    // First, check Rust-based collision rules
     for rule in params.rules.iter() {
         if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
             //eprintln!(
@@ -135,7 +142,356 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 audio_cmds: &mut params.audio_cmds,
             };
             callback(ent_a, ent_b, &mut ctx);
-            break;
+            return;
+        }
+    }
+
+    // Then, check Lua-based collision rules
+    for lua_rule in params.lua_rules.iter() {
+        if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
+            // Gather entity data for Lua callback
+            let pos_a = params.positions.get(ent_a).ok().map(|p| (p.pos.x, p.pos.y));
+            let pos_b = params.positions.get(ent_b).ok().map(|p| (p.pos.x, p.pos.y));
+            let vel_a = params
+                .rigid_bodies
+                .get(ent_a)
+                .ok()
+                .map(|rb| (rb.velocity.x, rb.velocity.y));
+            let vel_b = params
+                .rigid_bodies
+                .get(ent_b)
+                .ok()
+                .map(|rb| (rb.velocity.x, rb.velocity.y));
+
+            // Get collider rects for side detection
+            let rect_a = params
+                .box_colliders
+                .get(ent_a)
+                .ok()
+                .and_then(|c| pos_a.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py })));
+            let rect_b = params
+                .box_colliders
+                .get(ent_b)
+                .ok()
+                .and_then(|c| pos_b.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py })));
+
+            // Get colliding sides
+            let (sides_a, sides_b) = match (rect_a, rect_b) {
+                (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_else(|| (Vec::new(), Vec::new())),
+                _ => (Vec::new(), Vec::new()),
+            };
+
+            // Get entity signals (integers and flags)
+            let signals_a = params.signals.get(ent_a).ok();
+            let signals_b = params.signals.get(ent_b).ok();
+
+            // Get group names
+            let group_a = params.groups.get(ent_a).ok().map(|g| g.name().to_string());
+            let group_b = params.groups.get(ent_b).ok().map(|g| g.name().to_string());
+
+            // Build ctx table in Lua
+            if let Err(e) = call_lua_collision_callback(
+                &params.lua_runtime,
+                callback_name,
+                ent_a.to_bits(),
+                ent_b.to_bits(),
+                pos_a,
+                pos_b,
+                vel_a,
+                vel_b,
+                rect_a.map(|r| (r.x, r.y, r.width, r.height)),
+                rect_b.map(|r| (r.x, r.y, r.width, r.height)),
+                &sides_a,
+                &sides_b,
+                signals_a.as_deref(),
+                signals_b.as_deref(),
+                group_a.as_deref(),
+                group_b.as_deref(),
+            ) {
+                eprintln!(
+                    "[Lua Collision] Error calling callback '{}': {}",
+                    callback_name, e
+                );
+                return;
+            }
+
+            // Process collision commands after Lua callback returns
+            process_collision_entity_commands(
+                &mut params.commands,
+                &mut params.positions,
+                &mut params.rigid_bodies,
+                &mut params.signals,
+                &params.lua_runtime,
+            );
+
+            // Process collision signal commands
+            for cmd in params.lua_runtime.drain_collision_signal_commands() {
+                match cmd {
+                    SignalCmd::SetScalar { key, value } => {
+                        params.world_signals.set_scalar(&key, value);
+                    }
+                    SignalCmd::SetInteger { key, value } => {
+                        params.world_signals.set_integer(&key, value);
+                    }
+                    SignalCmd::SetString { key, value } => {
+                        params.world_signals.set_string(&key, &value);
+                    }
+                    SignalCmd::SetFlag { key } => {
+                        params.world_signals.set_flag(&key);
+                    }
+                    SignalCmd::ClearFlag { key } => {
+                        params.world_signals.clear_flag(&key);
+                    }
+                }
+            }
+
+            // Process collision audio commands
+            for cmd in params.lua_runtime.drain_collision_audio_commands() {
+                match cmd {
+                    AudioLuaCmd::PlayMusic { id, looped } => {
+                        params.audio_cmds.write(AudioCmd::PlayMusic { id, looped });
+                    }
+                    AudioLuaCmd::PlaySound { id } => {
+                        params.audio_cmds.write(AudioCmd::PlayFx { id });
+                    }
+                    AudioLuaCmd::StopAllMusic => {
+                        params.audio_cmds.write(AudioCmd::StopAllMusic);
+                    }
+                    AudioLuaCmd::StopAllSounds => {
+                        // No-op: AudioCmd doesn't have StopAllSounds
+                        // Could implement later if needed
+                    }
+                }
+            }
+
+            return;
+        }
+    }
+}
+
+/// Call a Lua collision callback with context data.
+fn call_lua_collision_callback(
+    lua_runtime: &LuaRuntime,
+    callback_name: &str,
+    entity_a_id: u64,
+    entity_b_id: u64,
+    pos_a: Option<(f32, f32)>,
+    pos_b: Option<(f32, f32)>,
+    vel_a: Option<(f32, f32)>,
+    vel_b: Option<(f32, f32)>,
+    rect_a: Option<(f32, f32, f32, f32)>,
+    rect_b: Option<(f32, f32, f32, f32)>,
+    sides_a: &[crate::components::collision::BoxSide],
+    sides_b: &[crate::components::collision::BoxSide],
+    signals_a: Option<&Signals>,
+    signals_b: Option<&Signals>,
+    group_a: Option<&str>,
+    group_b: Option<&str>,
+) -> mlua::Result<()> {
+    use mlua::IntoLua;
+
+    let lua = lua_runtime.lua();
+
+    // Create ctx table
+    let ctx = lua.create_table()?;
+
+    // Entity A
+    let a_table = lua.create_table()?;
+    a_table.set("id", entity_a_id)?;
+    a_table.set("group", group_a.unwrap_or(""))?;
+    if let Some((x, y)) = pos_a {
+        let pos_table = lua.create_table()?;
+        pos_table.set("x", x)?;
+        pos_table.set("y", y)?;
+        a_table.set("pos", pos_table)?;
+    }
+    if let Some((vx, vy)) = vel_a {
+        let vel_table = lua.create_table()?;
+        vel_table.set("x", vx)?;
+        vel_table.set("y", vy)?;
+        a_table.set("vel", vel_table)?;
+    }
+    if let Some((x, y, w, h)) = rect_a {
+        let rect_table = lua.create_table()?;
+        rect_table.set("x", x)?;
+        rect_table.set("y", y)?;
+        rect_table.set("w", w)?;
+        rect_table.set("h", h)?;
+        a_table.set("rect", rect_table)?;
+    }
+    if let Some(signals) = signals_a {
+        let sig_table = lua.create_table()?;
+        let flags_table = lua.create_table()?;
+        for (i, flag) in signals.get_flags().iter().enumerate() {
+            flags_table.set(i + 1, flag.as_str())?;
+        }
+        sig_table.set("flags", flags_table)?;
+        let integers_table = lua.create_table()?;
+        for (key, value) in signals.get_integers() {
+            integers_table.set(key.as_str(), *value)?;
+        }
+        sig_table.set("integers", integers_table)?;
+        a_table.set("signals", sig_table)?;
+    }
+    ctx.set("a", a_table)?;
+
+    // Entity B
+    let b_table = lua.create_table()?;
+    b_table.set("id", entity_b_id)?;
+    b_table.set("group", group_b.unwrap_or(""))?;
+    if let Some((x, y)) = pos_b {
+        let pos_table = lua.create_table()?;
+        pos_table.set("x", x)?;
+        pos_table.set("y", y)?;
+        b_table.set("pos", pos_table)?;
+    }
+    if let Some((vx, vy)) = vel_b {
+        let vel_table = lua.create_table()?;
+        vel_table.set("x", vx)?;
+        vel_table.set("y", vy)?;
+        b_table.set("vel", vel_table)?;
+    }
+    if let Some((x, y, w, h)) = rect_b {
+        let rect_table = lua.create_table()?;
+        rect_table.set("x", x)?;
+        rect_table.set("y", y)?;
+        rect_table.set("w", w)?;
+        rect_table.set("h", h)?;
+        b_table.set("rect", rect_table)?;
+    }
+    if let Some(signals) = signals_b {
+        let sig_table = lua.create_table()?;
+        let flags_table = lua.create_table()?;
+        for (i, flag) in signals.get_flags().iter().enumerate() {
+            flags_table.set(i + 1, flag.as_str())?;
+        }
+        sig_table.set("flags", flags_table)?;
+        let integers_table = lua.create_table()?;
+        for (key, value) in signals.get_integers() {
+            integers_table.set(key.as_str(), *value)?;
+        }
+        sig_table.set("integers", integers_table)?;
+        b_table.set("signals", sig_table)?;
+    }
+    ctx.set("b", b_table)?;
+
+    // Sides
+    let sides_table = lua.create_table()?;
+    let sides_a_table = lua.create_table()?;
+    for (i, side) in sides_a.iter().enumerate() {
+        let side_str = match side {
+            crate::components::collision::BoxSide::Left => "left",
+            crate::components::collision::BoxSide::Right => "right",
+            crate::components::collision::BoxSide::Top => "top",
+            crate::components::collision::BoxSide::Bottom => "bottom",
+        };
+        sides_a_table.set(i + 1, side_str)?;
+    }
+    sides_table.set("a", sides_a_table)?;
+    let sides_b_table = lua.create_table()?;
+    for (i, side) in sides_b.iter().enumerate() {
+        let side_str = match side {
+            crate::components::collision::BoxSide::Left => "left",
+            crate::components::collision::BoxSide::Right => "right",
+            crate::components::collision::BoxSide::Top => "top",
+            crate::components::collision::BoxSide::Bottom => "bottom",
+        };
+        sides_b_table.set(i + 1, side_str)?;
+    }
+    sides_table.set("b", sides_b_table)?;
+    ctx.set("sides", sides_table)?;
+
+    // Call the Lua function
+    let func: mlua::Function = lua.globals().get(callback_name)?;
+    func.call::<()>(ctx)?;
+
+    Ok(())
+}
+
+/// Process collision entity commands after Lua callback.
+fn process_collision_entity_commands(
+    commands: &mut Commands,
+    positions: &mut Query<&mut MapPosition>,
+    rigid_bodies: &mut Query<&mut RigidBody>,
+    signals: &mut Query<&mut Signals>,
+    lua_runtime: &LuaRuntime,
+) {
+    for cmd in lua_runtime.drain_collision_entity_commands() {
+        match cmd {
+            CollisionEntityCmd::SetPosition { entity_id, x, y } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut pos) = positions.get_mut(entity) {
+                    pos.pos.x = x;
+                    pos.pos.y = y;
+                }
+            }
+            CollisionEntityCmd::SetVelocity { entity_id, vx, vy } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
+                    rb.velocity.x = vx;
+                    rb.velocity.y = vy;
+                }
+            }
+            CollisionEntityCmd::Despawn { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).despawn();
+            }
+            CollisionEntityCmd::SignalSetInteger {
+                entity_id,
+                key,
+                value,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut sig) = signals.get_mut(entity) {
+                    sig.set_integer(&key, value);
+                }
+            }
+            CollisionEntityCmd::SignalSetFlag { entity_id, flag } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut sig) = signals.get_mut(entity) {
+                    sig.set_flag(&flag);
+                }
+            }
+            CollisionEntityCmd::SignalClearFlag { entity_id, flag } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut sig) = signals.get_mut(entity) {
+                    sig.clear_flag(&flag);
+                }
+            }
+            CollisionEntityCmd::InsertTimer {
+                entity_id,
+                duration,
+                signal,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(Timer::new(duration, signal));
+            }
+            CollisionEntityCmd::InsertStuckTo {
+                entity_id,
+                target_id,
+                follow_x,
+                follow_y,
+                offset_x,
+                offset_y,
+                stored_vx,
+                stored_vy,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                let target = Entity::from_bits(target_id);
+                commands.entity(entity).insert(StuckTo {
+                    target,
+                    follow_x,
+                    follow_y,
+                    offset: raylib::math::Vector2 {
+                        x: offset_x,
+                        y: offset_y,
+                    },
+                    stored_velocity: Some(raylib::math::Vector2 {
+                        x: stored_vx,
+                        y: stored_vy,
+                    }),
+                });
+            }
         }
     }
 }

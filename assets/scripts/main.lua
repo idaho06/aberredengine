@@ -9,6 +9,25 @@ engine.log("===========================================")
 -- Load modules
 local setup = require("setup")
 
+-- Scene modules (loaded on demand)
+local scenes = {}
+
+--- Lazy-load a scene module.
+--- @param name string The scene name (e.g., "menu", "level01")
+--- @return table|nil The scene module or nil if not found
+local function get_scene(name)
+    if not scenes[name] then
+        local ok, mod = pcall(require, "scenes." .. name)
+        if ok then
+            scenes[name] = mod
+        else
+            engine.log_warn("Scene module 'scenes." .. name .. "' not found: " .. tostring(mod))
+            return nil
+        end
+    end
+    return scenes[name]
+end
+
 -- Game configuration table
 game = {
     title = "Arkanoid Clone",
@@ -44,6 +63,14 @@ end
 --- @param scene_name string The name of the scene to switch to
 function on_switch_scene(scene_name)
     engine.log_info("Switching to scene: " .. scene_name)
+
+    -- Try to load and spawn the scene
+    local scene = get_scene(scene_name)
+    if scene and scene.spawn then
+        scene.spawn()
+    else
+        engine.log_info("No Lua spawning for scene '" .. scene_name .. "' (using Rust fallback)")
+    end
 end
 
 engine.log("main.lua loaded successfully!")
