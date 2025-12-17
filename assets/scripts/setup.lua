@@ -25,6 +25,8 @@ function M.load_assets()
     engine.load_texture("brick_yellow", "./assets/textures/brick_yellow.png")
     engine.load_texture("brick_purple", "./assets/textures/brick_purple.png")
     engine.load_texture("brick_silver", "./assets/textures/brick_silver.png")
+    engine.load_texture("vaus_sheet", "./assets/textures/vaus_sheet.png")
+
 
     -- Music
     engine.load_music("boss_fight", "./assets/audio/boss_fight.xm")
@@ -40,6 +42,11 @@ function M.load_assets()
 
     -- Tilemaps (loads both texture atlas and JSON metadata)
     engine.load_tilemap("level01", "./assets/tilemaps/level01")
+
+    -- Animations
+    engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
+    engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false)
+
 
     engine.log_info("Assets queued for loading!")
 end

@@ -130,7 +130,6 @@ fn main() {
     let mut update = Schedule::default();
     update.add_systems(phase_change_detector);
     update.add_systems(phase_update_system.after(phase_change_detector));
-    update.add_systems(lua_phase_system.after(phase_update_system));
     update.add_systems(menu_spawn_system);
     update.add_systems(gridlayout_spawn_system);
     update.add_systems(update_input_state);
@@ -158,7 +157,10 @@ fn main() {
     update.add_systems(tween_scale_system);
     update.add_systems(movement);
     update.add_systems(collision_detector.after(mouse_controller).after(movement));
-    update.add_systems(animation_controller);
+    // Run lua_phase_system AFTER collision detection so phase transitions from collision callbacks
+    // are processed in the same frame (before animation_controller evaluates signals)
+    update.add_systems(lua_phase_system.after(collision_detector));
+    update.add_systems(animation_controller.after(lua_phase_system));
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
     update.add_systems(update_world_signals_binding_system);

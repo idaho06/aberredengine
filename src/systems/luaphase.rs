@@ -30,6 +30,7 @@
 
 use bevy_ecs::prelude::*;
 
+use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
@@ -66,6 +67,8 @@ pub fn lua_phase_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut LuaPhase)>,
     stuckto_query: Query<&StuckTo>,
+    mut signals_query: Query<&mut Signals>,
+    mut animation_query: Query<&mut Animation>,
     time: Res<WorldTime>,
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
@@ -203,6 +206,70 @@ pub fn lua_phase_system(
                 }
                 // Remove StuckTo component
                 commands.entity(entity).remove::<StuckTo>();
+            }
+            EntityCmd::SignalSetFlag { entity_id, flag } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut signals) = signals_query.get_mut(entity) {
+                    signals.set_flag(&flag);
+                }
+            }
+            EntityCmd::SignalClearFlag { entity_id, flag } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut signals) = signals_query.get_mut(entity) {
+                    signals.clear_flag(&flag);
+                }
+            }
+            EntityCmd::SetVelocity { entity_id, vx, vy } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(RigidBody {
+                    velocity: Vector2 { x: vx, y: vy },
+                });
+            }
+            EntityCmd::InsertStuckTo {
+                entity_id,
+                target_id,
+                follow_x,
+                follow_y,
+                offset_x,
+                offset_y,
+                stored_vx,
+                stored_vy,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                let target = Entity::from_bits(target_id);
+                commands.entity(entity).insert(StuckTo {
+                    target,
+                    offset: Vector2 {
+                        x: offset_x,
+                        y: offset_y,
+                    },
+                    follow_x,
+                    follow_y,
+                    stored_velocity: Some(Vector2 {
+                        x: stored_vx,
+                        y: stored_vy,
+                    }),
+                });
+                // Remove RigidBody when inserting StuckTo
+                commands.entity(entity).remove::<RigidBody>();
+            }
+            EntityCmd::RestartAnimation { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut animation) = animation_query.get_mut(entity) {
+                    animation.frame_index = 0;
+                    animation.elapsed_time = 0.0;
+                }
+            }
+            EntityCmd::SetAnimation {
+                entity_id,
+                animation_key,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut animation) = animation_query.get_mut(entity) {
+                    animation.animation_key = animation_key;
+                    animation.frame_index = 0;
+                    animation.elapsed_time = 0.0;
+                }
             }
         }
     }

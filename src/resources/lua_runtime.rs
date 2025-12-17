@@ -136,6 +136,59 @@ pub struct LuaCollisionRuleData {
     pub callback: String,
 }
 
+/// Animation component data for spawning.
+#[derive(Debug, Clone)]
+pub struct AnimationData {
+    pub animation_key: String,
+}
+
+/// Animation rule data for AnimationController.
+#[derive(Debug, Clone)]
+pub struct AnimationRuleData {
+    pub condition: AnimationConditionData,
+    pub set_key: String,
+}
+
+/// Condition data for animation rules.
+#[derive(Debug, Clone)]
+pub enum AnimationConditionData {
+    /// Compare a float signal with a value.
+    ScalarCmp { key: String, op: String, value: f32 },
+    /// Check float signal is in range.
+    ScalarRange {
+        key: String,
+        min: f32,
+        max: f32,
+        inclusive: bool,
+    },
+    /// Compare an integer signal with a value.
+    IntegerCmp { key: String, op: String, value: i32 },
+    /// Check integer signal is in range.
+    IntegerRange {
+        key: String,
+        min: i32,
+        max: i32,
+        inclusive: bool,
+    },
+    /// Check that a flag is set.
+    HasFlag { key: String },
+    /// Check that a flag is not set.
+    LacksFlag { key: String },
+    /// All nested conditions must pass.
+    All(Vec<AnimationConditionData>),
+    /// At least one nested condition must pass.
+    Any(Vec<AnimationConditionData>),
+    /// Negate the nested condition.
+    Not(Box<AnimationConditionData>),
+}
+
+/// AnimationController component data for spawning.
+#[derive(Debug, Clone)]
+pub struct AnimationControllerData {
+    pub fallback_key: String,
+    pub rules: Vec<AnimationRuleData>,
+}
+
 /// Command representing a full entity spawn request from Lua.
 /// Contains all optional component data that Lua can specify.
 #[derive(Debug, Clone, Default)]
@@ -196,6 +249,10 @@ pub struct SpawnCmd {
     pub register_as: Option<String>,
     /// LuaCollisionRule component data
     pub lua_collision_rule: Option<LuaCollisionRuleData>,
+    /// Animation component data
+    pub animation: Option<AnimationData>,
+    /// AnimationController component data
+    pub animation_controller: Option<AnimationControllerData>,
 }
 
 /// Phase definition data from Lua
@@ -316,6 +373,30 @@ pub enum PhaseCmd {
 pub enum EntityCmd {
     /// Release an entity from StuckTo - removes StuckTo and adds RigidBody with stored velocity
     ReleaseStuckTo { entity_id: u64 },
+    /// Set a flag on an entity's Signals component
+    SignalSetFlag { entity_id: u64, flag: String },
+    /// Clear a flag on an entity's Signals component
+    SignalClearFlag { entity_id: u64, flag: String },
+    /// Set entity velocity (RigidBody)
+    SetVelocity { entity_id: u64, vx: f32, vy: f32 },
+    /// Insert a StuckTo component
+    InsertStuckTo {
+        entity_id: u64,
+        target_id: u64,
+        follow_x: bool,
+        follow_y: bool,
+        offset_x: f32,
+        offset_y: f32,
+        stored_vx: f32,
+        stored_vy: f32,
+    },
+    /// Restart the entity's current animation from frame 0
+    RestartAnimation { entity_id: u64 },
+    /// Set the entity's animation to a specific animation key (and restart from frame 0)
+    SetAnimation {
+        entity_id: u64,
+        animation_key: String,
+    },
 }
 
 // ============================================================================
@@ -405,6 +486,26 @@ pub enum CameraCmd {
     },
 }
 
+// ============================================================================
+// Animation Commands
+// ============================================================================
+
+/// Commands for registering animations from Lua.
+#[derive(Debug, Clone)]
+pub enum AnimationCmd {
+    /// Register an animation resource in the AnimationStore
+    RegisterAnimation {
+        id: String,
+        tex_key: String,
+        pos_x: f32,
+        pos_y: f32,
+        displacement: f32,
+        frame_count: usize,
+        fps: f32,
+        looped: bool,
+    },
+}
+
 /// Shared state accessible from Lua function closures.
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
 struct LuaAppData {
@@ -417,6 +518,7 @@ struct LuaAppData {
     group_commands: RefCell<Vec<GroupCmd>>,
     tilemap_commands: RefCell<Vec<TilemapCmd>>,
     camera_commands: RefCell<Vec<CameraCmd>>,
+    animation_commands: RefCell<Vec<AnimationCmd>>,
     // Collision-scoped command queues (processed immediately after each collision callback)
     collision_entity_commands: RefCell<Vec<CollisionEntityCmd>>,
     collision_signal_commands: RefCell<Vec<SignalCmd>>,
@@ -1000,6 +1102,128 @@ impl LuaUserData for LuaEntityBuilder {
             },
         );
 
+        // :with_animation(animation_key) - Add Animation component
+        // The animation_key refers to an animation registered via engine.register_animation()
+        methods.add_method_mut("with_animation", |_, this, animation_key: String| {
+            this.cmd.animation = Some(AnimationData { animation_key });
+            Ok(this.clone())
+        });
+
+        // :with_animation_controller(fallback_key) - Add AnimationController component
+        // The fallback_key is the default animation when no rules match
+        methods.add_method_mut(
+            "with_animation_controller",
+            |_, this, fallback_key: String| {
+                this.cmd.animation_controller = Some(AnimationControllerData {
+                    fallback_key,
+                    rules: Vec::new(),
+                });
+                Ok(this.clone())
+            },
+        );
+
+        // :with_animation_rule(condition_table, set_key) - Add rule to AnimationController
+        // condition_table format: { type = "has_flag", key = "moving" }
+        // or { type = "lacks_flag", key = "moving" }
+        // or { type = "scalar_cmp", key = "speed", op = "gt", value = 50.0 }
+        // or { type = "scalar_range", key = "speed", min = 5.0, max = 50.0, inclusive = true }
+        // or { type = "integer_cmp", key = "hp", op = "le", value = 0 }
+        // or { type = "integer_range", key = "hp", min = 0, max = 10, inclusive = true }
+        // or { type = "all", conditions = { ... } }
+        // or { type = "any", conditions = { ... } }
+        // or { type = "not", condition = { ... } }
+        methods.add_method_mut(
+            "with_animation_rule",
+            |_, this, (condition_table, set_key): (LuaTable, String)| {
+                fn parse_condition(table: &LuaTable) -> LuaResult<AnimationConditionData> {
+                    let cond_type: String = table.get("type")?;
+                    match cond_type.as_str() {
+                        "has_flag" => {
+                            let key: String = table.get("key")?;
+                            Ok(AnimationConditionData::HasFlag { key })
+                        }
+                        "lacks_flag" => {
+                            let key: String = table.get("key")?;
+                            Ok(AnimationConditionData::LacksFlag { key })
+                        }
+                        "scalar_cmp" => {
+                            let key: String = table.get("key")?;
+                            let op: String = table.get("op")?;
+                            let value: f32 = table.get("value")?;
+                            Ok(AnimationConditionData::ScalarCmp { key, op, value })
+                        }
+                        "scalar_range" => {
+                            let key: String = table.get("key")?;
+                            let min: f32 = table.get("min")?;
+                            let max: f32 = table.get("max")?;
+                            let inclusive: bool = table.get("inclusive").unwrap_or(true);
+                            Ok(AnimationConditionData::ScalarRange {
+                                key,
+                                min,
+                                max,
+                                inclusive,
+                            })
+                        }
+                        "integer_cmp" => {
+                            let key: String = table.get("key")?;
+                            let op: String = table.get("op")?;
+                            let value: i32 = table.get("value")?;
+                            Ok(AnimationConditionData::IntegerCmp { key, op, value })
+                        }
+                        "integer_range" => {
+                            let key: String = table.get("key")?;
+                            let min: i32 = table.get("min")?;
+                            let max: i32 = table.get("max")?;
+                            let inclusive: bool = table.get("inclusive").unwrap_or(true);
+                            Ok(AnimationConditionData::IntegerRange {
+                                key,
+                                min,
+                                max,
+                                inclusive,
+                            })
+                        }
+                        "all" => {
+                            let conditions_table: LuaTable = table.get("conditions")?;
+                            let mut conditions = Vec::new();
+                            for value in conditions_table.sequence_values::<LuaTable>() {
+                                conditions.push(parse_condition(&value?)?);
+                            }
+                            Ok(AnimationConditionData::All(conditions))
+                        }
+                        "any" => {
+                            let conditions_table: LuaTable = table.get("conditions")?;
+                            let mut conditions = Vec::new();
+                            for value in conditions_table.sequence_values::<LuaTable>() {
+                                conditions.push(parse_condition(&value?)?);
+                            }
+                            Ok(AnimationConditionData::Any(conditions))
+                        }
+                        "not" => {
+                            let inner_table: LuaTable = table.get("condition")?;
+                            let inner = parse_condition(&inner_table)?;
+                            Ok(AnimationConditionData::Not(Box::new(inner)))
+                        }
+                        _ => Err(LuaError::runtime(format!(
+                            "Unknown condition type: {}",
+                            cond_type
+                        ))),
+                    }
+                }
+
+                let Some(ref mut controller) = this.cmd.animation_controller else {
+                    return Err(LuaError::runtime(
+                        "with_animation_rule() requires with_animation_controller() first",
+                    ));
+                };
+
+                let condition = parse_condition(&condition_table)?;
+                controller
+                    .rules
+                    .push(AnimationRuleData { condition, set_key });
+                Ok(this.clone())
+            },
+        );
+
         // :register_as(key) - Register spawned entity in WorldSignals with this key
         // This allows Lua to retrieve the entity ID later via engine.get_entity(key)
         methods.add_method_mut("register_as", |_, this, key: String| {
@@ -1051,6 +1275,7 @@ impl LuaRuntime {
             group_commands: RefCell::new(Vec::new()),
             tilemap_commands: RefCell::new(Vec::new()),
             camera_commands: RefCell::new(Vec::new()),
+            animation_commands: RefCell::new(Vec::new()),
             collision_entity_commands: RefCell::new(Vec::new()),
             collision_signal_commands: RefCell::new(Vec::new()),
             collision_audio_commands: RefCell::new(Vec::new()),
@@ -1075,6 +1300,7 @@ impl LuaRuntime {
         runtime.register_tilemap_api()?;
         runtime.register_camera_api()?;
         runtime.register_collision_api()?;
+        runtime.register_animation_api()?;
 
         Ok(runtime)
     }
@@ -1460,6 +1686,113 @@ impl LuaRuntime {
             })?,
         )?;
 
+        // engine.entity_signal_set_flag(entity_id, flag) - Set a flag on entity's Signals
+        engine.set(
+            "entity_signal_set_flag",
+            self.lua
+                .create_function(|lua, (entity_id, flag): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SignalSetFlag { entity_id, flag });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_signal_clear_flag(entity_id, flag) - Clear a flag on entity's Signals
+        engine.set(
+            "entity_signal_clear_flag",
+            self.lua
+                .create_function(|lua, (entity_id, flag): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SignalClearFlag { entity_id, flag });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_set_velocity(entity_id, vx, vy) - Set entity velocity
+        engine.set(
+            "entity_set_velocity",
+            self.lua
+                .create_function(|lua, (entity_id, vx, vy): (u64, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetVelocity { entity_id, vx, vy });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
+        // Insert a StuckTo component on an entity
+        engine.set(
+            "entity_insert_stuckto",
+            self.lua.create_function(
+                |lua,
+                 (
+                    entity_id,
+                    target_id,
+                    follow_x,
+                    follow_y,
+                    offset_x,
+                    offset_y,
+                    stored_vx,
+                    stored_vy,
+                ): (u64, u64, bool, bool, f32, f32, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertStuckTo {
+                            entity_id,
+                            target_id,
+                            follow_x,
+                            follow_y,
+                            offset_x,
+                            offset_y,
+                            stored_vx,
+                            stored_vy,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_restart_animation(entity_id) - Restart entity's current animation from frame 0
+        engine.set(
+            "entity_restart_animation",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RestartAnimation { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.entity_set_animation(entity_id, animation_key) - Set entity's animation to a specific key
+        engine.set(
+            "entity_set_animation",
+            self.lua
+                .create_function(|lua, (entity_id, animation_key): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetAnimation {
+                            entity_id,
+                            animation_key,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
         Ok(())
     }
 
@@ -1791,6 +2124,48 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Registers animation functions in the `engine` table.
+    fn register_animation_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+
+        // engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)
+        // Registers an animation resource in the AnimationStore
+        engine.set(
+            "register_animation",
+            self.lua.create_function(
+                |lua,
+                 (id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped): (
+                    String,
+                    String,
+                    f32,
+                    f32,
+                    f32,
+                    usize,
+                    f32,
+                    bool,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .animation_commands
+                        .borrow_mut()
+                        .push(AnimationCmd::RegisterAnimation {
+                            id,
+                            tex_key,
+                            pos_x,
+                            pos_y,
+                            displacement,
+                            frame_count,
+                            fps,
+                            looped,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        Ok(())
+    }
+
     /// Drains all queued asset commands.
     ///
     /// Call this from a Rust system after Lua has queued commands via
@@ -1868,6 +2243,14 @@ impl LuaRuntime {
         self.lua
             .app_data_ref::<LuaAppData>()
             .map(|data| data.camera_commands.borrow_mut().drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Drains all queued animation commands.
+    pub fn drain_animation_commands(&self) -> Vec<AnimationCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| data.animation_commands.borrow_mut().drain(..).collect())
             .unwrap_or_default()
     }
 

@@ -131,6 +131,7 @@ fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Te
     (texture, tilemap)
 }
 
+/// Spawn tiles from a Tilemap resource into the ECS world.
 fn spawn_tiles(
     commands: &mut Commands,
     tilemap_tex_key: impl Into<String>,
@@ -208,6 +209,8 @@ pub fn setup(
     // This function sets up the game world, loading resources
     use crate::resources::lua_runtime::AssetCmd;
 
+    // Default camera. Needed to start the engine before entering play state
+    // The camera will be overridden later in the scene setup
     let camera = Camera2D {
         target: Vector2 {
             x: 0.0,
@@ -276,10 +279,40 @@ pub fn setup(
     commands.insert_resource(tex_store);
     commands.insert_resource(tilemaps_store);
 
-    // Animations (empty for now, will be moved to Lua later)
-    let anim_store = AnimationStore {
+    // Process animation registration commands from Lua
+    let mut anim_store = AnimationStore {
         animations: FxHashMap::default(),
     };
+    for cmd in lua_runtime.drain_animation_commands() {
+        match cmd {
+            crate::resources::lua_runtime::AnimationCmd::RegisterAnimation {
+                id,
+                tex_key,
+                pos_x,
+                pos_y,
+                displacement,
+                frame_count,
+                fps,
+                looped,
+            } => {
+                anim_store.animations.insert(
+                    id.clone(),
+                    AnimationResource {
+                        tex_key,
+                        position: Vector2 { x: pos_x, y: pos_y },
+                        displacement,
+                        frame_count,
+                        fps,
+                        looped,
+                    },
+                );
+                eprintln!(
+                    "[Rust] Registered animation '{}' ({} frames, {} fps)",
+                    id, frame_count, fps
+                );
+            }
+        }
+    }
     commands.insert_resource(anim_store);
 
     // Change GameState to Playing
@@ -559,62 +592,6 @@ pub fn enter_play(
     worldsignals.set_integer("level", 1);
     worldsignals.set_string("scene", "menu");
 
-    // Observer for TimerEvent
-    commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
-        match trigger.signal.as_str() {
-            "stop_title" => {
-                //commands.entity(trigger.entity).remove::<RigidBody>();
-                commands.entity(trigger.entity).insert(RigidBody {
-                    velocity: Vector2 { x: 0.0, y: 0.0 },
-                });
-                commands.entity(trigger.entity).remove::<Timer>();
-                commands.entity(trigger.entity).insert(MapPosition {
-                    pos: Vector2 { x: 0.0, y: -220.0 },
-                });
-            }
-            _ => (),
-        }
-    });
-
-    // Observer to remove the "sticky" flag from the entity (meant to be used by the "player" or "ball" entity)
-    commands.add_observer(
-        |trigger: On<TimerEvent>, mut signals: Query<&mut Signals>, mut commands: Commands| {
-            let entity = trigger.entity;
-            let signal = &trigger.signal;
-
-            if signal == "remove_sticky" {
-                if let Ok(mut sigs) = signals.get_mut(entity) {
-                    sigs.clear_flag("sticky");
-                }
-                commands.entity(entity).remove::<Timer>();
-            }
-        },
-    );
-
-    // Observer to remove StuckTo component and restore velocity
-    commands.add_observer(
-        |trigger: On<TimerEvent>,
-         stuck_to_query: Query<&StuckTo>,
-         mut rigid_body: Query<&mut RigidBody>,
-         mut commands: Commands| {
-            let entity = trigger.entity;
-            let signal = &trigger.signal;
-
-            if signal == "remove_stuck_to" {
-                // Restore stored velocity from StuckTo component before removing it
-                if let Ok(stuck_to) = stuck_to_query.get(entity) {
-                    if let Some(stored_velocity) = stuck_to.stored_velocity {
-                        if let Ok(mut rb) = rigid_body.get_mut(entity) {
-                            rb.velocity = stored_velocity;
-                        }
-                    }
-                }
-                commands.entity(entity).remove::<StuckTo>();
-                commands.entity(entity).remove::<Timer>();
-            }
-        },
-    );
-
     // Finally, run the switch_scene system to spawn initial scene entities
     commands.run_system(
         systems_store
@@ -725,6 +702,77 @@ fn parse_loop_mode(loop_mode: &str) -> LoopMode {
         "loop" => LoopMode::Loop,
         "ping_pong" => LoopMode::PingPong,
         _ => LoopMode::Once,
+    }
+}
+
+/// Parse comparison operator string from Lua into CmpOp enum
+fn parse_cmp_op(op: &str) -> CmpOp {
+    match op {
+        "lt" => CmpOp::Lt,
+        "le" => CmpOp::Le,
+        "gt" => CmpOp::Gt,
+        "ge" => CmpOp::Ge,
+        "eq" => CmpOp::Eq,
+        "ne" => CmpOp::Ne,
+        _ => CmpOp::Eq,
+    }
+}
+
+/// Convert AnimationConditionData from Lua to Condition enum
+fn convert_animation_condition(
+    data: crate::resources::lua_runtime::AnimationConditionData,
+) -> Condition {
+    use crate::resources::lua_runtime::AnimationConditionData;
+    match data {
+        AnimationConditionData::ScalarCmp { key, op, value } => Condition::ScalarCmp {
+            key,
+            op: parse_cmp_op(&op),
+            value,
+        },
+        AnimationConditionData::ScalarRange {
+            key,
+            min,
+            max,
+            inclusive,
+        } => Condition::ScalarRange {
+            key,
+            min,
+            max,
+            inclusive,
+        },
+        AnimationConditionData::IntegerCmp { key, op, value } => Condition::IntegerCmp {
+            key,
+            op: parse_cmp_op(&op),
+            value,
+        },
+        AnimationConditionData::IntegerRange {
+            key,
+            min,
+            max,
+            inclusive,
+        } => Condition::IntegerRange {
+            key,
+            min,
+            max,
+            inclusive,
+        },
+        AnimationConditionData::HasFlag { key } => Condition::HasFlag { key },
+        AnimationConditionData::LacksFlag { key } => Condition::LacksFlag { key },
+        AnimationConditionData::All(conditions) => Condition::All(
+            conditions
+                .into_iter()
+                .map(convert_animation_condition)
+                .collect(),
+        ),
+        AnimationConditionData::Any(conditions) => Condition::Any(
+            conditions
+                .into_iter()
+                .map(convert_animation_condition)
+                .collect(),
+        ),
+        AnimationConditionData::Not(inner) => {
+            Condition::Not(Box::new(convert_animation_condition(*inner)))
+        }
     }
 }
 
@@ -1025,6 +1073,40 @@ fn process_spawn_cmd(
         ));
     }
 
+    // Animation
+    if let Some(anim_data) = cmd.animation {
+        entity_commands.insert(Animation::new(anim_data.animation_key));
+    }
+
+    // AnimationController
+    if let Some(controller_data) = cmd.animation_controller {
+        let mut controller = AnimationController::new(&controller_data.fallback_key);
+        for rule in controller_data.rules {
+            let condition = convert_animation_condition(rule.condition);
+            controller = controller.with_rule(condition, rule.set_key);
+        }
+        entity_commands.insert(controller);
+    }
+
+    // StuckTo
+    if let Some(stuckto_data) = cmd.stuckto {
+        use crate::components::stuckto::StuckTo;
+        let target = Entity::from_bits(stuckto_data.target_entity_id);
+        let stuckto = StuckTo {
+            target,
+            offset: Vector2 {
+                x: stuckto_data.offset_x,
+                y: stuckto_data.offset_y,
+            },
+            follow_x: stuckto_data.follow_x,
+            follow_y: stuckto_data.follow_y,
+            stored_velocity: stuckto_data
+                .stored_velocity
+                .map(|(vx, vy)| Vector2 { x: vx, y: vy }),
+        };
+        entity_commands.insert(stuckto);
+    }
+
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         worldsignals.set_entity(&key, entity);
@@ -1149,6 +1231,7 @@ pub fn switch_scene(
         }
     }
 
+    // TODO: As the scene switching is moved to Lua, most of the code below can be removed
     match scene.as_str() {
         "menu" => {
             // NOTE: Camera is now set by menu.lua spawn() function via engine.set_camera()

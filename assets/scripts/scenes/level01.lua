@@ -4,6 +4,9 @@
 
 local M = {}
 
+local ball_bounces = 0
+local player_hits = 0
+
 -- ==================== COLLISION CALLBACK FUNCTIONS ====================
 -- These are called when collisions occur between entities with matching groups.
 -- ctx = {
@@ -62,6 +65,9 @@ function on_ball_walls(ctx)
 
     engine.entity_set_velocity(ball_id, new_vx, new_vy)
     engine.entity_set_position(ball_id, new_x, new_y)
+
+    -- Increment bounce counter
+    ball_bounces = ball_bounces + 1
 end
 
 --- Ball-Player collision: Reflect ball based on hit position, handle sticky
@@ -71,6 +77,7 @@ function on_ball_player(ctx)
     local ball_pos = ctx.a.pos
     local ball_vel = ctx.a.vel
     local ball_rect = ctx.a.rect
+    local player_id = ctx.b.id
     local player_pos = ctx.b.pos
     local player_rect = ctx.b.rect
     local player_signals = ctx.b.signals
@@ -101,19 +108,27 @@ function on_ball_player(ctx)
     end
 
     if is_sticky then
-        -- Calculate offset for sticking
+        -- Store ball data in world signals for the ball's phase to use
         local offset_x = ball_pos.x - player_pos.x
-        -- Store current velocity and stop the ball
-        local player_id = ctx.b.id
-        engine.entity_set_velocity(ball_id, 0, 0)
-        -- Attach ball to player (follow X only, with offset and stored velocity)
-        engine.entity_insert_stuckto(ball_id, player_id, true, false, offset_x, 0, new_vx, new_vy)
-        -- Set timer to release ball after 2 seconds
-        engine.entity_insert_timer(ball_id, 2.0, "remove_stuck_to")
+        engine.set_scalar("ball_stick_offset_x", offset_x)
+        engine.set_scalar("ball_stick_vx", new_vx)
+        engine.set_scalar("ball_stick_vy", new_vy)
+
+        -- Transition ball to stuck_to_player phase (ball's phase will handle StuckTo)
+        engine.phase_transition(ball_id, "stuck_to_player")
     end
+
+    -- Transition player to "hit" phase (handles animation flag)
+    engine.phase_transition(player_id, "hit")
 
     -- Play ping sound
     engine.collision_play_sound("ping")
+
+    -- Increment player hit counter
+    player_hits = player_hits + 1
+
+    -- Increment ball bounce counter
+    ball_bounces = ball_bounces + 1
 end
 
 --- Ball-Brick collision: Bounce, decrement HP, update score, despawn if dead
@@ -181,6 +196,9 @@ function on_ball_brick(ctx)
 
     -- Play ding sound
     engine.collision_play_sound("ding")
+
+    -- Increment ball bounce counter
+    ball_bounces = ball_bounces + 1
 end
 
 --- Ball-OOB collision: Despawn ball when fully inside OOB zone
@@ -250,31 +268,35 @@ function scene_get_started_enter(entity_id, previous_phase)
     -- Get player entity ID for StuckTo
     local player_id = engine.get_entity("player")
     if not player_id then
-        engine.log_error("Player entity not found in world signals!")
+        engine.log_error("Player entity not found in world signals! Cannot spawn ball.")
         return
     end
+    engine.log_info("Found player for ball spawn: " .. tostring(player_id))
+
+    -- set player to sticky phase
+    engine.phase_transition(player_id, "sticky")
 
     -- Get player Y position from world signals
     local player_y = engine.get_scalar("player_y") or 700.0
     local ball_y = player_y - 24.0 - 6.0 -- Above the player paddle
 
-    -- Spawn ball stuck to player (follows X only)
-    -- Ball will be released after 2 seconds via its own phase system
+    -- Spawn ball directly with StuckTo attached via spawn command
+    -- This avoids timing issues with engine.get_entity() in ball_stuck_enter
     engine.spawn()
         :with_group("ball")
-        :with_position(336, ball_y) -- Initial position (will be overridden by StuckTo)
+        :with_position(336, ball_y) -- Initial position (will be updated by StuckTo)
         :with_sprite("ball", 12, 12, 6, 6)
         :with_zindex(10)
         :with_collider(12, 12, 6, 6)
         :with_signals()
-        :with_stuckto(player_id, true, false)    -- Follow X only
-        :with_stuckto_offset(0, -30)             -- Above the paddle
-        :with_stuckto_stored_velocity(300, -300) -- Restore this velocity when released
+        :with_stuckto(player_id, true, false)    -- Follow player X only
+        :with_stuckto_offset(0, 0)               -- Centered on player X
+        :with_stuckto_stored_velocity(300, -300) -- Velocity when released
         :with_phase({
             initial = "stuck_to_player",
             phases = {
                 stuck_to_player = {
-                    on_enter = "ball_stuck_enter",
+                    -- No enter callback needed, StuckTo is already attached
                     on_update = "ball_stuck_update"
                 },
                 moving = {
@@ -284,7 +306,7 @@ function scene_get_started_enter(entity_id, previous_phase)
         })
         :build()
 
-    engine.log_info("Ball spawned stuck to player!")
+    engine.log_info("Ball spawned with StuckTo!")
 end
 
 --- Called each frame in "get_started" phase
@@ -296,8 +318,32 @@ end
 -- ==================== BALL PHASE CALLBACKS ====================
 
 --- Called when ball enters "stuck_to_player" phase
+--- Attach ball to player with stored velocity
 function ball_stuck_enter(entity_id, previous_phase)
-    engine.log_info("Ball stuck to player - waiting for launch...")
+    engine.log_info("Ball stuck to player - attaching... ball_id=" ..
+        tostring(entity_id) .. " prev=" .. tostring(previous_phase))
+
+    -- Get player entity
+    local player_id = engine.get_entity("player")
+    if not player_id then
+        engine.log_error("Player entity not found! Cannot attach ball.")
+        return
+    end
+    engine.log_info("Found player entity: " .. tostring(player_id))
+
+    -- Get stored ball data from world signals
+    local offset_x = engine.get_scalar("ball_stick_offset_x") or 0
+    local vx = engine.get_scalar("ball_stick_vx") or 300
+    local vy = engine.get_scalar("ball_stick_vy") or -300
+
+    engine.log_info("Ball stick data: offset_x=" ..
+        tostring(offset_x) .. " vx=" .. tostring(vx) .. " vy=" .. tostring(vy))
+
+    -- Stop the ball and attach to player
+    engine.entity_set_velocity(entity_id, 0, 0)
+    engine.entity_insert_stuckto(entity_id, player_id, true, false, offset_x, 0, vx, vy)
+
+    engine.log_info("Ball attached to player with StuckTo!")
 end
 
 --- Called each frame while ball is stuck to player
@@ -315,6 +361,48 @@ function ball_moving_enter(entity_id, previous_phase)
     engine.log_info("Ball released and moving!")
     -- Release from StuckTo - this removes the component and adds RigidBody with stored velocity
     engine.release_stuckto(entity_id)
+end
+
+-- ==================== PLAYER PHASE CALLBACKS ====================
+
+--- Called when player enters "sticky" phase
+--- Set the "sticky" flag so ball sticks on collision, and play glowing animation
+function player_sticky_enter(entity_id, previous_phase)
+    engine.log_info("Player entering sticky phase")
+    engine.entity_signal_set_flag(entity_id, "sticky")
+    engine.entity_set_animation(entity_id, "vaus_glowing")
+end
+
+--- Called each frame while player is in "sticky" phase
+--- After 3 seconds, transition to "glowing" phase
+function player_sticky_update(entity_id, time_in_phase)
+    if time_in_phase >= 3.0 then
+        engine.log_info("Sticky powerup expired!")
+        engine.phase_transition(entity_id, "glowing")
+    end
+end
+
+--- Called when player enters "glowing" phase
+--- Clear the "sticky" flag and play glowing animation
+function player_glowing_enter(entity_id, previous_phase)
+    engine.log_info("Player entering glowing phase")
+    engine.entity_signal_clear_flag(entity_id, "sticky")
+    engine.entity_set_animation(entity_id, "vaus_glowing")
+end
+
+--- Called when player enters "hit" phase
+--- Play the hit animation from frame 0
+function player_hit_enter(entity_id, previous_phase)
+    engine.log_info("Player entering hit phase")
+    engine.entity_set_animation(entity_id, "vaus_hit")
+end
+
+--- Called each frame while player is in "hit" phase
+--- After 0.5 seconds, transition back to "glowing" phase
+function player_hit_update(entity_id, time_in_phase)
+    if time_in_phase >= 0.5 then
+        engine.phase_transition(entity_id, "glowing")
+    end
 end
 
 -- ==================== SCENE GAME STATE CALLBACKS ====================
@@ -382,6 +470,10 @@ function scene_game_over_update(entity_id, time_in_phase)
         engine.log_info("Game over - returning to menu")
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
+
+        -- show bounces and hits in log
+        engine.log_info(string.format("Total ball bounces: %d", ball_bounces))
+        engine.log_info(string.format("Total player hits: %d", player_hits))
     end
 end
 
@@ -410,6 +502,10 @@ function scene_level_cleared_update(entity_id, time_in_phase)
         engine.log_info("Level cleared - returning to menu")
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
+
+        -- show bounces and hits in log
+        engine.log_info(string.format("Total ball bounces: %d", ball_bounces))
+        engine.log_info(string.format("Total player hits: %d", player_hits))
     end
 end
 
@@ -482,17 +578,33 @@ local function spawn_player()
     engine.set_scalar("player_y", player_y)
 
     -- The Vaus - the player paddle
+    -- Animation is controlled directly from Lua phase callbacks (no animation controller)
     engine.spawn()
         :with_group("player")
         :with_position(400, player_y)
         :with_zindex(10)
-        :with_sprite("vaus", 96, 24, 48, 24) -- 96x24 sprite, origin at bottom center
-        :with_collider(96, 24, 48, 24)       -- Same size collider
-        :with_mouse_controlled(true, false)  -- Follow mouse X only
+        :with_sprite("vaus_sheet", 96, 24, 48, 24) -- 96x24 sprite, origin at bottom center
+        :with_animation("vaus_glowing")            -- Start with glowing animation
+        :with_collider(96, 24, 48, 24)             -- Same size collider
+        :with_mouse_controlled(true, false)        -- Follow mouse X only
         :with_signals()
-        :with_signal_flag("sticky")          -- Start with sticky powerup
-        :with_timer(3.0, "remove_sticky")    -- Remove sticky after 3 seconds
-        :register_as("player")               -- Store entity ID for ball attachment
+        :with_phase({
+            initial = "sticky",
+            phases = {
+                sticky = {
+                    on_enter = "player_sticky_enter",
+                    on_update = "player_sticky_update"
+                },
+                glowing = {
+                    on_enter = "player_glowing_enter"
+                },
+                hit = {
+                    on_enter = "player_hit_enter",
+                    on_update = "player_hit_update"
+                }
+            }
+        })
+        :register_as("player") -- Store entity ID for ball attachment
         :build()
 
     engine.log_info("Player paddle spawned!")
@@ -538,12 +650,18 @@ local function spawn_bricks()
         :build()
 
     engine.log_info("Bricks grid layout spawned!")
+
+    -- TODO: Create a system to load json files and spawn entities from lua directly
 end
 
 --- Spawn all entities for level 01.
 --- This is called when entering the scene (before phase system starts)
 function M.spawn()
     engine.log_info("Spawning level01 scene entities from Lua...")
+
+    -- reset ball bounce and player hit counters
+    ball_bounces = 0
+    player_hits = 0
 
     -- Reset score and lives for a new game
     engine.set_integer("score", 0)
