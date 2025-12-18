@@ -53,6 +53,13 @@ function on_enter_play()
     engine.log_info("Game: " .. game.title .. " v" .. game.version)
     engine.log_info("Lua scripting is working correctly.")
 
+    -- Initialize game world signals
+    engine.set_integer("score", 0)
+    engine.set_integer("high_score", 0)
+    engine.set_integer("lives", 3)
+    engine.set_integer("level", 1)
+    engine.set_string("scene", "menu")
+
     -- Return a greeting that Rust can read
     return "Hello from Lua! Ready to play."
 end

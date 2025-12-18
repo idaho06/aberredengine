@@ -7,14 +7,18 @@
 //!
 //! - [`EntityCmd`](crate::resources::lua_runtime::EntityCmd) – Runtime entity manipulation
 //! - [`SpawnCmd`](crate::resources::lua_runtime::SpawnCmd) – Entity spawning
+//! - [`AssetCmd`](crate::resources::lua_runtime::AssetCmd) – Asset loading
+//! - [`AnimationCmd`](crate::resources::lua_runtime::AnimationCmd) – Animation registration
 //!
 //! # Functions
 //!
 //! - [`process_entity_commands`] – Process all EntityCmd variants
 //! - [`process_spawn_command`] – Process a single SpawnCmd to create an entity
-//! - [`process_signal_command`] – Process a single signal command
-//! - [`process_phase_command`] – Process a single phase command
-//! - [`process_audio_command`] – Process a single audio command
+//! - [`process_signal_command`] – Process a signal command
+//! - [`process_phase_command`] – Process a phase command
+//! - [`process_audio_command`] – Process an audio command
+//! - [`process_asset_command`] – Process an asset loading command
+//! - [`process_animation_command`] – Process an animation registration command
 //! - [`parse_tween_easing`] – Convert string to Easing enum
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
 
@@ -41,7 +45,7 @@ use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::lua_runtime::{AudioLuaCmd, EntityCmd, SignalCmd, SpawnCmd};
+use crate::resources::lua_runtime::{AnimationCmd, AssetCmd, AudioLuaCmd, EntityCmd, SignalCmd, SpawnCmd};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
 
@@ -111,6 +115,131 @@ pub fn process_phase_command(
             if let Ok((_, mut lua_phase)) = luaphase_query.get_mut(entity) {
                 lua_phase.next = Some(phase);
             }
+        }
+    }
+}
+
+/// Process a single asset command from Lua and load the corresponding asset.
+///
+/// This function handles asset loading commands (textures, fonts, music, sounds, tilemaps)
+/// by loading resources and storing them in the appropriate stores.
+///
+/// # Parameters
+///
+/// - `rl` - RaylibHandle for loading assets
+/// - `th` - RaylibThread for thread safety
+/// - `cmd` - The AssetCmd to process
+/// - `tex_store` - TextureStore for storing loaded textures
+/// - `tilemaps_store` - TilemapStore for storing loaded tilemap data
+/// - `fonts` - FontStore for storing loaded fonts
+/// - `audio_cmd_writer` - MessageWriter for queuing audio loading commands
+/// - `load_font_fn` - Function for loading fonts with mipmaps
+/// - `load_tilemap_fn` - Function for loading tilemap data
+///
+/// # Note
+///
+/// This function is designed for use during setup/initialization, not runtime gameplay.
+pub fn process_asset_command<F1, F2>(
+    rl: &mut raylib::RaylibHandle,
+    th: &raylib::RaylibThread,
+    cmd: AssetCmd,
+    tex_store: &mut crate::resources::texturestore::TextureStore,
+    tilemaps_store: &mut crate::resources::tilemapstore::TilemapStore,
+    fonts: &mut crate::resources::fontstore::FontStore,
+    audio_cmd_writer: &mut MessageWriter<AudioCmd>,
+    load_font_fn: F1,
+    load_tilemap_fn: F2,
+) where
+    F1: FnOnce(
+        &mut raylib::RaylibHandle,
+        &raylib::RaylibThread,
+        &str,
+        i32,
+    ) -> raylib::prelude::Font,
+    F2: FnOnce(
+        &mut raylib::RaylibHandle,
+        &raylib::RaylibThread,
+        &str,
+    ) -> (
+        raylib::prelude::Texture2D,
+        crate::resources::tilemapstore::Tilemap,
+    ),
+{
+    match cmd {
+        AssetCmd::LoadTexture { id, path } => match rl.load_texture(th, &path) {
+            Ok(tex) => {
+                eprintln!("[Rust] Loaded texture '{}' from '{}'", id, path);
+                tex_store.insert(&id, tex);
+            }
+            Err(e) => {
+                eprintln!("[Rust] Failed to load texture '{}': {}", path, e);
+            }
+        },
+        AssetCmd::LoadFont { id, path, size } => {
+            let font = load_font_fn(rl, th, &path, size);
+            eprintln!("[Rust] Loaded font '{}' from '{}'", id, path);
+            fonts.add(&id, font);
+        }
+        AssetCmd::LoadMusic { id, path } => {
+            eprintln!("[Rust] Queuing music '{}' from '{}'", id, path);
+            audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
+        }
+        AssetCmd::LoadSound { id, path } => {
+            eprintln!("[Rust] Queuing sound '{}' from '{}'", id, path);
+            audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
+        }
+        AssetCmd::LoadTilemap { id, path } => {
+            let (tilemap_tex, tilemap) = load_tilemap_fn(rl, th, &path);
+            let tiles_width = tilemap_tex.width;
+            eprintln!(
+                "[Rust] Loaded tilemap '{}' from '{}' ({}x{} texture, tile_size={})",
+                id, path, tiles_width, tilemap_tex.height, tilemap.tile_size
+            );
+            tex_store.insert(&id, tilemap_tex);
+            tilemaps_store.insert(&id, tilemap);
+        }
+    }
+}
+
+/// Process a single animation command from Lua and register it in the animation store.
+///
+/// This function handles animation registration commands by creating AnimationResource
+/// entries in the AnimationStore.
+///
+/// # Parameters
+///
+/// - `anim_store` - AnimationStore for storing animation metadata
+/// - `cmd` - The AnimationCmd to process
+pub fn process_animation_command(
+    anim_store: &mut rustc_hash::FxHashMap<String, crate::resources::animationstore::AnimationResource>,
+    cmd: AnimationCmd,
+) {
+    match cmd {
+        AnimationCmd::RegisterAnimation {
+            id,
+            tex_key,
+            pos_x,
+            pos_y,
+            displacement,
+            frame_count,
+            fps,
+            looped,
+        } => {
+            anim_store.insert(
+                id.clone(),
+                crate::resources::animationstore::AnimationResource {
+                    tex_key,
+                    position: Vector2 { x: pos_x, y: pos_y },
+                    displacement,
+                    frame_count,
+                    fps,
+                    looped,
+                },
+            );
+            eprintln!(
+                "[Rust] Registered animation '{}' ({} frames, {} fps)",
+                id, frame_count, fps
+            );
         }
     }
 }

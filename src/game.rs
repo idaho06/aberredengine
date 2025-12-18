@@ -77,13 +77,15 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::lua_runtime::{AnimationCmd, LuaRuntime};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use crate::systems::lua_commands::process_signal_command;
+use crate::systems::lua_commands::{
+    process_animation_command, process_asset_command, process_signal_command,
+};
 //use rand::Rng;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
@@ -208,7 +210,6 @@ pub fn setup(
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     // This function sets up the game world, loading resources
-    use crate::resources::lua_runtime::AssetCmd;
 
     // Default camera. Needed to start the engine before entering play state
     // The camera will be overridden later in the scene setup
@@ -240,41 +241,17 @@ pub fn setup(
 
     // Process asset commands queued by Lua
     for cmd in lua_runtime.drain_asset_commands() {
-        match cmd {
-            AssetCmd::LoadTexture { id, path } => match rl.load_texture(&th, &path) {
-                Ok(tex) => {
-                    eprintln!("[Rust] Loaded texture '{}' from '{}'", id, path);
-                    tex_store.insert(&id, tex);
-                }
-                Err(e) => {
-                    eprintln!("[Rust] Failed to load texture '{}': {}", path, e);
-                }
-            },
-            AssetCmd::LoadFont { id, path, size } => {
-                let font = load_font_with_mipmaps(&mut rl, &th, &path, size);
-                eprintln!("[Rust] Loaded font '{}' from '{}'", id, path);
-                fonts.add(&id, font);
-            }
-            AssetCmd::LoadMusic { id, path } => {
-                eprintln!("[Rust] Queuing music '{}' from '{}'", id, path);
-                audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
-            }
-            AssetCmd::LoadSound { id, path } => {
-                eprintln!("[Rust] Queuing sound '{}' from '{}'", id, path);
-                audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
-            }
-            AssetCmd::LoadTilemap { id, path } => {
-                // Load tilemap texture and JSON metadata
-                let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, &path);
-                let tiles_width = tilemap_tex.width;
-                eprintln!(
-                    "[Rust] Loaded tilemap '{}' from '{}' ({}x{} texture, tile_size={})",
-                    id, path, tiles_width, tilemap_tex.height, tilemap.tile_size
-                );
-                tex_store.insert(&id, tilemap_tex);
-                tilemaps_store.insert(&id, tilemap);
-            }
-        }
+        process_asset_command(
+            &mut rl,
+            &th,
+            cmd,
+            &mut tex_store,
+            &mut tilemaps_store,
+            &mut fonts,
+            &mut audio_cmd_writer,
+            load_font_with_mipmaps,
+            load_tilemap,
+        );
     }
 
     commands.insert_resource(tex_store);
@@ -285,34 +262,7 @@ pub fn setup(
         animations: FxHashMap::default(),
     };
     for cmd in lua_runtime.drain_animation_commands() {
-        match cmd {
-            crate::resources::lua_runtime::AnimationCmd::RegisterAnimation {
-                id,
-                tex_key,
-                pos_x,
-                pos_y,
-                displacement,
-                frame_count,
-                fps,
-                looped,
-            } => {
-                anim_store.animations.insert(
-                    id.clone(),
-                    AnimationResource {
-                        tex_key,
-                        position: Vector2 { x: pos_x, y: pos_y },
-                        displacement,
-                        frame_count,
-                        fps,
-                        looped,
-                    },
-                );
-                eprintln!(
-                    "[Rust] Registered animation '{}' ({} frames, {} fps)",
-                    id, frame_count, fps
-                );
-            }
-        }
+        process_animation_command(&mut anim_store.animations, cmd);
     }
     commands.insert_resource(anim_store);
 
@@ -359,7 +309,24 @@ pub fn enter_play(
             }
         }
     }
-    // Get Texture sizes
+
+    // Process signal commands queued by Lua (initializes world signals)
+    for cmd in lua_runtime.drain_signal_commands() {
+        process_signal_command(&mut worldsignals, cmd);
+    }
+
+    // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
+
+    // Finally, run the switch_scene system to spawn initial scene entities
+    commands.run_system(
+        systems_store
+            .get("switch_scene")
+            .expect("switch_scene system not found")
+            .clone(),
+    );
+
+    // this is old code to spawn test entities, commented out for now for reference
+
     /* let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
     let dummy_tex_width = dummy_tex.width;
     let dummy_tex_height = dummy_tex.height;
@@ -587,7 +554,7 @@ pub fn enter_play(
     // integer for remaining lives
     // integer for current level
     // string for scene ("menu", "playing", "gameover", etc.)
-    worldsignals.set_integer("score", 0);
+    /* worldsignals.set_integer("score", 0);
     worldsignals.set_integer("high_score", 0);
     worldsignals.set_integer("lives", 3);
     worldsignals.set_integer("level", 1);
@@ -599,7 +566,7 @@ pub fn enter_play(
             .get("switch_scene")
             .expect("switch_scene system not found")
             .clone(),
-    );
+    ); */
 }
 
 /// Per-frame update system for scene-specific logic.
@@ -696,7 +663,7 @@ pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<P
         commands.entity(entity).despawn();
     }
 }
-
+/*
 /// Parse easing string from Lua into Easing enum
 fn parse_easing(easing: &str) -> Easing {
     match easing {
@@ -791,7 +758,7 @@ fn convert_animation_condition(
         }
     }
 }
-
+ */
 /// Processes a SpawnCmd from Lua and spawns the corresponding entity.
 /// Returns the spawned entity ID and optional registration key.
 
