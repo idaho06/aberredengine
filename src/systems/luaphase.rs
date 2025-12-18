@@ -54,6 +54,7 @@ use crate::resources::lua_runtime::{
 };
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::lua_commands::{process_signal_command, process_spawn_command};
 use raylib::prelude::{Color, Vector2};
 
 /// Process Lua-based phase state machines.
@@ -168,28 +169,12 @@ pub fn lua_phase_system(
 
     // Process signal commands from Lua
     for cmd in lua_runtime.drain_signal_commands() {
-        match cmd {
-            SignalCmd::SetScalar { key, value } => {
-                world_signals.set_scalar(&key, value);
-            }
-            SignalCmd::SetInteger { key, value } => {
-                world_signals.set_integer(&key, value);
-            }
-            SignalCmd::SetString { key, value } => {
-                world_signals.set_string(&key, &value);
-            }
-            SignalCmd::SetFlag { key } => {
-                world_signals.set_flag(&key);
-            }
-            SignalCmd::ClearFlag { key } => {
-                world_signals.clear_flag(&key);
-            }
-        }
+        process_signal_command(&mut world_signals, cmd);
     }
 
     // Process spawn commands from Lua (entities spawned during phase callbacks)
     for cmd in lua_runtime.drain_spawn_commands() {
-        crate::systems::lua_commands::process_spawn_cmd(&mut commands, cmd, &mut world_signals);
+        process_spawn_command(&mut commands, cmd, &mut world_signals);
     }
 
     // Process entity commands from Lua (component manipulation)

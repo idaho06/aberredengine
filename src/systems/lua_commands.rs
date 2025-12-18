@@ -11,7 +11,8 @@
 //! # Functions
 //!
 //! - [`process_entity_commands`] – Process all EntityCmd variants
-//! - [`process_spawn_cmd`] – Process a single SpawnCmd to create an entity
+//! - [`process_spawn_command`] – Process a single SpawnCmd to create an entity
+//! - [`process_signal_command`] – Process a single signal command
 //! - [`parse_tween_easing`] – Convert string to Easing enum
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
 
@@ -37,9 +38,29 @@ use crate::components::stuckto::StuckTo;
 use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
-use crate::resources::lua_runtime::{EntityCmd, SpawnCmd};
+use crate::resources::lua_runtime::{EntityCmd, SignalCmd, SpawnCmd};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
+
+pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) {
+    match cmd {
+        SignalCmd::SetScalar { key, value } => {
+            world_signals.set_scalar(&key, value);
+        }
+        SignalCmd::SetInteger { key, value } => {
+            world_signals.set_integer(&key, value);
+        }
+        SignalCmd::SetFlag { key } => {
+            world_signals.set_flag(&key);
+        }
+        SignalCmd::ClearFlag { key } => {
+            world_signals.clear_flag(&key);
+        }
+        SignalCmd::SetString { key, value } => {
+            world_signals.set_string(&key, &value);
+        }
+    }
+}
 
 /// Process all EntityCmd commands queued by Lua.
 ///
@@ -244,7 +265,11 @@ pub fn process_entity_commands(
 /// - `commands` - Bevy Commands for entity creation
 /// - `cmd` - The SpawnCmd containing all entity configuration
 /// - `world_signals` - WorldSignals for entity registration
-pub fn process_spawn_cmd(commands: &mut Commands, cmd: SpawnCmd, world_signals: &mut WorldSignals) {
+pub fn process_spawn_command(
+    commands: &mut Commands,
+    cmd: SpawnCmd,
+    world_signals: &mut WorldSignals,
+) {
     let mut entity_commands = commands.spawn_empty();
     let entity = entity_commands.id();
 

@@ -83,6 +83,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::lua_commands::process_signal_command;
 //use rand::Rng;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
@@ -665,25 +666,10 @@ pub fn update(
 
     // Process signal commands queued by Lua
     for cmd in lua_runtime.drain_signal_commands() {
-        use crate::resources::lua_runtime::SignalCmd;
-        match cmd {
-            SignalCmd::SetScalar { key, value } => {
-                world_signals.set_scalar(&key, value);
-            }
-            SignalCmd::SetInteger { key, value } => {
-                world_signals.set_integer(&key, value);
-            }
-            SignalCmd::SetString { key, value } => {
-                world_signals.set_string(&key, &value);
-            }
-            SignalCmd::SetFlag { key } => {
-                world_signals.set_flag(&key);
-            }
-            SignalCmd::ClearFlag { key } => {
-                world_signals.clear_flag(&key);
-            }
-        }
+        process_signal_command(&mut world_signals, cmd);
     }
+
+    // TODO: Process entity, spawn and audio commands from Lua if needed
 
     // Check for quit flag (set by Lua)
     if world_signals.has_flag("quit_game") {
@@ -855,7 +841,7 @@ pub fn switch_scene(
 
     // Process spawn commands from Lua
     for cmd in lua_runtime.drain_spawn_commands() {
-        crate::systems::lua_commands::process_spawn_cmd(&mut commands, cmd, &mut worldsignals);
+        crate::systems::lua_commands::process_spawn_command(&mut commands, cmd, &mut worldsignals);
     }
 
     // Process group commands from Lua
