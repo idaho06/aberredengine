@@ -13,6 +13,7 @@
 //! - [`process_entity_commands`] – Process all EntityCmd variants
 //! - [`process_spawn_command`] – Process a single SpawnCmd to create an entity
 //! - [`process_signal_command`] – Process a single signal command
+//! - [`process_audio_command`] – Process a single audio command
 //! - [`parse_tween_easing`] – Convert string to Easing enum
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
 
@@ -38,9 +39,37 @@ use crate::components::stuckto::StuckTo;
 use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
-use crate::resources::lua_runtime::{EntityCmd, SignalCmd, SpawnCmd};
+use crate::events::audio::AudioCmd;
+use crate::resources::lua_runtime::{AudioLuaCmd, EntityCmd, SignalCmd, SpawnCmd};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
+
+/// Process a single audio command from Lua and write to the audio command channel.
+///
+/// This function converts Lua audio commands (AudioLuaCmd) into engine audio
+/// commands (AudioCmd) and writes them to the message channel for processing
+/// by the audio system.
+///
+/// # Parameters
+///
+/// - `audio_cmd_writer` - MessageWriter for sending AudioCmd messages
+/// - `cmd` - The AudioLuaCmd to process
+pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd: AudioLuaCmd) {
+    match cmd {
+        AudioLuaCmd::PlayMusic { id, looped } => {
+            audio_cmd_writer.write(AudioCmd::PlayMusic { id, looped });
+        }
+        AudioLuaCmd::PlaySound { id } => {
+            audio_cmd_writer.write(AudioCmd::PlayFx { id });
+        }
+        AudioLuaCmd::StopAllMusic => {
+            audio_cmd_writer.write(AudioCmd::StopAllMusic);
+        }
+        AudioLuaCmd::StopAllSounds => {
+            audio_cmd_writer.write(AudioCmd::UnloadAllFx);
+        }
+    }
+}
 
 pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) {
     match cmd {

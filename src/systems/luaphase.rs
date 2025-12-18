@@ -49,12 +49,12 @@ use crate::components::stuckto::StuckTo;
 use crate::components::timer::Timer;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::lua_runtime::{
-    AudioLuaCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
-};
+use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use crate::systems::lua_commands::{process_signal_command, process_spawn_command};
+use crate::systems::lua_commands::{
+    process_audio_command, process_signal_command, process_spawn_command,
+};
 use raylib::prelude::{Color, Vector2};
 
 /// Process Lua-based phase state machines.
@@ -151,20 +151,7 @@ pub fn lua_phase_system(
 
     // Process audio commands from Lua
     for cmd in lua_runtime.drain_audio_commands() {
-        match cmd {
-            AudioLuaCmd::PlayMusic { id, looped } => {
-                audio_cmd_writer.write(AudioCmd::PlayMusic { id, looped });
-            }
-            AudioLuaCmd::PlaySound { id } => {
-                audio_cmd_writer.write(AudioCmd::PlayFx { id });
-            }
-            AudioLuaCmd::StopAllMusic => {
-                audio_cmd_writer.write(AudioCmd::StopAllMusic);
-            }
-            AudioLuaCmd::StopAllSounds => {
-                audio_cmd_writer.write(AudioCmd::UnloadAllFx);
-            }
-        }
+        process_audio_command(&mut audio_cmd_writer, cmd);
     }
 
     // Process signal commands from Lua
