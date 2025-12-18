@@ -1,3 +1,38 @@
+//! Aberred Engine main entry point.
+//!
+//! A 2D game engine written in Rust using:
+//! - **raylib** for windowing, graphics, and audio
+//! - **bevy_ecs** for entity-component-system architecture
+//! - **mlua + LuaJIT** for game logic scripting
+//!
+//! This executable demonstrates an Arkanoid-style breakout game where most game
+//! logic is defined in Lua scripts under `assets/scripts/`.
+//!
+//! # Project Structure
+//!
+//! - [`components`] – ECS components (sprites, physics, collision, animation, etc.)
+//! - [`events`] – Event types (collision, menu, phase transitions, etc.)
+//! - [`game`] – High-level game setup and scene management
+//! - [`resources`] – ECS resources (world signals, asset stores, camera, etc.)
+//! - [`systems`] – ECS systems (rendering, physics, input, collision, etc.)
+//!
+//! # Main Loop
+//!
+//! 1. Initialize raylib window, ECS world, resources (fonts, audio, Lua runtime)
+//! 2. Load `main.lua` which calls setup callbacks to load assets
+//! 3. Register observers and systems
+//! 4. Run the main game loop:
+//!    - Update input, timers, physics, collision, animation
+//!    - Lua phase callbacks drive game logic
+//!    - Render world with camera transforms
+//! 5. Clean up audio thread on exit
+//!
+//! # Running
+//!
+//! ```sh
+//! cargo run --release
+//! ```
+
 mod components;
 mod events;
 mod game;
