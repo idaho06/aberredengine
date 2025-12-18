@@ -601,76 +601,109 @@ pub fn enter_play(
     );
 }
 
+/// Per-frame update system for scene-specific logic.
+///
+/// This system delegates scene behavior to Lua callbacks:
+/// - Calls `on_update_<scene>` callback in Lua for the current scene
+/// - Lua can queue signal commands (set_flag, set_string, etc.)
+/// - Processes signal commands from Lua
+/// - Reacts to flags set by Lua: "switch_scene", "quit_game"
 pub fn update(
     time: Res<WorldTime>,
-    // mut _query_rb: Query<(&mut MapPosition, &mut RigidBody, &BoxCollider), With<Group>>,
-    // mut query_enemies: Query<(&mut Sprite, &RigidBody), With<Group>>,
-    //mut query_player: Query<(&mut Sprite, &RigidBody), With<Group>>,
     input: Res<InputState>,
     mut commands: Commands,
     systems_store: Res<SystemsStore>,
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
-    let _delta_sec = time.delta;
+    let delta_sec = time.delta;
 
     let scene = world_signals
         .get_string("scene")
         .cloned()
         .unwrap_or("menu".to_string());
 
+    /*
     match scene.as_str() {
         "menu" => {
-            // Menu specific updates
-            if input.action_back.just_pressed {
-                next_game_state.set(GameStates::Quitting);
-            }
-            let switch_scene_system = systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone();
-
-            // Check if a phase callback requested a scene switch
-            //eprintln!("Checking world signals for scene switch...");
-            if world_signals.has_flag("switch_scene") {
-                eprintln!("Scene switch requested in world signals.");
-                world_signals.clear_flag("switch_scene");
-                commands.run_system(switch_scene_system);
-                return;
-            }
+            // Menu-specific logic can go here if needed
         }
         "level01" => {
-            // Level 1 specific updates
-            let switch_scene_system = systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone();
-
-            // Check if a phase callback requested a scene switch
-            //eprintln!("Checking world signals for scene switch...");
-            if world_signals.has_flag("switch_scene") {
-                eprintln!("Scene switch requested in world signals.");
-                world_signals.clear_flag("switch_scene");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-
-            // If action_back is pressed, go back to menu
-            if input.action_back.just_pressed {
-                world_signals.set_string("scene", "menu");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-
-            // NOTE: Ball loss, life management, and level cleared are now handled
-            // by the Phase system (see phase callbacks in switch_scene)
-        }
-        "level02" => {
-            // Level 2 specific updates
+            // Level-specific logic can go here if needed
         }
         _ => {
-            // Default or unknown scene updates
+            // Default or unknown scene logic
         }
+    }
+    */
+
+    // Update signal cache for Lua to read current values
+    lua_runtime.update_signal_cache(
+        &world_signals.scalars,
+        &world_signals.integers,
+        &world_signals.strings,
+        &world_signals.flags,
+        &world_signals.group_counts(),
+        &world_signals
+            .entities
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_bits()))
+            .collect(),
+    );
+
+    // Update input cache for Lua to read current input state
+    lua_runtime.update_input_cache(&input);
+
+    // Call scene-specific update callback
+    let callback_name = format!("on_update_{}", scene);
+    if lua_runtime.has_function(&callback_name) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, delta_sec) {
+            eprintln!("[Rust] Error calling {}: {}", callback_name, e);
+        }
+    }
+
+    // Process signal commands queued by Lua
+    for cmd in lua_runtime.drain_signal_commands() {
+        use crate::resources::lua_runtime::SignalCmd;
+        match cmd {
+            SignalCmd::SetScalar { key, value } => {
+                world_signals.set_scalar(&key, value);
+            }
+            SignalCmd::SetInteger { key, value } => {
+                world_signals.set_integer(&key, value);
+            }
+            SignalCmd::SetString { key, value } => {
+                world_signals.set_string(&key, &value);
+            }
+            SignalCmd::SetFlag { key } => {
+                world_signals.set_flag(&key);
+            }
+            SignalCmd::ClearFlag { key } => {
+                world_signals.clear_flag(&key);
+            }
+            _ => {
+                // Other signal commands (entity-specific, etc.) aren't relevant here
+            }
+        }
+    }
+
+    // Check for quit flag (set by Lua)
+    if world_signals.has_flag("quit_game") {
+        world_signals.clear_flag("quit_game");
+        next_game_state.set(GameStates::Quitting);
+        return;
+    }
+
+    // Check for scene switch flag (set by Lua)
+    if world_signals.has_flag("switch_scene") {
+        eprintln!("Scene switch requested in world signals.");
+        world_signals.clear_flag("switch_scene");
+        let switch_scene_system = systems_store
+            .get("switch_scene")
+            .expect("switch_scene system not found")
+            .clone();
+        commands.run_system(switch_scene_system);
     }
 }
 

@@ -736,4 +736,17 @@ function M.spawn()
     engine.log_info("Level01 scene entities queued!")
 end
 
+--- Called each frame when level01 scene is active.
+--- @param dt number Delta time in seconds
+function on_update_level01(dt)
+    -- Check for back button to return to menu
+    if engine.is_action_back_just_pressed() then
+        engine.set_string("scene", "menu")
+        engine.set_flag("switch_scene")
+    end
+
+    -- Note: Most game logic (ball physics, brick destruction, etc.) is handled
+    -- by the phase system callbacks above. This is just for input handling.
+end
+
 return M

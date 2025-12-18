@@ -38,6 +38,11 @@ pub(super) struct LuaAppData {
     signal_entities: RefCell<FxHashMap<String, u64>>,
     /// Cached tracked group names (read-only snapshot for Lua)
     tracked_groups: RefCell<FxHashSet<String>>,
+    /// Cached input state (read-only snapshot for Lua)
+    input_action_back_pressed: RefCell<bool>,
+    input_action_back_just_pressed: RefCell<bool>,
+    input_action_confirm_pressed: RefCell<bool>,
+    input_action_confirm_just_pressed: RefCell<bool>,
 }
 
 /// Resource holding the Lua interpreter state.
@@ -83,6 +88,10 @@ impl LuaRuntime {
             group_counts: RefCell::new(FxHashMap::default()),
             signal_entities: RefCell::new(FxHashMap::default()),
             tracked_groups: RefCell::new(FxHashSet::default()),
+            input_action_back_pressed: RefCell::new(false),
+            input_action_back_just_pressed: RefCell::new(false),
+            input_action_confirm_pressed: RefCell::new(false),
+            input_action_confirm_just_pressed: RefCell::new(false),
         });
 
         let runtime = Self { lua };
@@ -98,6 +107,7 @@ impl LuaRuntime {
         runtime.register_camera_api()?;
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
+        runtime.register_input_api()?;
 
         Ok(runtime)
     }
@@ -963,6 +973,65 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Registers input query functions in the `engine` table.
+    fn register_input_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+
+        // engine.is_action_back_pressed() - Check if action_back (ESC) is currently pressed
+        engine.set(
+            "is_action_back_pressed",
+            self.lua.create_function(|lua, ()| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .input_action_back_pressed
+                    .borrow()
+                    .clone()
+                    .into_lua(lua)
+            })?,
+        )?;
+
+        // engine.is_action_back_just_pressed() - Check if action_back (ESC) was just pressed this frame
+        engine.set(
+            "is_action_back_just_pressed",
+            self.lua.create_function(|lua, ()| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .input_action_back_just_pressed
+                    .borrow()
+                    .clone()
+                    .into_lua(lua)
+            })?,
+        )?;
+
+        // engine.is_action_confirm_pressed() - Check if action_confirm (SPACE) is currently pressed
+        engine.set(
+            "is_action_confirm_pressed",
+            self.lua.create_function(|lua, ()| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .input_action_confirm_pressed
+                    .borrow()
+                    .clone()
+                    .into_lua(lua)
+            })?,
+        )?;
+
+        // engine.is_action_confirm_just_pressed() - Check if action_confirm (SPACE) was just pressed this frame
+        engine.set(
+            "is_action_confirm_just_pressed",
+            self.lua.create_function(|lua, ()| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .input_action_confirm_just_pressed
+                    .borrow()
+                    .clone()
+                    .into_lua(lua)
+            })?,
+        )?;
+
+        Ok(())
+    }
+
     /// Drains all queued asset commands.
     ///
     /// Call this from a Rust system after Lua has queued commands via
@@ -1119,6 +1188,17 @@ impl LuaRuntime {
     pub fn update_tracked_groups_cache(&self, groups: &FxHashSet<String>) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             *data.tracked_groups.borrow_mut() = groups.clone();
+        }
+    }
+
+    /// Updates the cached input state that Lua can read.
+    /// Call this before invoking Lua callbacks so they have fresh input data.
+    pub fn update_input_cache(&self, input: &crate::resources::input::InputState) {
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            *data.input_action_back_pressed.borrow_mut() = input.action_back.active;
+            *data.input_action_back_just_pressed.borrow_mut() = input.action_back.just_pressed;
+            *data.input_action_confirm_pressed.borrow_mut() = input.action_1.active;
+            *data.input_action_confirm_just_pressed.borrow_mut() = input.action_1.just_pressed;
         }
     }
 

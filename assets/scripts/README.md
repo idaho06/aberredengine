@@ -7,6 +7,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Getting Started](#getting-started)
 - [Script Execution Flow](#script-execution-flow)
 - [Logging Functions](#logging-functions)
+- [Input Functions](#input-functions)
 - [Asset Loading](#asset-loading)
 - [Audio Playback](#audio-playback)
 - [Entity Spawning](#entity-spawning)
@@ -64,11 +65,6 @@ function on_enter_play()
     return "Hello from Lua!"  -- Optional return value
 end
 
--- Called every frame during gameplay
-function on_update(dt)
-    -- dt: delta time in seconds
-end
-
 -- Called when switching scenes
 function on_switch_scene(scene_name)
     local scene = require("scenes." .. scene_name)
@@ -78,21 +74,43 @@ function on_switch_scene(scene_name)
 end
 ```
 
+**Note**: The `on_update(dt)` callback in `main.lua` is not called by the engine. Use per-scene update callbacks instead (see below).
+
 ### 2. Scene Scripts
 
-Scene scripts in `scenes/` directory are loaded on-demand. Each scene module should export a `spawn()` function:
+Scene scripts in `scenes/` directory are loaded on-demand. Each scene module should export:
+- A `spawn()` function - called when the scene is loaded
+- An `on_update_<scenename>(dt)` function - called every frame when that scene is active
 
 ```lua
 -- scenes/level01.lua
 local M = {}
 
+-- Called when switching to this scene
 function M.spawn()
     engine.log_info("Spawning level 01...")
     -- Spawn entities here
 end
 
+-- Called every frame while this scene is active
+function on_update_level01(dt)
+    -- dt: delta time in seconds
+
+    -- Handle input for this scene
+    if engine.is_action_back_just_pressed() then
+        engine.set_string("scene", "menu")
+        engine.set_flag("switch_scene")
+    end
+
+    -- Most game logic goes in phase callbacks, not here
+end
+
 return M
 ```
+
+**Global Flags**:
+- `"switch_scene"` - Set this flag to trigger a scene change (cleared by engine after processing)
+- `"quit_game"` - Set this flag to exit the game (cleared by engine after processing)
 
 ---
 
@@ -121,6 +139,52 @@ Error level logging with "[Lua ERROR]" prefix.
 ```lua
 engine.log_error("Failed to load asset: " .. path)
 ```
+
+---
+
+## Input Functions
+
+Query the current input state from Lua. These functions read cached input values updated each frame.
+
+### `engine.is_action_back_pressed()`
+Returns `true` if the back/cancel button (ESC) is currently held down.
+```lua
+if engine.is_action_back_pressed() then
+    -- ESC key is being held
+end
+```
+
+### `engine.is_action_back_just_pressed()`
+Returns `true` if the back/cancel button (ESC) was pressed this frame (not held from previous frame).
+```lua
+-- Common pattern: Return to menu on ESC press
+function on_update_level01(dt)
+    if engine.is_action_back_just_pressed() then
+        engine.set_string("scene", "menu")
+        engine.set_flag("switch_scene")
+    end
+end
+```
+
+### `engine.is_action_confirm_pressed()`
+Returns `true` if the confirm/action button (SPACE) is currently held down.
+```lua
+if engine.is_action_confirm_pressed() then
+    -- Space bar is being held
+end
+```
+
+### `engine.is_action_confirm_just_pressed()`
+Returns `true` if the confirm/action button (SPACE) was pressed this frame.
+```lua
+if engine.is_action_confirm_just_pressed() then
+    -- Player just pressed space - trigger action
+end
+```
+
+**Input Mapping**:
+- `action_back` → ESC key
+- `action_confirm` → SPACE key (also used as `action_1`)
 
 ---
 

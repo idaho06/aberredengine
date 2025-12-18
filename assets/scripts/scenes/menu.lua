@@ -83,4 +83,16 @@ function M.spawn()
     engine.log_info("Menu scene entities queued!")
 end
 
+--- Called each frame when menu scene is active.
+--- @param dt number Delta time in seconds
+function on_update_menu(dt)
+    -- Check for back button to quit game
+    if engine.is_action_back_just_pressed() then
+        engine.set_flag("quit_game")
+    end
+
+    -- Note: Menu actions (scene switching) are handled by the menu system,
+    -- so no additional logic is needed here for that.
+end
+
 return M
