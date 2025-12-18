@@ -12,6 +12,7 @@
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::worldsignals::WorldSignals)
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
 //! - [`inputsimplecontroller`] – translate input state into velocity on entities
+//! - [`lua_commands`] – shared command processing for Lua-Rust communication
 //! - [`menu`] – menu spawning, input handling, and selection
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
@@ -30,6 +31,7 @@ pub mod gridlayout;
 pub mod group;
 pub mod input;
 pub mod inputsimplecontroller;
+pub mod lua_commands;
 pub mod luaphase;
 pub mod luatimer;
 pub mod menu;
