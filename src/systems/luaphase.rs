@@ -53,7 +53,8 @@ use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_audio_command, process_signal_command, process_spawn_command,
+    process_audio_command, process_entity_commands, process_phase_command, process_signal_command,
+    process_spawn_command,
 };
 use raylib::prelude::{Color, Vector2};
 
@@ -138,15 +139,7 @@ pub fn lua_phase_system(
 
     // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
-        match cmd {
-            PhaseCmd::TransitionTo { entity_id, phase } => {
-                // Find entity by ID and set its next phase
-                let entity = Entity::from_bits(entity_id);
-                if let Ok((_, mut lua_phase)) = query.get_mut(entity) {
-                    lua_phase.next = Some(phase);
-                }
-            }
-        }
+        process_phase_command(&mut query, cmd);
     }
 
     // Process audio commands from Lua
@@ -165,7 +158,7 @@ pub fn lua_phase_system(
     }
 
     // Process entity commands from Lua (component manipulation)
-    crate::systems::lua_commands::process_entity_commands(
+    process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
         &stuckto_query,

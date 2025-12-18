@@ -27,6 +27,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::animation::Animation;
+use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
@@ -37,7 +38,8 @@ use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_audio_command, process_signal_command, process_spawn_command,
+    process_audio_command, process_entity_commands, process_phase_command, process_signal_command,
+    process_spawn_command,
 };
 use raylib::prelude::Vector2;
 
@@ -81,12 +83,12 @@ pub fn update_lua_timers(
 ///
 /// If the Lua function doesn't exist, logs a warning but doesn't crash.
 pub fn lua_timer_observer(
-    trigger: Trigger<LuaTimerEvent>,
+    trigger: On<LuaTimerEvent>,
     mut commands: Commands,
     stuckto_query: Query<&StuckTo>,
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
-    mut luaphase_query: Query<&mut crate::components::luaphase::LuaPhase>,
+    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
@@ -124,14 +126,7 @@ pub fn lua_timer_observer(
 
     // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
-        match cmd {
-            PhaseCmd::TransitionTo { entity_id, phase } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut lua_phase) = luaphase_query.get_mut(entity) {
-                    lua_phase.next = Some(phase);
-                }
-            }
-        }
+        process_phase_command(&mut luaphase_query, cmd);
     }
 
     // Process audio commands from Lua
@@ -150,7 +145,7 @@ pub fn lua_timer_observer(
     }
 
     // Process entity commands from Lua
-    crate::systems::lua_commands::process_entity_commands(
+    process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
         &stuckto_query,

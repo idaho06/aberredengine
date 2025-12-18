@@ -13,6 +13,7 @@
 //! - [`process_entity_commands`] – Process all EntityCmd variants
 //! - [`process_spawn_command`] – Process a single SpawnCmd to create an entity
 //! - [`process_signal_command`] – Process a single signal command
+//! - [`process_phase_command`] – Process a single phase command
 //! - [`process_audio_command`] – Process a single audio command
 //! - [`parse_tween_easing`] – Convert string to Easing enum
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
@@ -87,6 +88,29 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         }
         SignalCmd::SetString { key, value } => {
             world_signals.set_string(&key, &value);
+        }
+    }
+}
+
+/// Process a single phase command from Lua and apply it to the appropriate entity.
+///
+/// This function converts Lua phase commands (PhaseCmd) into entity state changes
+/// by updating the LuaPhase component's next phase field.
+///
+/// # Parameters
+///
+/// - `luaphase_query` - Query for accessing and modifying LuaPhase components
+/// - `cmd` - The PhaseCmd to process
+pub fn process_phase_command(
+    luaphase_query: &mut Query<(Entity, &mut crate::components::luaphase::LuaPhase)>,
+    cmd: crate::resources::lua_runtime::PhaseCmd,
+) {
+    match cmd {
+        crate::resources::lua_runtime::PhaseCmd::TransitionTo { entity_id, phase } => {
+            let entity = Entity::from_bits(entity_id);
+            if let Ok((_, mut lua_phase)) = luaphase_query.get_mut(entity) {
+                lua_phase.next = Some(phase);
+            }
         }
     }
 }
