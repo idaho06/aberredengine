@@ -1,6 +1,10 @@
 -- main.lua
 -- Entry point for game scripts
 -- This file is loaded when the engine starts
+--
+-- Global flags used by the engine:
+-- - "switch_scene": Set to trigger scene switching (cleared by engine after processing)
+-- - "quit_game": Set to exit the game (cleared by engine after processing)
 
 engine.log("===========================================")
 engine.log("  Aberred Engine - Lua Scripting Active!")
@@ -51,12 +55,6 @@ function on_enter_play()
 
     -- Return a greeting that Rust can read
     return "Hello from Lua! Ready to play."
-end
-
---- Called every frame during gameplay.
---- @param dt number Delta time in seconds
-function on_update(dt)
-    -- This will be implemented in a future phase
 end
 
 --- Called when switching scenes.
