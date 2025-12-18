@@ -38,7 +38,7 @@ use raylib::ffi;
 use raylib::ffi::TextureFilter::{TEXTURE_FILTER_ANISOTROPIC_8X, TEXTURE_FILTER_BILINEAR};
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
-//use std::collections::HashMap;
+//use std::collections::HashMap; // always prefer FxHashMap for performance
 
 // Import component/resource types from modules
 use crate::components::animation::Animation;
@@ -339,11 +339,11 @@ pub fn enter_play(
     //mut next_state: ResMut<NextGameState>,
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     //th: NonSend<raylib::RaylibThread>,
-    mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
-    tex_store: Res<TextureStore>,
-    tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
+    //mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
+    //tex_store: Res<TextureStore>,
+    //tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
     mut worldsignals: ResMut<WorldSignals>,
-    mut tracked_groups: ResMut<TrackedGroups>,
+    //mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
@@ -681,9 +681,6 @@ pub fn update(
             }
             SignalCmd::ClearFlag { key } => {
                 world_signals.clear_flag(&key);
-            }
-            _ => {
-                // Other signal commands (entity-specific, etc.) aren't relevant here
             }
         }
     }
@@ -1150,13 +1147,13 @@ pub fn switch_scene(
     mut commands: Commands,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     mut worldsignals: ResMut<WorldSignals>,
-    systems_store: Res<SystemsStore>,
-    mut tilemaps_store: ResMut<TilemapStore>,
-    mut tex_store: ResMut<TextureStore>,
+    //systems_store: Res<SystemsStore>,
+    tilemaps_store: Res<TilemapStore>,
+    tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
-    mut rl: NonSendMut<raylib::RaylibHandle>,
-    th: NonSend<raylib::RaylibThread>,
+    //mut rl: NonSendMut<raylib::RaylibHandle>,
+    //th: NonSend<raylib::RaylibThread>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
@@ -1264,43 +1261,42 @@ pub fn switch_scene(
         }
     }
 
-    // TODO: As the scene switching is moved to Lua, most of the code below can be removed
-    match scene.as_str() {
-        "menu" => {
-            // NOTE: Camera is now set by menu.lua spawn() function via engine.set_camera()
-            // NOTE: Title entity with tweens is now spawned by menu.lua spawn() function
-            // NOTE: Background sprite is now spawned by menu.lua spawn() function
-            // NOTE: Cursor, Menu, MenuActions, and menu music are now spawned/played by menu.lua
-        }
-        "level01" => {
-            // Phase callbacks are now handled via LuaPhase in level01.lua
-            // The Lua script spawns a scene_phases entity with :with_phase({...})
+    /*     match scene.as_str() {
+           "menu" => {
+               // NOTE: Camera is now set by menu.lua spawn() function via engine.set_camera()
+               // NOTE: Title entity with tweens is now spawned by menu.lua spawn() function
+               // NOTE: Background sprite is now spawned by menu.lua spawn() function
+               // NOTE: Cursor, Menu, MenuActions, and menu music are now spawned/played by menu.lua
+           }
+           "level01" => {
+               // Phase callbacks are now handled via LuaPhase in level01.lua
+               // The Lua script spawns a scene_phases entity with :with_phase({...})
 
-            // ==================== COLLISION CALLBACKS ====================
-            // NOTE: Collision rules are now handled via LuaCollisionRule in level01.lua
-            // The Lua script spawns collision_rules entities with :with_lua_collision_rule()
+               // ==================== COLLISION CALLBACKS ====================
+               // NOTE: Collision rules are now handled via LuaCollisionRule in level01.lua
+               // The Lua script spawns collision_rules entities with :with_lua_collision_rule()
 
-            // ==================== SCENE SETUP ====================
+               // ==================== SCENE SETUP ====================
 
-            // NOTE: Score and lives are now reset by level01.lua spawn() function
-            // NOTE: Tilemap is now loaded in setup() via Lua's engine.load_tilemap()
-            // NOTE: Tiles are now spawned via Lua's engine.spawn_tiles() in level01.lua
-            // NOTE: Bricks are now spawned via Lua's engine.spawn():with_grid_layout() in level01.lua
+               // NOTE: Score and lives are now reset by level01.lua spawn() function
+               // NOTE: Tilemap is now loaded in setup() via Lua's engine.load_tilemap()
+               // NOTE: Tiles are now spawned via Lua's engine.spawn_tiles() in level01.lua
+               // NOTE: Bricks are now spawned via Lua's engine.spawn():with_grid_layout() in level01.lua
 
-            // NOTE: Player is now spawned by level01.lua spawn() function
-            // NOTE: Ball is now spawned by the "get_started" phase on_enter callback
-            // NOTE: Walls are now spawned by level01.lua spawn() function
-            // NOTE: Score UI texts are now spawned by level01.lua spawn() function
-            // NOTE: Camera is now set by level01.lua spawn() function via engine.set_camera()
+               // NOTE: Player is now spawned by level01.lua spawn() function
+               // NOTE: Ball is now spawned by the "get_started" phase on_enter callback
+               // NOTE: Walls are now spawned by level01.lua spawn() function
+               // NOTE: Score UI texts are now spawned by level01.lua spawn() function
+               // NOTE: Camera is now set by level01.lua spawn() function via engine.set_camera()
 
-            // NOTE: Tracked groups (ball, brick) are now set up by level01.lua spawn()
-        }
-        "level02" => {}
-        _ => {
-            eprintln!("Unknown scene: {}", scene);
-            panic!("Unknown scene");
-        }
-    }
-
+               // NOTE: Tracked groups (ball, brick) are now set up by level01.lua spawn()
+           }
+           "level02" => {}
+           _ => {
+               eprintln!("Unknown scene: {}", scene);
+               panic!("Unknown scene");
+           }
+       }
+    */
     // Stop any playing music when switching scenes
 }
