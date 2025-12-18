@@ -84,7 +84,8 @@ use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_animation_command, process_asset_command, process_signal_command,
+    process_animation_command, process_asset_command, process_group_command,
+    process_signal_command, process_spawn_command,
 };
 //use rand::Rng;
 
@@ -808,22 +809,12 @@ pub fn switch_scene(
 
     // Process spawn commands from Lua
     for cmd in lua_runtime.drain_spawn_commands() {
-        crate::systems::lua_commands::process_spawn_command(&mut commands, cmd, &mut worldsignals);
+        process_spawn_command(&mut commands, cmd, &mut worldsignals);
     }
 
     // Process group commands from Lua
     for cmd in lua_runtime.drain_group_commands() {
-        match cmd {
-            crate::resources::lua_runtime::GroupCmd::TrackGroup { name } => {
-                tracked_groups.add_group(&name);
-            }
-            crate::resources::lua_runtime::GroupCmd::UntrackGroup { name } => {
-                tracked_groups.remove_group(&name);
-            }
-            crate::resources::lua_runtime::GroupCmd::ClearTrackedGroups => {
-                tracked_groups.clear();
-            }
-        }
+        process_group_command(&mut tracked_groups, cmd);
     }
 
     // Update the tracked groups cache for Lua

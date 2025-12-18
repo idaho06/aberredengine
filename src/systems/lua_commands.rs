@@ -15,6 +15,7 @@
 //! - [`process_entity_commands`] – Process all EntityCmd variants
 //! - [`process_spawn_command`] – Process a single SpawnCmd to create an entity
 //! - [`process_signal_command`] – Process a signal command
+//! - [`process_group_command`] – Process a group tracking command
 //! - [`process_phase_command`] – Process a phase command
 //! - [`process_audio_command`] – Process an audio command
 //! - [`process_asset_command`] – Process an asset loading command
@@ -45,7 +46,8 @@ use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::lua_runtime::{AnimationCmd, AssetCmd, AudioLuaCmd, EntityCmd, SignalCmd, SpawnCmd};
+use crate::resources::group::TrackedGroups;
+use crate::resources::lua_runtime::{AnimationCmd, AssetCmd, AudioLuaCmd, EntityCmd, GroupCmd, SignalCmd, SpawnCmd};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
 
@@ -92,6 +94,29 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         }
         SignalCmd::SetString { key, value } => {
             world_signals.set_string(&key, &value);
+        }
+    }
+}
+
+/// Process a single group command from Lua and update the tracked groups.
+///
+/// This function handles group tracking commands by adding, removing, or clearing
+/// tracked groups in the TrackedGroups resource.
+///
+/// # Parameters
+///
+/// - `tracked_groups` - TrackedGroups resource for managing tracked entity groups
+/// - `cmd` - The GroupCmd to process
+pub fn process_group_command(tracked_groups: &mut TrackedGroups, cmd: GroupCmd) {
+    match cmd {
+        GroupCmd::TrackGroup { name } => {
+            tracked_groups.add_group(&name);
+        }
+        GroupCmd::UntrackGroup { name } => {
+            tracked_groups.remove_group(&name);
+        }
+        GroupCmd::ClearTrackedGroups => {
+            tracked_groups.clear();
         }
     }
 }
