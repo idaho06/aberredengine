@@ -424,6 +424,16 @@ impl LuaUserData for LuaEntityBuilder {
             },
         );
 
+        // :with_lua_timer(duration, callback) - Add LuaTimer component
+        // LuaTimer calls a Lua function after duration seconds
+        methods.add_method_mut(
+            "with_lua_timer",
+            |_, this, (duration, callback): (f32, String)| {
+                this.cmd.lua_timer = Some((duration, callback));
+                Ok(this.clone())
+            },
+        );
+
         // :with_signal_binding(key) - Bind DynamicText to a WorldSignal value
         // The text content will auto-update when the signal changes
         methods.add_method_mut("with_signal_binding", |_, this, key: String| {

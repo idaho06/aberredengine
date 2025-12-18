@@ -37,6 +37,7 @@ pub mod group;
 pub mod inputcontrolled;
 pub mod luacollision;
 pub mod luaphase;
+pub mod luatimer;
 pub mod mapposition;
 pub mod menu;
 pub mod persistent;

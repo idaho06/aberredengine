@@ -296,6 +296,12 @@ function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@return EntityBuilder
 function EntityBuilder:with_timer(duration, signal) end
 
+---Add Lua timer component (calls Lua function when timer expires)
+---@param duration number Timer duration in seconds
+---@param callback string Lua function name to call (receives entity_id as parameter)
+---@return EntityBuilder
+function EntityBuilder:with_lua_timer(duration, callback) end
+
 ---Bind DynamicText to a WorldSignal value
 ---@param key string Signal key to bind to
 ---@return EntityBuilder
@@ -529,6 +535,59 @@ function engine.release_stuckto(entity_id) end
 ---@param entity_id integer Entity ID
 ---@param animation_key string Animation identifier
 function engine.entity_set_animation(entity_id, animation_key) end
+
+---Insert LuaTimer component on an entity at runtime
+---@param entity_id integer Entity ID
+---@param duration number Timer duration in seconds
+---@param callback string Lua function name to call when timer expires
+function engine.entity_insert_lua_timer(entity_id, duration, callback) end
+
+---Remove LuaTimer component from an entity
+---@param entity_id integer Entity ID
+function engine.entity_remove_lua_timer(entity_id) end
+
+---Insert or replace TweenPosition component at runtime
+---@param entity_id integer Entity ID
+---@param from_x number Starting X position
+---@param from_y number Starting Y position
+---@param to_x number Target X position
+---@param to_y number Target Y position
+---@param duration number Duration in seconds
+---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode) end
+
+---Insert or replace TweenRotation component at runtime
+---@param entity_id integer Entity ID
+---@param from number Starting rotation in degrees
+---@param to number Target rotation in degrees
+---@param duration number Duration in seconds
+---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode) end
+
+---Insert or replace TweenScale component at runtime
+---@param entity_id integer Entity ID
+---@param from_x number Starting X scale
+---@param from_y number Starting Y scale
+---@param to_x number Target X scale
+---@param to_y number Target Y scale
+---@param duration number Duration in seconds
+---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode) end
+
+---Remove TweenPosition component from an entity
+---@param entity_id integer Entity ID
+function engine.entity_remove_tween_position(entity_id) end
+
+---Remove TweenRotation component from an entity
+---@param entity_id integer Entity ID
+function engine.entity_remove_tween_rotation(entity_id) end
+
+---Remove TweenScale component from an entity
+---@param entity_id integer Entity ID
+function engine.entity_remove_tween_scale(entity_id) end
 
 -- ==================== Phase Control ====================
 

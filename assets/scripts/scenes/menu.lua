@@ -22,6 +22,7 @@ function M.spawn()
         :with_sprite("background", 672, 768, 336, 384) -- width, height, origin_x, origin_y
         :with_zindex(0)
         :with_scale(3, 3)
+        :register_as("menu_background")
         :build()
 
     -- Spawn the animated title
@@ -44,6 +45,7 @@ function M.spawn()
         :with_tween_scale(0.9, 0.9, 1.1, 1.1, 1.0)
         :with_tween_scale_easing("quad_in_out")
         :with_tween_scale_loop("ping_pong")
+        :with_lua_timer(4.0, "on_timer_title_test") -- example timer callback
         :build()
 
     -- Spawn cursor first so the menu can reference it by key.
@@ -93,6 +95,27 @@ function on_update_menu(dt)
 
     -- Note: Menu actions (scene switching) are handled by the menu system,
     -- so no additional logic is needed here for that.
+end
+
+function on_timer_title_test(entity_id)
+    -- Test callback for Lua timer on title entity_id
+    engine.log_info("Title timer test callback triggered for entity ID: " .. tostring(entity_id))
+    -- Create another lua timer attached to the background entity as a demonstration
+    local bg_entity = engine.get_entity("menu_background")
+    if bg_entity then
+        engine.entity_insert_lua_timer(bg_entity, 3.0, "on_timer_background_test")
+    end
+    -- remove this timer so it doesn't repeat
+    engine.entity_remove_lua_timer(entity_id)
+end
+
+function on_timer_background_test(entity_id)
+    -- Test callback for Lua timer on background entity_id
+    engine.log_info("Background timer test callback triggered for entity ID: " .. tostring(entity_id))
+    -- Add a tween scale effect to the background as a demonstration
+    engine.entity_insert_tween_scale(entity_id, 3.0, 3.0, 3.2, 3.2, 2.0, "cubic_in_out", "ping_pong")
+    -- remove this timer so it doesn't repeat
+    engine.entity_remove_lua_timer(entity_id)
 end
 
 return M

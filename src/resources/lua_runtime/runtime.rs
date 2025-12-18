@@ -600,6 +600,170 @@ impl LuaRuntime {
                 })?,
         )?;
 
+        // engine.entity_insert_lua_timer(entity_id, duration, callback) - Insert a LuaTimer component
+        engine.set(
+            "entity_insert_lua_timer",
+            self.lua
+                .create_function(|lua, (entity_id, duration, callback): (u64, f32, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertLuaTimer {
+                            entity_id,
+                            duration,
+                            callback,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_remove_lua_timer(entity_id) - Remove a LuaTimer component
+        engine.set(
+            "entity_remove_lua_timer",
+            self.lua
+                .create_function(|lua, entity_id: u64| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::RemoveLuaTimer { entity_id });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        engine.set(
+            "entity_insert_tween_position",
+            self.lua.create_function(
+                |lua,
+                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
+                    u64,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    String,
+                    String,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTweenPosition {
+                            entity_id,
+                            from_x,
+                            from_y,
+                            to_x,
+                            to_y,
+                            duration,
+                            easing,
+                            loop_mode,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode)
+        engine.set(
+            "entity_insert_tween_rotation",
+            self.lua.create_function(
+                |lua, (entity_id, from, to, duration, easing, loop_mode): (u64, f32, f32, f32, String, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTweenRotation {
+                            entity_id,
+                            from,
+                            to,
+                            duration,
+                            easing,
+                            loop_mode,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        engine.set(
+            "entity_insert_tween_scale",
+            self.lua.create_function(
+                |lua,
+                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
+                    u64,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    String,
+                    String,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTweenScale {
+                            entity_id,
+                            from_x,
+                            from_y,
+                            to_x,
+                            to_y,
+                            duration,
+                            easing,
+                            loop_mode,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_remove_tween_position(entity_id)
+        engine.set(
+            "entity_remove_tween_position",
+            self.lua
+                .create_function(|lua, entity_id: u64| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::RemoveTweenPosition { entity_id });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_remove_tween_rotation(entity_id)
+        engine.set(
+            "entity_remove_tween_rotation",
+            self.lua
+                .create_function(|lua, entity_id: u64| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::RemoveTweenRotation { entity_id });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_remove_tween_scale(entity_id)
+        engine.set(
+            "entity_remove_tween_scale",
+            self.lua
+                .create_function(|lua, entity_id: u64| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::RemoveTweenScale { entity_id });
+                    Ok(())
+                })?,
+        )?;
+
         Ok(())
     }
 

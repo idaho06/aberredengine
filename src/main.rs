@@ -76,6 +76,7 @@ use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
+use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
 use crate::systems::tween::tween_scale_system;
@@ -159,6 +160,7 @@ fn main() {
     world.add_observer(switch_debug_observer);
     world.add_observer(menu_controller_observer);
     world.add_observer(menu_selection_observer);
+    world.add_observer(lua_timer_observer);
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
@@ -198,6 +200,7 @@ fn main() {
     update.add_systems(animation_controller.after(lua_phase_system));
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
+    update.add_systems(update_lua_timers);
     update.add_systems(update_world_signals_binding_system);
     update.add_systems(
         (game::update)

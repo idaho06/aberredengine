@@ -78,6 +78,51 @@ pub enum EntityCmd {
         entity_id: u64,
         animation_key: String,
     },
+    /// Insert a LuaTimer component
+    InsertLuaTimer {
+        entity_id: u64,
+        duration: f32,
+        callback: String,
+    },
+    /// Remove a LuaTimer component
+    RemoveLuaTimer { entity_id: u64 },
+    /// Insert TweenPosition component
+    InsertTweenPosition {
+        entity_id: u64,
+        from_x: f32,
+        from_y: f32,
+        to_x: f32,
+        to_y: f32,
+        duration: f32,
+        easing: String,
+        loop_mode: String,
+    },
+    /// Insert TweenRotation component
+    InsertTweenRotation {
+        entity_id: u64,
+        from: f32,
+        to: f32,
+        duration: f32,
+        easing: String,
+        loop_mode: String,
+    },
+    /// Insert TweenScale component
+    InsertTweenScale {
+        entity_id: u64,
+        from_x: f32,
+        from_y: f32,
+        to_x: f32,
+        to_y: f32,
+        duration: f32,
+        easing: String,
+        loop_mode: String,
+    },
+    /// Remove TweenPosition component
+    RemoveTweenPosition { entity_id: u64 },
+    /// Remove TweenRotation component
+    RemoveTweenRotation { entity_id: u64 },
+    /// Remove TweenScale component
+    RemoveTweenScale { entity_id: u64 },
 }
 
 /// Commands for manipulating entity components from Lua collision callbacks.

@@ -1,79 +1,98 @@
-//! Lua-based phase state machine systems.
+//! Lua timer systems.
 //!
-//! This module provides systems for processing [`LuaPhase`] components:
+//! This module provides systems for processing [`LuaTimer`](crate::components::luatimer::LuaTimer) components:
 //!
-//! - [`lua_phase_system`] – runs Lua callbacks for phase enter/update/exit
-//!
-//! Unlike the Rust-based [`phase`](super::phase) system, this system delegates
-//! all callback logic to Lua scripts via named function references.
+//! - [`update_lua_timers`] – updates timer elapsed time and emits events when they expire
+//! - [`lua_timer_observer`] – observer that calls Lua functions when timer events fire
 //!
 //! # System Flow
 //!
-//! Each frame, for each entity with a `LuaPhase` component:
+//! Each frame:
 //!
-//! 1. If `needs_enter_callback` is set, call the on_enter function for current phase
-//! 2. If `next` is set (transition requested):
-//!    - Call on_exit for old phase
-//!    - Swap phases, reset time
-//!    - Call on_enter for new phase
-//! 3. Call on_update for current phase
-//! 4. Increment `time_in_phase` by delta
-//! 5. Process any phase transition commands from Lua
+//! 1. `update_lua_timers` accumulates delta time on all LuaTimer components
+//! 2. When `elapsed >= duration`, emits `LuaTimerEvent` and resets timer
+//! 3. `lua_timer_observer` receives events and calls the named Lua function
+//! 4. Lua callback executes with full engine API access
+//! 5. Commands queued by Lua are processed (spawns, audio, signals, entity ops)
 //!
-//! # Callback Signatures (Lua side)
+//! # Lua Callback Signature
 //!
 //! ```lua
-//! function my_enter_callback(entity_id, previous_phase)
-//! function my_update_callback(entity_id, time_in_phase)
-//! function my_exit_callback(entity_id, next_phase)
+//! function callback_name(entity_id)
+//!     -- entity_id is a u64 number
+//!     -- Full access to engine API
+//! end
 //! ```
 
 use bevy_ecs::prelude::*;
 
 use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
-use crate::components::dynamictext::DynamicText;
-use crate::components::group::Group;
-use crate::components::inputcontrolled::MouseControlled;
-use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
-use crate::components::mapposition::MapPosition;
-use crate::components::persistent::Persistent;
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::signalbinding::SignalBinding;
+use crate::components::luatimer::LuaTimer;
 use crate::components::signals::Signals;
-use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
-use crate::components::timer::Timer;
-use crate::components::zindex::ZIndex;
+use crate::components::rigidbody::RigidBody;
 use crate::events::audio::AudioCmd;
+use crate::events::luatimer::LuaTimerEvent;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
 };
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use raylib::prelude::{Color, Vector2};
+use raylib::prelude::Vector2;
 
-/// Process Lua-based phase state machines.
+/// Update all Lua timer components and emit events when they expire.
 ///
-/// This system:
-/// 1. Updates signal cache for Lua to read
-/// 2. Runs Lua phase callbacks (enter/update/exit) via named functions
-/// 3. Processes commands queued by Lua (audio, signals, phases, spawns, entity ops)
-/// 4. Handles phase transitions
-pub fn lua_phase_system(
+/// Accumulates delta time on each [`LuaTimer`](crate::components::luatimer::LuaTimer)
+/// and triggers a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when
+/// `elapsed >= duration`. The timer resets by subtracting duration, allowing for
+/// consistent periodic timing.
+pub fn update_lua_timers(
+    world_time: Res<WorldTime>,
+    mut query: Query<(Entity, &mut LuaTimer)>,
     mut commands: Commands,
-    mut query: Query<(Entity, &mut LuaPhase)>,
+) {
+    for (entity, mut timer) in query.iter_mut() {
+        timer.elapsed += world_time.delta;
+        if timer.elapsed >= timer.duration {
+            // Emit timer event
+            commands.trigger(LuaTimerEvent {
+                entity,
+                callback: timer.callback.clone(),
+            });
+            // Reset timer (subtract duration instead of zeroing)
+            timer.reset();
+        }
+    }
+}
+
+/// Observer that handles Lua timer events by calling Lua functions.
+///
+/// When a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) is triggered:
+///
+/// 1. Checks if the Lua function exists
+/// 2. Calls it with `(entity_id)` as parameter
+/// 3. Processes all commands queued by the Lua function:
+///    - Audio commands (play music/sounds)
+///    - Signal commands (modify WorldSignals)
+///    - Phase commands (trigger phase transitions)
+///    - Spawn commands (create new entities)
+///    - Entity commands (modify components)
+///
+/// If the Lua function doesn't exist, logs a warning but doesn't crash.
+pub fn lua_timer_observer(
+    trigger: Trigger<LuaTimerEvent>,
+    mut commands: Commands,
     stuckto_query: Query<&StuckTo>,
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
-    time: Res<WorldTime>,
+    mut luaphase_query: Query<&mut crate::components::luaphase::LuaPhase>,
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
+    let event = trigger.event();
+    let entity_id = event.entity.to_bits();
+
     // Update signal cache so Lua can read current values
     let group_counts = world_signals.group_counts();
     let entities: rustc_hash::FxHashMap<String, u64> = world_signals
@@ -90,58 +109,24 @@ pub fn lua_phase_system(
         &entities,
     );
 
-    for (entity, mut lua_phase) in query.iter_mut() {
-        let entity_id = entity.to_bits();
-
-        // Handle initial enter callback
-        if lua_phase.needs_enter_callback {
-            lua_phase.needs_enter_callback = false;
-            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
-                if let Some(ref fn_name) = callbacks.on_enter {
-                    call_lua_callback(&lua_runtime, fn_name, entity_id, LuaNil);
-                }
-            }
+    // Call the Lua callback
+    if lua_runtime.has_function(&event.callback) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(&event.callback, entity_id) {
+            eprintln!("[Lua] Error in {}(): {}", event.callback, e);
         }
-
-        // Handle pending transition
-        if let Some(next_phase) = lua_phase.next.take() {
-            let old_phase = std::mem::replace(&mut lua_phase.current, next_phase.clone());
-            lua_phase.previous = Some(old_phase.clone());
-            lua_phase.time_in_phase = 0.0;
-
-            // Call exit callback for old phase
-            if let Some(callbacks) = lua_phase.get_callbacks(&old_phase) {
-                if let Some(ref fn_name) = callbacks.on_exit {
-                    call_lua_callback(&lua_runtime, fn_name, entity_id, next_phase.as_str());
-                }
-            }
-
-            // Call enter callback for new phase
-            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
-                if let Some(ref fn_name) = callbacks.on_enter {
-                    call_lua_callback(&lua_runtime, fn_name, entity_id, old_phase.as_str());
-                }
-            }
-        }
-
-        // Call update callback
-        if let Some(callbacks) = lua_phase.current_callbacks() {
-            if let Some(ref fn_name) = callbacks.on_update {
-                call_lua_callback(&lua_runtime, fn_name, entity_id, lua_phase.time_in_phase);
-            }
-        }
-
-        // Increment time
-        lua_phase.time_in_phase += time.delta;
+    } else {
+        eprintln!(
+            "[Lua] Warning: timer callback '{}' not found",
+            event.callback
+        );
     }
 
     // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
         match cmd {
             PhaseCmd::TransitionTo { entity_id, phase } => {
-                // Find entity by ID and set its next phase
                 let entity = Entity::from_bits(entity_id);
-                if let Ok((_, mut lua_phase)) = query.get_mut(entity) {
+                if let Ok(mut lua_phase) = luaphase_query.get_mut(entity) {
                     lua_phase.next = Some(phase);
                 }
             }
@@ -187,24 +172,21 @@ pub fn lua_phase_system(
         }
     }
 
-    // Process spawn commands from Lua (entities spawned during phase callbacks)
+    // Process spawn commands from Lua
     for cmd in lua_runtime.drain_spawn_commands() {
         process_spawn_cmd(&mut commands, cmd, &mut world_signals);
     }
 
-    // Process entity commands from Lua (component manipulation)
+    // Process entity commands from Lua
     for cmd in lua_runtime.drain_entity_commands() {
         match cmd {
             EntityCmd::ReleaseStuckTo { entity_id } => {
                 let entity = Entity::from_bits(entity_id);
-                // Get the stored velocity before removing StuckTo
                 if let Ok(stuckto) = stuckto_query.get(entity) {
                     if let Some(velocity) = stuckto.stored_velocity {
-                        // Add RigidBody with stored velocity
                         commands.entity(entity).insert(RigidBody { velocity });
                     }
                 }
-                // Remove StuckTo component
                 commands.entity(entity).remove::<StuckTo>();
             }
             EntityCmd::SignalSetFlag { entity_id, flag } => {
@@ -250,7 +232,6 @@ pub fn lua_phase_system(
                         y: stored_vy,
                     }),
                 });
-                // Remove RigidBody when inserting StuckTo
                 commands.entity(entity).remove::<RigidBody>();
             }
             EntityCmd::RestartAnimation { entity_id } => {
@@ -276,12 +257,10 @@ pub fn lua_phase_system(
                 duration,
                 callback,
             } => {
-                use crate::components::luatimer::LuaTimer;
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).insert(LuaTimer::new(duration, callback));
             }
             EntityCmd::RemoveLuaTimer { entity_id } => {
-                use crate::components::luatimer::LuaTimer;
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).remove::<LuaTimer>();
             }
@@ -295,7 +274,7 @@ pub fn lua_phase_system(
                 easing,
                 loop_mode,
             } => {
-                use crate::components::tween::{Easing, LoopMode, TweenPosition};
+                use crate::components::tween::TweenPosition;
                 let entity = Entity::from_bits(entity_id);
                 let parsed_easing = parse_tween_easing(&easing);
                 let parsed_loop = parse_tween_loop_mode(&loop_mode);
@@ -317,7 +296,7 @@ pub fn lua_phase_system(
                 easing,
                 loop_mode,
             } => {
-                use crate::components::tween::{Easing, LoopMode, TweenRotation};
+                use crate::components::tween::TweenRotation;
                 let entity = Entity::from_bits(entity_id);
                 let parsed_easing = parse_tween_easing(&easing);
                 let parsed_loop = parse_tween_loop_mode(&loop_mode);
@@ -335,7 +314,7 @@ pub fn lua_phase_system(
                 easing,
                 loop_mode,
             } => {
-                use crate::components::tween::{Easing, LoopMode, TweenScale};
+                use crate::components::tween::TweenScale;
                 let entity = Entity::from_bits(entity_id);
                 let parsed_easing = parse_tween_easing(&easing);
                 let parsed_loop = parse_tween_loop_mode(&loop_mode);
@@ -368,7 +347,7 @@ pub fn lua_phase_system(
     }
 }
 
-/// Parse easing string from Lua into Easing enum
+/// Parse easing string into Easing enum.
 fn parse_tween_easing(easing: &str) -> crate::components::tween::Easing {
     use crate::components::tween::Easing;
     match easing {
@@ -379,41 +358,42 @@ fn parse_tween_easing(easing: &str) -> crate::components::tween::Easing {
         "cubic_in" => Easing::CubicIn,
         "cubic_out" => Easing::CubicOut,
         "cubic_in_out" => Easing::CubicInOut,
-        _ => Easing::Linear,
+        _ => Easing::Linear, // Default to linear for unknown
     }
 }
 
-/// Parse loop mode string from Lua into LoopMode enum
+/// Parse loop mode string into LoopMode enum.
 fn parse_tween_loop_mode(loop_mode: &str) -> crate::components::tween::LoopMode {
     use crate::components::tween::LoopMode;
     match loop_mode {
         "once" => LoopMode::Once,
         "loop" => LoopMode::Loop,
         "ping_pong" => LoopMode::PingPong,
-        _ => LoopMode::Once,
+        _ => LoopMode::Once, // Default to once for unknown
     }
 }
 
-use mlua::IntoLua;
-use mlua::Nil as LuaNil;
-
-/// Call a named Lua function with (entity_id, arg2).
-fn call_lua_callback<'lua, T: IntoLua>(
-    lua_runtime: &LuaRuntime,
-    fn_name: &str,
-    entity_id: u64,
-    arg2: T,
-) {
-    if lua_runtime.has_function(fn_name) {
-        if let Err(e) = lua_runtime.call_function::<_, ()>(fn_name, (entity_id, arg2)) {
-            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
-        }
-    } else {
-        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
-    }
-}
-/// Processes a SpawnCmd from Lua and spawns the corresponding entity.
+/// Process a spawn command from Lua and create the corresponding entity.
+///
+/// This is a copy of the function from lua_phase_system, used to process
+/// entity spawns requested by Lua timer callbacks.
 fn process_spawn_cmd(commands: &mut Commands, cmd: SpawnCmd, world_signals: &mut WorldSignals) {
+    use crate::components::boxcollider::BoxCollider;
+    use crate::components::dynamictext::DynamicText;
+    use crate::components::group::Group;
+    use crate::components::inputcontrolled::MouseControlled;
+    use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
+    use crate::components::mapposition::MapPosition;
+    use crate::components::persistent::Persistent;
+    use crate::components::rotation::Rotation;
+    use crate::components::scale::Scale;
+    use crate::components::screenposition::ScreenPosition;
+    use crate::components::signalbinding::SignalBinding;
+    use crate::components::sprite::Sprite;
+    use crate::components::timer::Timer;
+    use crate::components::zindex::ZIndex;
+    use raylib::prelude::Color;
+
     let mut entity_commands = commands.spawn_empty();
     let entity = entity_commands.id();
 
@@ -541,7 +521,6 @@ fn process_spawn_cmd(commands: &mut Commands, cmd: SpawnCmd, world_signals: &mut
 
     // LuaPhase
     if let Some(phase_data) = cmd.phase_data {
-        // Convert PhaseCallbackData to PhaseCallbacks
         let phases = phase_data
             .phases
             .into_iter()
@@ -582,7 +561,6 @@ fn process_spawn_cmd(commands: &mut Commands, cmd: SpawnCmd, world_signals: &mut
 
     // LuaTimer
     if let Some((duration, callback)) = cmd.lua_timer {
-        use crate::components::luatimer::LuaTimer;
         entity_commands.insert(LuaTimer::new(duration, callback));
     }
 

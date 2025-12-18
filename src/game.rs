@@ -964,6 +964,12 @@ fn process_spawn_cmd(
         entity_commands.insert(Timer::new(duration, signal));
     }
 
+    // LuaTimer
+    if let Some((duration, callback)) = cmd.lua_timer {
+        use crate::components::luatimer::LuaTimer;
+        entity_commands.insert(LuaTimer::new(duration, callback));
+    }
+
     // SignalBinding
     if let Some((key, format)) = cmd.signal_binding {
         let mut binding = SignalBinding::new(&key);

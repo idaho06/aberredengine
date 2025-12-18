@@ -845,6 +845,47 @@ Add Timer component that fires after duration.
 :with_timer(3.0, "powerup_expired")
 ```
 
+**Note:** Standard timers emit events that must be handled by observers. For simpler use cases where you just want to call a Lua function, use `:with_lua_timer()` instead.
+
+#### `:with_lua_timer(duration, callback)`
+Add LuaTimer component that calls a Lua function after duration.
+
+**Parameters:**
+- `duration` - Time in seconds
+- `callback` - Lua function name to call when timer expires
+
+**Callback Signature:**
+```lua
+function callback_name(entity_id)
+    -- entity_id: u64 - the entity that owns this timer
+    -- Full access to engine API
+end
+```
+
+**Example:**
+```lua
+-- Add timer during entity spawn
+engine.spawn()
+    :with_position(100, 100)
+    :with_sprite("enemy", 32, 32, 16, 16)
+    :with_lua_timer(3.0, "enemy_explode")
+    :build()
+
+-- Define the callback function
+function enemy_explode(entity_id)
+    engine.log_info("Enemy exploding!")
+    engine.play_sound("explosion")
+    engine.entity_despawn(entity_id)
+end
+```
+
+**Features:**
+- Timer automatically resets after firing (repeats every `duration` seconds)
+- Lua callback has full engine API access (spawn entities, play audio, modify components, etc.)
+- Can be added at spawn-time with `:with_lua_timer()` or at runtime with `engine.entity_insert_lua_timer()`
+
+**See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
+
 #### `:with_lua_collision_rule(group_a, group_b, callback)`
 Register collision callback between two groups.
 
@@ -1044,6 +1085,151 @@ engine.entity_signal_set_integer(brick_id, "hp", hp - 1)
 Insert Timer component on entity.
 ```lua
 engine.entity_insert_timer(player_id, 5.0, "invulnerability_expired")
+```
+
+### `engine.entity_insert_lua_timer(entity_id, duration, callback)`
+Insert LuaTimer component on entity at runtime.
+
+**Parameters:**
+- `entity_id` - Entity to add timer to
+- `duration` - Time in seconds before timer fires
+- `callback` - Lua function name to call when timer expires
+
+**Example:**
+```lua
+-- In a collision callback
+function on_ball_powerup(ctx)
+    local player_id = engine.get_entity("player")
+
+    -- Give player 10 seconds of invulnerability
+    engine.entity_signal_set_flag(player_id, "invulnerable")
+    engine.entity_insert_lua_timer(player_id, 10.0, "remove_invulnerability")
+
+    engine.entity_despawn(ctx.b.id)  -- Remove powerup
+end
+
+-- Timer callback
+function remove_invulnerability(entity_id)
+    engine.entity_signal_clear_flag(entity_id, "invulnerable")
+    engine.play_sound("powerup_end")
+    engine.log_info("Invulnerability expired")
+end
+```
+
+**Note:** The timer automatically repeats every `duration` seconds until the component is removed or the entity is despawned.
+
+### `engine.entity_remove_lua_timer(entity_id)`
+Remove LuaTimer component from an entity to stop the timer.
+
+**Parameters:**
+- `entity_id` - Entity to remove timer from
+
+**Example:**
+```lua
+-- One-shot timer that removes itself after firing
+function on_timer_title_test(entity_id)
+    engine.log_info("Timer fired once!")
+    engine.play_sound("beep")
+
+    -- Remove timer so it doesn't repeat
+    engine.entity_remove_lua_timer(entity_id)
+end
+```
+
+### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)`
+Add or replace TweenPosition component at runtime to animate entity movement.
+
+**Parameters:**
+- `entity_id` - Entity to add tween to
+- `from_x`, `from_y` - Starting position
+- `to_x`, `to_y` - Target position
+- `duration` - Animation duration in seconds
+- `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+- `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
+
+**Example:**
+```lua
+-- Make entity slide from left to right with smooth easing
+local entity_id = engine.get_entity("player")
+engine.entity_insert_tween_position(entity_id, -100, 0, 100, 0, 2.0, "quad_out", "once")
+```
+
+### `engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode)`
+Add or replace TweenRotation component at runtime to animate entity rotation.
+
+**Parameters:**
+- `entity_id` - Entity to add tween to
+- `from` - Starting rotation in degrees
+- `to` - Target rotation in degrees
+- `duration` - Animation duration in seconds
+- `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+- `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
+
+**Example:**
+```lua
+-- Rotate entity 360 degrees continuously
+local entity_id = engine.get_entity("spinner")
+engine.entity_insert_tween_rotation(entity_id, 0, 360, 3.0, "linear", "loop")
+```
+
+### `engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)`
+Add or replace TweenScale component at runtime to animate entity scaling.
+
+**Parameters:**
+- `entity_id` - Entity to add tween to
+- `from_x`, `from_y` - Starting scale
+- `to_x`, `to_y` - Target scale
+- `duration` - Animation duration in seconds
+- `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+- `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
+
+**Example:**
+```lua
+-- Make entity pulse between normal and slightly larger
+local entity_id = engine.get_entity("button")
+engine.entity_insert_tween_scale(entity_id, 1.0, 1.0, 1.2, 1.2, 0.5, "quad_in_out", "ping_pong")
+```
+
+### `engine.entity_remove_tween_position(entity_id)`
+Remove TweenPosition component from an entity to stop position animation.
+
+**Parameters:**
+- `entity_id` - Entity to remove tween from
+
+**Example:**
+```lua
+-- Stop position animation when player takes damage
+function on_player_hit(entity_id)
+    engine.entity_remove_tween_position(entity_id)
+end
+```
+
+### `engine.entity_remove_tween_rotation(entity_id)`
+Remove TweenRotation component from an entity to stop rotation animation.
+
+**Parameters:**
+- `entity_id` - Entity to remove tween from
+
+**Example:**
+```lua
+-- Stop rotation animation
+local entity_id = engine.get_entity("spinner")
+engine.entity_remove_tween_rotation(entity_id)
+```
+
+### `engine.entity_remove_tween_scale(entity_id)`
+Remove TweenScale component from an entity to stop scale animation.
+
+**Parameters:**
+- `entity_id` - Entity to remove tween from
+
+**Example:**
+```lua
+-- Stop scale pulsing when menu is closed
+function on_menu_close()
+    local button = engine.get_entity("start_button")
+    engine.entity_remove_tween_scale(button)
+end
 ```
 
 ### `engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
