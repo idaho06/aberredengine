@@ -295,7 +295,7 @@ pub fn enter_play(
     //tex_store: Res<TextureStore>,
     //tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
     mut worldsignals: ResMut<WorldSignals>,
-    //mut tracked_groups: ResMut<TrackedGroups>,
+    mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
@@ -315,6 +315,14 @@ pub fn enter_play(
     for cmd in lua_runtime.drain_signal_commands() {
         process_signal_command(&mut worldsignals, cmd);
     }
+
+    // Process group commands from Lua (configures which groups to track globally)
+    for cmd in lua_runtime.drain_group_commands() {
+        process_group_command(&mut tracked_groups, cmd);
+    }
+
+    // Update the tracked groups cache for Lua
+    lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
     // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
 
