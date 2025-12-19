@@ -17,6 +17,7 @@ local setup = require("setup")
 local scenes = {}
 
 --- Lazy-load a scene module.
+--- Used by `on_switch_scene` in this script to load scene logic as needed.
 --- @param name string The scene name (e.g., "menu", "level01")
 --- @return table|nil The scene module or nil if not found
 local function get_scene(name)
@@ -74,7 +75,7 @@ function on_switch_scene(scene_name)
     if scene and scene.spawn then
         scene.spawn()
     else
-        engine.log_info("No Lua spawning for scene '" .. scene_name .. "' (using Rust fallback)")
+        engine.log_warn("No Lua `M.spawn` function for scene '" .. scene_name .. "' (using Rust fallback?)")
     end
 end
 
