@@ -38,7 +38,7 @@ use raylib::ffi;
 use raylib::ffi::TextureFilter::{TEXTURE_FILTER_ANISOTROPIC_8X, TEXTURE_FILTER_BILINEAR};
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
-//use std::collections::HashMap;
+//use std::collections::HashMap; // always prefer FxHashMap for performance
 
 // Import component/resource types from modules
 use crate::components::animation::Animation;
@@ -52,10 +52,11 @@ use crate::components::gridlayout::GridLayout;
 use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::inputcontrolled::MouseControlled;
+use crate::components::luacollision::LuaCollisionRule;
+use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::persistent::Persistent;
-use crate::components::phase::{Phase, PhaseCallback, PhaseContext};
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -77,11 +78,17 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::lua_runtime::{AnimationCmd, LuaRuntime};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::lua_commands::{
+    process_animation_command, process_asset_command, process_audio_command,
+    process_camera_command, process_entity_commands, process_group_command, process_phase_command,
+    process_signal_command, process_spawn_command, process_tilemap_command,
+};
 //use rand::Rng;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
@@ -130,6 +137,7 @@ fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Te
     (texture, tilemap)
 }
 
+/// Spawn tiles from a Tilemap resource into the ECS world.
 fn spawn_tiles(
     commands: &mut Commands,
     tilemap_tex_key: impl Into<String>,
@@ -202,9 +210,12 @@ pub fn setup(
     th: NonSend<raylib::RaylibThread>,
     mut fonts: NonSendMut<FontStore>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
     // This function sets up the game world, loading resources
 
+    // Default camera. Needed to start the engine before entering play state
+    // The camera will be overridden later in the scene setup
     let camera = Camera2D {
         target: Vector2 {
             x: 0.0,
@@ -220,211 +231,47 @@ pub fn setup(
     };
     commands.insert_resource(Camera2DRes(camera));
 
-    // Load fonts
-    let font = load_font_with_mipmaps(&mut rl, &th, "./assets/fonts/Arcade_Cabinet.ttf", 128);
-    fonts.add("arcade", font);
+    // Call Lua on_setup function to queue asset loading commands
+    if lua_runtime.has_function("on_setup") {
+        if let Err(e) = lua_runtime.call_function::<_, ()>("on_setup", ()) {
+            eprintln!("[Rust] Error calling on_setup: {}", e);
+        }
+    }
 
-    let font = load_font_with_mipmaps(&mut rl, &th, "./assets/fonts/Formal_Future.ttf", 128);
-    fonts.add("future", font);
-
-    // Load textures
-    let title_tex = rl
-        .load_texture(&th, "./assets/textures/title.png")
-        .expect("load assets/title.png");
-
-    let background_tex = rl
-        .load_texture(&th, "./assets/textures/background01.png")
-        .expect("load assets/background01.png");
-
-    let cursor_tex = rl
-        .load_texture(&th, "./assets/textures/cursor.png")
-        .expect("load assets/cursor.png");
-    let vaus_tex = rl
-        .load_texture(&th, "./assets/textures/vaus.png")
-        .expect("load assets/vaus.png");
-    let ball_tex = rl
-        .load_texture(&th, "./assets/textures/ball_12.png")
-        .expect("load assets/ball_12.png");
-    let brick_red_tex = rl
-        .load_texture(&th, "./assets/textures/brick_red.png")
-        .expect("load assets/brick_red.png");
-    let brick_green_tex = rl
-        .load_texture(&th, "./assets/textures/brick_green.png")
-        .expect("load assets/brick_green.png");
-    let brick_blue_tex = rl
-        .load_texture(&th, "./assets/textures/brick_blue.png")
-        .expect("load assets/brick_blue.png");
-    let brick_yellow_tex = rl
-        .load_texture(&th, "./assets/textures/brick_yellow.png")
-        .expect("load assets/brick_yellow.png");
-    let brick_purple_tex = rl
-        .load_texture(&th, "./assets/textures/brick_purple.png")
-        .expect("load assets/brick_purple.png");
-    let brick_silver_tex = rl
-        .load_texture(&th, "./assets/textures/brick_silver.png")
-        .expect("load assets/brick_silver.png");
-
-    /* let dummy_tex = rl
-        .load_texture(&th, "./assets/textures/player.png")
-        .expect("load assets/player.png");
-
-    let enemy_tex = rl
-        .load_texture(&th, "./assets/textures/enemy.png")
-        .expect("load assets/enemy.png");
-
-    let player_sheet_tex = rl
-        .load_texture(&th, "./assets/textures/WarriorMan-Sheet.png")
-        .expect("load assets/WarriorMan-Sheet.png"); */
-
-    // Load tilemap textures and data
-    //let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/maptest04");
+    // Initialize stores
+    let mut tex_store = TextureStore::new();
     let mut tilemaps_store = TilemapStore::new();
-    //tilemaps_store.insert("tilemap", tilemap);
+
+    // Process asset commands queued by Lua
+    for cmd in lua_runtime.drain_asset_commands() {
+        process_asset_command(
+            &mut rl,
+            &th,
+            cmd,
+            &mut tex_store,
+            &mut tilemaps_store,
+            &mut fonts,
+            &mut audio_cmd_writer,
+            load_font_with_mipmaps,
+            load_tilemap,
+        );
+    }
+
+    commands.insert_resource(tex_store);
     commands.insert_resource(tilemaps_store);
 
-    // Create textures from texts, fonts, and sizes for static texts
-    /* let arcade_font = fonts
-        .get("arcade")
-        .expect("Font 'arcade' not found in FontStore");
-    let billboard_tex = load_texture_from_text(
-        &mut rl,
-        &th,
-        arcade_font,
-        "Static Billboard!",
-        32.0,
-        1.0,
-        Color::RED,
-    )
-    .expect("Failed to create texture from text"); */
-
-    // Insert TextureStore resource
-    let mut tex_store = TextureStore::new();
-    tex_store.insert("title", title_tex);
-    tex_store.insert("background", background_tex);
-    tex_store.insert("cursor", cursor_tex);
-    tex_store.insert("vaus", vaus_tex);
-    tex_store.insert("ball", ball_tex);
-    tex_store.insert("brick_red", brick_red_tex);
-    tex_store.insert("brick_green", brick_green_tex);
-    tex_store.insert("brick_blue", brick_blue_tex);
-    tex_store.insert("brick_yellow", brick_yellow_tex);
-    tex_store.insert("brick_purple", brick_purple_tex);
-    tex_store.insert("brick_silver", brick_silver_tex);
-    /* tex_store.insert("player-sheet", player_sheet_tex);
-    tex_store.insert("dummy", dummy_tex);
-    tex_store.insert("enemy", enemy_tex);
-    tex_store.insert("tilemap", tilemap_tex);
-    tex_store.insert("billboard", billboard_tex); */
-    commands.insert_resource(tex_store);
-
-    // Animations
+    // Process animation registration commands from Lua
     let mut anim_store = AnimationStore {
         animations: FxHashMap::default(),
     };
-    /* anim_store.animations.insert(
-        "player_tired".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 16.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_stand".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 80.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_walk".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 144.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_run".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 208.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8,
-            fps: 6.0, // speed of the animation
-            looped: true,
-        },
-    );
-    anim_store.animations.insert(
-        "player_jump".into(),
-        AnimationResource {
-            tex_key: "player-sheet".into(),
-            position: Vector2 { x: 0.0, y: 272.0 },
-            displacement: 80.0, // width of each frame in the spritesheet
-            frame_count: 8 + 3,
-            fps: 12.0, // speed of the animation
-            looped: true,
-        },
-    ); */
+    for cmd in lua_runtime.drain_animation_commands() {
+        process_animation_command(&mut anim_store.animations, cmd);
+    }
     commands.insert_resource(anim_store);
-
-    // Send messages to load musics and sound effects via ECS Messages<AudioCmd>
-    /* audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "music1".into(),
-        path: "./assets/audio/chiptun1.mod".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "music2".into(),
-        path: "./assets/audio/mini1111.xm".into(),
-    }); */
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "boss_fight".into(),
-        path: "./assets/audio/boss_fight.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "journey_begins".into(),
-        path: "./assets/audio/journey_begins.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "player_ready".into(),
-        path: "./assets/audio/player_ready.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "success".into(),
-        path: "./assets/audio/success.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadMusic {
-        id: "menu".into(),
-        path: "./assets/audio/woffy_-_arkanoid_cover.xm".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "ding".into(),
-        path: "./assets/audio/ding.wav".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "ping".into(),
-        path: "./assets/audio/ping.wav".into(),
-    });
-    audio_cmd_writer.write(AudioCmd::LoadFx {
-        id: "option".into(),
-        path: "./assets/audio/option.wav".into(),
-    });
-
-    // Don't block; the audio thread will emit load messages which are polled by systems.
 
     // Change GameState to Playing
     next_state.set(GameStates::Playing);
-    eprintln!("Game setup_with_commands() done, next state set to Playing");
+    eprintln!("Game setup() done, next state set to Playing");
 }
 
 pub fn quit_game(
@@ -446,14 +293,51 @@ pub fn enter_play(
     //mut next_state: ResMut<NextGameState>,
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     //th: NonSend<raylib::RaylibThread>,
-    mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
-    tex_store: Res<TextureStore>,
-    tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
+    //mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
+    //tex_store: Res<TextureStore>,
+    //tilemaps_store: Res<TilemapStore>, // TODO: Make it optional?
     mut worldsignals: ResMut<WorldSignals>,
     mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
-    // Get Texture sizes
+    // Call Lua on_enter_play function if it exists
+    if lua_runtime.has_function("on_enter_play") {
+        match lua_runtime.call_function::<_, String>("on_enter_play", ()) {
+            Ok(result) => {
+                eprintln!("[Rust] Lua on_enter_play returned: {}", result);
+            }
+            Err(e) => {
+                eprintln!("[Rust] Error calling on_enter_play: {}", e);
+            }
+        }
+    }
+
+    // Process signal commands queued by Lua (initializes world signals)
+    for cmd in lua_runtime.drain_signal_commands() {
+        process_signal_command(&mut worldsignals, cmd);
+    }
+
+    // Process group commands from Lua (configures which groups to track globally)
+    for cmd in lua_runtime.drain_group_commands() {
+        process_group_command(&mut tracked_groups, cmd);
+    }
+
+    // Update the tracked groups cache for Lua
+    lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
+
+    // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
+
+    // Finally, run the switch_scene system to spawn initial scene entities
+    commands.run_system(
+        systems_store
+            .get("switch_scene")
+            .expect("switch_scene system not found")
+            .clone(),
+    );
+
+    // this is old code to spawn test entities, commented out for now for reference
+
     /* let dummy_tex = tex_store.get("dummy").expect("dummy texture not found");
     let dummy_tex_width = dummy_tex.width;
     let dummy_tex_height = dummy_tex.height;
@@ -681,67 +565,11 @@ pub fn enter_play(
     // integer for remaining lives
     // integer for current level
     // string for scene ("menu", "playing", "gameover", etc.)
-    worldsignals.set_integer("score", 0);
+    /* worldsignals.set_integer("score", 0);
     worldsignals.set_integer("high_score", 0);
     worldsignals.set_integer("lives", 3);
     worldsignals.set_integer("level", 1);
     worldsignals.set_string("scene", "menu");
-
-    // Observer for TimerEvent
-    commands.add_observer(|trigger: On<TimerEvent>, mut commands: Commands| {
-        match trigger.signal.as_str() {
-            "stop_title" => {
-                //commands.entity(trigger.entity).remove::<RigidBody>();
-                commands.entity(trigger.entity).insert(RigidBody {
-                    velocity: Vector2 { x: 0.0, y: 0.0 },
-                });
-                commands.entity(trigger.entity).remove::<Timer>();
-                commands.entity(trigger.entity).insert(MapPosition {
-                    pos: Vector2 { x: 0.0, y: -220.0 },
-                });
-            }
-            _ => (),
-        }
-    });
-
-    // Observer to remove the "sticky" flag from the entity (meant to be used by the "player" or "ball" entity)
-    commands.add_observer(
-        |trigger: On<TimerEvent>, mut signals: Query<&mut Signals>, mut commands: Commands| {
-            let entity = trigger.entity;
-            let signal = &trigger.signal;
-
-            if signal == "remove_sticky" {
-                if let Ok(mut sigs) = signals.get_mut(entity) {
-                    sigs.clear_flag("sticky");
-                }
-                commands.entity(entity).remove::<Timer>();
-            }
-        },
-    );
-
-    // Observer to remove StuckTo component and restore velocity
-    commands.add_observer(
-        |trigger: On<TimerEvent>,
-         stuck_to_query: Query<&StuckTo>,
-         mut rigid_body: Query<&mut RigidBody>,
-         mut commands: Commands| {
-            let entity = trigger.entity;
-            let signal = &trigger.signal;
-
-            if signal == "remove_stuck_to" {
-                // Restore stored velocity from StuckTo component before removing it
-                if let Ok(stuck_to) = stuck_to_query.get(entity) {
-                    if let Some(stored_velocity) = stuck_to.stored_velocity {
-                        if let Ok(mut rb) = rigid_body.get_mut(entity) {
-                            rb.velocity = stored_velocity;
-                        }
-                    }
-                }
-                commands.entity(entity).remove::<StuckTo>();
-                commands.entity(entity).remove::<Timer>();
-            }
-        },
-    );
 
     // Finally, run the switch_scene system to spawn initial scene entities
     commands.run_system(
@@ -749,79 +577,127 @@ pub fn enter_play(
             .get("switch_scene")
             .expect("switch_scene system not found")
             .clone(),
-    );
+    ); */
 }
 
+/// Per-frame update system for scene-specific logic.
+///
+/// This system delegates scene behavior to Lua callbacks:
+/// - Calls `on_update_<scene>` callback in Lua for the current scene
+/// - Lua can queue signal commands (set_flag, set_string, etc.)
+/// - Processes signal commands from Lua
+/// - Reacts to flags set by Lua: "switch_scene", "quit_game"
 pub fn update(
     time: Res<WorldTime>,
-    // mut _query_rb: Query<(&mut MapPosition, &mut RigidBody, &BoxCollider), With<Group>>,
-    // mut query_enemies: Query<(&mut Sprite, &RigidBody), With<Group>>,
-    //mut query_player: Query<(&mut Sprite, &RigidBody), With<Group>>,
     input: Res<InputState>,
     mut commands: Commands,
     systems_store: Res<SystemsStore>,
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
+    lua_runtime: NonSend<LuaRuntime>,
+    mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    stuckto_query: Query<&StuckTo>,
+    mut signals_query: Query<&mut Signals>,
+    mut animation_query: Query<&mut Animation>,
+    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
 ) {
-    let _delta_sec = time.delta;
+    let delta_sec = time.delta;
 
     let scene = world_signals
         .get_string("scene")
         .cloned()
         .unwrap_or("menu".to_string());
 
+    /*
     match scene.as_str() {
         "menu" => {
-            // Menu specific updates
-            if input.action_back.just_pressed {
-                next_game_state.set(GameStates::Quitting);
-            }
-            let switch_scene_system = systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone();
-
-            // Check if a phase callback requested a scene switch
-            //eprintln!("Checking world signals for scene switch...");
-            if world_signals.has_flag("switch_scene") {
-                eprintln!("Scene switch requested in world signals.");
-                world_signals.clear_flag("switch_scene");
-                commands.run_system(switch_scene_system);
-                return;
-            }
+            // Menu-specific logic can go here if needed
         }
         "level01" => {
-            // Level 1 specific updates
-            let switch_scene_system = systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found")
-                .clone();
-
-            // Check if a phase callback requested a scene switch
-            //eprintln!("Checking world signals for scene switch...");
-            if world_signals.has_flag("switch_scene") {
-                eprintln!("Scene switch requested in world signals.");
-                world_signals.clear_flag("switch_scene");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-
-            // If action_back is pressed, go back to menu
-            if input.action_back.just_pressed {
-                world_signals.set_string("scene", "menu");
-                commands.run_system(switch_scene_system);
-                return;
-            }
-
-            // NOTE: Ball loss, life management, and level cleared are now handled
-            // by the Phase system (see phase callbacks in switch_scene)
-        }
-        "level02" => {
-            // Level 2 specific updates
+            // Level-specific logic can go here if needed
         }
         _ => {
-            // Default or unknown scene updates
+            // Default or unknown scene logic
         }
+    }
+    */
+
+    // Update signal cache for Lua to read current values
+    lua_runtime.update_signal_cache(
+        &world_signals.scalars,
+        &world_signals.integers,
+        &world_signals.strings,
+        &world_signals.flags,
+        &world_signals.group_counts(),
+        &world_signals
+            .entities
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_bits()))
+            .collect(),
+    );
+
+    // Update input cache for Lua to read current input state
+    lua_runtime.update_input_cache(&input);
+
+    // Call scene-specific update callback
+    let callback_name = format!("on_update_{}", scene);
+    if lua_runtime.has_function(&callback_name) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, delta_sec) {
+            eprintln!("[Rust] Error calling {}: {}", callback_name, e);
+        }
+    }
+
+    // Process signal commands queued by Lua
+    for cmd in lua_runtime.drain_signal_commands() {
+        process_signal_command(&mut world_signals, cmd);
+    }
+
+    // Process entity commands from Lua
+    process_entity_commands(
+        &mut commands,
+        lua_runtime.drain_entity_commands(),
+        &stuckto_query,
+        &mut signals_query,
+        &mut animation_query,
+    );
+
+    // Process spawn commands from Lua
+    // WARNING: Spawning entities in on_update (60 FPS) can cause performance issues
+    for cmd in lua_runtime.drain_spawn_commands() {
+        process_spawn_command(&mut commands, cmd, &mut world_signals);
+    }
+
+    // Process phase commands from Lua
+    for cmd in lua_runtime.drain_phase_commands() {
+        process_phase_command(&mut luaphase_query, cmd);
+    }
+
+    // Process audio commands from Lua
+    for cmd in lua_runtime.drain_audio_commands() {
+        process_audio_command(&mut audio_cmd_writer, cmd);
+    }
+
+    // Process camera commands from Lua
+    for cmd in lua_runtime.drain_camera_commands() {
+        process_camera_command(&mut commands, cmd);
+    }
+
+    // Check for quit flag (set by Lua)
+    if world_signals.has_flag("quit_game") {
+        world_signals.clear_flag("quit_game");
+        next_game_state.set(GameStates::Quitting);
+        return;
+    }
+
+    // Check for scene switch flag (set by Lua)
+    if world_signals.has_flag("switch_scene") {
+        eprintln!("Scene switch requested in world signals.");
+        world_signals.clear_flag("switch_scene");
+        let switch_scene_system = systems_store
+            .get("switch_scene")
+            .expect("switch_scene system not found")
+            .clone();
+        commands.run_system(switch_scene_system);
     }
 }
 
@@ -831,18 +707,121 @@ pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<P
         commands.entity(entity).despawn();
     }
 }
+/*
+/// Parse easing string from Lua into Easing enum
+fn parse_easing(easing: &str) -> Easing {
+    match easing {
+        "linear" => Easing::Linear,
+        "quad_in" => Easing::QuadIn,
+        "quad_out" => Easing::QuadOut,
+        "quad_in_out" => Easing::QuadInOut,
+        "cubic_in" => Easing::CubicIn,
+        "cubic_out" => Easing::CubicOut,
+        "cubic_in_out" => Easing::CubicInOut,
+        _ => Easing::Linear,
+    }
+}
+
+/// Parse loop mode string from Lua into LoopMode enum
+fn parse_loop_mode(loop_mode: &str) -> LoopMode {
+    match loop_mode {
+        "once" => LoopMode::Once,
+        "loop" => LoopMode::Loop,
+        "ping_pong" => LoopMode::PingPong,
+        _ => LoopMode::Once,
+    }
+}
+
+/// Parse comparison operator string from Lua into CmpOp enum
+fn parse_cmp_op(op: &str) -> CmpOp {
+    match op {
+        "lt" => CmpOp::Lt,
+        "le" => CmpOp::Le,
+        "gt" => CmpOp::Gt,
+        "ge" => CmpOp::Ge,
+        "eq" => CmpOp::Eq,
+        "ne" => CmpOp::Ne,
+        _ => CmpOp::Eq,
+    }
+}
+
+/// Convert AnimationConditionData from Lua to Condition enum
+fn convert_animation_condition(
+    data: crate::resources::lua_runtime::AnimationConditionData,
+) -> Condition {
+    use crate::resources::lua_runtime::AnimationConditionData;
+    match data {
+        AnimationConditionData::ScalarCmp { key, op, value } => Condition::ScalarCmp {
+            key,
+            op: parse_cmp_op(&op),
+            value,
+        },
+        AnimationConditionData::ScalarRange {
+            key,
+            min,
+            max,
+            inclusive,
+        } => Condition::ScalarRange {
+            key,
+            min,
+            max,
+            inclusive,
+        },
+        AnimationConditionData::IntegerCmp { key, op, value } => Condition::IntegerCmp {
+            key,
+            op: parse_cmp_op(&op),
+            value,
+        },
+        AnimationConditionData::IntegerRange {
+            key,
+            min,
+            max,
+            inclusive,
+        } => Condition::IntegerRange {
+            key,
+            min,
+            max,
+            inclusive,
+        },
+        AnimationConditionData::HasFlag { key } => Condition::HasFlag { key },
+        AnimationConditionData::LacksFlag { key } => Condition::LacksFlag { key },
+        AnimationConditionData::All(conditions) => Condition::All(
+            conditions
+                .into_iter()
+                .map(convert_animation_condition)
+                .collect(),
+        ),
+        AnimationConditionData::Any(conditions) => Condition::Any(
+            conditions
+                .into_iter()
+                .map(convert_animation_condition)
+                .collect(),
+        ),
+        AnimationConditionData::Not(inner) => {
+            Condition::Not(Box::new(convert_animation_condition(*inner)))
+        }
+    }
+}
+ */
+/// Processes a SpawnCmd from Lua and spawns the corresponding entity.
+/// Returns the spawned entity ID and optional registration key.
 
 pub fn switch_scene(
     mut commands: Commands,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     mut worldsignals: ResMut<WorldSignals>,
-    systems_store: Res<SystemsStore>,
-    mut tilemaps_store: ResMut<TilemapStore>,
-    mut tex_store: ResMut<TextureStore>,
+    //systems_store: Res<SystemsStore>,
+    tilemaps_store: Res<TilemapStore>,
+    tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
-    mut rl: NonSendMut<raylib::RaylibHandle>,
-    th: NonSend<raylib::RaylibThread>,
+    //mut rl: NonSendMut<raylib::RaylibHandle>,
+    //th: NonSend<raylib::RaylibThread>,
+    lua_runtime: NonSend<LuaRuntime>,
+    stuckto_query: Query<&StuckTo>,
+    mut signals_query: Query<&mut Signals>,
+    mut animation_query: Query<&mut Animation>,
+    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
@@ -853,12 +832,12 @@ pub fn switch_scene(
             .clone(),
     ); */
     for entity in entities_to_clean.iter() {
-        commands.entity(entity).log_components();
+        //commands.entity(entity).log_components();
         //eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
 
-    tilemaps_store.clear();
+    // NOTE: tilemaps_store is NOT cleared - tilemaps are assets loaded during setup
 
     tracked_groups.clear();
     worldsignals.clear_group_counts();
@@ -868,863 +847,95 @@ pub fn switch_scene(
         .cloned()
         .unwrap_or_else(|| "menu".to_string());
 
-    match scene.as_str() {
-        "menu" => {
-            let camera = Camera2D {
-                target: Vector2 { x: 0.0, y: 0.0 },
-                offset: Vector2 {
-                    x: rl.get_screen_width() as f32 * 0.5,
-                    y: rl.get_screen_height() as f32 * 0.5,
-                },
-                rotation: 0.0,
-                zoom: 1.0,
-            };
-            commands.insert_resource(Camera2DRes(camera));
-            commands.spawn((
-                MapPosition::new(0.0, 0.0),
-                ZIndex(0),
-                Sprite {
-                    tex_key: "background".into(),
-                    width: 672.0,
-                    height: 768.0,
-                    origin: Vector2 { x: 336.0, y: 384.0 },
-                    offset: Vector2 { x: 0.0, y: 0.0 },
-                    flip_h: false,
-                    flip_v: false,
-                },
-                Scale {
-                    scale: Vector2 { x: 3.0, y: 3.0 },
-                },
-            ));
-            commands.spawn((
-                MapPosition::new(0.0, 384.0),
-                ZIndex(1),
-                Sprite {
-                    tex_key: "title".into(),
-                    width: 672.0,
-                    height: 198.0,
-                    origin: Vector2 { x: 336.0, y: 99.0 },
-                    offset: Vector2 { x: 0.0, y: 0.0 },
-                    flip_h: false,
-                    flip_v: false,
-                },
-                Rotation { degrees: 0.0 },
-                Scale {
-                    scale: Vector2 { x: 1.0, y: 1.0 },
-                },
-                /* RigidBody {
-                    velocity: Vector2 { x: 0.0, y: -300.0 },
-                },
-                Timer::new(2.0, "stop_title"), */
-                TweenPosition::new(
-                    Vector2 { x: 0.0, y: 384.0 },
-                    Vector2 { x: 0.0, y: -220.0 },
-                    2.0,
-                )
-                .with_easing(Easing::QuadOut)
-                .with_loop_mode(LoopMode::Once),
-                TweenRotation::new(-10.0, 10.0, 2.0)
-                    .with_easing(Easing::QuadInOut)
-                    .with_loop_mode(LoopMode::PingPong),
-                TweenScale::new(Vector2 { x: 0.9, y: 0.9 }, Vector2 { x: 1.1, y: 1.1 }, 1.0)
-                    .with_easing(Easing::QuadInOut)
-                    .with_loop_mode(LoopMode::PingPong),
-            ));
-            // Menu
-            let cursor_entity = commands
-                .spawn(Sprite {
-                    tex_key: "cursor".into(),
-                    width: 48.0,
-                    height: 48.0,
-                    origin: Vector2 { x: 56.0, y: 0.0 },
-                    offset: Vector2 { x: 0.0, y: 0.0 },
-                    flip_h: false,
-                    flip_v: false,
-                })
-                .id();
-
-            let actions = MenuActions::new()
-                .with("start_game", MenuAction::SetScene("level01".into()))
-                .with("options", MenuAction::ShowSubMenu("options".into()))
-                .with("exit", MenuAction::QuitGame);
-
-            commands.spawn((
-                Menu::new(
-                    &[
-                        ("start_game", "Start Game"),
-                        ("options", "Options"),
-                        ("exit", "Exit"),
-                    ],
-                    Vector2 { x: 250.0, y: 350.0 },
-                    "arcade",
-                    48.0,
-                    48.0 + 16.0,
-                    true,
-                )
-                .with_colors(Color::YELLOW, Color::WHITE)
-                .with_dynamic_text(true)
-                .with_cursor(cursor_entity)
-                .with_selection_sound("option"),
-                actions,
-                Group::new("main_menu"),
-            ));
-            // Play menu music
-            audio_cmd_writer.write(AudioCmd::PlayMusic {
-                id: "menu".into(),
-                looped: true,
-            });
-        }
-        "level01" => {
-            // ==================== PHASE CALLBACKS ====================
-
-            /// on_enter callback for "get_started" phase
-            /// - Plays "player_ready" music (no loop)
-            /// - Spawns the ball attached to the player with StuckTo
-            fn get_started_on_enter(
-                _entity: Entity,
-                _time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                // Play "player_ready" music (no loop)
-                ctx.audio_cmds.write(AudioCmd::PlayMusic {
-                    id: "player_ready".into(),
-                    looped: false,
-                });
-
-                // Get player entity and position from world_signals
-                let player_entity = match ctx.world_signals.get_entity("player") {
-                    Some(e) => *e,
-                    None => return None,
-                };
-                let player_y = ctx.world_signals.get_scalar("player_y").unwrap_or(700.0);
-
-                // Get current player X position
-                let player_x = if let Ok(pos) = ctx.positions.get(player_entity) {
-                    pos.pos.x
-                } else {
-                    400.0
-                };
-
-                // Ball Y position: above the player paddle
-                let ball_y = player_y - 24.0 - 6.0;
-
-                // Spawn the ball with StuckTo component
-                let ball_entity = ctx
-                    .commands
-                    .spawn((
-                        Group::new("ball"),
-                        MapPosition::new(player_x, ball_y),
-                        ZIndex(10),
-                        Sprite {
-                            tex_key: "ball".into(),
-                            width: 12.0,
-                            height: 12.0,
-                            offset: Vector2::zero(),
-                            origin: Vector2 { x: 6.0, y: 6.0 },
-                            flip_h: false,
-                            flip_v: false,
-                        },
-                        RigidBody {
-                            velocity: Vector2 { x: 0.0, y: 0.0 }, // Start with no velocity
-                        },
-                        BoxCollider {
-                            size: Vector2 { x: 12.0, y: 12.0 },
-                            offset: Vector2::zero(),
-                            origin: Vector2 { x: 6.0, y: 6.0 },
-                        },
-                        Signals::default(),
-                        // Attach ball to player (follow X only)
-                        StuckTo::follow_x_only(player_entity)
-                            .with_offset(Vector2 { x: 0.0, y: 0.0 })
-                            .with_stored_velocity(Vector2 {
-                                x: 300.0,
-                                y: -300.0,
-                            }),
-                        // Timer to release the ball
-                        Timer::new(2.0, "remove_stuck_to"),
-                    ))
-                    .id();
-                ctx.world_signals.set_entity("ball", ball_entity);
-
-                None
-            }
-
-            /// on_update callback for "get_started" phase
-            /// - Immediately transitions to "playing"
-            fn get_started_on_update(
-                _entity: Entity,
-                _time: f32,
-                _previous: Option<String>,
-                _ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                Some("playing".into())
-            }
-
-            /// on_update callback for "playing" phase
-            /// - If no balls remain (after the first frame), transition to "lose_life"
-            /// - If no bricks remain, transition to "level_cleared"
-            fn playing_on_update(
-                _entity: Entity,
-                time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                // Skip the first frame to allow the ball/brick group counts to update
-                if time < 0.1 {
-                    return None;
-                }
-                // Check for level cleared (no bricks)
-                if let Some(0) = ctx.world_signals.get_group_count("brick") {
-                    eprintln!("All bricks destroyed, level cleared!");
-                    return Some("level_cleared".into());
-                }
-                // Check for ball lost
-                if let Some(0) = ctx.world_signals.get_group_count("ball") {
-                    eprintln!("No balls remain, go to lose_life.");
-                    return Some("lose_life".into());
-                }
-                None
-            }
-
-            /// on_update callback for "lose_life" phase
-            /// - Subtracts one life
-            /// - If lives < 1, transition to "game_over"
-            /// - Otherwise, transition to "get_started"
-            fn lose_life_on_update(
-                _entity: Entity,
-                _time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                eprintln!("Player lost a life!");
-                let lives = ctx.world_signals.get_integer("lives").unwrap_or(0);
-                ctx.world_signals.set_integer("lives", lives - 1);
-
-                if lives - 1 < 1 {
-                    Some("game_over".into())
-                } else {
-                    Some("get_started".into())
-                }
-            }
-
-            /// on_enter callback for "game_over" phase
-            /// - Spawns "Game Over" text centered on screen
-            fn game_over_on_enter(
-                _entity: Entity,
-                _time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                // Spawn "Game Over" text using ScreenPosition (centered)
-                // Screen size is 672x768, so center is around (336, 384)
-                // With font size 48, offset by half the text width/height
-                eprintln!("Game Over! Spawning game over text.");
-                ctx.commands.spawn((
-                    Group::new("game_over_text"),
-                    ScreenPosition::new(200.0, 350.0), // Approximate center
-                    ZIndex(100),
-                    DynamicText::new("GAME OVER", "future", 48.0, Color::RED),
-                ));
-                None
-            }
-
-            /// on_update callback for "game_over" phase
-            /// - After 4 seconds, change scene to "menu"
-            fn game_over_on_update(
-                _entity: Entity,
-                time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                //eprintln!("In game_over phase, time elapsed: {:.2}", time);
-                if time >= 3.0 {
-                    ctx.world_signals.set_string("scene", "menu");
-                    ctx.world_signals.set_flag("switch_scene");
-                    eprintln!("Game over time exceeded 3 seconds, switching to menu.");
-                }
-                None
-            }
-
-            /// on_enter callback for "level_cleared" phase
-            /// - Plays "success" music (no loop)
-            /// - Spawns "LEVEL CLEARED" text centered on screen
-            fn level_cleared_on_enter(
-                _entity: Entity,
-                _time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                eprintln!("Level cleared! Spawning level cleared text.");
-                // Play success music
-                ctx.audio_cmds.write(AudioCmd::PlayMusic {
-                    id: "success".into(),
-                    looped: false,
-                });
-                // Spawn "LEVEL CLEARED" text using ScreenPosition (centered)
-                ctx.commands.spawn((
-                    Group::new("level_cleared_text"),
-                    ScreenPosition::new(150.0, 350.0), // Approximate center
-                    ZIndex(100),
-                    DynamicText::new("LEVEL CLEARED", "future", 48.0, Color::GREEN),
-                ));
-                None
-            }
-
-            /// on_update callback for "level_cleared" phase
-            /// - After 4 seconds, change scene to "menu" (TODO: go to next level)
-            fn level_cleared_on_update(
-                _entity: Entity,
-                time: f32,
-                _previous: Option<String>,
-                ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                if time >= 4.0 {
-                    // TODO: Go to next level instead of menu
-                    ctx.world_signals.set_string("scene", "menu");
-                    ctx.world_signals.set_flag("switch_scene");
-                    eprintln!("Level cleared time exceeded 4 seconds, switching to menu.");
-                }
-                None
-            }
-
-            // Spawn the scene phase entity with all callbacks
-            // Start in "init" phase which immediately transitions to "get_started"
-            // This ensures the on_enter callback for "get_started" runs on the first frame
-            fn init_on_update(
-                _entity: Entity,
-                _time: f32,
-                _previous: Option<String>,
-                _ctx: &mut PhaseContext,
-            ) -> Option<String> {
-                Some("get_started".into())
-            }
-
-            commands.spawn((
-                Group::new("scene_phases"),
-                Phase::new("init")
-                    .on_update("init", init_on_update as PhaseCallback)
-                    .on_enter("get_started", get_started_on_enter as PhaseCallback)
-                    .on_update("get_started", get_started_on_update as PhaseCallback)
-                    .on_update("playing", playing_on_update as PhaseCallback)
-                    .on_update("lose_life", lose_life_on_update as PhaseCallback)
-                    .on_enter("game_over", game_over_on_enter as PhaseCallback)
-                    .on_update("game_over", game_over_on_update as PhaseCallback)
-                    .on_enter("level_cleared", level_cleared_on_enter as PhaseCallback)
-                    .on_update("level_cleared", level_cleared_on_update as PhaseCallback),
-            ));
-
-            // ==================== COLLISION CALLBACKS ====================
-
-            // callback for player-wall collision
-            fn player_wall_collision_callback(
-                player_entity: Entity,
-                _wall_entity: Entity,
-                ctx: &mut CollisionContext,
-            ) {
-                //eprintln!("player_wall_collision_callback: Player collided with wall!");
-                // Stop the player's movement upon collision with the wall
-                if let Ok(mut pos) = ctx.positions.get_mut(player_entity) {
-                    pos.pos.x = pos.pos.x.max(72.0).min(600.0);
-                    //eprintln!("Corrected player X position to: {}", pos.pos.x);
-                }
-            }
-            commands.spawn((
-                CollisionRule::new(
-                    "player",
-                    "walls",
-                    player_wall_collision_callback as CollisionCallback,
-                ),
-                Group::new("collision_rules"),
-            ));
-            // Callback for ball-wall collision
-            fn ball_wall_collision_callback(
-                ball_entity: Entity,
-                wall_entity: Entity,
-                ctx: &mut CollisionContext,
-            ) {
-                // eprintln!("ball_wall_collision_callback: Ball collided with wall!");
-                let (mut ball_pos, mut ball_rb) = match (
-                    ctx.positions.get_mut(ball_entity),
-                    ctx.rigid_bodies.get_mut(ball_entity),
-                ) {
-                    (Ok(pos), Ok(rb)) => (pos.pos, rb),
-                    _ => return,
-                };
-                let ball_size = if let Ok(ball_collider) = ctx.box_colliders.get(ball_entity) {
-                    ball_collider.size
-                } else {
-                    return;
-                };
-                // Get the relative position of the ball to the wall to determine bounce direction
-                if let Ok(wall_pos) = ctx.positions.get(wall_entity) {
-                    // positions of the lateral walls are at the bottom left/right corners
-                    // and position of the top wall is at its center top
-                    // If ball is bellow the wall, collision is from top
-                    // and y velocity should be changed to positive (down)
-                    if wall_pos.pos.y < ball_pos.y {
-                        // Collision with top wall
-                        ball_rb.velocity.y = ball_rb.velocity.y.abs();
-
-                        // fix ball position to be just below the wall to prevent more collisions in the next frame
-                        let wall_height =
-                            if let Ok(wall_collider) = ctx.box_colliders.get(wall_entity) {
-                                wall_collider.size.y
-                            } else {
-                                0.0
-                            };
-                        ball_pos.y = wall_pos.pos.y + wall_height + (ball_size.y * 0.5);
-                    }
-                    // If ball is above the wall, collision is one of the lateral walls
-                    // If ball is to the left of the wall, collision is from right
-                    // and x velocity should be changed to negative (go left)
-                    // If ball is to the right of the wall, collision is from left
-                    // and x velocity should be changed to positive (go right)
-                    else {
-                        let wall_width =
-                            if let Ok(wall_collider) = ctx.box_colliders.get(wall_entity) {
-                                wall_collider.size.x
-                            } else {
-                                0.0
-                            };
-                        if ball_pos.x < wall_pos.pos.x {
-                            // Collision with right wall
-                            ball_rb.velocity.x = -ball_rb.velocity.x.abs();
-                            // fix ball position to be just left of the wall to prevent more collisions in the next frame
-                            ball_pos.x = wall_pos.pos.x - wall_width - (ball_size.x * 0.5);
-                        } else {
-                            // Collision with left wall
-                            ball_rb.velocity.x = ball_rb.velocity.x.abs();
-                            // fix ball position to be just right of the wall to prevent more collisions in the next frame
-                            ball_pos.x = wall_pos.pos.x + wall_width + (ball_size.x * 0.5);
-                        }
-                    }
-                }
-            }
-            commands.spawn((
-                CollisionRule::new(
-                    "ball",
-                    "walls",
-                    ball_wall_collision_callback as CollisionCallback,
-                ),
-                Group::new("collision_rules"),
-            ));
-            // Callback for ball-player collision
-            fn ball_player_collision_callback(
-                ball_entity: Entity,
-                player_entity: Entity,
-                ctx: &mut CollisionContext,
-            ) {
-                // Reflect the ball's velocity based on where it hit the player paddle
-                // We know that the ball_entity and player_entity are correct from the `collision_observer`
-                // `collision_observer` ensures ball_entity is "ball" group and player_entity is "player" group because of the alphabetical order of the names
-
-                // First, get the player position immutably
-                let player_pos = if let Ok(player_pos) = ctx.positions.get(player_entity) {
-                    player_pos.pos
-                } else {
-                    return;
-                };
-
-                let player_height =
-                    if let Ok(player_collider) = ctx.box_colliders.get(player_entity) {
-                        player_collider.size.y
-                    } else {
-                        return;
-                    };
-
-                let ball_height = if let Ok(ball_collider) = ctx.box_colliders.get(ball_entity) {
-                    ball_collider.size.y
-                } else {
-                    return;
-                };
-                // Now we can borrow ball_pos mutably and ball_rb mutably
-                if let (Ok(mut ball_pos), Ok(mut ball_rb)) = (
-                    ctx.positions.get_mut(ball_entity),
-                    ctx.rigid_bodies.get_mut(ball_entity),
-                ) {
-                    let hit_pos = ball_pos.pos.x - player_pos.x;
-                    let paddle_half_width = 96.0 * 0.5;
-                    let relative_hit_pos = hit_pos / paddle_half_width;
-                    let bounce_angle = relative_hit_pos * std::f32::consts::FRAC_PI_3; // Max 60 degrees
-                    let speed = (ball_rb.velocity.x.powi(2) + ball_rb.velocity.y.powi(2)).sqrt();
-                    ball_rb.velocity.x = speed * bounce_angle.sin();
-                    ball_rb.velocity.y = -speed * bounce_angle.cos();
-                    // Fix ball position to be just above the paddle to prevent more collisions in the next frame
-                    ball_pos.pos.y = player_pos.y - player_height - (ball_height * 0.5);
-                }
-                // If the player is sticky, set the ball's velocity to zero and stuck it to the player
-                if let Ok(player_signals) = ctx.signals.get(player_entity) {
-                    if player_signals.has_flag("sticky") {
-                        // Get current velocity to store in StuckTo component
-                        let stored_velocity =
-                            ctx.rigid_bodies.get(ball_entity).map(|rb| rb.velocity).ok();
-
-                        // Calculate offset: ball position relative to player position
-                        let offset_x = if let Ok(ball_pos) = ctx.positions.get(ball_entity) {
-                            ball_pos.pos.x - player_pos.x
-                        } else {
-                            0.0
-                        };
-
-                        // Stop the ball
-                        if let Ok(mut ball_rb) = ctx.rigid_bodies.get_mut(ball_entity) {
-                            ball_rb.velocity = Vector2 { x: 0.0, y: 0.0 };
-                        }
-
-                        // Attach ball to player using StuckTo component (follow X only, with offset)
-                        let mut stuck_to =
-                            StuckTo::follow_x_only(player_entity).with_offset(Vector2 {
-                                x: offset_x,
-                                y: 0.0,
-                            });
-                        if let Some(vel) = stored_velocity {
-                            stuck_to = stuck_to.with_stored_velocity(vel);
-                        }
-                        ctx.commands.entity(ball_entity).insert(stuck_to);
-
-                        // Set timer to remove StuckTo after 2.0 seconds
-                        ctx.commands
-                            .entity(ball_entity)
-                            .insert(Timer::new(2.0, "remove_stuck_to"));
-                    }
-                }
-                ctx.audio_cmds.write(AudioCmd::PlayFx { id: "ping".into() });
-            }
-            commands.spawn((
-                CollisionRule::new(
-                    "ball",
-                    "player",
-                    ball_player_collision_callback as CollisionCallback,
-                ),
-                Group::new("collision_rules"),
-            ));
-            // Callback for ball-brick collision
-            fn ball_brick_collision_callback(
-                ball_entity: Entity,
-                brick_entity: Entity,
-                ctx: &mut CollisionContext,
-            ) {
-                // Reflect the ball's velocity based on where it hit the brick
-                let position = ctx.positions.get(ball_entity).unwrap().pos();
-                let ball_rect = ctx
-                    .box_colliders
-                    .get(ball_entity)
-                    .unwrap()
-                    .as_rectangle(position);
-                let position = ctx.positions.get(brick_entity).unwrap().pos();
-                let brick_rect = ctx
-                    .box_colliders
-                    .get(brick_entity)
-                    .unwrap()
-                    .as_rectangle(position);
-                let Some((_colliding_sides_ball, colliding_sides_brick)) =
-                    get_colliding_sides(&ball_rect, &brick_rect)
-                else {
-                    return;
-                };
-                let (mut ball_rb, mut ball_pos) = match (
-                    ctx.rigid_bodies.get_mut(ball_entity),
-                    ctx.positions.get_mut(ball_entity),
-                ) {
-                    (Ok(rb), Ok(pos)) => (rb, pos.pos()),
-                    _ => return,
-                };
-                for brick_side in colliding_sides_brick {
-                    match brick_side {
-                        BoxSide::Top => {
-                            ball_rb.velocity.y = -ball_rb.velocity.y.abs();
-                            ball_pos.y = brick_rect.y - (ball_rect.height * 0.5);
-                        }
-                        BoxSide::Bottom => {
-                            ball_rb.velocity.y = ball_rb.velocity.y.abs();
-                            ball_pos.y =
-                                brick_rect.y + brick_rect.height + (ball_rect.height * 0.5);
-                        }
-                        BoxSide::Left => {
-                            ball_rb.velocity.x = -ball_rb.velocity.x.abs();
-                            ball_pos.x = brick_rect.x - (ball_rect.width * 0.5);
-                        }
-                        BoxSide::Right => {
-                            ball_rb.velocity.x = ball_rb.velocity.x.abs();
-                            ball_pos.x = brick_rect.x + brick_rect.width + (ball_rect.width * 0.5);
-                        }
-                    }
-                }
-                // substract 1 hit point from the brick's Signals
-                if let Ok(mut signals) = ctx.signals.get_mut(brick_entity) {
-                    let hit_points = signals.get_integer("hp").unwrap_or(1);
-                    if hit_points > 1 {
-                        signals.set_integer("hp", hit_points - 1);
-                    } else {
-                        // Increment score
-                        if let Some(points) = signals.get_integer("points") {
-                            let current_score = ctx.world_signals.get_integer("score").unwrap_or(0);
-                            ctx.world_signals
-                                .set_integer("score", current_score + points);
-                        }
-                        // Update high score if necessary
-                        let current_score = ctx.world_signals.get_integer("score").unwrap_or(0);
-                        let high_score = ctx.world_signals.get_integer("high_score").unwrap_or(0);
-                        if current_score > high_score {
-                            ctx.world_signals.set_integer("high_score", current_score);
-                        }
-                        // despawn brick entity
-                        ctx.commands.entity(brick_entity).despawn();
-                    }
-                }
-                ctx.audio_cmds.write(AudioCmd::PlayFx { id: "ding".into() });
-            }
-            commands.spawn((
-                CollisionRule::new(
-                    "ball",
-                    "brick",
-                    ball_brick_collision_callback as CollisionCallback,
-                ),
-                Group::new("collision_rules"),
-            ));
-            // Callback for ball-oob_wall collision (bottom wall)
-            fn ball_oob_wall_collision_callback(
-                ball_entity: Entity,
-                oob_wall_entity: Entity,
-                ctx: &mut CollisionContext,
-            ) {
-                // eprintln!("ball_oob_wall_collision_callback: Ball collided with oob wall!");
-                // Despawn the ball if the ball collider is inside the oob wall collider
-                let (ball_pos, wall_pos) = match (
-                    ctx.positions.get(ball_entity),
-                    ctx.positions.get(oob_wall_entity),
-                ) {
-                    (Ok(pos), Ok(wpos)) => (pos.pos, wpos.pos),
-                    _ => return,
-                };
-                let (ball_rect, wall_rect) = match (
-                    ctx.box_colliders.get(ball_entity),
-                    ctx.box_colliders.get(oob_wall_entity),
-                ) {
-                    (Ok(bcollider), Ok(wcollider)) => (
-                        bcollider.as_rectangle(ball_pos),
-                        wcollider.as_rectangle(wall_pos),
-                    ),
-                    _ => return,
-                };
-                let Some((colliding_sides_ball, _colliding_sides_wall)) =
-                    get_colliding_sides(&ball_rect, &wall_rect)
-                else {
-                    return;
-                };
-                if colliding_sides_ball.len() == 4 {
-                    // All sides are colliding, meaning ball is fully inside the oob wall
-                    // Despawn the ball
-                    ctx.commands.entity(ball_entity).despawn();
-                }
-            }
-            commands.spawn((
-                CollisionRule::new(
-                    "ball",
-                    "oob_wall",
-                    ball_oob_wall_collision_callback as CollisionCallback,
-                ),
-                Group::new("collision_rules"),
-            ));
-            // ==================== WORLDSIGNALS SETUP ====================
-            // reset score to 0
-            worldsignals.set_integer("score", 0);
-
-            // reset lives to 3
-            worldsignals.set_integer("lives", 3);
-
-            // ==================== SCENE SETUP ====================
-
-            // Load tilemap for level 1
-            let (tilemap_tex, tilemap) = load_tilemap(&mut rl, &th, "./assets/tilemaps/level01");
-            tilemaps_store.insert("level01", tilemap);
-            let tiles_width = tilemap_tex.width;
-            let tiles_height = tilemap_tex.height;
-            tex_store.insert("level01", tilemap_tex);
-            // Spawn tiles
-            let tilemap_info = tilemaps_store
-                .get("level01")
-                .expect("tilemap info not found for level01");
-            spawn_tiles(&mut commands, "level01", tiles_width, tilemap_info);
-            // Bricks
-            commands.spawn((GridLayout::new("./assets/levels/level01.json", "brick", 5),));
-            // The Vaus. The player paddle
-            let mut player_signals = Signals::default();
-            player_signals.set_flag("sticky");
-            let player_y = (tilemap_info.tile_size as f32 * tilemap_info.map_height as f32) - 36.0;
-            let player_pos = MapPosition::new(400.0, player_y);
-            let player_entity = commands
-                .spawn((
-                    Group::new("player"),
-                    player_pos.clone(),
-                    ZIndex(10),
-                    Sprite {
-                        tex_key: "vaus".into(),
-                        width: 96.0,
-                        height: 24.0,
-                        offset: Vector2::zero(),
-                        origin: Vector2 { x: 48.0, y: 24.0 },
-                        flip_h: false,
-                        flip_v: false,
-                    },
-                    //RigidBody::default(),
-                    MouseControlled::new(true, false),
-                    player_signals,
-                    BoxCollider {
-                        size: Vector2 { x: 96.0, y: 24.0 },
-                        offset: Vector2::zero(),
-                        origin: Vector2 { x: 48.0, y: 24.0 },
-                    },
-                    Timer::new(3.0, "remove_sticky"),
-                ))
-                .id();
-            worldsignals.set_entity("player", player_entity);
-            worldsignals.set_scalar("player_y", player_y);
-
-            // NOTE: Ball is now spawned by the "get_started" phase on_enter callback
-
-            // Create walls as BoxColliders
-            commands.spawn((
-                // Left wall
-                Group::new("walls"),
-                MapPosition::new(
-                    // position is at left, bottom of the map
-                    0.0,
-                    (tilemap_info.tile_size * tilemap_info.map_height) as f32,
-                ),
-                BoxCollider {
-                    size: Vector2 {
-                        x: tilemap_info.tile_size as f32 * 1.0,
-                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
-                    },
-                    offset: Vector2::zero(),
-                    origin: Vector2 {
-                        x: 0.0,
-                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
-                    },
-                },
-            ));
-            commands.spawn((
-                // Right wall
-                Group::new("walls"),
-                MapPosition::new(
-                    // position is at right, bottom of the map
-                    (tilemap_info.tile_size * tilemap_info.map_width) as f32,
-                    (tilemap_info.tile_size * tilemap_info.map_height) as f32,
-                ),
-                BoxCollider {
-                    size: Vector2 {
-                        x: tilemap_info.tile_size as f32 * 1.0,
-                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
-                    },
-                    offset: Vector2::zero(),
-                    origin: Vector2 {
-                        x: tilemap_info.tile_size as f32 * 1.0,
-                        y: tilemap_info.tile_size as f32 * (tilemap_info.map_height - 2) as f32,
-                    },
-                },
-            ));
-            commands.spawn((
-                // Top wall
-                Group::new("walls"),
-                MapPosition::new(
-                    // position is at center top of the map
-                    (tilemap_info.tile_size * (tilemap_info.map_width)) as f32 * 0.5,
-                    tilemap_info.tile_size as f32 * 2.0,
-                ),
-                BoxCollider {
-                    size: Vector2 {
-                        x: tilemap_info.tile_size as f32 * (tilemap_info.map_width - 2) as f32,
-                        y: tilemap_info.tile_size as f32 * 1.0,
-                    },
-                    offset: Vector2::zero(),
-                    origin: Vector2 {
-                        x: tilemap_info.tile_size as f32
-                            * (tilemap_info.map_width - 2) as f32
-                            * 0.5,
-                        y: tilemap_info.tile_size as f32 * 0.0,
-                    },
-                },
-            ));
-            // Out of bounds (bottom) wall
-            commands.spawn((
-                Group::new("oob_wall"),
-                MapPosition::new(
-                    // position is at left, bottom of the map
-                    -((tilemap_info.tile_size * 5) as f32),
-                    (tilemap_info.tile_size * tilemap_info.map_height) as f32,
-                ),
-                BoxCollider {
-                    size: Vector2 {
-                        x: tilemap_info.tile_size as f32 * (tilemap_info.map_width + 10) as f32,
-                        y: tilemap_info.tile_size as f32 * 10.0,
-                    },
-                    offset: Vector2::zero(),
-                    origin: Vector2 { x: 0.0, y: 0.0 },
-                },
-            ));
-            // Score Text
-            commands.spawn((
-                Group::new("ui"),
-                DynamicText::new(
-                    "1UP   HIGH SCORE",
-                    "arcade",
-                    tilemap_info.tile_size as f32,
-                    Color::RED,
-                ),
-                MapPosition::new((tilemap_info.tile_size * 3) as f32, 0.0),
-                ZIndex(20),
-            ));
-            commands.spawn((
-                Group::new("player_score"),
-                DynamicText::new("0", "arcade", tilemap_info.tile_size as f32, Color::WHITE),
-                MapPosition::new(
-                    (tilemap_info.tile_size * 3) as f32,
-                    tilemap_info.tile_size as f32,
-                ),
-                ZIndex(20),
-                SignalBinding::new("score"), // updates with "score" signal
-            ));
-            commands.spawn((
-                Group::new("high_score"),
-                DynamicText::new(
-                    format!("{}", worldsignals.get_integer("high_score").unwrap_or(0)),
-                    "arcade",
-                    tilemap_info.tile_size as f32,
-                    Color::WHITE,
-                ),
-                MapPosition::new(
-                    (tilemap_info.tile_size * 10) as f32,
-                    tilemap_info.tile_size as f32,
-                ),
-                ZIndex(20),
-                SignalBinding::new("high_score"),
-            ));
-
-            // Move camera to the center of the level
-            commands.insert_resource(Camera2DRes(Camera2D {
-                target: Vector2 {
-                    x: (tilemap_info.tile_size as f32 * (tilemap_info.map_width) as f32 * 0.5),
-                    y: (tilemap_info.tile_size as f32 * (tilemap_info.map_height) as f32 * 0.5),
-                },
-                offset: Vector2 {
-                    x: rl.get_screen_width() as f32 * 0.5,
-                    y: rl.get_screen_height() as f32 * 0.5,
-                },
-                rotation: 0.0,
-                zoom: 1.0,
-            }));
-            // Initialize tracked groups resource
-            tracked_groups.add_group("ball");
-            tracked_groups.add_group("brick");
-        }
-        "level02" => {}
-        _ => {
-            eprintln!("Unknown scene: {}", scene);
-            panic!("Unknown scene");
+    // Call Lua on_switch_scene function if it exists
+    if lua_runtime.has_function("on_switch_scene") {
+        if let Err(e) = lua_runtime.call_function::<_, ()>("on_switch_scene", scene.clone()) {
+            eprintln!("[Rust] Error calling on_switch_scene: {}", e);
         }
     }
 
-    // Stop any playing music when switching scenes
+    // Process signal commands from Lua (initialize world signals for the new scene)
+    for cmd in lua_runtime.drain_signal_commands() {
+        process_signal_command(&mut worldsignals, cmd);
+    }
+    // Process entity commands from Lua
+    process_entity_commands(
+        &mut commands,
+        lua_runtime.drain_entity_commands(),
+        &stuckto_query,
+        &mut signals_query,
+        &mut animation_query,
+    );
+
+    // Process phase commands from Lua
+    for cmd in lua_runtime.drain_phase_commands() {
+        process_phase_command(&mut luaphase_query, cmd);
+    }
+
+    // Process audio commands from Lua
+    for cmd in lua_runtime.drain_audio_commands() {
+        process_audio_command(&mut audio_cmd_writer, cmd);
+    }
+
+    // Process spawn commands from Lua
+    for cmd in lua_runtime.drain_spawn_commands() {
+        process_spawn_command(&mut commands, cmd, &mut worldsignals);
+    }
+
+    // Process group commands from Lua
+    for cmd in lua_runtime.drain_group_commands() {
+        process_group_command(&mut tracked_groups, cmd);
+    }
+
+    // Update the tracked groups cache for Lua
+    lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
+
+    // Process tilemap commands from Lua
+    for cmd in lua_runtime.drain_tilemap_commands() {
+        process_tilemap_command(&mut commands, cmd, &tex_store, &tilemaps_store, spawn_tiles);
+    }
+
+    // Process camera commands from Lua
+    for cmd in lua_runtime.drain_camera_commands() {
+        process_camera_command(&mut commands, cmd);
+    }
+
+    // for reference, here is the old hardcoded scene setup logic, now replaced by Lua scripts
+    /*     match scene.as_str() {
+           "menu" => {
+               // NOTE: Camera is now set by menu.lua spawn() function via engine.set_camera()
+               // NOTE: Title entity with tweens is now spawned by menu.lua spawn() function
+               // NOTE: Background sprite is now spawned by menu.lua spawn() function
+               // NOTE: Cursor, Menu, MenuActions, and menu music are now spawned/played by menu.lua
+           }
+           "level01" => {
+               // Phase callbacks are now handled via LuaPhase in level01.lua
+               // The Lua script spawns a scene_phases entity with :with_phase({...})
+
+               // ==================== COLLISION CALLBACKS ====================
+               // NOTE: Collision rules are now handled via LuaCollisionRule in level01.lua
+               // The Lua script spawns collision_rules entities with :with_lua_collision_rule()
+
+               // ==================== SCENE SETUP ====================
+
+               // NOTE: Score and lives are now reset by level01.lua spawn() function
+               // NOTE: Tilemap is now loaded in setup() via Lua's engine.load_tilemap()
+               // NOTE: Tiles are now spawned via Lua's engine.spawn_tiles() in level01.lua
+               // NOTE: Bricks are now spawned via Lua's engine.spawn():with_grid_layout() in level01.lua
+
+               // NOTE: Player is now spawned by level01.lua spawn() function
+               // NOTE: Ball is now spawned by the "get_started" phase on_enter callback
+               // NOTE: Walls are now spawned by level01.lua spawn() function
+               // NOTE: Score UI texts are now spawned by level01.lua spawn() function
+               // NOTE: Camera is now set by level01.lua spawn() function via engine.set_camera()
+
+               // NOTE: Tracked groups (ball, brick) are now set up by level01.lua spawn()
+           }
+           "level02" => {}
+           _ => {
+               eprintln!("Unknown scene: {}", scene);
+               panic!("Unknown scene");
+           }
+       }
+    */
 }

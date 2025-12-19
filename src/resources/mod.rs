@@ -29,6 +29,7 @@ pub mod fontstore;
 pub mod gamestate;
 pub mod group;
 pub mod input;
+pub mod lua_runtime;
 pub mod screensize;
 pub mod systemsstore;
 pub mod texturestore;

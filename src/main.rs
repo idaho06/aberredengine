@@ -1,3 +1,38 @@
+//! Aberred Engine main entry point.
+//!
+//! A 2D game engine written in Rust using:
+//! - **raylib** for windowing, graphics, and audio
+//! - **bevy_ecs** for entity-component-system architecture
+//! - **mlua + LuaJIT** for game logic scripting
+//!
+//! This executable demonstrates an Arkanoid-style breakout game where most game
+//! logic is defined in Lua scripts under `assets/scripts/`.
+//!
+//! # Project Structure
+//!
+//! - [`components`] – ECS components (sprites, physics, collision, animation, etc.)
+//! - [`events`] – Event types (collision, menu, phase transitions, etc.)
+//! - [`game`] – High-level game setup and scene management
+//! - [`resources`] – ECS resources (world signals, asset stores, camera, etc.)
+//! - [`systems`] – ECS systems (rendering, physics, input, collision, etc.)
+//!
+//! # Main Loop
+//!
+//! 1. Initialize raylib window, ECS world, resources (fonts, audio, Lua runtime)
+//! 2. Load `main.lua` which calls setup callbacks to load assets
+//! 3. Register observers and systems
+//! 4. Run the main game loop:
+//!    - Update input, timers, physics, collision, animation
+//!    - Lua phase callbacks drive game logic
+//!    - Render world with camera transforms
+//! 5. Clean up audio thread on exit
+//!
+//! # Running
+//!
+//! ```sh
+//! cargo run --release
+//! ```
+
 mod components;
 mod events;
 mod game;
@@ -13,6 +48,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -29,6 +65,7 @@ use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::luaphase::lua_phase_system;
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
@@ -39,6 +76,7 @@ use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
+use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
 use crate::systems::tween::tween_scale_system;
@@ -77,6 +115,14 @@ fn main() {
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_non_send_resource(FontStore::new());
+
+    // Initialize Lua runtime and load main script
+    let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
+    if let Err(e) = lua_runtime.run_script("./assets/scripts/main.lua") {
+        eprintln!("Failed to load main.lua: {}", e);
+    }
+    world.insert_non_send_resource(lua_runtime);
+
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
     world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
@@ -114,6 +160,7 @@ fn main() {
     world.add_observer(switch_debug_observer);
     world.add_observer(menu_controller_observer);
     world.add_observer(menu_selection_observer);
+    world.add_observer(lua_timer_observer);
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
@@ -147,9 +194,13 @@ fn main() {
     update.add_systems(tween_scale_system);
     update.add_systems(movement);
     update.add_systems(collision_detector.after(mouse_controller).after(movement));
-    update.add_systems(animation_controller);
+    // Run lua_phase_system AFTER collision detection so phase transitions from collision callbacks
+    // are processed in the same frame (before animation_controller evaluates signals)
+    update.add_systems(lua_phase_system.after(collision_detector));
+    update.add_systems(animation_controller.after(lua_phase_system));
     update.add_systems(animation.after(animation_controller));
     update.add_systems(update_timers);
+    update.add_systems(update_lua_timers);
     update.add_systems(update_world_signals_binding_system);
     update.add_systems(
         (game::update)

@@ -21,6 +21,7 @@ pub mod audio;
 pub mod collision;
 pub mod gamestate;
 pub mod input;
+pub mod luatimer;
 pub mod menu;
 pub mod phase;
 pub mod switchdebug;
