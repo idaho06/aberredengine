@@ -677,6 +677,11 @@ pub fn update(
         process_audio_command(&mut audio_cmd_writer, cmd);
     }
 
+    // Process camera commands from Lua
+    for cmd in lua_runtime.drain_camera_commands() {
+        process_camera_command(&mut commands, cmd);
+    }
+
     // Check for quit flag (set by Lua)
     if world_signals.has_flag("quit_game") {
         world_signals.clear_flag("quit_game");

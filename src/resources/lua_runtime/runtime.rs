@@ -29,6 +29,7 @@ pub(super) struct LuaAppData {
     collision_audio_commands: RefCell<Vec<AudioLuaCmd>>,
     pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
     collision_phase_commands: RefCell<Vec<PhaseCmd>>,
+    collision_camera_commands: RefCell<Vec<CameraCmd>>,
     /// Cached world signal values (read-only snapshot for Lua)
     /// These are updated before calling Lua callbacks
     signal_scalars: RefCell<FxHashMap<String, f32>>,
@@ -85,6 +86,7 @@ impl LuaRuntime {
             collision_audio_commands: RefCell::new(Vec::new()),
             collision_spawn_commands: RefCell::new(Vec::new()),
             collision_phase_commands: RefCell::new(Vec::new()),
+            collision_camera_commands: RefCell::new(Vec::new()),
             signal_scalars: RefCell::new(FxHashMap::default()),
             signal_integers: RefCell::new(FxHashMap::default()),
             signal_strings: RefCell::new(FxHashMap::default()),
@@ -1188,6 +1190,37 @@ impl LuaRuntime {
                 })?,
         )?;
 
+        // engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
+        // Set the camera during collision handling (for camera shake, zoom effects, etc.)
+        engine.set(
+            "collision_set_camera",
+            self.lua.create_function(
+                |lua,
+                 (target_x, target_y, offset_x, offset_y, rotation, zoom): (
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_camera_commands
+                        .borrow_mut()
+                        .push(CameraCmd::SetCamera2D {
+                            target_x,
+                            target_y,
+                            offset_x,
+                            offset_y,
+                            rotation,
+                            zoom,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
         Ok(())
     }
 
@@ -1443,6 +1476,20 @@ impl LuaRuntime {
             .app_data_ref::<LuaAppData>()
             .map(|data| {
                 data.collision_phase_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Drains all queued collision camera commands.
+    /// Call this after processing Lua collision callbacks to update the camera.
+    pub fn drain_collision_camera_commands(&self) -> Vec<CameraCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| {
+                data.collision_camera_commands
                     .borrow_mut()
                     .drain(..)
                     .collect()

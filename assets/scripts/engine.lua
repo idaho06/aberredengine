@@ -739,6 +739,15 @@ function engine.collision_spawn() end
 ---@param phase string Target phase name
 function engine.collision_phase_transition(entity_id, phase) end
 
+---Set camera during collision handling (for camera shake, zoom effects, etc.)
+---@param target_x number Camera target X
+---@param target_y number Camera target Y
+---@param offset_x number Screen offset X
+---@param offset_y number Screen offset Y
+---@param rotation number Camera rotation
+---@param zoom number Camera zoom
+function engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom) end
+
 ---Insert a Timer component on an entity (collision-scoped)
 ---@param entity_id integer Entity ID
 ---@param duration number Timer duration in seconds

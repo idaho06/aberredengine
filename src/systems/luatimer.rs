@@ -38,8 +38,8 @@ use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_audio_command, process_entity_commands, process_phase_command, process_signal_command,
-    process_spawn_command,
+    process_audio_command, process_camera_command, process_entity_commands, process_phase_command,
+    process_signal_command, process_spawn_command,
 };
 use raylib::prelude::Vector2;
 
@@ -152,4 +152,9 @@ pub fn lua_timer_observer(
         &mut signals_query,
         &mut animation_query,
     );
+
+    // Process camera commands from Lua
+    for cmd in lua_runtime.drain_camera_commands() {
+        process_camera_command(&mut commands, cmd);
+    }
 }
