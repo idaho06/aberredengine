@@ -123,6 +123,22 @@ pub enum EntityCmd {
     RemoveTweenRotation { entity_id: u64 },
     /// Remove TweenScale component
     RemoveTweenScale { entity_id: u64 },
+    /// Set entity rotation
+    SetRotation { entity_id: u64, degrees: f32 },
+    /// Set entity scale
+    SetScale { entity_id: u64, sx: f32, sy: f32 },
+    /// Set a scalar signal on an entity's Signals component
+    SignalSetScalar {
+        entity_id: u64,
+        key: String,
+        value: f32,
+    },
+    /// Set a string signal on an entity's Signals component
+    SignalSetString {
+        entity_id: u64,
+        key: String,
+        value: String,
+    },
 }
 
 /// Commands for manipulating entity components from Lua collision callbacks.

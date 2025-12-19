@@ -36,6 +36,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::collision::{CollisionContext, CollisionRule, get_colliding_sides};
 use crate::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
+use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
@@ -44,7 +45,8 @@ use crate::events::collision::CollisionEvent;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
-    process_audio_command, process_collision_entity_commands, process_signal_command,
+    process_audio_command, process_collision_entity_commands, process_phase_command,
+    process_signal_command, process_spawn_command,
 };
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
@@ -103,6 +105,7 @@ pub struct CollisionObserverParams<'w, 's> {
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub signals: Query<'w, 's, &'static mut Signals>,
+    pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
@@ -165,20 +168,18 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 .map(|rb| (rb.velocity.x, rb.velocity.y));
 
             // Get collider rects for side detection
-            let rect_a = params
-                .box_colliders
-                .get(ent_a)
-                .ok()
-                .and_then(|c| pos_a.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py })));
-            let rect_b = params
-                .box_colliders
-                .get(ent_b)
-                .ok()
-                .and_then(|c| pos_b.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py })));
+            let rect_a = params.box_colliders.get(ent_a).ok().and_then(|c| {
+                pos_a.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
+            });
+            let rect_b = params.box_colliders.get(ent_b).ok().and_then(|c| {
+                pos_b.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
+            });
 
             // Get colliding sides
             let (sides_a, sides_b) = match (rect_a, rect_b) {
-                (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_else(|| (Vec::new(), Vec::new())),
+                (Some(ra), Some(rb)) => {
+                    get_colliding_sides(&ra, &rb).unwrap_or_else(|| (Vec::new(), Vec::new()))
+                }
                 _ => (Vec::new(), Vec::new()),
             };
 
@@ -233,6 +234,16 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             // Process collision audio commands
             for cmd in params.lua_runtime.drain_collision_audio_commands() {
                 process_audio_command(&mut params.audio_cmds, cmd);
+            }
+
+            // Process collision spawn commands
+            for cmd in params.lua_runtime.drain_collision_spawn_commands() {
+                process_spawn_command(&mut params.commands, cmd, &mut params.world_signals);
+            }
+
+            // Process collision phase commands
+            for cmd in params.lua_runtime.drain_collision_phase_commands() {
+                process_phase_command(&mut params.luaphase_query, cmd);
             }
 
             return;

@@ -39,5 +39,5 @@ mod runtime;
 // Re-export all public types for backwards compatibility
 pub use commands::*;
 pub use spawn_data::*;
-pub use entity_builder::LuaEntityBuilder;
+pub use entity_builder::{LuaEntityBuilder, LuaCollisionEntityBuilder};
 pub use runtime::LuaRuntime;

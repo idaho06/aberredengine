@@ -53,6 +53,7 @@ use crate::components::group::Group;
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::inputcontrolled::MouseControlled;
 use crate::components::luacollision::LuaCollisionRule;
+use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::persistent::Persistent;
@@ -84,8 +85,9 @@ use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_animation_command, process_asset_command, process_camera_command,
-    process_group_command, process_signal_command, process_spawn_command, process_tilemap_command,
+    process_animation_command, process_asset_command, process_audio_command, process_camera_command,
+    process_entity_commands, process_group_command, process_phase_command, process_signal_command,
+    process_spawn_command, process_tilemap_command,
 };
 //use rand::Rng;
 
@@ -593,6 +595,11 @@ pub fn update(
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     lua_runtime: NonSend<LuaRuntime>,
+    mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    stuckto_query: Query<&StuckTo>,
+    mut signals_query: Query<&mut Signals>,
+    mut animation_query: Query<&mut Animation>,
+    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
 ) {
     let delta_sec = time.delta;
 
@@ -645,7 +652,30 @@ pub fn update(
         process_signal_command(&mut world_signals, cmd);
     }
 
-    // TODO: Process entity, spawn and audio commands from Lua if needed
+    // Process entity commands from Lua
+    process_entity_commands(
+        &mut commands,
+        lua_runtime.drain_entity_commands(),
+        &stuckto_query,
+        &mut signals_query,
+        &mut animation_query,
+    );
+
+    // Process spawn commands from Lua
+    // WARNING: Spawning entities in on_update (60 FPS) can cause performance issues
+    for cmd in lua_runtime.drain_spawn_commands() {
+        process_spawn_command(&mut commands, cmd, &mut world_signals);
+    }
+
+    // Process phase commands from Lua
+    for cmd in lua_runtime.drain_phase_commands() {
+        process_phase_command(&mut luaphase_query, cmd);
+    }
+
+    // Process audio commands from Lua
+    for cmd in lua_runtime.drain_audio_commands() {
+        process_audio_command(&mut audio_cmd_writer, cmd);
+    }
 
     // Check for quit flag (set by Lua)
     if world_signals.has_flag("quit_game") {

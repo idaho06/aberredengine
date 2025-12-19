@@ -550,6 +550,34 @@ pub fn process_entity_commands(
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).remove::<TweenScale>();
             }
+            EntityCmd::SetRotation { entity_id, degrees } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(Rotation { degrees });
+            }
+            EntityCmd::SetScale { entity_id, sx, sy } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(Scale::new(sx, sy));
+            }
+            EntityCmd::SignalSetScalar {
+                entity_id,
+                key,
+                value,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut signals) = signals_query.get_mut(entity) {
+                    signals.set_scalar(&key, value);
+                }
+            }
+            EntityCmd::SignalSetString {
+                entity_id,
+                key,
+                value,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut signals) = signals_query.get_mut(entity) {
+                    signals.set_string(&key, &value);
+                }
+            }
         }
     }
 }

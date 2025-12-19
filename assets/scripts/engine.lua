@@ -83,6 +83,9 @@ function engine.play_sound(id) end
 ---Stop all currently playing music
 function engine.stop_all_music() end
 
+---Stop all currently playing sounds
+function engine.stop_all_sounds() end
+
 -- ==================== Entity Spawning ====================
 
 ---@class EntityBuilder
@@ -461,7 +464,7 @@ function engine.get_entity(key) end
 
 -- ==================== Entity Commands ====================
 
----Set entity position
+---Set entity position (collision-scoped, use in collision callbacks)
 ---@param entity_id integer Entity ID
 ---@param x number New X position
 ---@param y number New Y position
@@ -475,30 +478,30 @@ function engine.entity_set_velocity(entity_id, vx, vy) end
 
 ---Set entity rotation
 ---@param entity_id integer Entity ID
----@param degrees number Rotation in degrees
+---@param degrees number Rotation angle in degrees
 function engine.entity_set_rotation(entity_id, degrees) end
 
 ---Set entity scale
 ---@param entity_id integer Entity ID
----@param sx number Scale X
----@param sy number Scale Y
+---@param sx number Scale X (1.0 = normal size)
+---@param sy number Scale Y (1.0 = normal size)
 function engine.entity_set_scale(entity_id, sx, sy) end
 
----Despawn an entity
+---Despawn an entity (collision-scoped, use in collision callbacks)
 ---@param entity_id integer Entity ID
 function engine.entity_despawn(entity_id) end
 
----Set entity scalar signal
----@param entity_id integer Entity ID
----@param key string Signal key
----@param value number Signal value
-function engine.entity_signal_set_scalar(entity_id, key, value) end
-
----Set entity integer signal
+---Set entity integer signal (collision-scoped, use in collision callbacks)
 ---@param entity_id integer Entity ID
 ---@param key string Signal key
 ---@param value integer Signal value
 function engine.entity_signal_set_integer(entity_id, key, value) end
+
+---Set entity scalar (float) signal
+---@param entity_id integer Entity ID
+---@param key string Signal key
+---@param value number Signal value
+function engine.entity_signal_set_scalar(entity_id, key, value) end
 
 ---Set entity string signal
 ---@param entity_id integer Entity ID
@@ -535,6 +538,10 @@ function engine.release_stuckto(entity_id) end
 ---@param entity_id integer Entity ID
 ---@param animation_key string Animation identifier
 function engine.entity_set_animation(entity_id, animation_key) end
+
+---Restart entity's current animation from frame 0
+---@param entity_id integer Entity ID
+function engine.entity_restart_animation(entity_id) end
 
 ---Insert LuaTimer component on an entity at runtime
 ---@param entity_id integer Entity ID
@@ -607,11 +614,154 @@ function engine.collision_play_sound(sound_key) end
 ---@param value integer Signal value
 function engine.collision_set_integer(key, value) end
 
+---Set flag signal during collision (collision-scoped)
+---@param flag string Flag key
+function engine.collision_set_flag(flag) end
+
+---Clear flag signal during collision (collision-scoped)
+---@param flag string Flag key
+function engine.collision_clear_flag(flag) end
+
+---@class CollisionEntityBuilder
+---Fluent builder for creating entities during collision callbacks.
+---Has a subset of EntityBuilder methods suitable for collision contexts.
+local CollisionEntityBuilder = {}
+
+---Set entity's collision group
+---@param name string Group name
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_group(name) end
+
+---Set entity's world position
+---@param x number X coordinate
+---@param y number Y coordinate
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_position(x, y) end
+
+---Set entity's sprite
+---@param tex_key string Texture identifier
+---@param width number Sprite width in pixels
+---@param height number Sprite height in pixels
+---@param origin_x number Origin X in pixels (pivot point)
+---@param origin_y number Origin Y in pixels (pivot point)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_sprite(tex_key, width, height, origin_x, origin_y) end
+
+---Set sprite offset for spritesheet frames
+---@param offset_x number X offset into texture
+---@param offset_y number Y offset into texture
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_sprite_offset(offset_x, offset_y) end
+
+---Set sprite flipping
+---@param flip_h boolean Flip horizontally
+---@param flip_v boolean Flip vertically
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_sprite_flip(flip_h, flip_v) end
+
+---Set entity's Z-index for render order
+---@param z integer Z-index (higher = rendered on top)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_zindex(z) end
+
+---Set entity's velocity (adds RigidBody component)
+---@param vx number Velocity X
+---@param vy number Velocity Y
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_velocity(vx, vy) end
+
+---Set entity's box collider
+---@param width number Collider width
+---@param height number Collider height
+---@param origin_x number Origin X for collider
+---@param origin_y number Origin Y for collider
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_collider(width, height, origin_x, origin_y) end
+
+---Set collider offset
+---@param offset_x number X offset
+---@param offset_y number Y offset
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_collider_offset(offset_x, offset_y) end
+
+---Set entity's rotation in degrees
+---@param degrees number Rotation angle
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_rotation(degrees) end
+
+---Set entity's scale
+---@param sx number Scale X
+---@param sy number Scale Y
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_scale(sx, sy) end
+
+---Add an integer signal to the entity
+---@param key string Signal key
+---@param value integer Signal value
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signal_integer(key, value) end
+
+---Add a flag signal to the entity
+---@param key string Signal key
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signal_flag(key) end
+
+---Add empty Signals component
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signals() end
+
+---Add timer component
+---@param duration number Timer duration in seconds
+---@param signal string Signal to emit when timer expires
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_timer(duration, signal) end
+
+---Add Lua timer component (calls Lua function when timer expires)
+---@param duration number Timer duration in seconds
+---@param callback string Lua function name to call (receives entity_id as parameter)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_timer(duration, callback) end
+
+---Add animation component
+---@param animation_key string Animation identifier
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_animation(animation_key) end
+
+---Build and queue the entity for spawning in collision context
+function CollisionEntityBuilder:build() end
+
+---Start building a new entity for spawning during collision
+---@return CollisionEntityBuilder
+function engine.collision_spawn() end
+
+---Request phase transition for an entity during collision handling
+---@param entity_id integer Entity ID with LuaPhase component
+---@param phase string Target phase name
+function engine.collision_phase_transition(entity_id, phase) end
+
+---Insert a Timer component on an entity (collision-scoped)
+---@param entity_id integer Entity ID
+---@param duration number Timer duration in seconds
+---@param signal string Signal to emit when timer expires
+function engine.entity_insert_timer(entity_id, duration, signal) end
+
 -- ==================== Group Tracking ====================
 
 ---Track a group for entity counting
 ---@param group_name string Group name to track
 function engine.track_group(group_name) end
+
+---Stop tracking a group
+---@param group_name string Group name to stop tracking
+function engine.untrack_group(group_name) end
+
+---Clear all tracked groups
+function engine.clear_tracked_groups() end
+
+---Check if a group is being tracked
+---@param group_name string Group name
+---@return boolean tracked True if the group is being tracked
+function engine.has_tracked_group(group_name) end
 
 ---Get count of entities in a tracked group
 ---@param group_name string Group name

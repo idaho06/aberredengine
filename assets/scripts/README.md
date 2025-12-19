@@ -92,7 +92,7 @@ function M.spawn()
     -- Spawn entities here
 end
 
--- Called every frame while this scene is active
+-- Called every frame while this scene is active (runs at 60 FPS)
 function on_update_level01(dt)
     -- dt: delta time in seconds
 
@@ -103,6 +103,12 @@ function on_update_level01(dt)
     end
 
     -- Most game logic goes in phase callbacks, not here
+
+    -- PERFORMANCE WARNING: You can use entity, spawn, phase, and audio commands
+    -- in on_update callbacks, but avoid spawning entities here when possible.
+    -- This callback runs every frame (60 FPS), so spawning entities here can
+    -- cause significant performance issues. Prefer spawning in on_switch_scene,
+    -- phase callbacks, or collision callbacks instead.
 end
 
 return M
@@ -111,6 +117,26 @@ return M
 **Global Flags**:
 - `"switch_scene"` - Set this flag to trigger a scene change (cleared by engine after processing)
 - `"quit_game"` - Set this flag to exit the game (cleared by engine after processing)
+
+### 3. Callback Command Processing
+
+Different callbacks process different types of engine commands. Here's what commands are processed after each callback type:
+
+| Callback | Processed Commands | Use Cases |
+|----------|-------------------|-----------|
+| `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps; register animations |
+| `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
+| `on_switch_scene(scene)` | Spawn, Group, Tilemap, Camera | Spawn scene entities; track groups; render tilemaps; set camera |
+| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio | **All commands available** - but avoid spawning (see warning below) |
+| Phase callbacks | Phase, Audio, Signal, Spawn, Entity | Transition phases; play sounds; spawn/modify entities |
+| Timer callbacks | Phase, Audio, Signal, Spawn, Entity | Same as phase callbacks |
+| Collision callbacks | Entity, Signal, Audio, Spawn, Phase | Modify entities; set signals; play sounds; spawn entities; transition phases |
+
+**Performance Warning for `on_update` callbacks**:
+- `on_update_<scene>` runs every frame (60 FPS)
+- Entity/Spawn commands work but can cause performance issues
+- **Avoid spawning entities in update loops** - prefer `on_switch_scene`, phase callbacks, or collision callbacks
+- Use `on_update` primarily for input handling and signal updates
 
 ---
 
@@ -1056,6 +1082,19 @@ Set entity's velocity (requires RigidBody component).
 engine.entity_set_velocity(ball_id, 300, -300)
 ```
 
+### `engine.entity_set_rotation(entity_id, degrees)`
+Set entity's rotation in degrees.
+```lua
+engine.entity_set_rotation(player_id, 45)  -- Rotate 45 degrees
+```
+
+### `engine.entity_set_scale(entity_id, sx, sy)`
+Set entity's scale (1.0 = normal size).
+```lua
+engine.entity_set_scale(boss_id, 2.0, 2.0)  -- Double size
+engine.entity_set_scale(player_id, 0.5, 1.0)  -- Half width
+```
+
 ### `engine.entity_despawn(entity_id)`
 Delete an entity.
 ```lua
@@ -1079,6 +1118,18 @@ Set integer signal on entity.
 ```lua
 local hp = engine.get_entity_signal_integer(brick_id, "hp")
 engine.entity_signal_set_integer(brick_id, "hp", hp - 1)
+```
+
+### `engine.entity_signal_set_scalar(entity_id, key, value)`
+Set floating-point signal on entity.
+```lua
+engine.entity_signal_set_scalar(player_id, "speed", 150.5)
+```
+
+### `engine.entity_signal_set_string(entity_id, key, value)`
+Set string signal on entity.
+```lua
+engine.entity_signal_set_string(player_id, "state", "running")
 ```
 
 ### `engine.entity_insert_timer(entity_id, duration, signal)`
@@ -1345,6 +1396,67 @@ engine.collision_set_flag("ball_hit_player")
 Clear global flag during collision.
 ```lua
 engine.collision_clear_flag("ball_hit_player")
+```
+
+#### `engine.collision_spawn()`
+Create a new entity builder for spawning entities during collision. Returns a `LuaCollisionEntityBuilder` with a subset of entity builder methods.
+
+**Available methods:**
+- `:with_group(name)`
+- `:with_position(x, y)`
+- `:with_sprite(tex_key, width, height, origin_x, origin_y)`
+- `:with_sprite_offset(offset_x, offset_y)`
+- `:with_sprite_flip(flip_h, flip_v)`
+- `:with_zindex(z)`
+- `:with_velocity(vx, vy)`
+- `:with_collider(width, height, origin_x, origin_y)`
+- `:with_collider_offset(offset_x, offset_y)`
+- `:with_rotation(degrees)`
+- `:with_scale(sx, sy)`
+- `:with_signal_integer(key, value)`
+- `:with_signal_flag(key)`
+- `:with_signals()`
+- `:with_timer(duration, signal)`
+- `:with_lua_timer(duration, callback)`
+- `:with_animation(animation_key)`
+- `:build()`
+
+```lua
+function on_ball_brick(ctx)
+    -- Spawn a particle effect at the brick's position
+    engine.collision_spawn()
+        :with_position(ctx.b.pos.x, ctx.b.pos.y)
+        :with_sprite("particle", 8, 8, 4, 4)
+        :with_group("particles")
+        :with_velocity(0, -50)
+        :with_lua_timer(0.5, "despawn_particle")
+        :build()
+
+    engine.entity_despawn(ctx.b.id)
+end
+
+function despawn_particle(entity_id)
+    engine.entity_despawn(entity_id)
+end
+```
+
+#### `engine.collision_phase_transition(entity_id, phase)`
+Request a phase transition for an entity during collision handling. Useful for triggering state changes like "hurt" or "stunned" states when collisions occur.
+
+**Parameters:**
+- `entity_id` - Entity with LuaPhase component
+- `phase` - Target phase name
+
+```lua
+function on_player_enemy(ctx)
+    local player_id = ctx.a.id
+
+    -- Transition player to hurt phase
+    engine.collision_phase_transition(player_id, "hurt")
+
+    -- Play hit sound
+    engine.collision_play_sound("player_hit")
+end
 ```
 
 ### Example: Ball-Brick Collision
