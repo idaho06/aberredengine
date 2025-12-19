@@ -39,12 +39,13 @@ use crate::components::luacollision::LuaCollisionRule;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
-use crate::components::stuckto::StuckTo;
-use crate::components::timer::Timer;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
-use crate::resources::lua_runtime::{AudioLuaCmd, CollisionEntityCmd, LuaRuntime, SignalCmd};
+use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::worldsignals::WorldSignals;
+use crate::systems::lua_commands::{
+    process_audio_command, process_collision_entity_commands, process_signal_command,
+};
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
 /// Broad-phase pairwise overlap test with event emission.
@@ -218,50 +219,20 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             // Process collision commands after Lua callback returns
             process_collision_entity_commands(
                 &mut params.commands,
+                params.lua_runtime.drain_collision_entity_commands(),
                 &mut params.positions,
                 &mut params.rigid_bodies,
                 &mut params.signals,
-                &params.lua_runtime,
             );
 
             // Process collision signal commands
             for cmd in params.lua_runtime.drain_collision_signal_commands() {
-                match cmd {
-                    SignalCmd::SetScalar { key, value } => {
-                        params.world_signals.set_scalar(&key, value);
-                    }
-                    SignalCmd::SetInteger { key, value } => {
-                        params.world_signals.set_integer(&key, value);
-                    }
-                    SignalCmd::SetString { key, value } => {
-                        params.world_signals.set_string(&key, &value);
-                    }
-                    SignalCmd::SetFlag { key } => {
-                        params.world_signals.set_flag(&key);
-                    }
-                    SignalCmd::ClearFlag { key } => {
-                        params.world_signals.clear_flag(&key);
-                    }
-                }
+                process_signal_command(&mut params.world_signals, cmd);
             }
 
             // Process collision audio commands
             for cmd in params.lua_runtime.drain_collision_audio_commands() {
-                match cmd {
-                    AudioLuaCmd::PlayMusic { id, looped } => {
-                        params.audio_cmds.write(AudioCmd::PlayMusic { id, looped });
-                    }
-                    AudioLuaCmd::PlaySound { id } => {
-                        params.audio_cmds.write(AudioCmd::PlayFx { id });
-                    }
-                    AudioLuaCmd::StopAllMusic => {
-                        params.audio_cmds.write(AudioCmd::StopAllMusic);
-                    }
-                    AudioLuaCmd::StopAllSounds => {
-                        // No-op: AudioCmd doesn't have StopAllSounds
-                        // Could implement later if needed
-                    }
-                }
+                process_audio_command(&mut params.audio_cmds, cmd);
             }
 
             return;
@@ -406,92 +377,4 @@ fn call_lua_collision_callback(
     func.call::<()>(ctx)?;
 
     Ok(())
-}
-
-/// Process collision entity commands after Lua callback.
-fn process_collision_entity_commands(
-    commands: &mut Commands,
-    positions: &mut Query<&mut MapPosition>,
-    rigid_bodies: &mut Query<&mut RigidBody>,
-    signals: &mut Query<&mut Signals>,
-    lua_runtime: &LuaRuntime,
-) {
-    for cmd in lua_runtime.drain_collision_entity_commands() {
-        match cmd {
-            CollisionEntityCmd::SetPosition { entity_id, x, y } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut pos) = positions.get_mut(entity) {
-                    pos.pos.x = x;
-                    pos.pos.y = y;
-                }
-            }
-            CollisionEntityCmd::SetVelocity { entity_id, vx, vy } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.velocity.x = vx;
-                    rb.velocity.y = vy;
-                }
-            }
-            CollisionEntityCmd::Despawn { entity_id } => {
-                let entity = Entity::from_bits(entity_id);
-                commands.entity(entity).despawn();
-            }
-            CollisionEntityCmd::SignalSetInteger {
-                entity_id,
-                key,
-                value,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut sig) = signals.get_mut(entity) {
-                    sig.set_integer(&key, value);
-                }
-            }
-            CollisionEntityCmd::SignalSetFlag { entity_id, flag } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut sig) = signals.get_mut(entity) {
-                    sig.set_flag(&flag);
-                }
-            }
-            CollisionEntityCmd::SignalClearFlag { entity_id, flag } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut sig) = signals.get_mut(entity) {
-                    sig.clear_flag(&flag);
-                }
-            }
-            CollisionEntityCmd::InsertTimer {
-                entity_id,
-                duration,
-                signal,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                commands.entity(entity).insert(Timer::new(duration, signal));
-            }
-            CollisionEntityCmd::InsertStuckTo {
-                entity_id,
-                target_id,
-                follow_x,
-                follow_y,
-                offset_x,
-                offset_y,
-                stored_vx,
-                stored_vy,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                let target = Entity::from_bits(target_id);
-                commands.entity(entity).insert(StuckTo {
-                    target,
-                    follow_x,
-                    follow_y,
-                    offset: raylib::math::Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    stored_velocity: Some(raylib::math::Vector2 {
-                        x: stored_vx,
-                        y: stored_vy,
-                    }),
-                });
-            }
-        }
-    }
 }
