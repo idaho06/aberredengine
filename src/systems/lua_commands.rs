@@ -16,6 +16,8 @@
 //! - [`process_spawn_command`] – Process a single SpawnCmd to create an entity
 //! - [`process_signal_command`] – Process a signal command
 //! - [`process_group_command`] – Process a group tracking command
+//! - [`process_tilemap_command`] – Process a tilemap spawning command
+//! - [`process_camera_command`] – Process a camera configuration command
 //! - [`process_phase_command`] – Process a phase command
 //! - [`process_audio_command`] – Process an audio command
 //! - [`process_asset_command`] – Process an asset loading command
@@ -47,7 +49,13 @@ use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, T
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::resources::group::TrackedGroups;
-use crate::resources::lua_runtime::{AnimationCmd, AssetCmd, AudioLuaCmd, EntityCmd, GroupCmd, SignalCmd, SpawnCmd};
+use crate::resources::camera2d::Camera2DRes;
+use crate::resources::lua_runtime::{
+    AnimationCmd, AssetCmd, AudioLuaCmd, CameraCmd, EntityCmd, GroupCmd, SignalCmd, SpawnCmd,
+    TilemapCmd,
+};
+use crate::resources::texturestore::TextureStore;
+use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
 
@@ -121,6 +129,84 @@ pub fn process_group_command(tracked_groups: &mut TrackedGroups, cmd: GroupCmd) 
     }
 }
 
+/// Process a single tilemap command from Lua and spawn tiles.
+///
+/// This function handles tilemap spawning commands by looking up the tilemap
+/// and texture data, then spawning the tiles as entities.
+///
+/// # Parameters
+///
+/// - `commands` - Bevy Commands for entity creation
+/// - `cmd` - The TilemapCmd to process
+/// - `tex_store` - TextureStore for looking up tilemap textures
+/// - `tilemaps_store` - TilemapStore for looking up tilemap data
+/// - `spawn_tiles_fn` - Function for spawning tiles from tilemap data
+pub fn process_tilemap_command<F>(
+    commands: &mut Commands,
+    cmd: TilemapCmd,
+    tex_store: &TextureStore,
+    tilemaps_store: &TilemapStore,
+    spawn_tiles_fn: F,
+) where
+    F: FnOnce(&mut Commands, String, i32, &Tilemap),
+{
+    match cmd {
+        TilemapCmd::SpawnTiles { id } => {
+            if let Some(tilemap_info) = tilemaps_store.get(&id) {
+                // Get texture width for calculating tile offsets
+                if let Some(tilemap_tex) = tex_store.get(&id) {
+                    let tiles_width = tilemap_tex.width;
+                    spawn_tiles_fn(commands, id.clone(), tiles_width, tilemap_info);
+                    eprintln!("[Rust] Spawned tiles for tilemap '{}'", id);
+                } else {
+                    eprintln!("[Rust] Tilemap texture '{}' not found", id);
+                }
+            } else {
+                eprintln!("[Rust] Tilemap '{}' not found in store", id);
+            }
+        }
+    }
+}
+
+/// Process a single camera command from Lua and update the camera resource.
+///
+/// This function handles camera configuration commands by inserting a new
+/// Camera2DRes resource with the specified parameters.
+///
+/// # Parameters
+///
+/// - `commands` - Bevy Commands for inserting the camera resource
+/// - `cmd` - The CameraCmd to process
+pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
+    match cmd {
+        CameraCmd::SetCamera2D {
+            target_x,
+            target_y,
+            offset_x,
+            offset_y,
+            rotation,
+            zoom,
+        } => {
+            commands.insert_resource(Camera2DRes(raylib::prelude::Camera2D {
+                target: Vector2 {
+                    x: target_x,
+                    y: target_y,
+                },
+                offset: Vector2 {
+                    x: offset_x,
+                    y: offset_y,
+                },
+                rotation,
+                zoom,
+            }));
+            eprintln!(
+                "[Rust] Camera set to target ({}, {}), offset ({}, {})",
+                target_x, target_y, offset_x, offset_y
+            );
+        }
+    }
+}
+
 /// Process a single phase command from Lua and apply it to the appropriate entity.
 ///
 /// This function converts Lua phase commands (PhaseCmd) into entity state changes
@@ -185,10 +271,7 @@ pub fn process_asset_command<F1, F2>(
         &mut raylib::RaylibHandle,
         &raylib::RaylibThread,
         &str,
-    ) -> (
-        raylib::prelude::Texture2D,
-        crate::resources::tilemapstore::Tilemap,
-    ),
+    ) -> (raylib::prelude::Texture2D, Tilemap),
 {
     match cmd {
         AssetCmd::LoadTexture { id, path } => match rl.load_texture(th, &path) {
@@ -236,7 +319,10 @@ pub fn process_asset_command<F1, F2>(
 /// - `anim_store` - AnimationStore for storing animation metadata
 /// - `cmd` - The AnimationCmd to process
 pub fn process_animation_command(
-    anim_store: &mut rustc_hash::FxHashMap<String, crate::resources::animationstore::AnimationResource>,
+    anim_store: &mut rustc_hash::FxHashMap<
+        String,
+        crate::resources::animationstore::AnimationResource,
+    >,
     cmd: AnimationCmd,
 ) {
     match cmd {

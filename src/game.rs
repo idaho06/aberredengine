@@ -84,8 +84,8 @@ use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_animation_command, process_asset_command, process_group_command,
-    process_signal_command, process_spawn_command,
+    process_animation_command, process_asset_command, process_camera_command,
+    process_group_command, process_signal_command, process_spawn_command, process_tilemap_command,
 };
 //use rand::Rng;
 
@@ -785,7 +785,7 @@ pub fn switch_scene(
             .clone(),
     ); */
     for entity in entities_to_clean.iter() {
-        commands.entity(entity).log_components();
+        //commands.entity(entity).log_components();
         //eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
@@ -822,55 +822,15 @@ pub fn switch_scene(
 
     // Process tilemap commands from Lua
     for cmd in lua_runtime.drain_tilemap_commands() {
-        match cmd {
-            crate::resources::lua_runtime::TilemapCmd::SpawnTiles { id } => {
-                if let Some(tilemap_info) = tilemaps_store.get(&id) {
-                    // Get texture width for calculating tile offsets
-                    if let Some(tilemap_tex) = tex_store.get(&id) {
-                        let tiles_width = tilemap_tex.width;
-                        spawn_tiles(&mut commands, &id, tiles_width, tilemap_info);
-                        eprintln!("[Rust] Spawned tiles for tilemap '{}'", id);
-                    } else {
-                        eprintln!("[Rust] Tilemap texture '{}' not found", id);
-                    }
-                } else {
-                    eprintln!("[Rust] Tilemap '{}' not found in store", id);
-                }
-            }
-        }
+        process_tilemap_command(&mut commands, cmd, &tex_store, &tilemaps_store, spawn_tiles);
     }
 
     // Process camera commands from Lua
     for cmd in lua_runtime.drain_camera_commands() {
-        match cmd {
-            crate::resources::lua_runtime::CameraCmd::SetCamera2D {
-                target_x,
-                target_y,
-                offset_x,
-                offset_y,
-                rotation,
-                zoom,
-            } => {
-                commands.insert_resource(Camera2DRes(Camera2D {
-                    target: Vector2 {
-                        x: target_x,
-                        y: target_y,
-                    },
-                    offset: Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    rotation,
-                    zoom,
-                }));
-                eprintln!(
-                    "[Rust] Camera set to target ({}, {}), offset ({}, {})",
-                    target_x, target_y, offset_x, offset_y
-                );
-            }
-        }
+        process_camera_command(&mut commands, cmd);
     }
 
+    // for reference, here is the old hardcoded scene setup logic, now replaced by Lua scripts
     /*     match scene.as_str() {
            "menu" => {
                // NOTE: Camera is now set by menu.lua spawn() function via engine.set_camera()
@@ -908,5 +868,4 @@ pub fn switch_scene(
            }
        }
     */
-    // Stop any playing music when switching scenes
 }

@@ -167,6 +167,7 @@ pub enum CollisionEntityCmd {
 /// Commands for tracked groups from Lua.
 #[derive(Debug, Clone)]
 pub enum GroupCmd {
+    //TODO: Rename to TrackedGroupCmd
     /// Track a group for entity counting
     TrackGroup { name: String },
     /// Stop tracking a group
