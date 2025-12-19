@@ -126,11 +126,23 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Spawn, Group, Tilemap, Camera | Spawn scene entities; track groups; render tilemaps; set camera |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio | **All commands available** - but avoid spawning (see warning below) |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera | **Most complete** - spawn entities; set signals; play audio; set camera |
+| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio | Per-frame logic - but avoid spawning (see warning below) |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Entity | Transition phases; play sounds; spawn/modify entities |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Entity | Same as phase callbacks |
-| Collision callbacks | Entity, Signal, Audio, Spawn, Phase | Modify entities; set signals; play sounds; spawn entities; transition phases |
+| Collision callbacks | Entity*, Signal, Audio, Spawn, Phase | Modify entities; set signals; play sounds; spawn entities; transition phases |
+
+**Note**: Collision callbacks use a separate `CollisionEntityCmd` queue with a subset of entity operations.
+
+**Processing Order by Callback**:
+| Callback | Order |
+|----------|-------|
+| `on_setup()` | Asset → Animation |
+| `on_enter_play()` | Signal → Group |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera |
+| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio |
+| Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity |
+| Collision callbacks | Entity → Signal → Audio → Spawn → Phase |
 
 **Performance Warning for `on_update` callbacks**:
 - `on_update_<scene>` runs every frame (60 FPS)

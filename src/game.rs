@@ -85,9 +85,9 @@ use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_animation_command, process_asset_command, process_audio_command, process_camera_command,
-    process_entity_commands, process_group_command, process_phase_command, process_signal_command,
-    process_spawn_command, process_tilemap_command,
+    process_animation_command, process_asset_command, process_audio_command,
+    process_camera_command, process_entity_commands, process_group_command, process_phase_command,
+    process_signal_command, process_spawn_command, process_tilemap_command,
 };
 //use rand::Rng;
 
@@ -813,6 +813,10 @@ pub fn switch_scene(
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     //th: NonSend<raylib::RaylibThread>,
     lua_runtime: NonSend<LuaRuntime>,
+    stuckto_query: Query<&StuckTo>,
+    mut signals_query: Query<&mut Signals>,
+    mut animation_query: Query<&mut Animation>,
+    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
@@ -843,6 +847,29 @@ pub fn switch_scene(
         if let Err(e) = lua_runtime.call_function::<_, ()>("on_switch_scene", scene.clone()) {
             eprintln!("[Rust] Error calling on_switch_scene: {}", e);
         }
+    }
+
+    // Process signal commands from Lua (initialize world signals for the new scene)
+    for cmd in lua_runtime.drain_signal_commands() {
+        process_signal_command(&mut worldsignals, cmd);
+    }
+    // Process entity commands from Lua
+    process_entity_commands(
+        &mut commands,
+        lua_runtime.drain_entity_commands(),
+        &stuckto_query,
+        &mut signals_query,
+        &mut animation_query,
+    );
+
+    // Process phase commands from Lua
+    for cmd in lua_runtime.drain_phase_commands() {
+        process_phase_command(&mut luaphase_query, cmd);
+    }
+
+    // Process audio commands from Lua
+    for cmd in lua_runtime.drain_audio_commands() {
+        process_audio_command(&mut audio_cmd_writer, cmd);
     }
 
     // Process spawn commands from Lua
