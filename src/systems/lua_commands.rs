@@ -26,9 +26,9 @@
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use raylib::prelude::{Camera2D, Vector2};
 
-use crate::components::animation::Animation;
+use crate::components::animation::{Animation, Condition};
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
@@ -48,11 +48,13 @@ use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::group::TrackedGroups;
+use crate::resources::animationstore::AnimationResource;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::fontstore::FontStore;
+use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
-    AnimationCmd, AssetCmd, AudioLuaCmd, CameraCmd, EntityCmd, GroupCmd, SignalCmd, SpawnCmd,
-    TilemapCmd,
+    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, EntityCmd, GroupCmd,
+    MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
 };
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -86,6 +88,15 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
     }
 }
 
+/// Process a single signal command from Lua and update world signals.
+///
+/// This function handles signal manipulation commands by setting or clearing
+/// scalar, integer, flag, and string values in the WorldSignals resource.
+///
+/// # Parameters
+///
+/// - `world_signals` - WorldSignals resource for storing global game state
+/// - `cmd` - The SignalCmd to process
 pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) {
     match cmd {
         SignalCmd::SetScalar { key, value } => {
@@ -187,7 +198,7 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
             rotation,
             zoom,
         } => {
-            commands.insert_resource(Camera2DRes(raylib::prelude::Camera2D {
+            commands.insert_resource(Camera2DRes(Camera2D {
                 target: Vector2 {
                     x: target_x,
                     y: target_y,
@@ -216,12 +227,9 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
 ///
 /// - `luaphase_query` - Query for accessing and modifying LuaPhase components
 /// - `cmd` - The PhaseCmd to process
-pub fn process_phase_command(
-    luaphase_query: &mut Query<(Entity, &mut crate::components::luaphase::LuaPhase)>,
-    cmd: crate::resources::lua_runtime::PhaseCmd,
-) {
+pub fn process_phase_command(luaphase_query: &mut Query<(Entity, &mut LuaPhase)>, cmd: PhaseCmd) {
     match cmd {
-        crate::resources::lua_runtime::PhaseCmd::TransitionTo { entity_id, phase } => {
+        PhaseCmd::TransitionTo { entity_id, phase } => {
             let entity = Entity::from_bits(entity_id);
             if let Ok((_, mut lua_phase)) = luaphase_query.get_mut(entity) {
                 lua_phase.next = Some(phase);
@@ -254,9 +262,9 @@ pub fn process_asset_command<F1, F2>(
     rl: &mut raylib::RaylibHandle,
     th: &raylib::RaylibThread,
     cmd: AssetCmd,
-    tex_store: &mut crate::resources::texturestore::TextureStore,
-    tilemaps_store: &mut crate::resources::tilemapstore::TilemapStore,
-    fonts: &mut crate::resources::fontstore::FontStore,
+    tex_store: &mut TextureStore,
+    tilemaps_store: &mut TilemapStore,
+    fonts: &mut FontStore,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     load_font_fn: F1,
     load_tilemap_fn: F2,
@@ -319,10 +327,7 @@ pub fn process_asset_command<F1, F2>(
 /// - `anim_store` - AnimationStore for storing animation metadata
 /// - `cmd` - The AnimationCmd to process
 pub fn process_animation_command(
-    anim_store: &mut rustc_hash::FxHashMap<
-        String,
-        crate::resources::animationstore::AnimationResource,
-    >,
+    anim_store: &mut rustc_hash::FxHashMap<String, AnimationResource>,
     cmd: AnimationCmd,
 ) {
     match cmd {
@@ -338,7 +343,7 @@ pub fn process_animation_command(
         } => {
             anim_store.insert(
                 id.clone(),
-                crate::resources::animationstore::AnimationResource {
+                AnimationResource {
                     tex_key,
                     position: Vector2 { x: pos_x, y: pos_y },
                     displacement,
@@ -758,13 +763,9 @@ pub fn process_spawn_command(
         let mut actions = MenuActions::new();
         for (item_id, action_data) in menu_data.actions {
             let action = match action_data {
-                crate::resources::lua_runtime::MenuActionData::SetScene { scene } => {
-                    MenuAction::SetScene(scene)
-                }
-                crate::resources::lua_runtime::MenuActionData::ShowSubMenu { menu } => {
-                    MenuAction::ShowSubMenu(menu)
-                }
-                crate::resources::lua_runtime::MenuActionData::QuitGame => MenuAction::QuitGame,
+                MenuActionData::SetScene { scene } => MenuAction::SetScene(scene),
+                MenuActionData::ShowSubMenu { menu } => MenuAction::ShowSubMenu(menu),
+                MenuActionData::QuitGame => MenuAction::QuitGame,
             };
             actions = actions.with(item_id, action);
         }
@@ -929,6 +930,9 @@ pub fn parse_tween_loop_mode(loop_mode: &str) -> LoopMode {
 }
 
 /// Parse comparison operator string into CmpOp enum.
+///
+/// Converts string representations like "lt", "le", "gt", etc. into the
+/// corresponding CmpOp variant. Unknown strings default to Eq.
 fn parse_cmp_op(op: &str) -> crate::components::animation::CmpOp {
     use crate::components::animation::CmpOp;
     match op {
@@ -943,11 +947,10 @@ fn parse_cmp_op(op: &str) -> crate::components::animation::CmpOp {
 }
 
 /// Convert AnimationConditionData from Lua into Condition enum.
-fn convert_animation_condition(
-    data: crate::resources::lua_runtime::AnimationConditionData,
-) -> crate::components::animation::Condition {
-    use crate::components::animation::Condition;
-    use crate::resources::lua_runtime::AnimationConditionData;
+///
+/// Recursively converts the Lua representation of animation conditions into
+/// the native Condition type, handling nested All, Any, and Not combinators.
+fn convert_animation_condition(data: AnimationConditionData) -> Condition {
     match data {
         AnimationConditionData::ScalarCmp { key, op, value } => Condition::ScalarCmp {
             key,
