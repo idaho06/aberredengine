@@ -1,3 +1,4 @@
+![Aberred Engine](aberred.ico)
 # Aberred Engine
 
 A compact 2D game engine and sandbox with full Lua scripting support. Demonstrated as an Arkanoid-style breakout clone.
