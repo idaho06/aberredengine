@@ -16,10 +16,12 @@ raylib = { version = "5.5.1", features = ["wayland","noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 raylib = { version = "5.5.1", features = ["noscreenshot"] }
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
 winres = "0.1"
 
 [package.metadata.winres]
-# OriginalFilename = ".EXE"
+OriginalFilename = "ABERRED.EXE"
 LegalCopyright = "© 2026 AkinoSoft"
 
 [profile.release]
