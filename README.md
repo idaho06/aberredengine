@@ -1,3 +1,4 @@
+![Aberred Engine](aberred.ico)
 # Aberred Engine
 
 A compact 2D game sandbox and engine prototype.
