@@ -83,7 +83,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-//use rand::Rng;
+use fastrand as rand;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
 pub fn load_texture_from_text(
@@ -811,22 +811,22 @@ fn snow_emitter_on_update(
         // emit snowflakes
         for _ in 0..num_snowflakes {
             // spawn snowflake entity from inside the collider rectangle
-            let spawn_x = rand::random::<f32>() * collider_rectangle.width + collider_rectangle.x;
-            let spawn_y = rand::random::<f32>() * collider_rectangle.height + collider_rectangle.y;
+            let spawn_x = rand::f32() * collider_rectangle.width + collider_rectangle.x;
+            let spawn_y = rand::f32() * collider_rectangle.height + collider_rectangle.y;
 
-            let size = 4.0 + rand::random::<f32>() * 32.0;
+            let size = 4.0 + rand::f32() * 32.0;
             // sprite is 256x256, calculate Scale to match size
             let scale = size / 256.0;
-            let fall_speed = 50.0 + rand::random::<f32>() * 100.0;
+            let fall_speed = 50.0 + rand::f32() * 100.0;
 
             // Create signals for jiggle parameters
             let mut snowflake_signals = Signals::default();
             // Random jiggle frequency (oscillations per second)
-            let jiggle_frequency = 0.05 + rand::random::<f32>() * 0.8;
+            let jiggle_frequency = 0.05 + rand::f32() * 0.8;
             // Random jiggle amplitude (pixels)
-            let jiggle_amplitude = 10.0 + rand::random::<f32>() * 30.0;
+            let jiggle_amplitude = 10.0 + rand::f32() * 30.0;
             // Random phase offset so snowflakes don't all jiggle in sync
-            let jiggle_phase_offset = rand::random::<f32>() * std::f32::consts::TAU;
+            let jiggle_phase_offset = rand::f32() * std::f32::consts::TAU;
             snowflake_signals.set_scalar("jiggle_frequency", jiggle_frequency);
             snowflake_signals.set_scalar("jiggle_amplitude", jiggle_amplitude);
             snowflake_signals.set_scalar("jiggle_phase_offset", jiggle_phase_offset);

@@ -5,13 +5,24 @@ edition = "2024"
 
 [dependencies]
 bevy_ecs = "0.17.3"
-raylib = { version = "5.5.1", features = ["wayland","noscreenshot"] }
-# rhai = "1.23.4"
-rand = "0.9"
 rustc-hash = "2.1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crossbeam-channel = "0.5"
+fastrand = "2.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+raylib = { version = "5.5.1", features = ["wayland","noscreenshot"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+raylib = { version = "5.5.1", features = ["noscreenshot"] }
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winres = "0.1"
+
+[package.metadata.winres]
+OriginalFilename = "ABERRED.EXE"
+LegalCopyright = "© 2026 AkinoSoft"
 
 [profile.release]
 opt-level = 3
