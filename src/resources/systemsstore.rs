@@ -28,7 +28,7 @@ impl SystemsStore {
     }
 
     /// Retrieve a system ID by name, if present.
-    pub fn get(&self, name: impl Into<String>) -> Option<&SystemId> {
-        self.map.get(&name.into())
+    pub fn get(&self, name: impl AsRef<str>) -> Option<&SystemId> {
+        self.map.get(name.as_ref())
     }
 }
