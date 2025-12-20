@@ -105,7 +105,7 @@ pub fn render_system(
             .collect();
         to_draw.sort_by_key(|(_, _, z, _, _)| *z);
         for (sprite, pos, _z, maybe_scale, maybe_rot) in to_draw.iter() {
-            if let Some(tex) = textures.get(sprite.tex_key.clone()) {
+            if let Some(tex) = textures.get(&sprite.tex_key) {
                 let mut src = Rectangle {
                     x: sprite.offset.x,
                     y: sprite.offset.y,
@@ -156,7 +156,8 @@ pub fn render_system(
                 let text_size = unsafe {
                     ffi::MeasureTextEx(
                         **fonts
-                            .get(t.font.clone().as_str())
+                            //.get(t.font.clone().as_str())
+                            .get(&t.font)
                             .expect("Font name must be valid!!"),
                         t.content.as_ptr() as *const i8,
                         t.font_size,
@@ -184,7 +185,7 @@ pub fn render_system(
             .collect();
         text_to_draw.sort_by_key(|(_, _, z)| *z);
         for (text, pos, _z) in text_to_draw.iter() {
-            if let Some(font) = fonts.get(text.font.clone().as_str()) {
+            if let Some(font) = fonts.get(&text.font) {
                 d2.draw_text_ex(
                     font,
                     &text.content,
@@ -259,7 +260,7 @@ pub fn render_system(
     } // End Camera2D mode
     // Draw in screen coordinates (UI layer).
     for (sprite, pos) in query_screen_sprites.iter() {
-        if let Some(tex) = textures.get(sprite.tex_key.clone()) {
+        if let Some(tex) = textures.get(&sprite.tex_key) {
             let mut src = Rectangle {
                 x: sprite.offset.x,
                 y: sprite.offset.y,
@@ -317,7 +318,7 @@ pub fn render_system(
         }
     }
     for (text, pos) in query_screen_dynamic_texts.iter() {
-        if let Some(font) = fonts.get(text.font.clone().as_str()) {
+        if let Some(font) = fonts.get(&text.font) {
             d.draw_text_ex(
                 font,
                 &text.content,

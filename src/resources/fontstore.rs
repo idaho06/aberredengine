@@ -34,8 +34,8 @@ impl FontStore {
     }
 
     /// Get a font by its key.
-    pub fn get(&self, id: &str) -> Option<&Font> {
-        self.fonts.get(id)
+    pub fn get(&self, id: impl AsRef<str>) -> Option<&Font> {
+        self.fonts.get(id.as_ref())
     }
 
     /// Remove all loaded fonts.

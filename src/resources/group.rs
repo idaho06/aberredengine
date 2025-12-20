@@ -70,13 +70,13 @@ impl TrackedGroups {
     }
 
     /// Returns `true` if the given group name is being tracked.
-    pub fn has_group(&self, group_name: &str) -> bool {
-        self.groups.contains(group_name)
+    pub fn has_group(&self, group_name: impl AsRef<str>) -> bool {
+        self.groups.contains(group_name.as_ref())
     }
 
     /// Removes a group name from tracking.
-    pub fn remove_group(&mut self, group_name: &str) {
-        self.groups.remove(group_name);
+    pub fn remove_group(&mut self, group_name: impl AsRef<str>) {
+        self.groups.remove(group_name.as_ref());
     }
 
     /// Clears all tracked group names.

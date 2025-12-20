@@ -51,8 +51,8 @@ impl TilemapStore {
         }
     }
     /// Get a tilemap by its key.
-    pub fn get(&self, key: impl Into<String>) -> Option<&Tilemap> {
-        self.map.get(&key.into())
+    pub fn get(&self, key: impl AsRef<str>) -> Option<&Tilemap> {
+        self.map.get(key.as_ref())
     }
     /// Insert a tilemap with a specific key.
     pub fn insert(&mut self, key: impl Into<String>, tilemap: Tilemap) {
