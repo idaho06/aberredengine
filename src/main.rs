@@ -64,6 +64,7 @@ use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
+use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::luaphase::lua_phase_system;
 use crate::systems::menu::menu_selection_observer;
@@ -187,6 +188,7 @@ fn main() {
     );
     //update.add_systems(check_input.after(update_input_state)); // is `after` necessary?
     update.add_systems(input_simple_controller);
+    update.add_systems(input_acceleration_controller);
     update.add_systems(mouse_controller);
     update.add_systems(stuck_to_entity_system.after(collision_detector));
     update.add_systems(tween_mapposition_system);
