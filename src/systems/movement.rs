@@ -1,8 +1,11 @@
 //! Movement system with acceleration physics.
 //!
 //! Integrates entity positions from their current rigid body velocities and
-//! the world's unscaled delta time. Supports acceleration-based movement with
-//! friction damping and optional speed clamping.
+//! the world's unscaled delta time. Supports multiple named acceleration forces
+//! with individual enable/disable, friction damping, and optional speed clamping.
+//!
+//! Entities with `frozen = true` are skipped entirely, allowing external systems
+//! to control their position directly.
 
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
@@ -14,14 +17,16 @@ use crate::events::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
 
-/// Apply acceleration and velocity to `MapPosition` using the frame's delta time.
+/// Apply acceleration forces and velocity to `MapPosition` using the frame's delta time.
 ///
 /// This system performs physics integration in the following order:
-/// 1. Integrate acceleration into velocity: `velocity += acceleration * delta`
-/// 2. Apply friction damping: `velocity *= (1 - friction * delta)`
-/// 3. Clamp velocity to max_speed if configured
-/// 4. Integrate velocity into position: `position += velocity * delta`
-/// 5. Update movement signals for animation/audio systems
+/// 1. Skip if entity is frozen
+/// 2. Sum all enabled acceleration forces
+/// 3. Integrate acceleration into velocity: `velocity += total_acceleration * delta`
+/// 4. Apply friction damping: `velocity *= (1 - friction * delta)`
+/// 5. Clamp velocity to max_speed if configured
+/// 6. Integrate velocity into position: `position += velocity * delta`
+/// 7. Update movement signals for animation/audio systems
 pub fn movement(
     mut query: Query<(
         Entity,
@@ -34,12 +39,25 @@ pub fn movement(
     mut _audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
     for (_entity, mut position, mut rigidbody, mut maybe_signals) in query.iter_mut() {
+        // Step 1: Skip frozen entities
+        if rigidbody.frozen {
+            // Still update signals for frozen entities (they might still be "moving" via external control)
+            if let Some(signals) = maybe_signals.as_mut() {
+                signals.clear_flag("moving");
+                signals.set_scalar("speed", 0.0);
+            }
+            continue;
+        }
+
         let delta = time.delta;
 
-        // Step 1: Integrate acceleration into velocity
-        rigidbody.velocity += rigidbody.acceleration * delta;
+        // Step 2: Calculate total acceleration from all enabled forces
+        let total_acceleration = rigidbody.total_acceleration();
 
-        // Step 2: Apply friction damping
+        // Step 3: Integrate acceleration into velocity
+        rigidbody.velocity += total_acceleration * delta;
+
+        // Step 4: Apply friction damping
         // Using linear damping: velocity *= (1 - friction * delta)
         // This is stable for typical friction values (0-10) and frame rates
         if rigidbody.friction > 0.0 {
@@ -53,7 +71,7 @@ pub fn movement(
             }
         }
 
-        // Step 3: Clamp velocity to max_speed if configured
+        // Step 5: Clamp velocity to max_speed if configured
         if let Some(max_speed) = rigidbody.max_speed {
             let speed = rigidbody.velocity.length();
             if speed > max_speed {
@@ -61,10 +79,10 @@ pub fn movement(
             }
         }
 
-        // Step 4: Integrate velocity into position
+        // Step 6: Integrate velocity into position
         position.pos += rigidbody.velocity * delta;
 
-        // Step 5: Update movement signals
+        // Step 7: Update movement signals
         if let Some(signals) = maybe_signals.as_mut() {
             let speed = rigidbody.velocity.length();
             if speed > 0.0 {
