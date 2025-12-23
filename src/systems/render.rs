@@ -49,6 +49,8 @@ pub fn render_system(
     textures: Res<TextureStore>, // TODO: move TextureStore resource creation out of setup system
     fonts: NonSend<FontStore>,
     isdebug: Option<Res<DebugMode>>,
+    mut sprite_buffer: Local<Vec<(Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>)>>,
+    mut text_buffer: Local<Vec<(DynamicText, MapPosition, ZIndex)>>,
 ) {
     let mut d = rl.begin_drawing(&th);
     d.clear_background(Color::DARKGRAY);
@@ -73,16 +75,15 @@ pub fn render_system(
             x: tl.x.max(br.x),
             y: tl.y.max(br.y),
         };
-
-        let mut to_draw: Vec<(
-            &Sprite,
-            &MapPosition,
-            &ZIndex,
-            Option<&Scale>,
-            Option<&Rotation>,
-        )> = query_map_sprites
-            .iter()
-            .filter_map(|(s, p, z, maybe_scale, maybe_rot)| {
+        /* let view_rectangle = Rectangle {
+            x: view_min.x,
+            y: view_min.y,
+            width: view_max.x - view_min.x,
+            height: view_max.y - view_min.y,
+        }; */
+        sprite_buffer.clear();
+        sprite_buffer.extend(query_map_sprites.iter().filter_map(
+            |(s, p, z, maybe_scale, maybe_rot)| {
                 let min = Vector2 {
                     x: p.pos.x - s.origin.x,
                     y: p.pos.y - s.origin.y,
@@ -91,20 +92,24 @@ pub fn render_system(
                     x: min.x + s.width,
                     y: min.y + s.height,
                 };
+                /* let sprite_rectangle = Rectangle {
+                    x: min.x,
+                    y: min.y,
+                    width: s.width,
+                    height: s.height,
+                }; */
 
                 let overlap = !(max.x < view_min.x
                     || min.x > view_max.x
                     || max.y < view_min.y
                     || min.y > view_max.y);
-                if overlap {
-                    Some((s, p, z, maybe_scale, maybe_rot))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        to_draw.sort_by_key(|(_, _, z, _, _)| *z);
-        for (sprite, pos, _z, maybe_scale, maybe_rot) in to_draw.iter() {
+                // let overlap = view_rectangle.check_collision_recs(&sprite_rectangle);
+                overlap.then_some((s.clone(), *p, *z, maybe_scale.copied(), maybe_rot.copied()))
+            },
+        ));
+
+        sprite_buffer.sort_unstable_by_key(|(_, _, z, _, _)| *z);
+        for (sprite, pos, _z, maybe_scale, maybe_rot) in sprite_buffer.iter() {
             if let Some(tex) = textures.get(&sprite.tex_key) {
                 let mut src = Rectangle {
                     x: sprite.offset.x,
@@ -148,43 +153,39 @@ pub fn render_system(
                 d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
             }
         } // End sprite drawing in camera space
-        let mut text_to_draw: Vec<(&DynamicText, &MapPosition, &ZIndex)> = query_map_dynamic_texts
-            .iter()
-            .filter_map(|(t, p, z)| {
-                //let text_width = d2.measure_text(&t.content, t.font_size as i32) as f32;
-                //let text_height = t.font_size;
-                let text_size = unsafe {
-                    ffi::MeasureTextEx(
-                        **fonts
-                            //.get(t.font.clone().as_str())
-                            .get(&t.font)
-                            .expect("Font name must be valid!!"),
-                        t.content.as_ptr() as *const i8,
-                        t.font_size,
-                        1.0,
-                    )
-                };
-                let text_width = text_size.x;
-                let text_height = text_size.y;
+        text_buffer.clear();
+        text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(t, p, z)| {
+            let text_c_string = std::ffi::CString::new(t.content.clone())
+                .expect("Failed to convert text content to CString");
+            let font = fonts.get(&t.font).expect("Font name must be valid!!");
+            let text_size = unsafe {
+                ffi::MeasureTextEx(
+                    **font,
+                    text_c_string.as_ptr() as *const i8,
+                    t.font_size,
+                    1.0,
+                )
+            };
+            let text_width = text_size.x;
+            let text_height = text_size.y;
 
-                let min = Vector2 {
-                    x: p.pos.x,
-                    y: p.pos.y,
-                };
-                let max = Vector2 {
-                    x: min.x + text_width,
-                    y: min.y + text_height,
-                };
+            let min = Vector2 {
+                x: p.pos.x,
+                y: p.pos.y,
+            };
+            let max = Vector2 {
+                x: min.x + text_width,
+                y: min.y + text_height,
+            };
 
-                let overlap = !(max.x < view_min.x
-                    || min.x > view_max.x
-                    || max.y < view_min.y
-                    || min.y > view_max.y);
-                if overlap { Some((t, p, z)) } else { None }
-            })
-            .collect();
-        text_to_draw.sort_by_key(|(_, _, z)| *z);
-        for (text, pos, _z) in text_to_draw.iter() {
+            let overlap = !(max.x < view_min.x
+                || min.x > view_max.x
+                || max.y < view_min.y
+                || min.y > view_max.y);
+            overlap.then_some((t.clone(), *p, *z))
+        }));
+        text_buffer.sort_unstable_by_key(|(_, _, z)| *z);
+        for (text, pos, _z) in text_buffer.iter() {
             if let Some(font) = fonts.get(&text.font) {
                 d2.draw_text_ex(
                     font,
