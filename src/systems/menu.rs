@@ -56,7 +56,7 @@ pub fn menu_spawn_system(
             if menu_item.dynamic_text {
                 // Dynamic text will be updated each frame
                 ecmd.insert(DynamicText::new(
-                    &menu_item.label,
+                    menu_item.label.clone(),
                     font_string.clone(),
                     font_size,
                     normal_color,
@@ -82,7 +82,7 @@ pub fn menu_spawn_system(
                 let key = format!("menu_{}", menu_item.id);
                 texture_store.insert(&key, texture_handle);
                 ecmd.insert(Sprite {
-                    tex_key: key,
+                    tex_key: key.into(),
                     width,
                     height,
                     offset: Vector2 { x: 0.0, y: 0.0 },

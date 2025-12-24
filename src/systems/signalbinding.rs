@@ -39,8 +39,8 @@ pub fn update_world_signals_binding_system(
 
         if let Some(value_str) = value_str {
             dynamic_text.content = match &signal_binding.format {
-                Some(format_str) => format_str.replace("{}", &value_str),
-                None => value_str,
+                Some(format_str) => format_str.replace("{}", &value_str).into(),
+                None => value_str.into(),
             };
         }
     }

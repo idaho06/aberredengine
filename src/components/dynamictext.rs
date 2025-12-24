@@ -37,6 +37,8 @@
 //! - [`crate::components::signalbinding::SignalBinding`] – binds text to signal values
 //! - [`crate::resources::fontstore::FontStore`] – font registry
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::Component;
 
 /// Dynamic text component for rendering variable strings in the world or screen.
@@ -46,9 +48,9 @@ use bevy_ecs::prelude::Component;
 #[derive(Component, Clone, Debug)]
 pub struct DynamicText {
     /// The text content to render.
-    pub content: String,
+    pub content: Arc<str>,
     /// Font type
-    pub font: String,
+    pub font: Arc<str>,
     /// Font size in world units.
     pub font_size: f32,
     /// Color of the text.
@@ -58,8 +60,8 @@ pub struct DynamicText {
 impl DynamicText {
     /// Creates a new DynamicText component.
     pub fn new(
-        content: impl Into<String>,
-        font: impl Into<String>,
+        content: impl Into<Arc<str>>,
+        font: impl Into<Arc<str>>,
         font_size: f32,
         color: raylib::prelude::Color,
     ) -> Self {
@@ -71,7 +73,7 @@ impl DynamicText {
         }
     }
     /// Updates the text content.
-    pub fn set_content(&mut self, new_content: impl Into<String>) {
+    pub fn set_content(&mut self, new_content: impl Into<Arc<str>>) {
         self.content = new_content.into();
     }
 }

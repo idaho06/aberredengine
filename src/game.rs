@@ -179,7 +179,7 @@ fn spawn_tiles(
                 MapPosition::new(wx, wy),
                 ZIndex(z),
                 Sprite {
-                    tex_key: tilemap_tex_key.clone(),
+                    tex_key: tilemap_tex_key.clone().into(),
                     width: tile_size,
                     height: tile_size,
                     offset: Vector2 {
@@ -1026,7 +1026,7 @@ pub fn update(
                         MapPosition::new(letter_spawn_x, 425.0),
                         ZIndex(20),
                         DynamicText::new(
-                            &char_to_spawn.to_string(),
+                            char_to_spawn.to_string(),
                             "extra_thick",
                             font_size,
                             Color::WHITE,

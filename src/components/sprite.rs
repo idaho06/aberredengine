@@ -5,6 +5,8 @@
 //! frame. `origin` defines the pivot (in pixels, from the texture's top-left)
 //! used when positioning/rotating/scaling the sprite.
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
@@ -12,7 +14,7 @@ use raylib::prelude::Vector2;
 /// Describes how to render a textured quad for an entity.
 pub struct Sprite {
     /// Texture identifier used to look up the GPU resource.
-    pub tex_key: String,
+    pub tex_key: Arc<str>,
     /// Width in world units.
     pub width: f32,
     /// Height in world units.

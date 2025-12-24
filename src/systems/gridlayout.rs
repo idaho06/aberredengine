@@ -90,7 +90,7 @@ pub fn gridlayout_spawn_system(
                 MapPosition::new(x, y),
                 ZIndex(grid_layout.z_index),
                 Sprite {
-                    tex_key: cell.texture_key.clone(),
+                    tex_key: cell.texture_key.clone().into(),
                     width: layout_data.cell_width,
                     height: layout_data.cell_height,
                     offset: Vector2::zero(),
