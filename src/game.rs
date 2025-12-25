@@ -89,17 +89,17 @@ use fastrand as rand;
 /// Transitions: Reds → Greens → Whites → back to Reds (loops smoothly).
 const CHRISTMAS_COLORS: [Color; 64] = [
     // === REDS (0-15) ===
-    Color::new(220, 20, 60, 255),  // Crimson
+    Color::new(220, 20, 60, 255), // Crimson
     Color::new(210, 25, 55, 255),
     Color::new(200, 30, 50, 255),
     Color::new(190, 35, 45, 255),
-    Color::new(178, 34, 34, 255),  // Firebrick
+    Color::new(178, 34, 34, 255), // Firebrick
     Color::new(165, 32, 32, 255),
     Color::new(152, 30, 30, 255),
-    Color::new(139, 0, 0, 255),    // Dark red
+    Color::new(139, 0, 0, 255), // Dark red
     Color::new(150, 20, 20, 255),
     Color::new(160, 35, 35, 255),
-    Color::new(165, 42, 42, 255),  // Brown-red
+    Color::new(165, 42, 42, 255), // Brown-red
     Color::new(155, 50, 45, 255),
     Color::new(145, 58, 48, 255),
     Color::new(135, 66, 52, 255),
@@ -112,16 +112,16 @@ const CHRISTMAS_COLORS: [Color; 64] = [
     Color::new(75, 114, 58, 255),
     Color::new(65, 122, 58, 255),
     Color::new(55, 130, 58, 255),
-    Color::new(46, 139, 87, 255),  // Sea green
+    Color::new(46, 139, 87, 255), // Sea green
     Color::new(40, 135, 75, 255),
-    Color::new(34, 139, 34, 255),  // Forest green
+    Color::new(34, 139, 34, 255), // Forest green
     Color::new(28, 134, 40, 255),
     Color::new(22, 130, 46, 255),
     Color::new(16, 126, 52, 255),
     Color::new(10, 122, 40, 255),
     Color::new(5, 118, 30, 255),
-    Color::new(0, 128, 0, 255),    // Green
-    Color::new(0, 100, 0, 255),    // Dark green
+    Color::new(0, 128, 0, 255), // Green
+    Color::new(0, 100, 0, 255), // Dark green
     // === GREEN TO WHITE TRANSITION (32-47) ===
     Color::new(30, 120, 50, 255),
     Color::new(50, 135, 70, 255),
@@ -155,7 +155,7 @@ const CHRISTMAS_COLORS: [Color; 64] = [
     Color::new(238, 45, 50, 255),
     Color::new(232, 35, 55, 255),
     Color::new(226, 28, 58, 255),
-    Color::new(220, 20, 60, 255),  // Back to crimson (loops smoothly)
+    Color::new(220, 20, 60, 255), // Back to crimson (loops smoothly)
 ];
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
@@ -300,12 +300,33 @@ pub fn setup(
     fonts.add("extra_thick", font);
 
     // Load textures
-    let mut snowflake_tex = rl
+    let mut snowflake01_tex = rl
         .load_texture(&th, "./assets/textures/snowflake01.png")
         .expect("load assets/textures/snowflake01.png");
     unsafe {
-        ffi::GenTextureMipmaps(&mut *snowflake_tex);
-        ffi::SetTextureFilter(*snowflake_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+        ffi::GenTextureMipmaps(&mut *snowflake01_tex);
+        ffi::SetTextureFilter(*snowflake01_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut snowflake02_tex = rl
+        .load_texture(&th, "./assets/textures/snowflake02.png")
+        .expect("load assets/textures/snowflake02.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *snowflake02_tex);
+        ffi::SetTextureFilter(*snowflake02_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut snowflake03_tex = rl
+        .load_texture(&th, "./assets/textures/snowflake03.png")
+        .expect("load assets/textures/snowflake03.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *snowflake03_tex);
+        ffi::SetTextureFilter(*snowflake03_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut snowflake04_tex = rl
+        .load_texture(&th, "./assets/textures/snowflake04.png")
+        .expect("load assets/textures/snowflake04.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *snowflake04_tex);
+        ffi::SetTextureFilter(*snowflake04_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
     }
     let mut santa00_tex = rl
         .load_texture(&th, "./assets/textures/00_trineodetras.png")
@@ -436,7 +457,10 @@ pub fn setup(
     tex_store.insert("enemy", enemy_tex);
     tex_store.insert("tilemap", tilemap_tex);
     tex_store.insert("billboard", billboard_tex); */
-    tex_store.insert("snowflake", snowflake_tex);
+    tex_store.insert("snowflake1", snowflake01_tex);
+    tex_store.insert("snowflake2", snowflake02_tex);
+    tex_store.insert("snowflake3", snowflake03_tex);
+    tex_store.insert("snowflake4", snowflake04_tex);
     tex_store.insert("santa00", santa00_tex);
     tex_store.insert("santa01", santa01_tex);
     tex_store.insert("santa02", santa02_tex);
@@ -851,11 +875,23 @@ pub fn enter_play(
         },
     );
 
-    let text = r"This is a test of the scrolling text system.
-It should display this text character by character, moving from right to left across the screen. ";
+    let text = r" Welcome to the Xmas demo 2025!
+For this year, AkinoSoft has crafted a delightful small game engine demo to celebrate the holiday season.
+Enjoy the falling snow, bouncing letters, and festive atmosphere as we spread some holiday cheer!
+We have smashed together Raylib-rs for graphics and audio, and Bevy ECS for the entity-component-system architecture.
+With a little Rust glue, we bring you this merry demo. The Aberred Engine! This is an in-development engine,
+so expect more features, improvements and games in the future.   https://github.com/idaho06/aberredengine 
+Happy Holidays and a Joyful New Year from AkinoSoft!
+                        
+GREETINGS TO:    - Po -     - Ikky -     - Lethe -     - Rivas -     - Palo -
+     - Boniato -     - Edu -     - Loso -     - Chuky -     - Brahma -
+     - Marcos -     - Fabi -     - Yisus -     - Weber -     - Windows -     - Loncho -
+     - Qetu -     - DarkHeavy -     
+FAMILY AND FRIENDS:    - Martuda, Raquel & Ester -     - Noe & Erik -     - Cristina, Leia & Elsa -     
+CREDITS:     - Code: Idaho06 -     - Art: Ikky -     - Music: axel of brainstorm - 
+                        ";
 
     let one_line_text = text.replace('\n', " ");
-
     worldsignals.set_string("scrolling_text", one_line_text); // The text to show in the scrolling text
     worldsignals.set_integer("char_pos", 0); // The next character to spawn in the scrolling text
     worldsignals.set_scalar("last_spawn_time", 0.0); // Timestamp of last character spawn
@@ -934,20 +970,38 @@ fn snow_emitter_on_update(
             snowflake_signals.set_scalar("jiggle_phase_offset", jiggle_phase_offset);
             snowflake_signals.set_scalar("base_x", spawn_x);
 
+            // randomly choose one of four snowflake textures
+            let snowflake_tex_index = rand::i8(1..=4);
+            let snowflake_tex_key = format!("snowflake{}", snowflake_tex_index);
+
+            // random rotation min - max values
+            let rotation_min = 0.0;
+            let rotation_max = 360.0;
+            let rotation = rotation_min + rand::f32() * (rotation_max - rotation_min);
+
+            // random rotation speed in seconds, 1 ro 5 seconds
+            let rotation_speed = 1.0 + rand::f32() * 4.0;
+
+            // Tween rotation over time
+            let rotation_tween = TweenRotation::new(0.0, rotation, rotation_speed)
+                .with_loop_mode(LoopMode::PingPong)
+                .with_easing(Easing::CubicInOut);
+
             ctx.commands.spawn((
                 Group::new("snowflake"),
                 MapPosition::new(spawn_x, spawn_y),
                 ZIndex(15),
                 Sprite {
-                    tex_key: "snowflake".into(),
-                    width: 256.0,
-                    height: 256.0,
+                    tex_key: snowflake_tex_key.into(),
+                    width: 128.0,
+                    height: 128.0,
                     offset: Vector2::zero(),
-                    origin: Vector2::zero(),
+                    origin: Vector2 { x: 64.0, y: 64.0 },
                     flip_h: false,
                     flip_v: false,
                 },
                 Scale::new(scale, scale),
+                Rotation { degrees: 0.0 },
                 RigidBody {
                     velocity: Vector2 {
                         x: 0.0,
@@ -956,6 +1010,7 @@ fn snow_emitter_on_update(
                 },
                 BoxCollider::new(size, size),
                 snowflake_signals,
+                rotation_tween,
                 Phase::new("falling").on_update("falling", snowflake_falling_on_update),
             ));
         }
@@ -1129,8 +1184,7 @@ pub fn update(
                     let letter_spawn_x = world_signals
                         .get_scalar("letter_spawn_x")
                         .unwrap_or(960.0 + 201.0);
-                    let letter_color =
-                        CHRISTMAS_COLORS[char_pos as usize % CHRISTMAS_COLORS.len()];
+                    let letter_color = CHRISTMAS_COLORS[char_pos as usize % CHRISTMAS_COLORS.len()];
                     commands.spawn((
                         Group::new("letters_scroller"),
                         MapPosition::new(letter_spawn_x, 425.0),
@@ -1279,7 +1333,7 @@ pub fn switch_scene(
             let mut signals = Signals::default();
             signals.set_scalar("time_last_emission", world_time.elapsed);
             signals.set_scalar("emission_interval", 0.5);
-            signals.set_integer("particles_per_emission", 4);
+            signals.set_integer("particles_per_emission", 16);
             commands.spawn((
                 Group::new("snow_emitter"),
                 MapPosition::new(0.0, -100.0),
