@@ -85,6 +85,79 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use fastrand as rand;
 
+/// 64-color Christmas gradient palette for the letter scroller.
+/// Transitions: Reds → Greens → Whites → back to Reds (loops smoothly).
+const CHRISTMAS_COLORS: [Color; 64] = [
+    // === REDS (0-15) ===
+    Color::new(220, 20, 60, 255),  // Crimson
+    Color::new(210, 25, 55, 255),
+    Color::new(200, 30, 50, 255),
+    Color::new(190, 35, 45, 255),
+    Color::new(178, 34, 34, 255),  // Firebrick
+    Color::new(165, 32, 32, 255),
+    Color::new(152, 30, 30, 255),
+    Color::new(139, 0, 0, 255),    // Dark red
+    Color::new(150, 20, 20, 255),
+    Color::new(160, 35, 35, 255),
+    Color::new(165, 42, 42, 255),  // Brown-red
+    Color::new(155, 50, 45, 255),
+    Color::new(145, 58, 48, 255),
+    Color::new(135, 66, 52, 255),
+    Color::new(125, 74, 56, 255),
+    Color::new(115, 82, 58, 255),
+    // === RED TO GREEN TRANSITION (16-31) ===
+    Color::new(105, 90, 58, 255),
+    Color::new(95, 98, 58, 255),
+    Color::new(85, 106, 58, 255),
+    Color::new(75, 114, 58, 255),
+    Color::new(65, 122, 58, 255),
+    Color::new(55, 130, 58, 255),
+    Color::new(46, 139, 87, 255),  // Sea green
+    Color::new(40, 135, 75, 255),
+    Color::new(34, 139, 34, 255),  // Forest green
+    Color::new(28, 134, 40, 255),
+    Color::new(22, 130, 46, 255),
+    Color::new(16, 126, 52, 255),
+    Color::new(10, 122, 40, 255),
+    Color::new(5, 118, 30, 255),
+    Color::new(0, 128, 0, 255),    // Green
+    Color::new(0, 100, 0, 255),    // Dark green
+    // === GREEN TO WHITE TRANSITION (32-47) ===
+    Color::new(30, 120, 50, 255),
+    Color::new(50, 135, 70, 255),
+    Color::new(70, 150, 90, 255),
+    Color::new(90, 165, 110, 255),
+    Color::new(110, 175, 130, 255),
+    Color::new(130, 185, 150, 255),
+    Color::new(150, 195, 170, 255),
+    Color::new(170, 205, 185, 255),
+    Color::new(185, 215, 200, 255),
+    Color::new(200, 222, 212, 255),
+    Color::new(210, 228, 222, 255),
+    Color::new(220, 233, 230, 255),
+    Color::new(230, 240, 238, 255),
+    Color::new(240, 246, 244, 255),
+    Color::new(248, 252, 250, 255),
+    Color::new(255, 250, 250, 255), // Snow white
+    // === WHITE TO RED TRANSITION (48-63) ===
+    Color::new(255, 245, 245, 255),
+    Color::new(255, 235, 235, 255),
+    Color::new(255, 220, 220, 255),
+    Color::new(255, 200, 200, 255),
+    Color::new(255, 180, 180, 255),
+    Color::new(255, 160, 160, 255),
+    Color::new(255, 140, 140, 255),
+    Color::new(255, 120, 120, 255),
+    Color::new(255, 100, 100, 255),
+    Color::new(252, 85, 85, 255),
+    Color::new(248, 70, 70, 255),
+    Color::new(244, 55, 55, 255),
+    Color::new(238, 45, 50, 255),
+    Color::new(232, 35, 55, 255),
+    Color::new(226, 28, 58, 255),
+    Color::new(220, 20, 60, 255),  // Back to crimson (loops smoothly)
+];
+
 /// Helper function to create a Texture2D from a text string, font, size, and color
 pub fn load_texture_from_text(
     rl: &mut RaylibHandle,
@@ -1034,7 +1107,7 @@ pub fn update(
                     let font = font_store
                         .get("extra_thick")
                         .expect("Font 'extra_thick' not found");
-                    let text_width = unsafe {
+                    let text_size = unsafe {
                         ffi::MeasureTextEx(
                             **font,
                             char_c_string.as_ptr() as *const i8,
@@ -1042,13 +1115,15 @@ pub fn update(
                             0.0,
                         )
                     };
-                    let collision_width = text_width.x;
-                    let collision_height = text_width.y;
+                    let collision_width = text_size.x;
+                    let collision_height = text_size.y;
                     let mut signals = Signals::default();
                     signals.set_flag("last");
                     let letter_spawn_x = world_signals
                         .get_scalar("letter_spawn_x")
                         .unwrap_or(960.0 + 201.0);
+                    let letter_color =
+                        CHRISTMAS_COLORS[char_pos as usize % CHRISTMAS_COLORS.len()];
                     commands.spawn((
                         Group::new("letters_scroller"),
                         MapPosition::new(letter_spawn_x, 425.0),
@@ -1057,7 +1132,7 @@ pub fn update(
                             char_to_spawn.to_string(),
                             "extra_thick",
                             font_size,
-                            Color::WHITE,
+                            letter_color,
                         ),
                         BoxCollider::new(collision_width, collision_height),
                         RigidBody {
