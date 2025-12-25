@@ -858,6 +858,7 @@ It should display this text character by character, moving from right to left ac
 
     worldsignals.set_string("scrolling_text", one_line_text); // The text to show in the scrolling text
     worldsignals.set_integer("char_pos", 0); // The next character to spawn in the scrolling text
+    worldsignals.set_scalar("last_spawn_time", 0.0); // Timestamp of last character spawn
     worldsignals.set_flag("spawn_char");
     // Finally, run the switch_scene system to spawn initial scene entities
     worldsignals.set_string("scene", "intro");
@@ -1080,6 +1081,12 @@ pub fn update(
 
     match scene.as_str() {
         "intro" => {
+            // Fallback: if no spawn for 1 second, trigger spawn
+            let last_spawn = world_signals.get_scalar("last_spawn_time").unwrap_or(0.0);
+            if time.elapsed - last_spawn > 1.0 && !world_signals.has_flag("spawn_char") {
+                world_signals.set_flag("spawn_char");
+            }
+
             // check for flag "spawn_char" in world_signals
             // if set, spawn next character in scrolling text
             // update "char_pos" integer in world_signals
@@ -1143,6 +1150,8 @@ pub fn update(
                     ));
                     // update char_pos
                     world_signals.set_integer("char_pos", char_pos + 1);
+                    // update last spawn time
+                    world_signals.set_scalar("last_spawn_time", time.elapsed);
                     // spawn timer to set "spawn_char" flag again after 0.1 seconds
                     // commands.spawn((Timer::new(0.1, "next_spawn_char"),));
                 }
