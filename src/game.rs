@@ -227,9 +227,55 @@ pub fn setup(
     fonts.add("extra_thick", font);
 
     // Load textures
-    let snowflake_tex = rl
+    let mut snowflake_tex = rl
         .load_texture(&th, "./assets/textures/snowflake01.png")
         .expect("load assets/textures/snowflake01.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *snowflake_tex);
+        ffi::SetTextureFilter(*snowflake_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut santa00_tex = rl
+        .load_texture(&th, "./assets/textures/00_trineodetras.png")
+        .expect("load assets/textures/00_trineodetras.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *santa00_tex);
+        ffi::SetTextureFilter(*santa00_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut santa01_tex = rl
+        .load_texture(&th, "./assets/textures/01_regalos.png")
+        .expect("load assets/textures/01_regalos.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *santa01_tex);
+        ffi::SetTextureFilter(*santa01_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut santa02_tex = rl
+        .load_texture(&th, "./assets/textures/02_trineomedio.png")
+        .expect("load assets/textures/02_trineomedio.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *santa02_tex);
+        ffi::SetTextureFilter(*santa02_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut santa03_tex = rl
+        .load_texture(&th, "./assets/textures/03_papanoel.png")
+        .expect("load assets/textures/03_papanoel.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *santa03_tex);
+        ffi::SetTextureFilter(*santa03_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut santa04_tex = rl
+        .load_texture(&th, "./assets/textures/04_trineofrontal.png")
+        .expect("load assets/textures/04_trineofrontal.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *santa04_tex);
+        ffi::SetTextureFilter(*santa04_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
+    let mut santa05_tex = rl
+        .load_texture(&th, "./assets/textures/05_reno.png")
+        .expect("load assets/textures/05_reno.png");
+    unsafe {
+        ffi::GenTextureMipmaps(&mut *santa05_tex);
+        ffi::SetTextureFilter(*santa05_tex, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
+    }
     /* let title_tex = rl
         .load_texture(&th, "./assets/textures/title.png")
         .expect("load assets/title.png");
@@ -318,6 +364,12 @@ pub fn setup(
     tex_store.insert("tilemap", tilemap_tex);
     tex_store.insert("billboard", billboard_tex); */
     tex_store.insert("snowflake", snowflake_tex);
+    tex_store.insert("santa00", santa00_tex);
+    tex_store.insert("santa01", santa01_tex);
+    tex_store.insert("santa02", santa02_tex);
+    tex_store.insert("santa03", santa03_tex);
+    tex_store.insert("santa04", santa04_tex);
+    tex_store.insert("santa05", santa05_tex);
     commands.insert_resource(tex_store);
 
     // Animations
@@ -711,7 +763,7 @@ pub fn enter_play(
         }
     });
 
-    // Observer to remove the "sticky" flag from the entity (meant to be used by the "player" or "ball" entity)
+    // Same observer as before, but querying Signals component too
     commands.add_observer(
         |trigger: On<TimerEvent>, mut signals: Query<&mut Signals>, mut commands: Commands| {
             let entity = trigger.entity;
@@ -725,30 +777,6 @@ pub fn enter_play(
             } */
         },
     );
-
-    // Observer to remove StuckTo component and restore velocity
-    /* commands.add_observer(
-        |trigger: On<TimerEvent>,
-         stuck_to_query: Query<&StuckTo>,
-         mut rigid_body: Query<&mut RigidBody>,
-         mut commands: Commands| {
-            let entity = trigger.entity;
-            let signal = &trigger.signal;
-
-            if signal == "remove_stuck_to" {
-                // Restore stored velocity from StuckTo component before removing it
-                if let Ok(stuck_to) = stuck_to_query.get(entity) {
-                    if let Some(stored_velocity) = stuck_to.stored_velocity {
-                        if let Ok(mut rb) = rigid_body.get_mut(entity) {
-                            rb.velocity = stored_velocity;
-                        }
-                    }
-                }
-                commands.entity(entity).remove::<StuckTo>();
-                commands.entity(entity).remove::<Timer>();
-            }
-        },
-    ); */
 
     let text = r"This is a test of the scrolling text system.
 It should display this text character by character, moving from right to left across the screen. ";
