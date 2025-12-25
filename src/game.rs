@@ -1369,6 +1369,160 @@ pub fn switch_scene(
                 ),
                 Group::new("collision_rules"),
             ));
+
+            let intro_scale = TweenScale::new(
+                Vector2 { x: 0.01, y: 0.01 },
+                Vector2 { x: 1.0, y: 1.0 },
+                8.0,
+            )
+            .with_easing(Easing::CubicInOut)
+            .with_loop_mode(LoopMode::Once);
+
+            let reno_id = commands
+                .spawn((
+                    Group::new("reno"),
+                    MapPosition::new(0.0, 0.0),
+                    ZIndex(5),
+                    Sprite {
+                        tex_key: "santa05".into(),
+                        width: 1024.0,
+                        height: 1024.0,
+                        offset: Vector2::zero(),
+                        origin: Vector2::zero(),
+                        flip_h: false,
+                        flip_v: false,
+                    },
+                    Scale {
+                        scale: Vector2::new(1.0, 1.0),
+                    },
+                    intro_scale.clone(),
+                ))
+                .id();
+            commands.spawn((
+                Group::new("papanoel"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(3),
+                Sprite {
+                    tex_key: "santa03".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+            ));
+            commands.spawn((
+                Group::new("regalos"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(1),
+                Sprite {
+                    tex_key: "santa01".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+            ));
+            commands.spawn((
+                Group::new("trineo"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(0),
+                Sprite {
+                    tex_key: "santa00".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+            ));
+            commands.spawn((
+                Group::new("trineo"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(2),
+                Sprite {
+                    tex_key: "santa02".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+            ));
+            commands.spawn((
+                Group::new("trineo"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(4),
+                Sprite {
+                    tex_key: "santa04".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+            ));
         }
         _ => {
             eprintln!("Unknown scene: {}", scene);
