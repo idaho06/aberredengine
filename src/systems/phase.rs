@@ -34,7 +34,9 @@ use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::phase::{Phase, PhaseCallback, PhaseContext};
 use crate::components::rigidbody::RigidBody;
+use crate::components::scale::Scale;
 use crate::components::signals::Signals;
+use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::events::phase::PhaseChangeEvent;
 use crate::resources::worldsignals::WorldSignals;
@@ -51,6 +53,8 @@ pub struct PhaseRunnerContext<'w, 's> {
     pub collision_rules: Query<'w, 's, &'static CollisionRule>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
+    pub stuck_tos: Query<'w, 's, &'static mut StuckTo>,
+    pub scales: Query<'w, 's, &'static Scale>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub signals: Query<'w, 's, &'static mut Signals>,
     pub world_signals: ResMut<'w, WorldSignals>,
@@ -115,6 +119,8 @@ pub fn phase_change_detector(
                     positions: &mut context.positions,
                     rigid_bodies: &mut context.rigid_bodies,
                     box_colliders: &context.box_colliders,
+                    stuck_tos: &mut context.stuck_tos,
+                    scales: &context.scales,
                     signals: &mut context.signals,
                     world_signals: &mut context.world_signals,
                     world_time: &context.world_time,
@@ -134,6 +140,8 @@ pub fn phase_change_detector(
                     positions: &mut context.positions,
                     rigid_bodies: &mut context.rigid_bodies,
                     box_colliders: &context.box_colliders,
+                    stuck_tos: &mut context.stuck_tos,
+                    scales: &context.scales,
                     signals: &mut context.signals,
                     world_signals: &mut context.world_signals,
                     world_time: &context.world_time,
@@ -176,6 +184,8 @@ pub fn phase_update_system(
                     positions: &mut context.positions,
                     rigid_bodies: &mut context.rigid_bodies,
                     box_colliders: &context.box_colliders,
+                    stuck_tos: &mut context.stuck_tos,
+                    scales: &context.scales,
                     signals: &mut context.signals,
                     world_signals: &mut context.world_signals,
                     world_time: &context.world_time,

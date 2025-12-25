@@ -99,4 +99,9 @@ impl StuckTo {
         self.stored_velocity = Some(velocity);
         self
     }
+
+    /// Change offset
+    pub fn set_offset(&mut self, offset: Vector2) {
+        self.offset = offset;
+    }
 }

@@ -300,6 +300,9 @@ pub fn setup(
     fonts.add("extra_thick", font);
 
     // Load textures
+    let mut text_background = rl
+        .load_texture(&th, "./assets/textures/text_background.png")
+        .expect("load assets/textures/text_background.png");
     let mut snowflake01_tex = rl
         .load_texture(&th, "./assets/textures/snowflake01.png")
         .expect("load assets/textures/snowflake01.png");
@@ -467,6 +470,7 @@ pub fn setup(
     tex_store.insert("santa03", santa03_tex);
     tex_store.insert("santa04", santa04_tex);
     tex_store.insert("santa05", santa05_tex);
+    tex_store.insert("text_background", text_background);
     commands.insert_resource(tex_store);
 
     // Animations
@@ -889,6 +893,8 @@ GREETINGS TO:    - Po -     - Ikky -     - Lethe -     - Rivas -     - Palo -
      - Qetu -     - DarkHeavy -     
 FAMILY AND FRIENDS:    - Martuda, Raquel & Ester -     - Noe & Erik -     - Cristina, Leia & Elsa -     
 CREDITS:     - Code: Idaho06 -     - Art: Ikky -     - Music: axel of brainstorm - 
+                        
+Press [ESC] to exit!
                         ";
 
     let one_line_text = text.replace('\n', " ");
@@ -1047,6 +1053,117 @@ fn snowflake_falling_on_update(
         pos.pos.x = base_x + jiggle_offset;
     }
 
+    None
+}
+
+fn reno_enter_scene_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    // Move the entity left to right over 8 seconds, then change to "running" phase
+    let duration = 8.0;
+    let start_x = -200.0;
+    let end_x = 0.0;
+    if time <= duration {
+        let t = time / duration;
+        let new_x = start_x + t * (end_x - start_x);
+        if let Ok(mut pos) = ctx.positions.get_mut(entity) {
+            pos.pos.x = new_x;
+        }
+        // Move the entity in a sine wave pattern vertically while staying at x=0
+        let amplitude = 20.0;
+        let frequency = 0.5; // oscillations per second
+        let new_y = 0.0 + amplitude * (frequency * time * std::f32::consts::TAU).sin();
+        if let Ok(mut pos) = ctx.positions.get_mut(entity) {
+            pos.pos.y = new_y;
+        }
+        None
+    } else {
+        Some("running".to_string())
+    }
+}
+
+fn reno_running_on_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    // Move the entity in a sine wave pattern vertically while staying at x=0
+    let amplitude = 20.0;
+    let frequency = 0.5; // oscillations per second
+    let new_y = 0.0 + amplitude * (frequency * time * std::f32::consts::TAU).sin();
+    let new_x = 0.0 + 30.0 * (0.2 * time * std::f32::consts::TAU).sin(); // small left-right movement
+    if let Ok(mut pos) = ctx.positions.get_mut(entity) {
+        pos.pos.y = new_y;
+        pos.pos.x = new_x;
+    }
+    None
+}
+
+fn trineo_running_on_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    // Get the trineo StuckTo component and change its offset vertically in a sine wave pattern multiplied by the Scale component
+    let amplitude = 10.0;
+    let frequency = 1.0; // oscillations per second
+    let scale = if let Ok(scale_comp) = ctx.scales.get(entity) {
+        scale_comp.scale.y
+    } else {
+        1.0
+    };
+    let jiggle_offset = amplitude * scale * (frequency * time * std::f32::consts::TAU).sin();
+    if let Ok(mut stuck_to) = ctx.stuck_tos.get_mut(entity) {
+        stuck_to.set_offset(Vector2 {
+            x: 0.0,
+            y: jiggle_offset,
+        });
+    }
+    None
+}
+
+fn papanoel_running_on_update(
+    entity: Entity,
+    time: f32,
+    _previous: Option<String>,
+    ctx: &mut PhaseContext,
+) -> Option<String> {
+    // Move the entity in a sine wave pattern vertically respect to the offset of the trineo
+    let amplitude = 7.0;
+    let frequency = 1.0; // oscillations per second
+    // get trineo offset
+    let trineo_entity = ctx
+        .world_signals
+        .get_entity("trineo")
+        .expect("trineo entity not in WorldSignals");
+    /* let trineo_pos = if let Ok(pos) = ctx.positions.get(*trineo_entity) {
+        pos.pos
+    } else {
+        Vector2 { x: 0.0, y: 0.0 }
+    }; */
+    let trineo_offset = if let Ok(stuck_to) = ctx.stuck_tos.get(*trineo_entity) {
+        stuck_to.offset
+    } else {
+        Vector2 { x: 0.0, y: 0.0 }
+    };
+    let scale = if let Ok(scale_comp) = ctx.scales.get(entity) {
+        scale_comp.scale.y
+    } else {
+        1.0
+    };
+    //let base_y = trineo_pos.y + trineo_offset.y;
+    let jiggle_offset = amplitude * scale * (frequency * time * std::f32::consts::TAU).sin();
+    if let Ok(mut stuck_to) = ctx.stuck_tos.get_mut(entity) {
+        stuck_to.offset = Vector2 {
+            x: stuck_to.offset.x,
+            y: jiggle_offset + trineo_offset.y,
+        };
+    }
     None
 }
 
@@ -1319,6 +1436,20 @@ pub fn switch_scene(
             let screen_width = rl.get_screen_width() as f32;
             let screen_height = rl.get_screen_height() as f32;
             commands.spawn((
+                MapPosition::new(0.0, screen_height - 128.0),
+                ZIndex(19),
+                Sprite {
+                    tex_key: "text_background".into(),
+                    width: 128.0,
+                    height: 128.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale::new(screen_width / 128.0, 128.0 / 128.0),
+            ));
+            commands.spawn((
                 Group::new("walls_scroller"),
                 MapPosition::new(-200.0, -200.0),
                 ZIndex(5),
@@ -1396,83 +1527,41 @@ pub fn switch_scene(
                         scale: Vector2::new(1.0, 1.0),
                     },
                     intro_scale.clone(),
+                    Phase::new("enter_scene")
+                        .on_update("enter_scene", reno_enter_scene_update)
+                        .on_update("running", reno_running_on_update),
                 ))
                 .id();
-            commands.spawn((
-                Group::new("papanoel"),
-                MapPosition::new(0.0, 0.0),
-                ZIndex(3),
-                Sprite {
-                    tex_key: "santa03".into(),
-                    width: 1024.0,
-                    height: 1024.0,
-                    offset: Vector2::zero(),
-                    origin: Vector2::zero(),
-                    flip_h: false,
-                    flip_v: false,
-                },
-                Scale {
-                    scale: Vector2::new(1.0, 1.0),
-                },
-                intro_scale.clone(),
-                StuckTo {
-                    target: reno_id,
-                    offset: Vector2::new(0.0, 0.0),
-                    follow_x: true,
-                    follow_y: true,
-                    stored_velocity: None,
-                },
-            ));
-            commands.spawn((
-                Group::new("regalos"),
-                MapPosition::new(0.0, 0.0),
-                ZIndex(1),
-                Sprite {
-                    tex_key: "santa01".into(),
-                    width: 1024.0,
-                    height: 1024.0,
-                    offset: Vector2::zero(),
-                    origin: Vector2::zero(),
-                    flip_h: false,
-                    flip_v: false,
-                },
-                Scale {
-                    scale: Vector2::new(1.0, 1.0),
-                },
-                intro_scale.clone(),
-                StuckTo {
-                    target: reno_id,
-                    offset: Vector2::new(0.0, 0.0),
-                    follow_x: true,
-                    follow_y: true,
-                    stored_velocity: None,
-                },
-            ));
-            commands.spawn((
-                Group::new("trineo"),
-                MapPosition::new(0.0, 0.0),
-                ZIndex(0),
-                Sprite {
-                    tex_key: "santa00".into(),
-                    width: 1024.0,
-                    height: 1024.0,
-                    offset: Vector2::zero(),
-                    origin: Vector2::zero(),
-                    flip_h: false,
-                    flip_v: false,
-                },
-                Scale {
-                    scale: Vector2::new(1.0, 1.0),
-                },
-                intro_scale.clone(),
-                StuckTo {
-                    target: reno_id,
-                    offset: Vector2::new(0.0, 0.0),
-                    follow_x: true,
-                    follow_y: true,
-                    stored_velocity: None,
-                },
-            ));
+            let trineo_id = commands
+                .spawn((
+                    Group::new("trineo"),
+                    MapPosition::new(0.0, 0.0),
+                    ZIndex(0),
+                    Sprite {
+                        tex_key: "santa00".into(),
+                        width: 1024.0,
+                        height: 1024.0,
+                        offset: Vector2::zero(),
+                        origin: Vector2::zero(),
+                        flip_h: false,
+                        flip_v: false,
+                    },
+                    Scale {
+                        scale: Vector2::new(1.0, 1.0),
+                    },
+                    intro_scale.clone(),
+                    StuckTo {
+                        target: reno_id,
+                        offset: Vector2::new(0.0, 0.0),
+                        follow_x: true,
+                        follow_y: true,
+                        stored_velocity: None,
+                    },
+                    Phase::new("running").on_update("running", trineo_running_on_update),
+                ))
+                .id();
+            worldsignals.set_entity("reno", reno_id.clone());
+            worldsignals.set_entity("trineo", trineo_id.clone());
             commands.spawn((
                 Group::new("trineo"),
                 MapPosition::new(0.0, 0.0),
@@ -1497,6 +1586,7 @@ pub fn switch_scene(
                     follow_y: true,
                     stored_velocity: None,
                 },
+                Phase::new("running").on_update("running", trineo_running_on_update),
             ));
             commands.spawn((
                 Group::new("trineo"),
@@ -1522,6 +1612,59 @@ pub fn switch_scene(
                     follow_y: true,
                     stored_velocity: None,
                 },
+                Phase::new("running").on_update("running", trineo_running_on_update),
+            ));
+            commands.spawn((
+                Group::new("papanoel"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(3),
+                Sprite {
+                    tex_key: "santa03".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+                Phase::new("running").on_update("running", papanoel_running_on_update),
+            ));
+            commands.spawn((
+                Group::new("regalos"),
+                MapPosition::new(0.0, 0.0),
+                ZIndex(1),
+                Sprite {
+                    tex_key: "santa01".into(),
+                    width: 1024.0,
+                    height: 1024.0,
+                    offset: Vector2::zero(),
+                    origin: Vector2::zero(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                intro_scale.clone(),
+                StuckTo {
+                    target: reno_id,
+                    offset: Vector2::new(0.0, 0.0),
+                    follow_x: true,
+                    follow_y: true,
+                    stored_velocity: None,
+                },
+                Phase::new("running").on_update("running", papanoel_running_on_update),
             ));
         }
         _ => {

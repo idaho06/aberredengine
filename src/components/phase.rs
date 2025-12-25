@@ -56,7 +56,9 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
+use crate::components::scale::Scale;
 use crate::components::signals::Signals;
+use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -71,6 +73,8 @@ pub struct PhaseContext<'a, 'w, 's> {
     pub positions: &'a mut Query<'w, 's, &'static mut MapPosition>,
     pub rigid_bodies: &'a mut Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: &'a Query<'w, 's, &'static BoxCollider>,
+    pub stuck_tos: &'a mut Query<'w, 's, &'static mut StuckTo>,
+    pub scales: &'a Query<'w, 's, &'static Scale>,
     pub signals: &'a mut Query<'w, 's, &'static mut Signals>,
     pub world_signals: &'a mut ResMut<'w, WorldSignals>,
     pub world_time: &'a Res<'w, WorldTime>,
