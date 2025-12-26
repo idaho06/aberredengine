@@ -31,6 +31,7 @@
 
 use std::ffi::CString;
 use std::panic;
+use std::sync::Arc;
 
 use bevy_ecs::event::Trigger;
 use bevy_ecs::prelude::*;
@@ -144,7 +145,7 @@ fn spawn_tiles(
     tex_width: i32, // We assume square tiles, so only width is needed
     tilemap: &Tilemap,
 ) {
-    let tilemap_tex_key: String = tilemap_tex_key.into();
+    let tilemap_tex_key: Arc<str> = Arc::from(tilemap_tex_key.into());
 
     // texture size in pixels
     let tex_w = tex_width as f32;

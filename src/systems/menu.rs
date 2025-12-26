@@ -9,6 +9,8 @@
 //! Menus can render in world-space or screen-space depending on the
 //! `use_screen_space` flag.
 
+use std::sync::Arc;
+
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
@@ -82,7 +84,7 @@ pub fn menu_spawn_system(
                 let key = format!("menu_{}", menu_item.id);
                 texture_store.insert(&key, texture_handle);
                 ecmd.insert(Sprite {
-                    tex_key: key,
+                    tex_key: Arc::from(key),
                     width,
                     height,
                     offset: Vector2 { x: 0.0, y: 0.0 },

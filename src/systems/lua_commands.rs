@@ -26,6 +26,8 @@
 //! - [`parse_tween_easing`] – Convert string to Easing enum
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::*;
 use raylib::prelude::{Camera2D, Vector2};
 
@@ -345,7 +347,7 @@ pub fn process_animation_command(
             anim_store.insert(
                 id.clone(),
                 AnimationResource {
-                    tex_key,
+                    tex_key: Arc::from(tex_key),
                     position: Vector2 { x: pos_x, y: pos_y },
                     displacement,
                     frame_count,
@@ -613,7 +615,7 @@ pub fn process_spawn_command(
     // Sprite
     if let Some(sprite_data) = cmd.sprite {
         entity_commands.insert(Sprite {
-            tex_key: sprite_data.tex_key,
+            tex_key: Arc::from(sprite_data.tex_key),
             width: sprite_data.width,
             height: sprite_data.height,
             origin: Vector2 {

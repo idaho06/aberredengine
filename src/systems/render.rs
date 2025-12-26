@@ -155,7 +155,7 @@ pub fn render_system(
         } // End sprite drawing in camera space
         text_buffer.clear();
         text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(t, p, z)| {
-            let text_c_string = std::ffi::CString::new(t.content.clone())
+            let text_c_string = std::ffi::CString::new(t.content.as_bytes())
                 .expect("Failed to convert text content to CString");
             let font = fonts.get(&t.font).expect("Font name must be valid!!");
             let text_size = unsafe {

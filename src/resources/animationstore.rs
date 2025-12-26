@@ -4,6 +4,8 @@
 //! reused by multiple entities. Systems can look up an animation by a string
 //! key and drive playback based on the immutable parameters stored here.
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::Resource;
 use raylib::prelude::Vector2;
 use rustc_hash::FxHashMap;
@@ -22,7 +24,7 @@ pub struct AnimationStore {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnimationResource {
     /// Texture key in [`crate::resources::texturestore::TextureStore`].
-    pub tex_key: String,
+    pub tex_key: Arc<str>,
     /// Base screen/world position where the animation is anchored.
     pub position: Vector2,
     /// Optional per-frame displacement in the forward axis.

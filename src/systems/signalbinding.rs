@@ -3,6 +3,8 @@
 //! This module provides the system that synchronizes [`DynamicText`](crate::components::dynamictext::DynamicText)
 //! components with signal values based on their [`SignalBinding`](crate::components::signalbinding::SignalBinding).
 
+use std::sync::Arc;
+
 use crate::components::dynamictext::DynamicText;
 use crate::components::signalbinding::{SignalBinding, SignalSource};
 use crate::components::signals::Signals;
@@ -38,10 +40,11 @@ pub fn update_world_signals_binding_system(
         };
 
         if let Some(value_str) = value_str {
-            dynamic_text.content = match &signal_binding.format {
+            let new_content = match &signal_binding.format {
                 Some(format_str) => format_str.replace("{}", &value_str),
                 None => value_str,
             };
+            dynamic_text.content = Arc::from(new_content);
         }
     }
 }

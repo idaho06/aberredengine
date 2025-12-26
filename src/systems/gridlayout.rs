@@ -27,6 +27,8 @@
 //! - [`crate::components::gridlayout::GridLayout`] – the trigger component
 //! - [`crate::components::gridlayout::GridLayoutData`] – the parsed JSON structure
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
 
@@ -90,7 +92,7 @@ pub fn gridlayout_spawn_system(
                 MapPosition::new(x, y),
                 ZIndex(grid_layout.z_index),
                 Sprite {
-                    tex_key: cell.texture_key.clone(),
+                    tex_key: Arc::from(cell.texture_key.clone()),
                     width: layout_data.cell_width,
                     height: layout_data.cell_height,
                     offset: Vector2::zero(),
