@@ -72,8 +72,11 @@ impl DynamicText {
             color,
         }
     }
-    /// Updates the text content.
-    pub fn set_content(&mut self, new_content: impl Into<String>) {
-        self.content = Arc::from(new_content.into());
+    /// Updates the text content only if changed.
+    pub fn set_content(&mut self, new_content: impl AsRef<str>) {
+        let new_content_ref = new_content.as_ref();
+        if &*self.content != new_content_ref {
+            self.content = Arc::from(new_content_ref);
+        }
     }
 }
