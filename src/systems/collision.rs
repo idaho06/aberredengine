@@ -56,12 +56,9 @@ use crate::systems::lua_commands::{
 /// checks overlap, and triggers an event for each collision. Observers can
 /// react to despawn, apply damage, or play sounds.
 pub fn collision_detector(
-    mut query: Query<(Entity, &mut MapPosition, &BoxCollider)>,
+    mut query: Query<(Entity, &MapPosition, &BoxCollider)>,
     mut commands: Commands,
 ) {
-    // first we create a Vector of pairs of entities
-    let mut pairs: Vec<(Entity, Entity)> = Vec::new();
-
     let mut combos = query.iter_combinations_mut();
     while let Some(
         [
@@ -70,26 +67,14 @@ pub fn collision_detector(
         ],
     ) = combos.fetch_next()
     {
-        /* if collider_a.overlaps(position_a.pos, collider_b, position_b.pos) {
-            pairs.push((entity_a, entity_b));
-        } */
         let rect_a = collider_a.as_rectangle(position_a.pos);
         let rect_b = collider_b.as_rectangle(position_b.pos);
         if rect_a.check_collision_recs(&rect_b) {
-            pairs.push((entity_a, entity_b));
+            commands.trigger(CollisionEvent {
+                a: entity_a,
+                b: entity_b,
+            });
         }
-    }
-
-    // Trigger a CollisionEvent for each pair. Observers will run immediately when commands flush.
-    for (entity_a, entity_b) in pairs {
-        // println!(
-        //     "Triggering CollisionEvent between {:?} and {:?}",
-        //     entity_a, entity_b
-        // );
-        commands.trigger(CollisionEvent {
-            a: entity_a,
-            b: entity_b,
-        });
     }
 }
 

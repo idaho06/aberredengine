@@ -82,7 +82,7 @@ fn get_world_signal_as_str<'a>(
         return Some(Either::Right(signal_value.as_str()));
     }
     if world_signals.has_flag(signal_key) {
-        return Some(Either::Left("true".to_string()));
+        return Some(Either::Right("true"));
     }
     None
 }
@@ -105,7 +105,7 @@ fn get_entity_signal_as_str<'a>(
         return Some(Either::Right(signal_value.as_str()));
     }
     if signals.has_flag(signal_key) {
-        return Some(Either::Left("true".to_string()));
+        return Some(Either::Right("true"));
     }
     None
 }
