@@ -176,6 +176,11 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             let group_a = params.groups.get(ent_a).ok().map(|g| g.name().to_string());
             let group_b = params.groups.get(ent_b).ok().map(|g| g.name().to_string());
 
+            // Update signal cache so Lua can read current world signals
+            params
+                .lua_runtime
+                .update_signal_cache(params.world_signals.snapshot());
+
             // Build ctx table in Lua
             if let Err(e) = call_lua_collision_callback(
                 &params.lua_runtime,

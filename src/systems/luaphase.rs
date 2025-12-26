@@ -77,20 +77,7 @@ pub fn lua_phase_system(
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
     // Update signal cache so Lua can read current values
-    let group_counts = world_signals.group_counts();
-    let entities: rustc_hash::FxHashMap<String, u64> = world_signals
-        .entities
-        .iter()
-        .map(|(k, v)| (k.clone(), v.to_bits()))
-        .collect();
-    lua_runtime.update_signal_cache(
-        world_signals.scalars(),
-        world_signals.integers(),
-        world_signals.strings(),
-        world_signals.flags(),
-        &group_counts,
-        &entities,
-    );
+    lua_runtime.update_signal_cache(world_signals.snapshot());
 
     for (entity, mut lua_phase) in query.iter_mut() {
         let entity_id = entity.to_bits();

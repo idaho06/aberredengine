@@ -97,20 +97,7 @@ pub fn lua_timer_observer(
     let entity_id = event.entity.to_bits();
 
     // Update signal cache so Lua can read current values
-    let group_counts = world_signals.group_counts();
-    let entities: rustc_hash::FxHashMap<String, u64> = world_signals
-        .entities
-        .iter()
-        .map(|(k, v)| (k.clone(), v.to_bits()))
-        .collect();
-    lua_runtime.update_signal_cache(
-        world_signals.scalars(),
-        world_signals.integers(),
-        world_signals.strings(),
-        world_signals.flags(),
-        &group_counts,
-        &entities,
-    );
+    lua_runtime.update_signal_cache(world_signals.snapshot());
 
     // Call the Lua callback
     if lua_runtime.has_function(&event.callback) {

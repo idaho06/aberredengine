@@ -624,18 +624,7 @@ pub fn update(
     */
 
     // Update signal cache for Lua to read current values
-    lua_runtime.update_signal_cache(
-        &world_signals.scalars,
-        &world_signals.integers,
-        &world_signals.strings,
-        &world_signals.flags,
-        &world_signals.group_counts(),
-        &world_signals
-            .entities
-            .iter()
-            .map(|(k, v)| (k.clone(), v.to_bits()))
-            .collect(),
-    );
+    lua_runtime.update_signal_cache(world_signals.snapshot());
 
     // Update input cache for Lua to read current input state
     lua_runtime.update_input_cache(&input);

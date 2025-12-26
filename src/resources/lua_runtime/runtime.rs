@@ -6,9 +6,11 @@
 use super::commands::*;
 use super::entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 use super::spawn_data::*;
+use crate::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use std::cell::RefCell;
+use std::sync::Arc;
 
 /// Shared state accessible from Lua function closures.
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
@@ -30,15 +32,10 @@ pub(super) struct LuaAppData {
     pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
     collision_phase_commands: RefCell<Vec<PhaseCmd>>,
     collision_camera_commands: RefCell<Vec<CameraCmd>>,
-    /// Cached world signal values (read-only snapshot for Lua)
-    /// These are updated before calling Lua callbacks
-    signal_scalars: RefCell<FxHashMap<String, f32>>,
-    signal_integers: RefCell<FxHashMap<String, i32>>,
-    signal_strings: RefCell<FxHashMap<String, String>>,
-    signal_flags: RefCell<FxHashSet<String>>,
-    group_counts: RefCell<FxHashMap<String, u32>>,
-    /// Cached entity IDs (as u64 from Entity::to_bits())
-    signal_entities: RefCell<FxHashMap<String, u64>>,
+    /// Cached world signal snapshot (read-only for Lua).
+    /// Updated before calling Lua callbacks via `update_signal_cache()`.
+    /// Using Arc allows cheap sharing without cloning all maps on every callback.
+    signal_snapshot: RefCell<Arc<SignalSnapshot>>,
     /// Cached tracked group names (read-only snapshot for Lua)
     tracked_groups: RefCell<FxHashSet<String>>,
     /// Cached input state (read-only snapshot for Lua)
@@ -87,12 +84,7 @@ impl LuaRuntime {
             collision_spawn_commands: RefCell::new(Vec::new()),
             collision_phase_commands: RefCell::new(Vec::new()),
             collision_camera_commands: RefCell::new(Vec::new()),
-            signal_scalars: RefCell::new(FxHashMap::default()),
-            signal_integers: RefCell::new(FxHashMap::default()),
-            signal_strings: RefCell::new(FxHashMap::default()),
-            signal_flags: RefCell::new(FxHashSet::default()),
-            group_counts: RefCell::new(FxHashMap::default()),
-            signal_entities: RefCell::new(FxHashMap::default()),
+            signal_snapshot: RefCell::new(Arc::new(SignalSnapshot::default())),
             tracked_groups: RefCell::new(FxHashSet::default()),
             input_action_back_pressed: RefCell::new(false),
             input_action_back_just_pressed: RefCell::new(false),
@@ -326,7 +318,7 @@ impl LuaRuntime {
             self.lua.create_function(|lua, key: String| {
                 let value = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_scalars.borrow().get(&key).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().scalars.get(&key).copied());
                 Ok(value)
             })?,
         )?;
@@ -337,7 +329,7 @@ impl LuaRuntime {
             self.lua.create_function(|lua, key: String| {
                 let value = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_integers.borrow().get(&key).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().integers.get(&key).copied());
                 Ok(value)
             })?,
         )?;
@@ -348,7 +340,7 @@ impl LuaRuntime {
             self.lua.create_function(|lua, key: String| {
                 let value = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_strings.borrow().get(&key).cloned());
+                    .and_then(|data| data.signal_snapshot.borrow().strings.get(&key).cloned());
                 Ok(value)
             })?,
         )?;
@@ -359,7 +351,7 @@ impl LuaRuntime {
             self.lua.create_function(|lua, key: String| {
                 let has = lua
                     .app_data_ref::<LuaAppData>()
-                    .map(|data| data.signal_flags.borrow().contains(&key))
+                    .map(|data| data.signal_snapshot.borrow().flags.contains(&key))
                     .unwrap_or(false);
                 Ok(has)
             })?,
@@ -371,7 +363,7 @@ impl LuaRuntime {
             self.lua.create_function(|lua, group: String| {
                 let count = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.group_counts.borrow().get(&group).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().group_counts.get(&group).copied());
                 Ok(count)
             })?,
         )?;
@@ -383,7 +375,7 @@ impl LuaRuntime {
             self.lua.create_function(|lua, key: String| {
                 let entity_id = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_entities.borrow().get(&key).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().entities.get(&key).copied());
                 Ok(entity_id)
             })?,
         )?;
@@ -1497,24 +1489,13 @@ impl LuaRuntime {
             .unwrap_or_default()
     }
 
-    /// Updates the cached world signal values that Lua can read.
+    /// Updates the cached world signal snapshot that Lua can read.
+    ///
     /// Call this before invoking Lua callbacks so they have fresh data.
-    pub fn update_signal_cache(
-        &self,
-        scalars: &FxHashMap<String, f32>,
-        integers: &FxHashMap<String, i32>,
-        strings: &FxHashMap<String, String>,
-        flags: &FxHashSet<String>,
-        group_counts: &FxHashMap<String, u32>,
-        entities: &FxHashMap<String, u64>,
-    ) {
+    /// Takes an `Arc<SignalSnapshot>` which is cheaply cloned (just increments refcount).
+    pub fn update_signal_cache(&self, snapshot: Arc<SignalSnapshot>) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
-            *data.signal_scalars.borrow_mut() = scalars.clone();
-            *data.signal_integers.borrow_mut() = integers.clone();
-            *data.signal_strings.borrow_mut() = strings.clone();
-            *data.signal_flags.borrow_mut() = flags.clone();
-            *data.group_counts.borrow_mut() = group_counts.clone();
-            *data.signal_entities.borrow_mut() = entities.clone();
+            *data.signal_snapshot.borrow_mut() = snapshot;
         }
     }
 
