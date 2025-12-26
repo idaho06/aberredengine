@@ -1540,6 +1540,8 @@ engine.set_camera(336, 384, 336, 384, 0.0, 1.0)
 
 Entity groups can be tracked for counting.
 
+**Note:** Group names must not exceed 51 characters for optimal performance.
+
 ### `engine.track_group(name)`
 Enable tracking for a group.
 ```lua

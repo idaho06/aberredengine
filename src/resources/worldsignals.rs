@@ -125,9 +125,30 @@ impl WorldSignals {
         self.integers.get(key).copied()
     }
     /// Get a group count by the name of the group.
+    ///
+    /// Uses a stack buffer to avoid heap allocation. Group names must not
+    /// exceed 51 characters (64 - 13 for "group_count:" prefix).
     pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
-        let key = format!("group_count:{}", group_name);
-        self.get_integer(&key)
+        use std::fmt::Write;
+        let mut buf = arrayvec::ArrayString::<64>::new();
+        let _ = write!(buf, "group_count:{}", group_name);
+        self.integers.get(buf.as_str()).copied()
+    }
+
+    /// Set a group count by the name of the group.
+    ///
+    /// Only updates if the value changed to avoid unnecessary dirty marking.
+    /// Uses a stack buffer to avoid heap allocation. Group names must not
+    /// exceed 51 characters (64 - 13 for "group_count:" prefix).
+    pub fn set_group_count(&mut self, group_name: &str, count: i32) {
+        use std::fmt::Write;
+        let mut buf = arrayvec::ArrayString::<64>::new();
+        let _ = write!(buf, "group_count:{}", group_name);
+        let current = self.integers.get(buf.as_str()).copied();
+        if current != Some(count) {
+            self.integers.insert(buf.to_string(), count);
+            self.mark_dirty();
+        }
     }
     /// Remove all integer signals whose keys start with a given prefix.
     pub fn clear_integer_prefix(&mut self, prefix: &str) {

@@ -70,13 +70,9 @@ pub fn update_group_counts_system(
     }
 
     // Update world signals for all tracked groups (including zeros for despawned groups)
-    // Only set if value changed to avoid unnecessary snapshot rebuilds
+    // set_group_count only marks dirty if value changed, and uses stack allocation
     for group_name in tracked_groups.iter() {
         let count = counts.get(group_name.as_str()).copied().unwrap_or(0);
-        let signal_key = format!("group_count:{}", group_name);
-        let current = world_signals.get_integer(&signal_key);
-        if current != Some(count) {
-            world_signals.set_integer(signal_key, count);
-        }
+        world_signals.set_group_count(group_name, count);
     }
 }
