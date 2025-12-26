@@ -33,6 +33,9 @@
 //! cargo run --release
 //! ```
 
+// Do not create console on Windows
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 mod components;
 mod events;
 mod game;
@@ -66,6 +69,7 @@ use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::luaphase::lua_phase_system;
+use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
@@ -76,7 +80,6 @@ use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_timers;
 use crate::systems::time::update_world_time;
-use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
 use crate::systems::tween::tween_scale_system;
