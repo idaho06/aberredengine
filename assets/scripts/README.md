@@ -397,6 +397,73 @@ Add RigidBody component with initial velocity.
 :with_velocity(300, -300)  -- Move diagonally
 ```
 
+#### `:with_friction(friction)`
+Set velocity damping on RigidBody (requires `:with_velocity()` first).
+
+**Parameters:**
+- `friction` - Damping factor (0.0 = no friction, ~5.0 = responsive, ~10.0 = heavy drag)
+
+```lua
+:with_velocity(0, 0)
+:with_friction(5.0)  -- Responsive friction for player control
+```
+
+#### `:with_max_speed(max_speed)`
+Set maximum velocity magnitude on RigidBody (requires `:with_velocity()` first).
+
+**Parameters:**
+- `max_speed` - Maximum speed in world units per second
+
+```lua
+:with_velocity(0, 0)
+:with_max_speed(300.0)  -- Clamp speed to 300 units/sec
+```
+
+#### `:with_accel(name, x, y, enabled)`
+Add a named acceleration force to RigidBody (requires `:with_velocity()` first).
+
+Forces are accumulated each frame and applied to velocity. Multiple forces can be added with different names and toggled independently.
+
+**Parameters:**
+- `name` - Unique identifier for this force
+- `x`, `y` - Acceleration in world units per second squared
+- `enabled` - Whether this force is active (true/false)
+
+```lua
+:with_velocity(0, 0)
+:with_accel("gravity", 0, 980, true)      -- Enabled gravity
+:with_accel("thrust", 0, -500, false)     -- Disabled thrust (toggle later)
+:with_accel("wind", 50, 0, true)          -- Enabled wind
+```
+
+#### `:with_frozen(frozen)`
+Set frozen state on RigidBody (requires `:with_velocity()` first).
+
+When frozen, the movement system skips all physics calculations for this entity. Position can still be modified externally (e.g., by StuckTo system or direct manipulation).
+
+**Parameters:**
+- `frozen` - Whether entity is frozen (true/false)
+
+```lua
+:with_velocity(300, -300)
+:with_frozen(true)  -- Start frozen (e.g., ball stuck to paddle)
+```
+
+**Complete Physics Example:**
+```lua
+-- Entity with gravity, friction, and speed limit
+engine.spawn()
+    :with_group("player")
+    :with_position(400, 300)
+    :with_sprite("player", 32, 32, 16, 16)
+    :with_velocity(0, 0)
+    :with_friction(5.0)
+    :with_max_speed(300.0)
+    :with_accel("gravity", 0, 980, true)
+    :with_accel("jump", 0, -1500, false)  -- Toggle on when jumping
+    :build()
+```
+
 #### `:with_collider(width, height, origin_x, origin_y)`
 Add BoxCollider for collision detection.
 ```lua
@@ -1327,6 +1394,170 @@ Restart current animation from frame 0.
 engine.entity_restart_animation(player_id)
 ```
 
+### Physics Commands
+
+The following commands manipulate the physics properties of entities with RigidBody components.
+
+### `engine.entity_add_force(entity_id, name, x, y, enabled)`
+Add or update a named acceleration force on an entity's RigidBody.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Unique force identifier
+- `x`, `y` - Acceleration in world units per second squared
+- `enabled` - Whether the force is active
+
+```lua
+-- Add gravity to an entity
+engine.entity_add_force(player_id, "gravity", 0, 980, true)
+
+-- Add jump force (disabled until player jumps)
+engine.entity_add_force(player_id, "jump", 0, -1500, false)
+```
+
+### `engine.entity_remove_force(entity_id, name)`
+Remove a named force entirely from an entity's RigidBody.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Force identifier to remove
+
+```lua
+-- Remove wind force when player enters shelter
+engine.entity_remove_force(player_id, "wind")
+```
+
+### `engine.entity_set_force_enabled(entity_id, name, enabled)`
+Enable or disable a specific force without removing it.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Force identifier
+- `enabled` - Whether to enable (true) or disable (false) the force
+
+```lua
+-- Disable gravity when player is on ground
+engine.entity_set_force_enabled(player_id, "gravity", false)
+
+-- Re-enable gravity when player leaves ground
+engine.entity_set_force_enabled(player_id, "gravity", true)
+
+-- Enable jump force momentarily
+engine.entity_set_force_enabled(player_id, "jump", true)
+```
+
+### `engine.entity_set_force_value(entity_id, name, x, y)`
+Update the acceleration value of an existing force.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Force identifier
+- `x`, `y` - New acceleration values
+
+```lua
+-- Increase gravity in a specific area
+engine.entity_set_force_value(player_id, "gravity", 0, 1500)
+
+-- Change wind direction
+engine.entity_set_force_value(player_id, "wind", -100, 0)
+```
+
+### `engine.entity_set_friction(entity_id, friction)`
+Set velocity damping on an entity's RigidBody.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `friction` - Damping factor (0.0 = no friction, ~5.0 = responsive, ~10.0 = heavy drag)
+
+```lua
+-- Apply ice physics (low friction)
+engine.entity_set_friction(player_id, 0.5)
+
+-- Apply mud physics (high friction)
+engine.entity_set_friction(player_id, 15.0)
+```
+
+### `engine.entity_set_max_speed(entity_id, max_speed)`
+Set or remove maximum velocity limit on an entity's RigidBody.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `max_speed` - Maximum speed in world units/sec, or `nil` to remove limit
+
+```lua
+-- Limit player speed
+engine.entity_set_max_speed(player_id, 300.0)
+
+-- Remove speed limit (power-up)
+engine.entity_set_max_speed(player_id, nil)
+```
+
+### `engine.entity_freeze(entity_id)`
+Freeze an entity, preventing the movement system from updating its physics.
+
+When frozen, velocity and acceleration are not applied. Position can still be modified externally (e.g., by StuckTo system or direct manipulation).
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+
+```lua
+-- Freeze ball while stuck to paddle
+engine.entity_freeze(ball_id)
+```
+
+### `engine.entity_unfreeze(entity_id)`
+Unfreeze an entity, allowing the movement system to resume physics calculations.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+
+```lua
+-- Release ball from paddle
+engine.entity_unfreeze(ball_id)
+```
+
+**Complete Physics Example:**
+```lua
+-- Platform game player with multiple forces
+function setup_player_physics(player_id)
+    -- Add gravity (always enabled)
+    engine.entity_add_force(player_id, "gravity", 0, 980, true)
+
+    -- Add jump force (disabled by default)
+    engine.entity_add_force(player_id, "jump", 0, -2000, false)
+
+    -- Add movement force (controlled by input)
+    engine.entity_add_force(player_id, "move", 0, 0, true)
+
+    -- Set friction for responsive controls
+    engine.entity_set_friction(player_id, 8.0)
+
+    -- Limit max speed
+    engine.entity_set_max_speed(player_id, 250.0)
+end
+
+function player_jump(player_id)
+    -- Disable gravity, enable jump for a moment
+    engine.entity_set_force_enabled(player_id, "gravity", false)
+    engine.entity_set_force_enabled(player_id, "jump", true)
+
+    -- Schedule re-enabling gravity after 0.1 seconds
+    engine.entity_insert_lua_timer(player_id, 0.1, "restore_gravity")
+end
+
+function restore_gravity(entity_id)
+    engine.entity_set_force_enabled(entity_id, "gravity", true)
+    engine.entity_set_force_enabled(entity_id, "jump", false)
+    engine.entity_remove_lua_timer(entity_id)
+end
+
+function player_move(player_id, direction)
+    -- direction: -1 (left), 0 (stop), 1 (right)
+    local move_accel = 500 * direction
+    engine.entity_set_force_value(player_id, "move", move_accel, 0)
+end
+```
+
 ---
 
 ## Phase Control
@@ -1421,6 +1652,10 @@ Create a new entity builder for spawning entities during collision. Returns a `L
 - `:with_sprite_flip(flip_h, flip_v)`
 - `:with_zindex(z)`
 - `:with_velocity(vx, vy)`
+- `:with_friction(friction)`
+- `:with_max_speed(max_speed)`
+- `:with_accel(name, x, y, enabled)`
+- `:with_frozen(frozen)`
 - `:with_collider(width, height, origin_x, origin_y)`
 - `:with_collider_offset(offset_x, offset_y)`
 - `:with_rotation(degrees)`
@@ -1468,6 +1703,72 @@ function on_player_enemy(ctx)
 
     -- Play hit sound
     engine.collision_play_sound("player_hit")
+end
+```
+
+#### `engine.collision_entity_freeze(entity_id)`
+Freeze an entity during collision handling, preventing physics calculations.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+
+```lua
+function on_ball_sticky_paddle(ctx)
+    local ball_id = ctx.a.id
+    -- Freeze ball when it hits a sticky paddle
+    engine.collision_entity_freeze(ball_id)
+end
+```
+
+#### `engine.collision_entity_unfreeze(entity_id)`
+Unfreeze an entity during collision handling, resuming physics calculations.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+
+```lua
+function on_ball_release(ctx)
+    local ball_id = ctx.a.id
+    engine.collision_entity_unfreeze(ball_id)
+end
+```
+
+#### `engine.collision_entity_add_force(entity_id, name, x, y, enabled)`
+Add or update a named acceleration force during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Unique force identifier
+- `x`, `y` - Acceleration in world units per second squared
+- `enabled` - Whether the force is active
+
+```lua
+function on_player_wind_zone(ctx)
+    local player_id = ctx.a.id
+    -- Add wind force when entering wind zone
+    engine.collision_entity_add_force(player_id, "wind", 200, 0, true)
+end
+```
+
+#### `engine.collision_entity_set_force_enabled(entity_id, name, enabled)`
+Enable or disable a specific force during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Force identifier
+- `enabled` - Whether to enable (true) or disable (false)
+
+```lua
+function on_player_ground(ctx)
+    local player_id = ctx.a.id
+    -- Disable gravity when landing on ground
+    engine.collision_entity_set_force_enabled(player_id, "gravity", false)
+end
+
+function on_player_leave_ground(ctx)
+    local player_id = ctx.a.id
+    -- Re-enable gravity when leaving ground
+    engine.collision_entity_set_force_enabled(player_id, "gravity", true)
 end
 ```
 
