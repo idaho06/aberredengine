@@ -48,7 +48,7 @@ pub fn render_system(
     screensize: Res<ScreenSize>,
     textures: Res<TextureStore>, // TODO: move TextureStore resource creation out of setup system
     fonts: NonSend<FontStore>,
-    isdebug: Option<Res<DebugMode>>,
+    maybe_debug: Option<Res<DebugMode>>,
     mut sprite_buffer: Local<Vec<(Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>)>>,
     mut text_buffer: Local<Vec<(DynamicText, MapPosition, ZIndex)>>,
 ) {
@@ -155,27 +155,15 @@ pub fn render_system(
         } // End sprite drawing in camera space
         text_buffer.clear();
         text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(t, p, z)| {
-            let text_c_string = std::ffi::CString::new(t.content.as_bytes())
-                .expect("Failed to convert text content to CString");
-            let font = fonts.get(&t.font).expect("Font name must be valid!!");
-            let text_size = unsafe {
-                ffi::MeasureTextEx(
-                    **font,
-                    text_c_string.as_ptr() as *const i8,
-                    t.font_size,
-                    1.0,
-                )
-            };
-            let text_width = text_size.x;
-            let text_height = text_size.y;
+            let text_size = t.size();
 
             let min = Vector2 {
                 x: p.pos.x,
                 y: p.pos.y,
             };
             let max = Vector2 {
-                x: min.x + text_width,
-                y: min.y + text_height,
+                x: min.x + text_size.x,
+                y: min.y + text_size.y,
             };
 
             let overlap = !(max.x < view_min.x
@@ -187,17 +175,19 @@ pub fn render_system(
         text_buffer.sort_unstable_by_key(|(_, _, z)| *z);
         for (text, pos, _z) in text_buffer.iter() {
             if let Some(font) = fonts.get(&text.font) {
-                d2.draw_text_ex(
-                    font,
-                    &text.content,
-                    pos.pos,
-                    text.font_size,
-                    1.0,
-                    text.color,
-                );
+                d2.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, text.color);
+                if maybe_debug.is_some() {
+                    d2.draw_rectangle_lines(
+                        pos.pos.x as i32,
+                        pos.pos.y as i32,
+                        text.size().x as i32,
+                        text.size().y as i32,
+                        Color::ORANGE,
+                    );
+                }
             }
         }
-        if isdebug.is_some() {
+        if maybe_debug.is_some() {
             for (collider, position) in query_colliders.iter() {
                 let (x, y, w, h) = collider.get_aabb(position.pos);
 
@@ -294,7 +284,7 @@ pub fn render_system(
                 Color::WHITE,
             );
         }
-        if isdebug.is_some() {
+        if maybe_debug.is_some() {
             d.draw_rectangle_lines(
                 pos.pos.x as i32 - sprite.origin.x as i32,
                 pos.pos.y as i32 - sprite.origin.y as i32,
@@ -320,26 +310,19 @@ pub fn render_system(
     }
     for (text, pos) in query_screen_dynamic_texts.iter() {
         if let Some(font) = fonts.get(&text.font) {
-            d.draw_text_ex(
-                font,
-                &text.content,
-                pos.pos,
-                text.font_size,
-                1.0,
-                text.color,
-            );
-            if isdebug.is_some() {
+            d.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, text.color);
+            if maybe_debug.is_some() {
                 d.draw_rectangle_lines(
                     pos.pos.x as i32,
                     pos.pos.y as i32,
-                    d.measure_text(&text.content, text.font_size as i32),
-                    text.font_size as i32,
+                    text.size().x as i32,
+                    text.size().y as i32,
                     Color::ORANGE,
                 );
             }
         }
     }
-    if isdebug.is_some() {
+    if maybe_debug.is_some() {
         let debug_text = "DEBUG MODE (press F11 to toggle)";
 
         let fps = d.get_fps();
