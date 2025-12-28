@@ -14,10 +14,12 @@
 //! - [`gamestate`] – authoritative and pending high-level game state
 //! - [`group`] – set of group names tracked for entity counting
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
-//! - [`screensize`] – current framebuffer dimensions in pixels
+//! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
+//! - [`screensize`] – game's internal render resolution in pixels
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturestore`] – loaded textures keyed by string IDs
 //! - [`tilemapstore`] – loaded tile maps and layers
+//! - [`windowsize`] – actual window dimensions for letterbox calculations
 //! - [`worldsignals`] – global signal storage for cross-system communication
 //! - [`worldtime`] – simulation time and delta
 
@@ -30,9 +32,11 @@ pub mod gamestate;
 pub mod group;
 pub mod input;
 pub mod lua_runtime;
+pub mod rendertarget;
 pub mod screensize;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod tilemapstore;
+pub mod windowsize;
 pub mod worldsignals;
 pub mod worldtime;

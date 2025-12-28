@@ -52,8 +52,11 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::rendertarget::RenderFilter;
+use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
@@ -86,14 +89,19 @@ use crate::systems::tween::tween_rotation_system;
 use crate::systems::tween::tween_scale_system;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
-use raylib::collision;
+//use raylib::collision;
 //use raylib::prelude::*;
 
 fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
+    // Game resolution (fixed internal render size)
+    const GAME_WIDTH: u32 = 224 * 3;
+    const GAME_HEIGHT: u32 = 256 * 3;
+
     let (mut rl, thread) = raylib::init()
-        .size(224 * 3, 256 * 3)
+        .size(GAME_WIDTH as i32, GAME_HEIGHT as i32)
+        .resizable()
         .title("Aberred Engine - Arkanoid")
         .vsync()
         .build();
@@ -101,16 +109,27 @@ fn main() {
     // Disable ESC to exit
     rl.set_exit_key(None);
 
+    // --------------- Render target for fixed-resolution rendering ---------------
+    let render_target = RenderTarget::new(&mut rl, &thread, GAME_WIDTH, GAME_HEIGHT)
+        .expect("Failed to create render target");
+    //render_target.set_filter(RenderFilter::Nearest);
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(WorldSignals::default());
     world.insert_resource(TrackedGroups::default());
+    // ScreenSize is the game's internal render resolution (fixed)
     world.insert_resource(ScreenSize {
+        w: GAME_WIDTH as i32,
+        h: GAME_HEIGHT as i32,
+    });
+    // WindowSize is the actual window dimensions (updated each frame)
+    world.insert_resource(WindowSize {
         w: rl.get_screen_width(),
         h: rl.get_screen_height(),
     });
     world.insert_resource(InputState::default());
+    world.insert_non_send_resource(render_target);
 
     // Init audio
     setup_audio(&mut world); // sets up AudioBridge and Events<AudioEvent> as resources
@@ -224,6 +243,17 @@ fn main() {
         .window_should_close()
         && !world.resource::<WorldSignals>().has_flag("quit_game")
     {
+        // Update window size each frame (may change due to resize)
+        let (new_w, new_h) = {
+            let rl = world.non_send_resource::<raylib::RaylibHandle>();
+            (rl.get_screen_width(), rl.get_screen_height())
+        };
+        {
+            let mut window_size = world.resource_mut::<WindowSize>();
+            window_size.w = new_w;
+            window_size.h = new_h;
+        }
+
         let dt = world
             .non_send_resource::<raylib::RaylibHandle>()
             .get_frame_time();
