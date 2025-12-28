@@ -26,6 +26,7 @@
 pub mod animation;
 pub mod audio;
 pub mod collision;
+pub mod dynamictext_size;
 pub mod gamestate;
 pub mod gridlayout;
 pub mod group;

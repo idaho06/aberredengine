@@ -9,12 +9,11 @@ enum Either<L, R> {
     Right(R),
 }
 
-use std::sync::Arc;
-
 use crate::components::dynamictext::DynamicText;
 use crate::components::signalbinding::{SignalBinding, SignalSource};
 use crate::components::signals::Signals;
 use crate::resources::worldsignals::WorldSignals;
+use bevy_ecs::change_detection::DetectChangesMut;
 use bevy_ecs::prelude::*;
 
 /// Updates [`DynamicText`](crate::components::dynamictext::DynamicText) content based on signal bindings.
@@ -30,6 +29,9 @@ use bevy_ecs::prelude::*;
 /// - **Flag** - Displayed as `"true"` if set
 ///
 /// If a format string is specified in the binding, the value replaces the `{}` placeholder.
+///
+/// Uses `bypass_change_detection` to avoid marking `DynamicText` as changed every frame.
+/// Change detection is only triggered when content actually differs.
 pub fn update_world_signals_binding_system(
     mut query: Query<(&mut DynamicText, &SignalBinding)>,
     world_signals: Res<WorldSignals>,
@@ -47,7 +49,7 @@ pub fn update_world_signals_binding_system(
         };
 
         if let Some(value) = value_opt {
-            let new_content = match &signal_binding.format {
+            let new_text = match &signal_binding.format {
                 Some(format_str) => match value {
                     Either::Left(ref s) => format_str.replace("{}", s),
                     Either::Right(s) => format_str.replace("{}", s),
@@ -57,8 +59,10 @@ pub fn update_world_signals_binding_system(
                     Either::Right(s) => s.to_string(),
                 },
             };
-            if &*dynamic_text.content != new_content {
-                dynamic_text.content = Arc::from(new_content);
+            // Bypass automatic change detection; manually mark as changed only if content differs
+            let changed = dynamic_text.bypass_change_detection().set_text(new_text);
+            if changed {
+                dynamic_text.set_changed();
             }
         }
     }

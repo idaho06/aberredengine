@@ -63,6 +63,7 @@ use crate::systems::audio::{
 };
 use crate::systems::collision::collision_detector;
 use crate::systems::collision::collision_observer;
+use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
@@ -205,6 +206,7 @@ fn main() {
     update.add_systems(update_timers);
     update.add_systems(update_lua_timers);
     update.add_systems(update_world_signals_binding_system);
+    update.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
     update.add_systems(
         (game::update)
             .run_if(state_is_playing)
