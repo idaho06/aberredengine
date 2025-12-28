@@ -71,6 +71,7 @@ pub fn lua_phase_system(
     stuckto_query: Query<&StuckTo>,
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
+    mut rigid_bodies_query: Query<&mut RigidBody>,
     time: Res<WorldTime>,
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
@@ -164,6 +165,7 @@ pub fn lua_phase_system(
         &stuckto_query,
         &mut signals_query,
         &mut animation_query,
+        &mut rigid_bodies_query,
     );
 
     // Process camera commands from Lua

@@ -93,11 +93,77 @@ impl LuaUserData for LuaEntityBuilder {
         });
 
         // :with_velocity(vx, vy) - Set RigidBody velocity
+        // Creates a RigidBody if one doesn't exist, otherwise updates velocity
         methods.add_method_mut("with_velocity", |_, this, (vx, vy): (f32, f32)| {
-            this.cmd.rigidbody = Some(RigidBodyData {
-                velocity_x: vx,
-                velocity_y: vy,
-            });
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.velocity_x = vx;
+                rb.velocity_y = vy;
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    velocity_x: vx,
+                    velocity_y: vy,
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        });
+
+        // :with_friction(friction) - Set RigidBody friction (velocity damping)
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut("with_friction", |_, this, friction: f32| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.friction = friction;
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    friction,
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        });
+
+        // :with_max_speed(speed) - Set RigidBody max_speed clamp
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut("with_max_speed", |_, this, speed: f32| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.max_speed = Some(speed);
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    max_speed: Some(speed),
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        });
+
+        // :with_accel(name, x, y, enabled) - Add a named acceleration force
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut(
+            "with_accel",
+            |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
+                if let Some(ref mut rb) = this.cmd.rigidbody {
+                    rb.forces.push(ForceData { name, x, y, enabled });
+                } else {
+                    this.cmd.rigidbody = Some(RigidBodyData {
+                        forces: vec![ForceData { name, x, y, enabled }],
+                        ..RigidBodyData::default()
+                    });
+                }
+                Ok(this.clone())
+            },
+        );
+
+        // :with_frozen() - Mark entity as frozen (physics skipped)
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut("with_frozen", |_, this, ()| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.frozen = true;
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    frozen: true,
+                    ..RigidBodyData::default()
+                });
+            }
             Ok(this.clone())
         });
 
@@ -803,11 +869,77 @@ impl LuaUserData for LuaCollisionEntityBuilder {
         });
 
         // :with_velocity(vx, vy) - Set RigidBody velocity
+        // Creates a RigidBody if one doesn't exist, otherwise updates velocity
         methods.add_method_mut("with_velocity", |_, this, (vx, vy): (f32, f32)| {
-            this.cmd.rigidbody = Some(RigidBodyData {
-                velocity_x: vx,
-                velocity_y: vy,
-            });
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.velocity_x = vx;
+                rb.velocity_y = vy;
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    velocity_x: vx,
+                    velocity_y: vy,
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        });
+
+        // :with_friction(friction) - Set RigidBody friction (velocity damping)
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut("with_friction", |_, this, friction: f32| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.friction = friction;
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    friction,
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        });
+
+        // :with_max_speed(speed) - Set RigidBody max_speed clamp
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut("with_max_speed", |_, this, speed: f32| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.max_speed = Some(speed);
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    max_speed: Some(speed),
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        });
+
+        // :with_accel(name, x, y, enabled) - Add a named acceleration force
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut(
+            "with_accel",
+            |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
+                if let Some(ref mut rb) = this.cmd.rigidbody {
+                    rb.forces.push(ForceData { name, x, y, enabled });
+                } else {
+                    this.cmd.rigidbody = Some(RigidBodyData {
+                        forces: vec![ForceData { name, x, y, enabled }],
+                        ..RigidBodyData::default()
+                    });
+                }
+                Ok(this.clone())
+            },
+        );
+
+        // :with_frozen() - Mark entity as frozen (physics skipped)
+        // Creates a RigidBody if one doesn't exist
+        methods.add_method_mut("with_frozen", |_, this, ()| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.frozen = true;
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    frozen: true,
+                    ..RigidBodyData::default()
+                });
+            }
             Ok(this.clone())
         });
 

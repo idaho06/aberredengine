@@ -366,6 +366,7 @@ pub fn process_animation_command(
 /// This function handles all runtime entity manipulation commands including:
 /// - Component insertion/removal (StuckTo, LuaTimer, Tweens)
 /// - Entity state changes (velocity, animation, signals)
+/// - RigidBody physics (forces, friction, freeze)
 ///
 /// # Parameters
 ///
@@ -374,12 +375,14 @@ pub fn process_animation_command(
 /// - `stuckto_query` - Query for reading StuckTo components
 /// - `signals_query` - Query for modifying Signals components
 /// - `animation_query` - Query for modifying Animation components
+/// - `rigid_bodies_query` - Query for modifying RigidBody components
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
     stuckto_query: &Query<&StuckTo>,
     signals_query: &mut Query<&mut Signals>,
     animation_query: &mut Query<&mut Animation>,
+    rigid_bodies_query: &mut Query<&mut RigidBody>,
 ) {
     for cmd in entity_commands {
         match cmd {
@@ -387,7 +390,10 @@ pub fn process_entity_commands(
                 let entity = Entity::from_bits(entity_id);
                 if let Ok(stuckto) = stuckto_query.get(entity) {
                     if let Some(velocity) = stuckto.stored_velocity {
-                        commands.entity(entity).insert(RigidBody { velocity });
+                        // Create a new RigidBody with the stored velocity
+                        let mut rb = RigidBody::new();
+                        rb.velocity = velocity;
+                        commands.entity(entity).insert(rb);
                     }
                 }
                 commands.entity(entity).remove::<StuckTo>();
@@ -406,9 +412,9 @@ pub fn process_entity_commands(
             }
             EntityCmd::SetVelocity { entity_id, vx, vy } => {
                 let entity = Entity::from_bits(entity_id);
-                commands.entity(entity).insert(RigidBody {
-                    velocity: Vector2 { x: vx, y: vy },
-                });
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.velocity = Vector2 { x: vx, y: vy };
+                }
             }
             EntityCmd::InsertStuckTo {
                 entity_id,
@@ -578,6 +584,69 @@ pub fn process_entity_commands(
                     signals.set_string(&key, &value);
                 }
             }
+            EntityCmd::AddForce {
+                entity_id,
+                name,
+                x,
+                y,
+                enabled,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.add_force_with_state(&name, Vector2 { x, y }, enabled);
+                }
+            }
+            EntityCmd::RemoveForce { entity_id, name } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.remove_force(&name);
+                }
+            }
+            EntityCmd::SetForceEnabled {
+                entity_id,
+                name,
+                enabled,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.set_force_enabled(&name, enabled);
+                }
+            }
+            EntityCmd::SetForceValue {
+                entity_id,
+                name,
+                x,
+                y,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.set_force_value(&name, Vector2 { x, y });
+                }
+            }
+            EntityCmd::SetFriction { entity_id, friction } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.friction = friction;
+                }
+            }
+            EntityCmd::SetMaxSpeed { entity_id, max_speed } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.max_speed = max_speed;
+                }
+            }
+            EntityCmd::FreezeEntity { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.freeze();
+                }
+            }
+            EntityCmd::UnfreezeEntity { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.unfreeze();
+                }
+            }
         }
     }
 }
@@ -636,12 +705,16 @@ pub fn process_spawn_command(
 
     // RigidBody
     if let Some(rb_data) = cmd.rigidbody {
-        entity_commands.insert(RigidBody {
-            velocity: Vector2 {
-                x: rb_data.velocity_x,
-                y: rb_data.velocity_y,
-            },
-        });
+        let mut rb = RigidBody::with_physics(rb_data.friction, rb_data.max_speed);
+        rb.velocity = Vector2 {
+            x: rb_data.velocity_x,
+            y: rb_data.velocity_y,
+        };
+        rb.frozen = rb_data.frozen;
+        for force in rb_data.forces {
+            rb.add_force_with_state(&force.name, Vector2 { x: force.x, y: force.y }, force.enabled);
+        }
+        entity_commands.insert(rb);
     }
 
     // BoxCollider
@@ -1128,6 +1201,40 @@ pub fn process_collision_entity_commands(
                         y: stored_vy,
                     }),
                 });
+            }
+            CollisionEntityCmd::FreezeEntity { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
+                    rb.freeze();
+                }
+            }
+            CollisionEntityCmd::UnfreezeEntity { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
+                    rb.unfreeze();
+                }
+            }
+            CollisionEntityCmd::AddForce {
+                entity_id,
+                name,
+                x,
+                y,
+                enabled,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
+                    rb.add_force_with_state(&name, Vector2 { x, y }, enabled);
+                }
+            }
+            CollisionEntityCmd::SetForceEnabled {
+                entity_id,
+                name,
+                enabled,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
+                    rb.set_force_enabled(&name, enabled);
+                }
             }
         }
     }

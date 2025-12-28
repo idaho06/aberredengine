@@ -139,6 +139,37 @@ pub enum EntityCmd {
         key: String,
         value: String,
     },
+    /// Add or update a named force on the entity's RigidBody
+    AddForce {
+        entity_id: u64,
+        name: String,
+        x: f32,
+        y: f32,
+        enabled: bool,
+    },
+    /// Remove a named force from the entity's RigidBody
+    RemoveForce { entity_id: u64, name: String },
+    /// Enable or disable a specific force on the entity's RigidBody
+    SetForceEnabled {
+        entity_id: u64,
+        name: String,
+        enabled: bool,
+    },
+    /// Update the value of an existing force on the entity's RigidBody
+    SetForceValue {
+        entity_id: u64,
+        name: String,
+        x: f32,
+        y: f32,
+    },
+    /// Set friction on entity's RigidBody
+    SetFriction { entity_id: u64, friction: f32 },
+    /// Set max_speed on entity's RigidBody (None to remove limit)
+    SetMaxSpeed { entity_id: u64, max_speed: Option<f32> },
+    /// Freeze entity (skip physics calculations)
+    FreezeEntity { entity_id: u64 },
+    /// Unfreeze entity (resume physics calculations)
+    UnfreezeEntity { entity_id: u64 },
 }
 
 /// Commands for manipulating entity components from Lua collision callbacks.
@@ -177,6 +208,24 @@ pub enum CollisionEntityCmd {
         offset_y: f32,
         stored_vx: f32,
         stored_vy: f32,
+    },
+    /// Freeze entity (skip physics calculations)
+    FreezeEntity { entity_id: u64 },
+    /// Unfreeze entity (resume physics calculations)
+    UnfreezeEntity { entity_id: u64 },
+    /// Add or update a named force on the entity's RigidBody
+    AddForce {
+        entity_id: u64,
+        name: String,
+        x: f32,
+        y: f32,
+        enabled: bool,
+    },
+    /// Enable or disable a specific force on the entity's RigidBody
+    SetForceEnabled {
+        entity_id: u64,
+        name: String,
+        enabled: bool,
     },
 }
 

@@ -600,6 +600,7 @@ pub fn update(
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
+    mut rigid_bodies_query: Query<&mut RigidBody>,
 ) {
     let delta_sec = time.delta;
 
@@ -659,6 +660,7 @@ pub fn update(
         &stuckto_query,
         &mut signals_query,
         &mut animation_query,
+        &mut rigid_bodies_query,
     );
 
     // Process spawn commands from Lua
@@ -822,6 +824,7 @@ pub fn switch_scene(
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
+    mut rigid_bodies_query: Query<&mut RigidBody>,
 ) {
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
@@ -865,6 +868,7 @@ pub fn switch_scene(
         &stuckto_query,
         &mut signals_query,
         &mut animation_query,
+        &mut rigid_bodies_query,
     );
 
     // Process phase commands from Lua
