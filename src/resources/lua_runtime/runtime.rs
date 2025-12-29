@@ -831,6 +831,147 @@ impl LuaRuntime {
                 })?,
         )?;
 
+        // engine.entity_add_force(entity_id, name, x, y, enabled) - Add/update a named force on RigidBody
+        engine.set(
+            "entity_add_force",
+            self.lua.create_function(
+                |lua, (entity_id, name, x, y, enabled): (u64, String, f32, f32, bool)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::AddForce {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                            enabled,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_remove_force(entity_id, name) - Remove a named force from RigidBody
+        engine.set(
+            "entity_remove_force",
+            self.lua
+                .create_function(|lua, (entity_id, name): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::RemoveForce { entity_id, name });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_set_force_enabled(entity_id, name, enabled) - Enable/disable a force
+        engine.set(
+            "entity_set_force_enabled",
+            self.lua.create_function(
+                |lua, (entity_id, name, enabled): (u64, String, bool)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetForceEnabled {
+                            entity_id,
+                            name,
+                            enabled,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_set_force_value(entity_id, name, x, y) - Update force value
+        engine.set(
+            "entity_set_force_value",
+            self.lua
+                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetForceValue {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_set_friction(entity_id, friction) - Set RigidBody friction
+        engine.set(
+            "entity_set_friction",
+            self.lua
+                .create_function(|lua, (entity_id, friction): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetFriction { entity_id, friction });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_set_max_speed(entity_id, max_speed) - Set RigidBody max_speed (nil to remove limit)
+        engine.set(
+            "entity_set_max_speed",
+            self.lua
+                .create_function(|lua, (entity_id, max_speed): (u64, Option<f32>)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetMaxSpeed { entity_id, max_speed });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_freeze(entity_id) - Freeze entity (skip physics calculations)
+        engine.set(
+            "entity_freeze",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::FreezeEntity { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.entity_unfreeze(entity_id) - Unfreeze entity (resume physics calculations)
+        engine.set(
+            "entity_unfreeze",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::UnfreezeEntity { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction
+        engine.set(
+            "entity_set_speed",
+            self.lua
+                .create_function(|lua, (entity_id, speed): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetSpeed { entity_id, speed });
+                    Ok(())
+                })?,
+        )?;
+
         Ok(())
     }
 
@@ -1211,6 +1352,86 @@ impl LuaRuntime {
                     Ok(())
                 },
             )?,
+        )?;
+
+        // engine.collision_entity_freeze(entity_id) - Freeze entity during collision handling
+        engine.set(
+            "collision_entity_freeze",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(CollisionEntityCmd::FreezeEntity { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_unfreeze(entity_id) - Unfreeze entity during collision handling
+        engine.set(
+            "collision_entity_unfreeze",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(CollisionEntityCmd::UnfreezeEntity { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_add_force(entity_id, name, x, y, enabled) - Add/update force during collision
+        engine.set(
+            "collision_entity_add_force",
+            self.lua.create_function(
+                |lua, (entity_id, name, x, y, enabled): (u64, String, f32, f32, bool)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(CollisionEntityCmd::AddForce {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                            enabled,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_set_force_enabled(entity_id, name, enabled) - Enable/disable force during collision
+        engine.set(
+            "collision_entity_set_force_enabled",
+            self.lua.create_function(
+                |lua, (entity_id, name, enabled): (u64, String, bool)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(CollisionEntityCmd::SetForceEnabled {
+                            entity_id,
+                            name,
+                            enabled,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction during collision
+        engine.set(
+            "collision_entity_set_speed",
+            self.lua
+                .create_function(|lua, (entity_id, speed): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(CollisionEntityCmd::SetSpeed { entity_id, speed });
+                    Ok(())
+                })?,
         )?;
 
         Ok(())

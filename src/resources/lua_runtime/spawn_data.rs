@@ -28,11 +28,28 @@ pub struct ColliderData {
     pub origin_y: f32,
 }
 
+/// Named acceleration force data for spawning.
+#[derive(Debug, Clone)]
+pub struct ForceData {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub enabled: bool,
+}
+
 /// RigidBody component data for spawning.
 #[derive(Debug, Clone, Default)]
 pub struct RigidBodyData {
     pub velocity_x: f32,
     pub velocity_y: f32,
+    /// Velocity damping factor (0.0 = no friction, higher = more drag).
+    pub friction: f32,
+    /// Optional maximum speed clamp.
+    pub max_speed: Option<f32>,
+    /// When true, movement system skips physics calculations.
+    pub frozen: bool,
+    /// Named acceleration forces to add at spawn time.
+    pub forces: Vec<ForceData>,
 }
 
 /// StuckTo component data for spawning.
