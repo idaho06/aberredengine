@@ -170,6 +170,8 @@ pub enum EntityCmd {
     FreezeEntity { entity_id: u64 },
     /// Unfreeze entity (resume physics calculations)
     UnfreezeEntity { entity_id: u64 },
+    /// Set entity speed while maintaining velocity direction
+    SetSpeed { entity_id: u64, speed: f32 },
 }
 
 /// Commands for manipulating entity components from Lua collision callbacks.
@@ -227,6 +229,8 @@ pub enum CollisionEntityCmd {
         name: String,
         enabled: bool,
     },
+    /// Set entity speed while maintaining velocity direction
+    SetSpeed { entity_id: u64, speed: f32 },
 }
 
 /// Commands for tracked groups from Lua.

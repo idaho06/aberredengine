@@ -647,6 +647,12 @@ pub fn process_entity_commands(
                     rb.unfreeze();
                 }
             }
+            EntityCmd::SetSpeed { entity_id, speed } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+                    rb.set_speed(speed);
+                }
+            }
         }
     }
 }
@@ -1234,6 +1240,12 @@ pub fn process_collision_entity_commands(
                 let entity = Entity::from_bits(entity_id);
                 if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
                     rb.set_force_enabled(&name, enabled);
+                }
+            }
+            CollisionEntityCmd::SetSpeed { entity_id, speed } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
+                    rb.set_speed(speed);
                 }
             }
         }

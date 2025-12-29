@@ -44,7 +44,7 @@ pub fn movement(
             // Still update signals for frozen entities (they might still be "moving" via external control)
             if let Some(signals) = maybe_signals.as_mut() {
                 signals.clear_flag("moving");
-                signals.set_scalar("speed", 0.0);
+                signals.set_scalar("speed_sq", 0.0);
             }
             continue;
         }
@@ -84,13 +84,13 @@ pub fn movement(
 
         // Step 7: Update movement signals
         if let Some(signals) = maybe_signals.as_mut() {
-            let speed = rigidbody.velocity.length();
-            if speed > 0.0 {
+            let speed_sq = rigidbody.velocity.length_sqr();
+            if speed_sq > 0.0 {
                 signals.set_flag("moving");
             } else {
                 signals.clear_flag("moving");
             }
-            signals.set_scalar("speed", speed);
+            signals.set_scalar("speed_sq", speed_sq);
         }
     }
 }

@@ -966,6 +966,20 @@ impl LuaRuntime {
             })?,
         )?;
 
+        // engine.entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction
+        engine.set(
+            "entity_set_speed",
+            self.lua
+                .create_function(|lua, (entity_id, speed): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetSpeed { entity_id, speed });
+                    Ok(())
+                })?,
+        )?;
+
         Ok(())
     }
 
@@ -1412,6 +1426,20 @@ impl LuaRuntime {
                     Ok(())
                 },
             )?,
+        )?;
+
+        // engine.collision_entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction during collision
+        engine.set(
+            "collision_entity_set_speed",
+            self.lua
+                .create_function(|lua, (entity_id, speed): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(CollisionEntityCmd::SetSpeed { entity_id, speed });
+                    Ok(())
+                })?,
         )?;
 
         Ok(())

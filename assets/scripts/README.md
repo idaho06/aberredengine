@@ -1516,6 +1516,23 @@ Unfreeze an entity, allowing the movement system to resume physics calculations.
 engine.entity_unfreeze(ball_id)
 ```
 
+### `engine.entity_set_speed(entity_id, speed)`
+Set entity's speed while maintaining velocity direction. If velocity is zero, prints a warning and does nothing.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `speed` - New speed magnitude (in world units per second)
+
+```lua
+-- Increase ball speed after hitting brick
+engine.entity_set_speed(ball_id, 400.0)
+
+-- Slow down player
+engine.entity_set_speed(player_id, 100.0)
+```
+
+**Note:** This function normalizes the current velocity and scales it by the new speed. If the entity has zero velocity (not moving), this is a no-op and a warning is printed to stderr.
+
 **Complete Physics Example:**
 ```lua
 -- Platform game player with multiple forces
@@ -1593,12 +1610,14 @@ function on_ball_player(ctx)
     local ball_id = ctx.a.id           -- Entity A ID
     local ball_pos = ctx.a.pos         -- { x, y }
     local ball_vel = ctx.a.vel         -- { x, y }
+    local ball_speed_sq = ctx.a.speed_sq -- Squared speed (use math.sqrt for actual speed)
     local ball_rect = ctx.a.rect       -- { x, y, w, h }
     local ball_signals = ctx.a.signals -- { flags = {...}, integers = {...}, ... }
 
     local player_id = ctx.b.id         -- Entity B ID
     local player_pos = ctx.b.pos
     local player_vel = ctx.b.vel
+    local player_speed_sq = ctx.b.speed_sq
     local player_rect = ctx.b.rect
     local player_signals = ctx.b.signals
 
@@ -1769,6 +1788,22 @@ function on_player_leave_ground(ctx)
     local player_id = ctx.a.id
     -- Re-enable gravity when leaving ground
     engine.collision_entity_set_force_enabled(player_id, "gravity", true)
+end
+```
+
+#### `engine.collision_entity_set_speed(entity_id, speed)`
+Set entity's speed while maintaining velocity direction during collision handling. If velocity is zero, prints a warning and does nothing.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `speed` - New speed magnitude (in world units per second)
+
+```lua
+function on_ball_speed_boost(ctx)
+    local ball_id = ctx.a.id
+    -- Increase ball speed when hitting speed booster
+    engine.collision_entity_set_speed(ball_id, 500.0)
+    engine.collision_play_sound("speed_up")
 end
 ```
 

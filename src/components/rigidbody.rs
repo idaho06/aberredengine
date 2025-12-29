@@ -200,4 +200,22 @@ impl RigidBody {
     pub fn unfreeze(&mut self) {
         self.frozen = false;
     }
+
+    /// Set speed while maintaining the current direction of velocity.
+    ///
+    /// If the current velocity is zero, this is a no-op since there's no
+    /// direction to maintain. A warning will be printed to stderr.
+    ///
+    /// # Arguments
+    /// * `new_speed` - The desired speed (magnitude of velocity)
+    pub fn set_speed(&mut self, new_speed: f32) {
+        let current_speed = self.velocity.length();
+        if current_speed > 0.0 {
+            self.velocity = self.velocity.normalized() * new_speed;
+        } else {
+            eprintln!(
+                "[WARN] RigidBody::set_speed called with zero velocity - operation ignored"
+            );
+        }
+    }
 }

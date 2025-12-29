@@ -156,16 +156,28 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             // Gather entity data for Lua callback
             let pos_a = params.positions.get(ent_a).ok().map(|p| (p.pos.x, p.pos.y));
             let pos_b = params.positions.get(ent_b).ok().map(|p| (p.pos.x, p.pos.y));
-            let vel_a = params
+            let (vel_a, speed_sq_a) = params
                 .rigid_bodies
                 .get(ent_a)
                 .ok()
-                .map(|rb| (rb.velocity.x, rb.velocity.y));
-            let vel_b = params
+                .map(|rb| {
+                    (
+                        Some((rb.velocity.x, rb.velocity.y)),
+                        rb.velocity.length_sqr(),
+                    )
+                })
+                .unwrap_or((None, 0.0));
+            let (vel_b, speed_sq_b) = params
                 .rigid_bodies
                 .get(ent_b)
                 .ok()
-                .map(|rb| (rb.velocity.x, rb.velocity.y));
+                .map(|rb| {
+                    (
+                        Some((rb.velocity.x, rb.velocity.y)),
+                        rb.velocity.length_sqr(),
+                    )
+                })
+                .unwrap_or((None, 0.0));
 
             // Get collider rects for side detection
             let rect_a = params.box_colliders.get(ent_a).ok().and_then(|c| {
@@ -201,6 +213,8 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 pos_b,
                 vel_a,
                 vel_b,
+                speed_sq_a,
+                speed_sq_b,
                 rect_a.map(|r| (r.x, r.y, r.width, r.height)),
                 rect_b.map(|r| (r.x, r.y, r.width, r.height)),
                 &sides_a,
@@ -257,6 +271,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
 }
 
 /// Call a Lua collision callback with context data.
+#[allow(clippy::too_many_arguments)]
 fn call_lua_collision_callback(
     lua_runtime: &LuaRuntime,
     callback_name: &str,
@@ -266,6 +281,8 @@ fn call_lua_collision_callback(
     pos_b: Option<(f32, f32)>,
     vel_a: Option<(f32, f32)>,
     vel_b: Option<(f32, f32)>,
+    speed_sq_a: f32,
+    speed_sq_b: f32,
     rect_a: Option<(f32, f32, f32, f32)>,
     rect_b: Option<(f32, f32, f32, f32)>,
     sides_a: &[crate::components::collision::BoxSide],
@@ -275,8 +292,6 @@ fn call_lua_collision_callback(
     group_a: Option<&str>,
     group_b: Option<&str>,
 ) -> mlua::Result<()> {
-    use mlua::IntoLua;
-
     let lua = lua_runtime.lua();
 
     // Create ctx table
@@ -286,6 +301,7 @@ fn call_lua_collision_callback(
     let a_table = lua.create_table()?;
     a_table.set("id", entity_a_id)?;
     a_table.set("group", group_a.unwrap_or(""))?;
+    a_table.set("speed_sq", speed_sq_a)?;
     if let Some((x, y)) = pos_a {
         let pos_table = lua.create_table()?;
         pos_table.set("x", x)?;
@@ -326,6 +342,7 @@ fn call_lua_collision_callback(
     let b_table = lua.create_table()?;
     b_table.set("id", entity_b_id)?;
     b_table.set("group", group_b.unwrap_or(""))?;
+    b_table.set("speed_sq", speed_sq_b)?;
     if let Some((x, y)) = pos_b {
         let pos_table = lua.create_table()?;
         pos_table.set("x", x)?;

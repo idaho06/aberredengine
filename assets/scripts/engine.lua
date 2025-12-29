@@ -575,6 +575,12 @@ function engine.entity_freeze(entity_id) end
 ---@param entity_id integer Entity ID
 function engine.entity_unfreeze(entity_id) end
 
+---Set entity speed while maintaining velocity direction
+---Prints warning if velocity is zero (no-op in that case)
+---@param entity_id integer Entity ID
+---@param speed number New speed magnitude
+function engine.entity_set_speed(entity_id, speed) end
+
 ---Set entity flag signal
 ---@param entity_id integer Entity ID
 ---@param key string Signal key
@@ -857,6 +863,12 @@ function engine.collision_entity_add_force(entity_id, name, x, y, enabled) end
 ---@param name string Force identifier
 ---@param enabled boolean Enable flag
 function engine.collision_entity_set_force_enabled(entity_id, name, enabled) end
+
+---Set entity speed while maintaining velocity direction during collision handling
+---Prints warning if velocity is zero (no-op in that case)
+---@param entity_id integer Entity ID
+---@param speed number New speed magnitude
+function engine.collision_entity_set_speed(entity_id, speed) end
 
 ---Insert a Timer component on an entity (collision-scoped)
 ---@param entity_id integer Entity ID
