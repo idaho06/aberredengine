@@ -130,6 +130,28 @@ function EntityBuilder:with_zindex(z) end
 ---@return EntityBuilder
 function EntityBuilder:with_velocity(vx, vy) end
 
+---Set RigidBody friction (velocity damping)
+---@param friction number Friction value (0.0 = no friction)
+---@return EntityBuilder
+function EntityBuilder:with_friction(friction) end
+
+---Set RigidBody max speed clamp
+---@param speed number Maximum speed
+---@return EntityBuilder
+function EntityBuilder:with_max_speed(speed) end
+
+---Add a named acceleration force to the RigidBody
+---@param name string Force identifier
+---@param x number X component
+---@param y number Y component
+---@param enabled boolean Whether the force is active
+---@return EntityBuilder
+function EntityBuilder:with_accel(name, x, y, enabled) end
+
+---Mark the entity's RigidBody as frozen (physics skipped)
+---@return EntityBuilder
+function EntityBuilder:with_frozen() end
+
 ---Set entity's box collider
 ---@param width number Collider width
 ---@param height number Collider height
@@ -509,6 +531,50 @@ function engine.entity_signal_set_scalar(entity_id, key, value) end
 ---@param value string Signal value
 function engine.entity_signal_set_string(entity_id, key, value) end
 
+---Add or update a named acceleration force on an entity's RigidBody
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+---@param x number Force X component
+---@param y number Force Y component
+---@param enabled boolean Whether the force is active
+function engine.entity_add_force(entity_id, name, x, y, enabled) end
+
+---Remove a named force from an entity's RigidBody
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+function engine.entity_remove_force(entity_id, name) end
+
+---Enable or disable a named force on an entity's RigidBody
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+---@param enabled boolean Enable flag
+function engine.entity_set_force_enabled(entity_id, name, enabled) end
+
+---Update a named force value on an entity's RigidBody
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+---@param x number Force X component
+---@param y number Force Y component
+function engine.entity_set_force_value(entity_id, name, x, y) end
+
+---Set RigidBody friction (velocity damping)
+---@param entity_id integer Entity ID
+---@param friction number Friction value (0.0 = no friction)
+function engine.entity_set_friction(entity_id, friction) end
+
+---Set RigidBody max speed clamp (pass nil to remove limit)
+---@param entity_id integer Entity ID
+---@param max_speed number|nil Maximum speed or nil to remove clamp
+function engine.entity_set_max_speed(entity_id, max_speed) end
+
+---Freeze entity (skip physics calculations)
+---@param entity_id integer Entity ID
+function engine.entity_freeze(entity_id) end
+
+---Unfreeze entity (resume physics calculations)
+---@param entity_id integer Entity ID
+function engine.entity_unfreeze(entity_id) end
+
 ---Set entity flag signal
 ---@param entity_id integer Entity ID
 ---@param key string Signal key
@@ -670,6 +736,28 @@ function CollisionEntityBuilder:with_zindex(z) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_velocity(vx, vy) end
 
+---Set RigidBody friction (velocity damping) for collision-spawned entity
+---@param friction number Friction value (0.0 = no friction)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_friction(friction) end
+
+---Set RigidBody max speed clamp for collision-spawned entity
+---@param speed number Maximum speed
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_max_speed(speed) end
+
+---Add a named acceleration force to the RigidBody for collision-spawned entity
+---@param name string Force identifier
+---@param x number X component
+---@param y number Y component
+---@param enabled boolean Whether the force is active
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_accel(name, x, y, enabled) end
+
+---Mark the collision-spawned entity's RigidBody as frozen (physics skipped)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_frozen() end
+
 ---Set entity's box collider
 ---@param width number Collider width
 ---@param height number Collider height
@@ -747,6 +835,28 @@ function engine.collision_phase_transition(entity_id, phase) end
 ---@param rotation number Camera rotation
 ---@param zoom number Camera zoom
 function engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom) end
+
+---Freeze an entity during collision handling (collision-scoped)
+---@param entity_id integer Entity ID
+function engine.collision_entity_freeze(entity_id) end
+
+---Unfreeze an entity during collision handling (collision-scoped)
+---@param entity_id integer Entity ID
+function engine.collision_entity_unfreeze(entity_id) end
+
+---Add or update a named force on an entity during collision handling
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+---@param x number Force X component
+---@param y number Force Y component
+---@param enabled boolean Whether the force is active
+function engine.collision_entity_add_force(entity_id, name, x, y, enabled) end
+
+---Enable or disable a named force during collision handling
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+---@param enabled boolean Enable flag
+function engine.collision_entity_set_force_enabled(entity_id, name, enabled) end
 
 ---Insert a Timer component on an entity (collision-scoped)
 ---@param entity_id integer Entity ID
