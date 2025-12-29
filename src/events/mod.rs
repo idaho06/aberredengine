@@ -13,6 +13,7 @@
 //! - [`menu`] – menu selection events
 //! - [`phase`] – phase transition events for state machine components
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off
+//! - [`switchfullscreen`] – toggle fullscreen mode on/off
 //! - [`timer`] – timer expiration events
 //!
 //! See each submodule for concrete event data, semantics, and example usage.
@@ -25,4 +26,5 @@ pub mod luatimer;
 pub mod menu;
 pub mod phase;
 pub mod switchdebug;
+pub mod switchfullscreen;
 pub mod timer;

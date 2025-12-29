@@ -70,7 +70,8 @@ src/
 ├── resources/
 │   ├── mod.rs                 # Re-exports
 │   ├── worldtime.rs           # Delta time, time scale
-│   ├── input.rs               # InputState cached keyboard
+│   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
+│   ├── fullscreen.rs          # FullScreen marker resource
 │   ├── texturestore.rs        # FxHashMap<String, Texture2D>
 │   ├── fontstore.rs           # FxHashMap<String, Font> (non-send)
 │   ├── animationstore.rs      # Animation definitions
@@ -100,7 +101,8 @@ src/
     ├── phase.rs               # PhaseTransition
     ├── timer.rs               # TimerEvent
     ├── luatimer.rs            # LuaTimerEvent
-    ├── switchdebug.rs         # DebugToggle
+    ├── switchdebug.rs         # DebugToggle (F11)
+    ├── switchfullscreen.rs    # FullScreen toggle event + observer (F10)
     └── audio.rs               # AudioCmd, AudioMessage
 
 assets/scripts/
@@ -145,8 +147,8 @@ MouseControlled { follow_x: bool, follow_y: bool }
 ## RESOURCE QUICK-REF
 
 WorldTime { delta: f32, scale: f32 }
-InputState { action_back: ActionState, action_1: ActionState, ... }
-ActionState { active: bool, just_pressed: bool }
+InputState { action_back, action_1, mode_debug, fullscreen_toggle, action_special, ...: BoolState }
+BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
 TextureStore(FxHashMap<String, Texture2D>)
 FontStore(FxHashMap<String, Font>) - NON_SEND
 AnimationStore(FxHashMap<String, AnimationDef>)
@@ -162,6 +164,7 @@ WindowSize { w: i32, h: i32 } - actual window dimensions
 RenderTarget { texture: RenderTexture2D, game_width, game_height, filter: RenderFilter } - NON_SEND
 RenderFilter { Nearest, Bilinear }
 DebugMode (marker)
+FullScreen (marker) - presence indicates fullscreen mode
 SystemsStore(FxHashMap<String, SystemFn>)
 LuaRuntime { lua: Lua, ... } - NON_SEND
 AudioBridge { sender, receiver }

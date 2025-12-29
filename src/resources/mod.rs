@@ -11,6 +11,7 @@
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`fontstore`] – loaded fonts keyed by string IDs
+//! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
 //! - [`group`] – set of group names tracked for entity counting
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
@@ -28,6 +29,7 @@ pub mod audio;
 pub mod camera2d;
 pub mod debugmode;
 pub mod fontstore;
+pub mod fullscreen;
 pub mod gamestate;
 pub mod group;
 pub mod input;

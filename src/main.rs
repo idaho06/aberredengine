@@ -46,6 +46,7 @@ use crate::components::persistent::Persistent;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::switch_debug_observer;
+use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
@@ -182,6 +183,7 @@ fn main() {
 
     world.add_observer(collision_observer);
     world.add_observer(switch_debug_observer);
+    world.add_observer(switch_fullscreen_observer);
     world.add_observer(menu_controller_observer);
     world.add_observer(menu_selection_observer);
     world.add_observer(lua_timer_observer);
