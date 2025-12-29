@@ -9,6 +9,8 @@ use crate::resources::fullscreen::FullScreen;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use raylib::ffi;
+use crate::GAME_WIDTH;
+use crate::GAME_HEIGHT;
 
 /// Event triggered to toggle fullscreen mode.
 ///
@@ -39,7 +41,10 @@ pub fn switch_fullscreen_observer(
         if rl.is_window_fullscreen() {
             #[cfg(target_os = "windows")]
             {
-                rl.toggle_borderless_windowed();
+                //rl.toggle_borderless_windowed();
+                //rl.restore_window();
+                rl.toggle_fullscreen();
+                rl.set_window_size(GAME_WIDTH as i32, GAME_HEIGHT as i32);
                 rl.restore_window();
             }
             #[cfg(not(target_os = "windows"))]
@@ -60,20 +65,24 @@ pub fn switch_fullscreen_observer(
 
         if !rl.is_window_fullscreen() {
             // get monitor dimensions
-            let monitor: i32 = unsafe { ffi::GetCurrentMonitor() };
-            let monitor_width = unsafe { ffi::GetMonitorWidth(monitor) };
-            let monitor_height = unsafe { ffi::GetMonitorHeight(monitor) };
+            //#[cfg(not(target_os = "windows"))]
+            {
+                //rl.set_window_position(0, 0);
+                rl.maximize_window();
+                let monitor: i32 = unsafe { ffi::GetCurrentMonitor() };
+                let monitor_width = unsafe { ffi::GetMonitorWidth(monitor) };
+                let monitor_height = unsafe { ffi::GetMonitorHeight(monitor) };
+                eprintln!("Monitor dimensions: {}x{}", monitor_width, monitor_height);
+                // resize window to monitor dimensions
+                rl.set_window_size(monitor_width, monitor_height);
+            }
 
-            eprintln!("Monitor dimensions: {}x{}", monitor_width, monitor_height);
-
-            // resize window to monitor dimensions
-            rl.set_window_size(monitor_width, monitor_height);
 
             #[cfg(target_os = "windows")]
             {
-                rl.toggle_borderless_windowed();
-                rl.set_window_position(0, 0);
-                rl.maximize_window();
+                //rl.toggle_borderless_windowed();
+                //rl.maximize_window();
+                rl.toggle_fullscreen();
             }
             #[cfg(not(target_os = "windows"))]
             {
