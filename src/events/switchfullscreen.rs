@@ -37,8 +37,16 @@ pub fn switch_fullscreen_observer(
         commands.remove_resource::<FullScreen>();
 
         if rl.is_window_fullscreen() {
-            rl.toggle_fullscreen();
-            rl.restore_window();
+            #[cfg(target_os = "windows")]
+            {
+                rl.toggle_borderless_windowed();
+                rl.restore_window();
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                rl.toggle_fullscreen();
+                rl.restore_window();
+            }
 
             if !rl.is_window_fullscreen() {
                 eprintln!("Full screen disabled");
@@ -61,8 +69,17 @@ pub fn switch_fullscreen_observer(
             // resize window to monitor dimensions
             rl.set_window_size(monitor_width, monitor_height);
 
-            rl.maximize_window();
-            rl.toggle_fullscreen();
+            #[cfg(target_os = "windows")]
+            {
+                rl.toggle_borderless_windowed();
+                rl.set_window_position(0, 0);
+                rl.maximize_window();
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                rl.maximize_window();
+                rl.toggle_fullscreen();
+            }
 
             if rl.is_window_fullscreen() {
                 eprintln!("Full screen enabled");
