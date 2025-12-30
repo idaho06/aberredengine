@@ -9,6 +9,7 @@ use raylib::ffi::KeyboardKey;
 
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
+use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::resources::input::InputState;
 
 /// Poll Raylib for keyboard input and update the `InputState` resource.
@@ -42,6 +43,9 @@ pub fn update_input_state(
     // Emit input events for actions that were just pressed or released
     if is_key_pressed(input.mode_debug.key_binding) {
         commands.trigger(SwitchDebugEvent {});
+    }
+    if is_key_pressed(input.fullscreen_toggle.key_binding) {
+        commands.trigger(SwitchFullScreenEvent {});
     }
 
     if is_key_pressed(input.action_special.key_binding) {

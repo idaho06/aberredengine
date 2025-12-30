@@ -40,6 +40,7 @@ pub struct InputState {
     pub action_1: BoolState,
     pub action_2: BoolState,
     pub mode_debug: BoolState,
+    pub fullscreen_toggle: BoolState,
     pub action_special: BoolState,
 }
 
@@ -130,6 +131,12 @@ impl Default for InputState {
                 just_pressed: false,
                 just_released: false,
                 key_binding: KeyboardKey::KEY_F11,
+            },
+            fullscreen_toggle: BoolState {
+                active: false,
+                just_pressed: false,
+                just_released: false,
+                key_binding: KeyboardKey::KEY_F10,
             },
             action_special: BoolState {
                 active: false,
