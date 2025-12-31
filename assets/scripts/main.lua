@@ -35,7 +35,7 @@ end
 
 -- Game configuration table
 game = {
-    title = "Arkanoid Clone",
+    title = "Asteroids Clone",
     version = "0.1.0",
     author = "Idaho",
 }

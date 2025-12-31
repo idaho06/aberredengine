@@ -95,14 +95,14 @@ use bevy_ecs::prelude::*;
 //use raylib::prelude::*;
 
 // Game resolution (fixed internal render size)
-const GAME_WIDTH: u32 = 224 * 3;
-const GAME_HEIGHT: u32 = 256 * 3;
+const GAME_WIDTH: u32 = 480;
+const GAME_HEIGHT: u32 = 270;
 
 fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
     let (mut rl, thread) = raylib::init()
-        .size(GAME_WIDTH as i32, GAME_HEIGHT as i32)
+        .size((GAME_WIDTH * 3u32) as i32, (GAME_HEIGHT * 3u32) as i32)
         .resizable()
         .title("Aberred Engine - Arkanoid")
         .vsync()
