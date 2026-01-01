@@ -4,8 +4,8 @@
 
 local M = {}
 
-local ball_bounces = 0
-local player_hits = 0
+-- local ball_bounces = 0
+-- local player_hits = 0
 
 -- ==================== COLLISION CALLBACK FUNCTIONS ====================
 -- These are called when collisions occur between entities with matching groups.
@@ -15,236 +15,6 @@ local player_hits = 0
 --   sides = { a = {"left","top",...}, b = {...} }
 -- }
 
---- Player-Walls collision: Clamp player X position
-function on_player_walls(ctx)
-    -- Player is 'a' (alphabetically first), wall is 'b'
-    local player_x = ctx.a.pos.x
-    -- Clamp to playable area (72 to 600)
-    local clamped_x = math.max(72, math.min(600, player_x))
-    if clamped_x ~= player_x then
-        engine.entity_set_position(ctx.a.id, clamped_x, ctx.a.pos.y)
-    end
-end
-
---- Ball-Walls collision: Bounce ball off walls
-function on_ball_walls(ctx)
-    -- Ball is 'a', wall is 'b'
-    local ball_id = ctx.a.id
-    local ball_pos = ctx.a.pos
-    local ball_vel = ctx.a.vel
-    local ball_rect = ctx.a.rect
-    local wall_pos = ctx.b.pos
-
-    local new_vx = ball_vel.x
-    local new_vy = ball_vel.y
-    local new_x = ball_pos.x
-    local new_y = ball_pos.y
-
-    -- Determine wall type based on relative position
-    -- Wall positions: lateral walls at bottom left/right, top wall at center top
-    if wall_pos.y < ball_pos.y then
-        -- Collision with top wall: bounce down
-        new_vy = math.abs(ball_vel.y)
-        -- Fix position to be just below the wall
-        -- Get wall collider height from rect
-        local wall_height = ctx.b.rect and ctx.b.rect.h or 24
-        new_y = wall_pos.y + wall_height + (ball_rect.h * 0.5)
-    else
-        -- Collision with lateral wall
-        local wall_width = ctx.b.rect and ctx.b.rect.w or 24
-        if ball_pos.x < wall_pos.x then
-            -- Ball is left of wall position -> right wall collision
-            new_vx = -math.abs(ball_vel.x)
-            new_x = wall_pos.x - wall_width - (ball_rect.w * 0.5)
-        else
-            -- Ball is right of wall position -> left wall collision
-            new_vx = math.abs(ball_vel.x)
-            new_x = wall_pos.x + wall_width + (ball_rect.w * 0.5)
-        end
-    end
-
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
-    engine.entity_set_position(ball_id, new_x, new_y)
-
-    -- Increment bounce counter
-    ball_bounces = ball_bounces + 1
-end
-
---- Ball-Player collision: Reflect ball based on hit position, handle sticky
-function on_ball_player(ctx)
-    -- Ball is 'a', player is 'b'
-    local ball_id = ctx.a.id
-    local ball_pos = ctx.a.pos
-    local ball_vel = ctx.a.vel
-    local ball_rect = ctx.a.rect
-    local player_id = ctx.b.id
-    local player_pos = ctx.b.pos
-    local player_rect = ctx.b.rect
-    local player_signals = ctx.b.signals
-
-    -- Calculate reflection angle based on hit position
-    local hit_pos = ball_pos.x - player_pos.x
-    local paddle_half_width = 48.0                        -- 96 / 2
-    local relative_hit_pos = hit_pos / paddle_half_width
-    local bounce_angle = relative_hit_pos * (math.pi / 3) -- Max 60 degrees
-    local speed = math.sqrt(ball_vel.x * ball_vel.x + ball_vel.y * ball_vel.y)
-
-    local new_vx = speed * math.sin(bounce_angle)
-    local new_vy = -speed * math.cos(bounce_angle)
-    local new_y = player_pos.y - player_rect.h - (ball_rect.h * 0.5)
-
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
-    engine.entity_set_position(ball_id, ball_pos.x, new_y)
-
-    -- Check for sticky powerup
-    local is_sticky = false
-    if player_signals and player_signals.flags then
-        for _, flag in ipairs(player_signals.flags) do
-            if flag == "sticky" then
-                is_sticky = true
-                break
-            end
-        end
-    end
-
-    if is_sticky then
-        -- Store ball data in world signals for the ball's phase to use
-        local offset_x = ball_pos.x - player_pos.x
-        engine.set_scalar("ball_stick_offset_x", offset_x)
-        engine.set_scalar("ball_stick_vx", new_vx)
-        engine.set_scalar("ball_stick_vy", new_vy)
-
-        -- Transition ball to stuck_to_player phase (ball's phase will handle StuckTo)
-        engine.phase_transition(ball_id, "stuck_to_player")
-    end
-
-    -- Transition player to "hit" phase (handles animation flag)
-    engine.phase_transition(player_id, "hit")
-
-    -- Play ping sound
-    engine.collision_play_sound("ping")
-
-    -- Increment player hit counter
-    player_hits = player_hits + 1
-
-    -- Increment ball bounce counter
-    ball_bounces = ball_bounces + 1
-end
-
---- Ball-Brick collision: Bounce, decrement HP, update score, despawn if dead
-function on_ball_brick(ctx)
-    -- Ball is 'a', brick is 'b'
-    local ball_id = ctx.a.id
-    local ball_rect = ctx.a.rect
-    local ball_vel = ctx.a.vel
-    local ball_pos = ctx.a.pos
-    local brick_id = ctx.b.id
-    local brick_rect = ctx.b.rect
-    local brick_signals = ctx.b.signals
-
-    -- Bounce ball based on colliding sides of the brick
-    local new_vx = ball_vel.x
-    local new_vy = ball_vel.y
-    local new_x = ball_pos.x
-    local new_y = ball_pos.y
-
-    for _, side in ipairs(ctx.sides.b) do
-        if side == "top" then
-            new_vy = -math.abs(ball_vel.y)
-            new_y = brick_rect.y - (ball_rect.h * 0.5)
-        elseif side == "bottom" then
-            new_vy = math.abs(ball_vel.y)
-            new_y = brick_rect.y + brick_rect.h + (ball_rect.h * 0.5)
-        elseif side == "left" then
-            new_vx = -math.abs(ball_vel.x)
-            new_x = brick_rect.x - (ball_rect.w * 0.5)
-        elseif side == "right" then
-            new_vx = math.abs(ball_vel.x)
-            new_x = brick_rect.x + brick_rect.w + (ball_rect.w * 0.5)
-        end
-    end
-
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
-    engine.entity_set_position(ball_id, new_x, new_y)
-
-    -- Handle brick HP and score
-    local hp = 1
-    local points = 0
-    if brick_signals and brick_signals.integers then
-        hp = brick_signals.integers.hp or 1
-        points = brick_signals.integers.points or 0
-    end
-
-    if hp > 1 then
-        -- Just decrement HP
-        engine.entity_signal_set_integer(brick_id, "hp", hp - 1)
-    else
-        -- Brick destroyed
-        if points > 0 then
-            local current_score = engine.get_integer("score") or 0
-            engine.collision_set_integer("score", current_score + points)
-
-            -- Update high score if necessary
-            local high_score = engine.get_integer("high_score") or 0
-            if current_score + points > high_score then
-                engine.collision_set_integer("high_score", current_score + points)
-            end
-        end
-        -- Despawn brick
-        engine.entity_despawn(brick_id)
-    end
-
-    -- Play ding sound
-    engine.collision_play_sound("ding")
-
-    -- Increment ball bounce counter
-    ball_bounces = ball_bounces + 1
-end
-
---- Ball-OOB collision: Despawn ball when fully inside OOB zone
-function on_ball_oob(ctx)
-    -- Ball is 'a', oob_wall is 'b'
-    -- If all 4 sides of ball are colliding (ball fully inside oob), despawn it
-    local ball_sides = ctx.sides.a
-    if ball_sides and #ball_sides == 4 then
-        engine.entity_despawn(ctx.a.id)
-    end
-end
-
---- Spawn the collision rule entities for level01
-local function spawn_collision_rules()
-    -- Player-Walls collision rule
-    engine.spawn()
-        :with_group("collision_rules")
-        :with_lua_collision_rule("player", "walls", "on_player_walls")
-        :build()
-
-    -- Ball-Walls collision rule
-    engine.spawn()
-        :with_group("collision_rules")
-        :with_lua_collision_rule("ball", "walls", "on_ball_walls")
-        :build()
-
-    -- Ball-Player collision rule
-    engine.spawn()
-        :with_group("collision_rules")
-        :with_lua_collision_rule("ball", "player", "on_ball_player")
-        :build()
-
-    -- Ball-Brick collision rule
-    engine.spawn()
-        :with_group("collision_rules")
-        :with_lua_collision_rule("ball", "brick", "on_ball_brick")
-        :build()
-
-    -- Ball-OOB collision rule
-    engine.spawn()
-        :with_group("collision_rules")
-        :with_lua_collision_rule("ball", "oob_wall", "on_ball_oob")
-        :build()
-
-    engine.log_info("Collision rules spawned!")
-end
 
 -- ==================== PHASE CALLBACK FUNCTIONS ====================
 -- These are named functions called directly by the engine based on
@@ -262,7 +32,7 @@ end
 function scene_get_started_enter(entity_id, previous_phase)
     engine.log_info("Entering get_started phase - spawning ball")
 
-    -- Play "player_ready" music (no loop)
+    --[[     -- Play "player_ready" music (no loop)
     engine.play_music("player_ready", false)
 
     -- Get player entity ID for StuckTo
@@ -306,13 +76,13 @@ function scene_get_started_enter(entity_id, previous_phase)
         })
         :build()
 
-    engine.log_info("Ball spawned with StuckTo!")
+    engine.log_info("Ball spawned with StuckTo!") ]]
 end
 
 --- Called each frame in "get_started" phase
 function scene_get_started_update(entity_id, time_in_phase)
     -- Transition to playing after setup
-    engine.phase_transition(entity_id, "playing")
+    -- engine.phase_transition(entity_id, "playing")
 end
 
 -- ==================== BALL PHASE CALLBACKS ====================
@@ -320,7 +90,7 @@ end
 --- Called when ball enters "stuck_to_player" phase
 --- Attach ball to player with stored velocity
 function ball_stuck_enter(entity_id, previous_phase)
-    engine.log_info("Ball stuck to player - attaching... ball_id=" ..
+    --[[     engine.log_info("Ball stuck to player - attaching... ball_id=" ..
         tostring(entity_id) .. " prev=" .. tostring(previous_phase))
 
     -- Get player entity
@@ -343,24 +113,24 @@ function ball_stuck_enter(entity_id, previous_phase)
     engine.entity_set_velocity(entity_id, 0, 0)
     engine.entity_insert_stuckto(entity_id, player_id, true, false, offset_x, 0, vx, vy)
 
-    engine.log_info("Ball attached to player with StuckTo!")
+    engine.log_info("Ball attached to player with StuckTo!") ]]
 end
 
 --- Called each frame while ball is stuck to player
 --- After 2 seconds, release the ball
 function ball_stuck_update(entity_id, time_in_phase)
-    if time_in_phase >= 2.0 then
+    --[[     if time_in_phase >= 2.0 then
         engine.log_info("Releasing ball!")
         engine.phase_transition(entity_id, "moving")
-    end
+    end ]]
 end
 
 --- Called when ball enters "moving" phase (released from paddle)
 --- Remove StuckTo component and restore stored velocity to RigidBody
 function ball_moving_enter(entity_id, previous_phase)
-    engine.log_info("Ball released and moving!")
+    --[[     engine.log_info("Ball released and moving!")
     -- Release from StuckTo - this removes the component and adds RigidBody with stored velocity
-    engine.release_stuckto(entity_id)
+    engine.release_stuckto(entity_id) ]]
 end
 
 -- ==================== PLAYER PHASE CALLBACKS ====================
@@ -368,41 +138,41 @@ end
 --- Called when player enters "sticky" phase
 --- Set the "sticky" flag so ball sticks on collision, and play glowing animation
 function player_sticky_enter(entity_id, previous_phase)
-    engine.log_info("Player entering sticky phase")
+    --[[     engine.log_info("Player entering sticky phase")
     engine.entity_signal_set_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing")
+    engine.entity_set_animation(entity_id, "vaus_glowing") ]]
 end
 
 --- Called each frame while player is in "sticky" phase
 --- After 3 seconds, transition to "glowing" phase
 function player_sticky_update(entity_id, time_in_phase)
-    if time_in_phase >= 3.0 then
+    --[[     if time_in_phase >= 3.0 then
         engine.log_info("Sticky powerup expired!")
         engine.phase_transition(entity_id, "glowing")
-    end
+    end ]]
 end
 
 --- Called when player enters "glowing" phase
 --- Clear the "sticky" flag and play glowing animation
 function player_glowing_enter(entity_id, previous_phase)
-    engine.log_info("Player entering glowing phase")
+    --[[     engine.log_info("Player entering glowing phase")
     engine.entity_signal_clear_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing")
+    engine.entity_set_animation(entity_id, "vaus_glowing") ]]
 end
 
 --- Called when player enters "hit" phase
 --- Play the hit animation from frame 0
 function player_hit_enter(entity_id, previous_phase)
-    engine.log_info("Player entering hit phase")
-    engine.entity_set_animation(entity_id, "vaus_hit")
+    --[[     engine.log_info("Player entering hit phase")
+    engine.entity_set_animation(entity_id, "vaus_hit") ]]
 end
 
 --- Called each frame while player is in "hit" phase
 --- After 0.5 seconds, transition back to "glowing" phase
 function player_hit_update(entity_id, time_in_phase)
-    if time_in_phase >= 0.5 then
+    --[[     if time_in_phase >= 0.5 then
         engine.phase_transition(entity_id, "glowing")
-    end
+    end ]]
 end
 
 -- ==================== SCENE GAME STATE CALLBACKS ====================
@@ -411,7 +181,7 @@ end
 --- - Check for level cleared (no bricks)
 --- - Check for ball lost (no balls)
 function scene_playing_update(entity_id, time_in_phase)
-    -- Skip first few frames to let group counts update
+    --[[     -- Skip first few frames to let group counts update
     if time_in_phase < 0.1 then
         return
     end
@@ -430,14 +200,14 @@ function scene_playing_update(entity_id, time_in_phase)
         engine.log_info("No balls remaining - lose life!")
         engine.phase_transition(entity_id, "lose_life")
         return
-    end
+    end ]]
 end
 
 --- Called each frame in "lose_life" phase
 --- - Decrement lives
 --- - Transition to game_over or get_started
 function scene_lose_life_update(entity_id, time_in_phase)
-    local lives = engine.get_integer("lives") or 0
+    --[[     local lives = engine.get_integer("lives") or 0
     lives = lives - 1
     engine.set_integer("lives", lives)
     engine.log_info(string.format("Lost a life! Remaining lives: %d", lives))
@@ -446,13 +216,13 @@ function scene_lose_life_update(entity_id, time_in_phase)
         engine.phase_transition(entity_id, "game_over")
     else
         engine.phase_transition(entity_id, "get_started")
-    end
+    end ]]
 end
 
 --- Called when entering "game_over" phase
 --- - Spawn "GAME OVER" text
 function scene_game_over_enter(entity_id, previous_phase)
-    engine.log_info("Game Over!")
+    --[[     engine.log_info("Game Over!")
 
     -- Spawn game over text
     engine.spawn()
@@ -460,13 +230,13 @@ function scene_game_over_enter(entity_id, previous_phase)
         :with_screen_position(200, 350)
         :with_text("GAME OVER", "future", 48, 255, 0, 0, 255) -- Red
         :with_zindex(100)
-        :build()
+        :build() ]]
 end
 
 --- Called each frame in "game_over" phase
 --- - After 3 seconds, switch to menu scene
 function scene_game_over_update(entity_id, time_in_phase)
-    if time_in_phase >= 3.0 then
+    --[[     if time_in_phase >= 3.0 then
         engine.log_info("Game over - returning to menu")
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
@@ -474,14 +244,14 @@ function scene_game_over_update(entity_id, time_in_phase)
         -- show bounces and hits in log
         engine.log_info(string.format("Total ball bounces: %d", ball_bounces))
         engine.log_info(string.format("Total player hits: %d", player_hits))
-    end
+    end ]]
 end
 
 --- Called when entering "level_cleared" phase
 --- - Play success music
 --- - Spawn "LEVEL CLEARED" text
 function scene_level_cleared_enter(entity_id, previous_phase)
-    engine.log_info("Level Cleared!")
+    --[[     engine.log_info("Level Cleared!")
 
     -- Play success music
     engine.play_music("success", false)
@@ -492,13 +262,13 @@ function scene_level_cleared_enter(entity_id, previous_phase)
         :with_screen_position(150, 350)
         :with_text("LEVEL CLEARED", "future", 48, 0, 255, 0, 255) -- Green
         :with_zindex(100)
-        :build()
+        :build() ]]
 end
 
 --- Called each frame in "level_cleared" phase
 --- - After 4 seconds, switch to menu scene
 function scene_level_cleared_update(entity_id, time_in_phase)
-    if time_in_phase >= 4.0 then
+    --[[     if time_in_phase >= 4.0 then
         engine.log_info("Level cleared - returning to menu")
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
@@ -506,18 +276,18 @@ function scene_level_cleared_update(entity_id, time_in_phase)
         -- show bounces and hits in log
         engine.log_info(string.format("Total ball bounces: %d", ball_bounces))
         engine.log_info(string.format("Total player hits: %d", player_hits))
-    end
+    end ]]
 end
 
 -- ==================== ENTITY SPAWNING ====================
 
 -- Level constants (matching tilemap info)
-local TILE_SIZE = 24
+--[[ local TILE_SIZE = 24
 local MAP_WIDTH = 28
 local MAP_HEIGHT = 32
-
+ ]]
 --- Spawn the invisible wall colliders for the level
-local function spawn_walls()
+--[[ local function spawn_walls()
     -- Left wall - position at left bottom, origin at bottom
     engine.spawn()
         :with_group("walls")
@@ -567,10 +337,10 @@ local function spawn_walls()
         :build()
 
     engine.log_info("Walls spawned!")
-end
+end ]]
 
 --- Spawn the player paddle (Vaus)
-local function spawn_player()
+--[[ local function spawn_player()
     -- Calculate player Y position: near bottom of play area
     local player_y = (TILE_SIZE * MAP_HEIGHT) - 36.0
 
@@ -608,10 +378,10 @@ local function spawn_player()
         :build()
 
     engine.log_info("Player paddle spawned!")
-end
+end ]]
 
 --- Spawn the UI score texts
-local function spawn_ui_texts()
+--[[ local function spawn_ui_texts()
     -- Score header text "1UP   HIGH SCORE"
     engine.spawn()
         :with_group("ui")
@@ -639,10 +409,10 @@ local function spawn_ui_texts()
         :build()
 
     engine.log_info("UI texts spawned!")
-end
+end ]]
 
 --- Spawn the bricks grid layout
-local function spawn_bricks()
+--[[ local function spawn_bricks()
     -- Spawn an entity with GridLayout component
     -- The gridlayout_spawn_system will process the JSON and spawn brick entities
     engine.spawn()
@@ -652,14 +422,14 @@ local function spawn_bricks()
     engine.log_info("Bricks grid layout spawned!")
 
     -- TODO: Create a system to load json files and spawn entities from lua directly
-end
+end ]]
 
 --- Spawn all entities for level 01.
 --- This is called when entering the scene (before phase system starts)
 function M.spawn()
     engine.log_info("Spawning level01 scene entities from Lua...")
 
-    -- reset ball bounce and player hit counters
+    --[[     -- reset ball bounce and player hit counters
     ball_bounces = 0
     player_hits = 0
 
@@ -731,7 +501,7 @@ function M.spawn()
             }
         })
         :build()
-
+ ]]
     engine.log_info("Scene phase entity spawned with LuaPhase")
     engine.log_info("Level01 scene entities queued!")
 end
