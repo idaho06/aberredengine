@@ -96,35 +96,31 @@ use bevy_ecs::prelude::*;
 //use raylib::collision;
 //use raylib::prelude::*;
 
-// Default safe values for initial window creation.
-// Actual values will be loaded from config.ini by GameConfig.
-const DEFAULT_RENDER_WIDTH: u32 = 640;
-const DEFAULT_RENDER_HEIGHT: u32 = 360;
-const DEFAULT_WINDOW_WIDTH: u32 = 1280;
-const DEFAULT_WINDOW_HEIGHT: u32 = 720;
-
 fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
-    // Initial window uses safe defaults; actual config loaded by apply_gameconfig_changes system
+    // GameConfig - will load from config.ini on first frame via apply_gameconfig_changes
+    let mut config = GameConfig::new();
+    config.load_from_file().ok(); // ignore errors, use defaults
+
+    let window_width = config.window_width;
+    let window_height = config.window_height;
+
     let (mut rl, thread) = raylib::init()
-        .size(DEFAULT_WINDOW_WIDTH as i32, DEFAULT_WINDOW_HEIGHT as i32)
+        .size(window_width as i32, window_height as i32)
         .resizable()
-        .title("Aberred Engine - Arkanoid")
+        .title("Aberred Engine")
         .build();
     rl.set_target_fps(120);
     // Disable ESC to exit
     rl.set_exit_key(None);
 
     // --------------- Render target for fixed-resolution rendering ---------------
-    // Initial render target uses safe defaults; recreated by apply_gameconfig_changes if needed
-    let render_target = RenderTarget::new(
-        &mut rl,
-        &thread,
-        DEFAULT_RENDER_WIDTH,
-        DEFAULT_RENDER_HEIGHT,
-    )
-    .expect("Failed to create render target");
+    let render_width = config.render_width;
+    let render_height = config.render_height;
+
+    let render_target = RenderTarget::new(&mut rl, &thread, render_width, render_height)
+        .expect("Failed to create render target");
     //render_target.set_filter(RenderFilter::Nearest);
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
@@ -133,8 +129,8 @@ fn main() {
     world.insert_resource(TrackedGroups::default());
     // ScreenSize is the game's internal render resolution (updated by apply_gameconfig_changes)
     world.insert_resource(ScreenSize {
-        w: DEFAULT_RENDER_WIDTH as i32,
-        h: DEFAULT_RENDER_HEIGHT as i32,
+        w: render_width as i32,
+        h: render_height as i32,
     });
     // WindowSize is the actual window dimensions (updated each frame)
     world.insert_resource(WindowSize {
@@ -142,9 +138,6 @@ fn main() {
         h: rl.get_screen_height(),
     });
 
-    // GameConfig - will load from config.ini on first frame via apply_gameconfig_changes
-    let mut config = GameConfig::new();
-    config.load_from_file().ok(); // ignore errors, use defaults
     world.insert_resource(config);
     world.insert_resource(InputState::default());
     world.insert_non_send_resource(render_target);
