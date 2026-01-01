@@ -1,14 +1,15 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2025-12-29 (synced with codebase)
+# Last updated: 2026-01-01 (synced with codebase)
 
 ## QUICK REFERENCE
 
-STACK: Rust + Bevy ECS 0.17 + Raylib 5.5 + MLua (LuaJIT)
+STACK: Rust + Bevy ECS 0.17 + Raylib 5.5 + MLua (LuaJIT) + configparser (INI)
 GAME_TYPE: Arkanoid-style breakout clone (2D)
 ENTRY: src/main.rs
 LUA_ENTRY: assets/scripts/main.lua
-WINDOW: 672x768 @ 120fps
+CONFIG: config.ini (INI format, loaded at startup)
+WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
 ## FILE TREE (ESSENTIAL)
 
@@ -66,12 +67,14 @@ src/
 │   ├── group.rs               # Group counting
 │   ├── menu.rs                # Menu spawn/input
 │   ├── audio.rs               # Audio thread bridge
+│   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps)
 │   └── gamestate.rs           # State transition check
 ├── resources/
 │   ├── mod.rs                 # Re-exports
 │   ├── worldtime.rs           # Delta time, time scale
 │   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
 │   ├── fullscreen.rs          # FullScreen marker resource
+│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen)
 │   ├── texturestore.rs        # FxHashMap<String, Texture2D>
 │   ├── fontstore.rs           # FxHashMap<String, Font> (non-send)
 │   ├── animationstore.rs      # Animation definitions
@@ -113,7 +116,28 @@ assets/scripts/
 └── scenes/
     ├── menu.lua               # Menu scene
     └── level01.lua            # Gameplay scene
+
+config.ini                     # Game configuration (INI format)
 ```
+
+## CONFIG.INI FORMAT
+
+```ini
+[render]
+width = 640                    ; Internal render width
+height = 360                   ; Internal render height
+
+[window]
+width = 1280                   ; Window width (currently ignored due to raylib issue)
+height = 720                   ; Window height (currently ignored due to raylib issue)
+target_fps = 120               ; Target frames per second
+vsync = true                   ; Enable vertical sync
+fullscreen = false             ; Start in fullscreen mode
+```
+
+The `apply_gameconfig_changes` system loads config.ini when GameConfig is added,
+then applies changes reactively when GameConfig is modified. Uses `is_added()`
+and `is_changed()` for change detection.
 
 ## COMPONENT QUICK-REF
 
@@ -146,6 +170,7 @@ MouseControlled { follow_x: bool, follow_y: bool }
 
 ## RESOURCE QUICK-REF
 
+GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, config_path }
 WorldTime { delta: f32, scale: f32 }
 InputState { action_back, action_1, mode_debug, fullscreen_toggle, action_special, ...: BoolState }
 BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
