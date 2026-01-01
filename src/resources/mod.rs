@@ -30,6 +30,7 @@ pub mod camera2d;
 pub mod debugmode;
 pub mod fontstore;
 pub mod fullscreen;
+pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
 pub mod input;

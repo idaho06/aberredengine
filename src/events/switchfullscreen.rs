@@ -6,11 +6,10 @@
 //! track the current state.
 
 use crate::resources::fullscreen::FullScreen;
+use crate::resources::gameconfig::GameConfig;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use raylib::ffi;
-use crate::GAME_WIDTH;
-use crate::GAME_HEIGHT;
 
 /// Event triggered to toggle fullscreen mode.
 ///
@@ -30,6 +29,7 @@ pub fn switch_fullscreen_observer(
     //th: NonSend<raylib::RaylibThread>,
     mut commands: Commands,
     fullscreen: Option<Res<FullScreen>>,
+    config: Res<GameConfig>,
 ) {
     // This observer is triggered when a SwitchFullScreenEvent is fired.
     // It toggles the FullScreen resource.
@@ -44,12 +44,15 @@ pub fn switch_fullscreen_observer(
                 //rl.toggle_borderless_windowed();
                 //rl.restore_window();
                 rl.toggle_fullscreen();
-                rl.set_window_size(GAME_WIDTH as i32, GAME_HEIGHT as i32);
+                let (w, h) = config.window_size();
+                rl.set_window_size(w as i32, h as i32);
                 rl.restore_window();
             }
             #[cfg(not(target_os = "windows"))]
             {
                 rl.toggle_fullscreen();
+                let (w, h) = config.window_size();
+                rl.set_window_size(w as i32, h as i32);
                 rl.restore_window();
             }
 
@@ -76,7 +79,6 @@ pub fn switch_fullscreen_observer(
                 // resize window to monitor dimensions
                 rl.set_window_size(monitor_width, monitor_height);
             }
-
 
             #[cfg(target_os = "windows")]
             {
