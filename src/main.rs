@@ -49,6 +49,7 @@ use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::fontstore::FontStore;
+use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
@@ -68,6 +69,7 @@ use crate::systems::audio::{
 use crate::systems::collision::collision_detector;
 use crate::systems::collision::collision_observer;
 use crate::systems::dynamictext_size::dynamictext_size_system;
+use crate::systems::gameconfig::apply_gameconfig_changes;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
@@ -94,42 +96,56 @@ use bevy_ecs::prelude::*;
 //use raylib::collision;
 //use raylib::prelude::*;
 
-// Game resolution (fixed internal render size)
-const GAME_WIDTH: u32 = 640;
-const GAME_HEIGHT: u32 = 360;
+// Default safe values for initial window creation.
+// Actual values will be loaded from config.ini by GameConfig.
+const DEFAULT_RENDER_WIDTH: u32 = 640;
+const DEFAULT_RENDER_HEIGHT: u32 = 360;
+const DEFAULT_WINDOW_WIDTH: u32 = 1280;
+const DEFAULT_WINDOW_HEIGHT: u32 = 720;
 
 fn main() {
     println!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
+    // Initial window uses safe defaults; actual config loaded by apply_gameconfig_changes system
     let (mut rl, thread) = raylib::init()
-        .size((GAME_WIDTH * 2u32) as i32, (GAME_HEIGHT * 2u32) as i32)
+        .size(DEFAULT_WINDOW_WIDTH as i32, DEFAULT_WINDOW_HEIGHT as i32)
         .resizable()
         .title("Aberred Engine - Arkanoid")
-        .vsync()
         .build();
     rl.set_target_fps(120);
     // Disable ESC to exit
     rl.set_exit_key(None);
 
     // --------------- Render target for fixed-resolution rendering ---------------
-    let render_target = RenderTarget::new(&mut rl, &thread, GAME_WIDTH, GAME_HEIGHT)
-        .expect("Failed to create render target");
+    // Initial render target uses safe defaults; recreated by apply_gameconfig_changes if needed
+    let render_target = RenderTarget::new(
+        &mut rl,
+        &thread,
+        DEFAULT_RENDER_WIDTH,
+        DEFAULT_RENDER_HEIGHT,
+    )
+    .expect("Failed to create render target");
     //render_target.set_filter(RenderFilter::Nearest);
     // --------------- ECS world + resources ---------------
     let mut world = World::new();
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(WorldSignals::default());
     world.insert_resource(TrackedGroups::default());
-    // ScreenSize is the game's internal render resolution (fixed)
+    // ScreenSize is the game's internal render resolution (updated by apply_gameconfig_changes)
     world.insert_resource(ScreenSize {
-        w: GAME_WIDTH as i32,
-        h: GAME_HEIGHT as i32,
+        w: DEFAULT_RENDER_WIDTH as i32,
+        h: DEFAULT_RENDER_HEIGHT as i32,
     });
     // WindowSize is the actual window dimensions (updated each frame)
     world.insert_resource(WindowSize {
         w: rl.get_screen_width(),
         h: rl.get_screen_height(),
     });
+
+    // GameConfig - will load from config.ini on first frame via apply_gameconfig_changes
+    let mut config = GameConfig::new();
+    config.load_from_file().ok(); // ignore errors, use defaults
+    world.insert_resource(config);
     world.insert_resource(InputState::default());
     world.insert_non_send_resource(render_target);
 
@@ -191,6 +207,7 @@ fn main() {
     world.flush();
 
     let mut update = Schedule::default();
+    update.add_systems(apply_gameconfig_changes.run_if(state_is_playing)); // Must run early to apply config before other systems
     update.add_systems(phase_change_detector);
     update.add_systems(phase_update_system.after(phase_change_detector));
     update.add_systems(menu_spawn_system);
@@ -247,6 +264,15 @@ fn main() {
         .window_should_close()
         && !world.resource::<WorldSignals>().has_flag("quit_game")
     {
+        let dt = world
+            .non_send_resource::<raylib::RaylibHandle>()
+            .get_frame_time();
+        update_world_time(&mut world, dt);
+
+        update.run(&mut world);
+
+        world.clear_trackers(); // Clear changed components for next frame
+
         // Update window size each frame (may change due to resize)
         let (new_w, new_h) = {
             let rl = world.non_send_resource::<raylib::RaylibHandle>();
@@ -257,15 +283,6 @@ fn main() {
             window_size.w = new_w;
             window_size.h = new_h;
         }
-
-        let dt = world
-            .non_send_resource::<raylib::RaylibHandle>()
-            .get_frame_time();
-        update_world_time(&mut world, dt);
-
-        update.run(&mut world);
-
-        world.clear_trackers(); // Clear changed components for next frame
     }
     shutdown_audio(&mut world);
 }

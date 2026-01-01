@@ -32,6 +32,11 @@ impl WindowSize {
         let window_w = self.w as f32;
         let window_h = self.h as f32;
 
+        /*         eprintln!(
+                   "Calculating letterbox: game {}x{}, window {}x{}",
+                   game_w, game_h, window_w, window_h
+               );
+        */
         let game_aspect = game_w / game_h;
         let window_aspect = window_w / window_h;
 
