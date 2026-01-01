@@ -5,7 +5,7 @@
 ## QUICK REFERENCE
 
 STACK: Rust + Bevy ECS 0.17 + Raylib 5.5 + MLua (LuaJIT) + configparser (INI)
-GAME_TYPE: Arkanoid-style breakout clone (2D)
+GAME_TYPE: Asteroids-style arcade clone (2D)
 ENTRY: src/main.rs
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
