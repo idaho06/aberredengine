@@ -26,7 +26,7 @@ pub(super) struct LuaAppData {
     camera_commands: RefCell<Vec<CameraCmd>>,
     animation_commands: RefCell<Vec<AnimationCmd>>,
     // Collision-scoped command queues (processed immediately after each collision callback)
-    collision_entity_commands: RefCell<Vec<CollisionEntityCmd>>,
+    collision_entity_commands: RefCell<Vec<EntityCmd>>,
     collision_signal_commands: RefCell<Vec<SignalCmd>>,
     collision_audio_commands: RefCell<Vec<AudioLuaCmd>>,
     pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
@@ -361,9 +361,13 @@ impl LuaRuntime {
         engine.set(
             "get_group_count",
             self.lua.create_function(|lua, group: String| {
-                let count = lua
-                    .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_snapshot.borrow().group_counts.get(&group).copied());
+                let count = lua.app_data_ref::<LuaAppData>().and_then(|data| {
+                    data.signal_snapshot
+                        .borrow()
+                        .group_counts
+                        .get(&group)
+                        .copied()
+                });
                 Ok(count)
             })?,
         )?;
@@ -869,8 +873,8 @@ impl LuaRuntime {
         // engine.entity_set_force_enabled(entity_id, name, enabled) - Enable/disable a force
         engine.set(
             "entity_set_force_enabled",
-            self.lua.create_function(
-                |lua, (entity_id, name, enabled): (u64, String, bool)| {
+            self.lua
+                .create_function(|lua, (entity_id, name, enabled): (u64, String, bool)| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .entity_commands
@@ -881,8 +885,7 @@ impl LuaRuntime {
                             enabled,
                         });
                     Ok(())
-                },
-            )?,
+                })?,
         )?;
 
         // engine.entity_set_force_value(entity_id, name, x, y) - Update force value
@@ -913,7 +916,10 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .entity_commands
                         .borrow_mut()
-                        .push(EntityCmd::SetFriction { entity_id, friction });
+                        .push(EntityCmd::SetFriction {
+                            entity_id,
+                            friction,
+                        });
                     Ok(())
                 })?,
         )?;
@@ -927,7 +933,10 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .entity_commands
                         .borrow_mut()
-                        .push(EntityCmd::SetMaxSpeed { entity_id, max_speed });
+                        .push(EntityCmd::SetMaxSpeed {
+                            entity_id,
+                            max_speed,
+                        });
                     Ok(())
                 })?,
         )?;
@@ -1105,7 +1114,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SetPosition { entity_id, x, y });
+                        .push(EntityCmd::SetPosition { entity_id, x, y });
                     Ok(())
                 })?,
         )?;
@@ -1120,7 +1129,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SetVelocity { entity_id, vx, vy });
+                        .push(EntityCmd::SetVelocity { entity_id, vx, vy });
                     Ok(())
                 })?,
         )?;
@@ -1134,7 +1143,7 @@ impl LuaRuntime {
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                     .collision_entity_commands
                     .borrow_mut()
-                    .push(CollisionEntityCmd::Despawn { entity_id });
+                    .push(EntityCmd::Despawn { entity_id });
                 Ok(())
             })?,
         )?;
@@ -1149,7 +1158,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SignalSetInteger {
+                        .push(EntityCmd::SignalSetInteger {
                             entity_id,
                             key,
                             value,
@@ -1168,7 +1177,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SignalSetFlag { entity_id, flag });
+                        .push(EntityCmd::SignalSetFlag { entity_id, flag });
                     Ok(())
                 })?,
         )?;
@@ -1183,7 +1192,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SignalClearFlag { entity_id, flag });
+                        .push(EntityCmd::SignalClearFlag { entity_id, flag });
                     Ok(())
                 })?,
         )?;
@@ -1198,7 +1207,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::InsertTimer {
+                        .push(EntityCmd::InsertTimer {
                             entity_id,
                             duration,
                             signal,
@@ -1228,7 +1237,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::InsertStuckTo {
+                        .push(EntityCmd::InsertStuckTo {
                             entity_id,
                             target_id,
                             follow_x,
@@ -1362,7 +1371,7 @@ impl LuaRuntime {
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                     .collision_entity_commands
                     .borrow_mut()
-                    .push(CollisionEntityCmd::FreezeEntity { entity_id });
+                    .push(EntityCmd::FreezeEntity { entity_id });
                 Ok(())
             })?,
         )?;
@@ -1375,7 +1384,7 @@ impl LuaRuntime {
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                     .collision_entity_commands
                     .borrow_mut()
-                    .push(CollisionEntityCmd::UnfreezeEntity { entity_id });
+                    .push(EntityCmd::UnfreezeEntity { entity_id });
                 Ok(())
             })?,
         )?;
@@ -1389,7 +1398,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::AddForce {
+                        .push(EntityCmd::AddForce {
                             entity_id,
                             name,
                             x,
@@ -1404,20 +1413,19 @@ impl LuaRuntime {
         // engine.collision_entity_set_force_enabled(entity_id, name, enabled) - Enable/disable force during collision
         engine.set(
             "collision_entity_set_force_enabled",
-            self.lua.create_function(
-                |lua, (entity_id, name, enabled): (u64, String, bool)| {
+            self.lua
+                .create_function(|lua, (entity_id, name, enabled): (u64, String, bool)| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SetForceEnabled {
+                        .push(EntityCmd::SetForceEnabled {
                             entity_id,
                             name,
                             enabled,
                         });
                     Ok(())
-                },
-            )?,
+                })?,
         )?;
 
         // engine.collision_entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction during collision
@@ -1429,7 +1437,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
                         .borrow_mut()
-                        .push(CollisionEntityCmd::SetSpeed { entity_id, speed });
+                        .push(EntityCmd::SetSpeed { entity_id, speed });
                     Ok(())
                 })?,
         )?;
@@ -1628,7 +1636,7 @@ impl LuaRuntime {
 
     /// Drains all queued collision entity commands.
     /// Call this after processing Lua collision callbacks to apply entity changes.
-    pub fn drain_collision_entity_commands(&self) -> Vec<CollisionEntityCmd> {
+    pub fn drain_collision_entity_commands(&self) -> Vec<EntityCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
             .map(|data| {
