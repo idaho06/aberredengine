@@ -1,6 +1,6 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2026-01-01 (synced with codebase)
+# Last updated: 2026-01-03 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -254,6 +254,7 @@ AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, fram
 
 ## LUA API STRUCTURE (runtime.rs)
 
+-- Logging
 engine.log(msg), engine.log_info(msg), engine.log_warn(msg), engine.log_error(msg)
 
 -- Assets (on_setup only)
@@ -270,26 +271,37 @@ engine.play_sound(id)
 engine.stop_all_music()
 engine.stop_all_sounds()
 
--- World Signals
-engine.set_scalar/integer/string/flag(key, value?)
-engine.get_scalar/integer/string(key) -> value|nil
+-- World Signals (Reading)
+engine.get_scalar(key) -> value|nil
+engine.get_integer(key) -> value|nil
+engine.get_string(key) -> value|nil
 engine.has_flag(key) -> bool
-engine.clear_flag(key)
 engine.get_entity(key) -> entity_id|nil
 engine.get_group_count(group) -> count|nil
 
--- Entity Commands (queued for deferred processing)
-engine.release_stuckto(id)
+-- World Signals (Writing)
+engine.set_scalar(key, value)
+engine.set_integer(key, value)
+engine.set_string(key, value)
+engine.set_flag(key)
+engine.clear_flag(key)
+
+-- Entity Commands (unified - work in all callback contexts)
+engine.entity_set_position(id, x, y)
+engine.entity_set_velocity(id, vx, vy)
+engine.entity_set_rotation(id, deg)
+engine.entity_set_scale(id, sx, sy)
+engine.entity_despawn(id)
 engine.entity_signal_set_flag(id, flag)
 engine.entity_signal_clear_flag(id, flag)
 engine.entity_signal_set_scalar(id, key, value)
 engine.entity_signal_set_string(id, key, value)
-engine.entity_set_velocity(id, vx, vy)  -- NOTE: overwrites to collision queue
-engine.entity_set_rotation(id, deg)
-engine.entity_set_scale(id, sx, sy)
+engine.entity_signal_set_integer(id, key, value)
 engine.entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
+engine.release_stuckto(id)
 engine.entity_set_animation(id, key)
 engine.entity_restart_animation(id)
+engine.entity_insert_timer(id, duration, signal)
 engine.entity_insert_lua_timer(id, duration, callback)
 engine.entity_remove_lua_timer(id)
 engine.entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
@@ -306,21 +318,13 @@ engine.entity_freeze(id)
 engine.entity_unfreeze(id)
 engine.entity_set_speed(id, speed)
 
--- Collision-Context Commands (processed immediately after collision callbacks)
--- NOTE: entity_set_position, entity_set_velocity, entity_despawn push to collision queue
-engine.entity_set_position(id, x, y)  -- collision queue only
-engine.entity_set_velocity(id, vx, vy)  -- collision queue (overwrites entity API)
-engine.entity_despawn(id)  -- collision queue only
-engine.entity_signal_set_integer(id, key, value)  -- collision queue
-engine.entity_signal_set_flag(id, flag)  -- collision queue (overwrites entity API)
-engine.entity_signal_clear_flag(id, flag)  -- collision queue (overwrites entity API)
-engine.entity_insert_timer(id, duration, signal)  -- collision queue only
-engine.entity_insert_stuckto(...)  -- collision queue (overwrites entity API)
+-- Collision-Specific Commands (use these in collision callbacks for proper timing)
+-- These use separate queues that drain immediately after collision callback returns
+engine.collision_spawn() -> CollisionEntityBuilder (same capabilities as EntityBuilder)
 engine.collision_play_sound(id)
 engine.collision_set_integer(key, value)
 engine.collision_set_flag(key)
 engine.collision_clear_flag(key)
-engine.collision_spawn() -> LuaCollisionEntityBuilder
 engine.collision_phase_transition(id, phase)
 engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 engine.collision_entity_freeze(id)
@@ -404,11 +408,17 @@ engine.spawn_tiles(id)
 :build()
 
 -- Collision Entity Builder (engine.collision_spawn())
--- Subset of methods: with_group, with_position, with_sprite, with_sprite_offset,
+-- Has the SAME capabilities as EntityBuilder - all methods available:
+-- with_group, with_position, with_screen_position, with_sprite, with_sprite_offset,
 -- with_sprite_flip, with_zindex, with_velocity, with_friction, with_max_speed,
 -- with_accel, with_frozen, with_collider, with_collider_offset, with_rotation,
--- with_scale, with_signal_integer, with_signal_flag, with_signals, with_timer,
--- with_lua_timer, with_animation, :build()
+-- with_scale, with_mouse_controlled, with_persistent, with_signals,
+-- with_signal_scalar/integer/flag/string, with_text, with_signal_binding,
+-- with_signal_binding_format, with_menu (and menu_*), with_animation,
+-- with_animation_controller, with_animation_rule, with_phase, with_stuckto,
+-- with_stuckto_offset, with_stuckto_stored_velocity, with_tween_* (all),
+-- with_timer, with_lua_timer, with_lua_collision_rule, with_grid_layout,
+-- register_as, build()
 
 ## COLLISION CONTEXT (Lua callback ctx table)
 
@@ -506,9 +516,15 @@ Lua calls engine.* -> LuaAppData.commands.borrow_mut().push(Cmd)
 movement_system moves entities
 -> collision_system detects AABB overlaps
 -> dispatches CollisionEvent or calls Lua callback
--> Lua callback uses engine.collision_* functions
--> CollisionEntityCmd queued
--> process_collision_entity_commands runs immediately
+-> Lua callback uses engine.* entity commands + engine.collision_* specific commands
+-> Collision-specific commands use separate queues
+-> process_collision_entity_commands runs immediately after callback
+
+### Entity Commands Architecture (refactored):
+- Entity commands (engine.entity_*) are UNIFIED across all contexts
+- They work in phase callbacks, timer callbacks, collision callbacks, and update callbacks
+- Collision-specific commands (engine.collision_*) are for spawning, audio, signals, camera
+- CollisionEntityBuilder has full feature parity with EntityBuilder
 
 ## IMPORTANT FILES TO READ FIRST
 
@@ -553,17 +569,18 @@ For features touching:
 ## COMMON GOTCHAS
 
 1. Non-send resources (FontStore, LuaRuntime, RenderTarget) need NonSend/NonSendMut
-2. Collision callbacks have separate command queue (CollisionEntityCmd)
-3. SpawnCmd processed in lua_commands.rs, not inline
-4. Entity IDs are u64 in Lua (Entity::to_bits)
-5. Raylib Vector2 methods differ from other math libs
-6. Signals component auto-created if using :with_signal_* builders
-7. Phase callbacks receive entity_id as first arg
-8. Timer callbacks receive entity_id as first arg
-9. Animation controller evaluates rules in order, first match wins
-10. Frozen entities skip movement but still render
-11. engine.entity_set_position/velocity/despawn go to collision queue (not entity queue)
-12. Some entity_* functions are overwritten by collision API registration order
+2. Entity commands are UNIFIED - work in all callback contexts (phase, timer, collision, update)
+3. Collision-specific commands (engine.collision_*) use separate queues that drain immediately
+4. Use engine.collision_spawn() in collision callbacks for proper timing (not engine.spawn())
+5. SpawnCmd processed in lua_commands.rs, not inline
+6. Entity IDs are u64 in Lua (Entity::to_bits)
+7. Raylib Vector2 methods differ from other math libs
+8. Signals component auto-created if using :with_signal_* builders
+9. Phase callbacks receive entity_id as first arg
+10. Timer callbacks receive entity_id as first arg
+11. Animation controller evaluates rules in order, first match wins
+12. Frozen entities skip movement but still render
 13. DynamicText.size is cached by dynamictext_size_system (not calculated per-frame)
 14. WindowSize vs ScreenSize: WindowSize is actual window, ScreenSize is game resolution
 15. Mouse position is automatically corrected for letterboxing in mouse_controller
+16. CollisionEntityBuilder has SAME capabilities as EntityBuilder (full feature parity)
