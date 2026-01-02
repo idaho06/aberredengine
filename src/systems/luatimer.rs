@@ -30,6 +30,7 @@ use bevy_ecs::prelude::*;
 use crate::components::animation::Animation;
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
+use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
 use crate::components::stuckto::StuckTo;
@@ -92,6 +93,7 @@ pub fn lua_timer_observer(
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
     mut rigid_bodies_query: Query<&mut RigidBody>,
+    mut positions_query: Query<&mut MapPosition>,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
@@ -153,6 +155,7 @@ pub fn lua_timer_observer(
         &mut signals_query,
         &mut animation_query,
         &mut rigid_bodies_query,
+        &mut positions_query,
     );
 
     // Process camera commands from Lua

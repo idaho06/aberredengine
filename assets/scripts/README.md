@@ -134,9 +134,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera | Per-frame logic - camera effects, but avoid spawning (see warning below) |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
-| Collision callbacks | Entity*, Signal, Audio, Spawn, Phase, Camera | Modify entities; set signals; play sounds; camera shake on impact |
-
-**Note**: Collision callbacks use a separate `CollisionEntityCmd` queue with a subset of entity operations.
+| Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
 
 **Processing Order by Callback**:
 | Callback | Order |
@@ -160,20 +158,11 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
-**Entity commands in collision callbacks** also require the `collision_` prefix:
-- `engine.collision_entity_set_position()` instead of `engine.entity_set_position()` (not available in regular API)
-- `engine.collision_entity_set_velocity()` instead of `engine.entity_set_velocity()`
-- `engine.collision_entity_despawn()` instead of `engine.entity_despawn()` (not available in regular API)
-- `engine.collision_entity_signal_set_integer()` instead of `engine.entity_signal_set_integer()` (not available in regular API)
-- `engine.collision_entity_signal_set_flag()` instead of `engine.entity_signal_set_flag()`
-- `engine.collision_entity_signal_clear_flag()` instead of `engine.entity_signal_clear_flag()`
-- `engine.collision_entity_insert_timer()` instead of `engine.entity_insert_timer()` (not available in regular API)
-- `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
-
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 - Using `engine.spawn()` in a collision callback → entity is created during the next `on_update` or phase/timer callback (1+ frames later)
 - Using `engine.play_sound()` in a collision callback → sound plays during the next processing cycle
-- Using `engine.entity_set_velocity()` in a collision callback → velocity change may happen after next collision is processed
+
+For entity commands like `engine.entity_set_velocity()`, `engine.entity_despawn()`, etc., there is only one set of functions that work correctly in all contexts.
 
 **Performance Warning for `on_update` callbacks**:
 - `on_update_<scene>` runs every frame (60 FPS)
@@ -1709,31 +1698,9 @@ engine.collision_clear_flag("ball_hit_player")
 ```
 
 #### `engine.collision_spawn()`
-Create a new entity builder for spawning entities during collision. Returns a `LuaCollisionEntityBuilder` with a subset of entity builder methods.
+Create a new entity builder for spawning entities during collision. Returns a `CollisionEntityBuilder` with the same capabilities as the standard `EntityBuilder`.
 
-**Available methods:**
-- `:with_group(name)`
-- `:with_position(x, y)`
-- `:with_sprite(tex_key, width, height, origin_x, origin_y)`
-- `:with_sprite_offset(offset_x, offset_y)`
-- `:with_sprite_flip(flip_h, flip_v)`
-- `:with_zindex(z)`
-- `:with_velocity(vx, vy)`
-- `:with_friction(friction)`
-- `:with_max_speed(max_speed)`
-- `:with_accel(name, x, y, enabled)`
-- `:with_frozen(frozen)`
-- `:with_collider(width, height, origin_x, origin_y)`
-- `:with_collider_offset(offset_x, offset_y)`
-- `:with_rotation(degrees)`
-- `:with_scale(sx, sy)`
-- `:with_signal_integer(key, value)`
-- `:with_signal_flag(key)`
-- `:with_signals()`
-- `:with_timer(duration, signal)`
-- `:with_lua_timer(duration, callback)`
-- `:with_animation(animation_key)`
-- `:build()`
+All methods available on `engine.spawn()` are also available on `engine.collision_spawn()`. See [Entity Spawning](#entity-spawning) for the complete method reference.
 
 ```lua
 function on_ball_brick(ctx)

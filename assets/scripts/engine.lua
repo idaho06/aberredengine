@@ -500,9 +500,12 @@ function engine.clear_flag(key) end
 function engine.get_entity(key) end
 
 -- ==================== Entity Commands ====================
--- Note: entity_set_position, entity_despawn, entity_signal_set_integer, and
--- entity_insert_timer only exist in the collision API (collision_entity_*).
--- See collision-specific commands section below.
+
+---Set entity position
+---@param entity_id integer Entity ID
+---@param x number New X position
+---@param y number New Y position
+function engine.entity_set_position(entity_id, x, y) end
 
 ---Set entity velocity
 ---@param entity_id integer Entity ID
@@ -520,6 +523,16 @@ function engine.entity_set_rotation(entity_id, degrees) end
 ---@param sx number Scale X (1.0 = normal size)
 ---@param sy number Scale Y (1.0 = normal size)
 function engine.entity_set_scale(entity_id, sx, sy) end
+
+---Despawn an entity
+---@param entity_id integer Entity ID
+function engine.entity_despawn(entity_id) end
+
+---Set entity integer signal
+---@param entity_id integer Entity ID
+---@param key string Signal key
+---@param value integer Signal value
+function engine.entity_signal_set_integer(entity_id, key, value) end
 
 ---Set entity scalar (float) signal
 ---@param entity_id integer Entity ID
@@ -677,22 +690,25 @@ function engine.entity_remove_tween_scale(entity_id) end
 ---@param next_phase string Name of the phase to transition to
 function engine.phase_transition(entity_id, next_phase) end
 
--- ==================== Collision API (called from collision callbacks) ====================
+-- ==================== Collision API ====================
+-- These functions are designed for use inside collision callbacks.
+-- Collision callbacks now have the same entity command capabilities as
+-- phase and timer callbacks.
 
----Play sound during collision (collision-scoped)
+---Play sound during collision
 ---@param sound_key string Sound identifier
 function engine.collision_play_sound(sound_key) end
 
----Set integer signal during collision (collision-scoped)
+---Set integer signal during collision
 ---@param key string Signal key
 ---@param value integer Signal value
 function engine.collision_set_integer(key, value) end
 
----Set flag signal during collision (collision-scoped)
+---Set flag signal during collision
 ---@param flag string Flag key
 function engine.collision_set_flag(flag) end
 
----Clear flag signal during collision (collision-scoped)
+---Clear flag signal during collision
 ---@param flag string Flag key
 function engine.collision_clear_flag(flag) end
 
@@ -749,8 +765,12 @@ end
 
 ---@class CollisionEntityBuilder
 ---Fluent builder for creating entities during collision callbacks.
----Has a subset of EntityBuilder methods suitable for collision contexts.
+---Has the same capabilities as EntityBuilder - all methods are available.
+---@see EntityBuilder for full method reference
 local CollisionEntityBuilder = {}
+
+-- All EntityBuilder methods are available on CollisionEntityBuilder.
+-- The following are commonly used in collision contexts:
 
 ---Set entity's collision group
 ---@param name string Group name
@@ -795,17 +815,17 @@ function CollisionEntityBuilder:with_zindex(z) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_velocity(vx, vy) end
 
----Set RigidBody friction (velocity damping) for collision-spawned entity
+---Set RigidBody friction (velocity damping)
 ---@param friction number Friction value (0.0 = no friction)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_friction(friction) end
 
----Set RigidBody max speed clamp for collision-spawned entity
+---Set RigidBody max speed clamp
 ---@param speed number Maximum speed
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_max_speed(speed) end
 
----Add a named acceleration force to the RigidBody for collision-spawned entity
+---Add a named acceleration force to the RigidBody
 ---@param name string Force identifier
 ---@param x number X component
 ---@param y number Y component
@@ -813,7 +833,7 @@ function CollisionEntityBuilder:with_max_speed(speed) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_accel(name, x, y, enabled) end
 
----Mark the collision-spawned entity's RigidBody as frozen (physics skipped)
+---Mark the entity's RigidBody as frozen (physics skipped)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_frozen() end
 
@@ -831,6 +851,12 @@ function CollisionEntityBuilder:with_collider(width, height, origin_x, origin_y)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_collider_offset(offset_x, offset_y) end
 
+---Make entity follow mouse cursor
+---@param follow_x boolean Follow mouse X
+---@param follow_y boolean Follow mouse Y
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_mouse_controlled(follow_x, follow_y) end
+
 ---Set entity's rotation in degrees
 ---@param degrees number Rotation angle
 ---@return CollisionEntityBuilder
@@ -841,6 +867,16 @@ function CollisionEntityBuilder:with_rotation(degrees) end
 ---@param sy number Scale Y
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_scale(sx, sy) end
+
+---Mark entity as persistent across scene changes
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_persistent() end
+
+---Add a scalar signal to the entity
+---@param key string Signal key
+---@param value number Signal value
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signal_scalar(key, value) end
 
 ---Add an integer signal to the entity
 ---@param key string Signal key
@@ -853,9 +889,67 @@ function CollisionEntityBuilder:with_signal_integer(key, value) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_signal_flag(key) end
 
+---Add a string signal to the entity
+---@param key string Signal key
+---@param value string Signal value
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signal_string(key, value) end
+
 ---Add empty Signals component
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_signals() end
+
+---Set entity's screen position (for UI elements)
+---@param x number Screen X
+---@param y number Screen Y
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_screen_position(x, y) end
+
+---Add dynamic text to the entity
+---@param content string Text content
+---@param font string Font identifier
+---@param font_size number Font size
+---@param r integer Red (0-255)
+---@param g integer Green (0-255)
+---@param b integer Blue (0-255)
+---@param a integer Alpha (0-255)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_text(content, font, font_size, r, g, b, a) end
+
+---Add a menu component
+---@param items table[] Array of {id: string, label: string}
+---@param origin_x number Menu origin X
+---@param origin_y number Menu origin Y
+---@param font string Font identifier
+---@param font_size number Font size
+---@param item_spacing number Spacing between items
+---@param use_screen_space boolean Use screen coordinates
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu(items, origin_x, origin_y, font, font_size, item_spacing, use_screen_space) end
+
+---Add Lua phase state machine to entity
+---@param phase_table table Phase definition: {initial: string, phases: table}
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_phase(phase_table) end
+
+---Attach entity to another entity (StuckTo component)
+---@param target_entity_id integer Target entity ID
+---@param follow_x boolean Follow target X
+---@param follow_y boolean Follow target Y
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_stuckto(target_entity_id, follow_x, follow_y) end
+
+---Set StuckTo offset
+---@param offset_x number X offset
+---@param offset_y number Y offset
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_stuckto_offset(offset_x, offset_y) end
+
+---Set StuckTo stored velocity (restored when detached)
+---@param vx number Velocity X
+---@param vy number Velocity Y
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 
 ---Add timer component
 ---@param duration number Timer duration in seconds
@@ -869,15 +963,104 @@ function CollisionEntityBuilder:with_timer(duration, signal) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_timer(duration, callback) end
 
+---Bind DynamicText to a WorldSignal value
+---@param key string Signal key to bind to
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signal_binding(key) end
+
+---Set format string for signal binding
+---@param format string Format string with {} placeholder
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_signal_binding_format(format) end
+
+---Add position tween animation
+---@param from_x number Start X
+---@param from_y number Start Y
+---@param to_x number End X
+---@param to_y number End Y
+---@param duration number Duration in seconds
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_position(from_x, from_y, to_x, to_y, duration) end
+
+---Set position tween easing
+---@param easing string Easing function: "linear", "quad_in", "quad_out", etc.
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_position_easing(easing) end
+
+---Set position tween loop mode
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_position_loop(loop_mode) end
+
+---Add rotation tween animation
+---@param from number Start rotation in degrees
+---@param to number End rotation in degrees
+---@param duration number Duration in seconds
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_rotation(from, to, duration) end
+
+---Set rotation tween easing
+---@param easing string Easing function
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_rotation_easing(easing) end
+
+---Set rotation tween loop mode
+---@param loop_mode string Loop mode
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_rotation_loop(loop_mode) end
+
+---Add scale tween animation
+---@param from_x number Start scale X
+---@param from_y number Start scale Y
+---@param to_x number End scale X
+---@param to_y number End scale Y
+---@param duration number Duration in seconds
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_scale(from_x, from_y, to_x, to_y, duration) end
+
+---Set scale tween easing
+---@param easing string Easing function
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_scale_easing(easing) end
+
+---Set scale tween loop mode
+---@param loop_mode string Loop mode
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_scale_loop(loop_mode) end
+
+---Add Lua collision rule
+---@param group_a string First group name
+---@param group_b string Second group name
+---@param callback string Lua callback function name
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+
 ---Add animation component
 ---@param animation_key string Animation identifier
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_animation(animation_key) end
 
----Build and queue the entity for spawning in collision context
+---Add animation controller
+---@param fallback_key string Default animation key
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_animation_controller(fallback_key) end
+
+---Add animation rule to controller
+---@param condition_table table Condition definition
+---@param set_key string Animation key to set when condition is true
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_animation_rule(condition_table, set_key) end
+
+---Register spawned entity in WorldSignals with this key
+---@param key string WorldSignals key for this entity
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:register_as(key) end
+
+---Build and queue the entity for spawning
 function CollisionEntityBuilder:build() end
 
 ---Start building a new entity for spawning during collision
+---Has the same capabilities as engine.spawn()
 ---@return CollisionEntityBuilder
 function engine.collision_spawn() end
 
@@ -895,11 +1078,11 @@ function engine.collision_phase_transition(entity_id, phase) end
 ---@param zoom number Camera zoom
 function engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom) end
 
----Freeze an entity during collision handling (collision-scoped)
+---Freeze an entity during collision handling
 ---@param entity_id integer Entity ID
 function engine.collision_entity_freeze(entity_id) end
 
----Unfreeze an entity during collision handling (collision-scoped)
+---Unfreeze an entity during collision handling
 ---@param entity_id integer Entity ID
 function engine.collision_entity_unfreeze(entity_id) end
 
@@ -922,6 +1105,12 @@ function engine.collision_entity_set_force_enabled(entity_id, name, enabled) end
 ---@param entity_id integer Entity ID
 ---@param speed number New speed magnitude
 function engine.collision_entity_set_speed(entity_id, speed) end
+
+---Insert a Timer component on an entity
+---@param entity_id integer Entity ID
+---@param duration number Timer duration in seconds
+---@param signal string Signal to emit when timer expires
+function engine.entity_insert_timer(entity_id, duration, signal) end
 
 -- ==================== Group Tracking ====================
 
