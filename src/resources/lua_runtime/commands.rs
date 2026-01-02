@@ -165,23 +165,18 @@ pub enum EntityCmd {
     /// Set friction on entity's RigidBody
     SetFriction { entity_id: u64, friction: f32 },
     /// Set max_speed on entity's RigidBody (None to remove limit)
-    SetMaxSpeed { entity_id: u64, max_speed: Option<f32> },
+    SetMaxSpeed {
+        entity_id: u64,
+        max_speed: Option<f32>,
+    },
     /// Freeze entity (skip physics calculations)
     FreezeEntity { entity_id: u64 },
     /// Unfreeze entity (resume physics calculations)
     UnfreezeEntity { entity_id: u64 },
     /// Set entity speed while maintaining velocity direction
     SetSpeed { entity_id: u64, speed: f32 },
-}
-
-/// Commands for manipulating entity components from Lua collision callbacks.
-/// These are processed immediately after each collision callback.
-#[derive(Debug, Clone)]
-pub enum CollisionEntityCmd {
-    /// Set entity position
+    /// Set entity position (MapPosition)
     SetPosition { entity_id: u64, x: f32, y: f32 },
-    /// Set entity velocity (RigidBody)
-    SetVelocity { entity_id: u64, vx: f32, vy: f32 },
     /// Despawn an entity
     Despawn { entity_id: u64 },
     /// Set an integer signal on an entity's Signals component
@@ -190,47 +185,12 @@ pub enum CollisionEntityCmd {
         key: String,
         value: i32,
     },
-    /// Set a flag on an entity's Signals component
-    SignalSetFlag { entity_id: u64, flag: String },
-    /// Clear a flag on an entity's Signals component
-    SignalClearFlag { entity_id: u64, flag: String },
-    /// Insert a Timer component
+    /// Insert a Timer component (signal-based timer, not Lua callback)
     InsertTimer {
         entity_id: u64,
         duration: f32,
         signal: String,
     },
-    /// Insert a StuckTo component
-    InsertStuckTo {
-        entity_id: u64,
-        target_id: u64,
-        follow_x: bool,
-        follow_y: bool,
-        offset_x: f32,
-        offset_y: f32,
-        stored_vx: f32,
-        stored_vy: f32,
-    },
-    /// Freeze entity (skip physics calculations)
-    FreezeEntity { entity_id: u64 },
-    /// Unfreeze entity (resume physics calculations)
-    UnfreezeEntity { entity_id: u64 },
-    /// Add or update a named force on the entity's RigidBody
-    AddForce {
-        entity_id: u64,
-        name: String,
-        x: f32,
-        y: f32,
-        enabled: bool,
-    },
-    /// Enable or disable a specific force on the entity's RigidBody
-    SetForceEnabled {
-        entity_id: u64,
-        name: String,
-        enabled: bool,
-    },
-    /// Set entity speed while maintaining velocity direction
-    SetSpeed { entity_id: u64, speed: f32 },
 }
 
 /// Commands for tracked groups from Lua.

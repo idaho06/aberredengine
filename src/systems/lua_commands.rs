@@ -22,7 +22,6 @@
 //! - [`process_audio_command`] – Process an audio command
 //! - [`process_asset_command`] – Process an asset loading command
 //! - [`process_animation_command`] – Process an animation registration command
-//! - [`process_collision_entity_commands`] – Process collision-specific entity commands
 //! - [`parse_tween_easing`] – Convert string to Easing enum
 //! - [`parse_tween_loop_mode`] – Convert string to LoopMode enum
 
@@ -56,8 +55,8 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
-    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CollisionEntityCmd,
-    EntityCmd, GroupCmd, MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
+    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, EntityCmd, GroupCmd,
+    MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
 };
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -366,9 +365,10 @@ pub fn process_animation_command(
 /// Process all EntityCmd commands queued by Lua.
 ///
 /// This function handles all runtime entity manipulation commands including:
-/// - Component insertion/removal (StuckTo, LuaTimer, Tweens)
-/// - Entity state changes (velocity, animation, signals)
+/// - Component insertion/removal (StuckTo, LuaTimer, Tweens, Timer)
+/// - Entity state changes (position, velocity, animation, signals)
 /// - RigidBody physics (forces, friction, freeze)
+/// - Entity despawning
 ///
 /// # Parameters
 ///
@@ -378,6 +378,7 @@ pub fn process_animation_command(
 /// - `signals_query` - Query for modifying Signals components
 /// - `animation_query` - Query for modifying Animation components
 /// - `rigid_bodies_query` - Query for modifying RigidBody components
+/// - `positions_query` - Query for modifying MapPosition components
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
@@ -385,6 +386,7 @@ pub fn process_entity_commands(
     signals_query: &mut Query<&mut Signals>,
     animation_query: &mut Query<&mut Animation>,
     rigid_bodies_query: &mut Query<&mut RigidBody>,
+    positions_query: &mut Query<&mut MapPosition>,
 ) {
     for cmd in entity_commands {
         match cmd {
@@ -654,6 +656,35 @@ pub fn process_entity_commands(
                 if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
                     rb.set_speed(speed);
                 }
+            }
+            EntityCmd::SetPosition { entity_id, x, y } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut pos) = positions_query.get_mut(entity) {
+                    pos.pos.x = x;
+                    pos.pos.y = y;
+                }
+            }
+            EntityCmd::Despawn { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).despawn();
+            }
+            EntityCmd::SignalSetInteger {
+                entity_id,
+                key,
+                value,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut signals) = signals_query.get_mut(entity) {
+                    signals.set_integer(&key, value);
+                }
+            }
+            EntityCmd::InsertTimer {
+                entity_id,
+                duration,
+                signal,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(Timer::new(duration, signal));
             }
         }
     }
@@ -1110,146 +1141,6 @@ fn convert_animation_condition(data: AnimationConditionData) -> Condition {
         ),
         AnimationConditionData::Not(inner) => {
             Condition::Not(Box::new(convert_animation_condition(*inner)))
-        }
-    }
-}
-
-/// Process collision entity commands after Lua callback.
-///
-/// This function handles collision-specific entity commands that are processed
-/// immediately after each collision callback to ensure causal ordering within
-/// a single frame's collision processing.
-///
-/// # Parameters
-///
-/// - `commands` - Bevy Commands for entity manipulation
-/// - `collision_entity_commands` - Iterator of CollisionEntityCmd variants to process
-/// - `positions` - Query for modifying MapPosition components
-/// - `rigid_bodies` - Query for modifying RigidBody components
-/// - `signals` - Query for modifying Signals components
-pub fn process_collision_entity_commands(
-    commands: &mut Commands,
-    collision_entity_commands: impl IntoIterator<Item = CollisionEntityCmd>,
-    positions: &mut Query<&mut MapPosition>,
-    rigid_bodies: &mut Query<&mut RigidBody>,
-    signals: &mut Query<&mut Signals>,
-) {
-    for cmd in collision_entity_commands {
-        match cmd {
-            CollisionEntityCmd::SetPosition { entity_id, x, y } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut pos) = positions.get_mut(entity) {
-                    pos.pos.x = x;
-                    pos.pos.y = y;
-                }
-            }
-            CollisionEntityCmd::SetVelocity { entity_id, vx, vy } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.velocity.x = vx;
-                    rb.velocity.y = vy;
-                }
-            }
-            CollisionEntityCmd::Despawn { entity_id } => {
-                let entity = Entity::from_bits(entity_id);
-                commands.entity(entity).despawn();
-            }
-            CollisionEntityCmd::SignalSetInteger {
-                entity_id,
-                key,
-                value,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut sig) = signals.get_mut(entity) {
-                    sig.set_integer(&key, value);
-                }
-            }
-            CollisionEntityCmd::SignalSetFlag { entity_id, flag } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut sig) = signals.get_mut(entity) {
-                    sig.set_flag(&flag);
-                }
-            }
-            CollisionEntityCmd::SignalClearFlag { entity_id, flag } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut sig) = signals.get_mut(entity) {
-                    sig.clear_flag(&flag);
-                }
-            }
-            CollisionEntityCmd::InsertTimer {
-                entity_id,
-                duration,
-                signal,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                commands.entity(entity).insert(Timer::new(duration, signal));
-            }
-            CollisionEntityCmd::InsertStuckTo {
-                entity_id,
-                target_id,
-                follow_x,
-                follow_y,
-                offset_x,
-                offset_y,
-                stored_vx,
-                stored_vy,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                let target = Entity::from_bits(target_id);
-                commands.entity(entity).insert(StuckTo {
-                    target,
-                    follow_x,
-                    follow_y,
-                    offset: Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    stored_velocity: Some(Vector2 {
-                        x: stored_vx,
-                        y: stored_vy,
-                    }),
-                });
-            }
-            CollisionEntityCmd::FreezeEntity { entity_id } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.freeze();
-                }
-            }
-            CollisionEntityCmd::UnfreezeEntity { entity_id } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.unfreeze();
-                }
-            }
-            CollisionEntityCmd::AddForce {
-                entity_id,
-                name,
-                x,
-                y,
-                enabled,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.add_force_with_state(&name, Vector2 { x, y }, enabled);
-                }
-            }
-            CollisionEntityCmd::SetForceEnabled {
-                entity_id,
-                name,
-                enabled,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.set_force_enabled(&name, enabled);
-                }
-            }
-            CollisionEntityCmd::SetSpeed { entity_id, speed } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies.get_mut(entity) {
-                    rb.set_speed(speed);
-                }
-            }
         }
     }
 }
