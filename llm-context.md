@@ -1,6 +1,6 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2025-12-29 (synced with codebase)
+# Last updated: 2026-01-02 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -195,23 +195,16 @@ EntityCmd {
     FreezeEntity { entity_id }
     UnfreezeEntity { entity_id }
     SetSpeed { entity_id, speed }
-}
-
-CollisionEntityCmd {
     SetPosition { entity_id, x, y }
-    SetVelocity { entity_id, vx, vy }
     Despawn { entity_id }
     SignalSetInteger { entity_id, key, value }
-    SignalSetFlag { entity_id, flag }
-    SignalClearFlag { entity_id, flag }
     InsertTimer { entity_id, duration, signal }
-    InsertStuckTo { entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy }
-    FreezeEntity { entity_id }
-    UnfreezeEntity { entity_id }
-    AddForce { entity_id, name, x, y, enabled }
-    SetForceEnabled { entity_id, name, enabled }
-    SetSpeed { entity_id, speed }
 }
+
+// NOTE: EntityCmd is used by both regular entity_commands queue and
+// collision_entity_commands queue. The queues have different timing:
+// - entity_commands: processed after phase/timer/update callbacks
+// - collision_entity_commands: processed immediately after collision callbacks
 
 SpawnCmd { position, screen_position, sprite, collider, velocity, friction, max_speed, forces, frozen, ... }
 
@@ -376,11 +369,8 @@ engine.spawn_tiles(id)
 :build()
 
 -- Collision Entity Builder (engine.collision_spawn())
--- Subset of methods: with_group, with_position, with_sprite, with_sprite_offset,
--- with_sprite_flip, with_zindex, with_velocity, with_friction, with_max_speed,
--- with_accel, with_frozen, with_collider, with_collider_offset, with_rotation,
--- with_scale, with_signal_integer, with_signal_flag, with_signals, with_timer,
--- with_lua_timer, with_animation, :build()
+-- Same capabilities as engine.spawn(), but queues to collision_spawn_commands
+-- for immediate processing after collision callbacks.
 
 ## COLLISION CONTEXT (Lua callback ctx table)
 
@@ -437,17 +427,13 @@ Approximate execution order:
 
 ### Adding a new EntityCmd:
 1. Add variant to EntityCmd enum (commands.rs)
-2. Add Lua function in runtime.rs (register_entity_api)
+2. Add Lua function in runtime.rs (register_entity_api or register_collision_api)
 3. Process in process_entity_commands (lua_commands.rs)
 4. Add to engine.lua autocomplete stubs
 5. Document in README.md
 
-### Adding a CollisionEntityCmd:
-1. Add variant to CollisionEntityCmd enum (commands.rs)
-2. Add Lua function in runtime.rs (register_collision_api)
-3. Process in process_collision_entity_commands (lua_commands.rs)
-4. Add to engine.lua autocomplete stubs
-5. Document in README.md
+// NOTE: EntityCmd is shared by both entity_commands and collision_entity_commands queues.
+// For collision-specific API functions, push to collision_entity_commands in runtime.rs.
 
 ### Adding a new Component:
 1. Create file in src/components/
@@ -478,9 +464,12 @@ Lua calls engine.* -> LuaAppData.commands.borrow_mut().push(Cmd)
 movement_system moves entities
 -> collision_system detects AABB overlaps
 -> dispatches CollisionEvent or calls Lua callback
--> Lua callback uses engine.collision_* functions
--> CollisionEntityCmd queued
--> process_collision_entity_commands runs immediately
+-> Lua callback uses engine.collision_* or engine.entity_* functions
+-> EntityCmd queued to collision_entity_commands
+-> process_entity_commands runs immediately after callback
+
+// NOTE: Collision callbacks now have the same entity command capabilities
+// as phase/timer callbacks. Both use EntityCmd, just different queues.
 
 ## IMPORTANT FILES TO READ FIRST
 
@@ -525,7 +514,7 @@ For features touching:
 ## COMMON GOTCHAS
 
 1. Non-send resources (FontStore, LuaRuntime, RenderTarget) need NonSend/NonSendMut
-2. Collision callbacks have separate command queue (CollisionEntityCmd)
+2. Collision callbacks use separate command queues (collision_entity_commands, collision_spawn_commands, etc.)
 3. SpawnCmd processed in lua_commands.rs, not inline
 4. Entity IDs are u64 in Lua (Entity::to_bits)
 5. Raylib Vector2 methods differ from other math libs
@@ -534,8 +523,9 @@ For features touching:
 8. Timer callbacks receive entity_id as first arg
 9. Animation controller evaluates rules in order, first match wins
 10. Frozen entities skip movement but still render
-11. engine.entity_set_position/velocity/despawn go to collision queue (not entity queue)
-12. Some entity_* functions are overwritten by collision API registration order
+11. Use engine.collision_spawn() in collision callbacks (not engine.spawn()) for correct timing
+12. Use engine.collision_* functions in collision callbacks for immediate processing
 13. DynamicText.size is cached by dynamictext_size_system (not calculated per-frame)
 14. WindowSize vs ScreenSize: WindowSize is actual window, ScreenSize is game resolution
 15. Mouse position is automatically corrected for letterboxing in mouse_controller
+16. EntityCmd is shared by entity_commands and collision_entity_commands queues (unified enum)
