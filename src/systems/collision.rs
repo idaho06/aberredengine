@@ -40,13 +40,15 @@ use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
+use crate::components::stuckto::StuckTo;
+use crate::components::animation::Animation;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
-    process_audio_command, process_camera_command, process_collision_entity_commands,
-    process_phase_command, process_signal_command, process_spawn_command,
+    process_audio_command, process_camera_command, process_entity_commands, process_phase_command,
+    process_signal_command, process_spawn_command,
 };
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
@@ -90,6 +92,8 @@ pub struct CollisionObserverParams<'w, 's> {
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub signals: Query<'w, 's, &'static mut Signals>,
+    pub stuckto_query: Query<'w, 's, &'static StuckTo>,
+    pub animation_query: Query<'w, 's, &'static mut Animation>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
@@ -222,12 +226,14 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             }
 
             // Process collision commands after Lua callback returns
-            process_collision_entity_commands(
+            process_entity_commands(
                 &mut params.commands,
                 params.lua_runtime.drain_collision_entity_commands(),
-                &mut params.positions,
-                &mut params.rigid_bodies,
+                &params.stuckto_query,
                 &mut params.signals,
+                &mut params.animation_query,
+                &mut params.rigid_bodies,
+                &mut params.positions,
             );
 
             // Process collision signal commands
