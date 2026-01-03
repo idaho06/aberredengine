@@ -1106,12 +1106,6 @@ function engine.collision_entity_set_force_enabled(entity_id, name, enabled) end
 ---@param speed number New speed magnitude
 function engine.collision_entity_set_speed(entity_id, speed) end
 
----Insert a Timer component on an entity
----@param entity_id integer Entity ID
----@param duration number Timer duration in seconds
----@param signal string Signal to emit when timer expires
-function engine.entity_insert_timer(entity_id, duration, signal) end
-
 -- ==================== Group Tracking ====================
 
 ---Track a group for entity counting
