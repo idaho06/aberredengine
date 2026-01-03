@@ -249,7 +249,7 @@ engine.entity_signal_set_flag(id, flag)
 engine.entity_signal_clear_flag(id, flag)
 engine.entity_signal_set_scalar(id, key, value)
 engine.entity_signal_set_string(id, key, value)
-engine.entity_set_velocity(id, vx, vy)  -- NOTE: overwrites to collision queue
+engine.entity_set_velocity(id, vx, vy)
 engine.entity_set_rotation(id, deg)
 engine.entity_set_scale(id, sx, sy)
 engine.entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
@@ -272,15 +272,15 @@ engine.entity_unfreeze(id)
 engine.entity_set_speed(id, speed)
 
 -- Collision-Context Commands (processed immediately after collision callbacks)
--- NOTE: entity_set_position, entity_set_velocity, entity_despawn push to collision queue
-engine.entity_set_position(id, x, y)  -- collision queue only
-engine.entity_set_velocity(id, vx, vy)  -- collision queue (overwrites entity API)
-engine.entity_despawn(id)  -- collision queue only
-engine.entity_signal_set_integer(id, key, value)  -- collision queue
-engine.entity_signal_set_flag(id, flag)  -- collision queue (overwrites entity API)
-engine.entity_signal_clear_flag(id, flag)  -- collision queue (overwrites entity API)
-engine.entity_insert_timer(id, duration, signal)  -- collision queue only
-engine.entity_insert_stuckto(...)  -- collision queue (overwrites entity API)
+-- These functions use `collision_entity_*` prefix and should be used inside collision callbacks
+engine.collision_entity_set_position(id, x, y)
+engine.collision_entity_set_velocity(id, vx, vy)
+engine.collision_entity_despawn(id)
+engine.collision_entity_signal_set_integer(id, key, value)
+engine.collision_entity_signal_set_flag(id, flag)
+engine.collision_entity_signal_clear_flag(id, flag)
+engine.collision_entity_insert_timer(id, duration, signal)
+engine.collision_entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
 engine.collision_play_sound(id)
 engine.collision_set_integer(key, value)
 engine.collision_set_flag(key)
