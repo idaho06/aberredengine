@@ -1095,10 +1095,10 @@ impl LuaRuntime {
     fn register_collision_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
 
-        // engine.entity_set_position(entity_id, x, y)
+        // engine.collision_entity_set_position(entity_id, x, y)
         // Sets the position of an entity during collision handling
         engine.set(
-            "entity_set_position",
+            "collision_entity_set_position",
             self.lua
                 .create_function(|lua, (entity_id, x, y): (u64, f32, f32)| {
                     lua.app_data_ref::<LuaAppData>()
@@ -1110,10 +1110,10 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_set_velocity(entity_id, vx, vy)
+        // engine.collision_entity_set_velocity(entity_id, vx, vy)
         // Sets the velocity of an entity during collision handling
         engine.set(
-            "entity_set_velocity",
+            "collision_entity_set_velocity",
             self.lua
                 .create_function(|lua, (entity_id, vx, vy): (u64, f32, f32)| {
                     lua.app_data_ref::<LuaAppData>()
@@ -1125,10 +1125,10 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_despawn(entity_id)
+        // engine.collision_entity_despawn(entity_id)
         // Despawns an entity during collision handling
         engine.set(
-            "entity_despawn",
+            "collision_entity_despawn",
             self.lua.create_function(|lua, entity_id: u64| {
                 lua.app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
@@ -1139,10 +1139,10 @@ impl LuaRuntime {
             })?,
         )?;
 
-        // engine.entity_signal_set_integer(entity_id, key, value)
+        // engine.collision_entity_signal_set_integer(entity_id, key, value)
         // Sets an integer signal on an entity during collision handling
         engine.set(
-            "entity_signal_set_integer",
+            "collision_entity_signal_set_integer",
             self.lua
                 .create_function(|lua, (entity_id, key, value): (u64, String, i32)| {
                     lua.app_data_ref::<LuaAppData>()
@@ -1158,10 +1158,10 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_signal_set_flag(entity_id, flag)
+        // engine.collision_entity_signal_set_flag(entity_id, flag)
         // Sets a flag signal on an entity during collision handling
         engine.set(
-            "entity_signal_set_flag",
+            "collision_entity_signal_set_flag",
             self.lua
                 .create_function(|lua, (entity_id, flag): (u64, String)| {
                     lua.app_data_ref::<LuaAppData>()
@@ -1173,10 +1173,10 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_signal_clear_flag(entity_id, flag)
+        // engine.collision_entity_signal_clear_flag(entity_id, flag)
         // Clears a flag signal on an entity during collision handling
         engine.set(
-            "entity_signal_clear_flag",
+            "collision_entity_signal_clear_flag",
             self.lua
                 .create_function(|lua, (entity_id, flag): (u64, String)| {
                     lua.app_data_ref::<LuaAppData>()
@@ -1188,10 +1188,10 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_insert_timer(entity_id, duration, signal)
+        // engine.collision_entity_insert_timer(entity_id, duration, signal)
         // Inserts a timer component on an entity during collision handling
         engine.set(
-            "entity_insert_timer",
+            "collision_entity_insert_timer",
             self.lua.create_function(
                 |lua, (entity_id, duration, signal): (u64, f32, String)| {
                     lua.app_data_ref::<LuaAppData>()
@@ -1208,10 +1208,10 @@ impl LuaRuntime {
             )?,
         )?;
 
-        // engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
+        // engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
         // Inserts a StuckTo component on an entity during collision handling
         engine.set(
-            "entity_insert_stuckto",
+            "collision_entity_insert_stuckto",
             self.lua.create_function(
                 |lua,
                  (
