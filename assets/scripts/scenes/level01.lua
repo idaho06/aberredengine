@@ -22,7 +22,7 @@ function on_player_walls(ctx)
     -- Clamp to playable area (72 to 600)
     local clamped_x = math.max(72, math.min(600, player_x))
     if clamped_x ~= player_x then
-        engine.entity_set_position(ctx.a.id, clamped_x, ctx.a.pos.y)
+        engine.collision_entity_set_position(ctx.a.id, clamped_x, ctx.a.pos.y)
     end
 end
 
@@ -63,8 +63,8 @@ function on_ball_walls(ctx)
         end
     end
 
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
-    engine.entity_set_position(ball_id, new_x, new_y)
+    engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
+    engine.collision_entity_set_position(ball_id, new_x, new_y)
 
     -- Increment bounce counter
     ball_bounces = ball_bounces + 1
@@ -93,8 +93,8 @@ function on_ball_player(ctx)
     local new_vy = -speed * math.cos(bounce_angle)
     local new_y = player_pos.y - player_rect.h - (ball_rect.h * 0.5)
 
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
-    engine.entity_set_position(ball_id, ball_pos.x, new_y)
+    engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
+    engine.collision_entity_set_position(ball_id, ball_pos.x, new_y)
 
     -- Check for sticky powerup
     local is_sticky = false
@@ -164,8 +164,8 @@ function on_ball_brick(ctx)
         end
     end
 
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
-    engine.entity_set_position(ball_id, new_x, new_y)
+    engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
+    engine.collision_entity_set_position(ball_id, new_x, new_y)
 
     -- Handle brick HP and score
     local hp = 1
@@ -177,7 +177,7 @@ function on_ball_brick(ctx)
 
     if hp > 1 then
         -- Just decrement HP
-        engine.entity_signal_set_integer(brick_id, "hp", hp - 1)
+        engine.collision_entity_signal_set_integer(brick_id, "hp", hp - 1)
     else
         -- Brick destroyed
         if points > 0 then
@@ -191,7 +191,7 @@ function on_ball_brick(ctx)
             end
         end
         -- Despawn brick
-        engine.entity_despawn(brick_id)
+        engine.collision_entity_despawn(brick_id)
     end
 
     -- Play ding sound
@@ -207,7 +207,7 @@ function on_ball_oob(ctx)
     -- If all 4 sides of ball are colliding (ball fully inside oob), despawn it
     local ball_sides = ctx.sides.a
     if ball_sides and #ball_sides == 4 then
-        engine.entity_despawn(ctx.a.id)
+        engine.collision_entity_despawn(ctx.a.id)
     end
 end
 
