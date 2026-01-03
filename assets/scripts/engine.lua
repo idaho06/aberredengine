@@ -697,6 +697,56 @@ function engine.collision_set_flag(flag) end
 ---@param flag string Flag key
 function engine.collision_clear_flag(flag) end
 
+---Set entity position during collision handling
+---@param entity_id integer Entity ID
+---@param x number New X position
+---@param y number New Y position
+function engine.collision_entity_set_position(entity_id, x, y) end
+
+---Set entity velocity during collision handling
+---@param entity_id integer Entity ID
+---@param vx number New velocity X
+---@param vy number New velocity Y
+function engine.collision_entity_set_velocity(entity_id, vx, vy) end
+
+---Despawn an entity during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_despawn(entity_id) end
+
+---Set entity integer signal during collision handling
+---@param entity_id integer Entity ID
+---@param key string Signal key
+---@param value integer Signal value
+function engine.collision_entity_signal_set_integer(entity_id, key, value) end
+
+---Set entity flag signal during collision handling
+---@param entity_id integer Entity ID
+---@param flag string Flag key
+function engine.collision_entity_signal_set_flag(entity_id, flag) end
+
+---Clear entity flag signal during collision handling
+---@param entity_id integer Entity ID
+---@param flag string Flag key
+function engine.collision_entity_signal_clear_flag(entity_id, flag) end
+
+---Insert Timer component on an entity during collision handling
+---@param entity_id integer Entity ID
+---@param duration number Timer duration in seconds
+---@param signal string Signal to emit when timer expires
+function engine.collision_entity_insert_timer(entity_id, duration, signal) end
+
+---Insert StuckTo component on an entity during collision handling
+---@param entity_id integer Entity ID
+---@param target_id integer Target entity ID
+---@param follow_x boolean Follow target X
+---@param follow_y boolean Follow target Y
+---@param offset_x number X offset
+---@param offset_y number Y offset
+---@param stored_vx number Stored velocity X
+---@param stored_vy number Stored velocity Y
+function engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx,
+                                                stored_vy) end
+
 ---@class CollisionEntityBuilder
 ---Fluent builder for creating entities during collision callbacks.
 ---Has the same capabilities as EntityBuilder - all methods are available.
@@ -1039,12 +1089,6 @@ function engine.collision_entity_set_force_enabled(entity_id, name, enabled) end
 ---@param entity_id integer Entity ID
 ---@param speed number New speed magnitude
 function engine.collision_entity_set_speed(entity_id, speed) end
-
----Insert a Timer component on an entity
----@param entity_id integer Entity ID
----@param duration number Timer duration in seconds
----@param signal string Signal to emit when timer expires
-function engine.entity_insert_timer(entity_id, duration, signal) end
 
 -- ==================== Group Tracking ====================
 
