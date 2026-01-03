@@ -154,11 +154,20 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
+**Entity commands in collision callbacks** also require the `collision_` prefix:
+- `engine.collision_entity_set_position()` instead of `engine.entity_set_position()` (not available in regular API)
+- `engine.collision_entity_set_velocity()` instead of `engine.entity_set_velocity()`
+- `engine.collision_entity_despawn()` instead of `engine.entity_despawn()` (not available in regular API)
+- `engine.collision_entity_signal_set_integer()` instead of `engine.entity_signal_set_integer()` (not available in regular API)
+- `engine.collision_entity_signal_set_flag()` instead of `engine.entity_signal_set_flag()`
+- `engine.collision_entity_signal_clear_flag()` instead of `engine.entity_signal_clear_flag()`
+- `engine.collision_entity_insert_timer()` instead of `engine.entity_insert_timer()` (not available in regular API)
+- `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
+
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 - Using `engine.spawn()` in a collision callback → entity is created during the next `on_update` or phase/timer callback (1+ frames later)
 - Using `engine.play_sound()` in a collision callback → sound plays during the next processing cycle
-
-For entity commands like `engine.entity_set_velocity()`, `engine.entity_despawn()`, etc., there is only one set of functions that work correctly in all contexts.
+- Using `engine.entity_set_velocity()` in a collision callback → velocity change may happen after next collision is processed
 
 **Performance Warning for `on_update` callbacks**:
 - `on_update_<scene>` runs every frame (60 FPS)
@@ -1149,12 +1158,12 @@ All entity command functions require an `entity_id` parameter (type `u64`). You 
    engine.entity_set_velocity(player_id, 100, 0)
    ```
 
-2. **From collision callbacks** - Entity IDs are provided in the collision context:
+2. **From collision callbacks** - Entity IDs are provided in the collision context. Use `collision_entity_*` functions:
    ```lua
    function on_ball_brick(ctx)
        local ball_id = ctx.a.id    -- Ball entity ID
        local brick_id = ctx.b.id   -- Brick entity ID
-       engine.entity_despawn(brick_id)
+       engine.collision_entity_despawn(brick_id)
    end
    ```
 
