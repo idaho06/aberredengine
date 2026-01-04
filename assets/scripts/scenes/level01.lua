@@ -133,45 +133,33 @@ function ball_moving_enter(entity_id, previous_phase)
     engine.release_stuckto(entity_id) ]]
 end
 
--- ==================== PLAYER PHASE CALLBACKS ====================
+-- ==================== SHIP PHASE CALLBACKS ====================
 
---- Called when player enters "sticky" phase
---- Set the "sticky" flag so ball sticks on collision, and play glowing animation
-function player_sticky_enter(entity_id, previous_phase)
-    --[[     engine.log_info("Player entering sticky phase")
-    engine.entity_signal_set_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing") ]]
+
+function ship_phase_idle_enter(entity_id, previous_phase)
+    engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(previous_phase))
+    -- set animation to idle
+    engine.entity_set_animation(entity_id, "ship_idle")
 end
 
---- Called each frame while player is in "sticky" phase
---- After 3 seconds, transition to "glowing" phase
-function player_sticky_update(entity_id, time_in_phase)
-    --[[     if time_in_phase >= 3.0 then
-        engine.log_info("Sticky powerup expired!")
-        engine.phase_transition(entity_id, "glowing")
+function ship_phase_idle_update(entity_id, time_in_phase)
+    -- engine.log_info("Ship idle phase update")
+    -- Check for input to switch to propulsion phase
+    --[[ if engine.is_action_thrust_pressed() then
+        engine.phase_transition(entity_id, "propulsion")
     end ]]
 end
 
---- Called when player enters "glowing" phase
---- Clear the "sticky" flag and play glowing animation
-function player_glowing_enter(entity_id, previous_phase)
-    --[[     engine.log_info("Player entering glowing phase")
-    engine.entity_signal_clear_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing") ]]
+function ship_phase_propulsion_enter(entity_id, previous_phase)
+    engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(previous_phase))
+    -- set animation to propulsion
+    engine.entity_set_animation(entity_id, "ship_propulsion")
 end
 
---- Called when player enters "hit" phase
---- Play the hit animation from frame 0
-function player_hit_enter(entity_id, previous_phase)
-    --[[     engine.log_info("Player entering hit phase")
-    engine.entity_set_animation(entity_id, "vaus_hit") ]]
-end
-
---- Called each frame while player is in "hit" phase
---- After 0.5 seconds, transition back to "glowing" phase
-function player_hit_update(entity_id, time_in_phase)
-    --[[     if time_in_phase >= 0.5 then
-        engine.phase_transition(entity_id, "glowing")
+function ship_phase_propulsion_update(entity_id, time_in_phase)
+    -- Check for input to switch back to idle phase
+    --[[ if not engine.is_action_thrust_pressed() then
+        engine.phase_transition(entity_id, "idle")
     end ]]
 end
 
@@ -339,46 +327,35 @@ local MAP_HEIGHT = 32
     engine.log_info("Walls spawned!")
 end ]]
 
---- Spawn the player paddle (Vaus)
---[[ local function spawn_player()
-    -- Calculate player Y position: near bottom of play area
-    local player_y = (TILE_SIZE * MAP_HEIGHT) - 36.0
-
-    -- Store player_y in world signals for ball spawn positioning
-    engine.set_scalar("player_y", player_y)
-
-    -- The Vaus - the player paddle
+--- Spawn the ship
+local function spawn_ship()
     -- Animation is controlled directly from Lua phase callbacks (no animation controller)
     engine.spawn()
-        :with_group("player")
-        :with_position(400, player_y)
-        :with_zindex(10)
-        :with_sprite("vaus_sheet", 96, 24, 48, 24) -- 96x24 sprite, origin at bottom center
-        :with_animation("vaus_glowing")            -- Start with glowing animation
-        :with_collider(96, 24, 48, 24)             -- Same size collider
-        :with_mouse_controlled(true, false)        -- Follow mouse X only
+        :with_group("ship")
+        :with_position(0, 0)
+        :with_zindex(1)
+        :with_sprite("ship_sheet", 64, 64, 32, 32)
+        :with_animation("ship_idle")
+        :with_collider(64, 64, 32, 32) -- Same size collider
         :with_signals()
         :with_phase({
-            initial = "sticky",
+            initial = "idle",
             phases = {
-                sticky = {
-                    on_enter = "player_sticky_enter",
-                    on_update = "player_sticky_update"
+                idle = {
+                    on_enter = "ship_phase_idle_enter",
+                    on_update = "ship_phase_idle_update"
                 },
-                glowing = {
-                    on_enter = "player_glowing_enter"
-                },
-                hit = {
-                    on_enter = "player_hit_enter",
-                    on_update = "player_hit_update"
+                propulsion = {
+                    on_enter = "ship_phase_propulsion_enter",
+                    on_update = "ship_phase_propulsion_update"
                 }
             }
         })
-        :register_as("player") -- Store entity ID for ball attachment
+        :register_as("ship") -- Store entity ID for ball attachment
         :build()
 
-    engine.log_info("Player paddle spawned!")
-end ]]
+    engine.log_info("Ship spawned!")
+end
 
 --- Spawn the UI score texts
 --[[ local function spawn_ui_texts()
@@ -428,6 +405,12 @@ end ]]
 --- This is called when entering the scene (before phase system starts)
 function M.spawn()
     engine.log_info("Spawning level01 scene entities from Lua...")
+
+    engine.log_info("Setting camera.")
+    -- todo: get screen size from engine instead of hardcoding for calculating offset
+    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 0.5)
+
+    spawn_ship()
 
     --[[     -- reset ball bounce and player hit counters
     ball_bounces = 0

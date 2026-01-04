@@ -15,6 +15,7 @@ function M.load_assets()
 
     -- Textures
     engine.load_texture("cursor", "./assets/textures/cursor.png")
+    engine.load_texture("ship_sheet", "./assets/textures/asteroids_ship.png")
     --[[ engine.load_texture("title", "./assets/textures/title.png")
     engine.load_texture("background", "./assets/textures/background01.png")
     engine.load_texture("vaus", "./assets/textures/vaus.png")
@@ -45,6 +46,8 @@ function M.load_assets()
     --[[ engine.load_tilemap("level01", "./assets/tilemaps/level01") ]]
 
     -- Animations
+    engine.register_animation("ship_idle", "ship_sheet", 0, 0, 64, 8, 15, true)
+    engine.register_animation("ship_propulsion", "ship_sheet", 0, 64, 64, 8, 15, true)
     --[[ engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
     engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false) ]]
 
