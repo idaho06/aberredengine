@@ -86,10 +86,11 @@ function M.spawn()
 end
 
 --- Called each frame when menu scene is active.
+--- @param input table Input state table with digital/analog inputs
 --- @param dt number Delta time in seconds
-function on_update_menu(dt)
+function on_update_menu(input, dt)
     -- Check for back button to quit game
-    if engine.is_action_back_just_pressed() then
+    if input.digital.back.just_pressed then
         engine.set_flag("quit_game")
     end
 
@@ -97,7 +98,7 @@ function on_update_menu(dt)
     -- so no additional logic is needed here for that.
 end
 
-function on_timer_title_test(entity_id)
+function on_timer_title_test(entity_id, input)
     -- Test callback for Lua timer on title entity_id
     engine.log_info("Title timer test callback triggered for entity ID: " .. tostring(entity_id))
     -- Create another lua timer attached to the background entity as a demonstration
@@ -109,7 +110,7 @@ function on_timer_title_test(entity_id)
     engine.entity_remove_lua_timer(entity_id)
 end
 
-function on_timer_background_test(entity_id)
+function on_timer_background_test(entity_id, input)
     -- Test callback for Lua timer on background entity_id
     engine.log_info("Background timer test callback triggered for entity ID: " .. tostring(entity_id))
     -- Add a tween scale effect to the background as a demonstration

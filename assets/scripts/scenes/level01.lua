@@ -251,7 +251,7 @@ end
 -- the phase definitions in :with_phase()
 
 --- Called when entering "init" phase (not used, we just transition immediately)
-function scene_init_update(entity_id, time_in_phase)
+function scene_init_update(entity_id, input, time_in_phase, dt)
     -- Immediately transition to get_started
     engine.phase_transition(entity_id, "get_started")
 end
@@ -259,7 +259,7 @@ end
 --- Called when entering "get_started" phase
 --- - Play "player_ready" music
 --- - Spawn the ball (stuck to player paddle)
-function scene_get_started_enter(entity_id, previous_phase)
+function scene_get_started_enter(entity_id, input, previous_phase)
     engine.log_info("Entering get_started phase - spawning ball")
 
     -- Play "player_ready" music (no loop)
@@ -310,7 +310,7 @@ function scene_get_started_enter(entity_id, previous_phase)
 end
 
 --- Called each frame in "get_started" phase
-function scene_get_started_update(entity_id, time_in_phase)
+function scene_get_started_update(entity_id, input, time_in_phase, dt)
     -- Transition to playing after setup
     engine.phase_transition(entity_id, "playing")
 end
@@ -319,7 +319,7 @@ end
 
 --- Called when ball enters "stuck_to_player" phase
 --- Attach ball to player with stored velocity
-function ball_stuck_enter(entity_id, previous_phase)
+function ball_stuck_enter(entity_id, input, previous_phase)
     engine.log_info("Ball stuck to player - attaching... ball_id=" ..
         tostring(entity_id) .. " prev=" .. tostring(previous_phase))
 
@@ -348,7 +348,7 @@ end
 
 --- Called each frame while ball is stuck to player
 --- After 2 seconds, release the ball
-function ball_stuck_update(entity_id, time_in_phase)
+function ball_stuck_update(entity_id, input, time_in_phase, dt)
     if time_in_phase >= 2.0 then
         engine.log_info("Releasing ball!")
         engine.phase_transition(entity_id, "moving")
@@ -357,7 +357,7 @@ end
 
 --- Called when ball enters "moving" phase (released from paddle)
 --- Remove StuckTo component and restore stored velocity to RigidBody
-function ball_moving_enter(entity_id, previous_phase)
+function ball_moving_enter(entity_id, input, previous_phase)
     engine.log_info("Ball released and moving!")
     -- Release from StuckTo - this removes the component and adds RigidBody with stored velocity
     engine.release_stuckto(entity_id)
@@ -367,7 +367,7 @@ end
 
 --- Called when player enters "sticky" phase
 --- Set the "sticky" flag so ball sticks on collision, and play glowing animation
-function player_sticky_enter(entity_id, previous_phase)
+function player_sticky_enter(entity_id, input, previous_phase)
     engine.log_info("Player entering sticky phase")
     engine.entity_signal_set_flag(entity_id, "sticky")
     engine.entity_set_animation(entity_id, "vaus_glowing")
@@ -375,7 +375,7 @@ end
 
 --- Called each frame while player is in "sticky" phase
 --- After 3 seconds, transition to "glowing" phase
-function player_sticky_update(entity_id, time_in_phase)
+function player_sticky_update(entity_id, input, time_in_phase, dt)
     if time_in_phase >= 3.0 then
         engine.log_info("Sticky powerup expired!")
         engine.phase_transition(entity_id, "glowing")
@@ -384,7 +384,7 @@ end
 
 --- Called when player enters "glowing" phase
 --- Clear the "sticky" flag and play glowing animation
-function player_glowing_enter(entity_id, previous_phase)
+function player_glowing_enter(entity_id, input, previous_phase)
     engine.log_info("Player entering glowing phase")
     engine.entity_signal_clear_flag(entity_id, "sticky")
     engine.entity_set_animation(entity_id, "vaus_glowing")
@@ -392,14 +392,14 @@ end
 
 --- Called when player enters "hit" phase
 --- Play the hit animation from frame 0
-function player_hit_enter(entity_id, previous_phase)
+function player_hit_enter(entity_id, input, previous_phase)
     engine.log_info("Player entering hit phase")
     engine.entity_set_animation(entity_id, "vaus_hit")
 end
 
 --- Called each frame while player is in "hit" phase
 --- After 0.5 seconds, transition back to "glowing" phase
-function player_hit_update(entity_id, time_in_phase)
+function player_hit_update(entity_id, input, time_in_phase, dt)
     if time_in_phase >= 0.5 then
         engine.phase_transition(entity_id, "glowing")
     end
@@ -410,7 +410,7 @@ end
 --- Called each frame in "playing" phase
 --- - Check for level cleared (no bricks)
 --- - Check for ball lost (no balls)
-function scene_playing_update(entity_id, time_in_phase)
+function scene_playing_update(entity_id, input, time_in_phase, dt)
     -- Skip first few frames to let group counts update
     if time_in_phase < 0.1 then
         return
@@ -436,7 +436,7 @@ end
 --- Called each frame in "lose_life" phase
 --- - Decrement lives
 --- - Transition to game_over or get_started
-function scene_lose_life_update(entity_id, time_in_phase)
+function scene_lose_life_update(entity_id, input, time_in_phase, dt)
     local lives = engine.get_integer("lives") or 0
     lives = lives - 1
     engine.set_integer("lives", lives)
@@ -451,7 +451,7 @@ end
 
 --- Called when entering "game_over" phase
 --- - Spawn "GAME OVER" text
-function scene_game_over_enter(entity_id, previous_phase)
+function scene_game_over_enter(entity_id, input, previous_phase)
     engine.log_info("Game Over!")
 
     -- Spawn game over text
@@ -465,7 +465,7 @@ end
 
 --- Called each frame in "game_over" phase
 --- - After 3 seconds, switch to menu scene
-function scene_game_over_update(entity_id, time_in_phase)
+function scene_game_over_update(entity_id, input, time_in_phase, dt)
     if time_in_phase >= 3.0 then
         engine.log_info("Game over - returning to menu")
         engine.set_string("scene", "menu")
@@ -480,7 +480,7 @@ end
 --- Called when entering "level_cleared" phase
 --- - Play success music
 --- - Spawn "LEVEL CLEARED" text
-function scene_level_cleared_enter(entity_id, previous_phase)
+function scene_level_cleared_enter(entity_id, input, previous_phase)
     engine.log_info("Level Cleared!")
 
     -- Play success music
@@ -497,7 +497,7 @@ end
 
 --- Called each frame in "level_cleared" phase
 --- - After 4 seconds, switch to menu scene
-function scene_level_cleared_update(entity_id, time_in_phase)
+function scene_level_cleared_update(entity_id, input, time_in_phase, dt)
     if time_in_phase >= 4.0 then
         engine.log_info("Level cleared - returning to menu")
         engine.set_string("scene", "menu")
@@ -737,10 +737,11 @@ function M.spawn()
 end
 
 --- Called each frame when level01 scene is active.
+--- @param input table Input state table with digital/analog inputs
 --- @param dt number Delta time in seconds
-function on_update_level01(dt)
+function on_update_level01(input, dt)
     -- Check for back button to return to menu
-    if engine.is_action_back_just_pressed() then
+    if input.digital.back.just_pressed then
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
     end
