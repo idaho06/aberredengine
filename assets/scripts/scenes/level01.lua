@@ -21,7 +21,11 @@ local M = {}
 -- the phase definitions in :with_phase()
 
 --- Called when entering "init" phase (not used, we just transition immediately)
-function scene_init_update(entity_id, time_in_phase)
+--- @param entity_id integer Entity ID
+--- @param input Input Input state table
+--- @param time_in_phase number Time spent in current phase
+--- @param dt number Delta time in seconds
+function scene_init_update(entity_id, input, time_in_phase, dt)
     -- Immediately transition to get_started
     engine.phase_transition(entity_id, "get_started")
 end
@@ -29,7 +33,10 @@ end
 --- Called when entering "get_started" phase
 --- - Play "player_ready" music
 --- - Spawn the ball (stuck to player paddle)
-function scene_get_started_enter(entity_id, previous_phase)
+--- @param entity_id integer Entity ID
+--- @param input Input Input state table
+--- @param previous_phase string|nil Previous phase name or nil
+function scene_get_started_enter(entity_id, input, previous_phase)
     engine.log_info("Entering get_started phase - spawning ball")
 
     --[[     -- Play "player_ready" music (no loop)
@@ -133,34 +140,72 @@ function ball_moving_enter(entity_id, previous_phase)
     engine.release_stuckto(entity_id) ]]
 end
 
--- ==================== SHIP PHASE CALLBACKS ====================
+-- ==================== SHIP PHASE CALLBACKS AND HELPERS ====================
 
+CURRENT_ROTATION = 0.0
 
-function ship_phase_idle_enter(entity_id, previous_phase)
+function rotate_ship(entity_id, input, dt)
+    local rotation_speed = 180 -- degrees per second
+    -- engine.log_info("Current rotation: " .. tostring(CURRENT_ROTATION))
+    -- local current_rotation = engine.entity_get_rotation(entity_id) -- OOPS! no such function yet
+
+    if input.digital.left.pressed then
+        -- engine.log_info("Rotating left")
+        CURRENT_ROTATION = CURRENT_ROTATION - rotation_speed * dt
+    end
+    if input.digital.right.pressed then
+        -- engine.log_info("Rotating right")
+        CURRENT_ROTATION = CURRENT_ROTATION + rotation_speed * dt
+    end
+
+    engine.entity_set_rotation(entity_id, CURRENT_ROTATION)
+end
+
+--- @param entity_id integer Entity ID
+--- @param input Input Input state table
+--- @param previous_phase string|nil Previous phase name or nil
+function ship_phase_idle_enter(entity_id, input, previous_phase)
     engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(previous_phase))
     -- set animation to idle
     engine.entity_set_animation(entity_id, "ship_idle")
 end
 
-function ship_phase_idle_update(entity_id, time_in_phase)
+--- @param entity_id integer Entity ID
+--- @param input Input Input state table
+--- @param time_in_phase number Time spent in current phase
+--- @param dt number Delta time in seconds
+function ship_phase_idle_update(entity_id, input, time_in_phase, dt)
     -- engine.log_info("Ship idle phase update")
-    -- Check for input to switch to propulsion phase
-    --[[ if engine.is_action_thrust_pressed() then
+
+    -- Handle rotation input
+    rotate_ship(entity_id, input, dt)
+
+    -- If "up" is just pressend, switch to propulsion phase
+    if input.digital.up.just_pressed then
         engine.phase_transition(entity_id, "propulsion")
-    end ]]
+    end
 end
 
-function ship_phase_propulsion_enter(entity_id, previous_phase)
+--- @param entity_id integer Entity ID
+--- @param input Input Input state table
+--- @param previous_phase string|nil Previous phase name or nil
+function ship_phase_propulsion_enter(entity_id, input, previous_phase)
     engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(previous_phase))
     -- set animation to propulsion
     engine.entity_set_animation(entity_id, "ship_propulsion")
 end
 
-function ship_phase_propulsion_update(entity_id, time_in_phase)
-    -- Check for input to switch back to idle phase
-    --[[ if not engine.is_action_thrust_pressed() then
+--- @param entity_id integer Entity ID
+--- @param input Input Input state table
+--- @param time_in_phase number Time spent in current phase
+--- @param dt number Delta time in seconds
+function ship_phase_propulsion_update(entity_id, input, time_in_phase, dt)
+    -- Handle rotation input
+    rotate_ship(entity_id, input, dt)
+    -- When "up" is released, go back to idle
+    if input.digital.up.just_released then
         engine.phase_transition(entity_id, "idle")
-    end ]]
+    end
 end
 
 -- ==================== SCENE GAME STATE CALLBACKS ====================
@@ -337,6 +382,7 @@ local function spawn_ship()
         :with_sprite("ship_sheet", 64, 64, 32, 32)
         :with_animation("ship_idle")
         :with_collider(64, 64, 32, 32) -- Same size collider
+        :with_rotation(0)
         :with_signals()
         :with_phase({
             initial = "idle",
@@ -408,7 +454,7 @@ function M.spawn()
 
     engine.log_info("Setting camera.")
     -- todo: get screen size from engine instead of hardcoding for calculating offset
-    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 0.5)
+    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
 
     spawn_ship()
 
@@ -490,10 +536,11 @@ function M.spawn()
 end
 
 --- Called each frame when level01 scene is active.
+--- @param input Input Input state table
 --- @param dt number Delta time in seconds
-function on_update_level01(dt)
+function on_update_level01(input, dt)
     -- Check for back button to return to menu
-    if engine.is_action_back_just_pressed() then
+    if input.digital.back.just_pressed then
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
     end
