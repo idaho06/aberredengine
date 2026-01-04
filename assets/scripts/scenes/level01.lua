@@ -110,16 +110,16 @@ function on_ball_player(ctx)
     if is_sticky then
         -- Store ball data in world signals for the ball's phase to use
         local offset_x = ball_pos.x - player_pos.x
-        engine.set_scalar("ball_stick_offset_x", offset_x)
-        engine.set_scalar("ball_stick_vx", new_vx)
-        engine.set_scalar("ball_stick_vy", new_vy)
+        engine.collision_set_scalar("ball_stick_offset_x", offset_x)
+        engine.collision_set_scalar("ball_stick_vx", new_vx)
+        engine.collision_set_scalar("ball_stick_vy", new_vy)
 
         -- Transition ball to stuck_to_player phase (ball's phase will handle StuckTo)
-        engine.phase_transition(ball_id, "stuck_to_player")
+        engine.collision_phase_transition(ball_id, "stuck_to_player")
     end
 
     -- Transition player to "hit" phase (handles animation flag)
-    engine.phase_transition(player_id, "hit")
+    engine.collision_phase_transition(player_id, "hit")
 
     -- Play ping sound
     engine.collision_play_sound("ping")
@@ -360,7 +360,7 @@ end
 function ball_moving_enter(entity_id, input, previous_phase)
     engine.log_info("Ball released and moving!")
     -- Release from StuckTo - this removes the component and adds RigidBody with stored velocity
-    engine.release_stuckto(entity_id)
+    engine.entity_release_stuckto(entity_id)
 end
 
 -- ==================== PLAYER PHASE CALLBACKS ====================
