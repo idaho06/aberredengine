@@ -5,6 +5,7 @@
 
 use super::commands::*;
 use super::entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
+use super::input_snapshot::InputSnapshot;
 use super::spawn_data::*;
 use crate::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
@@ -38,11 +39,6 @@ pub(super) struct LuaAppData {
     signal_snapshot: RefCell<Arc<SignalSnapshot>>,
     /// Cached tracked group names (read-only snapshot for Lua)
     tracked_groups: RefCell<FxHashSet<String>>,
-    /// Cached input state (read-only snapshot for Lua)
-    input_action_back_pressed: RefCell<bool>,
-    input_action_back_just_pressed: RefCell<bool>,
-    input_action_confirm_pressed: RefCell<bool>,
-    input_action_confirm_just_pressed: RefCell<bool>,
 }
 
 /// Resource holding the Lua interpreter state.
@@ -86,10 +82,6 @@ impl LuaRuntime {
             collision_camera_commands: RefCell::new(Vec::new()),
             signal_snapshot: RefCell::new(Arc::new(SignalSnapshot::default())),
             tracked_groups: RefCell::new(FxHashSet::default()),
-            input_action_back_pressed: RefCell::new(false),
-            input_action_back_just_pressed: RefCell::new(false),
-            input_action_confirm_pressed: RefCell::new(false),
-            input_action_confirm_just_pressed: RefCell::new(false),
         });
 
         let runtime = Self { lua };
@@ -105,7 +97,6 @@ impl LuaRuntime {
         runtime.register_camera_api()?;
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
-        runtime.register_input_api()?;
 
         Ok(runtime)
     }
@@ -1487,65 +1478,6 @@ impl LuaRuntime {
         Ok(())
     }
 
-    /// Registers input query functions in the `engine` table.
-    fn register_input_api(&self) -> LuaResult<()> {
-        let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.is_action_back_pressed() - Check if action_back (ESC) is currently pressed
-        engine.set(
-            "is_action_back_pressed",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .input_action_back_pressed
-                    .borrow()
-                    .clone()
-                    .into_lua(lua)
-            })?,
-        )?;
-
-        // engine.is_action_back_just_pressed() - Check if action_back (ESC) was just pressed this frame
-        engine.set(
-            "is_action_back_just_pressed",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .input_action_back_just_pressed
-                    .borrow()
-                    .clone()
-                    .into_lua(lua)
-            })?,
-        )?;
-
-        // engine.is_action_confirm_pressed() - Check if action_confirm (SPACE) is currently pressed
-        engine.set(
-            "is_action_confirm_pressed",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .input_action_confirm_pressed
-                    .borrow()
-                    .clone()
-                    .into_lua(lua)
-            })?,
-        )?;
-
-        // engine.is_action_confirm_just_pressed() - Check if action_confirm (SPACE) was just pressed this frame
-        engine.set(
-            "is_action_confirm_just_pressed",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .input_action_confirm_just_pressed
-                    .borrow()
-                    .clone()
-                    .into_lua(lua)
-            })?,
-        )?;
-
-        Ok(())
-    }
-
     /// Drains all queued asset commands.
     ///
     /// Call this from a Rust system after Lua has queued commands via
@@ -1736,15 +1668,60 @@ impl LuaRuntime {
         }
     }
 
-    /// Updates the cached input state that Lua can read.
-    /// Call this before invoking Lua callbacks so they have fresh input data.
-    pub fn update_input_cache(&self, input: &crate::resources::input::InputState) {
-        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
-            *data.input_action_back_pressed.borrow_mut() = input.action_back.active;
-            *data.input_action_back_just_pressed.borrow_mut() = input.action_back.just_pressed;
-            *data.input_action_confirm_pressed.borrow_mut() = input.action_1.active;
-            *data.input_action_confirm_just_pressed.borrow_mut() = input.action_1.just_pressed;
-        }
+    /// Creates a Lua table containing the current input state.
+    ///
+    /// This is called before each Lua callback to create the input table argument.
+    /// The table structure is:
+    /// ```lua
+    /// input = {
+    ///     digital = {
+    ///         up = { pressed = bool, just_pressed = bool, just_released = bool },
+    ///         down = { ... },
+    ///         left = { ... },
+    ///         right = { ... },
+    ///         action_1 = { ... },
+    ///         action_2 = { ... },
+    ///         back = { ... },
+    ///         special = { ... },
+    ///     },
+    ///     analog = {
+    ///         -- Reserved for future gamepad support
+    ///     },
+    /// }
+    /// ```
+    pub fn create_input_table(&self, snapshot: &InputSnapshot) -> LuaResult<LuaTable> {
+        let lua = &self.lua;
+
+        // Helper to create a button state table
+        let create_button_table =
+            |state: &super::input_snapshot::DigitalButtonState| -> LuaResult<LuaTable> {
+                let table = lua.create_table()?;
+                table.set("pressed", state.pressed)?;
+                table.set("just_pressed", state.just_pressed)?;
+                table.set("just_released", state.just_released)?;
+                Ok(table)
+            };
+
+        // Create digital inputs table
+        let digital = lua.create_table()?;
+        digital.set("up", create_button_table(&snapshot.digital.up)?)?;
+        digital.set("down", create_button_table(&snapshot.digital.down)?)?;
+        digital.set("left", create_button_table(&snapshot.digital.left)?)?;
+        digital.set("right", create_button_table(&snapshot.digital.right)?)?;
+        digital.set("action_1", create_button_table(&snapshot.digital.action_1)?)?;
+        digital.set("action_2", create_button_table(&snapshot.digital.action_2)?)?;
+        digital.set("back", create_button_table(&snapshot.digital.back)?)?;
+        digital.set("special", create_button_table(&snapshot.digital.special)?)?;
+
+        // Create analog inputs table (empty for now, reserved for future gamepad support)
+        let analog = lua.create_table()?;
+
+        // Create root input table
+        let input = lua.create_table()?;
+        input.set("digital", digital)?;
+        input.set("analog", analog)?;
+
+        Ok(input)
     }
 
     /// Loads and executes a Lua script from a file path.
