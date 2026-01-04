@@ -32,12 +32,14 @@
 //! ```
 
 mod commands;
-mod spawn_data;
 mod entity_builder;
+mod input_snapshot;
 mod runtime;
+mod spawn_data;
 
 // Re-export all public types for backwards compatibility
 pub use commands::*;
-pub use spawn_data::*;
-pub use entity_builder::{LuaEntityBuilder, LuaCollisionEntityBuilder};
+pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
+pub use input_snapshot::InputSnapshot;
 pub use runtime::LuaRuntime;
+pub use spawn_data::*;

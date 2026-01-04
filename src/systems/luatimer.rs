@@ -18,8 +18,9 @@
 //! # Lua Callback Signature
 //!
 //! ```lua
-//! function callback_name(entity_id)
+//! function callback_name(entity_id, input)
 //!     -- entity_id is a u64 number
+//!     -- input is the input table with digital and analog inputs
 //!     -- Full access to engine API
 //! end
 //! ```
@@ -34,7 +35,8 @@ use crate::components::signals::Signals;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
-use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
+use crate::resources::input::InputState;
+use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
@@ -73,7 +75,7 @@ pub fn update_lua_timers(
 /// When a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) is triggered:
 ///
 /// 1. Checks if the Lua function exists
-/// 2. Calls it with `(entity_id)` as parameter
+/// 2. Calls it with `(entity_id, input)` as parameters
 /// 3. Processes all commands queued by the Lua function:
 ///    - Audio commands (play music/sounds)
 ///    - Signal commands (modify WorldSignals)
@@ -85,6 +87,7 @@ pub fn update_lua_timers(
 pub fn lua_timer_observer(
     trigger: On<LuaTimerEvent>,
     mut commands: Commands,
+    input: Res<InputState>,
     stuckto_query: Query<&StuckTo>,
     mut signals_query: Query<&mut Signals>,
     mut animation_query: Query<&mut Animation>,
@@ -100,9 +103,19 @@ pub fn lua_timer_observer(
     // Update signal cache so Lua can read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
 
-    // Call the Lua callback
+    // Create input snapshot and table
+    let input_snapshot = InputSnapshot::from_input_state(&input);
+    let input_table = match lua_runtime.create_input_table(&input_snapshot) {
+        Ok(table) => table,
+        Err(e) => {
+            eprintln!("[Rust] Error creating input table for timer callback: {}", e);
+            return;
+        }
+    };
+
+    // Call the Lua callback with (entity_id, input)
     if lua_runtime.has_function(&event.callback) {
-        if let Err(e) = lua_runtime.call_function::<_, ()>(&event.callback, entity_id) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(&event.callback, (entity_id, input_table)) {
             eprintln!("[Lua] Error in {}(): {}", event.callback, e);
         }
     } else {

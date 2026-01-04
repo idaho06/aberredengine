@@ -23,23 +23,38 @@ function engine.log_warn(message) end
 ---@param message string The message to log
 function engine.log_error(message) end
 
--- ==================== Input Functions ====================
+-- ==================== Input Types ====================
+-- Input is passed as an argument to callbacks, not queried via functions.
+--
+-- Callback signatures:
+--   Scene update:    function on_update_scenename(input, dt)
+--   Phase enter:     function phase_enter(entity_id, input, previous_phase)
+--   Phase update:    function phase_update(entity_id, input, time_in_phase, dt)
+--   Phase exit:      function phase_exit(entity_id)  -- no input, housekeeping only
+--   Timer callback:  function timer_callback(entity_id, input)
 
----Check if the back/cancel button (ESC) is currently held down
----@return boolean pressed True if ESC is currently pressed
-function engine.is_action_back_pressed() end
+---@class DigitalButtonState
+---@field pressed boolean Whether the button is currently held down
+---@field just_pressed boolean Whether the button was just pressed this frame
+---@field just_released boolean Whether the button was just released this frame
 
----Check if the back/cancel button (ESC) was just pressed this frame
----@return boolean just_pressed True if ESC was just pressed this frame
-function engine.is_action_back_just_pressed() end
+---@class DigitalInputs
+---@field up DigitalButtonState Up direction (W or Up arrow)
+---@field down DigitalButtonState Down direction (S or Down arrow)
+---@field left DigitalButtonState Left direction (A or Left arrow)
+---@field right DigitalButtonState Right direction (D or Right arrow)
+---@field action_1 DigitalButtonState Primary action (Space)
+---@field action_2 DigitalButtonState Secondary action (Enter)
+---@field back DigitalButtonState Back/cancel (Escape)
+---@field special DigitalButtonState Special action (F12)
 
----Check if the confirm/action button (SPACE) is currently held down
----@return boolean pressed True if SPACE is currently pressed
-function engine.is_action_confirm_pressed() end
+---@class AnalogInputs
+-- Reserved for future gamepad support
+-- Future fields: move_x, move_y, look_x, look_y, trigger_left, trigger_right
 
----Check if the confirm/action button (SPACE) was just pressed this frame
----@return boolean just_pressed True if SPACE was just pressed this frame
-function engine.is_action_confirm_just_pressed() end
+---@class Input
+---@field digital DigitalInputs Digital button states
+---@field analog AnalogInputs Analog axis values (reserved for future use)
 
 -- ==================== Asset Loading ====================
 
@@ -485,12 +500,9 @@ function engine.clear_flag(key) end
 function engine.get_entity(key) end
 
 -- ==================== Entity Commands ====================
-
----Set entity position (collision-scoped, use in collision callbacks)
----@param entity_id integer Entity ID
----@param x number New X position
----@param y number New Y position
-function engine.entity_set_position(entity_id, x, y) end
+-- Note: entity_set_position, entity_despawn, entity_signal_set_integer, and
+-- entity_insert_timer only exist in the collision API (collision_entity_*).
+-- See collision-specific commands section below.
 
 ---Set entity velocity
 ---@param entity_id integer Entity ID
@@ -508,16 +520,6 @@ function engine.entity_set_rotation(entity_id, degrees) end
 ---@param sx number Scale X (1.0 = normal size)
 ---@param sy number Scale Y (1.0 = normal size)
 function engine.entity_set_scale(entity_id, sx, sy) end
-
----Despawn an entity (collision-scoped, use in collision callbacks)
----@param entity_id integer Entity ID
-function engine.entity_despawn(entity_id) end
-
----Set entity integer signal (collision-scoped, use in collision callbacks)
----@param entity_id integer Entity ID
----@param key string Signal key
----@param value integer Signal value
-function engine.entity_signal_set_integer(entity_id, key, value) end
 
 ---Set entity scalar (float) signal
 ---@param entity_id integer Entity ID

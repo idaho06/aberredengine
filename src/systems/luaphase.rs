@@ -23,12 +23,13 @@
 //! # Callback Signatures (Lua side)
 //!
 //! ```lua
-//! function my_enter_callback(entity_id, previous_phase)
-//! function my_update_callback(entity_id, time_in_phase)
-//! function my_exit_callback(entity_id, next_phase)
+//! function my_enter_callback(entity_id, input, previous_phase)
+//! function my_update_callback(entity_id, input, time_in_phase, dt)
+//! function my_exit_callback(entity_id)
 //! ```
 
 use bevy_ecs::prelude::*;
+use mlua::prelude::*;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
@@ -49,7 +50,8 @@ use crate::components::stuckto::StuckTo;
 use crate::components::timer::Timer;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
+use crate::resources::input::InputState;
+use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
@@ -57,6 +59,61 @@ use crate::systems::lua_commands::{
     process_signal_command, process_spawn_command,
 };
 use raylib::prelude::{Color, Vector2};
+
+/// Call phase enter callback: (entity_id, input, previous_phase)
+fn call_phase_enter(
+    lua_runtime: &LuaRuntime,
+    fn_name: &str,
+    entity_id: u64,
+    input_table: &LuaTable,
+    previous_phase: Option<&str>,
+) {
+    if lua_runtime.has_function(fn_name) {
+        let result = match previous_phase {
+            Some(phase) => {
+                lua_runtime.call_function::<_, ()>(fn_name, (entity_id, input_table.clone(), phase))
+            }
+            None => lua_runtime.call_function::<_, ()>(fn_name, (entity_id, input_table.clone(), LuaNil)),
+        };
+        if let Err(e) = result {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+        }
+    } else {
+        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+    }
+}
+
+/// Call phase update callback: (entity_id, input, time_in_phase, dt)
+fn call_phase_update(
+    lua_runtime: &LuaRuntime,
+    fn_name: &str,
+    entity_id: u64,
+    input_table: &LuaTable,
+    time_in_phase: f32,
+    dt: f32,
+) {
+    if lua_runtime.has_function(fn_name) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(
+            fn_name,
+            (entity_id, input_table.clone(), time_in_phase, dt),
+        ) {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+        }
+    } else {
+        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+    }
+}
+
+/// Call phase exit callback: (entity_id) - no input, housekeeping only
+fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, entity_id: u64) {
+    if lua_runtime.has_function(fn_name) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(fn_name, entity_id) {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+        }
+    } else {
+        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+    }
+}
 
 /// Process Lua-based phase state machines.
 ///
@@ -73,6 +130,7 @@ pub fn lua_phase_system(
     mut animation_query: Query<&mut Animation>,
     mut rigid_bodies_query: Query<&mut RigidBody>,
     time: Res<WorldTime>,
+    input: Res<InputState>,
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
@@ -80,15 +138,27 @@ pub fn lua_phase_system(
     // Update signal cache so Lua can read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
 
+    // Create input snapshot once for all callbacks this frame
+    let input_snapshot = InputSnapshot::from_input_state(&input);
+    let input_table = match lua_runtime.create_input_table(&input_snapshot) {
+        Ok(table) => table,
+        Err(e) => {
+            eprintln!("[Rust] Error creating input table for phase system: {}", e);
+            return;
+        }
+    };
+
+    let delta = time.delta;
+
     for (entity, mut lua_phase) in query.iter_mut() {
         let entity_id = entity.to_bits();
 
-        // Handle initial enter callback
+        // Handle initial enter callback: (entity_id, input, nil)
         if lua_phase.needs_enter_callback {
             lua_phase.needs_enter_callback = false;
             if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
                 if let Some(ref fn_name) = callbacks.on_enter {
-                    call_lua_callback(&lua_runtime, fn_name, entity_id, LuaNil);
+                    call_phase_enter(&lua_runtime, fn_name, entity_id, &input_table, None);
                 }
             }
         }
@@ -99,30 +169,30 @@ pub fn lua_phase_system(
             lua_phase.previous = Some(old_phase.clone());
             lua_phase.time_in_phase = 0.0;
 
-            // Call exit callback for old phase
+            // Call exit callback for old phase: (entity_id) - no input, housekeeping only
             if let Some(callbacks) = lua_phase.get_callbacks(&old_phase) {
                 if let Some(ref fn_name) = callbacks.on_exit {
-                    call_lua_callback(&lua_runtime, fn_name, entity_id, next_phase.as_str());
+                    call_phase_exit(&lua_runtime, fn_name, entity_id);
                 }
             }
 
-            // Call enter callback for new phase
+            // Call enter callback for new phase: (entity_id, input, previous_phase)
             if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
                 if let Some(ref fn_name) = callbacks.on_enter {
-                    call_lua_callback(&lua_runtime, fn_name, entity_id, old_phase.as_str());
+                    call_phase_enter(&lua_runtime, fn_name, entity_id, &input_table, Some(&old_phase));
                 }
             }
         }
 
-        // Call update callback
+        // Call update callback: (entity_id, input, time_in_phase, dt)
         if let Some(callbacks) = lua_phase.current_callbacks() {
             if let Some(ref fn_name) = callbacks.on_update {
-                call_lua_callback(&lua_runtime, fn_name, entity_id, lua_phase.time_in_phase);
+                call_phase_update(&lua_runtime, fn_name, entity_id, &input_table, lua_phase.time_in_phase, delta);
             }
         }
 
         // Increment time
-        lua_phase.time_in_phase += time.delta;
+        lua_phase.time_in_phase += delta;
     }
 
     // Process phase commands from Lua
@@ -158,24 +228,5 @@ pub fn lua_phase_system(
     // Process camera commands from Lua
     for cmd in lua_runtime.drain_camera_commands() {
         process_camera_command(&mut commands, cmd);
-    }
-}
-
-use mlua::IntoLua;
-use mlua::Nil as LuaNil;
-
-/// Call a named Lua function with (entity_id, arg2).
-fn call_lua_callback<'lua, T: IntoLua>(
-    lua_runtime: &LuaRuntime,
-    fn_name: &str,
-    entity_id: u64,
-    arg2: T,
-) {
-    if lua_runtime.has_function(fn_name) {
-        if let Err(e) = lua_runtime.call_function::<_, ()>(fn_name, (entity_id, arg2)) {
-            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
-        }
-    } else {
-        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
     }
 }
