@@ -1,14 +1,14 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2025-12-29 (synced with codebase)
+# Last updated: 2026-01-04 (synced with codebase)
 
 ## QUICK REFERENCE
 
-STACK: Rust + Bevy ECS 0.17 + Raylib 5.5 + MLua (LuaJIT)
+STACK: Rust + Bevy ECS 0.17.3 + Raylib 5.5 + MLua (LuaJIT)
 GAME_TYPE: Arkanoid-style breakout clone (2D)
 ENTRY: src/main.rs
 LUA_ENTRY: assets/scripts/main.lua
-WINDOW: 672x768 @ 120fps
+WINDOW: Configurable (default 640x360 render, 1280x720 window) @ 120fps
 
 ## FILE TREE (ESSENTIAL)
 
@@ -49,6 +49,7 @@ src/
 │   ├── collision.rs           # AABB detection, Lua callback dispatch
 │   ├── render.rs              # Raylib drawing, camera, debug overlays, letterboxing
 │   ├── input.rs               # Poll keyboard state
+│   ├── gameconfig.rs          # Apply configuration changes from GameConfig
 │   ├── inputsimplecontroller.rs    # Input→velocity
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
@@ -72,6 +73,7 @@ src/
 │   ├── worldtime.rs           # Delta time, time scale
 │   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
 │   ├── fullscreen.rs          # FullScreen marker resource
+│   ├── gameconfig.rs          # GameConfig INI-based configuration
 │   ├── texturestore.rs        # FxHashMap<String, Texture2D>
 │   ├── fontstore.rs           # FxHashMap<String, Font> (non-send)
 │   ├── animationstore.rs      # Animation definitions
@@ -153,8 +155,11 @@ TextureStore(FxHashMap<String, Texture2D>)
 FontStore(FxHashMap<String, Font>) - NON_SEND
 AnimationStore(FxHashMap<String, AnimationDef>)
 TilemapStore(FxHashMap<String, TilemapData>)
-GameState { Setup, Playing, Paused, Quitting }
-NextGameState(Option<GameState>)
+GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, config_path } - Loaded from config.ini
+GameState { current: GameStates } - Authoritative current state
+GameStates enum { None, Setup, Playing, Paused, Quitting }
+NextGameState { next: NextGameStates } - Pending transition
+NextGameStates enum { Unchanged, Pending(GameStates) }
 WorldSignals { scalars, integers, strings, flags, entities, group_counts }
 SignalSnapshot { scalars, integers, strings, flags, entities, group_counts } - read-only cache for Lua
 TrackedGroups(FxHashSet<String>)
@@ -198,22 +203,10 @@ EntityCmd {
     FreezeEntity { entity_id }
     UnfreezeEntity { entity_id }
     SetSpeed { entity_id, speed }
-}
-
-CollisionEntityCmd {
     SetPosition { entity_id, x, y }
-    SetVelocity { entity_id, vx, vy }
     Despawn { entity_id }
     SignalSetInteger { entity_id, key, value }
-    SignalSetFlag { entity_id, flag }
-    SignalClearFlag { entity_id, flag }
     InsertTimer { entity_id, duration, signal }
-    InsertStuckTo { entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy }
-    FreezeEntity { entity_id }
-    UnfreezeEntity { entity_id }
-    AddForce { entity_id, name, x, y, enabled }
-    SetForceEnabled { entity_id, name, enabled }
-    SetSpeed { entity_id, speed }
 }
 
 SpawnCmd { position, screen_position, sprite, collider, velocity, friction, max_speed, forces, frozen, ... }
@@ -253,16 +246,20 @@ engine.clear_flag(key)
 engine.get_entity(key) -> entity_id|nil
 engine.get_group_count(group) -> count|nil
 
--- Entity Commands (queued for deferred processing)
+-- Entity Commands (queued for deferred processing in entity_commands)
 engine.release_stuckto(id)
 engine.entity_signal_set_flag(id, flag)
 engine.entity_signal_clear_flag(id, flag)
 engine.entity_signal_set_scalar(id, key, value)
 engine.entity_signal_set_string(id, key, value)
-engine.entity_set_velocity(id, vx, vy)  -- NOTE: overwrites to collision queue
+engine.entity_signal_set_integer(id, key, value)
+engine.entity_set_velocity(id, vx, vy)
 engine.entity_set_rotation(id, deg)
 engine.entity_set_scale(id, sx, sy)
+engine.entity_set_position(id, x, y)
+engine.entity_despawn(id)
 engine.entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
+engine.entity_insert_timer(id, duration, signal)
 engine.entity_set_animation(id, key)
 engine.entity_restart_animation(id)
 engine.entity_insert_lua_timer(id, duration, callback)
@@ -282,36 +279,34 @@ engine.entity_unfreeze(id)
 engine.entity_set_speed(id, speed)
 
 -- Collision-Context Commands (processed immediately after collision callbacks)
--- NOTE: entity_set_position, entity_set_velocity, entity_despawn push to collision queue
-engine.entity_set_position(id, x, y)  -- collision queue only
-engine.entity_set_velocity(id, vx, vy)  -- collision queue (overwrites entity API)
-engine.entity_despawn(id)  -- collision queue only
-engine.entity_signal_set_integer(id, key, value)  -- collision queue
-engine.entity_signal_set_flag(id, flag)  -- collision queue (overwrites entity API)
-engine.entity_signal_clear_flag(id, flag)  -- collision queue (overwrites entity API)
-engine.entity_insert_timer(id, duration, signal)  -- collision queue only
-engine.entity_insert_stuckto(...)  -- collision queue (overwrites entity API)
-engine.collision_play_sound(id)
-engine.collision_set_integer(key, value)
-engine.collision_set_flag(key)
-engine.collision_clear_flag(key)
-engine.collision_spawn() -> LuaCollisionEntityBuilder
-engine.collision_phase_transition(id, phase)
-engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
-engine.collision_entity_freeze(id)
-engine.collision_entity_unfreeze(id)
-engine.collision_entity_add_force(id, name, x, y, enabled)
-engine.collision_entity_set_force_enabled(id, name, enabled)
-engine.collision_entity_set_speed(id, speed)
+-- All collision context commands use the collision_entity_commands queue
+engine.entity_set_position(id, x, y)  -- queued to collision_entity_commands
+engine.entity_set_velocity(id, vx, vy)  -- queued to collision_entity_commands
+engine.entity_despawn(id)  -- queued to collision_entity_commands
+engine.entity_signal_set_integer(id, key, value)  -- queued to collision_entity_commands
+engine.entity_signal_set_flag(id, flag)  -- queued to collision_entity_commands
+engine.entity_signal_clear_flag(id, flag)  -- queued to collision_entity_commands
+engine.entity_insert_timer(id, duration, signal)  -- queued to collision_entity_commands
+engine.entity_insert_stuckto(...)  -- queued to collision_entity_commands
+engine.entity_freeze(id)  -- queued to collision_entity_commands
+engine.entity_unfreeze(id)  -- queued to collision_entity_commands
+engine.entity_add_force(id, name, x, y, enabled)  -- queued to collision_entity_commands
+engine.entity_set_force_enabled(id, name, enabled)  -- queued to collision_entity_commands
+engine.entity_set_speed(id, speed)  -- queued to collision_entity_commands
+engine.collision_play_sound(id)  -- queued to collision_audio_commands
+engine.collision_set_integer(key, value)  -- queued to collision_signal_commands
+engine.collision_set_flag(key)  -- queued to collision_signal_commands
+engine.collision_clear_flag(key)  -- queued to collision_signal_commands
+engine.collision_spawn() -> LuaCollisionEntityBuilder  -- queued to collision_spawn_commands
+engine.collision_phase_transition(id, phase)  -- queued to collision_phase_commands
+engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)  -- queued to collision_camera_commands
 
 -- Phase Control
 engine.phase_transition(id, phase)
 
--- Input
-engine.is_action_back_pressed() -> bool
-engine.is_action_back_just_pressed() -> bool
-engine.is_action_confirm_pressed() -> bool
-engine.is_action_confirm_just_pressed() -> bool
+-- Input (passed via input table argument to callbacks, not engine API functions)
+-- See create_input_table() for structure: input.digital.up/down/left/right/action_1/action_2/back/special
+-- Each has: pressed, just_pressed, just_released fields
 
 -- Groups
 engine.track_group(name)
@@ -413,28 +408,31 @@ Systems with explicit ordering constraints (`.after()`):
 - render_system.after(collision_detector)
 
 Approximate execution order:
-1. phase_change_detector
-2. phase_update_system
-3. menu_spawn_system
-4. gridlayout_spawn_system
-5. update_input_state
-6. check_pending_state
-7. update_group_counts_system
-8. audio systems (update_world_time, poll_audio_messages, forward_audio_cmds, ...)
-9. input_simple_controller
-10. input_acceleration_controller
-11. mouse_controller
-12. tween_mapposition_system, tween_rotation_system, tween_scale_system
-13. movement
-14. collision_detector
-15. stuck_to_entity_system, lua_phase_system, render_system (all after collision)
-16. animation_controller (after lua_phase)
-17. animation (after animation_controller)
-18. update_timers
-19. update_lua_timers
-20. update_world_signals_binding_system
-21. dynamictext_size_system
-22. run_<scene>_update (via game.rs)
+1. apply_gameconfig_changes (when state is Playing)
+2. phase_change_detector
+3. phase_update_system (after phase_change_detector)
+4. menu_spawn_system
+5. gridlayout_spawn_system
+6. update_input_state
+7. check_pending_state
+8. update_group_counts_system
+9. audio systems (update_bevy_audio_cmds, forward_audio_cmds, poll_audio_messages, update_bevy_audio_messages)
+10. input_simple_controller
+11. input_acceleration_controller
+12. mouse_controller
+13. tween_mapposition_system, tween_rotation_system, tween_scale_system
+14. movement
+15. collision_detector (after mouse_controller, after movement)
+16. stuck_to_entity_system (after collision_detector)
+17. lua_phase_system (after collision_detector)
+18. animation_controller (after lua_phase_system)
+19. animation (after animation_controller)
+20. update_timers
+21. update_lua_timers
+22. update_world_signals_binding_system
+23. dynamictext_size_system (after update_world_signals_binding_system)
+24. game::update (run_if state_is_playing, after check_pending_state)
+25. render_system (after collision_detector)
 
 ## KEY PATTERNS
 
@@ -497,6 +495,7 @@ For features touching:
 - Signals: signals.rs, worldsignals.rs
 - Text: dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
 - Input: inputcontrolled.rs (InputControlled, AccelerationControlled, MouseControlled)
+- Configuration: gameconfig.rs (resource), gameconfig.rs (system), config.ini
 
 ## RAYLIB NOTES
 
@@ -537,8 +536,10 @@ For features touching:
 8. Timer callbacks receive entity_id as first arg
 9. Animation controller evaluates rules in order, first match wins
 10. Frozen entities skip movement but still render
-11. engine.entity_set_position/velocity/despawn go to collision queue (not entity queue)
-12. Some entity_* functions are overwritten by collision API registration order
-13. DynamicText.size is cached by dynamictext_size_system (not calculated per-frame)
-14. WindowSize vs ScreenSize: WindowSize is actual window, ScreenSize is game resolution
-15. Mouse position is automatically corrected for letterboxing in mouse_controller
+10. All entity commands (entity_set_position, entity_despawn, entity_set_velocity, etc.) use EntityCmd and go to entity_commands queue in normal context or collision_entity_commands queue in collision callbacks
+11. Input is not available via engine API functions; it's passed as an 'input' table argument to Lua callbacks
+12. DynamicText.size is cached by dynamictext_size_system (not calculated per-frame)
+13. WindowSize vs ScreenSize: WindowSize is actual window, ScreenSize is game resolution
+14. Mouse position is automatically corrected for letterboxing in mouse_controller
+15. GameConfig is loaded from config.ini on startup; changes are applied by apply_gameconfig_changes system
+16. GameStates is the enum (None, Setup, Playing, Paused, Quitting); GameState is the resource containing current state
