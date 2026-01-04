@@ -79,7 +79,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{AnimationCmd, LuaRuntime};
+use crate::resources::lua_runtime::{AnimationCmd, InputSnapshot, LuaRuntime};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -628,13 +628,21 @@ pub fn update(
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
 
-    // Update input cache for Lua to read current input state
-    lua_runtime.update_input_cache(&input);
+    // Create input snapshot and Lua table for callbacks
+    let input_snapshot = InputSnapshot::from_input_state(&input);
+    let input_table = match lua_runtime.create_input_table(&input_snapshot) {
+        Ok(table) => table,
+        Err(e) => {
+            eprintln!("[Rust] Error creating input table: {}", e);
+            return;
+        }
+    };
 
-    // Call scene-specific update callback
+    // Call scene-specific update callback with (input, dt)
     let callback_name = format!("on_update_{}", scene);
     if lua_runtime.has_function(&callback_name) {
-        if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, delta_sec) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, (input_table, delta_sec))
+        {
             eprintln!("[Rust] Error calling {}: {}", callback_name, e);
         }
     }

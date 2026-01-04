@@ -7,7 +7,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Getting Started](#getting-started)
 - [Script Execution Flow](#script-execution-flow)
 - [Logging Functions](#logging-functions)
-- [Input Functions](#input-functions)
+- [Input System](#input-system)
 - [Asset Loading](#asset-loading)
 - [Audio Playback](#audio-playback)
 - [Entity Spawning](#entity-spawning)
@@ -26,6 +26,10 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Camera Control](#camera-control)
 - [Group Tracking](#group-tracking)
 - [Tilemap Rendering](#tilemap-rendering)
+- [Complete Example: Player Paddle](#complete-example-player-paddle)
+- [Tips and Best Practices](#tips-and-best-practices)
+- [Debugging](#debugging)
+- [License](#license)
 
 ---
 
@@ -205,49 +209,92 @@ engine.log_error("Failed to load asset: " .. path)
 
 ---
 
-## Input Functions
+## Input System
 
-Query the current input state from Lua. These functions read cached input values updated each frame.
+Input is passed as a table argument to callbacks instead of being queried via functions. This provides a snapshot of all input state at the moment the callback is invoked.
 
-### `engine.is_action_back_pressed()`
-Returns `true` if the back/cancel button (ESC) is currently held down.
+### Input Table Structure
+
+The `input` table has the following structure:
+
 ```lua
-if engine.is_action_back_pressed() then
-    -- ESC key is being held
-end
+input = {
+    digital = {
+        up = { pressed = bool, just_pressed = bool, just_released = bool },
+        down = { pressed = bool, just_pressed = bool, just_released = bool },
+        left = { pressed = bool, just_pressed = bool, just_released = bool },
+        right = { pressed = bool, just_pressed = bool, just_released = bool },
+        action_1 = { pressed = bool, just_pressed = bool, just_released = bool },
+        action_2 = { pressed = bool, just_pressed = bool, just_released = bool },
+        back = { pressed = bool, just_pressed = bool, just_released = bool },
+        special = { pressed = bool, just_pressed = bool, just_released = bool },
+    },
+    analog = {
+        -- Reserved for future gamepad support
+    }
+}
 ```
 
-### `engine.is_action_back_just_pressed()`
-Returns `true` if the back/cancel button (ESC) was pressed this frame (not held from previous frame).
+### Digital Input States
+
+Each digital button has three boolean properties:
+
+- `pressed` - `true` if the button is currently held down
+- `just_pressed` - `true` only on the frame when the button was first pressed
+- `just_released` - `true` only on the frame when the button was released
+
+### Input Mapping
+
+| Input Name | Keyboard Keys |
+|------------|---------------|
+| `up` | W, Up Arrow |
+| `down` | S, Down Arrow |
+| `left` | A, Left Arrow |
+| `right` | D, Right Arrow |
+| `action_1` | Space |
+| `action_2` | Left Shift |
+| `back` | Escape |
+| `special` | Enter |
+
+### Usage Examples
+
 ```lua
+-- Check if player is holding right
+if input.digital.right.pressed then
+    -- Move player right
+end
+
+-- Check if player just pressed jump (one-shot action)
+if input.digital.action_1.just_pressed then
+    -- Start jump
+end
+
+-- Check if player released the action button
+if input.digital.action_1.just_released then
+    -- End charged attack
+end
+
 -- Common pattern: Return to menu on ESC press
-function on_update_level01(dt)
-    if engine.is_action_back_just_pressed() then
+function on_update_level01(input, dt)
+    if input.digital.back.just_pressed then
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
     end
 end
 ```
 
-### `engine.is_action_confirm_pressed()`
-Returns `true` if the confirm/action button (SPACE) is currently held down.
-```lua
-if engine.is_action_confirm_pressed() then
-    -- Space bar is being held
-end
-```
+### Which Callbacks Receive Input
 
-### `engine.is_action_confirm_just_pressed()`
-Returns `true` if the confirm/action button (SPACE) was pressed this frame.
-```lua
-if engine.is_action_confirm_just_pressed() then
-    -- Player just pressed space - trigger action
-end
-```
+| Callback Type | Receives Input | Signature |
+|---------------|----------------|-----------|
+| Scene update | ✓ | `on_update_scenename(input, dt)` |
+| Phase on_enter | ✓ | `callback(entity_id, input, previous_phase)` |
+| Phase on_update | ✓ | `callback(entity_id, input, time_in_phase, dt)` |
+| Phase on_exit | ✗ | `callback(entity_id)` |
+| Timer | ✓ | `callback(entity_id, input)` |
+| Collision | ✗ | `callback(ctx)` |
 
-**Input Mapping**:
-- `action_back` → ESC key
-- `action_confirm` → SPACE key (also used as `action_1`)
+**Note:** Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
 
 ---
 
@@ -1005,14 +1052,17 @@ engine.spawn()
 function enemy_explode(entity_id)
     engine.log_info("Enemy exploding!")
     engine.play_sound("explosion")
-    engine.entity_despawn(entity_id)
+    -- Note: entity_despawn is not available in regular API.
+    -- Use phase transitions or spawn entities with fixed lifetimes instead.
+    engine.phase_transition(entity_id, "dead")  -- Transition to a "dead" phase
 end
 ```
 
 **Features:**
 - Timer automatically resets after firing (repeats every `duration` seconds)
-- Lua callback has full engine API access (spawn entities, play audio, modify components, etc.)
+- Lua callback has full engine API access (spawn entities, play audio, modify signals, etc.)
 - Can be added at spawn-time with `:with_lua_timer()` or at runtime with `engine.entity_insert_lua_timer()`
+- **Limitation:** Cannot despawn entities from timer callbacks (use phase transitions instead)
 
 **See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
 
@@ -1174,12 +1224,6 @@ All entity command functions require an `entity_id` parameter (type `u64`). You 
    end
    ```
 
-### `engine.entity_set_position(entity_id, x, y)`
-Set entity's world position.
-```lua
-engine.entity_set_position(ball_id, 400, 300)
-```
-
 ### `engine.entity_set_velocity(entity_id, vx, vy)`
 Set entity's velocity (requires RigidBody component).
 ```lua
@@ -1199,12 +1243,6 @@ engine.entity_set_scale(boss_id, 2.0, 2.0)  -- Double size
 engine.entity_set_scale(player_id, 0.5, 1.0)  -- Half width
 ```
 
-### `engine.entity_despawn(entity_id)`
-Delete an entity.
-```lua
-engine.entity_despawn(brick_id)
-```
-
 ### `engine.entity_signal_set_flag(entity_id, flag)`
 Set flag on entity's Signals component.
 ```lua
@@ -1215,13 +1253,6 @@ engine.entity_signal_set_flag(player_id, "sticky")
 Clear flag on entity's Signals component.
 ```lua
 engine.entity_signal_clear_flag(player_id, "sticky")
-```
-
-### `engine.entity_signal_set_integer(entity_id, key, value)`
-Set integer signal on entity.
-```lua
-local hp = engine.get_entity_signal_integer(brick_id, "hp")
-engine.entity_signal_set_integer(brick_id, "hp", hp - 1)
 ```
 
 ### `engine.entity_signal_set_scalar(entity_id, key, value)`
@@ -1236,12 +1267,6 @@ Set string signal on entity.
 engine.entity_signal_set_string(player_id, "state", "running")
 ```
 
-### `engine.entity_insert_timer(entity_id, duration, signal)`
-Insert Timer component on entity.
-```lua
-engine.entity_insert_timer(player_id, 5.0, "invulnerability_expired")
-```
-
 ### `engine.entity_insert_lua_timer(entity_id, duration, callback)`
 Insert LuaTimer component on entity at runtime.
 
@@ -1252,15 +1277,11 @@ Insert LuaTimer component on entity at runtime.
 
 **Example:**
 ```lua
--- In a collision callback
-function on_ball_powerup(ctx)
-    local player_id = engine.get_entity("player")
-
+-- In a phase callback (regular context)
+function player_hit_enter(entity_id, input, previous_phase)
     -- Give player 10 seconds of invulnerability
-    engine.entity_signal_set_flag(player_id, "invulnerable")
-    engine.entity_insert_lua_timer(player_id, 10.0, "remove_invulnerability")
-
-    engine.entity_despawn(ctx.b.id)  -- Remove powerup
+    engine.entity_signal_set_flag(entity_id, "invulnerable")
+    engine.entity_insert_lua_timer(entity_id, 10.0, "remove_invulnerability")
 end
 
 -- Timer callback
@@ -1650,8 +1671,8 @@ function on_ball_player(ctx)
     -- sides.a contains: "top", "bottom", "left", "right"
     -- sides.b contains: "top", "bottom", "left", "right"
 
-    -- Manipulate entities
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
+    -- Manipulate entities using collision-specific functions
+    engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
     engine.collision_play_sound("ping")
 end
 ```
@@ -1701,11 +1722,13 @@ function on_ball_brick(ctx)
         :with_lua_timer(0.5, "despawn_particle")
         :build()
 
-    engine.entity_despawn(ctx.b.id)
+    engine.collision_entity_despawn(ctx.b.id)
 end
 
 function despawn_particle(entity_id)
-    engine.entity_despawn(entity_id)
+    -- Note: This timer callback runs in regular context, but entity_despawn
+    -- doesn't exist in regular API. Use phase callbacks or spawn entities
+    -- with a fixed lifetime instead.
 end
 ```
 
@@ -1725,6 +1748,170 @@ function on_player_enemy(ctx)
 
     -- Play hit sound
     engine.collision_play_sound("player_hit")
+end
+```
+
+#### `engine.collision_entity_set_position(entity_id, x, y)`
+Set an entity's world position during collision handling. Useful for teleporting entities or implementing push-back mechanics.
+
+**Parameters:**
+- `entity_id` - Entity with MapPosition component
+- `x`, `y` - New world position
+
+```lua
+function on_player_teleporter(ctx)
+    local player_id = ctx.a.id
+    -- Teleport player to destination
+    engine.collision_entity_set_position(player_id, 400, 300)
+    engine.collision_play_sound("teleport")
+end
+```
+
+#### `engine.collision_entity_set_velocity(entity_id, vx, vy)`
+Set an entity's velocity during collision handling. Essential for implementing bounce physics and knockback effects.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `vx`, `vy` - New velocity components
+
+```lua
+function on_ball_wall(ctx)
+    local ball_id = ctx.a.id
+    local ball_vel = ctx.a.vel
+    local sides = ctx.sides.a
+
+    local new_vx = ball_vel.x
+    local new_vy = ball_vel.y
+
+    if sides.left or sides.right then
+        new_vx = -new_vx
+    end
+    if sides.top or sides.bottom then
+        new_vy = -new_vy
+    end
+
+    engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
+end
+```
+
+#### `engine.collision_entity_despawn(entity_id)`
+Remove an entity during collision handling. The entity will be despawned after the collision callback returns.
+
+**Parameters:**
+- `entity_id` - Entity to despawn
+
+```lua
+function on_bullet_enemy(ctx)
+    local bullet_id = ctx.a.id
+    local enemy_id = ctx.b.id
+
+    -- Despawn both the bullet and the enemy
+    engine.collision_entity_despawn(bullet_id)
+    engine.collision_entity_despawn(enemy_id)
+
+    -- Spawn explosion effect
+    engine.collision_spawn()
+        :with_position(ctx.b.pos.x, ctx.b.pos.y)
+        :with_sprite("explosion", 32, 32, 16, 16)
+        :with_animation("explosion_anim")
+        :build()
+end
+```
+
+#### `engine.collision_entity_signal_set_integer(entity_id, key, value)`
+Set an integer signal on an entity's Signals component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Signals component
+- `key` - Signal key
+- `value` - Integer value
+
+```lua
+function on_ball_brick(ctx)
+    local brick_id = ctx.b.id
+    local brick_signals = ctx.b.signals
+
+    local hp = brick_signals.integers and brick_signals.integers.hp or 1
+    hp = hp - 1
+
+    if hp <= 0 then
+        engine.collision_entity_despawn(brick_id)
+    else
+        engine.collision_entity_signal_set_integer(brick_id, "hp", hp)
+    end
+end
+```
+
+#### `engine.collision_entity_signal_set_flag(entity_id, flag)`
+Set a flag on an entity's Signals component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Signals component
+- `flag` - Flag name
+
+```lua
+function on_player_powerup(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_signal_set_flag(player_id, "powered_up")
+    engine.collision_entity_despawn(ctx.b.id)
+end
+```
+
+#### `engine.collision_entity_signal_clear_flag(entity_id, flag)`
+Clear a flag on an entity's Signals component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Signals component
+- `flag` - Flag name
+
+```lua
+function on_player_debuff_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_signal_clear_flag(player_id, "shield_active")
+end
+```
+
+#### `engine.collision_entity_insert_timer(entity_id, duration, signal)`
+Insert a Timer component on an entity during collision handling. When the timer expires, it emits a TimerEvent with the specified signal.
+
+**Parameters:**
+- `entity_id` - Entity to add timer to
+- `duration` - Time in seconds
+- `signal` - Signal name for the TimerEvent
+
+```lua
+function on_player_poison(ctx)
+    local player_id = ctx.a.id
+    -- Start a 5 second poison timer
+    engine.collision_entity_insert_timer(player_id, 5.0, "poison_tick")
+end
+```
+
+#### `engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
+Attach an entity to another entity during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to attach
+- `target_id` - Entity to follow
+- `follow_x`, `follow_y` - Which axes to follow
+- `offset_x`, `offset_y` - Position offset from target
+- `stored_vx`, `stored_vy` - Velocity to restore when released
+
+```lua
+function on_ball_sticky_paddle(ctx)
+    local ball_id = ctx.a.id
+    local paddle_id = ctx.b.id
+
+    -- Calculate offset (ball position relative to paddle)
+    local offset_x = ctx.a.pos.x - ctx.b.pos.x
+
+    -- Attach ball to paddle
+    engine.collision_entity_insert_stuckto(
+        ball_id, paddle_id,
+        true, false,      -- Follow X only
+        offset_x, -12,    -- Offset (centered X, above paddle)
+        300, -300         -- Stored velocity for release
+    )
 end
 ```
 
@@ -1830,13 +2017,13 @@ function on_ball_brick(ctx)
     -- Damage brick
     hp = hp - 1
     if hp <= 0 then
-        engine.entity_despawn(brick_id)
+        engine.collision_entity_despawn(brick_id)
 
         -- Award points
         local score = engine.get_integer("score") or 0
         engine.collision_set_integer("score", score + 100)
     else
-        engine.entity_signal_set_integer(brick_id, "hp", hp)
+        engine.collision_entity_signal_set_integer(brick_id, "hp", hp)
     end
 
     -- Bounce ball
@@ -1851,7 +2038,7 @@ function on_ball_brick(ctx)
         new_vx = -new_vx
     end
 
-    engine.entity_set_velocity(ball_id, new_vx, new_vy)
+    engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
     engine.collision_play_sound("ding")
 end
 ```
