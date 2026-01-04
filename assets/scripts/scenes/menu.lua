@@ -72,10 +72,11 @@ function M.spawn()
 end
 
 --- Called each frame when menu scene is active.
+--- @param input Input Input state table
 --- @param dt number Delta time in seconds
-function on_update_menu(dt)
+function on_update_menu(input, dt)
     -- Check for back button to quit game
-    if engine.is_action_back_just_pressed() then
+    if input.digital.back.just_pressed then
         engine.set_flag("quit_game")
     end
 
