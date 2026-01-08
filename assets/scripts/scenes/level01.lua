@@ -19,23 +19,24 @@ local M = {}
 -- ==================== PHASE CALLBACK FUNCTIONS ====================
 -- These are named functions called directly by the engine based on
 -- the phase definitions in :with_phase()
--- Phase callbacks now receive EntityContext (ctx) instead of entity_id
 
 --- Called when entering "init" phase (not used, we just transition immediately)
---- @param ctx EntityContext Entity context table
+--- @param entity_id integer Entity ID
 --- @param input Input Input state table
+--- @param time_in_phase number Time spent in current phase
 --- @param dt number Delta time in seconds
-function scene_init_update(ctx, input, dt)
+function scene_init_update(entity_id, input, time_in_phase, dt)
     -- Immediately transition to get_started
-    engine.phase_transition(ctx.id, "get_started")
+    engine.phase_transition(entity_id, "get_started")
 end
 
 --- Called when entering "get_started" phase
 --- - Play "player_ready" music
 --- - Spawn the ball (stuck to player paddle)
---- @param ctx EntityContext Entity context table
+--- @param entity_id integer Entity ID
 --- @param input Input Input state table
-function scene_get_started_enter(ctx, input)
+--- @param previous_phase string|nil Previous phase name or nil
+function scene_get_started_enter(entity_id, input, previous_phase)
     engine.log_info("Entering get_started phase - spawning ball")
 
     --[[     -- Play "player_ready" music (no loop)
@@ -86,23 +87,18 @@ function scene_get_started_enter(ctx, input)
 end
 
 --- Called each frame in "get_started" phase
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function scene_get_started_update(ctx, input, dt)
+function scene_get_started_update(entity_id, time_in_phase)
     -- Transition to playing after setup
-    -- engine.phase_transition(ctx.id, "playing")
+    -- engine.phase_transition(entity_id, "playing")
 end
 
 -- ==================== BALL PHASE CALLBACKS ====================
 
 --- Called when ball enters "stuck_to_player" phase
 --- Attach ball to player with stored velocity
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function ball_stuck_enter(ctx, input)
+function ball_stuck_enter(entity_id, previous_phase)
     --[[     engine.log_info("Ball stuck to player - attaching... ball_id=" ..
-        tostring(ctx.id) .. " prev=" .. tostring(ctx.previous_phase))
+        tostring(entity_id) .. " prev=" .. tostring(previous_phase))
 
     -- Get player entity
     local player_id = engine.get_entity("player")
@@ -121,98 +117,94 @@ function ball_stuck_enter(ctx, input)
         tostring(offset_x) .. " vx=" .. tostring(vx) .. " vy=" .. tostring(vy))
 
     -- Stop the ball and attach to player
-    engine.entity_set_velocity(ctx.id, 0, 0)
-    engine.entity_insert_stuckto(ctx.id, player_id, true, false, offset_x, 0, vx, vy)
+    engine.entity_set_velocity(entity_id, 0, 0)
+    engine.entity_insert_stuckto(entity_id, player_id, true, false, offset_x, 0, vx, vy)
 
     engine.log_info("Ball attached to player with StuckTo!") ]]
 end
 
 --- Called each frame while ball is stuck to player
 --- After 2 seconds, release the ball
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function ball_stuck_update(ctx, input, dt)
-    --[[     if ctx.time_in_phase >= 2.0 then
+function ball_stuck_update(entity_id, time_in_phase)
+    --[[     if time_in_phase >= 2.0 then
         engine.log_info("Releasing ball!")
-        engine.phase_transition(ctx.id, "moving")
+        engine.phase_transition(entity_id, "moving")
     end ]]
 end
 
 --- Called when ball enters "moving" phase (released from paddle)
 --- Remove StuckTo component and restore stored velocity to RigidBody
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function ball_moving_enter(ctx, input)
+function ball_moving_enter(entity_id, previous_phase)
     --[[     engine.log_info("Ball released and moving!")
     -- Release from StuckTo - this removes the component and adds RigidBody with stored velocity
-    engine.release_stuckto(ctx.id) ]]
+    engine.release_stuckto(entity_id) ]]
 end
 
 -- ==================== SHIP PHASE CALLBACKS AND HELPERS ====================
 
---- Helper function to rotate the ship based on input
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-local function rotate_ship(ctx, input, dt)
-    local rotation_speed = 360.0 -- degrees per second
+CURRENT_ROTATION = 0.0
+
+function rotate_ship(entity_id, input, dt)
+    local rotation_speed = 180 -- degrees per second
     -- engine.log_info("Current rotation: " .. tostring(CURRENT_ROTATION))
-    -- Note: ctx.rotation contains current rotation if available
-    current_rotation = ctx.rotation or 0.0
+    -- local current_rotation = engine.entity_get_rotation(entity_id) -- OOPS! no such function yet
 
     if input.digital.left.pressed then
         -- engine.log_info("Rotating left")
-        current_rotation = current_rotation - rotation_speed * dt
+        CURRENT_ROTATION = CURRENT_ROTATION - rotation_speed * dt
     end
     if input.digital.right.pressed then
         -- engine.log_info("Rotating right")
-        current_rotation = current_rotation + rotation_speed * dt
+        CURRENT_ROTATION = CURRENT_ROTATION + rotation_speed * dt
     end
 
-    engine.entity_set_rotation(ctx.id, current_rotation)
+    engine.entity_set_rotation(entity_id, CURRENT_ROTATION)
 end
 
---- @param ctx EntityContext Entity context table
+--- @param entity_id integer Entity ID
 --- @param input Input Input state table
-function ship_phase_idle_enter(ctx, input)
-    engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
+--- @param previous_phase string|nil Previous phase name or nil
+function ship_phase_idle_enter(entity_id, input, previous_phase)
+    engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(previous_phase))
     -- set animation to idle
-    engine.entity_set_animation(ctx.id, "ship_idle")
+    engine.entity_set_animation(entity_id, "ship_idle")
 end
 
---- @param ctx EntityContext Entity context table
+--- @param entity_id integer Entity ID
 --- @param input Input Input state table
+--- @param time_in_phase number Time spent in current phase
 --- @param dt number Delta time in seconds
-function ship_phase_idle_update(ctx, input, dt)
+function ship_phase_idle_update(entity_id, input, time_in_phase, dt)
     -- engine.log_info("Ship idle phase update")
 
     -- Handle rotation input
-    rotate_ship(ctx, input, dt)
+    rotate_ship(entity_id, input, dt)
 
-    -- If "up" is just pressed, switch to propulsion phase
+    -- If "up" is just pressend, switch to propulsion phase
     if input.digital.up.just_pressed then
-        engine.phase_transition(ctx.id, "propulsion")
+        engine.phase_transition(entity_id, "propulsion")
     end
 end
 
---- @param ctx EntityContext Entity context table
+--- @param entity_id integer Entity ID
 --- @param input Input Input state table
-function ship_phase_propulsion_enter(ctx, input)
-    engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
+--- @param previous_phase string|nil Previous phase name or nil
+function ship_phase_propulsion_enter(entity_id, input, previous_phase)
+    engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(previous_phase))
     -- set animation to propulsion
-    engine.entity_set_animation(ctx.id, "ship_propulsion")
+    engine.entity_set_animation(entity_id, "ship_propulsion")
 end
 
---- @param ctx EntityContext Entity context table
+--- @param entity_id integer Entity ID
 --- @param input Input Input state table
+--- @param time_in_phase number Time spent in current phase
 --- @param dt number Delta time in seconds
-function ship_phase_propulsion_update(ctx, input, dt)
+function ship_phase_propulsion_update(entity_id, input, time_in_phase, dt)
     -- Handle rotation input
-    rotate_ship(ctx, input, dt)
+    rotate_ship(entity_id, input, dt)
     -- When "up" is released, go back to idle
     if input.digital.up.just_released then
-        engine.phase_transition(ctx.id, "idle")
+        engine.phase_transition(entity_id, "idle")
     end
 end
 
@@ -221,12 +213,9 @@ end
 --- Called each frame in "playing" phase
 --- - Check for level cleared (no bricks)
 --- - Check for ball lost (no balls)
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function scene_playing_update(ctx, input, dt)
+function scene_playing_update(entity_id, time_in_phase)
     --[[     -- Skip first few frames to let group counts update
-    if ctx.time_in_phase < 0.1 then
+    if time_in_phase < 0.1 then
         return
     end
 
@@ -234,7 +223,7 @@ function scene_playing_update(ctx, input, dt)
     local brick_count = engine.get_group_count("brick")
     if brick_count ~= nil and brick_count == 0 then
         engine.log_info("All bricks destroyed - level cleared!")
-        engine.phase_transition(ctx.id, "level_cleared")
+        engine.phase_transition(entity_id, "level_cleared")
         return
     end
 
@@ -242,7 +231,7 @@ function scene_playing_update(ctx, input, dt)
     local ball_count = engine.get_group_count("ball")
     if ball_count ~= nil and ball_count == 0 then
         engine.log_info("No balls remaining - lose life!")
-        engine.phase_transition(ctx.id, "lose_life")
+        engine.phase_transition(entity_id, "lose_life")
         return
     end ]]
 end
@@ -250,27 +239,22 @@ end
 --- Called each frame in "lose_life" phase
 --- - Decrement lives
 --- - Transition to game_over or get_started
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function scene_lose_life_update(ctx, input, dt)
+function scene_lose_life_update(entity_id, time_in_phase)
     --[[     local lives = engine.get_integer("lives") or 0
     lives = lives - 1
     engine.set_integer("lives", lives)
     engine.log_info(string.format("Lost a life! Remaining lives: %d", lives))
 
     if lives < 1 then
-        engine.phase_transition(ctx.id, "game_over")
+        engine.phase_transition(entity_id, "game_over")
     else
-        engine.phase_transition(ctx.id, "get_started")
+        engine.phase_transition(entity_id, "get_started")
     end ]]
 end
 
 --- Called when entering "game_over" phase
 --- - Spawn "GAME OVER" text
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function scene_game_over_enter(ctx, input)
+function scene_game_over_enter(entity_id, previous_phase)
     --[[     engine.log_info("Game Over!")
 
     -- Spawn game over text
@@ -284,11 +268,8 @@ end
 
 --- Called each frame in "game_over" phase
 --- - After 3 seconds, switch to menu scene
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function scene_game_over_update(ctx, input, dt)
-    --[[     if ctx.time_in_phase >= 3.0 then
+function scene_game_over_update(entity_id, time_in_phase)
+    --[[     if time_in_phase >= 3.0 then
         engine.log_info("Game over - returning to menu")
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
@@ -302,9 +283,7 @@ end
 --- Called when entering "level_cleared" phase
 --- - Play success music
 --- - Spawn "LEVEL CLEARED" text
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function scene_level_cleared_enter(ctx, input)
+function scene_level_cleared_enter(entity_id, previous_phase)
     --[[     engine.log_info("Level Cleared!")
 
     -- Play success music
@@ -321,11 +300,8 @@ end
 
 --- Called each frame in "level_cleared" phase
 --- - After 4 seconds, switch to menu scene
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function scene_level_cleared_update(ctx, input, dt)
-    --[[     if ctx.time_in_phase >= 4.0 then
+function scene_level_cleared_update(entity_id, time_in_phase)
+    --[[     if time_in_phase >= 4.0 then
         engine.log_info("Level cleared - returning to menu")
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")

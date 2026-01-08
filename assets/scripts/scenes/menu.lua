@@ -84,25 +84,25 @@ function on_update_menu(input, dt)
     -- so no additional logic is needed here for that.
 end
 
---[[ function on_timer_title_test(ctx, input)
-    -- Test callback for Lua timer on title entity
-    engine.log_info("Title timer test callback triggered for entity ID: " .. tostring(ctx.id))
+--[[ function on_timer_title_test(entity_id)
+    -- Test callback for Lua timer on title entity_id
+    engine.log_info("Title timer test callback triggered for entity ID: " .. tostring(entity_id))
     -- Create another lua timer attached to the background entity as a demonstration
     local bg_entity = engine.get_entity("menu_background")
     if bg_entity then
         engine.entity_insert_lua_timer(bg_entity, 3.0, "on_timer_background_test")
     end
     -- remove this timer so it doesn't repeat
-    engine.entity_remove_lua_timer(ctx.id)
+    engine.entity_remove_lua_timer(entity_id)
 end ]]
 
---[[ function on_timer_background_test(ctx, input)
-    -- Test callback for Lua timer on background entity
-    engine.log_info("Background timer test callback triggered for entity ID: " .. tostring(ctx.id))
+--[[ function on_timer_background_test(entity_id)
+    -- Test callback for Lua timer on background entity_id
+    engine.log_info("Background timer test callback triggered for entity ID: " .. tostring(entity_id))
     -- Add a tween scale effect to the background as a demonstration
-    engine.entity_insert_tween_scale(ctx.id, 3.0, 3.0, 3.2, 3.2, 2.0, "cubic_in_out", "ping_pong")
+    engine.entity_insert_tween_scale(entity_id, 3.0, 3.0, 3.2, 3.2, 2.0, "cubic_in_out", "ping_pong")
     -- remove this timer so it doesn't repeat
-    engine.entity_remove_lua_timer(ctx.id)
+    engine.entity_remove_lua_timer(entity_id)
 end ]]
 
 return M

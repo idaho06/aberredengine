@@ -80,7 +80,6 @@ src/
 │   ├── animationstore.rs      # Animation definitions
 │   ├── tilemapstore.rs        # Tilemap layouts
 │   ├── gamestate.rs           # GameState enum + NextGameState
-│   ├── gameconfig.rs          # GameConfig (resolution, fps, etc.)
 │   ├── worldsignals.rs        # Global signal storage + SignalSnapshot
 │   ├── group.rs               # TrackedGroups set
 │   ├── camera2d.rs            # Camera2D config
@@ -93,9 +92,8 @@ src/
 │   └── lua_runtime/
 │       ├── mod.rs             # Public exports
 │       ├── runtime.rs         # LuaRuntime, engine table API registration
-│       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, etc.
+│       ├── commands.rs        # EntityCmd, CollisionEntityCmd, SpawnCmd, etc.
 │       ├── entity_builder.rs  # LuaEntityBuilder, LuaCollisionEntityBuilder fluent API
-│       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
 │       └── spawn_data.rs      # SpawnComponentData structures
 └── events/
     ├── mod.rs                 # Re-exports
@@ -183,7 +181,6 @@ AnimationStore(FxHashMap<String, AnimationDef>)
 TilemapStore(FxHashMap<String, TilemapData>)
 GameState { Setup, Playing, Paused, Quitting }
 NextGameState(Option<GameState>)
-GameConfig { fps: u32, render_width: u32, render_height: u32, render_filter: RenderFilter }
 WorldSignals { scalars, integers, strings, flags, entities, group_counts }
 SignalSnapshot { scalars, integers, strings, flags, entities, group_counts } - read-only cache for Lua
 TrackedGroups(FxHashSet<String>)
@@ -197,12 +194,6 @@ FullScreen (marker) - presence indicates fullscreen mode
 SystemsStore(FxHashMap<String, SystemFn>)
 LuaRuntime { lua: Lua, ... } - NON_SEND
 AudioBridge { sender, receiver }
-InputSnapshot { digital: DigitalInputs, analog: AnalogInputs } - frozen input state for Lua
-DigitalInputs { up, down, left, right, action_1, action_2, back, special: DigitalButtonState }
-DigitalButtonState { pressed: bool, just_pressed: bool, just_released: bool }
-AnalogInputs { } - reserved for future gamepad supportystemFn>)
-LuaRuntime { lua: Lua, ... } - NON_SEND
-AudioBridge { sender, receiver }
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
@@ -211,19 +202,19 @@ EntityCmd {
     SignalSetFlag { entity_id, flag }
     SignalClearFlag { entity_id, flag }
     SetVelocity { entity_id, vx, vy }
-    SetPosition { entity_id, x, y }
     InsertStuckTo { entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy }
     RestartAnimation { entity_id }
     SetAnimation { entity_id, animation_key }
     InsertLuaTimer { entity_id, duration, callback }
     RemoveLuaTimer { entity_id }
-    InsertTimer { entity_id, duration, signal }
     InsertTweenPosition { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode }
     InsertTweenRotation { entity_id, from, to, duration, easing, loop_mode }
     InsertTweenScale { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode }
     RemoveTweenPosition/Rotation/Scale { entity_id }
     SetRotation { entity_id, degrees }
     SetScale { entity_id, sx, sy }
+    SignalSetScalar { entity_id, key, value }
+    SignalSetString { entity_id, key, value }
     AddForce { entity_id, name, x, y, enabled }
     RemoveForce { entity_id, name }
     SetForceEnabled { entity_id, name, enabled }
@@ -305,13 +296,10 @@ engine.entity_set_animation(id, key)
 engine.entity_restart_animation(id)
 engine.entity_insert_lua_timer(id, duration, callback)
 engine.entity_remove_lua_timer(id)
-engine.entity_insert_timer(id, duration, signal)
 engine.entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
 engine.entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode)
 engine.entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
-engine.entity_remove_tween_position(id)
-engine.entity_remove_tween_rotation(id)
-engine.entity_remove_tween_scale(id)
+engine.entity_remove_tween_position/rotation/scale(id)
 engine.entity_add_force(id, name, x, y, enabled)
 engine.entity_remove_force(id, name)
 engine.entity_set_force_enabled(id, name, enabled)
@@ -331,8 +319,6 @@ engine.entity_insert_timer(id, duration, signal)
 engine.collision_spawn() -> EntityBuilder (same capabilities as engine.spawn())
 engine.collision_play_sound(id)
 engine.collision_set_integer(key, value)
-engine.collision_set_scalar(key, value)
-engine.collision_set_string(key, value)
 engine.collision_set_flag(key)
 engine.collision_clear_flag(key)
 engine.collision_phase_transition(id, phase)
@@ -416,8 +402,6 @@ engine.spawn_tiles(id)
 
 ## COLLISION CONTEXT (Lua callback ctx table)
 
-Collision callbacks receive a single `ctx` table argument with collision details:
-
 ctx.a.id           -- u64 entity ID
 ctx.a.group        -- string group name
 ctx.a.pos          -- { x, y } or nil
@@ -428,10 +412,8 @@ ctx.a.signals      -- { flags={...}, integers={...}, scalars={...}, strings={...
 
 ctx.b.id/group/pos/vel/speed_sq/rect/signals  -- same structure
 
-ctx.sides.a -- array of strings: "top", "bottom", "left", "right" (which sides of 'a' are colliding)
-ctx.sides.b -- array of strings: "top", "bottom", "left", "right" (which sides of 'b' are colliding)
-
-Note: Collision callbacks do NOT receive input parameter - only ctx table
+ctx.sides.a.top/bottom/left/right  -- bool collision sides
+ctx.sides.b.top/bottom/left/right
 
 ## SYSTEM EXECUTION ORDER (main.rs schedule)
 
@@ -467,26 +449,7 @@ Approximate execution order:
 19. update_lua_timers
 20. update_world_signals_binding_system
 21. dynamictext_size_system
-22. Input in Lua Callbacks:
-Lua callbacks now receive input as a parameter (not queried):
-- Scene update: `on_update_scenename(input, dt)` for regular, register_collision_api for collision)
-3. Process in process_entity_commands or process_collision_entity_commands (lua_commands.rs)
-4. Add to engine.lua autocomplete stubs
-5. Document in README.md
-
-### Adding a CollisionEntityCmd:
-DEPRECATED - Collision now uses same EntityCmd enum. Add to both entity and collision APIs using pattern above.ust_pressed  -- boolean
-input.digital.back.just_released     -- boolean
--- Available: up, down, left, right, action_1, action_2, back, special
-```
-
-### Entity API Synchronization:
-Both regular and collision entity APIs now expose the same 32 EntityCmd functions:
-- Regular API: `engine.entity_*` functions (queued, processed each frame)
-- Collision API: `engine.collision_entity_*` functions (processed immediately after collision)
-- Key difference: execution timing, not capabilities
-
-### run_<scene>_update (via game.rs)
+22. run_<scene>_update (via game.rs)
 
 ## KEY PATTERNS
 
@@ -511,14 +474,14 @@ Both regular and collision entity APIs now expose the same 32 EntityCmd function
 3. Export from systems/mod.rs
 4. Add to schedule in main.rs (correct position)
 
-### Adding a new Resource:, input_snapshot.rs
-- Collision: collision.rs (systems), boxcollider.rs, luacollision.rs (components)
-- Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs
-- Animation: animation.rs (component + controller), animationstore.rs
-- State machines: luaphase.rs (component + system)
-- Signals: signals.rs, worldsignals.rs
-- Text: dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
-- Input: inputcontrolled.rs (InputControlled, AccelerationControlled, MouseControlled), input_snapshot.rs
+### Adding a new Resource:
+1. Create file in src/resources/
+2. Derive Resource (or use non-send pattern)
+3. Export from resources/mod.rs
+4. Insert into world in main.rs
+
+### Lua-Rust Command Flow:
+Lua calls engine.* -> LuaAppData.commands.borrow_mut().push(Cmd)
 -> Lua returns -> game.rs processes queued commands
 -> Commands modify ECS world
 
@@ -556,23 +519,20 @@ For features touching:
 - normalized() returns new vector
 - Camera2D { target, offset, rotation, zoom }
 - Texture2D, Font are non-Send
-- Color::new(r, g, b, ause same EntityCmd queue but processed immediately (collision_entity_commands)
-3. SpawnCmd processed in lua_commands.rs, not inline
-4. Entity IDs are u64 in Lua (Entity::to_bits)
-5. Raylib Vector2 methods differ from other math libs (length_sqr not length_squared)
-6. Signals component auto-created if using :with_signal_* builders
-7. Phase callbacks receive entity_id as first arg, then input (except on_exit which has no input)
-8. Timer callbacks receive (entity_id, input) as arguments
-9. Collision callbacks receive only ctx table (no input parameter)
-10. Animation controller evaluates rules in order, first match wins
-11. Frozen entities skip movement but still render
-12. Both entity_* and collision_entity_* APIs now have identical 32 functions
-13. DynamicText.size is cached by dynamictext_size_system (not calculated per-frame)
-14. WindowSize vs ScreenSize: WindowSize is actual window, ScreenSize is game resolution
-15. Mouse position is automatically corrected for letterboxing in mouse_controller
-16. Input is passed as parameter to callbacks (input.digital.up.pressed), not queried via functions
-17. InputSnapshot is created once per frame and passed to all Lua callbacks
-18. Regular entity commands are queued and processed each frame; collision entity commands are immediate
+- Color::new(r, g, b, a) with u8 values
+
+## BEVY ECS NOTES
+
+- Entity::to_bits() / Entity::from_bits() for u64 conversion
+- Query<(Entity, &Component, &mut Component)>
+- Res<Resource>, ResMut<Resource>
+- NonSend<Resource>, NonSendMut<Resource> for non-thread-safe types
+- Commands for deferred entity operations
+- world.get_resource::<T>(), world.get_resource_mut::<T>()
+- world.entity(entity).get::<T>()
+
+## MLUA NOTES
+
 - lua.create_function(|lua, args| { ... })
 - lua.app_data_ref::<T>() for accessing shared data
 - LuaError::runtime("message") for errors
