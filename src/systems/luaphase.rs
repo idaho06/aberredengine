@@ -233,6 +233,61 @@ fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, ctx_table: &LuaTable
     }
 }
 
+/// Call phase enter callback: (entity_id, input, previous_phase)
+fn call_phase_enter(
+    lua_runtime: &LuaRuntime,
+    fn_name: &str,
+    entity_id: u64,
+    input_table: &LuaTable,
+    previous_phase: Option<&str>,
+) {
+    if lua_runtime.has_function(fn_name) {
+        let result = match previous_phase {
+            Some(phase) => {
+                lua_runtime.call_function::<_, ()>(fn_name, (entity_id, input_table.clone(), phase))
+            }
+            None => lua_runtime.call_function::<_, ()>(fn_name, (entity_id, input_table.clone(), LuaNil)),
+        };
+        if let Err(e) = result {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+        }
+    } else {
+        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+    }
+}
+
+/// Call phase update callback: (entity_id, input, time_in_phase, dt)
+fn call_phase_update(
+    lua_runtime: &LuaRuntime,
+    fn_name: &str,
+    entity_id: u64,
+    input_table: &LuaTable,
+    time_in_phase: f32,
+    dt: f32,
+) {
+    if lua_runtime.has_function(fn_name) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(
+            fn_name,
+            (entity_id, input_table.clone(), time_in_phase, dt),
+        ) {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+        }
+    } else {
+        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+    }
+}
+
+/// Call phase exit callback: (entity_id) - no input, housekeeping only
+fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, entity_id: u64) {
+    if lua_runtime.has_function(fn_name) {
+        if let Err(e) = lua_runtime.call_function::<_, ()>(fn_name, entity_id) {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+        }
+    } else {
+        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+    }
+}
+
 /// Process Lua-based phase state machines.
 ///
 /// This system:

@@ -654,7 +654,7 @@ function engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, 
 
 ---Release entity from StuckTo
 ---@param entity_id integer Entity ID
-function engine.release_stuckto(entity_id) end
+function engine.entity_release_stuckto(entity_id) end
 
 ---Set entity animation
 ---@param entity_id integer Entity ID
