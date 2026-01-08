@@ -23,63 +23,15 @@ function engine.log_warn(message) end
 ---@param message string The message to log
 function engine.log_error(message) end
 
--- ==================== Entity Context Types ====================
--- Entity context (ctx) is passed as the first argument to phase and timer callbacks.
--- It provides immediate access to entity state without needing separate API calls.
+-- ==================== Input Types ====================
+-- Input is passed as an argument to callbacks, not queried via functions.
 --
 -- Callback signatures:
 --   Scene update:    function on_update_scenename(input, dt)
---   Phase enter:     function phase_enter(ctx, input)      -- ctx.previous_phase available
---   Phase update:    function phase_update(ctx, input, dt) -- ctx.time_in_phase in ctx
---   Phase exit:      function phase_exit(ctx)
---   Timer callback:  function timer_callback(ctx, input)
---   Collision:       function collision_callback(ctx)      -- ctx.a and ctx.b for entities
-
----@class Vector2
----@field x number X coordinate
----@field y number Y coordinate
-
----@class SpriteInfo
----@field tex_key string Texture identifier
----@field flip_h boolean Flipped horizontally
----@field flip_v boolean Flipped vertically
-
----@class AnimationInfo
----@field key string Animation key
----@field frame_index integer Current frame index
----@field elapsed number Elapsed time in current frame
-
----@class SignalsInfo
----@field flags string[] Array of flag names (1-indexed)
----@field integers table<string, integer> Integer signals
----@field scalars table<string, number> Scalar signals
----@field strings table<string, string> String signals
-
----@class TimerInfo
----@field duration number Timer duration in seconds
----@field elapsed number Elapsed time since last reset
----@field callback string Callback function name
-
----@class EntityContext
----@field id integer Entity ID (always present)
----@field group string|nil Entity group name
----@field pos Vector2|nil World position (MapPosition)
----@field screen_pos Vector2|nil Screen position (ScreenPosition)
----@field vel Vector2|nil Velocity from RigidBody
----@field speed_sq number|nil Squared speed from RigidBody
----@field frozen boolean|nil Frozen state from RigidBody
----@field rotation number|nil Rotation in degrees
----@field scale Vector2|nil Scale factors
----@field rect {x: number, y: number, w: number, h: number}|nil BoxCollider AABB
----@field sprite SpriteInfo|nil Sprite information
----@field animation AnimationInfo|nil Animation state
----@field signals SignalsInfo|nil Entity signals
----@field phase string|nil Current phase name (from LuaPhase)
----@field time_in_phase number|nil Time in current phase (from LuaPhase)
----@field previous_phase string|nil Previous phase (on_enter only)
----@field timer TimerInfo|nil Timer information (from LuaTimer)
-
--- ==================== Input Types ====================
+--   Phase enter:     function phase_enter(entity_id, input, previous_phase)
+--   Phase update:    function phase_update(entity_id, input, time_in_phase, dt)
+--   Phase exit:      function phase_exit(entity_id)  -- no input, housekeeping only
+--   Timer callback:  function timer_callback(entity_id, input)
 
 ---@class DigitalButtonState
 ---@field pressed boolean Whether the button is currently held down
@@ -654,7 +606,7 @@ function engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, 
 
 ---Release entity from StuckTo
 ---@param entity_id integer Entity ID
-function engine.entity_release_stuckto(entity_id) end
+function engine.release_stuckto(entity_id) end
 
 ---Set entity animation
 ---@param entity_id integer Entity ID
