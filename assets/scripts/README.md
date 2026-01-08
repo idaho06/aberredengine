@@ -312,13 +312,13 @@ end
 | Callback Type | Receives Input | Signature |
 |---------------|----------------|-----------|
 | Scene update | ✓ | `on_update_scenename(input, dt)` |
-| Phase on_enter | ✓ | `callback(entity_id, input, previous_phase)` |
-| Phase on_update | ✓ | `callback(entity_id, input, time_in_phase, dt)` |
-| Phase on_exit | ✗ | `callback(entity_id)` |
-| Timer | ✓ | `callback(entity_id, input)` |
+| Phase on_enter | ✓ | `callback(ctx, input)` |
+| Phase on_update | ✓ | `callback(ctx, input, dt)` |
+| Phase on_exit | ✗ | `callback(ctx)` |
+| Timer | ✓ | `callback(ctx, input)` |
 | Collision | ✗ | `callback(ctx)` |
 
-**Note:** Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
+**Note:** Phase and timer callbacks now receive an `EntityContext` (`ctx`) object instead of just `entity_id`. The context contains all entity component data. See [Phase Component](#phase-component) for details. Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
 
 ---
 
@@ -882,29 +882,97 @@ Add LuaPhase component with state machine definition.
 })
 ```
 
+**EntityContext Structure:**
+
+Phase and timer callbacks receive a rich context object (`ctx`) containing entity state:
+
+```lua
+ctx = {
+    -- Core identity (always present)
+    id = 12345678,           -- Entity ID (u64)
+
+    -- Optional fields (nil if component not present)
+    group = "player",        -- Entity group name
+    pos = { x = 100, y = 200 },      -- World position (MapPosition)
+    screen_pos = { x = 50, y = 100 }, -- Screen position (ScreenPosition)
+    vel = { x = 0, y = 0 },          -- Velocity (RigidBody)
+    speed_sq = 0,                    -- Squared speed (RigidBody)
+    frozen = false,                  -- Frozen state (RigidBody)
+    rotation = 0,                    -- Rotation in degrees
+    scale = { x = 1, y = 1 },        -- Scale factors
+    rect = { x = 90, y = 190, w = 20, h = 20 }, -- BoxCollider AABB
+
+    -- Sprite info
+    sprite = {
+        tex_key = "player_sheet",
+        flip_h = false,
+        flip_v = false
+    },
+
+    -- Animation state
+    animation = {
+        key = "idle",
+        frame_index = 0,
+        elapsed = 0.0
+    },
+
+    -- Entity signals
+    signals = {
+        flags = { "active", "grounded" },  -- 1-indexed array
+        integers = { hp = 3, score = 100 },
+        scalars = { speed = 150.5 },
+        strings = { state = "idle" }
+    },
+
+    -- Phase info (from LuaPhase)
+    phase = "idle",          -- Current phase name
+    time_in_phase = 1.5,     -- Seconds in current phase
+
+    -- Only on on_enter callbacks
+    previous_phase = "spawning", -- Previous phase (nil on initial enter)
+
+    -- Timer info (from LuaTimer)
+    timer = {
+        duration = 5.0,
+        elapsed = 2.3,
+        callback = "on_timer_tick"
+    }
+}
+```
+
 **Phase Callback Signatures:**
 
 ```lua
 -- Called when entering a phase
-function player_idle_enter(entity_id, previous_phase)
-    -- entity_id: u64
-    -- previous_phase: string or nil
+function player_idle_enter(ctx, input)
+    -- ctx: EntityContext table with all component data
+    -- ctx.previous_phase: string or nil (the phase we came from)
+    -- input: input state table
+
+    engine.log_info("Player " .. ctx.id .. " entered idle from " .. (ctx.previous_phase or "initial"))
 end
 
 -- Called each frame while in phase
-function player_idle_update(entity_id, time_in_phase)
-    -- entity_id: u64
-    -- time_in_phase: f32 (seconds in current phase)
+function player_idle_update(ctx, input, dt)
+    -- ctx: EntityContext table
+    -- ctx.time_in_phase: seconds in current phase
+    -- input: input state table
+    -- dt: delta time in seconds
 
-    if time_in_phase >= 2.0 then
-        engine.phase_transition(entity_id, "running")
+    if ctx.time_in_phase >= 2.0 then
+        engine.phase_transition(ctx.id, "running")
+    end
+
+    -- Access input directly
+    if input.digital.action_1.just_pressed then
+        engine.phase_transition(ctx.id, "jumping")
     end
 end
 
 -- Called when exiting a phase
-function player_idle_exit(entity_id, next_phase)
-    -- entity_id: u64
-    -- next_phase: string
+function player_idle_exit(ctx)
+    -- ctx: EntityContext table (no input parameter)
+    engine.log_info("Player " .. ctx.id .. " exiting idle phase")
 end
 ```
 
@@ -1057,8 +1125,11 @@ Add LuaTimer component that calls a Lua function after duration.
 
 **Callback Signature:**
 ```lua
-function callback_name(entity_id)
-    -- entity_id: u64 - the entity that owns this timer
+function callback_name(ctx, input)
+    -- ctx: EntityContext table with all component data (see Phase Component section)
+    -- ctx.id: entity ID (u64) - the entity that owns this timer
+    -- ctx.timer: { duration, elapsed, callback } - timer info
+    -- input: input state table
     -- Full access to engine API
 end
 ```
@@ -1073,12 +1144,12 @@ engine.spawn()
     :build()
 
 -- Define the callback function
-function enemy_explode(entity_id)
-    engine.log_info("Enemy exploding!")
+function enemy_explode(ctx, input)
+    engine.log_info("Enemy " .. ctx.id .. " exploding at position " .. ctx.pos.x .. "," .. ctx.pos.y)
     engine.play_sound("explosion")
     -- Note: entity_despawn is not available in regular API.
     -- Use phase transitions or spawn entities with fixed lifetimes instead.
-    engine.phase_transition(entity_id, "dead")  -- Transition to a "dead" phase
+    engine.phase_transition(ctx.id, "dead")  -- Transition to a "dead" phase
 end
 ```
 
@@ -1241,10 +1312,10 @@ All entity command functions require an `entity_id` parameter (type `u64`). You 
    end
    ```
 
-3. **From phase callbacks** - The entity ID is passed as the first parameter:
+3. **From phase/timer callbacks** - The entity ID is available in the context object:
    ```lua
-   function player_idle_enter(entity_id, previous_phase)
-       engine.entity_set_animation(entity_id, "idle_anim")
+   function player_idle_enter(ctx, input)
+       engine.entity_set_animation(ctx.id, "idle_anim")
    end
    ```
 
@@ -1321,17 +1392,17 @@ Insert LuaTimer component on entity at runtime.
 **Example:**
 ```lua
 -- In a phase callback (regular context)
-function player_hit_enter(entity_id, input, previous_phase)
+function player_hit_enter(ctx, input)
     -- Give player 10 seconds of invulnerability
-    engine.entity_signal_set_flag(entity_id, "invulnerable")
-    engine.entity_insert_lua_timer(entity_id, 10.0, "remove_invulnerability")
+    engine.entity_signal_set_flag(ctx.id, "invulnerable")
+    engine.entity_insert_lua_timer(ctx.id, 10.0, "remove_invulnerability")
 end
 
 -- Timer callback
-function remove_invulnerability(entity_id)
-    engine.entity_signal_clear_flag(entity_id, "invulnerable")
+function remove_invulnerability(ctx, input)
+    engine.entity_signal_clear_flag(ctx.id, "invulnerable")
     engine.play_sound("powerup_end")
-    engine.log_info("Invulnerability expired")
+    engine.log_info("Invulnerability expired for entity " .. ctx.id)
 end
 ```
 
@@ -1346,12 +1417,12 @@ Remove LuaTimer component from an entity to stop the timer.
 **Example:**
 ```lua
 -- One-shot timer that removes itself after firing
-function on_timer_title_test(entity_id)
+function on_timer_title_test(ctx, input)
     engine.log_info("Timer fired once!")
     engine.play_sound("beep")
 
     -- Remove timer so it doesn't repeat
-    engine.entity_remove_lua_timer(entity_id)
+    engine.entity_remove_lua_timer(ctx.id)
 end
 ```
 
@@ -1667,10 +1738,10 @@ function player_jump(player_id)
     engine.entity_insert_lua_timer(player_id, 0.1, "restore_gravity")
 end
 
-function restore_gravity(entity_id)
-    engine.entity_set_force_enabled(entity_id, "gravity", true)
-    engine.entity_set_force_enabled(entity_id, "jump", false)
-    engine.entity_remove_lua_timer(entity_id)
+function restore_gravity(ctx, input)
+    engine.entity_set_force_enabled(ctx.id, "gravity", true)
+    engine.entity_set_force_enabled(ctx.id, "jump", false)
+    engine.entity_remove_lua_timer(ctx.id)
 end
 
 function player_move(player_id, direction)
@@ -2471,30 +2542,30 @@ engine.spawn()
     :register_as("player")
     :build()
 
--- Phase callbacks
-function player_sticky_enter(entity_id, previous_phase)
-    engine.entity_signal_set_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing")
+-- Phase callbacks (using EntityContext)
+function player_sticky_enter(ctx, input)
+    engine.entity_signal_set_flag(ctx.id, "sticky")
+    engine.entity_set_animation(ctx.id, "vaus_glowing")
 end
 
-function player_sticky_update(entity_id, time_in_phase)
-    if time_in_phase >= 3.0 then
-        engine.phase_transition(entity_id, "glowing")
+function player_sticky_update(ctx, input, dt)
+    if ctx.time_in_phase >= 3.0 then
+        engine.phase_transition(ctx.id, "glowing")
     end
 end
 
-function player_glowing_enter(entity_id, previous_phase)
-    engine.entity_signal_clear_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing")
+function player_glowing_enter(ctx, input)
+    engine.entity_signal_clear_flag(ctx.id, "sticky")
+    engine.entity_set_animation(ctx.id, "vaus_glowing")
 end
 
-function player_hit_enter(entity_id, previous_phase)
-    engine.entity_set_animation(entity_id, "vaus_hit")
+function player_hit_enter(ctx, input)
+    engine.entity_set_animation(ctx.id, "vaus_hit")
 end
 
-function player_hit_update(entity_id, time_in_phase)
-    if time_in_phase >= 0.5 then
-        engine.phase_transition(entity_id, "glowing")
+function player_hit_update(ctx, input, dt)
+    if ctx.time_in_phase >= 0.5 then
+        engine.phase_transition(ctx.id, "glowing")
     end
 end
 ```
