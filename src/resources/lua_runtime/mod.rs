@@ -32,6 +32,7 @@
 //! ```
 
 mod commands;
+mod context;
 mod entity_builder;
 mod input_snapshot;
 mod runtime;
@@ -39,6 +40,10 @@ mod spawn_data;
 
 // Re-export all public types for backwards compatibility
 pub use commands::*;
+pub use context::{
+    build_entity_context, AnimationSnapshot, LuaPhaseSnapshot, LuaTimerSnapshot,
+    RigidBodySnapshot, SpriteSnapshot,
+};
 pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
 pub use runtime::LuaRuntime;
