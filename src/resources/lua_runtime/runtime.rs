@@ -473,7 +473,20 @@ impl LuaRuntime {
     fn register_entity_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
 
-        // engine.entity_release_stuckto(entity_id) - Release entity from StuckTo, restore velocity
+        // engine.entity_despawn(entity_id) - Despawn an entity
+        engine.set(
+            "entity_despawn",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::Despawn { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.release_stuckto(entity_id) - Release entity from StuckTo, restore velocity
         engine.set(
             "entity_release_stuckto",
             self.lua.create_function(|lua, entity_id: u64| {
@@ -986,19 +999,6 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_despawn(entity_id) - Despawn an entity
-        engine.set(
-            "entity_despawn",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::Despawn { entity_id });
-                Ok(())
-            })?,
-        )?;
-
         // engine.entity_signal_set_integer(entity_id, key, value) - Set integer signal on entity
         engine.set(
             "entity_signal_set_integer",
@@ -1017,7 +1017,7 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_insert_timer(entity_id, duration, signal) - Insert a signal-based timer
+        // engine.entity_insert_timer(entity_id, duration, signal) - Insert a signal-based Timer component
         engine.set(
             "entity_insert_timer",
             self.lua.create_function(
@@ -1305,6 +1305,452 @@ impl LuaRuntime {
                     Ok(())
                 },
             )?,
+        )?;
+
+        // engine.collision_release_stuckto(entity_id)
+        // Release entity from StuckTo during collision handling
+        engine.set(
+            "collision_release_stuckto",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::ReleaseStuckTo { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_signal_set_scalar(entity_id, key, value)
+        // Sets a scalar signal on an entity during collision handling
+        engine.set(
+            "collision_entity_signal_set_scalar",
+            self.lua
+                .create_function(|lua, (entity_id, key, value): (u64, String, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SignalSetScalar {
+                            entity_id,
+                            key,
+                            value,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_signal_set_string(entity_id, key, value)
+        // Sets a string signal on an entity during collision handling
+        engine.set(
+            "collision_entity_signal_set_string",
+            self.lua
+                .create_function(|lua, (entity_id, key, value): (u64, String, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SignalSetString {
+                            entity_id,
+                            key,
+                            value,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_insert_lua_timer(entity_id, duration, callback)
+        // Inserts a LuaTimer component on an entity during collision handling
+        engine.set(
+            "collision_entity_insert_lua_timer",
+            self.lua.create_function(
+                |lua, (entity_id, duration, callback): (u64, f32, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertLuaTimer {
+                            entity_id,
+                            duration,
+                            callback,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_remove_lua_timer(entity_id)
+        // Removes a LuaTimer component during collision handling
+        engine.set(
+            "collision_entity_remove_lua_timer",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveLuaTimer { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_restart_animation(entity_id)
+        // Restarts entity animation during collision handling
+        engine.set(
+            "collision_entity_restart_animation",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RestartAnimation { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_set_animation(entity_id, animation_key)
+        // Sets entity animation during collision handling
+        engine.set(
+            "collision_entity_set_animation",
+            self.lua
+                .create_function(|lua, (entity_id, animation_key): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetAnimation {
+                            entity_id,
+                            animation_key,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        // Inserts TweenPosition during collision handling
+        engine.set(
+            "collision_entity_insert_tween_position",
+            self.lua.create_function(
+                |lua,
+                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
+                    u64,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    String,
+                    String,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTweenPosition {
+                            entity_id,
+                            from_x,
+                            from_y,
+                            to_x,
+                            to_y,
+                            duration,
+                            easing,
+                            loop_mode,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode)
+        // Inserts TweenRotation during collision handling
+        engine.set(
+            "collision_entity_insert_tween_rotation",
+            self.lua.create_function(
+                |lua,
+                 (entity_id, from, to, duration, easing, loop_mode): (
+                    u64,
+                    f32,
+                    f32,
+                    f32,
+                    String,
+                    String,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTweenRotation {
+                            entity_id,
+                            from,
+                            to,
+                            duration,
+                            easing,
+                            loop_mode,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        // Inserts TweenScale during collision handling
+        engine.set(
+            "collision_entity_insert_tween_scale",
+            self.lua.create_function(
+                |lua,
+                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
+                    u64,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    f32,
+                    String,
+                    String,
+                )| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTweenScale {
+                            entity_id,
+                            from_x,
+                            from_y,
+                            to_x,
+                            to_y,
+                            duration,
+                            easing,
+                            loop_mode,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_remove_tween_position(entity_id)
+        // Removes TweenPosition during collision handling
+        engine.set(
+            "collision_entity_remove_tween_position",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveTweenPosition { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_remove_tween_rotation(entity_id)
+        // Removes TweenRotation during collision handling
+        engine.set(
+            "collision_entity_remove_tween_rotation",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveTweenRotation { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_remove_tween_scale(entity_id)
+        // Removes TweenScale during collision handling
+        engine.set(
+            "collision_entity_remove_tween_scale",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveTweenScale { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_set_rotation(entity_id, degrees)
+        // Sets entity rotation during collision handling
+        engine.set(
+            "collision_entity_set_rotation",
+            self.lua
+                .create_function(|lua, (entity_id, degrees): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetRotation { entity_id, degrees });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_set_scale(entity_id, sx, sy)
+        // Sets entity scale during collision handling
+        engine.set(
+            "collision_entity_set_scale",
+            self.lua
+                .create_function(|lua, (entity_id, sx, sy): (u64, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetScale { entity_id, sx, sy });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_add_force(entity_id, name, x, y, enabled)
+        // Adds a force to entity during collision handling
+        engine.set(
+            "collision_entity_add_force",
+            self.lua.create_function(
+                |lua, (entity_id, name, x, y, enabled): (u64, String, f32, f32, bool)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::AddForce {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                            enabled,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_remove_force(entity_id, name)
+        // Removes a force from entity during collision handling
+        engine.set(
+            "collision_entity_remove_force",
+            self.lua
+                .create_function(|lua, (entity_id, name): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::RemoveForce { entity_id, name });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_set_force_enabled(entity_id, name, enabled)
+        // Enables/disables a force during collision handling
+        engine.set(
+            "collision_entity_set_force_enabled",
+            self.lua
+                .create_function(|lua, (entity_id, name, enabled): (u64, String, bool)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetForceEnabled {
+                            entity_id,
+                            name,
+                            enabled,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_set_force_value(entity_id, name, x, y)
+        // Updates force value during collision handling
+        engine.set(
+            "collision_entity_set_force_value",
+            self.lua
+                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetForceValue {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_set_friction(entity_id, friction)
+        // Sets entity friction during collision handling
+        engine.set(
+            "collision_entity_set_friction",
+            self.lua
+                .create_function(|lua, (entity_id, friction): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetFriction {
+                            entity_id,
+                            friction,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_set_max_speed(entity_id, max_speed)
+        // Sets entity max speed during collision handling (nil to remove limit)
+        engine.set(
+            "collision_entity_set_max_speed",
+            self.lua
+                .create_function(|lua, (entity_id, max_speed): (u64, Option<f32>)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetMaxSpeed {
+                            entity_id,
+                            max_speed,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_freeze(entity_id)
+        // Freezes entity during collision handling
+        engine.set(
+            "collision_entity_freeze",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::FreezeEntity { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_unfreeze(entity_id)
+        // Unfreezes entity during collision handling
+        engine.set(
+            "collision_entity_unfreeze",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::UnfreezeEntity { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_set_speed(entity_id, speed)
+        // Sets entity speed during collision handling
+        engine.set(
+            "collision_entity_set_speed",
+            self.lua
+                .create_function(|lua, (entity_id, speed): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetSpeed { entity_id, speed });
+                    Ok(())
+                })?,
         )?;
 
         // engine.collision_play_sound(sound_name)
@@ -1796,124 +2242,6 @@ impl LuaRuntime {
                 },
             )?,
         )?;
-
-        // engine.collision_entity_insert_tween_scale(...) - Insert scale tween during collision
-        engine.set(
-            "collision_entity_insert_tween_scale",
-            self.lua.create_function(
-                |lua,
-                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenScale {
-                            entity_id,
-                            from_x,
-                            from_y,
-                            to_x,
-                            to_y,
-                            duration,
-                            easing,
-                            loop_mode,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_remove_tween_position(entity_id) - Remove position tween during collision
-        engine.set(
-            "collision_entity_remove_tween_position",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenPosition { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_remove_tween_rotation(entity_id) - Remove rotation tween during collision
-        engine.set(
-            "collision_entity_remove_tween_rotation",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenRotation { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_remove_tween_scale(entity_id) - Remove scale tween during collision
-        engine.set(
-            "collision_entity_remove_tween_scale",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenScale { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        Ok(())
-    }
-
-    /// Registers animation functions in the `engine` table.
-    fn register_animation_api(&self) -> LuaResult<()> {
-        let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)
-        // Registers an animation resource in the AnimationStore
-        engine.set(
-            "register_animation",
-            self.lua.create_function(
-                |lua,
-                 (id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped): (
-                    String,
-                    String,
-                    f32,
-                    f32,
-                    f32,
-                    usize,
-                    f32,
-                    bool,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .animation_commands
-                        .borrow_mut()
-                        .push(AnimationCmd::RegisterAnimation {
-                            id,
-                            tex_key,
-                            pos_x,
-                            pos_y,
-                            displacement,
-                            frame_count,
-                            fps,
-                            looped,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        Ok(())
-    }
 
     /// Drains all queued asset commands.
     ///

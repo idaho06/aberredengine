@@ -11,46 +11,32 @@ function M.spawn()
 
     -- Set camera centered at origin with screen offset at center
     -- target: (0, 0) - center of the menu scene
-    -- offset: center of screen (672x768 window)
-    local camera_offset_x = 336.0 -- 672 / 2
-    local camera_offset_y = 384.0 -- 768 / 2
+    -- offset: center of screen (480x270 window)
+    local camera_offset_x = 240.0 -- 480 / 2
+    local camera_offset_y = 135.0 -- 270 / 2
     engine.set_camera(0.0, 0.0, camera_offset_x, camera_offset_y, 0.0, 1.0)
 
     -- Spawn the background (scaled 3x)
-    engine.spawn()
+    --[[     engine.spawn()
         :with_position(0, 0)
         :with_sprite("background", 672, 768, 336, 384) -- width, height, origin_x, origin_y
         :with_zindex(0)
         :with_scale(3, 3)
         :register_as("menu_background")
         :build()
+ ]]
 
-    -- Spawn the animated title
-    -- Starts at y=384, tweens to y=-220 over 2 seconds
-    -- Rotates back and forth between -10 and 10 degrees
-    -- Scales between 0.9 and 1.1
-    engine.spawn()
-        :with_group("title")
-        :with_position(0, 384)
-        :with_sprite("title", 672, 198, 336, 99) -- width, height, origin_x, origin_y
+    -- Spawn the title
+    local title_entity = engine.spawn()
+        :with_text("DRIFTERS", "future", 64, 255, 255, 255, 255)
+        :with_screen_position(0, 32)
         :with_zindex(1)
-        :with_rotation(0)
-        :with_scale(1, 1)
-        :with_tween_position(0, 384, 0, -220, 2.0)
-        :with_tween_position_easing("quad_out")
-        :with_tween_position_loop("once")
-        :with_tween_rotation(-10, 10, 2.0)
-        :with_tween_rotation_easing("quad_in_out")
-        :with_tween_rotation_loop("ping_pong")
-        :with_tween_scale(0.9, 0.9, 1.1, 1.1, 1.0)
-        :with_tween_scale_easing("quad_in_out")
-        :with_tween_scale_loop("ping_pong")
-        :with_lua_timer(4.0, "on_timer_title_test") -- example timer callback
+        :register_as("menu_title")
         :build()
 
     -- Spawn cursor first so the menu can reference it by key.
     engine.spawn()
-        :with_sprite("cursor", 48, 48, 56, 0)
+        :with_sprite("cursor", 16, 16, 16 + 8, 0)
         :register_as("menu_cursor")
         :build()
 
@@ -63,11 +49,11 @@ function M.spawn()
                 { id = "options",    label = "Options" },
                 { id = "exit",       label = "Exit" },
             },
-            250,
-            350,
+            16 + 8,
+            64 + 16,
             "arcade",
-            48,
-            64,
+            16,
+            24,
             true
         )
         :with_menu_colors(255, 255, 0, 255, 255, 255, 255, 255)
@@ -80,13 +66,13 @@ function M.spawn()
         :build()
 
     -- Play menu music
-    engine.play_music("menu", true)
+    -- engine.play_music("menu", true)
 
     engine.log_info("Menu scene entities queued!")
 end
 
 --- Called each frame when menu scene is active.
---- @param input table Input state table with digital/analog inputs
+--- @param input Input Input state table
 --- @param dt number Delta time in seconds
 function on_update_menu(input, dt)
     -- Check for back button to quit game
@@ -98,25 +84,25 @@ function on_update_menu(input, dt)
     -- so no additional logic is needed here for that.
 end
 
-function on_timer_title_test(entity_id, input)
-    -- Test callback for Lua timer on title entity_id
-    engine.log_info("Title timer test callback triggered for entity ID: " .. tostring(entity_id))
+--[[ function on_timer_title_test(ctx, input)
+    -- Test callback for Lua timer on title entity
+    engine.log_info("Title timer test callback triggered for entity ID: " .. tostring(ctx.id))
     -- Create another lua timer attached to the background entity as a demonstration
     local bg_entity = engine.get_entity("menu_background")
     if bg_entity then
         engine.entity_insert_lua_timer(bg_entity, 3.0, "on_timer_background_test")
     end
     -- remove this timer so it doesn't repeat
-    engine.entity_remove_lua_timer(entity_id)
-end
+    engine.entity_remove_lua_timer(ctx.id)
+end ]]
 
-function on_timer_background_test(entity_id, input)
-    -- Test callback for Lua timer on background entity_id
-    engine.log_info("Background timer test callback triggered for entity ID: " .. tostring(entity_id))
+--[[ function on_timer_background_test(ctx, input)
+    -- Test callback for Lua timer on background entity
+    engine.log_info("Background timer test callback triggered for entity ID: " .. tostring(ctx.id))
     -- Add a tween scale effect to the background as a demonstration
-    engine.entity_insert_tween_scale(entity_id, 3.0, 3.0, 3.2, 3.2, 2.0, "cubic_in_out", "ping_pong")
+    engine.entity_insert_tween_scale(ctx.id, 3.0, 3.0, 3.2, 3.2, 2.0, "cubic_in_out", "ping_pong")
     -- remove this timer so it doesn't repeat
-    engine.entity_remove_lua_timer(entity_id)
-end
+    engine.entity_remove_lua_timer(ctx.id)
+end ]]
 
 return M

@@ -158,15 +158,39 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
-**Entity commands in collision callbacks** also require the `collision_` prefix:
-- `engine.collision_entity_set_position()` instead of `engine.entity_set_position()` (not available in regular API)
+**Entity commands in collision callbacks** also require the `collision_` prefix. Both APIs now have full parity - all entity commands available in the regular API have a `collision_` equivalent:
+- `engine.collision_entity_set_position()` instead of `engine.entity_set_position()`
 - `engine.collision_entity_set_velocity()` instead of `engine.entity_set_velocity()`
-- `engine.collision_entity_despawn()` instead of `engine.entity_despawn()` (not available in regular API)
-- `engine.collision_entity_signal_set_integer()` instead of `engine.entity_signal_set_integer()` (not available in regular API)
+- `engine.collision_entity_despawn()` instead of `engine.entity_despawn()`
 - `engine.collision_entity_signal_set_flag()` instead of `engine.entity_signal_set_flag()`
 - `engine.collision_entity_signal_clear_flag()` instead of `engine.entity_signal_clear_flag()`
-- `engine.collision_entity_insert_timer()` instead of `engine.entity_insert_timer()` (not available in regular API)
+- `engine.collision_entity_signal_set_integer()` instead of `engine.entity_signal_set_integer()`
+- `engine.collision_entity_signal_set_scalar()` instead of `engine.entity_signal_set_scalar()`
+- `engine.collision_entity_signal_set_string()` instead of `engine.entity_signal_set_string()`
+- `engine.collision_entity_insert_timer()` instead of `engine.entity_insert_timer()`
+- `engine.collision_entity_insert_lua_timer()` instead of `engine.entity_insert_lua_timer()`
+- `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
 - `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
+- `engine.collision_release_stuckto()` instead of `engine.release_stuckto()`
+- `engine.collision_entity_set_animation()` instead of `engine.entity_set_animation()`
+- `engine.collision_entity_restart_animation()` instead of `engine.entity_restart_animation()`
+- `engine.collision_entity_set_rotation()` instead of `engine.entity_set_rotation()`
+- `engine.collision_entity_set_scale()` instead of `engine.entity_set_scale()`
+- `engine.collision_entity_insert_tween_position()` instead of `engine.entity_insert_tween_position()`
+- `engine.collision_entity_insert_tween_rotation()` instead of `engine.entity_insert_tween_rotation()`
+- `engine.collision_entity_insert_tween_scale()` instead of `engine.entity_insert_tween_scale()`
+- `engine.collision_entity_remove_tween_position()` instead of `engine.entity_remove_tween_position()`
+- `engine.collision_entity_remove_tween_rotation()` instead of `engine.entity_remove_tween_rotation()`
+- `engine.collision_entity_remove_tween_scale()` instead of `engine.entity_remove_tween_scale()`
+- `engine.collision_entity_add_force()` instead of `engine.entity_add_force()`
+- `engine.collision_entity_remove_force()` instead of `engine.entity_remove_force()`
+- `engine.collision_entity_set_force_enabled()` instead of `engine.entity_set_force_enabled()`
+- `engine.collision_entity_set_force_value()` instead of `engine.entity_set_force_value()`
+- `engine.collision_entity_set_friction()` instead of `engine.entity_set_friction()`
+- `engine.collision_entity_set_max_speed()` instead of `engine.entity_set_max_speed()`
+- `engine.collision_entity_freeze()` instead of `engine.entity_freeze()`
+- `engine.collision_entity_unfreeze()` instead of `engine.entity_unfreeze()`
+- `engine.collision_entity_set_speed()` instead of `engine.entity_set_speed()`
 
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 - Using `engine.spawn()` in a collision callback → entity is created during the next `on_update` or phase/timer callback (1+ frames later)
@@ -288,13 +312,13 @@ end
 | Callback Type | Receives Input | Signature |
 |---------------|----------------|-----------|
 | Scene update | ✓ | `on_update_scenename(input, dt)` |
-| Phase on_enter | ✓ | `callback(entity_id, input, previous_phase)` |
-| Phase on_update | ✓ | `callback(entity_id, input, time_in_phase, dt)` |
-| Phase on_exit | ✗ | `callback(entity_id)` |
-| Timer | ✓ | `callback(entity_id, input)` |
+| Phase on_enter | ✓ | `callback(ctx, input)` |
+| Phase on_update | ✓ | `callback(ctx, input, dt)` |
+| Phase on_exit | ✗ | `callback(ctx)` |
+| Timer | ✓ | `callback(ctx, input)` |
 | Collision | ✗ | `callback(ctx)` |
 
-**Note:** Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
+**Note:** Phase and timer callbacks now receive an `EntityContext` (`ctx`) object instead of just `entity_id`. The context contains all entity component data. See [Phase Component](#phase-component) for details. Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
 
 ---
 
@@ -858,29 +882,97 @@ Add LuaPhase component with state machine definition.
 })
 ```
 
+**EntityContext Structure:**
+
+Phase and timer callbacks receive a rich context object (`ctx`) containing entity state:
+
+```lua
+ctx = {
+    -- Core identity (always present)
+    id = 12345678,           -- Entity ID (u64)
+
+    -- Optional fields (nil if component not present)
+    group = "player",        -- Entity group name
+    pos = { x = 100, y = 200 },      -- World position (MapPosition)
+    screen_pos = { x = 50, y = 100 }, -- Screen position (ScreenPosition)
+    vel = { x = 0, y = 0 },          -- Velocity (RigidBody)
+    speed_sq = 0,                    -- Squared speed (RigidBody)
+    frozen = false,                  -- Frozen state (RigidBody)
+    rotation = 0,                    -- Rotation in degrees
+    scale = { x = 1, y = 1 },        -- Scale factors
+    rect = { x = 90, y = 190, w = 20, h = 20 }, -- BoxCollider AABB
+
+    -- Sprite info
+    sprite = {
+        tex_key = "player_sheet",
+        flip_h = false,
+        flip_v = false
+    },
+
+    -- Animation state
+    animation = {
+        key = "idle",
+        frame_index = 0,
+        elapsed = 0.0
+    },
+
+    -- Entity signals
+    signals = {
+        flags = { "active", "grounded" },  -- 1-indexed array
+        integers = { hp = 3, score = 100 },
+        scalars = { speed = 150.5 },
+        strings = { state = "idle" }
+    },
+
+    -- Phase info (from LuaPhase)
+    phase = "idle",          -- Current phase name
+    time_in_phase = 1.5,     -- Seconds in current phase
+
+    -- Only on on_enter callbacks
+    previous_phase = "spawning", -- Previous phase (nil on initial enter)
+
+    -- Timer info (from LuaTimer)
+    timer = {
+        duration = 5.0,
+        elapsed = 2.3,
+        callback = "on_timer_tick"
+    }
+}
+```
+
 **Phase Callback Signatures:**
 
 ```lua
 -- Called when entering a phase
-function player_idle_enter(entity_id, previous_phase)
-    -- entity_id: u64
-    -- previous_phase: string or nil
+function player_idle_enter(ctx, input)
+    -- ctx: EntityContext table with all component data
+    -- ctx.previous_phase: string or nil (the phase we came from)
+    -- input: input state table
+
+    engine.log_info("Player " .. ctx.id .. " entered idle from " .. (ctx.previous_phase or "initial"))
 end
 
 -- Called each frame while in phase
-function player_idle_update(entity_id, time_in_phase)
-    -- entity_id: u64
-    -- time_in_phase: f32 (seconds in current phase)
+function player_idle_update(ctx, input, dt)
+    -- ctx: EntityContext table
+    -- ctx.time_in_phase: seconds in current phase
+    -- input: input state table
+    -- dt: delta time in seconds
 
-    if time_in_phase >= 2.0 then
-        engine.phase_transition(entity_id, "running")
+    if ctx.time_in_phase >= 2.0 then
+        engine.phase_transition(ctx.id, "running")
+    end
+
+    -- Access input directly
+    if input.digital.action_1.just_pressed then
+        engine.phase_transition(ctx.id, "jumping")
     end
 end
 
 -- Called when exiting a phase
-function player_idle_exit(entity_id, next_phase)
-    -- entity_id: u64
-    -- next_phase: string
+function player_idle_exit(ctx)
+    -- ctx: EntityContext table (no input parameter)
+    engine.log_info("Player " .. ctx.id .. " exiting idle phase")
 end
 ```
 
@@ -1033,8 +1125,11 @@ Add LuaTimer component that calls a Lua function after duration.
 
 **Callback Signature:**
 ```lua
-function callback_name(entity_id)
-    -- entity_id: u64 - the entity that owns this timer
+function callback_name(ctx, input)
+    -- ctx: EntityContext table with all component data (see Phase Component section)
+    -- ctx.id: entity ID (u64) - the entity that owns this timer
+    -- ctx.timer: { duration, elapsed, callback } - timer info
+    -- input: input state table
     -- Full access to engine API
 end
 ```
@@ -1049,12 +1144,12 @@ engine.spawn()
     :build()
 
 -- Define the callback function
-function enemy_explode(entity_id)
-    engine.log_info("Enemy exploding!")
+function enemy_explode(ctx, input)
+    engine.log_info("Enemy " .. ctx.id .. " exploding at position " .. ctx.pos.x .. "," .. ctx.pos.y)
     engine.play_sound("explosion")
     -- Note: entity_despawn is not available in regular API.
     -- Use phase transitions or spawn entities with fixed lifetimes instead.
-    engine.phase_transition(entity_id, "dead")  -- Transition to a "dead" phase
+    engine.phase_transition(ctx.id, "dead")  -- Transition to a "dead" phase
 end
 ```
 
@@ -1217,10 +1312,10 @@ All entity command functions require an `entity_id` parameter (type `u64`). You 
    end
    ```
 
-3. **From phase callbacks** - The entity ID is passed as the first parameter:
+3. **From phase/timer callbacks** - The entity ID is available in the context object:
    ```lua
-   function player_idle_enter(entity_id, previous_phase)
-       engine.entity_set_animation(entity_id, "idle_anim")
+   function player_idle_enter(ctx, input)
+       engine.entity_set_animation(ctx.id, "idle_anim")
    end
    ```
 
@@ -1228,6 +1323,18 @@ All entity command functions require an `entity_id` parameter (type `u64`). You 
 Set entity's velocity (requires RigidBody component).
 ```lua
 engine.entity_set_velocity(ball_id, 300, -300)
+```
+
+### `engine.entity_set_position(entity_id, x, y)`
+Set entity's world position.
+```lua
+engine.entity_set_position(player_id, 400, 300)
+```
+
+### `engine.entity_despawn(entity_id)`
+Remove an entity from the world.
+```lua
+engine.entity_despawn(enemy_id)
 ```
 
 ### `engine.entity_set_rotation(entity_id, degrees)`
@@ -1255,6 +1362,13 @@ Clear flag on entity's Signals component.
 engine.entity_signal_clear_flag(player_id, "sticky")
 ```
 
+### `engine.entity_signal_set_integer(entity_id, key, value)`
+Set integer signal on entity.
+```lua
+engine.entity_signal_set_integer(player_id, "hp", 3)
+engine.entity_signal_set_integer(enemy_id, "damage", 10)
+```
+
 ### `engine.entity_signal_set_scalar(entity_id, key, value)`
 Set floating-point signal on entity.
 ```lua
@@ -1278,17 +1392,17 @@ Insert LuaTimer component on entity at runtime.
 **Example:**
 ```lua
 -- In a phase callback (regular context)
-function player_hit_enter(entity_id, input, previous_phase)
+function player_hit_enter(ctx, input)
     -- Give player 10 seconds of invulnerability
-    engine.entity_signal_set_flag(entity_id, "invulnerable")
-    engine.entity_insert_lua_timer(entity_id, 10.0, "remove_invulnerability")
+    engine.entity_signal_set_flag(ctx.id, "invulnerable")
+    engine.entity_insert_lua_timer(ctx.id, 10.0, "remove_invulnerability")
 end
 
 -- Timer callback
-function remove_invulnerability(entity_id)
-    engine.entity_signal_clear_flag(entity_id, "invulnerable")
+function remove_invulnerability(ctx, input)
+    engine.entity_signal_clear_flag(ctx.id, "invulnerable")
     engine.play_sound("powerup_end")
-    engine.log_info("Invulnerability expired")
+    engine.log_info("Invulnerability expired for entity " .. ctx.id)
 end
 ```
 
@@ -1303,14 +1417,30 @@ Remove LuaTimer component from an entity to stop the timer.
 **Example:**
 ```lua
 -- One-shot timer that removes itself after firing
-function on_timer_title_test(entity_id)
+function on_timer_title_test(ctx, input)
     engine.log_info("Timer fired once!")
     engine.play_sound("beep")
 
     -- Remove timer so it doesn't repeat
-    engine.entity_remove_lua_timer(entity_id)
+    engine.entity_remove_lua_timer(ctx.id)
 end
 ```
+
+### `engine.entity_insert_timer(entity_id, duration, signal)`
+Insert a signal-based Timer component on an entity at runtime. When the timer expires, it emits a TimerEvent with the specified signal.
+
+**Parameters:**
+- `entity_id` - Entity to add timer to
+- `duration` - Time in seconds
+- `signal` - Signal name for the TimerEvent
+
+**Example:**
+```lua
+-- Start a 5 second countdown timer
+engine.entity_insert_timer(player_id, 5.0, "powerup_expired")
+```
+
+**Note:** This is a signal-based timer that emits events. For simpler use cases where you just want to call a Lua function, use `engine.entity_insert_lua_timer()` instead.
 
 ### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)`
 Add or replace TweenPosition component at runtime to animate entity movement.
@@ -1608,10 +1738,10 @@ function player_jump(player_id)
     engine.entity_insert_lua_timer(player_id, 0.1, "restore_gravity")
 end
 
-function restore_gravity(entity_id)
-    engine.entity_set_force_enabled(entity_id, "gravity", true)
-    engine.entity_set_force_enabled(entity_id, "jump", false)
-    engine.entity_remove_lua_timer(entity_id)
+function restore_gravity(ctx, input)
+    engine.entity_set_force_enabled(ctx.id, "gravity", true)
+    engine.entity_set_force_enabled(ctx.id, "jump", false)
+    engine.entity_remove_lua_timer(ctx.id)
 end
 
 function player_move(player_id, direction)
@@ -1997,6 +2127,272 @@ function on_ball_speed_boost(ctx)
 end
 ```
 
+#### `engine.collision_release_stuckto(entity_id)`
+Release entity from StuckTo attachment during collision handling, restoring stored velocity.
+
+**Parameters:**
+- `entity_id` - Entity with StuckTo component
+
+```lua
+function on_ball_release_trigger(ctx)
+    local ball_id = ctx.a.id
+    engine.collision_release_stuckto(ball_id)
+    engine.collision_play_sound("launch")
+end
+```
+
+#### `engine.collision_entity_signal_set_scalar(entity_id, key, value)`
+Set a floating-point signal on an entity's Signals component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Signals component
+- `key` - Signal key
+- `value` - Float value
+
+```lua
+function on_player_speed_boost(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_signal_set_scalar(player_id, "speed_multiplier", 1.5)
+end
+```
+
+#### `engine.collision_entity_signal_set_string(entity_id, key, value)`
+Set a string signal on an entity's Signals component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Signals component
+- `key` - Signal key
+- `value` - String value
+
+```lua
+function on_player_color_change(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_signal_set_string(player_id, "color", "red")
+end
+```
+
+#### `engine.collision_entity_insert_lua_timer(entity_id, duration, callback)`
+Insert a LuaTimer component on an entity during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to add timer to
+- `duration` - Time in seconds before timer fires
+- `callback` - Lua function name to call when timer expires
+
+```lua
+function on_player_powerup(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_signal_set_flag(player_id, "powered_up")
+    engine.collision_entity_insert_lua_timer(player_id, 10.0, "remove_powerup")
+    engine.collision_entity_despawn(ctx.b.id)
+end
+```
+
+#### `engine.collision_entity_remove_lua_timer(entity_id)`
+Remove LuaTimer component from an entity during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to remove timer from
+
+```lua
+function on_timer_cancel_zone(ctx)
+    local entity_id = ctx.a.id
+    engine.collision_entity_remove_lua_timer(entity_id)
+end
+```
+
+#### `engine.collision_entity_restart_animation(entity_id)`
+Restart entity's current animation from frame 0 during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Animation component
+
+```lua
+function on_player_hit(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_restart_animation(player_id)
+end
+```
+
+#### `engine.collision_entity_set_animation(entity_id, animation_key)`
+Change entity's animation during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with Animation component
+- `animation_key` - Animation identifier (registered with `engine.register_animation()`)
+
+```lua
+function on_player_hit(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_animation(player_id, "player_hit")
+end
+```
+
+#### `engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)`
+Add or replace TweenPosition component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to add tween to
+- `from_x`, `from_y` - Starting position
+- `to_x`, `to_y` - Target position
+- `duration` - Animation duration in seconds
+- `easing` - Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+- `loop_mode` - Loop behavior: "once", "loop", "ping_pong"
+
+```lua
+function on_player_bounce_pad(ctx)
+    local player_id = ctx.a.id
+    local pos = ctx.a.pos
+    engine.collision_entity_insert_tween_position(player_id, pos.x, pos.y, pos.x, pos.y - 100, 0.5, "quad_out", "once")
+end
+```
+
+#### `engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode)`
+Add or replace TweenRotation component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to add tween to
+- `from` - Starting rotation in degrees
+- `to` - Target rotation in degrees
+- `duration` - Animation duration in seconds
+- `easing` - Easing function
+- `loop_mode` - Loop behavior
+
+```lua
+function on_player_spin_powerup(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_insert_tween_rotation(player_id, 0, 360, 1.0, "linear", "loop")
+end
+```
+
+#### `engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)`
+Add or replace TweenScale component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to add tween to
+- `from_x`, `from_y` - Starting scale
+- `to_x`, `to_y` - Target scale
+- `duration` - Animation duration in seconds
+- `easing` - Easing function
+- `loop_mode` - Loop behavior
+
+```lua
+function on_player_grow_powerup(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_insert_tween_scale(player_id, 1.0, 1.0, 2.0, 2.0, 0.5, "quad_out", "once")
+end
+```
+
+#### `engine.collision_entity_remove_tween_position(entity_id)`
+Remove TweenPosition component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to remove tween from
+
+```lua
+function on_player_stop_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_remove_tween_position(player_id)
+end
+```
+
+#### `engine.collision_entity_remove_tween_rotation(entity_id)`
+Remove TweenRotation component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to remove tween from
+
+#### `engine.collision_entity_remove_tween_scale(entity_id)`
+Remove TweenScale component during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to remove tween from
+
+#### `engine.collision_entity_set_rotation(entity_id, degrees)`
+Set entity's rotation during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to rotate
+- `degrees` - Rotation angle in degrees
+
+```lua
+function on_player_orientation_trigger(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_rotation(player_id, 45)
+end
+```
+
+#### `engine.collision_entity_set_scale(entity_id, sx, sy)`
+Set entity's scale during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity to scale
+- `sx`, `sy` - Scale factors
+
+```lua
+function on_player_shrink_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_scale(player_id, 0.5, 0.5)
+end
+```
+
+#### `engine.collision_entity_remove_force(entity_id, name)`
+Remove a named force from entity's RigidBody during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Force identifier to remove
+
+```lua
+function on_player_leave_wind_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_remove_force(player_id, "wind")
+end
+```
+
+#### `engine.collision_entity_set_force_value(entity_id, name, x, y)`
+Update the acceleration value of an existing force during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `name` - Force identifier
+- `x`, `y` - New acceleration values
+
+```lua
+function on_player_strong_wind_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_force_value(player_id, "wind", 500, 0)
+end
+```
+
+#### `engine.collision_entity_set_friction(entity_id, friction)`
+Set velocity damping on entity's RigidBody during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `friction` - Damping factor (0.0 = no friction, ~5.0 = responsive, ~10.0 = heavy drag)
+
+```lua
+function on_player_ice_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_friction(player_id, 0.5)
+end
+```
+
+#### `engine.collision_entity_set_max_speed(entity_id, max_speed)`
+Set or remove maximum velocity limit during collision handling.
+
+**Parameters:**
+- `entity_id` - Entity with RigidBody component
+- `max_speed` - Maximum speed in world units/sec, or `nil` to remove limit
+
+```lua
+function on_player_speed_limit_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_max_speed(player_id, 150.0)
+end
+```
+
 ### Example: Ball-Brick Collision
 
 ```lua
@@ -2146,30 +2542,30 @@ engine.spawn()
     :register_as("player")
     :build()
 
--- Phase callbacks
-function player_sticky_enter(entity_id, previous_phase)
-    engine.entity_signal_set_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing")
+-- Phase callbacks (using EntityContext)
+function player_sticky_enter(ctx, input)
+    engine.entity_signal_set_flag(ctx.id, "sticky")
+    engine.entity_set_animation(ctx.id, "vaus_glowing")
 end
 
-function player_sticky_update(entity_id, time_in_phase)
-    if time_in_phase >= 3.0 then
-        engine.phase_transition(entity_id, "glowing")
+function player_sticky_update(ctx, input, dt)
+    if ctx.time_in_phase >= 3.0 then
+        engine.phase_transition(ctx.id, "glowing")
     end
 end
 
-function player_glowing_enter(entity_id, previous_phase)
-    engine.entity_signal_clear_flag(entity_id, "sticky")
-    engine.entity_set_animation(entity_id, "vaus_glowing")
+function player_glowing_enter(ctx, input)
+    engine.entity_signal_clear_flag(ctx.id, "sticky")
+    engine.entity_set_animation(ctx.id, "vaus_glowing")
 end
 
-function player_hit_enter(entity_id, previous_phase)
-    engine.entity_set_animation(entity_id, "vaus_hit")
+function player_hit_enter(ctx, input)
+    engine.entity_set_animation(ctx.id, "vaus_hit")
 end
 
-function player_hit_update(entity_id, time_in_phase)
-    if time_in_phase >= 0.5 then
-        engine.phase_transition(entity_id, "glowing")
+function player_hit_update(ctx, input, dt)
+    if ctx.time_in_phase >= 0.5 then
+        engine.phase_transition(ctx.id, "glowing")
     end
 end
 ```
