@@ -156,10 +156,17 @@ end
 --- @param input Input Input state table
 --- @param dt number Delta time in seconds
 local function rotate_ship(ctx, input, dt)
-    local rotation_speed = 360.0 -- degrees per second
+    local rotation_speed = 360.0   -- degrees per second
+    local propulsion_accel = 300.0 -- units per second squared
     -- engine.log_info("Current rotation: " .. tostring(CURRENT_ROTATION))
     -- Note: ctx.rotation contains current rotation if available
     current_rotation = ctx.rotation or 0.0
+
+    -- calculate acceleration vector based on current rotation
+    local radians = math.rad(current_rotation)
+    local accel_x = math.sin(radians) * propulsion_accel
+    local accel_y = -math.cos(radians) * propulsion_accel
+    engine.entity_set_force_value(ctx.id, "propulsion", accel_x, accel_y)
 
     if input.digital.left.pressed then
         -- engine.log_info("Rotating left")
@@ -179,6 +186,7 @@ function ship_phase_idle_enter(ctx, input)
     engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
     -- set animation to idle
     engine.entity_set_animation(ctx.id, "ship_idle")
+    engine.entity_set_force_enabled(ctx.id, "propulsion", false)
 end
 
 --- @param ctx EntityContext Entity context table
@@ -202,6 +210,7 @@ function ship_phase_propulsion_enter(ctx, input)
     engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
     -- set animation to propulsion
     engine.entity_set_animation(ctx.id, "ship_propulsion")
+    engine.entity_set_force_enabled(ctx.id, "propulsion", true)
 end
 
 --- @param ctx EntityContext Entity context table
@@ -406,7 +415,10 @@ local function spawn_ship()
         :with_sprite("ship_sheet", 64, 64, 32, 32)
         :with_animation("ship_idle")
         :with_collider(64, 64, 32, 32) -- Same size collider
-        :with_rotation(0)
+        :with_rotation(0.0)
+        :with_velocity(0, 0)
+        :with_friction(1.0)
+        :with_accel("propulsion", 0.0, -300.0, false)
         :with_signals()
         :with_phase({
             initial = "idle",
