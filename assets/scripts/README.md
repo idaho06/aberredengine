@@ -944,37 +944,78 @@ ctx = {
 
 ```lua
 -- Called when entering a phase
+-- Returns: nil or phase_name (string) to transition to another phase
 function player_idle_enter(ctx, input)
     -- ctx: EntityContext table with all component data
     -- ctx.previous_phase: string or nil (the phase we came from)
     -- input: input state table
 
     engine.log_info("Player " .. ctx.id .. " entered idle from " .. (ctx.previous_phase or "initial"))
+    return nil  -- Stay in current phase
 end
 
 -- Called each frame while in phase
+-- Returns: nil or phase_name (string) to transition to another phase
 function player_idle_update(ctx, input, dt)
     -- ctx: EntityContext table
     -- ctx.time_in_phase: seconds in current phase
     -- input: input state table
     -- dt: delta time in seconds
 
+    -- Option 1: Use return value to transition (preferred for same entity)
     if ctx.time_in_phase >= 2.0 then
-        engine.phase_transition(ctx.id, "running")
+        return "running"
     end
 
     -- Access input directly
     if input.digital.action_1.just_pressed then
-        engine.phase_transition(ctx.id, "jumping")
+        return "jumping"
     end
+
+    return nil  -- Stay in current phase
 end
 
 -- Called when exiting a phase
+-- Does NOT support return value (transition already decided)
 function player_idle_exit(ctx)
     -- ctx: EntityContext table (no input parameter)
     engine.log_info("Player " .. ctx.id .. " exiting idle phase")
 end
 ```
+
+**Phase Transition Methods:**
+
+There are two ways to trigger phase transitions:
+
+1. **Return value (preferred for same entity):** Return a phase name string from `on_enter` or `on_update` callbacks.
+   ```lua
+   function my_update(ctx, input, dt)
+       if some_condition then
+           return "next_phase"  -- Transition to "next_phase"
+       end
+       return nil  -- Stay in current phase
+   end
+   ```
+
+2. **`engine.phase_transition(entity_id, phase)`:** Call this function to transition any entity (including other entities).
+   ```lua
+   function my_update(ctx, input, dt)
+       -- Transition self (works, but return value is cleaner)
+       engine.phase_transition(ctx.id, "next_phase")
+
+       -- Transition another entity (must use this method)
+       local other_id = engine.get_entity("partner")
+       if other_id then
+           engine.phase_transition(other_id, "alert")
+       end
+   end
+   ```
+
+**Important notes:**
+- Return values take precedence over `engine.phase_transition(ctx.id, ...)` for the same entity
+- Returning the current phase name is ignored (no transition)
+- Transitions happen on the next frame (not immediately)
+- `on_exit` does NOT support return values (transition already decided)
 
 ---
 
