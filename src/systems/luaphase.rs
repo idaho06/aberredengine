@@ -29,7 +29,7 @@
 //! ```
 
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::SystemParam;
+use bevy_ecs::system::{Local, SystemParam};
 use mlua::prelude::*;
 
 use crate::components::animation::Animation;
@@ -48,8 +48,8 @@ use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{
-    build_entity_context, AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
-    LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
+    AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime, LuaTimerSnapshot,
+    RigidBodySnapshot, SpriteSnapshot, build_entity_context,
 };
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -98,10 +98,7 @@ fn build_phase_context(
     // Query all optional components
     let group = ctx_queries.groups.get(entity).ok().map(|g| g.name());
 
-    let map_pos = positions_query
-        .get(entity)
-        .ok()
-        .map(|p| (p.pos.x, p.pos.y));
+    let map_pos = positions_query.get(entity).ok().map(|p| (p.pos.x, p.pos.y));
 
     let screen_pos = ctx_queries
         .screen_positions
@@ -134,20 +131,21 @@ fn build_phase_context(
         })
     });
 
-    let sprite = ctx_queries.sprites.get(entity).ok().map(|s| SpriteSnapshot {
-        tex_key: s.tex_key.to_string(),
-        flip_h: s.flip_h,
-        flip_v: s.flip_v,
-    });
-
-    let animation = animation_query
+    let sprite = ctx_queries
+        .sprites
         .get(entity)
         .ok()
-        .map(|a| AnimationSnapshot {
-            key: a.animation_key.clone(),
-            frame_index: a.frame_index,
-            elapsed: a.elapsed_time,
+        .map(|s| SpriteSnapshot {
+            tex_key: s.tex_key.to_string(),
+            flip_h: s.flip_h,
+            flip_v: s.flip_v,
         });
+
+    let animation = animation_query.get(entity).ok().map(|a| AnimationSnapshot {
+        key: a.animation_key.clone(),
+        frame_index: a.frame_index,
+        elapsed: a.elapsed_time,
+    });
 
     let signals_ref = signals_query.get(entity).ok();
 
@@ -185,40 +183,83 @@ fn build_phase_context(
     )
 }
 
+/// Process the return value from a phase callback.
+/// Returns Some(phase_name) if a valid transition was requested (different from current phase).
+fn process_callback_return(
+    result: LuaResult<LuaValue>,
+    current_phase: &str,
+    fn_name: &str,
+) -> Option<String> {
+    match result {
+        Ok(LuaValue::String(s)) => {
+            match s.to_str() {
+                Ok(phase) => {
+                    if phase != current_phase {
+                        Some(phase.to_string())
+                    } else {
+                        None // Same phase, ignore
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[Lua] Error converting return value in {}(): {}",
+                        fn_name, e
+                    );
+                    None
+                }
+            }
+        }
+        Ok(LuaValue::Nil) => None,
+        Ok(_) => {
+            eprintln!(
+                "[Lua] Warning: phase callback '{}' returned non-string, non-nil value",
+                fn_name
+            );
+            None
+        }
+        Err(e) => {
+            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+            None
+        }
+    }
+}
+
 /// Call phase enter callback: (ctx, input)
+/// Returns Some(phase_name) if the callback returned a phase transition request.
 fn call_phase_enter(
     lua_runtime: &LuaRuntime,
     fn_name: &str,
     ctx_table: &LuaTable,
     input_table: &LuaTable,
-) {
+    current_phase: &str,
+) -> Option<String> {
     if lua_runtime.has_function(fn_name) {
-        if let Err(e) =
-            lua_runtime.call_function::<_, ()>(fn_name, (ctx_table.clone(), input_table.clone()))
-        {
-            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
-        }
+        let result = lua_runtime
+            .call_function::<_, LuaValue>(fn_name, (ctx_table.clone(), input_table.clone()));
+        process_callback_return(result, current_phase, fn_name)
     } else {
         eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+        None
     }
 }
 
 /// Call phase update callback: (ctx, input, dt)
+/// Returns Some(phase_name) if the callback returned a phase transition request.
 fn call_phase_update(
     lua_runtime: &LuaRuntime,
     fn_name: &str,
     ctx_table: &LuaTable,
     input_table: &LuaTable,
     dt: f32,
-) {
+    current_phase: &str,
+) -> Option<String> {
     if lua_runtime.has_function(fn_name) {
-        if let Err(e) = lua_runtime
-            .call_function::<_, ()>(fn_name, (ctx_table.clone(), input_table.clone(), dt))
-        {
-            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
-        }
+        let result = lua_runtime
+            .call_function::<_, LuaValue>(fn_name, (ctx_table.clone(), input_table.clone(), dt));
+        process_callback_return(result, current_phase, fn_name)
     } else {
         eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+        None
     }
 }
 
@@ -258,7 +299,12 @@ pub fn lua_phase_system(
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    // Local resource to avoid per-frame allocation for callback return transitions
+    mut callback_transitions: Local<Vec<(u64, String)>>,
 ) {
+    // Clear previous frame's transitions (reuses allocated capacity)
+    callback_transitions.clear();
+
     // Update signal cache so Lua can read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
 
@@ -276,17 +322,37 @@ pub fn lua_phase_system(
     let lua = lua_runtime.lua();
 
     for (entity, mut lua_phase) in query.iter_mut() {
+        let entity_id = entity.to_bits();
+        let current_phase = lua_phase.current.clone();
+
         // Handle initial enter callback: (ctx, input) with previous_phase = nil
         if lua_phase.needs_enter_callback {
             lua_phase.needs_enter_callback = false;
-            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
+            if let Some(callbacks) = lua_phase.get_callbacks(&current_phase) {
                 if let Some(ref fn_name) = callbacks.on_enter {
                     // Build context with no previous_phase
                     match build_phase_context(
-                        lua, entity, &lua_phase, None, &ctx_queries,
-                        &positions_query, &rigid_bodies_query, &animation_query, &signals_query,
+                        lua,
+                        entity,
+                        &lua_phase,
+                        None,
+                        &ctx_queries,
+                        &positions_query,
+                        &rigid_bodies_query,
+                        &animation_query,
+                        &signals_query,
                     ) {
-                        Ok(ctx) => call_phase_enter(&lua_runtime, fn_name, &ctx, &input_table),
+                        Ok(ctx) => {
+                            if let Some(next) = call_phase_enter(
+                                &lua_runtime,
+                                fn_name,
+                                &ctx,
+                                &input_table,
+                                &current_phase,
+                            ) {
+                                callback_transitions.push((entity_id, next));
+                            }
+                        }
                         Err(e) => eprintln!("[Rust] Error building context: {}", e),
                     }
                 }
@@ -303,8 +369,15 @@ pub fn lua_phase_system(
             if let Some(callbacks) = lua_phase.get_callbacks(&old_phase) {
                 if let Some(ref fn_name) = callbacks.on_exit {
                     match build_phase_context(
-                        lua, entity, &lua_phase, None, &ctx_queries,
-                        &positions_query, &rigid_bodies_query, &animation_query, &signals_query,
+                        lua,
+                        entity,
+                        &lua_phase,
+                        None,
+                        &ctx_queries,
+                        &positions_query,
+                        &rigid_bodies_query,
+                        &animation_query,
+                        &signals_query,
                     ) {
                         Ok(ctx) => call_phase_exit(&lua_runtime, fn_name, &ctx),
                         Err(e) => eprintln!("[Rust] Error building context: {}", e),
@@ -313,13 +386,31 @@ pub fn lua_phase_system(
             }
 
             // Call enter callback for new phase: (ctx, input) with previous_phase set
-            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
+            let new_current = lua_phase.current.clone();
+            if let Some(callbacks) = lua_phase.get_callbacks(&new_current) {
                 if let Some(ref fn_name) = callbacks.on_enter {
                     match build_phase_context(
-                        lua, entity, &lua_phase, Some(&old_phase), &ctx_queries,
-                        &positions_query, &rigid_bodies_query, &animation_query, &signals_query,
+                        lua,
+                        entity,
+                        &lua_phase,
+                        Some(&old_phase),
+                        &ctx_queries,
+                        &positions_query,
+                        &rigid_bodies_query,
+                        &animation_query,
+                        &signals_query,
                     ) {
-                        Ok(ctx) => call_phase_enter(&lua_runtime, fn_name, &ctx, &input_table),
+                        Ok(ctx) => {
+                            if let Some(next) = call_phase_enter(
+                                &lua_runtime,
+                                fn_name,
+                                &ctx,
+                                &input_table,
+                                &new_current,
+                            ) {
+                                callback_transitions.push((entity_id, next));
+                            }
+                        }
                         Err(e) => eprintln!("[Rust] Error building context: {}", e),
                     }
                 }
@@ -327,13 +418,32 @@ pub fn lua_phase_system(
         }
 
         // Call update callback: (ctx, input, dt)
+        let update_current = lua_phase.current.clone();
         if let Some(callbacks) = lua_phase.current_callbacks() {
             if let Some(ref fn_name) = callbacks.on_update {
                 match build_phase_context(
-                    lua, entity, &lua_phase, None, &ctx_queries,
-                    &positions_query, &rigid_bodies_query, &animation_query, &signals_query,
+                    lua,
+                    entity,
+                    &lua_phase,
+                    None,
+                    &ctx_queries,
+                    &positions_query,
+                    &rigid_bodies_query,
+                    &animation_query,
+                    &signals_query,
                 ) {
-                    Ok(ctx) => call_phase_update(&lua_runtime, fn_name, &ctx, &input_table, delta),
+                    Ok(ctx) => {
+                        if let Some(next) = call_phase_update(
+                            &lua_runtime,
+                            fn_name,
+                            &ctx,
+                            &input_table,
+                            delta,
+                            &update_current,
+                        ) {
+                            callback_transitions.push((entity_id, next));
+                        }
+                    }
                     Err(e) => eprintln!("[Rust] Error building context: {}", e),
                 }
             }
@@ -343,9 +453,17 @@ pub fn lua_phase_system(
         lua_phase.time_in_phase += delta;
     }
 
-    // Process phase commands from Lua
+    // Process phase commands from Lua (from engine.phase_transition calls)
     for cmd in lua_runtime.drain_phase_commands() {
         process_phase_command(&mut query, cmd);
+    }
+
+    // Apply return value transitions (these take precedence over PhaseCmd)
+    for (entity_id, next_phase) in (*callback_transitions).drain(..) {
+        let entity = Entity::from_bits(entity_id);
+        if let Ok((_, mut lua_phase)) = query.get_mut(entity) {
+            lua_phase.next = Some(next_phase);
+        }
     }
 
     // Process audio commands from Lua

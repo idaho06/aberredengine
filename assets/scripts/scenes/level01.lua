@@ -27,7 +27,8 @@ local M = {}
 --- @param dt number Delta time in seconds
 function scene_init_update(ctx, input, dt)
     -- Immediately transition to get_started
-    engine.phase_transition(ctx.id, "get_started")
+    -- engine.phase_transition(ctx.id, "get_started")
+    return "get_started"
 end
 
 --- Called when entering "get_started" phase
@@ -200,7 +201,8 @@ function ship_phase_idle_update(ctx, input, dt)
 
     -- If "up" is just pressed, switch to propulsion phase
     if input.digital.up.just_pressed then
-        engine.phase_transition(ctx.id, "propulsion")
+        -- engine.phase_transition(ctx.id, "propulsion")
+        return "propulsion"
     end
 end
 
@@ -221,7 +223,8 @@ function ship_phase_propulsion_update(ctx, input, dt)
     rotate_ship(ctx, input, dt)
     -- When "up" is released, go back to idle
     if input.digital.up.just_released then
-        engine.phase_transition(ctx.id, "idle")
+        -- engine.phase_transition(ctx.id, "idle")
+        return "idle"
     end
 end
 
@@ -417,7 +420,7 @@ local function spawn_ship()
         :with_collider(64, 64, 32, 32) -- Same size collider
         :with_rotation(0.0)
         :with_velocity(0, 0)
-        :with_friction(1.0)
+        :with_friction(0.0)
         :with_accel("propulsion", 0.0, -300.0, false)
         :with_signals()
         :with_phase({
@@ -490,7 +493,7 @@ function M.spawn()
 
     engine.log_info("Setting camera.")
     -- todo: get screen size from engine instead of hardcoding for calculating offset
-    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
+    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 0.5)
 
     spawn_ship()
 

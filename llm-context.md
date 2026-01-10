@@ -1,6 +1,6 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2026-01-09 (synced with codebase)
+# Last updated: 2026-01-10 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -363,6 +363,7 @@ engine.collision_entity_set_speed(id, speed)
 
 -- Phase Control
 engine.phase_transition(id, phase)
+-- OR return phase name from on_enter/on_update callbacks (return value takes precedence)
 
 -- Input (passed as argument to callbacks, not queried via functions)
 -- Input table structure:
@@ -609,7 +610,7 @@ For features touching:
 7. Raylib Vector2 methods differ from other math libs
 8. Signals component auto-created if using :with_signal_* builders
 9. Scene update callbacks: on_update_scenename(input, dt)
-10. Phase callbacks: on_enter(ctx, input), on_update(ctx, input, dt), on_exit(ctx) - ctx contains entity state
+10. Phase callbacks: on_enter(ctx, input), on_update(ctx, input, dt), on_exit(ctx) - ctx contains entity state. on_enter/on_update can return phase name string to trigger transition (takes precedence over engine.phase_transition)
 11. Timer callbacks receive (ctx, input) as args - ctx contains entity state including timer info
 12. Animation controller evaluates rules in order, first match wins
 13. Frozen entities skip movement but still render

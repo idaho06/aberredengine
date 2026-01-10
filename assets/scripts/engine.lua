@@ -30,10 +30,16 @@ function engine.log_error(message) end
 -- Callback signatures:
 --   Scene update:    function on_update_scenename(input, dt)
 --   Phase enter:     function phase_enter(ctx, input)      -- ctx.previous_phase available
+--                    -> return string|nil (phase name to transition to, or nil)
 --   Phase update:    function phase_update(ctx, input, dt) -- ctx.time_in_phase in ctx
---   Phase exit:      function phase_exit(ctx)
+--                    -> return string|nil (phase name to transition to, or nil)
+--   Phase exit:      function phase_exit(ctx)              -- no return value
 --   Timer callback:  function timer_callback(ctx, input)
 --   Collision:       function collision_callback(ctx)      -- ctx.a and ctx.b for entities
+--
+-- Phase callbacks (on_enter, on_update) can return a phase name string to trigger
+-- a transition, as an alternative to calling engine.phase_transition(ctx.id, "phase").
+-- Return value takes precedence over engine.phase_transition() for the same entity.
 
 ---@class Vector2
 ---@field x number X coordinate
