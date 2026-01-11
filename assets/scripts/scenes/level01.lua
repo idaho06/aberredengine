@@ -21,6 +21,113 @@ local M = {}
 -- the phase definitions in :with_phase()
 -- Phase callbacks now receive EntityContext (ctx) instead of entity_id
 
+-- =================== ASTEROID PHASE CALLBACKS AND HELPERS ====================
+
+function asteroid_phase_drifting_enter(ctx, input)
+    engine.log_info("Asteroid drifting enter: ID " .. tostring(ctx.id))
+    -- Set random rotation speed
+    local rotation_speed = math.random(-30.0, 30.0) -- degrees per second
+    engine.entity_signal_set_scalar(ctx.id, "rotation_speed", rotation_speed)
+end
+
+function asteroid_phase_drifting_update(ctx, input, dt)
+    -- Rotate asteroid based on rotation speed
+    local rotation_speed = ctx.signals.scalars.rotation_speed or 0.0
+    local new_rotation = (ctx.rotation or 0.0) + rotation_speed * dt
+    engine.entity_set_rotation(ctx.id, new_rotation)
+end
+
+-- ==================== SHIP PHASE CALLBACKS AND HELPERS ====================
+
+--- Helper function to rotate the ship based on input
+--- @param ctx EntityContext Entity context table
+--- @param input Input Input state table
+--- @param dt number Delta time in seconds
+local function rotate_ship(ctx, input, dt)
+    local rotation_speed = 360.0   -- degrees per second
+    local propulsion_accel = 300.0 -- units per second squared
+    -- engine.log_info("Current rotation: " .. tostring(CURRENT_ROTATION))
+    -- Note: ctx.rotation contains current rotation if available
+    current_rotation = ctx.rotation or 0.0
+
+    -- calculate acceleration vector based on current rotation
+    local radians = math.rad(current_rotation)
+    local accel_x = math.sin(radians) * propulsion_accel
+    local accel_y = -math.cos(radians) * propulsion_accel
+    engine.entity_set_force_value(ctx.id, "propulsion", accel_x, accel_y)
+
+    if input.digital.left.pressed then
+        -- engine.log_info("Rotating left")
+        current_rotation = current_rotation - rotation_speed * dt
+    end
+    if input.digital.right.pressed then
+        -- engine.log_info("Rotating right")
+        current_rotation = current_rotation + rotation_speed * dt
+    end
+
+    engine.entity_set_rotation(ctx.id, current_rotation)
+end
+
+--- @param ctx EntityContext Entity context table
+--- @param input Input Input state table
+function ship_phase_idle_enter(ctx, input)
+    engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
+    -- set animation to idle
+    engine.entity_set_animation(ctx.id, "ship_idle")
+    engine.entity_set_force_enabled(ctx.id, "propulsion", false)
+end
+
+--- @param ctx EntityContext Entity context table
+--- @param input Input Input state table
+--- @param dt number Delta time in seconds
+function ship_phase_idle_update(ctx, input, dt)
+    -- engine.log_info("Ship idle phase update")
+    -- set camera ship's position
+    engine.set_camera(ctx.pos.x, ctx.pos.y, 640 / 2, 360 / 2, 0.0, 1.0)
+
+    -- Handle rotation input
+    rotate_ship(ctx, input, dt)
+
+    -- If "up" is just pressed, switch to propulsion phase
+    if input.digital.up.just_pressed then
+        -- engine.phase_transition(ctx.id, "propulsion")
+        return "propulsion"
+    end
+end
+
+--- @param ctx EntityContext Entity context table
+--- @param input Input Input state table
+function ship_phase_propulsion_enter(ctx, input)
+    engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
+    -- set animation to propulsion
+    engine.entity_set_animation(ctx.id, "ship_propulsion")
+    engine.entity_set_force_enabled(ctx.id, "propulsion", true)
+end
+
+--- @param ctx EntityContext Entity context table
+--- @param input Input Input state table
+--- @param dt number Delta time in seconds
+function ship_phase_propulsion_update(ctx, input, dt)
+    -- set camera ship's position
+    engine.set_camera(ctx.pos.x, ctx.pos.y, 640 / 2, 360 / 2, 0.0, 1.0)
+
+    -- Handle rotation input
+    rotate_ship(ctx, input, dt)
+    -- When "up" is released, go back to idle
+    if input.digital.up.just_released then
+        -- engine.phase_transition(ctx.id, "idle")
+        return "idle"
+    end
+end
+
+-- ==================== SCENE GAME STATE CALLBACKS ====================
+
+function scene_init_enter(ctx, input)
+    engine.log_info("scene_init_enter: Entering init phase")
+    return "get_started"
+end
+
+--[[
 --- Called when entering "init" phase (not used, we just transition immediately)
 --- @param ctx EntityContext Entity context table
 --- @param input Input Input state table
@@ -28,8 +135,14 @@ local M = {}
 function scene_init_update(ctx, input, dt)
     -- Immediately transition to get_started
     -- engine.phase_transition(ctx.id, "get_started")
+    engine.log_info("scene_init_update: Init phase complete - transitioning to get_started")
     return "get_started"
 end
+
+function scene_init_exit(ctx, input)
+    engine.log_info("scene_init_exit: Exiting init phase")
+end
+ ]]
 
 --- Called when entering "get_started" phase
 --- - Play "player_ready" music
@@ -37,7 +150,7 @@ end
 --- @param ctx EntityContext Entity context table
 --- @param input Input Input state table
 function scene_get_started_enter(ctx, input)
-    engine.log_info("Entering get_started phase - spawning ball")
+    engine.log_info("Entering get_started phase")
 
     --[[     -- Play "player_ready" music (no loop)
     engine.play_music("player_ready", false)
@@ -94,141 +207,6 @@ function scene_get_started_update(ctx, input, dt)
     -- Transition to playing after setup
     -- engine.phase_transition(ctx.id, "playing")
 end
-
--- ==================== BALL PHASE CALLBACKS ====================
-
---- Called when ball enters "stuck_to_player" phase
---- Attach ball to player with stored velocity
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function ball_stuck_enter(ctx, input)
-    --[[     engine.log_info("Ball stuck to player - attaching... ball_id=" ..
-        tostring(ctx.id) .. " prev=" .. tostring(ctx.previous_phase))
-
-    -- Get player entity
-    local player_id = engine.get_entity("player")
-    if not player_id then
-        engine.log_error("Player entity not found! Cannot attach ball.")
-        return
-    end
-    engine.log_info("Found player entity: " .. tostring(player_id))
-
-    -- Get stored ball data from world signals
-    local offset_x = engine.get_scalar("ball_stick_offset_x") or 0
-    local vx = engine.get_scalar("ball_stick_vx") or 300
-    local vy = engine.get_scalar("ball_stick_vy") or -300
-
-    engine.log_info("Ball stick data: offset_x=" ..
-        tostring(offset_x) .. " vx=" .. tostring(vx) .. " vy=" .. tostring(vy))
-
-    -- Stop the ball and attach to player
-    engine.entity_set_velocity(ctx.id, 0, 0)
-    engine.entity_insert_stuckto(ctx.id, player_id, true, false, offset_x, 0, vx, vy)
-
-    engine.log_info("Ball attached to player with StuckTo!") ]]
-end
-
---- Called each frame while ball is stuck to player
---- After 2 seconds, release the ball
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function ball_stuck_update(ctx, input, dt)
-    --[[     if ctx.time_in_phase >= 2.0 then
-        engine.log_info("Releasing ball!")
-        engine.phase_transition(ctx.id, "moving")
-    end ]]
-end
-
---- Called when ball enters "moving" phase (released from paddle)
---- Remove StuckTo component and restore stored velocity to RigidBody
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function ball_moving_enter(ctx, input)
-    --[[     engine.log_info("Ball released and moving!")
-    -- Release from StuckTo - this removes the component and adds RigidBody with stored velocity
-    engine.release_stuckto(ctx.id) ]]
-end
-
--- ==================== SHIP PHASE CALLBACKS AND HELPERS ====================
-
---- Helper function to rotate the ship based on input
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-local function rotate_ship(ctx, input, dt)
-    local rotation_speed = 360.0   -- degrees per second
-    local propulsion_accel = 300.0 -- units per second squared
-    -- engine.log_info("Current rotation: " .. tostring(CURRENT_ROTATION))
-    -- Note: ctx.rotation contains current rotation if available
-    current_rotation = ctx.rotation or 0.0
-
-    -- calculate acceleration vector based on current rotation
-    local radians = math.rad(current_rotation)
-    local accel_x = math.sin(radians) * propulsion_accel
-    local accel_y = -math.cos(radians) * propulsion_accel
-    engine.entity_set_force_value(ctx.id, "propulsion", accel_x, accel_y)
-
-    if input.digital.left.pressed then
-        -- engine.log_info("Rotating left")
-        current_rotation = current_rotation - rotation_speed * dt
-    end
-    if input.digital.right.pressed then
-        -- engine.log_info("Rotating right")
-        current_rotation = current_rotation + rotation_speed * dt
-    end
-
-    engine.entity_set_rotation(ctx.id, current_rotation)
-end
-
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function ship_phase_idle_enter(ctx, input)
-    engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
-    -- set animation to idle
-    engine.entity_set_animation(ctx.id, "ship_idle")
-    engine.entity_set_force_enabled(ctx.id, "propulsion", false)
-end
-
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function ship_phase_idle_update(ctx, input, dt)
-    -- engine.log_info("Ship idle phase update")
-
-    -- Handle rotation input
-    rotate_ship(ctx, input, dt)
-
-    -- If "up" is just pressed, switch to propulsion phase
-    if input.digital.up.just_pressed then
-        -- engine.phase_transition(ctx.id, "propulsion")
-        return "propulsion"
-    end
-end
-
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
-function ship_phase_propulsion_enter(ctx, input)
-    engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
-    -- set animation to propulsion
-    engine.entity_set_animation(ctx.id, "ship_propulsion")
-    engine.entity_set_force_enabled(ctx.id, "propulsion", true)
-end
-
---- @param ctx EntityContext Entity context table
---- @param input Input Input state table
---- @param dt number Delta time in seconds
-function ship_phase_propulsion_update(ctx, input, dt)
-    -- Handle rotation input
-    rotate_ship(ctx, input, dt)
-    -- When "up" is released, go back to idle
-    if input.digital.up.just_released then
-        -- engine.phase_transition(ctx.id, "idle")
-        return "idle"
-    end
-end
-
--- ==================== SCENE GAME STATE CALLBACKS ====================
 
 --- Called each frame in "playing" phase
 --- - Check for level cleared (no bricks)
@@ -442,6 +420,70 @@ local function spawn_ship()
     engine.log_info("Ship spawned!")
 end
 
+--- Spawn the background
+local function spawn_background()
+    -- We have 4 textures: space01, space02, space03, space04
+    -- The textures are 512x512. We are going to create a 8x8 grid of them
+    -- Each tile will have a random texture from the 4 options
+    -- Each tile will have a random rotation (0, 90, 180, 270 degrees)
+    -- The first tile will be at (0,0)
+    local tile_size = 512
+    local grid_size = 8
+    for row = 0, grid_size - 1 do
+        for col = 0, grid_size - 1 do
+            -- Randomly select a texture
+            local texture_index = math.random(1, 4)
+            local texture_name = "space0" .. tostring(texture_index)
+            -- Randomly select a rotation
+            local rotation_options = { 0, 90, 180, 270 }
+            local rotation_index = math.random(1, #rotation_options)
+            local rotation = rotation_options[rotation_index]
+            -- Spawn the background tile
+            engine.spawn()
+                :with_group("background")
+                :with_position(col * tile_size, row * tile_size)
+                :with_sprite(texture_name, tile_size, tile_size, tile_size / 2, tile_size / 2)
+                :with_rotation(rotation)
+                :with_zindex(-10)
+                :build()
+        end
+    end
+end
+
+local function spawn_asteroids()
+    -- Spawn a few asteroids at random positions
+    local asteroid_textures = { "asteroids-big01", "asteroids-big02", "asteroids-big03" }
+    for i = 1, 10 do
+        local texture_index = math.random(1, #asteroid_textures)
+        local texture_name = asteroid_textures[texture_index]
+        local pos_x = math.random(0, 2048)
+        local pos_y = math.random(0, 2048)
+        engine.spawn()
+            :with_group("asteroids")
+            :with_position(pos_x, pos_y)
+            :with_sprite(texture_name, 128, 128, 64, 64)
+            :with_rotation(math.random(0, 360))
+            :with_velocity(math.random(-10, 10), math.random(-10, 10))
+            :with_zindex(5)
+            :with_collider(80, 80, 40, 40)
+            :with_signals()
+            :with_phase({
+                initial = "drifting",
+                phases = {
+                    drifting = {
+                        on_enter = "asteroid_phase_drifting_enter",  -- Setup vars in signals
+                        on_update = "asteroid_phase_drifting_update" -- Handle movement
+                    },
+                    exploding = {
+                        on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
+                    }
+                }
+            })
+            :build()
+    end
+    engine.log_info("Asteroids spawned!")
+end
+
 --- Spawn the UI score texts
 --[[ local function spawn_ui_texts()
     -- Score header text "1UP   HIGH SCORE"
@@ -493,9 +535,13 @@ function M.spawn()
 
     engine.log_info("Setting camera.")
     -- todo: get screen size from engine instead of hardcoding for calculating offset
-    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 0.5)
+    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
 
     spawn_ship()
+
+    spawn_background()
+
+    spawn_asteroids()
 
     --[[     -- reset ball bounce and player hit counters
     ball_bounces = 0
@@ -537,7 +583,7 @@ function M.spawn()
 
     -- Spawn collision rule entities
     spawn_collision_rules()
-
+]]
     -- Spawn the scene phase entity with LuaPhase component
     -- Each phase specifies its callback function names
     engine.spawn()
@@ -546,7 +592,9 @@ function M.spawn()
             initial = "init",
             phases = {
                 init = {
-                    on_update = "scene_init_update"
+                    on_enter = "scene_init_enter"
+                    -- on_update = "scene_init_update",
+                    -- on_exit = "scene_init_exit"
                 },
                 get_started = {
                     on_enter = "scene_get_started_enter",
@@ -569,7 +617,7 @@ function M.spawn()
             }
         })
         :build()
- ]]
+
     engine.log_info("Scene phase entity spawned with LuaPhase")
     engine.log_info("Level01 scene entities queued!")
 end
