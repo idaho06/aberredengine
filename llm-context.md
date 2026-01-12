@@ -1,6 +1,6 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2026-01-10 (synced with codebase)
+# Last updated: 2026-01-12 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -458,6 +458,10 @@ ctx.time_in_phase  -- f32 or nil
 ctx.previous_phase -- string or nil (only in on_enter callbacks)
 ctx.timer          -- { duration, elapsed, callback } or nil (LuaTimer)
 
+IMPORTANT: The entity context table is POOLED and REUSED between callbacks for performance.
+Do NOT store references to ctx or its subtables for later use - values will be overwritten.
+(Implementation: EntityCtxPool/EntityCtxTables in runtime.rs, build_entity_context_pooled in context.rs)
+
 ## COLLISION CONTEXT (Lua callback ctx table)
 
 ctx.a.id           -- u64 entity ID
@@ -470,8 +474,12 @@ ctx.a.signals      -- { flags={...}, integers={...}, scalars={...}, strings={...
 
 ctx.b.id/group/pos/vel/speed_sq/rect/signals  -- same structure
 
-ctx.sides.a.top/bottom/left/right  -- bool collision sides
-ctx.sides.b.top/bottom/left/right
+ctx.sides.a        -- array of strings: {"left", "top", ...} (collision sides for entity A)
+ctx.sides.b        -- array of strings: {"right", ...} (collision sides for entity B)
+
+IMPORTANT: The collision context table is POOLED and REUSED between collisions for performance.
+Do NOT store references to ctx or its subtables for later use - values will be overwritten.
+(Implementation: CollisionCtxPool/CollisionCtxTables in runtime.rs)
 
 ## SYSTEM EXECUTION ORDER (main.rs schedule)
 

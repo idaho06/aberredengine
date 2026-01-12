@@ -10,8 +10,9 @@ This document describes the Lua scripting interface architecture and provides a 
 4. [Command Types and Queues](#command-types-and-queues)
 5. [Entity Builder Pattern](#entity-builder-pattern)
 6. [Signal Snapshot System](#signal-snapshot-system)
-7. [How to Add New Lua Commands](#how-to-add-new-lua-commands)
-8. [Best Practices](#best-practices)
+7. [Context Table Pooling](#context-table-pooling)
+8. [How to Add New Lua Commands](#how-to-add-new-lua-commands)
+9. [Best Practices](#best-practices)
 
 ---
 
@@ -22,25 +23,25 @@ The Aberred Engine uses a **deferred command pattern** for Lua-Rust integration.
 ### High-Level Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             GAME LOOP                                        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                             GAME LOOP                                         │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐         │
 │   │   Lua Script    │───▶│  Command Queue  │───▶│  Rust Systems   │         │
-│   │                 │    │  (LuaAppData)   │    │  (process_*)    │         │
-│   └─────────────────┘    └─────────────────┘    └─────────────────┘         │
-│          │                       │                      │                    │
-│          │ engine.spawn()        │ SpawnCmd             │ Commands.spawn()   │
-│          │ engine.set_flag()     │ SignalCmd            │ world_signals.set  │
-│          │ engine.despawn()      │ EntityCmd            │ entity.despawn()   │
-│          ▼                       ▼                      ▼                    │
-│   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │
+│   │                 │     │  (LuaAppData)   │     │  (process_*)    │         │
+│   └─────────────────┘     └─────────────────┘     └─────────────────┘         │
+│          │                       │                      │                     │
+│          │ engine.spawn()        │ SpawnCmd             │ Commands.spawn()    │
+│          │ engine.set_flag()     │ SignalCmd            │ world_signals.set   │
+│          │ engine.despawn()      │ EntityCmd            │ entity.despawn()    │
+│          ▼                       ▼                      ▼                     │
+│   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐         │
 │   │ Signal Snapshot │◀───│  WorldSignals   │◀───│   ECS World     │         │
-│   │   (read-only)   │    │   (Resource)    │    │                 │         │
-│   └─────────────────┘    └─────────────────┘    └─────────────────┘         │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+│   │   (read-only)   │     │   (Resource)    │     │                 │         │
+│   └─────────────────┘     └─────────────────┘     └─────────────────┘         │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Why Deferred Commands?
@@ -59,9 +60,11 @@ The Lua runtime is organized in `src/resources/lua_runtime/`:
 ```
 src/resources/lua_runtime/
 ├── mod.rs              # Public exports
-├── runtime.rs          # LuaRuntime struct, engine table API registration
+├── runtime.rs          # LuaRuntime struct, engine table API registration, context pools
 ├── commands.rs         # Command enums (EntityCmd, SignalCmd, etc.)
+├── context.rs          # Entity context builder for Lua callbacks (pooled)
 ├── entity_builder.rs   # LuaEntityBuilder fluent API for spawning
+├── input_snapshot.rs   # InputSnapshot for Lua callbacks
 └── spawn_data.rs       # Data structures for spawn configuration
 ```
 
@@ -73,6 +76,7 @@ The main struct managing the Lua interpreter. It:
 - Registers the global `engine` table with all API functions
 - Manages `LuaAppData` for command queuing
 - Provides `drain_*_commands()` methods for Rust to retrieve queued commands
+- Manages **context table pools** for collision and entity callbacks (see [Context Table Pooling](#context-table-pooling))
 
 #### `LuaAppData` (runtime.rs)
 Internal shared state accessible from Lua closures:
@@ -313,6 +317,97 @@ local score = engine.get_integer("score")  -- Reads from cache
 // In game.rs or system that calls Lua
 lua_runtime.update_signal_cache(world_signals.snapshot());
 ```
+
+---
+
+## Context Table Pooling
+
+To minimize Lua table allocations in hot paths, the engine uses **table pooling** for callback context tables. Instead of creating new tables for each collision or entity callback, pre-allocated tables are stored in the Lua registry and reused.
+
+### Why Pooling?
+
+Without pooling, each callback would allocate many Lua tables:
+- **Collision callbacks**: ~15-17 tables per collision (ctx, ctx.a, ctx.b, pos tables, vel tables, rect tables, signals, sides, etc.)
+- **Entity callbacks** (phase/timer): ~10-14 tables per callback (ctx, pos, screen_pos, vel, scale, rect, sprite, animation, timer, signals)
+
+In a game with frequent collisions or many entities with phase/timer components, this creates significant GC pressure.
+
+### Pool Architecture
+
+#### CollisionCtxPool (for collision callbacks)
+```rust
+struct CollisionCtxPool {
+    ctx: LuaRegistryKey,        // Root context table
+    a: LuaRegistryKey,          // ctx.a entity table
+    b: LuaRegistryKey,          // ctx.b entity table
+    a_pos: LuaRegistryKey,      // ctx.a.pos
+    a_vel: LuaRegistryKey,      // ctx.a.vel
+    a_rect: LuaRegistryKey,     // ctx.a.rect
+    a_signals: LuaRegistryKey,  // ctx.a.signals
+    b_pos: LuaRegistryKey,      // ctx.b.pos (etc.)
+    // ... more tables
+    sides: LuaRegistryKey,      // ctx.sides
+    sides_a: LuaRegistryKey,    // ctx.sides.a
+    sides_b: LuaRegistryKey,    // ctx.sides.b
+}
+```
+
+#### EntityCtxPool (for phase/timer callbacks)
+```rust
+struct EntityCtxPool {
+    ctx: LuaRegistryKey,        // Root context table
+    pos: LuaRegistryKey,        // ctx.pos
+    screen_pos: LuaRegistryKey, // ctx.screen_pos
+    vel: LuaRegistryKey,        // ctx.vel
+    scale: LuaRegistryKey,      // ctx.scale
+    rect: LuaRegistryKey,       // ctx.rect
+    sprite: LuaRegistryKey,     // ctx.sprite
+    animation: LuaRegistryKey,  // ctx.animation
+    timer: LuaRegistryKey,      // ctx.timer
+    signals: LuaRegistryKey,    // ctx.signals
+}
+```
+
+### How It Works
+
+1. **Initialization**: Pools are created once in `LuaRuntime::new()` via `create_collision_ctx_pool()` and `create_entity_ctx_pool()`
+
+2. **Retrieval**: Before each callback, `get_collision_ctx_pool()` or `get_entity_ctx_pool()` fetches tables from the registry
+
+3. **Population**: The context builder functions populate the pooled tables with current entity data:
+   - Scalar values (id, speed_sq, rotation, etc.) are set directly
+   - Optional fields are explicitly set to `nil` when absent (prevents stale data)
+   - Variable-length data (signal maps) is still created fresh each time
+
+4. **Reuse**: The same tables are reused for the next callback
+
+### What Gets Pooled vs Created Fresh
+
+| Data Type | Pooled? | Reason |
+|-----------|---------|--------|
+| Fixed-structure tables (ctx, pos, vel, rect, etc.) | Yes | Same structure every time |
+| Scalar/numeric values | N/A | Set directly on pooled tables |
+| Signal inner maps (flags, integers, scalars, strings) | No | Variable keys per entity |
+| Collision side arrays | Cleared & repopulated | Variable length |
+
+### Important: No Persistent References
+
+**Lua scripts must NOT store references to context tables or their subtables for later use.** The tables are reused and values will be overwritten on the next callback.
+
+```lua
+-- BAD: Don't do this!
+local saved_pos = ctx.pos  -- This reference will have wrong values later
+
+-- GOOD: Copy the values you need
+local saved_x = ctx.pos.x
+local saved_y = ctx.pos.y
+```
+
+### Implementation Files
+
+- `runtime.rs`: Pool structs, `create_*_pool()`, `get_*_pool()` methods
+- `context.rs`: `build_entity_context_pooled()` function
+- `collision.rs`: Collision callback context population using pool
 
 ---
 

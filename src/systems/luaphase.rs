@@ -27,6 +27,11 @@
 //! function my_update_callback(ctx, input, dt) -- ctx.time_in_phase in ctx
 //! function my_exit_callback(ctx)
 //! ```
+//!
+//! # Performance
+//!
+//! Context tables are pooled and reused across callbacks to reduce Lua GC pressure.
+//! See [`EntityCtxPool`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::{Local, SystemParam};
@@ -49,7 +54,7 @@ use crate::events::audio::AudioCmd;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{
     AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime, LuaTimerSnapshot,
-    RigidBodySnapshot, SpriteSnapshot, build_entity_context,
+    RigidBodySnapshot, SpriteSnapshot, build_entity_context_pooled,
 };
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -75,14 +80,15 @@ pub struct ContextQueries<'w, 's> {
     pub lua_timers: Query<'w, 's, &'static LuaTimer>,
 }
 
-/// Build entity context for phase callbacks.
+/// Build entity context for phase callbacks using pooled tables.
 ///
 /// Gathers all component data for the given entity and builds a Lua context table.
+/// Uses pooled tables to reduce allocations.
 /// Note: Some queries are passed separately because they conflict with mutable queries
 /// used for command processing.
 #[allow(clippy::too_many_arguments)]
 fn build_phase_context(
-    lua: &Lua,
+    lua_runtime: &LuaRuntime,
     entity: Entity,
     lua_phase: &LuaPhase,
     previous_phase: Option<&str>,
@@ -93,6 +99,8 @@ fn build_phase_context(
     animation_query: &Query<&mut Animation>,
     signals_query: &Query<&mut Signals>,
 ) -> LuaResult<LuaTable> {
+    let lua = lua_runtime.lua();
+    let tables = lua_runtime.get_entity_ctx_pool()?;
     let entity_id = entity.to_bits();
 
     // Query all optional components
@@ -164,8 +172,9 @@ fn build_phase_context(
             callback: t.callback.clone(),
         });
 
-    build_entity_context(
+    build_entity_context_pooled(
         lua,
+        &tables,
         entity_id,
         group,
         map_pos,
@@ -319,7 +328,6 @@ pub fn lua_phase_system(
     };
 
     let delta = time.delta;
-    let lua = lua_runtime.lua();
 
     for (entity, mut lua_phase) in query.iter_mut() {
         let entity_id = entity.to_bits();
@@ -332,7 +340,7 @@ pub fn lua_phase_system(
                 if let Some(ref fn_name) = callbacks.on_enter {
                     // Build context with no previous_phase
                     match build_phase_context(
-                        lua,
+                        &lua_runtime,
                         entity,
                         &lua_phase,
                         None,
@@ -369,7 +377,7 @@ pub fn lua_phase_system(
             if let Some(callbacks) = lua_phase.get_callbacks(&old_phase) {
                 if let Some(ref fn_name) = callbacks.on_exit {
                     match build_phase_context(
-                        lua,
+                        &lua_runtime,
                         entity,
                         &lua_phase,
                         None,
@@ -390,7 +398,7 @@ pub fn lua_phase_system(
             if let Some(callbacks) = lua_phase.get_callbacks(&new_current) {
                 if let Some(ref fn_name) = callbacks.on_enter {
                     match build_phase_context(
-                        lua,
+                        &lua_runtime,
                         entity,
                         &lua_phase,
                         Some(&old_phase),
@@ -422,7 +430,7 @@ pub fn lua_phase_system(
         if let Some(callbacks) = lua_phase.current_callbacks() {
             if let Some(ref fn_name) = callbacks.on_update {
                 match build_phase_context(
-                    lua,
+                    &lua_runtime,
                     entity,
                     &lua_phase,
                     None,
