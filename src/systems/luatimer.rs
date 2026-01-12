@@ -24,6 +24,11 @@
 //!     -- Full access to engine API
 //! end
 //! ```
+//!
+//! # Performance
+//!
+//! Context tables are pooled and reused across callbacks to reduce Lua GC pressure.
+//! See [`EntityCtxPool`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -46,7 +51,7 @@ use crate::events::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{
-    build_entity_context, AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
+    build_entity_context_pooled, AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
     LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
 };
 use crate::resources::worldsignals::WorldSignals;
@@ -98,14 +103,15 @@ pub struct TimerContextQueries<'w, 's> {
     pub lua_timers: Query<'w, 's, &'static LuaTimer>,
 }
 
-/// Build entity context for timer callbacks.
+/// Build entity context for timer callbacks using pooled tables.
 ///
 /// Gathers all component data for the given entity and builds a Lua context table.
+/// Uses pooled tables to reduce allocations.
 /// Note: Some queries are passed separately because they conflict with mutable queries
 /// used for command processing.
 #[allow(clippy::too_many_arguments)]
 fn build_timer_context(
-    lua: &Lua,
+    lua_runtime: &LuaRuntime,
     entity: Entity,
     ctx_queries: &TimerContextQueries,
     // These are passed separately because they conflict with mutable queries
@@ -115,6 +121,8 @@ fn build_timer_context(
     signals_query: &Query<&mut Signals>,
     luaphase_query: &Query<(Entity, &mut LuaPhase)>,
 ) -> LuaResult<LuaTable> {
+    let lua = lua_runtime.lua();
+    let tables = lua_runtime.get_entity_ctx_pool()?;
     let entity_id = entity.to_bits();
 
     // Query all optional components
@@ -191,8 +199,9 @@ fn build_timer_context(
             callback: t.callback.clone(),
         });
 
-    build_entity_context(
+    build_entity_context_pooled(
         lua,
+        &tables,
         entity_id,
         group,
         map_pos,
@@ -260,11 +269,9 @@ pub fn lua_timer_observer(
         }
     };
 
-    let lua = lua_runtime.lua();
-
     // Build entity context
     let ctx_table = match build_timer_context(
-        lua, entity, &ctx_queries,
+        &lua_runtime, entity, &ctx_queries,
         &positions_query, &rigid_bodies_query, &animation_query, &signals_query, &luaphase_query,
     ) {
         Ok(ctx) => ctx,

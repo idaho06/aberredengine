@@ -31,6 +31,7 @@
 
 use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;
+use smallvec::SmallVec;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
@@ -118,21 +119,23 @@ pub enum BoxSide {
     Bottom,
 }
 
+/// Type alias for collision side vectors (0-4 elements, stack-allocated).
+pub type BoxSides = SmallVec<[BoxSide; 4]>;
+
 /// Returns two vectors representing the colliding sides of two Rectangles.
 /// If no collision, returns None.
+///
+/// Uses `SmallVec<[BoxSide; 4]>` to avoid heap allocations since each
+/// rectangle can have at most 4 colliding sides.
 pub fn get_colliding_sides(
     rect_a: &Rectangle,
     rect_b: &Rectangle,
-) -> Option<(Vec<BoxSide>, Vec<BoxSide>)> {
-    /* if !rect_a.check_collision_recs(rect_b) {
-        return None;
-    } */
-
+) -> Option<(BoxSides, BoxSides)> {
     let Some(overlap_rect) = rect_a.get_collision_rec(rect_b) else {
         return None;
     };
-    let mut sides_a = Vec::with_capacity(4);
-    let mut sides_b = Vec::with_capacity(4);
+    let mut sides_a = SmallVec::new();
+    let mut sides_b = SmallVec::new();
 
     if overlap_rect.x <= rect_a.x {
         sides_a.push(BoxSide::Left);

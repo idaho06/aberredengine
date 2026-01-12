@@ -3,14 +3,31 @@
 //! This module provides two main systems:
 //!
 //! - [`collision_detector`] – pairwise AABB overlap checks, emits [`CollisionEvent`](crate::events::collision::CollisionEvent)
-//! - [`collision_observer`] – receives collision events and dispatches to [`CollisionRule`](crate::components::collision::CollisionRule) callbacks
+//! - [`collision_observer`] – receives collision events and dispatches to [`CollisionRule`](crate::components::collision::CollisionRule) or [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule) callbacks
 //!
 //! # Collision Flow
 //!
 //! 1. `collision_detector` iterates all entity pairs with [`BoxCollider`](crate::components::boxcollider::BoxCollider) + [`MapPosition`](crate::components::mapposition::MapPosition)
 //! 2. For each overlap, triggers a `CollisionEvent`
-//! 3. `collision_observer` looks up matching `CollisionRule` components by [`Group`](crate::components::group::Group) names
-//! 4. Invokes the rule's callback with both entities and a [`CollisionContext`](crate::components::collision::CollisionContext)
+//! 3. `collision_observer` looks up matching collision rules by [`Group`](crate::components::group::Group) names
+//! 4. For Rust rules: invokes the callback with a [`CollisionContext`](crate::components::collision::CollisionContext)
+//! 5. For Lua rules: calls [`call_lua_collision_callback`] with pooled context tables
+//!
+//! # Lua Collision Callbacks
+//!
+//! Lua collision rules are defined via `engine.spawn():with_lua_collision_rule()`.
+//! The callback receives a context table with entity data for both colliders:
+//!
+//! ```lua
+//! function on_player_enemy(ctx)
+//!     -- ctx.a and ctx.b contain entity data
+//!     -- ctx.sides.a and ctx.sides.b contain collision sides
+//! end
+//! ```
+//!
+//! **Performance**: Context tables are pooled and reused between collisions to
+//! reduce GC pressure. See [`CollisionCtxPool`](crate::resources::lua_runtime::CollisionCtxTables)
+//! in runtime.rs for implementation details.
 //!
 //! # Defining Collision Rules
 //!
@@ -25,7 +42,8 @@
 //!
 //! # Related
 //!
-//! - [`crate::components::collision::CollisionRule`] – defines collision handlers
+//! - [`crate::components::collision::CollisionRule`] – defines Rust collision handlers
+//! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
 //! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
 
@@ -176,12 +194,12 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 pos_b.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
             });
 
-            // Get colliding sides
+            // Get colliding sides (uses SmallVec to avoid heap allocation)
             let (sides_a, sides_b) = match (rect_a, rect_b) {
                 (Some(ra), Some(rb)) => {
-                    get_colliding_sides(&ra, &rb).unwrap_or_else(|| (Vec::new(), Vec::new()))
+                    get_colliding_sides(&ra, &rb).unwrap_or_default()
                 }
-                _ => (Vec::new(), Vec::new()),
+                _ => Default::default(),
             };
 
             // Get entity signals (integers and flags)
@@ -266,7 +284,64 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
     }
 }
 
+/// Clear all numeric indices from a Lua table (for reusing array tables).
+fn clear_lua_array(table: &mlua::Table) -> mlua::Result<()> {
+    let len = table.raw_len();
+    for i in 1..=len {
+        table.raw_set(i, mlua::Value::Nil)?;
+    }
+    Ok(())
+}
+
+/// Convert BoxSide to string representation.
+fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str {
+    match side {
+        crate::components::collision::BoxSide::Left => "left",
+        crate::components::collision::BoxSide::Right => "right",
+        crate::components::collision::BoxSide::Top => "top",
+        crate::components::collision::BoxSide::Bottom => "bottom",
+    }
+}
+
+/// Populate an entity's signal tables (creates fresh tables for variable-length data).
+fn populate_entity_signals(
+    lua: &mlua::Lua,
+    signals_table: &mlua::Table,
+    signals: &Signals,
+) -> mlua::Result<()> {
+    // Create fresh flags array (variable length)
+    let flags_table = lua.create_table()?;
+    for (i, flag) in signals.get_flags().iter().enumerate() {
+        flags_table.set(i + 1, flag.as_str())?;
+    }
+    signals_table.set("flags", flags_table)?;
+
+    // Create fresh integers map (variable keys)
+    let integers_table = lua.create_table()?;
+    for (key, value) in signals.get_integers() {
+        integers_table.set(key.as_str(), *value)?;
+    }
+    signals_table.set("integers", integers_table)?;
+
+    // Create fresh scalars map (variable keys)
+    let scalars_table = lua.create_table()?;
+    for (key, value) in signals.get_scalars() {
+        scalars_table.set(key.as_str(), *value)?;
+    }
+    signals_table.set("scalars", scalars_table)?;
+
+    // Create fresh strings map (variable keys)
+    let strings_table = lua.create_table()?;
+    for (key, value) in &signals.strings {
+        strings_table.set(key.as_str(), value.as_str())?;
+    }
+    signals_table.set("strings", strings_table)?;
+
+    Ok(())
+}
+
 /// Call a Lua collision callback with context data.
+/// Uses pooled tables for fixed-structure data to reduce allocations.
 #[allow(clippy::too_many_arguments)]
 fn call_lua_collision_callback(
     lua_runtime: &LuaRuntime,
@@ -290,120 +365,107 @@ fn call_lua_collision_callback(
 ) -> mlua::Result<()> {
     let lua = lua_runtime.lua();
 
-    // Create ctx table
-    let ctx = lua.create_table()?;
+    // Get pooled tables
+    let tables = lua_runtime.get_collision_ctx_pool()?;
 
-    // Entity A
-    let a_table = lua.create_table()?;
-    a_table.set("id", entity_a_id)?;
-    a_table.set("group", group_a.unwrap_or(""))?;
-    a_table.set("speed_sq", speed_sq_a)?;
+    // === Populate Entity A ===
+    tables.entity_a.set("id", entity_a_id)?;
+    tables.entity_a.set("group", group_a.unwrap_or(""))?;
+    tables.entity_a.set("speed_sq", speed_sq_a)?;
+
+    // Position A
     if let Some((x, y)) = pos_a {
-        let pos_table = lua.create_table()?;
-        pos_table.set("x", x)?;
-        pos_table.set("y", y)?;
-        a_table.set("pos", pos_table)?;
+        tables.pos_a.set("x", x)?;
+        tables.pos_a.set("y", y)?;
+        tables.entity_a.set("pos", tables.pos_a.clone())?;
+    } else {
+        tables.entity_a.set("pos", mlua::Value::Nil)?;
     }
+
+    // Velocity A
     if let Some((vx, vy)) = vel_a {
-        let vel_table = lua.create_table()?;
-        vel_table.set("x", vx)?;
-        vel_table.set("y", vy)?;
-        a_table.set("vel", vel_table)?;
+        tables.vel_a.set("x", vx)?;
+        tables.vel_a.set("y", vy)?;
+        tables.entity_a.set("vel", tables.vel_a.clone())?;
+    } else {
+        tables.entity_a.set("vel", mlua::Value::Nil)?;
     }
+
+    // Rect A
     if let Some((x, y, w, h)) = rect_a {
-        let rect_table = lua.create_table()?;
-        rect_table.set("x", x)?;
-        rect_table.set("y", y)?;
-        rect_table.set("w", w)?;
-        rect_table.set("h", h)?;
-        a_table.set("rect", rect_table)?;
+        tables.rect_a.set("x", x)?;
+        tables.rect_a.set("y", y)?;
+        tables.rect_a.set("w", w)?;
+        tables.rect_a.set("h", h)?;
+        tables.entity_a.set("rect", tables.rect_a.clone())?;
+    } else {
+        tables.entity_a.set("rect", mlua::Value::Nil)?;
     }
+
+    // Signals A (creates fresh tables for variable-length data)
     if let Some(signals) = signals_a {
-        let sig_table = lua.create_table()?;
-        let flags_table = lua.create_table()?;
-        for (i, flag) in signals.get_flags().iter().enumerate() {
-            flags_table.set(i + 1, flag.as_str())?;
-        }
-        sig_table.set("flags", flags_table)?;
-        let integers_table = lua.create_table()?;
-        for (key, value) in signals.get_integers() {
-            integers_table.set(key.as_str(), *value)?;
-        }
-        sig_table.set("integers", integers_table)?;
-        a_table.set("signals", sig_table)?;
+        populate_entity_signals(lua, &tables.signals_a, signals)?;
+        tables.entity_a.set("signals", tables.signals_a.clone())?;
+    } else {
+        tables.entity_a.set("signals", mlua::Value::Nil)?;
     }
-    ctx.set("a", a_table)?;
 
-    // Entity B
-    let b_table = lua.create_table()?;
-    b_table.set("id", entity_b_id)?;
-    b_table.set("group", group_b.unwrap_or(""))?;
-    b_table.set("speed_sq", speed_sq_b)?;
+    // === Populate Entity B ===
+    tables.entity_b.set("id", entity_b_id)?;
+    tables.entity_b.set("group", group_b.unwrap_or(""))?;
+    tables.entity_b.set("speed_sq", speed_sq_b)?;
+
+    // Position B
     if let Some((x, y)) = pos_b {
-        let pos_table = lua.create_table()?;
-        pos_table.set("x", x)?;
-        pos_table.set("y", y)?;
-        b_table.set("pos", pos_table)?;
+        tables.pos_b.set("x", x)?;
+        tables.pos_b.set("y", y)?;
+        tables.entity_b.set("pos", tables.pos_b.clone())?;
+    } else {
+        tables.entity_b.set("pos", mlua::Value::Nil)?;
     }
+
+    // Velocity B
     if let Some((vx, vy)) = vel_b {
-        let vel_table = lua.create_table()?;
-        vel_table.set("x", vx)?;
-        vel_table.set("y", vy)?;
-        b_table.set("vel", vel_table)?;
+        tables.vel_b.set("x", vx)?;
+        tables.vel_b.set("y", vy)?;
+        tables.entity_b.set("vel", tables.vel_b.clone())?;
+    } else {
+        tables.entity_b.set("vel", mlua::Value::Nil)?;
     }
+
+    // Rect B
     if let Some((x, y, w, h)) = rect_b {
-        let rect_table = lua.create_table()?;
-        rect_table.set("x", x)?;
-        rect_table.set("y", y)?;
-        rect_table.set("w", w)?;
-        rect_table.set("h", h)?;
-        b_table.set("rect", rect_table)?;
+        tables.rect_b.set("x", x)?;
+        tables.rect_b.set("y", y)?;
+        tables.rect_b.set("w", w)?;
+        tables.rect_b.set("h", h)?;
+        tables.entity_b.set("rect", tables.rect_b.clone())?;
+    } else {
+        tables.entity_b.set("rect", mlua::Value::Nil)?;
     }
+
+    // Signals B (creates fresh tables for variable-length data)
     if let Some(signals) = signals_b {
-        let sig_table = lua.create_table()?;
-        let flags_table = lua.create_table()?;
-        for (i, flag) in signals.get_flags().iter().enumerate() {
-            flags_table.set(i + 1, flag.as_str())?;
-        }
-        sig_table.set("flags", flags_table)?;
-        let integers_table = lua.create_table()?;
-        for (key, value) in signals.get_integers() {
-            integers_table.set(key.as_str(), *value)?;
-        }
-        sig_table.set("integers", integers_table)?;
-        b_table.set("signals", sig_table)?;
+        populate_entity_signals(lua, &tables.signals_b, signals)?;
+        tables.entity_b.set("signals", tables.signals_b.clone())?;
+    } else {
+        tables.entity_b.set("signals", mlua::Value::Nil)?;
     }
-    ctx.set("b", b_table)?;
 
-    // Sides
-    let sides_table = lua.create_table()?;
-    let sides_a_table = lua.create_table()?;
+    // === Populate Sides (clear and repopulate pooled arrays) ===
+    clear_lua_array(&tables.sides_a)?;
     for (i, side) in sides_a.iter().enumerate() {
-        let side_str = match side {
-            crate::components::collision::BoxSide::Left => "left",
-            crate::components::collision::BoxSide::Right => "right",
-            crate::components::collision::BoxSide::Top => "top",
-            crate::components::collision::BoxSide::Bottom => "bottom",
-        };
-        sides_a_table.set(i + 1, side_str)?;
+        tables.sides_a.set(i + 1, box_side_to_str(side))?;
     }
-    sides_table.set("a", sides_a_table)?;
-    let sides_b_table = lua.create_table()?;
-    for (i, side) in sides_b.iter().enumerate() {
-        let side_str = match side {
-            crate::components::collision::BoxSide::Left => "left",
-            crate::components::collision::BoxSide::Right => "right",
-            crate::components::collision::BoxSide::Top => "top",
-            crate::components::collision::BoxSide::Bottom => "bottom",
-        };
-        sides_b_table.set(i + 1, side_str)?;
-    }
-    sides_table.set("b", sides_b_table)?;
-    ctx.set("sides", sides_table)?;
 
-    // Call the Lua function
+    clear_lua_array(&tables.sides_b)?;
+    for (i, side) in sides_b.iter().enumerate() {
+        tables.sides_b.set(i + 1, box_side_to_str(side))?;
+    }
+
+    // Call the Lua function with pooled context
     let func: mlua::Function = lua.globals().get(callback_name)?;
-    func.call::<()>(ctx)?;
+    func.call::<()>(tables.ctx)?;
 
     Ok(())
 }
