@@ -1325,6 +1325,37 @@ engine.clear_flag("switch_scene")
 engine.clear_flag("game_paused")
 ```
 
+#### `engine.clear_scalar(key)`
+Remove a scalar signal.
+```lua
+engine.clear_scalar("player_y")
+```
+
+#### `engine.clear_integer(key)`
+Remove an integer signal.
+```lua
+engine.clear_integer("temp_score")
+```
+
+#### `engine.clear_string(key)`
+Remove a string signal.
+```lua
+engine.clear_string("current_powerup")
+```
+
+#### `engine.set_entity(key, entity_id)`
+Store an entity ID in world signals (alternative to `:register_as()`).
+```lua
+local spawned_id = -- ... get from spawn
+engine.set_entity("special_enemy", spawned_id)
+```
+
+#### `engine.remove_entity(key)`
+Remove an entity registration from world signals.
+```lua
+engine.remove_entity("special_enemy")
+```
+
 ---
 
 ## Entity Commands
@@ -1872,6 +1903,36 @@ engine.collision_set_flag("ball_hit_player")
 Clear global flag during collision.
 ```lua
 engine.collision_clear_flag("ball_hit_player")
+```
+
+#### `engine.collision_set_scalar(key, value)`
+Set global scalar signal during collision.
+```lua
+engine.collision_set_scalar("impact_force", 150.0)
+```
+
+#### `engine.collision_set_string(key, value)`
+Set global string signal during collision.
+```lua
+engine.collision_set_string("last_collision", "ball_brick")
+```
+
+#### `engine.collision_clear_scalar(key)`
+Remove a scalar signal during collision.
+```lua
+engine.collision_clear_scalar("temp_boost")
+```
+
+#### `engine.collision_clear_integer(key)`
+Remove an integer signal during collision.
+```lua
+engine.collision_clear_integer("combo_count")
+```
+
+#### `engine.collision_clear_string(key)`
+Remove a string signal during collision.
+```lua
+engine.collision_clear_string("active_effect")
 ```
 
 #### `engine.collision_spawn()`

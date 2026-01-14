@@ -116,6 +116,23 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         SignalCmd::SetString { key, value } => {
             world_signals.set_string(&key, &value);
         }
+        SignalCmd::ClearScalar { key } => {
+            world_signals.clear_scalar(&key);
+        }
+        SignalCmd::ClearInteger { key } => {
+            world_signals.clear_integer(&key);
+        }
+        SignalCmd::ClearString { key } => {
+            world_signals.remove_string(&key);
+        }
+        SignalCmd::SetEntity { key, entity_id } => {
+            if let Some(entity) = Entity::try_from_bits(entity_id) {
+                world_signals.set_entity(&key, entity);
+            }
+        }
+        SignalCmd::RemoveEntity { key } => {
+            world_signals.remove_entity(&key);
+        }
     }
 }
 

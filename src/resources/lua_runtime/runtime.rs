@@ -677,6 +677,72 @@ impl LuaRuntime {
             })?,
         )?;
 
+        // engine.clear_scalar(key)
+        engine.set(
+            "clear_scalar",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ClearScalar { key });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.clear_integer(key)
+        engine.set(
+            "clear_integer",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ClearInteger { key });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.clear_string(key)
+        engine.set(
+            "clear_string",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ClearString { key });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.set_entity(key, entity_id)
+        engine.set(
+            "set_entity",
+            self.lua
+                .create_function(|lua, (key, entity_id): (String, u64)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .signal_commands
+                        .borrow_mut()
+                        .push(SignalCmd::SetEntity { key, entity_id });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.remove_entity(key)
+        engine.set(
+            "remove_entity",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::RemoveEntity { key });
+                Ok(())
+            })?,
+        )?;
+
         Ok(())
     }
 
@@ -2038,6 +2104,78 @@ impl LuaRuntime {
                     .collision_signal_commands
                     .borrow_mut()
                     .push(SignalCmd::ClearFlag { key: flag });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_set_scalar(key, value)
+        // Sets a global scalar signal during collision handling
+        engine.set(
+            "collision_set_scalar",
+            self.lua
+                .create_function(|lua, (key, value): (String, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_signal_commands
+                        .borrow_mut()
+                        .push(SignalCmd::SetScalar { key, value });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_set_string(key, value)
+        // Sets a global string signal during collision handling
+        engine.set(
+            "collision_set_string",
+            self.lua
+                .create_function(|lua, (key, value): (String, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_signal_commands
+                        .borrow_mut()
+                        .push(SignalCmd::SetString { key, value });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_clear_scalar(key)
+        // Clears a global scalar signal during collision handling
+        engine.set(
+            "collision_clear_scalar",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ClearScalar { key });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_clear_integer(key)
+        // Clears a global integer signal during collision handling
+        engine.set(
+            "collision_clear_integer",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ClearInteger { key });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_clear_string(key)
+        // Clears a global string signal during collision handling
+        engine.set(
+            "collision_clear_string",
+            self.lua.create_function(|lua, key: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ClearString { key });
                 Ok(())
             })?,
         )?;

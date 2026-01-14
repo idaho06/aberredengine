@@ -265,7 +265,7 @@ SpawnCmd (spawn_data.rs) {
     register_as, lua_collision_rule, animation, animation_controller
 }
 
-SignalCmd { SetScalar, SetInteger, SetString, SetFlag, ClearFlag }
+SignalCmd { SetScalar, SetInteger, SetString, SetFlag, ClearFlag, ClearScalar, ClearInteger, ClearString, SetEntity, RemoveEntity }
 AudioLuaCmd { PlayMusic { id, looped }, PlaySound { id }, StopAllMusic, StopAllSounds }
 GroupCmd { TrackGroup { name }, UntrackGroup { name }, ClearTrackedGroups }
 PhaseCmd { TransitionTo { entity_id, phase } }
@@ -307,6 +307,11 @@ engine.set_integer(key, value)
 engine.set_string(key, value)
 engine.set_flag(key)
 engine.clear_flag(key)
+engine.clear_scalar(key)
+engine.clear_integer(key)
+engine.clear_string(key)
+engine.set_entity(key, entity_id)
+engine.remove_entity(key)
 
 -- Entity Commands (all contexts - phase/timer/collision/update callbacks)
 -- All entity commands work in all Lua callback contexts
@@ -346,8 +351,13 @@ engine.entity_insert_timer(id, duration, signal)
 engine.collision_spawn() -> EntityBuilder (same capabilities as engine.spawn())
 engine.collision_play_sound(id)
 engine.collision_set_integer(key, value)
+engine.collision_set_scalar(key, value)
+engine.collision_set_string(key, value)
 engine.collision_set_flag(key)
 engine.collision_clear_flag(key)
+engine.collision_clear_scalar(key)
+engine.collision_clear_integer(key)
+engine.collision_clear_string(key)
 engine.collision_phase_transition(id, phase)
 engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 

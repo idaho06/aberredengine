@@ -548,6 +548,27 @@ function engine.set_flag(key) end
 ---@param key string Signal key
 function engine.clear_flag(key) end
 
+---Clear (remove) a scalar signal
+---@param key string Signal key
+function engine.clear_scalar(key) end
+
+---Clear (remove) an integer signal
+---@param key string Signal key
+function engine.clear_integer(key) end
+
+---Clear (remove) a string signal
+---@param key string Signal key
+function engine.clear_string(key) end
+
+---Store an entity ID in world signals
+---@param key string Signal key
+---@param entity_id integer Entity ID to store
+function engine.set_entity(key, entity_id) end
+
+---Remove an entity registration from world signals
+---@param key string Signal key
+function engine.remove_entity(key) end
+
 ---Get entity ID by WorldSignals key
 ---@param key string Entity registration key (from :register_as())
 ---@return integer|nil entity_id The entity ID or nil if not found
@@ -770,6 +791,28 @@ function engine.collision_set_flag(flag) end
 ---Clear flag signal during collision
 ---@param flag string Flag key
 function engine.collision_clear_flag(flag) end
+
+---Set scalar signal during collision
+---@param key string Signal key
+---@param value number Signal value
+function engine.collision_set_scalar(key, value) end
+
+---Set string signal during collision
+---@param key string Signal key
+---@param value string Signal value
+function engine.collision_set_string(key, value) end
+
+---Clear scalar signal during collision
+---@param key string Signal key
+function engine.collision_clear_scalar(key) end
+
+---Clear integer signal during collision
+---@param key string Signal key
+function engine.collision_clear_integer(key) end
+
+---Clear string signal during collision
+---@param key string Signal key
+function engine.collision_clear_string(key) end
 
 ---Set entity position during collision handling
 ---@param entity_id integer Entity ID

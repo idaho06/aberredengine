@@ -187,6 +187,22 @@ impl WorldSignals {
         }
         result
     }
+    /// Remove a scalar signal by key.
+    pub fn clear_scalar(&mut self, key: &str) -> Option<f32> {
+        let result = self.scalars.remove(key);
+        if result.is_some() {
+            self.mark_dirty();
+        }
+        result
+    }
+    /// Remove an integer signal by key.
+    pub fn clear_integer(&mut self, key: &str) -> Option<i32> {
+        let result = self.integers.remove(key);
+        if result.is_some() {
+            self.mark_dirty();
+        }
+        result
+    }
     /// Read-only view of all integer signals.
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers
