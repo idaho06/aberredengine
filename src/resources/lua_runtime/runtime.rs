@@ -784,6 +784,19 @@ impl LuaRuntime {
             })?,
         )?;
 
+        // engine.entity_menu_despawn(entity_id) - Despawn a menu and its items/cursor/textures
+        engine.set(
+            "entity_menu_despawn",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::MenuDespawn { entity_id });
+                Ok(())
+            })?,
+        )?;
+
         // engine.release_stuckto(entity_id) - Release entity from StuckTo, restore velocity
         engine.set(
             "release_stuckto",

@@ -60,6 +60,7 @@ impl TilemapStore {
     }
 
     /// Clear all loaded tilemaps.
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.map.clear();
     }

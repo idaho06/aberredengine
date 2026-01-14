@@ -57,6 +57,7 @@ use crate::resources::lua_runtime::{
     AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, EntityCmd, GroupCmd,
     MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
 };
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
@@ -395,6 +396,7 @@ pub fn process_animation_command(
 /// - `animation_query` - Query for modifying Animation components
 /// - `rigid_bodies_query` - Query for modifying RigidBody components
 /// - `positions_query` - Query for modifying MapPosition components
+/// - `systems_store` - SystemsStore for calling registered systems
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
@@ -403,6 +405,7 @@ pub fn process_entity_commands(
     animation_query: &mut Query<&mut Animation>,
     rigid_bodies_query: &mut Query<&mut RigidBody>,
     positions_query: &mut Query<&mut MapPosition>,
+    systems_store: &SystemsStore,
 ) {
     for cmd in entity_commands {
         match cmd {
@@ -683,6 +686,12 @@ pub fn process_entity_commands(
             EntityCmd::Despawn { entity_id } => {
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).despawn();
+            }
+            EntityCmd::MenuDespawn { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Some(system_id) = systems_store.get_entity_system("menu_despawn") {
+                    commands.run_system_with(*system_id, entity);
+                }
             }
             EntityCmd::SignalSetInteger {
                 entity_id,

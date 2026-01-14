@@ -112,9 +112,10 @@ impl WorldSignals {
         self.scalars.get(key).copied()
     }
     /// Read-only view of all scalar signals.
-    pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
-        &self.scalars
-    }
+    // pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
+    //     &self.scalars
+    // }
+
     /// Set an integer signal value.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         self.integers.insert(key.into(), value);
@@ -128,6 +129,7 @@ impl WorldSignals {
     ///
     /// Uses a stack buffer to avoid heap allocation. Group names must not
     /// exceed 51 characters (64 - 13 for "group_count:" prefix).
+    #[allow(dead_code)] // Kept for Rust-side convenience; Lua uses the cached snapshot
     pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
         use std::fmt::Write;
         let mut buf = arrayvec::ArrayString::<64>::new();
@@ -204,9 +206,9 @@ impl WorldSignals {
         result
     }
     /// Read-only view of all integer signals.
-    pub fn get_integers(&self) -> &FxHashMap<String, i32> {
-        &self.integers
-    }
+    // pub fn get_integers(&self) -> &FxHashMap<String, i32> {
+    //     &self.integers
+    // }
     /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
@@ -223,9 +225,9 @@ impl WorldSignals {
         self.flags.contains(key)
     }
     /// Read-only view of all flags.
-    pub fn get_flags(&self) -> &FxHashSet<String> {
-        &self.flags
-    }
+    // pub fn get_flags(&self) -> &FxHashSet<String> {
+    //     &self.flags
+    // }
     /// Get an entity by key.
     pub fn get_entity(&self, key: &str) -> Option<&Entity> {
         self.entities.get(key)
@@ -245,24 +247,24 @@ impl WorldSignals {
     }
 
     /// Read-only view of all scalar signals (for caching).
-    pub fn scalars(&self) -> &FxHashMap<String, f32> {
-        &self.scalars
-    }
+    // pub fn scalars(&self) -> &FxHashMap<String, f32> {
+    //     &self.scalars
+    // }
 
     /// Read-only view of all integer signals (for caching).
-    pub fn integers(&self) -> &FxHashMap<String, i32> {
-        &self.integers
-    }
+    // pub fn integers(&self) -> &FxHashMap<String, i32> {
+    //     &self.integers
+    // }
 
     /// Read-only view of all string signals (for caching).
-    pub fn strings(&self) -> &FxHashMap<String, String> {
-        &self.strings
-    }
+    // pub fn strings(&self) -> &FxHashMap<String, String> {
+    //     &self.strings
+    // }
 
     /// Read-only view of all flags (for caching).
-    pub fn flags(&self) -> &FxHashSet<String> {
-        &self.flags
-    }
+    // pub fn flags(&self) -> &FxHashSet<String> {
+    //     &self.flags
+    // }
 
     /// Get a map of group counts (for caching).
     /// Returns a map from group name to count.

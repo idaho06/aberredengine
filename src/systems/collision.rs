@@ -63,6 +63,7 @@ use crate::components::animation::Animation;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_entity_commands, process_phase_command,
@@ -116,6 +117,7 @@ pub struct CollisionObserverParams<'w, 's> {
     pub world_signals: ResMut<'w, WorldSignals>,
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
+    pub systems_store: Res<'w, SystemsStore>,
 }
 
 pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObserverParams) {
@@ -252,6 +254,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 &mut params.animation_query,
                 &mut params.rigid_bodies,
                 &mut params.positions,
+                &params.systems_store,
             );
 
             // Process collision signal commands

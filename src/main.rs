@@ -54,7 +54,7 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::LuaRuntime;
-use crate::resources::rendertarget::RenderFilter;
+// use crate::resources::rendertarget::RenderFilter;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
@@ -79,7 +79,7 @@ use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::luaphase::lua_phase_system;
 use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use crate::systems::menu::menu_selection_observer;
-use crate::systems::menu::{menu_controller_observer, menu_spawn_system};
+use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::render::render_system;
@@ -176,6 +176,9 @@ fn main() {
 
     let switch_scene_system_id = world.register_system(game::switch_scene);
     systems_store.insert("switch_scene", switch_scene_system_id);
+
+    let menu_despawn_system_id = world.register_system(menu_despawn);
+    systems_store.insert_entity_system("menu_despawn", menu_despawn_system_id);
 
     world.insert_resource(systems_store);
 

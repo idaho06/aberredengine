@@ -29,8 +29,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
 use bevy_ecs::prelude::*;
-use raylib::audio;
-use raylib::prelude::{Color, Font, Vector2};
+use raylib::prelude::Vector2;
 
 /// Spawns entities for newly added [`Menu`] components.
 ///
@@ -131,26 +130,46 @@ pub fn menu_spawn_system(
     }
 }
 
-/// Despawns all menu-related entities.
+/// Despawns a specific menu entity and its related entities.
 ///
 /// Removes menu item entities, cursor entity, and the menu entity itself.
-pub fn menu_despawn(mut commands: Commands, query: Query<(Entity, &Menu)>) {
-    for (entity, menu) in query.iter() {
-        // Despawn menu item entities
-        for item in menu.items.iter() {
-            if let Some(item_entity) = item.entity {
-                commands.entity(item_entity).despawn();
-            }
-        }
+/// Called via `world.run_system_with(system_id, entity)`.
+///
+/// # Parameters
+///
+/// - `target` - The menu entity to despawn
+pub fn menu_despawn(
+    In(target): In<Entity>,
+    mut commands: Commands,
+    query: Query<&Menu>,
+    mut texture_store: ResMut<TextureStore>,
+) {
+    let Ok(menu) = query.get(target) else {
+        eprintln!(
+            "menu_despawn: Entity {:?} not found or has no Menu component",
+            target
+        );
+        return;
+    };
 
-        // Despawn cursor entity if applicable
-        if let Some(cursor_entity) = menu.cursor_entity {
-            commands.entity(cursor_entity).despawn();
-        }
+    // Despawn menu item entities and clean up textures
+    for item in menu.items.iter() {
+        // Remove texture if it exists (only non-dynamic items have textures)
+        let texture_key = format!("menu_{}", item.id);
+        texture_store.remove(&texture_key);
 
-        // Finally despawn the menu entity itself
-        commands.entity(entity).despawn();
+        if let Some(item_entity) = item.entity {
+            commands.entity(item_entity).despawn();
+        }
     }
+
+    // Despawn cursor entity if applicable
+    if let Some(cursor_entity) = menu.cursor_entity {
+        commands.entity(cursor_entity).despawn();
+    }
+
+    // Finally despawn the menu entity itself
+    commands.entity(target).despawn();
 }
 
 /// Handles input events to navigate menus and confirm selections.

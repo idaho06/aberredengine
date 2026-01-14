@@ -98,7 +98,7 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
                 .expect("EnterPlay system not found in SystemsStore");
             commands.run_system(enter_play_system_id.clone());
         }
-        GameStates::Paused => eprintln!("Entered Paused state"),
+        // GameStates::Paused => eprintln!("Entered Paused state"),
         GameStates::Quitting => {
             let quit_game_system_id = systems_store
                 .get("quit_game")
@@ -115,7 +115,7 @@ fn on_state_exit(state: &GameStates, _commands: &mut Commands, _systems_store: &
         GameStates::None => eprintln!("Exited None state"),
         GameStates::Setup => eprintln!("Exited Setup state"),
         GameStates::Playing => eprintln!("Exited Playing state"),
-        GameStates::Paused => eprintln!("Exited Paused state"),
+        // GameStates::Paused => eprintln!("Exited Paused state"),
         GameStates::Quitting => eprintln!("Exited Quitting state"),
     }
 }

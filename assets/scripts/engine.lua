@@ -579,6 +579,11 @@ function engine.entity_set_position(entity_id, x, y) end
 ---@param entity_id integer Entity ID
 function engine.entity_despawn(entity_id) end
 
+---Despawn a menu entity along with its items, cursor, and associated textures
+---This is the proper way to clean up menu entities as it handles all related resources
+---@param entity_id integer Menu entity ID (entity with Menu component)
+function engine.entity_menu_despawn(entity_id) end
+
 ---Set entity velocity
 ---@param entity_id integer Entity ID
 ---@param vx number New velocity X

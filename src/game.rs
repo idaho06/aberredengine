@@ -30,54 +30,52 @@
 //! entities interact: ball-wall bounce, ball-player reflection, ball-brick destruction.
 
 use std::ffi::CString;
-use std::panic;
 use std::sync::Arc;
 
-use bevy_ecs::event::Trigger;
 use bevy_ecs::prelude::*;
 use raylib::ffi;
-use raylib::ffi::TextureFilter::{TEXTURE_FILTER_ANISOTROPIC_8X, TEXTURE_FILTER_BILINEAR};
+use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 //use std::collections::HashMap; // always prefer FxHashMap for performance
 
 // Import component/resource types from modules
 use crate::components::animation::Animation;
-use crate::components::animation::{AnimationController, CmpOp, Condition};
-use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{
-    BoxSide, CollisionCallback, CollisionContext, CollisionRule, get_colliding_sides,
-};
-use crate::components::dynamictext::DynamicText;
-use crate::components::gridlayout::GridLayout;
+// use crate::components::animation::{AnimationController, CmpOp, Condition};
+// use crate::components::boxcollider::BoxCollider;
+// use crate::components::collision::{
+//     BoxSide, CollisionCallback, CollisionContext, CollisionRule, get_colliding_sides,
+// };
+// use crate::components::dynamictext::DynamicText;
+// use crate::components::gridlayout::GridLayout;
 use crate::components::group::Group;
-use crate::components::inputcontrolled::InputControlled;
-use crate::components::inputcontrolled::MouseControlled;
-use crate::components::luacollision::LuaCollisionRule;
+// use crate::components::inputcontrolled::InputControlled;
+// use crate::components::inputcontrolled::MouseControlled;
+// use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
-use crate::components::menu::{Menu, MenuAction, MenuActions};
+// use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::signalbinding::SignalBinding;
+// use crate::components::rotation::Rotation;
+// use crate::components::scale::Scale;
+// use crate::components::screenposition::ScreenPosition;
+// use crate::components::signalbinding::SignalBinding;
 use crate::components::signals::Signals;
-use crate::components::sprite;
+// use crate::components::sprite;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
-use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
+// use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
-use crate::resources::animationstore::AnimationResource;
+// use crate::resources::animationstore::AnimationResource;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{AnimationCmd, InputSnapshot, LuaRuntime};
+use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -659,6 +657,7 @@ pub fn update(
         &mut animation_query,
         &mut rigid_bodies_query,
         &mut positions_query,
+        &systems_store,
     );
 
     // Process spawn commands from Lua
@@ -810,7 +809,7 @@ pub fn switch_scene(
     mut commands: Commands,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     mut worldsignals: ResMut<WorldSignals>,
-    //systems_store: Res<SystemsStore>,
+    systems_store: Res<SystemsStore>,
     tilemaps_store: Res<TilemapStore>,
     tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
@@ -869,6 +868,7 @@ pub fn switch_scene(
         &mut animation_query,
         &mut rigid_bodies_query,
         &mut positions_query,
+        &systems_store,
     );
 
     // Process phase commands from Lua

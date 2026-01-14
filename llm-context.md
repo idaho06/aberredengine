@@ -212,7 +212,7 @@ RenderTarget { texture: RenderTexture2D, game_width, game_height, filter: Render
 RenderFilter { Nearest, Bilinear }
 DebugMode (marker)
 FullScreen (marker) - presence indicates fullscreen mode
-SystemsStore(FxHashMap<String, SystemFn>)
+SystemsStore { map: FxHashMap<String, SystemId>, entity_map: FxHashMap<String, SystemId<In<Entity>>> }
 LuaRuntime { lua: Lua, ... } - NON_SEND
 AudioBridge { sender, receiver }
 
@@ -247,6 +247,7 @@ EntityCmd {
     SetSpeed { entity_id, speed }
     SetPosition { entity_id, x, y }
     Despawn { entity_id }
+    MenuDespawn { entity_id }  -- despawn menu + items + cursor + textures via SystemsStore
     SignalSetInteger { entity_id, key, value }
 }
 
@@ -336,6 +337,7 @@ engine.entity_unfreeze(id)
 engine.entity_set_speed(id, speed)
 engine.entity_set_position(id, x, y)
 engine.entity_despawn(id)
+engine.entity_menu_despawn(id)  -- despawn menu + items + cursor + associated textures
 engine.entity_signal_set_integer(id, key, value)
 
 -- Collision-Specific Commands (collision callbacks only - for proper timing)
@@ -547,6 +549,13 @@ Approximate execution order:
 3. Process in process_entity_commands (lua_commands.rs)
 4. Add to engine.lua autocomplete stubs
 5. Document in README.md
+
+### Registering Entity-Input Systems (SystemsStore):
+For systems that need to be called with a specific entity (like menu_despawn):
+1. Define system with `In(target): In<Entity>` parameter
+2. Register with `world.register_system(system_fn)` -> `SystemId<In<Entity>>`
+3. Store in `systems_store.insert_entity_system("name", system_id)`
+4. Call via `commands.run_system_with(*system_id, entity)` in EntityCmd handler
 
 ### Adding a new Component:
 1. Create file in src/components/

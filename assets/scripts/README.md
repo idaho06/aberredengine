@@ -1392,6 +1392,26 @@ Remove an entity from the world.
 engine.entity_despawn(enemy_id)
 ```
 
+### `engine.entity_menu_despawn(entity_id)`
+Remove a menu entity along with its items, cursor, and associated textures. This is the proper way to clean up menu entities as it handles all related resources.
+
+**Parameters:**
+- `entity_id` - Menu entity ID (entity with Menu component)
+
+```lua
+-- Clean up menu when switching scenes
+local menu_id = engine.get_entity("main_menu")
+if menu_id then
+    engine.entity_menu_despawn(menu_id)
+end
+```
+
+**Note:** This function cleans up:
+- All menu item entities
+- The cursor entity (if present)
+- Generated menu item textures from TextureStore
+- The menu entity itself
+
 ### `engine.entity_set_rotation(entity_id, degrees)`
 Set entity's rotation in degrees.
 ```lua

@@ -28,4 +28,8 @@ impl TextureStore {
     pub fn insert(&mut self, key: impl Into<String>, texture: Texture2D) {
         self.map.insert(key.into(), texture);
     }
+    /// Remove a texture by its key, returning it if it existed.
+    pub fn remove(&mut self, key: impl AsRef<str>) -> Option<Texture2D> {
+        self.map.remove(key.as_ref())
+    }
 }

@@ -86,6 +86,7 @@ impl RenderTarget {
     }
 
     /// Get the aspect ratio of the game resolution.
+    #[allow(dead_code)]
     pub fn aspect_ratio(&self) -> f32 {
         self.game_width as f32 / self.game_height as f32
     }

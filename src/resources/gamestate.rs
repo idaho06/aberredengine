@@ -15,7 +15,7 @@ pub enum GameStates {
     None,
     Setup,
     Playing,
-    Paused,
+    // Paused,
     Quitting,
 }
 

@@ -8,7 +8,7 @@
 //! Note: This is a non-send resource because Raylib fonts must be accessed
 //! from the main thread only.
 
-use bevy_ecs::prelude::Resource;
+// use bevy_ecs::prelude::Resource; // NonSend resource: use NonSend<FontStore> in system parameters
 use raylib::prelude::Font;
 use rustc_hash::FxHashMap;
 

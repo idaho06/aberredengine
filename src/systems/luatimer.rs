@@ -54,6 +54,7 @@ use crate::resources::lua_runtime::{
     build_entity_context_pooled, AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
     LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
 };
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
@@ -252,6 +253,7 @@ pub fn lua_timer_observer(
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    systems_store: Res<SystemsStore>,
 ) {
     let event = trigger.event();
     let entity = event.entity;
@@ -324,6 +326,7 @@ pub fn lua_timer_observer(
         &mut animation_query,
         &mut rigid_bodies_query,
         &mut positions_query,
+        &systems_store,
     );
 
     // Process camera commands from Lua

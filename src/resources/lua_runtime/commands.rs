@@ -184,6 +184,8 @@ pub enum EntityCmd {
     SetPosition { entity_id: u64, x: f32, y: f32 },
     /// Despawn an entity
     Despawn { entity_id: u64 },
+    /// Despawn a menu entity and its items/cursor/textures
+    MenuDespawn { entity_id: u64 },
     /// Set an integer signal on an entity's Signals component
     SignalSetInteger {
         entity_id: u64,
