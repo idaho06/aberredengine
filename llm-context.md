@@ -1,6 +1,6 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2026-01-12 (synced with codebase)
+# Last updated: 2026-01-14 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -10,6 +10,12 @@ ENTRY: src/main.rs
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
+
+## STATUS (2026-01-14)
+
+- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
+- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03), sound (option.wav); music/tilemap/brick assets are not loaded.
+- Lua on_enter_play seeds signals (score, high_score, lives, level) and sets scene="menu"; scene switches via WorldSignals flag "switch_scene".
 
 ## FILE TREE (ESSENTIAL)
 
@@ -109,16 +115,31 @@ src/
     ├── switchdebug.rs         # DebugToggle (F11)
     ├── switchfullscreen.rs    # FullScreen toggle event + observer (F10)
     └── audio.rs               # AudioCmd, AudioMessage
-
-assets/scripts/
-├── main.lua                   # Entry: on_setup, on_enter_play, on_switch_scene, on_update_*
-├── setup.lua                  # Asset loading helpers (require in on_setup)
-├── engine.lua                 # LSP autocomplete stubs (45k+ lines)
-├── .luarc.json                # Lua Language Server configuration for LuaJIT
-├── README.md                  # Lua API documentation (78k+ lines)
-└── scenes/
-    ├── menu.lua               # Menu scene
-    └── level01.lua            # Gameplay scene (asteroids)
+assets/
+├── scripts/
+│   ├── main.lua               # Entry: on_setup, on_enter_play, on_switch_scene, on_update_*
+│   ├── setup.lua              # Asset loading helpers (require in on_setup)
+│   ├── engine.lua             # LSP autocomplete stubs (45k+ lines)
+│   ├── .luarc.json            # Lua Language Server configuration for LuaJIT
+│   ├── README.md              # Lua API documentation (78k+ lines)
+│   └── scenes/
+│       ├── menu.lua           # Menu scene (DRIFTERS title, Start Game -> level01, back=quit)
+│       └── level01.lua        # Asteroids scene (ship phases, background tiles, drifting asteroids)
+├── textures/                  # Space/asteroid art set
+│   ├── cursor.png
+│   ├── asteroids_ship.png
+│   ├── space01.png
+│   ├── space02.png
+│   ├── space03.png
+│   ├── space04.png
+│   ├── asteroids-big01.png
+│   ├── asteroids-big02.png
+│   └── asteroids-big03.png
+├── audio/
+│   └── option.wav             # Menu selection sound
+└── fonts/
+    ├── Arcade_Cabinet.ttf
+    └── Formal_Future.ttf
 
 config.ini                     # Game configuration (INI format)
 ```
@@ -131,16 +152,17 @@ width = 640                    ; Internal render width
 height = 360                   ; Internal render height
 
 [window]
-width = 1280                   ; Window width (currently ignored due to raylib issue)
-height = 720                   ; Window height (currently ignored due to raylib issue)
+width = 1280                   ; Window width in pixels
+height = 720                   ; Window height in pixels
 target_fps = 120               ; Target frames per second
 vsync = true                   ; Enable vertical sync
 fullscreen = false             ; Start in fullscreen mode
 ```
 
-The `apply_gameconfig_changes` system loads config.ini when GameConfig is added,
-then applies changes reactively when GameConfig is modified. Uses `is_added()`
-and `is_changed()` for change detection.
+GameConfig::load_from_file() is invoked in main.rs before world setup; `apply_gameconfig_changes`
+(run_if state_is_playing) reacts to `is_added()`/`is_changed()` to resize the render target and
+ScreenSize, sync fullscreen via SwitchFullScreenEvent, and apply vsync/target_fps (window resizing
+code is currently commented out).
 
 ## COMPONENT QUICK-REF
 
@@ -484,6 +506,7 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 ## SYSTEM EXECUTION ORDER (main.rs schedule)
 
 Systems with explicit ordering constraints (`.after()`):
+- apply_gameconfig_changes (run_if state_is_playing)
 - phase_update_system.after(phase_change_detector)
 - stuck_to_entity_system.after(collision_detector)
 - collision_detector.after(mouse_controller).after(movement)
@@ -494,28 +517,31 @@ Systems with explicit ordering constraints (`.after()`):
 - render_system.after(collision_detector)
 
 Approximate execution order:
-1. phase_change_detector
-2. phase_update_system
-3. menu_spawn_system
-4. gridlayout_spawn_system
-5. update_input_state
-6. check_pending_state
-7. update_group_counts_system
-8. audio systems (update_world_time, poll_audio_messages, forward_audio_cmds, ...)
-9. input_simple_controller
-10. input_acceleration_controller
-11. mouse_controller
-12. tween_mapposition_system, tween_rotation_system, tween_scale_system
-13. movement
-14. collision_detector
-15. stuck_to_entity_system, lua_phase_system, render_system (all after collision)
-16. animation_controller (after lua_phase)
-17. animation (after animation_controller)
-18. update_timers
-19. update_lua_timers
-20. update_world_signals_binding_system
-21. dynamictext_size_system
-22. run_<scene>_update (via game.rs)
+1. apply_gameconfig_changes (run_if state_is_playing)
+2. phase_change_detector
+3. phase_update_system
+4. menu_spawn_system
+5. gridlayout_spawn_system
+6. update_input_state
+7. check_pending_state
+8. update_group_counts_system
+9. audio systems chain (update_bevy_audio_cmds → forward_audio_cmds → poll_audio_messages → update_bevy_audio_messages)
+10. input_simple_controller
+11. input_acceleration_controller
+12. mouse_controller
+13. tween_mapposition_system, tween_rotation_system, tween_scale_system
+14. movement
+15. collision_detector
+16. stuck_to_entity_system (after collision)
+17. lua_phase_system (after collision)
+18. animation_controller (after lua_phase)
+19. animation (after animation_controller)
+20. update_timers
+21. update_lua_timers
+22. update_world_signals_binding_system
+23. dynamictext_size_system
+24. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
+25. render_system (after collision_detector)
 
 ## KEY PATTERNS
 
