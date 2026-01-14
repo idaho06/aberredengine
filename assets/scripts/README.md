@@ -1188,17 +1188,14 @@ engine.spawn()
 function enemy_explode(ctx, input)
     engine.log_info("Enemy " .. ctx.id .. " exploding at position " .. ctx.pos.x .. "," .. ctx.pos.y)
     engine.play_sound("explosion")
-    -- Note: entity_despawn is not available in regular API.
-    -- Use phase transitions or spawn entities with fixed lifetimes instead.
-    engine.phase_transition(ctx.id, "dead")  -- Transition to a "dead" phase
+    engine.entity_despawn(ctx.id)
 end
 ```
 
 **Features:**
 - Timer automatically resets after firing (repeats every `duration` seconds)
-- Lua callback has full engine API access (spawn entities, play audio, modify signals, etc.)
+- Lua callback has full engine API access (spawn/despawn entities, play audio, modify signals, etc.)
 - Can be added at spawn-time with `:with_lua_timer()` or at runtime with `engine.entity_insert_lua_timer()`
-- **Limitation:** Cannot despawn entities from timer callbacks (use phase transitions instead)
 
 **See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
 

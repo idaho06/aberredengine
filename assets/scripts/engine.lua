@@ -135,8 +135,8 @@ function engine.load_sound(id, path) end
 
 ---Load a tilemap from JSON and texture atlas
 ---@param id string Tilemap identifier for later reference
----@param path_without_extension string Path without .json/.png extension
-function engine.load_tilemap(id, path_without_extension) end
+---@param path string Directory path containing <name>.txt and <name>.png
+function engine.load_tilemap(id, path) end
 
 -- ==================== Audio Playback ====================
 
@@ -554,9 +554,15 @@ function engine.clear_flag(key) end
 function engine.get_entity(key) end
 
 -- ==================== Entity Commands ====================
--- Note: entity_set_position, entity_despawn, entity_signal_set_integer, and
--- entity_insert_timer only exist in the collision API (collision_entity_*).
--- See collision-specific commands section below.
+---Set entity world position
+---@param entity_id integer Entity ID
+---@param x number World X position
+---@param y number World Y position
+function engine.entity_set_position(entity_id, x, y) end
+
+---Despawn an entity
+---@param entity_id integer Entity ID
+function engine.entity_despawn(entity_id) end
 
 ---Set entity velocity
 ---@param entity_id integer Entity ID
@@ -580,6 +586,12 @@ function engine.entity_set_scale(entity_id, sx, sy) end
 ---@param key string Signal key
 ---@param value number Signal value
 function engine.entity_signal_set_scalar(entity_id, key, value) end
+
+---Set entity integer signal
+---@param entity_id integer Entity ID
+---@param key string Signal key
+---@param value integer Signal value
+function engine.entity_signal_set_integer(entity_id, key, value) end
 
 ---Set entity string signal
 ---@param entity_id integer Entity ID
@@ -661,6 +673,12 @@ function engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, 
 ---Release entity from StuckTo
 ---@param entity_id integer Entity ID
 function engine.release_stuckto(entity_id) end
+
+---Insert Timer component on an entity
+---@param entity_id integer Entity ID
+---@param duration number Timer duration in seconds
+---@param signal string Signal to emit when timer fires
+function engine.entity_insert_timer(entity_id, duration, signal) end
 
 ---Set entity animation
 ---@param entity_id integer Entity ID
