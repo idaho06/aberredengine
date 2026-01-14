@@ -15,7 +15,7 @@
 //! - [`mapposition`] – world-space position (pivot) for an entity
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
-//! - [`phase`] – state machine component with enter/update/exit callbacks
+//! - [`luaphase`] – Lua-based state machine with enter/update/exit callbacks
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
@@ -24,7 +24,7 @@
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component
 //! - [`stuckto`] – attaches an entity's position to another entity
-//! - [`timer`] – countdown timer that emits events when finished
+//! - [`luatimer`] – Lua callback timer for delayed actions
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`zindex`] – rendering order hint for 2D drawing
 
@@ -41,7 +41,6 @@ pub mod luatimer;
 pub mod mapposition;
 pub mod menu;
 pub mod persistent;
-pub mod phase;
 pub mod rigidbody;
 pub mod rotation;
 pub mod scale;
@@ -50,6 +49,5 @@ pub mod signalbinding;
 pub mod signals;
 pub mod sprite;
 pub mod stuckto;
-pub mod timer;
 pub mod tween;
 pub mod zindex;

@@ -33,13 +33,11 @@ src/
 │   ├── luacollision.rs        # LuaCollisionRule for Lua callbacks
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
-│   ├── phase.rs               # Rust phase state machine
 │   ├── luaphase.rs            # Lua-based phase state machine
 │   ├── signals.rs             # Per-entity signals (scalars/ints/flags/strings)
 │   ├── dynamictext.rs         # Text rendering component with cached size
 │   ├── signalbinding.rs       # Bind text to world signals
 │   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
-│   ├── timer.rs               # Countdown timer
 │   ├── luatimer.rs            # Lua callback timer
 │   ├── stuckto.rs             # Attach entity to another
 │   ├── menu.rs                # Interactive menu
@@ -60,11 +58,10 @@ src/
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController)
-│   ├── phase.rs               # Rust phase callbacks
 │   ├── luaphase.rs            # Lua phase callbacks
 │   ├── lua_commands.rs        # Process EntityCmd/CollisionEntityCmd/SpawnCmd
 │   ├── luatimer.rs            # Lua timer processing
-│   ├── time.rs                # WorldTime update, timer ticks
+│   ├── time.rs                # WorldTime update
 │   ├── signalbinding.rs       # Update bound text
 │   ├── dynamictext_size.rs    # Cache DynamicText bounding box sizes
 │   ├── tween.rs               # Tween animation systems (position/rotation/scale)
@@ -109,8 +106,6 @@ src/
     ├── gamestate.rs           # GameStateTransition
     ├── input.rs               # InputAction events
     ├── menu.rs                # MenuSelection
-    ├── phase.rs               # PhaseTransition
-    ├── timer.rs               # TimerEvent
     ├── luatimer.rs            # LuaTimerEvent
     ├── switchdebug.rs         # DebugToggle (F11)
     ├── switchfullscreen.rs    # FullScreen toggle event + observer (F10)
@@ -179,7 +174,6 @@ LuaPhase { definition: LuaPhaseDefinition, current_phase: String, time_in_phase:
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
-Timer { duration: f32, elapsed: f32, signal: String }
 LuaTimer { duration: f32, elapsed: f32, callback: String }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
 Menu { items: Vec<MenuItem>, selected: usize, actions: FxHashMap<String, MenuAction>, ... }
@@ -254,13 +248,12 @@ EntityCmd {
     SetPosition { entity_id, x, y }
     Despawn { entity_id }
     SignalSetInteger { entity_id, key, value }
-    InsertTimer { entity_id, duration, signal }
 }
 
 SpawnCmd (spawn_data.rs) {
     group, position, screen_position, sprite, text, zindex, rigidbody, collider,
     mouse_controlled, rotation, scale, persistent, signal_scalars, signal_integers,
-    signal_flags, signal_strings, phase_data, has_signals, stuckto, timer, lua_timer,
+    signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
     register_as, lua_collision_rule, animation, animation_controller
 }
@@ -344,7 +337,6 @@ engine.entity_set_speed(id, speed)
 engine.entity_set_position(id, x, y)
 engine.entity_despawn(id)
 engine.entity_signal_set_integer(id, key, value)
-engine.entity_insert_timer(id, duration, signal)
 
 -- Collision-Specific Commands (collision callbacks only - for proper timing)
 -- These use separate queues that drain immediately after collision callback returns
@@ -370,7 +362,6 @@ engine.collision_entity_signal_set_flag(id, flag)
 engine.collision_entity_signal_clear_flag(id, flag)
 engine.collision_entity_signal_set_scalar(id, key, value)
 engine.collision_entity_signal_set_string(id, key, value)
-engine.collision_entity_insert_timer(id, duration, signal)
 engine.collision_entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
 engine.collision_release_stuckto(id)
 engine.collision_entity_insert_lua_timer(id, duration, callback)
@@ -460,7 +451,6 @@ engine.spawn_tiles(id)
 :with_tween_scale(fx, fy, tx, ty, dur)
 :with_tween_scale_easing(easing)
 :with_tween_scale_loop(mode)
-:with_timer(duration, signal)
 :with_lua_timer(duration, callback)
 :with_lua_collision_rule(group_a, group_b, callback)
 :with_grid_layout(path, group, zindex)
@@ -517,7 +507,6 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 
 Systems with explicit ordering constraints (`.after()`):
 - apply_gameconfig_changes (run_if state_is_playing)
-- phase_update_system.after(phase_change_detector)
 - stuck_to_entity_system.after(collision_detector)
 - collision_detector.after(mouse_controller).after(movement)
 - lua_phase_system.after(collision_detector)
@@ -528,30 +517,27 @@ Systems with explicit ordering constraints (`.after()`):
 
 Approximate execution order:
 1. apply_gameconfig_changes (run_if state_is_playing)
-2. phase_change_detector
-3. phase_update_system
-4. menu_spawn_system
-5. gridlayout_spawn_system
-6. update_input_state
-7. check_pending_state
-8. update_group_counts_system
-9. audio systems chain (update_bevy_audio_cmds → forward_audio_cmds → poll_audio_messages → update_bevy_audio_messages)
-10. input_simple_controller
-11. input_acceleration_controller
-12. mouse_controller
-13. tween_mapposition_system, tween_rotation_system, tween_scale_system
-14. movement
-15. collision_detector
-16. stuck_to_entity_system (after collision)
-17. lua_phase_system (after collision)
-18. animation_controller (after lua_phase)
-19. animation (after animation_controller)
-20. update_timers
-21. update_lua_timers
-22. update_world_signals_binding_system
-23. dynamictext_size_system
-24. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
-25. render_system (after collision_detector)
+2. menu_spawn_system
+3. gridlayout_spawn_system
+4. update_input_state
+5. check_pending_state
+6. update_group_counts_system
+7. audio systems chain (update_bevy_audio_cmds → forward_audio_cmds → poll_audio_messages → update_bevy_audio_messages)
+8. input_simple_controller
+9. input_acceleration_controller
+10. mouse_controller
+11. tween_mapposition_system, tween_rotation_system, tween_scale_system
+12. movement
+13. collision_detector
+14. stuck_to_entity_system (after collision)
+15. lua_phase_system (after collision)
+16. animation_controller (after lua_phase)
+17. animation (after animation_controller)
+18. update_lua_timers
+19. update_world_signals_binding_system
+20. dynamictext_size_system
+21. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
+22. render_system (after collision_detector)
 
 ## KEY PATTERNS
 

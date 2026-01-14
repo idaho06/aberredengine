@@ -1315,25 +1315,6 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.entity_insert_timer(entity_id, duration, signal) - Insert a signal-based Timer component
-        engine.set(
-            "entity_insert_timer",
-            self.lua.create_function(
-                |lua, (entity_id, duration, signal): (u64, f32, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTimer {
-                            entity_id,
-                            duration,
-                            signal,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
         Ok(())
     }
 
@@ -1548,26 +1529,6 @@ impl LuaRuntime {
                         .push(EntityCmd::SignalClearFlag { entity_id, flag });
                     Ok(())
                 })?,
-        )?;
-
-        // engine.collision_entity_insert_timer(entity_id, duration, signal)
-        // Inserts a timer component on an entity during collision handling
-        engine.set(
-            "collision_entity_insert_timer",
-            self.lua.create_function(
-                |lua, (entity_id, duration, signal): (u64, f32, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTimer {
-                            entity_id,
-                            duration,
-                            signal,
-                        });
-                    Ok(())
-                },
-            )?,
         )?;
 
         // engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)

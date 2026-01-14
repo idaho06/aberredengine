@@ -46,7 +46,6 @@ use crate::components::signalbinding::SignalBinding;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
-use crate::components::timer::Timer;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
@@ -695,14 +694,6 @@ pub fn process_entity_commands(
                     signals.set_integer(&key, value);
                 }
             }
-            EntityCmd::InsertTimer {
-                entity_id,
-                duration,
-                signal,
-            } => {
-                let entity = Entity::from_bits(entity_id);
-                commands.entity(entity).insert(Timer::new(duration, signal));
-            }
         }
     }
 }
@@ -971,11 +962,6 @@ pub fn process_spawn_command(
             .stored_velocity
             .map(|(vx, vy)| Vector2 { x: vx, y: vy });
         entity_commands.insert(stuckto);
-    }
-
-    // Timer
-    if let Some((duration, signal)) = cmd.timer {
-        entity_commands.insert(Timer::new(duration, signal));
     }
 
     // LuaTimer

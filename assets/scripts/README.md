@@ -167,7 +167,6 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_signal_set_integer()` instead of `engine.entity_signal_set_integer()`
 - `engine.collision_entity_signal_set_scalar()` instead of `engine.entity_signal_set_scalar()`
 - `engine.collision_entity_signal_set_string()` instead of `engine.entity_signal_set_string()`
-- `engine.collision_entity_insert_timer()` instead of `engine.entity_insert_timer()`
 - `engine.collision_entity_insert_lua_timer()` instead of `engine.entity_insert_lua_timer()`
 - `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
 - `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
@@ -1144,19 +1143,6 @@ Set loop behavior for scale (requires `:with_tween_scale()`).
 
 ### Additional Components
 
-#### `:with_timer(duration, signal)`
-Add Timer component that fires after duration.
-
-**Parameters:**
-- `duration` - Time in seconds
-- `signal` - TimerEvent signal name to emit
-
-```lua
-:with_timer(3.0, "powerup_expired")
-```
-
-**Note:** Standard timers emit events that must be handled by observers. For simpler use cases where you just want to call a Lua function, use `:with_lua_timer()` instead.
-
 #### `:with_lua_timer(duration, callback)`
 Add LuaTimer component that calls a Lua function after duration.
 
@@ -1494,22 +1480,6 @@ function on_timer_title_test(ctx, input)
     engine.entity_remove_lua_timer(ctx.id)
 end
 ```
-
-### `engine.entity_insert_timer(entity_id, duration, signal)`
-Insert a signal-based Timer component on an entity at runtime. When the timer expires, it emits a TimerEvent with the specified signal.
-
-**Parameters:**
-- `entity_id` - Entity to add timer to
-- `duration` - Time in seconds
-- `signal` - Signal name for the TimerEvent
-
-**Example:**
-```lua
--- Start a 5 second countdown timer
-engine.entity_insert_timer(player_id, 5.0, "powerup_expired")
-```
-
-**Note:** This is a signal-based timer that emits events. For simpler use cases where you just want to call a Lua function, use `engine.entity_insert_lua_timer()` instead.
 
 ### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)`
 Add or replace TweenPosition component at runtime to animate entity movement.
@@ -2097,22 +2067,6 @@ Clear a flag on an entity's Signals component during collision handling.
 function on_player_debuff_zone(ctx)
     local player_id = ctx.a.id
     engine.collision_entity_signal_clear_flag(player_id, "shield_active")
-end
-```
-
-#### `engine.collision_entity_insert_timer(entity_id, duration, signal)`
-Insert a Timer component on an entity during collision handling. When the timer expires, it emits a TimerEvent with the specified signal.
-
-**Parameters:**
-- `entity_id` - Entity to add timer to
-- `duration` - Time in seconds
-- `signal` - Signal name for the TimerEvent
-
-```lua
-function on_player_poison(ctx)
-    local player_id = ctx.a.id
-    -- Start a 5 second poison timer
-    engine.collision_entity_insert_timer(player_id, 5.0, "poison_tick")
 end
 ```
 

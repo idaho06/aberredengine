@@ -384,12 +384,6 @@ function EntityBuilder:with_stuckto_offset(offset_x, offset_y) end
 ---@return EntityBuilder
 function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 
----Add timer component
----@param duration number Timer duration in seconds
----@param signal string Signal to emit when timer expires
----@return EntityBuilder
-function EntityBuilder:with_timer(duration, signal) end
-
 ---Add Lua timer component (calls Lua function when timer expires)
 ---@param duration number Timer duration in seconds
 ---@param callback string Lua function name to call (receives entity_id as parameter)
@@ -695,12 +689,6 @@ function engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, 
 ---@param entity_id integer Entity ID
 function engine.release_stuckto(entity_id) end
 
----Insert Timer component on an entity
----@param entity_id integer Entity ID
----@param duration number Timer duration in seconds
----@param signal string Signal to emit when timer fires
-function engine.entity_insert_timer(entity_id, duration, signal) end
-
 ---Set entity animation
 ---@param entity_id integer Entity ID
 ---@param animation_key string Animation identifier
@@ -845,12 +833,6 @@ function engine.collision_entity_signal_set_flag(entity_id, flag) end
 ---@param entity_id integer Entity ID
 ---@param flag string Flag key
 function engine.collision_entity_signal_clear_flag(entity_id, flag) end
-
----Insert Timer component on an entity during collision handling
----@param entity_id integer Entity ID
----@param duration number Timer duration in seconds
----@param signal string Signal to emit when timer expires
-function engine.collision_entity_insert_timer(entity_id, duration, signal) end
 
 ---Insert StuckTo component on an entity during collision handling
 ---@param entity_id integer Entity ID
@@ -1052,12 +1034,6 @@ function CollisionEntityBuilder:with_stuckto_offset(offset_x, offset_y) end
 ---@param vy number Velocity Y
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
-
----Add timer component
----@param duration number Timer duration in seconds
----@param signal string Signal to emit when timer expires
----@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_timer(duration, signal) end
 
 ---Add Lua timer component (calls Lua function when timer expires)
 ---@param duration number Timer duration in seconds

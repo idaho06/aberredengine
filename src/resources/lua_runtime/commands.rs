@@ -190,12 +190,6 @@ pub enum EntityCmd {
         key: String,
         value: i32,
     },
-    /// Insert a Timer component (signal-based timer, not Lua callback)
-    InsertTimer {
-        entity_id: u64,
-        duration: f32,
-        signal: String,
-    },
 }
 
 /// Commands for tracked groups from Lua.

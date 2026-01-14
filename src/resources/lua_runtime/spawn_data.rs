@@ -272,8 +272,6 @@ pub struct SpawnCmd {
     pub has_signals: bool,
     /// StuckTo component data
     pub stuckto: Option<StuckToData>,
-    /// Timer component data (duration, signal)
-    pub timer: Option<(f32, String)>,
     /// LuaTimer component data (duration, callback)
     pub lua_timer: Option<(f32, String)>,
     /// SignalBinding component data (key, optional format)

@@ -11,10 +11,9 @@
 //! - [`gamestate`] – state transition notifications for the high-level game flow
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
-//! - [`phase`] – phase transition events for state machine components
+//! - [`luatimer`] – Lua timer callback events
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off
 //! - [`switchfullscreen`] – toggle fullscreen mode on/off
-//! - [`timer`] – timer expiration events
 //!
 //! See each submodule for concrete event data, semantics, and example usage.
 
@@ -24,7 +23,5 @@ pub mod gamestate;
 pub mod input;
 pub mod luatimer;
 pub mod menu;
-pub mod phase;
 pub mod switchdebug;
 pub mod switchfullscreen;
-pub mod timer;

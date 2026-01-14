@@ -481,16 +481,6 @@ impl LuaUserData for LuaEntityBuilder {
             },
         );
 
-        // :with_timer(duration, signal) - Add Timer component
-        // Timer fires a TimerEvent with the signal after duration seconds
-        methods.add_method_mut(
-            "with_timer",
-            |_, this, (duration, signal): (f32, String)| {
-                this.cmd.timer = Some((duration, signal));
-                Ok(this.clone())
-            },
-        );
-
         // :with_lua_timer(duration, callback) - Add LuaTimer component
         // LuaTimer calls a Lua function after duration seconds
         methods.add_method_mut(
@@ -1003,15 +993,6 @@ impl LuaUserData for LuaCollisionEntityBuilder {
             this.cmd.has_signals = true;
             Ok(this.clone())
         });
-
-        // :with_timer(duration, signal) - Add Timer component
-        methods.add_method_mut(
-            "with_timer",
-            |_, this, (duration, signal): (f32, String)| {
-                this.cmd.timer = Some((duration, signal));
-                Ok(this.clone())
-            },
-        );
 
         // :with_lua_timer(duration, callback) - Add LuaTimer component
         methods.add_method_mut(
