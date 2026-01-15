@@ -62,7 +62,7 @@ struct CollisionCtxPool {
     signals_b: LuaRegistryKey,
 
     // Sides
-    sides: LuaRegistryKey,
+    // sides: LuaRegistryKey,
     sides_a: LuaRegistryKey,
     sides_b: LuaRegistryKey,
 }
@@ -81,7 +81,7 @@ pub struct CollisionCtxTables {
     pub rect_b: LuaTable,
     pub signals_a: LuaTable,
     pub signals_b: LuaTable,
-    pub sides: LuaTable,
+    // pub sides: LuaTable,
     pub sides_a: LuaTable,
     pub sides_b: LuaTable,
 }
@@ -243,7 +243,7 @@ impl LuaRuntime {
             rect_b: lua.create_registry_value(rect_b)?,
             signals_a: lua.create_registry_value(signals_a)?,
             signals_b: lua.create_registry_value(signals_b)?,
-            sides: lua.create_registry_value(sides)?,
+            // sides: lua.create_registry_value(sides)?,
             sides_a: lua.create_registry_value(sides_a)?,
             sides_b: lua.create_registry_value(sides_b)?,
         })
@@ -256,9 +256,10 @@ impl LuaRuntime {
     ///
     /// Returns an error if the pool is not initialized or registry retrieval fails.
     pub fn get_collision_ctx_pool(&self) -> LuaResult<CollisionCtxTables> {
-        let pool = self.collision_ctx_pool.as_ref().ok_or_else(|| {
-            LuaError::runtime("Collision context pool not initialized")
-        })?;
+        let pool = self
+            .collision_ctx_pool
+            .as_ref()
+            .ok_or_else(|| LuaError::runtime("Collision context pool not initialized"))?;
 
         Ok(CollisionCtxTables {
             ctx: self.lua.registry_value(&pool.ctx)?,
@@ -272,7 +273,7 @@ impl LuaRuntime {
             rect_b: self.lua.registry_value(&pool.rect_b)?,
             signals_a: self.lua.registry_value(&pool.signals_a)?,
             signals_b: self.lua.registry_value(&pool.signals_b)?,
-            sides: self.lua.registry_value(&pool.sides)?,
+            //sides: self.lua.registry_value(&pool.sides)?,
             sides_a: self.lua.registry_value(&pool.sides_a)?,
             sides_b: self.lua.registry_value(&pool.sides_b)?,
         })
@@ -315,9 +316,10 @@ impl LuaRuntime {
     ///
     /// Returns an error if the pool is not initialized or registry retrieval fails.
     pub fn get_entity_ctx_pool(&self) -> LuaResult<EntityCtxTables> {
-        let pool = self.entity_ctx_pool.as_ref().ok_or_else(|| {
-            LuaError::runtime("Entity context pool not initialized")
-        })?;
+        let pool = self
+            .entity_ctx_pool
+            .as_ref()
+            .ok_or_else(|| LuaError::runtime("Entity context pool not initialized"))?;
 
         Ok(EntityCtxTables {
             ctx: self.lua.registry_value(&pool.ctx)?,

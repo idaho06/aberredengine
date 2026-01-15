@@ -50,8 +50,9 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
+use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{CollisionContext, CollisionRule, get_colliding_sides};
+use crate::components::collision::get_colliding_sides;
 use crate::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
@@ -59,7 +60,6 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
 use crate::components::stuckto::StuckTo;
-use crate::components::animation::Animation;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::lua_runtime::LuaRuntime;
@@ -105,7 +105,7 @@ pub fn collision_detector(
 pub struct CollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
-    pub rules: Query<'w, 's, &'static CollisionRule>,
+    // pub rules: Query<'w, 's, &'static CollisionRule>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
@@ -137,28 +137,28 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
     };
 
     // First, check Rust-based collision rules
-    for rule in params.rules.iter() {
-        if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
-            //eprintln!(
-            //    "Collision rule matched for groups '{}' and '{}'",
-            //    ga, gb
-            //);
-            let callback = rule.callback;
-            let mut ctx = CollisionContext {
-                commands: &mut params.commands,
-                groups: &params.groups,
-                positions: &mut params.positions,
-                rigid_bodies: &mut params.rigid_bodies,
-                box_colliders: &params.box_colliders,
-                signals: &mut params.signals,
-                world_signals: &mut params.world_signals,
-                audio_cmds: &mut params.audio_cmds,
-            };
-            callback(ent_a, ent_b, &mut ctx);
-            return;
-        }
-    }
-
+    /*     for rule in params.rules.iter() {
+           if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
+               //eprintln!(
+               //    "Collision rule matched for groups '{}' and '{}'",
+               //    ga, gb
+               //);
+               let callback = rule.callback;
+               let mut ctx = CollisionContext {
+                   commands: &mut params.commands,
+                   groups: &params.groups,
+                   positions: &mut params.positions,
+                   rigid_bodies: &mut params.rigid_bodies,
+                   box_colliders: &params.box_colliders,
+                   signals: &mut params.signals,
+                   world_signals: &mut params.world_signals,
+                   audio_cmds: &mut params.audio_cmds,
+               };
+               callback(ent_a, ent_b, &mut ctx);
+               return;
+           }
+       }
+    */
     // Then, check Lua-based collision rules
     for lua_rule in params.lua_rules.iter() {
         if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
@@ -198,9 +198,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
 
             // Get colliding sides (uses SmallVec to avoid heap allocation)
             let (sides_a, sides_b) = match (rect_a, rect_b) {
-                (Some(ra), Some(rb)) => {
-                    get_colliding_sides(&ra, &rb).unwrap_or_default()
-                }
+                (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_default(),
                 _ => Default::default(),
             };
 

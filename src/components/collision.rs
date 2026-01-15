@@ -29,23 +29,22 @@
 //! - [`crate::events::collision::CollisionEvent`] – event emitted on collisions
 //! - [`super::group::Group`] – group tag used for rule matching
 
-use bevy_ecs::prelude::*;
+// use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;
 use smallvec::SmallVec;
 
-use crate::components::boxcollider::BoxCollider;
+/* use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
-use crate::events::collision::CollisionEvent;
 use crate::resources::worldsignals::WorldSignals;
-
+ */
 /// Context passed into collision callbacks to access world state.
 ///
 /// Extend this struct as new queries/resources are needed by callbacks.
-pub struct CollisionContext<'a, 'w, 's> {
+/* pub struct CollisionContext<'a, 'w, 's> {
     pub commands: &'a mut Commands<'w, 's>,
     pub groups: &'a Query<'w, 's, &'static Group>,
     pub positions: &'a mut Query<'w, 's, &'static mut MapPosition>,
@@ -55,29 +54,29 @@ pub struct CollisionContext<'a, 'w, 's> {
     pub world_signals: &'a mut ResMut<'w, WorldSignals>,
     pub audio_cmds: &'a mut MessageWriter<'w, AudioCmd>,
 }
-
+ */
 /// Callback signature for collision components using a grouped context.
 /// The callback receives the two entities involved in the collision
 /// and a mutable reference to the collision context.
 /// Callbacks are created in the game code when defining collision rules.
-pub type CollisionCallback =
-    for<'a, 'w, 's> fn(a: Entity, b: Entity, ctx: &mut CollisionContext<'a, 'w, 's>);
-
+/* pub type CollisionCallback =
+   for<'a, 'w, 's> fn(a: Entity, b: Entity, ctx: &mut CollisionContext<'a, 'w, 's>);
+*/
 /// Defines how collisions between two entity groups should be handled.
 ///
 /// When a collision is detected between entities with groups matching
 /// `group_a` and `group_b`, the `callback` function is invoked with
 /// the entities and a [`CollisionContext`].
-#[derive(Component)]
+/* #[derive(Component)]
 pub struct CollisionRule {
     pub group_a: String,
     pub group_b: String,
     pub callback: CollisionCallback,
 }
-// TODO: Instead of using a fixed function signature for the callback,
+ */// TODO: Instead of using a fixed function signature for the callback,
 // use a closure that can capture additional context if needed.
 
-impl CollisionRule {
+/* impl CollisionRule {
     /// Create a new collision rule for two groups with a callback.
     pub fn new(
         group_a: impl Into<String>,
@@ -111,7 +110,7 @@ impl CollisionRule {
         }
     }
 }
-
+ */
 pub enum BoxSide {
     Left,
     Right,
@@ -127,10 +126,7 @@ pub type BoxSides = SmallVec<[BoxSide; 4]>;
 ///
 /// Uses `SmallVec<[BoxSide; 4]>` to avoid heap allocations since each
 /// rectangle can have at most 4 colliding sides.
-pub fn get_colliding_sides(
-    rect_a: &Rectangle,
-    rect_b: &Rectangle,
-) -> Option<(BoxSides, BoxSides)> {
+pub fn get_colliding_sides(rect_a: &Rectangle, rect_b: &Rectangle) -> Option<(BoxSides, BoxSides)> {
     let Some(overlap_rect) = rect_a.get_collision_rec(rect_b) else {
         return None;
     };

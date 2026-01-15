@@ -31,8 +31,8 @@
 //! **Important**: Pooled context tables are reused. Lua scripts must not store
 //! references to `ctx` or its subtables for later use.
 
-use crate::components::signals::Signals;
 use super::runtime::EntityCtxTables;
+use crate::components::signals::Signals;
 use mlua::{Lua, Result as LuaResult, Table as LuaTable, Value as LuaValue};
 
 /// Snapshot of RigidBody data for context building.
@@ -80,6 +80,10 @@ pub struct LuaTimerSnapshot {
 /// Fields are only set if the corresponding data is provided (Some). Missing
 /// components result in nil fields in Lua.
 ///
+/// ** REPLACED BY POOLED VERSION **
+/// See: [`build_entity_context_pooled`] for a more efficient implementation that
+/// uses pre-allocated tables to reduce allocations and GC pressure.
+///
 /// # Arguments
 ///
 /// * `lua` - Reference to the Lua state
@@ -101,7 +105,7 @@ pub struct LuaTimerSnapshot {
 /// # Returns
 ///
 /// A Lua table containing the entity context.
-#[allow(clippy::too_many_arguments)]
+/* #[allow(clippy::too_many_arguments)]
 pub fn build_entity_context<'a>(
     lua: &Lua,
     entity_id: u64,
@@ -253,7 +257,7 @@ pub fn build_entity_context<'a>(
 
     Ok(ctx)
 }
-
+ */
 /// Populate entity signal tables (creates fresh tables for variable-length data).
 fn populate_entity_signals(
     lua: &Lua,
