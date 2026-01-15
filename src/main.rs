@@ -160,24 +160,44 @@ fn main() {
     world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
     // Game state systems store
+    // NOTE: In bevy_ecs 0.18, registered systems are stored as entities.
+    // We must mark them as Persistent so they survive scene transitions.
     let mut systems_store = SystemsStore::new();
 
     let setup_system_id = world.register_system(game::setup);
+    world
+        .entity_mut(setup_system_id.entity())
+        .insert(Persistent);
     systems_store.insert("setup", setup_system_id);
 
     let enter_play_system_id = world.register_system(game::enter_play);
+    world
+        .entity_mut(enter_play_system_id.entity())
+        .insert(Persistent);
     systems_store.insert("enter_play", enter_play_system_id);
 
     let quit_game_system_id = world.register_system(game::quit_game);
+    world
+        .entity_mut(quit_game_system_id.entity())
+        .insert(Persistent);
     systems_store.insert("quit_game", quit_game_system_id);
 
     let clean_all_entities_system_id = world.register_system(game::clean_all_entities);
+    world
+        .entity_mut(clean_all_entities_system_id.entity())
+        .insert(Persistent);
     systems_store.insert("clean_all_entities", clean_all_entities_system_id);
 
     let switch_scene_system_id = world.register_system(game::switch_scene);
+    world
+        .entity_mut(switch_scene_system_id.entity())
+        .insert(Persistent);
     systems_store.insert("switch_scene", switch_scene_system_id);
 
     let menu_despawn_system_id = world.register_system(menu_despawn);
+    world
+        .entity_mut(menu_despawn_system_id.entity())
+        .insert(Persistent);
     systems_store.insert_entity_system("menu_despawn", menu_despawn_system_id);
 
     world.insert_resource(systems_store);
@@ -191,12 +211,12 @@ fn main() {
     }
     world.trigger(GameStateChangedEvent {}); // Call inmediatly to enter Setup state
 
-    world.add_observer(collision_observer);
-    world.add_observer(switch_debug_observer);
-    world.add_observer(switch_fullscreen_observer);
-    world.add_observer(menu_controller_observer);
-    world.add_observer(menu_selection_observer);
-    world.add_observer(lua_timer_observer);
+    world.spawn((Observer::new(collision_observer), Persistent));
+    world.spawn((Observer::new(switch_debug_observer), Persistent));
+    world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
+    world.spawn((Observer::new(menu_controller_observer), Persistent));
+    world.spawn((Observer::new(menu_selection_observer), Persistent));
+    world.spawn((Observer::new(lua_timer_observer), Persistent));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 

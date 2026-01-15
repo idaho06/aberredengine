@@ -127,6 +127,11 @@ pub fn menu_spawn_system(
                 commands.entity(cursor_entity).insert(ZIndex(23));
             }
         }
+        eprintln!(
+            "menu_spawn_system: Spawned menu entity {:?} with {} items",
+            entity,
+            menu.items.len()
+        );
     }
 }
 
@@ -184,11 +189,20 @@ pub fn menu_controller_observer(
     mut audio_cmds: MessageWriter<AudioCmd>,
 ) {
     for (entity, mut menu, mut signals) in query.iter_mut() {
+        eprintln!(
+            "menu_controller_observer: Handling input for menu entity {:?}",
+            entity
+        );
         if !menu.active {
+            eprintln!(
+                "menu_controller_observer: Menu entity {:?} is not active, skipping",
+                entity
+            );
             continue;
         }
         let event = trigger.event();
         if !event.pressed {
+            eprintln!("menu_controller_observer: Input event is a release, skipping");
             continue; // Only handle key press, not release
         }
 
@@ -210,6 +224,10 @@ pub fn menu_controller_observer(
             InputAction::Action1 | InputAction::Action2 => {
                 if let Some(item) = menu.items.get(menu.selected_index) {
                     let selected_id = item.id.clone();
+                    eprintln!(
+                        "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelectionEvent",
+                        selected_id
+                    );
                     signals.clear_flag("waiting_selection");
                     menu.active = false;
                     signals.set_string("selected_item", selected_id.clone());
@@ -265,6 +283,10 @@ pub fn menu_selection_observer(
     systems_store: Res<SystemsStore>,
 ) {
     let event = trigger.event();
+    eprintln!(
+        "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
+        event.menu, event.item_id
+    );
     let Ok(menu_actions) = menus.get(event.menu) else {
         eprintln!(
             "menu_selection_observer: No MenuActions found for menu entity {:?}, item_id {:?}",
@@ -272,8 +294,16 @@ pub fn menu_selection_observer(
         );
         return;
     };
+    eprintln!(
+        "menu_selection_observer: Found MenuActions, looking up action for item_id={}",
+        event.item_id
+    );
     match menu_actions.get(&event.item_id) {
         MenuAction::SetScene(scene_name) => {
+            eprintln!(
+                "menu_selection_observer: SetScene action found, scene_name={}",
+                scene_name
+            );
             world_signals.set_string("scene", scene_name.clone());
             commands.run_system(
                 systems_store

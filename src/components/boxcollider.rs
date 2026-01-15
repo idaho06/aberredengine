@@ -104,3 +104,246 @@ impl BoxCollider {
         Rectangle::new(x, y, w, h)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    fn vec_approx_eq(a: Vector2, b: Vector2) -> bool {
+        approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
+    }
+
+    // ==================== CONSTRUCTOR TESTS ====================
+
+    #[test]
+    fn test_new() {
+        let col = BoxCollider::new(10.0, 20.0);
+        assert!(vec_approx_eq(col.size, Vector2::new(10.0, 20.0)));
+        assert!(vec_approx_eq(col.offset, Vector2::zero()));
+        assert!(vec_approx_eq(col.origin, Vector2::zero()));
+    }
+
+    #[test]
+    fn test_new_with_zero_size() {
+        let col = BoxCollider::new(0.0, 0.0);
+        assert!(vec_approx_eq(col.size, Vector2::zero()));
+    }
+
+    #[test]
+    fn test_with_offset() {
+        let col = BoxCollider::new(10.0, 10.0).with_offset(Vector2::new(5.0, 5.0));
+        assert!(vec_approx_eq(col.offset, Vector2::new(5.0, 5.0)));
+        assert!(vec_approx_eq(col.size, Vector2::new(10.0, 10.0))); // size unchanged
+    }
+
+    #[test]
+    fn test_with_origin() {
+        let col = BoxCollider::new(10.0, 10.0).with_origin(Vector2::new(5.0, 5.0));
+        assert!(vec_approx_eq(col.origin, Vector2::new(5.0, 5.0)));
+    }
+
+    #[test]
+    fn test_builder_chaining() {
+        let col = BoxCollider::new(20.0, 30.0)
+            .with_offset(Vector2::new(2.0, 3.0))
+            .with_origin(Vector2::new(10.0, 15.0));
+
+        assert!(vec_approx_eq(col.size, Vector2::new(20.0, 30.0)));
+        assert!(vec_approx_eq(col.offset, Vector2::new(2.0, 3.0)));
+        assert!(vec_approx_eq(col.origin, Vector2::new(10.0, 15.0)));
+    }
+
+    // ==================== AABB TESTS ====================
+
+    #[test]
+    fn test_aabb_simple() {
+        let col = BoxCollider::new(10.0, 10.0);
+        let pos = Vector2::new(0.0, 0.0);
+        let (min, max) = col.aabb(pos);
+        assert!(vec_approx_eq(min, Vector2::new(0.0, 0.0)));
+        assert!(vec_approx_eq(max, Vector2::new(10.0, 10.0)));
+    }
+
+    #[test]
+    fn test_aabb_with_position() {
+        let col = BoxCollider::new(10.0, 10.0);
+        let pos = Vector2::new(100.0, 50.0);
+        let (min, max) = col.aabb(pos);
+        assert!(vec_approx_eq(min, Vector2::new(100.0, 50.0)));
+        assert!(vec_approx_eq(max, Vector2::new(110.0, 60.0)));
+    }
+
+    #[test]
+    fn test_aabb_with_offset() {
+        let col = BoxCollider::new(10.0, 10.0).with_offset(Vector2::new(5.0, 5.0));
+        let pos = Vector2::new(0.0, 0.0);
+        let (min, max) = col.aabb(pos);
+        assert!(vec_approx_eq(min, Vector2::new(5.0, 5.0)));
+        assert!(vec_approx_eq(max, Vector2::new(15.0, 15.0)));
+    }
+
+    #[test]
+    fn test_aabb_with_origin() {
+        // Origin shifts the box in the opposite direction
+        let col = BoxCollider::new(10.0, 10.0).with_origin(Vector2::new(5.0, 5.0));
+        let pos = Vector2::new(0.0, 0.0);
+        let (min, max) = col.aabb(pos);
+        // position - origin = (0,0) - (5,5) = (-5,-5)
+        assert!(vec_approx_eq(min, Vector2::new(-5.0, -5.0)));
+        assert!(vec_approx_eq(max, Vector2::new(5.0, 5.0)));
+    }
+
+    #[test]
+    fn test_aabb_with_origin_and_offset() {
+        let col = BoxCollider::new(10.0, 10.0)
+            .with_origin(Vector2::new(5.0, 5.0))
+            .with_offset(Vector2::new(3.0, 3.0));
+        let pos = Vector2::new(0.0, 0.0);
+        let (min, max) = col.aabb(pos);
+        // position - origin + offset = (0,0) - (5,5) + (3,3) = (-2,-2)
+        assert!(vec_approx_eq(min, Vector2::new(-2.0, -2.0)));
+        assert!(vec_approx_eq(max, Vector2::new(8.0, 8.0)));
+    }
+
+    #[test]
+    fn test_aabb_negative_size_normalizes() {
+        // Negative size should be handled correctly
+        let mut col = BoxCollider::new(10.0, 10.0);
+        col.size = Vector2::new(-10.0, -10.0);
+        let pos = Vector2::new(10.0, 10.0);
+        let (min, max) = col.aabb(pos);
+        // p0 = (10, 10), p1 = (0, 0), normalized: min=(0,0), max=(10,10)
+        assert!(vec_approx_eq(min, Vector2::new(0.0, 0.0)));
+        assert!(vec_approx_eq(max, Vector2::new(10.0, 10.0)));
+    }
+
+    // ==================== GET_AABB TESTS ====================
+
+    #[test]
+    fn test_get_aabb() {
+        let col = BoxCollider::new(20.0, 30.0);
+        let pos = Vector2::new(10.0, 10.0);
+        let (x, y, w, h) = col.get_aabb(pos);
+        assert!(approx_eq(x, 10.0));
+        assert!(approx_eq(y, 10.0));
+        assert!(approx_eq(w, 20.0));
+        assert!(approx_eq(h, 30.0));
+    }
+
+    // ==================== OVERLAPS TESTS ====================
+
+    #[test]
+    fn test_overlaps_true() {
+        let col_a = BoxCollider::new(10.0, 10.0);
+        let col_b = BoxCollider::new(10.0, 10.0);
+        let pos_a = Vector2::new(0.0, 0.0);
+        let pos_b = Vector2::new(5.0, 5.0); // overlapping
+        assert!(col_a.overlaps(pos_a, &col_b, pos_b));
+    }
+
+    #[test]
+    fn test_overlaps_false() {
+        let col_a = BoxCollider::new(10.0, 10.0);
+        let col_b = BoxCollider::new(10.0, 10.0);
+        let pos_a = Vector2::new(0.0, 0.0);
+        let pos_b = Vector2::new(20.0, 0.0); // no overlap
+        assert!(!col_a.overlaps(pos_a, &col_b, pos_b));
+    }
+
+    #[test]
+    fn test_overlaps_edge_touching() {
+        // Edge-to-edge touching is NOT an overlap (strict inequality)
+        let col_a = BoxCollider::new(10.0, 10.0);
+        let col_b = BoxCollider::new(10.0, 10.0);
+        let pos_a = Vector2::new(0.0, 0.0);
+        let pos_b = Vector2::new(10.0, 0.0); // exactly touching
+        assert!(!col_a.overlaps(pos_a, &col_b, pos_b));
+    }
+
+    #[test]
+    fn test_overlaps_contained() {
+        let col_a = BoxCollider::new(20.0, 20.0);
+        let col_b = BoxCollider::new(5.0, 5.0);
+        let pos_a = Vector2::new(0.0, 0.0);
+        let pos_b = Vector2::new(5.0, 5.0); // b inside a
+        assert!(col_a.overlaps(pos_a, &col_b, pos_b));
+    }
+
+    #[test]
+    fn test_overlaps_symmetric() {
+        let col_a = BoxCollider::new(10.0, 10.0);
+        let col_b = BoxCollider::new(10.0, 10.0);
+        let pos_a = Vector2::new(0.0, 0.0);
+        let pos_b = Vector2::new(5.0, 5.0);
+        // a overlaps b == b overlaps a
+        assert_eq!(
+            col_a.overlaps(pos_a, &col_b, pos_b),
+            col_b.overlaps(pos_b, &col_a, pos_a)
+        );
+    }
+
+    // ==================== CONTAINS_POINT TESTS ====================
+
+    #[test]
+    fn test_contains_point_inside() {
+        let col = BoxCollider::new(10.0, 10.0);
+        let pos = Vector2::new(0.0, 0.0);
+        let point = Vector2::new(5.0, 5.0);
+        assert!(col.contains_point(pos, point));
+    }
+
+    #[test]
+    fn test_contains_point_outside() {
+        let col = BoxCollider::new(10.0, 10.0);
+        let pos = Vector2::new(0.0, 0.0);
+        let point = Vector2::new(15.0, 5.0);
+        assert!(!col.contains_point(pos, point));
+    }
+
+    #[test]
+    fn test_contains_point_on_edge() {
+        let col = BoxCollider::new(10.0, 10.0);
+        let pos = Vector2::new(0.0, 0.0);
+        // Points on edge are included (>=, <=)
+        assert!(col.contains_point(pos, Vector2::new(0.0, 5.0)));
+        assert!(col.contains_point(pos, Vector2::new(10.0, 5.0)));
+        assert!(col.contains_point(pos, Vector2::new(5.0, 0.0)));
+        assert!(col.contains_point(pos, Vector2::new(5.0, 10.0)));
+    }
+
+    #[test]
+    fn test_contains_point_corner() {
+        let col = BoxCollider::new(10.0, 10.0);
+        let pos = Vector2::new(0.0, 0.0);
+        assert!(col.contains_point(pos, Vector2::new(0.0, 0.0)));
+        assert!(col.contains_point(pos, Vector2::new(10.0, 10.0)));
+    }
+
+    // ==================== AS_RECTANGLE TESTS ====================
+
+    #[test]
+    fn test_as_rectangle() {
+        let col = BoxCollider::new(15.0, 25.0);
+        let pos = Vector2::new(10.0, 20.0);
+        let rect = col.as_rectangle(pos);
+        assert!(approx_eq(rect.x, 10.0));
+        assert!(approx_eq(rect.y, 20.0));
+        assert!(approx_eq(rect.width, 15.0));
+        assert!(approx_eq(rect.height, 25.0));
+    }
+
+    #[test]
+    fn test_as_rectangle_with_offset() {
+        let col = BoxCollider::new(10.0, 10.0).with_offset(Vector2::new(5.0, 5.0));
+        let pos = Vector2::new(0.0, 0.0);
+        let rect = col.as_rectangle(pos);
+        assert!(approx_eq(rect.x, 5.0));
+        assert!(approx_eq(rect.y, 5.0));
+    }
+}

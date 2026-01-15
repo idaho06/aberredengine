@@ -166,6 +166,289 @@ impl AnimationController {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== ANIMATION TESTS ====================
+
+    #[test]
+    fn test_animation_new() {
+        let anim = Animation::new("idle");
+        assert_eq!(anim.animation_key, "idle");
+        assert_eq!(anim.frame_index, 0);
+        assert!((anim.elapsed_time - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_animation_new_with_string() {
+        let anim = Animation::new(String::from("run"));
+        assert_eq!(anim.animation_key, "run");
+    }
+
+    #[test]
+    fn test_animation_new_empty_key() {
+        let anim = Animation::new("");
+        assert_eq!(anim.animation_key, "");
+        assert_eq!(anim.frame_index, 0);
+    }
+
+    // ==================== CMP OP TESTS ====================
+
+    #[test]
+    fn test_cmp_op_variants_exist() {
+        let _lt = CmpOp::Lt;
+        let _le = CmpOp::Le;
+        let _gt = CmpOp::Gt;
+        let _ge = CmpOp::Ge;
+        let _eq = CmpOp::Eq;
+        let _ne = CmpOp::Ne;
+    }
+
+    // ==================== CONDITION TESTS ====================
+
+    #[test]
+    fn test_condition_scalar_cmp() {
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Gt,
+            value: 10.0,
+        };
+        if let Condition::ScalarCmp { key, op, value } = cond {
+            assert_eq!(key, "speed");
+            assert!(matches!(op, CmpOp::Gt));
+            assert!((value - 10.0).abs() < 1e-6);
+        } else {
+            panic!("Expected ScalarCmp");
+        }
+    }
+
+    #[test]
+    fn test_condition_scalar_range() {
+        let cond = Condition::ScalarRange {
+            key: "health".to_string(),
+            min: 0.0,
+            max: 100.0,
+            inclusive: true,
+        };
+        if let Condition::ScalarRange {
+            key,
+            min,
+            max,
+            inclusive,
+        } = cond
+        {
+            assert_eq!(key, "health");
+            assert!((min - 0.0).abs() < 1e-6);
+            assert!((max - 100.0).abs() < 1e-6);
+            assert!(inclusive);
+        } else {
+            panic!("Expected ScalarRange");
+        }
+    }
+
+    #[test]
+    fn test_condition_integer_cmp() {
+        let cond = Condition::IntegerCmp {
+            key: "level".to_string(),
+            op: CmpOp::Ge,
+            value: 5,
+        };
+        if let Condition::IntegerCmp { key, op, value } = cond {
+            assert_eq!(key, "level");
+            assert!(matches!(op, CmpOp::Ge));
+            assert_eq!(value, 5);
+        } else {
+            panic!("Expected IntegerCmp");
+        }
+    }
+
+    #[test]
+    fn test_condition_integer_range() {
+        let cond = Condition::IntegerRange {
+            key: "score".to_string(),
+            min: 0,
+            max: 1000,
+            inclusive: false,
+        };
+        if let Condition::IntegerRange {
+            key,
+            min,
+            max,
+            inclusive,
+        } = cond
+        {
+            assert_eq!(key, "score");
+            assert_eq!(min, 0);
+            assert_eq!(max, 1000);
+            assert!(!inclusive);
+        } else {
+            panic!("Expected IntegerRange");
+        }
+    }
+
+    #[test]
+    fn test_condition_has_flag() {
+        let cond = Condition::HasFlag {
+            key: "is_running".to_string(),
+        };
+        if let Condition::HasFlag { key } = cond {
+            assert_eq!(key, "is_running");
+        } else {
+            panic!("Expected HasFlag");
+        }
+    }
+
+    #[test]
+    fn test_condition_lacks_flag() {
+        let cond = Condition::LacksFlag {
+            key: "is_dead".to_string(),
+        };
+        if let Condition::LacksFlag { key } = cond {
+            assert_eq!(key, "is_dead");
+        } else {
+            panic!("Expected LacksFlag");
+        }
+    }
+
+    #[test]
+    fn test_condition_all() {
+        let cond = Condition::All(vec![
+            Condition::HasFlag {
+                key: "a".to_string(),
+            },
+            Condition::HasFlag {
+                key: "b".to_string(),
+            },
+        ]);
+        if let Condition::All(conditions) = cond {
+            assert_eq!(conditions.len(), 2);
+        } else {
+            panic!("Expected All");
+        }
+    }
+
+    #[test]
+    fn test_condition_any() {
+        let cond = Condition::Any(vec![
+            Condition::HasFlag {
+                key: "x".to_string(),
+            },
+            Condition::HasFlag {
+                key: "y".to_string(),
+            },
+        ]);
+        if let Condition::Any(conditions) = cond {
+            assert_eq!(conditions.len(), 2);
+        } else {
+            panic!("Expected Any");
+        }
+    }
+
+    #[test]
+    fn test_condition_not() {
+        let inner = Condition::HasFlag {
+            key: "test".to_string(),
+        };
+        let cond = Condition::Not(Box::new(inner));
+        if let Condition::Not(boxed) = cond {
+            if let Condition::HasFlag { key } = *boxed {
+                assert_eq!(key, "test");
+            } else {
+                panic!("Expected HasFlag inside Not");
+            }
+        } else {
+            panic!("Expected Not");
+        }
+    }
+
+    // ==================== ANIM RULE TESTS ====================
+
+    #[test]
+    fn test_anim_rule_creation() {
+        let rule = AnimRule {
+            when: Condition::HasFlag {
+                key: "moving".to_string(),
+            },
+            set_key: "walk".to_string(),
+        };
+        assert_eq!(rule.set_key, "walk");
+    }
+
+    // ==================== ANIMATION CONTROLLER TESTS ====================
+
+    #[test]
+    fn test_animation_controller_new() {
+        let ctrl = AnimationController::new("idle");
+        assert_eq!(ctrl.current_key, "idle");
+        assert_eq!(ctrl.fallback_key, "idle");
+        assert!(ctrl.rules.is_empty());
+    }
+
+    #[test]
+    fn test_animation_controller_new_with_string() {
+        let ctrl = AnimationController::new(String::from("default"));
+        assert_eq!(ctrl.current_key, "default");
+        assert_eq!(ctrl.fallback_key, "default");
+    }
+
+    #[test]
+    fn test_animation_controller_with_rule() {
+        let ctrl = AnimationController::new("idle").with_rule(
+            Condition::HasFlag {
+                key: "is_running".to_string(),
+            },
+            "run",
+        );
+        assert_eq!(ctrl.rules.len(), 1);
+        assert_eq!(ctrl.rules[0].set_key, "run");
+    }
+
+    #[test]
+    fn test_animation_controller_multiple_rules() {
+        let ctrl = AnimationController::new("idle")
+            .with_rule(
+                Condition::HasFlag {
+                    key: "is_running".to_string(),
+                },
+                "run",
+            )
+            .with_rule(
+                Condition::ScalarCmp {
+                    key: "hp".to_string(),
+                    op: CmpOp::Le,
+                    value: 0.0,
+                },
+                "dead",
+            )
+            .with_rule(
+                Condition::HasFlag {
+                    key: "is_jumping".to_string(),
+                },
+                "jump",
+            );
+
+        assert_eq!(ctrl.rules.len(), 3);
+        assert_eq!(ctrl.rules[0].set_key, "run");
+        assert_eq!(ctrl.rules[1].set_key, "dead");
+        assert_eq!(ctrl.rules[2].set_key, "jump");
+        // Fallback unchanged
+        assert_eq!(ctrl.fallback_key, "idle");
+    }
+
+    #[test]
+    fn test_animation_controller_preserves_current_key() {
+        let ctrl = AnimationController::new("standing").with_rule(
+            Condition::HasFlag {
+                key: "x".to_string(),
+            },
+            "y",
+        );
+        // current_key should still be the initial fallback
+        assert_eq!(ctrl.current_key, "standing");
+    }
+}
+
 /*
 TODO: Create methods to load/save AnimationController and Animation from/to JSON or other formats
 */

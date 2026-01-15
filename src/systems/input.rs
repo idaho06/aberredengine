@@ -18,6 +18,7 @@ pub fn update_input_state(
     rl: NonSendMut<raylib::RaylibHandle>,
     mut commands: Commands,
 ) {
+    // eprintln!("update_input_state: Updating input state from Raylib");
     // Update the input resource each frame
     let is_key_down = |key: KeyboardKey| rl.is_key_down(key);
     let is_key_pressed = |key: KeyboardKey| rl.is_key_pressed(key);
@@ -42,13 +43,19 @@ pub fn update_input_state(
 
     // Emit input events for actions that were just pressed or released
     if is_key_pressed(input.mode_debug.key_binding) {
+        eprintln!("update_input_state: Debug mode key pressed");
+        input.mode_debug.just_pressed = true;
         commands.trigger(SwitchDebugEvent {});
+    } else {
+        input.mode_debug.just_pressed = false;
     }
     if is_key_pressed(input.fullscreen_toggle.key_binding) {
+        eprintln!("update_input_state: Fullscreen toggle key pressed");
         commands.trigger(SwitchFullScreenEvent {});
     }
 
     if is_key_pressed(input.action_special.key_binding) {
+        eprintln!("update_input_state: Action Special key pressed");
         input.action_special.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Special,
@@ -58,6 +65,7 @@ pub fn update_input_state(
         input.action_special.just_pressed = false;
     }
     if is_key_released(input.action_special.key_binding) {
+        eprintln!("update_input_state: Action Special key released");
         input.action_special.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Special,
@@ -67,6 +75,7 @@ pub fn update_input_state(
         input.action_special.just_released = false;
     }
     if is_key_pressed(input.action_1.key_binding) {
+        eprintln!("update_input_state: Action 1 key pressed");
         input.action_1.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Action1,
@@ -76,6 +85,7 @@ pub fn update_input_state(
         input.action_1.just_pressed = false;
     }
     if is_key_released(input.action_1.key_binding) {
+        eprintln!("update_input_state: Action 1 key released");
         input.action_1.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Action1,

@@ -219,3 +219,318 @@ impl RigidBody {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    fn vec_approx_eq(a: Vector2, b: Vector2) -> bool {
+        approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
+    }
+
+    // ==================== ACCELERATION FORCE TESTS ====================
+
+    #[test]
+    fn test_acceleration_force_new() {
+        let force = AccelerationForce::new(Vector2 { x: 10.0, y: 20.0 });
+        assert!(approx_eq(force.value.x, 10.0));
+        assert!(approx_eq(force.value.y, 20.0));
+        assert!(force.enabled); // enabled by default
+    }
+
+    #[test]
+    fn test_acceleration_force_with_enabled_true() {
+        let force = AccelerationForce::with_enabled(Vector2 { x: 5.0, y: 5.0 }, true);
+        assert!(force.enabled);
+    }
+
+    #[test]
+    fn test_acceleration_force_with_enabled_false() {
+        let force = AccelerationForce::with_enabled(Vector2 { x: 5.0, y: 5.0 }, false);
+        assert!(!force.enabled);
+    }
+
+    // ==================== RIGIDBODY CONSTRUCTOR TESTS ====================
+
+    #[test]
+    fn test_rigidbody_new() {
+        let rb = RigidBody::new();
+        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(rb.forces.is_empty());
+        assert!(approx_eq(rb.friction, 0.0));
+        assert!(rb.max_speed.is_none());
+        assert!(!rb.frozen);
+    }
+
+    #[test]
+    fn test_rigidbody_default() {
+        let rb = RigidBody::default();
+        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(rb.forces.is_empty());
+    }
+
+    #[test]
+    fn test_rigidbody_with_physics() {
+        let rb = RigidBody::with_physics(5.0, Some(300.0));
+        assert!(approx_eq(rb.friction, 5.0));
+        assert_eq!(rb.max_speed, Some(300.0));
+        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(!rb.frozen);
+    }
+
+    #[test]
+    fn test_rigidbody_with_physics_no_max_speed() {
+        let rb = RigidBody::with_physics(10.0, None);
+        assert!(approx_eq(rb.friction, 10.0));
+        assert!(rb.max_speed.is_none());
+    }
+
+    // ==================== FORCE MANAGEMENT TESTS ====================
+
+    #[test]
+    fn test_add_force() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        assert_eq!(rb.forces.len(), 1);
+        let force = rb.get_force("gravity").unwrap();
+        assert!(approx_eq(force.value.y, 980.0));
+        assert!(force.enabled);
+    }
+
+    #[test]
+    fn test_add_force_overwrites() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 200.0 });
+        assert_eq!(rb.forces.len(), 1);
+        let force = rb.get_force("gravity").unwrap();
+        assert!(approx_eq(force.value.y, 200.0));
+    }
+
+    #[test]
+    fn test_add_force_with_state_enabled() {
+        let mut rb = RigidBody::new();
+        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, true);
+        let force = rb.get_force("wind").unwrap();
+        assert!(force.enabled);
+    }
+
+    #[test]
+    fn test_add_force_with_state_disabled() {
+        let mut rb = RigidBody::new();
+        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, false);
+        let force = rb.get_force("wind").unwrap();
+        assert!(!force.enabled);
+    }
+
+    #[test]
+    fn test_remove_force() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        assert_eq!(rb.forces.len(), 1);
+        rb.remove_force("gravity");
+        assert!(rb.forces.is_empty());
+    }
+
+    #[test]
+    fn test_remove_nonexistent_force() {
+        let mut rb = RigidBody::new();
+        rb.remove_force("nonexistent"); // should not panic
+        assert!(rb.forces.is_empty());
+    }
+
+    #[test]
+    fn test_set_force_enabled() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        assert!(rb.is_force_enabled("gravity"));
+
+        let result = rb.set_force_enabled("gravity", false);
+        assert!(result);
+        assert!(!rb.is_force_enabled("gravity"));
+
+        let result = rb.set_force_enabled("gravity", true);
+        assert!(result);
+        assert!(rb.is_force_enabled("gravity"));
+    }
+
+    #[test]
+    fn test_set_force_enabled_nonexistent() {
+        let mut rb = RigidBody::new();
+        let result = rb.set_force_enabled("nonexistent", true);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_is_force_enabled_nonexistent() {
+        let rb = RigidBody::new();
+        assert!(!rb.is_force_enabled("nonexistent"));
+    }
+
+    #[test]
+    fn test_set_force_value() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
+
+        let result = rb.set_force_value("gravity", Vector2 { x: 0.0, y: 200.0 });
+        assert!(result);
+        let force = rb.get_force("gravity").unwrap();
+        assert!(approx_eq(force.value.y, 200.0));
+    }
+
+    #[test]
+    fn test_set_force_value_nonexistent() {
+        let mut rb = RigidBody::new();
+        let result = rb.set_force_value("nonexistent", Vector2 { x: 0.0, y: 0.0 });
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_get_force() {
+        let mut rb = RigidBody::new();
+        rb.add_force("test", Vector2 { x: 1.0, y: 2.0 });
+        let force = rb.get_force("test");
+        assert!(force.is_some());
+        assert!(approx_eq(force.unwrap().value.x, 1.0));
+    }
+
+    #[test]
+    fn test_get_force_nonexistent() {
+        let rb = RigidBody::new();
+        assert!(rb.get_force("nonexistent").is_none());
+    }
+
+    // ==================== TOTAL ACCELERATION TESTS ====================
+
+    #[test]
+    fn test_total_acceleration_empty() {
+        let rb = RigidBody::new();
+        let total = rb.total_acceleration();
+        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 0.0 }));
+    }
+
+    #[test]
+    fn test_total_acceleration_single_force() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        let total = rb.total_acceleration();
+        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 980.0 }));
+    }
+
+    #[test]
+    fn test_total_acceleration_multiple_forces() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
+        rb.add_force("wind", Vector2 { x: 50.0, y: 0.0 });
+        rb.add_force("thrust", Vector2 { x: 0.0, y: -30.0 });
+        let total = rb.total_acceleration();
+        assert!(vec_approx_eq(total, Vector2 { x: 50.0, y: 70.0 }));
+    }
+
+    #[test]
+    fn test_total_acceleration_disabled_forces_excluded() {
+        let mut rb = RigidBody::new();
+        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
+        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, false);
+        let total = rb.total_acceleration();
+        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 100.0 }));
+    }
+
+    #[test]
+    fn test_total_acceleration_all_disabled() {
+        let mut rb = RigidBody::new();
+        rb.add_force_with_state("gravity", Vector2 { x: 0.0, y: 100.0 }, false);
+        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, false);
+        let total = rb.total_acceleration();
+        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 0.0 }));
+    }
+
+    // ==================== VELOCITY TESTS ====================
+
+    #[test]
+    fn test_set_velocity() {
+        let mut rb = RigidBody::new();
+        rb.set_velocity(Vector2 { x: 100.0, y: 200.0 });
+        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 100.0, y: 200.0 }));
+    }
+
+    #[test]
+    fn test_velocity_getter() {
+        let mut rb = RigidBody::new();
+        rb.velocity = Vector2 { x: 50.0, y: 75.0 };
+        let vel = rb.velocity();
+        assert!(vec_approx_eq(vel, Vector2 { x: 50.0, y: 75.0 }));
+    }
+
+    #[test]
+    fn test_translate() {
+        let mut rb = RigidBody::new();
+        rb.velocity = Vector2 { x: 10.0, y: 20.0 };
+        rb.translate(5.0, -3.0);
+        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 15.0, y: 17.0 }));
+    }
+
+    // ==================== FREEZE/UNFREEZE TESTS ====================
+
+    #[test]
+    fn test_freeze() {
+        let mut rb = RigidBody::new();
+        assert!(!rb.frozen);
+        rb.freeze();
+        assert!(rb.frozen);
+    }
+
+    #[test]
+    fn test_unfreeze() {
+        let mut rb = RigidBody::new();
+        rb.frozen = true;
+        rb.unfreeze();
+        assert!(!rb.frozen);
+    }
+
+    // ==================== SET SPEED TESTS ====================
+
+    #[test]
+    fn test_set_speed_maintains_direction() {
+        let mut rb = RigidBody::new();
+        rb.velocity = Vector2 { x: 3.0, y: 4.0 }; // magnitude = 5
+        rb.set_speed(10.0);
+        // Direction should be preserved: (0.6, 0.8) * 10 = (6, 8)
+        assert!(approx_eq(rb.velocity.x, 6.0));
+        assert!(approx_eq(rb.velocity.y, 8.0));
+        assert!(approx_eq(rb.velocity.length(), 10.0));
+    }
+
+    #[test]
+    fn test_set_speed_with_zero_velocity() {
+        let mut rb = RigidBody::new();
+        rb.velocity = Vector2 { x: 0.0, y: 0.0 };
+        rb.set_speed(10.0);
+        // Should be no-op when velocity is zero
+        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+    }
+
+    #[test]
+    fn test_set_speed_to_zero() {
+        let mut rb = RigidBody::new();
+        rb.velocity = Vector2 { x: 3.0, y: 4.0 };
+        rb.set_speed(0.0);
+        assert!(approx_eq(rb.velocity.length(), 0.0));
+    }
+
+    #[test]
+    fn test_set_speed_negative_direction() {
+        let mut rb = RigidBody::new();
+        rb.velocity = Vector2 { x: -3.0, y: -4.0 }; // magnitude = 5
+        rb.set_speed(10.0);
+        // Direction preserved: (-0.6, -0.8) * 10 = (-6, -8)
+        assert!(approx_eq(rb.velocity.x, -6.0));
+        assert!(approx_eq(rb.velocity.y, -8.0));
+    }
+}

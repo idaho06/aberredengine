@@ -824,6 +824,7 @@ pub fn switch_scene(
     mut rigid_bodies_query: Query<&mut RigidBody>,
     mut positions_query: Query<&mut MapPosition>,
 ) {
+    eprintln!("switch_scene: System called!");
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
     /* commands.run_system(
