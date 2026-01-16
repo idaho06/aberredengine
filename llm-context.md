@@ -1,17 +1,17 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
 # Machine-readable context for AI assistants working on this codebase
-# Last updated: 2026-01-14 (synced with codebase)
+# Last updated: 2026-01-16 (synced with codebase)
 
 ## QUICK REFERENCE
 
-STACK: Rust (edition 2024) + Bevy ECS 0.17.3 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3
+STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3
 GAME_TYPE: Asteroids-style arcade clone (2D)
 ENTRY: src/main.rs
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-01-14)
+## STATUS (2026-01-16)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03), sound (option.wav); music/tilemap/brick assets are not loaded.
@@ -200,13 +200,13 @@ TextureStore(FxHashMap<String, Texture2D>)
 FontStore(FxHashMap<String, Font>) - NON_SEND
 AnimationStore(FxHashMap<String, AnimationDef>)
 TilemapStore(FxHashMap<String, TilemapData>)
-GameState { Setup, Playing, Paused, Quitting }
+GameState { None, Setup, Playing, Quitting }
 NextGameState(Option<GameState>)
 WorldSignals { scalars, integers, strings, flags, entities, group_counts }
 SignalSnapshot { scalars, integers, strings, flags, entities, group_counts } - read-only cache for Lua
 TrackedGroups(FxHashSet<String>)
 Camera2D { target, offset, rotation, zoom }
-ScreenSize { width: u32, height: u32 } - game's internal render resolution
+ScreenSize { w: i32, h: i32 } - game's internal render resolution
 WindowSize { w: i32, h: i32 } - actual window dimensions
 RenderTarget { texture: RenderTexture2D, game_width, game_height, filter: RenderFilter } - NON_SEND
 RenderFilter { Nearest, Bilinear }

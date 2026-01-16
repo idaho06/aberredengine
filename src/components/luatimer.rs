@@ -18,11 +18,12 @@
 //! # Lua Callback Signature
 //!
 //! ```lua
-//! function my_timer_callback(entity_id)
+//! function my_timer_callback(ctx, input)
+//!     -- ctx contains entity state (id, pos, vel, signals, phase, timer, etc.)
+//!     -- input contains digital/analog input state
 //!     -- Full access to engine API
 //!     engine.play_sound("beep")
 //!     engine.spawn():with_position(100, 100):build()
-//!     -- etc.
 //! end
 //! ```
 //!
@@ -39,9 +40,9 @@
 //!     :build()
 //!
 //! -- Timer callback
-//! function delayed_explosion(entity_id)
+//! function delayed_explosion(ctx, input)
 //!     engine.play_sound("boom")
-//!     -- Spawn particle effect, modify components, etc.
+//!     -- ctx.id is the entity ID, ctx.pos.x/y for position, etc.
 //! end
 //! ```
 //!
