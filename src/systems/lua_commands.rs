@@ -229,10 +229,10 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
                 rotation,
                 zoom,
             }));
-            eprintln!(
+            /* eprintln!(
                 "[Rust] Camera set to target ({}, {}), offset ({}, {})",
                 target_x, target_y, offset_x, offset_y
-            );
+            ); */
         }
     }
 }
@@ -646,13 +646,19 @@ pub fn process_entity_commands(
                     rb.set_force_value(&name, Vector2 { x, y });
                 }
             }
-            EntityCmd::SetFriction { entity_id, friction } => {
+            EntityCmd::SetFriction {
+                entity_id,
+                friction,
+            } => {
                 let entity = Entity::from_bits(entity_id);
                 if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
                     rb.friction = friction;
                 }
             }
-            EntityCmd::SetMaxSpeed { entity_id, max_speed } => {
+            EntityCmd::SetMaxSpeed {
+                entity_id,
+                max_speed,
+            } => {
                 let entity = Entity::from_bits(entity_id);
                 if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
                     rb.max_speed = max_speed;
@@ -768,7 +774,14 @@ pub fn process_spawn_command(
         };
         rb.frozen = rb_data.frozen;
         for force in rb_data.forces {
-            rb.add_force_with_state(&force.name, Vector2 { x: force.x, y: force.y }, force.enabled);
+            rb.add_force_with_state(
+                &force.name,
+                Vector2 {
+                    x: force.x,
+                    y: force.y,
+                },
+                force.enabled,
+            );
         }
         entity_commands.insert(rb);
     }
