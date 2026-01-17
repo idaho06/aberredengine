@@ -46,6 +46,7 @@ use crate::components::signalbinding::SignalBinding;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
+use crate::components::ttl::Ttl;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
@@ -597,6 +598,7 @@ pub fn process_entity_commands(
             EntityCmd::SetRotation { entity_id, degrees } => {
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).insert(Rotation { degrees });
+                //commands.entity(entity).try_insert(Rotation { degrees });
             }
             EntityCmd::SetScale { entity_id, sx, sy } => {
                 let entity = Entity::from_bits(entity_id);
@@ -723,6 +725,10 @@ pub fn process_entity_commands(
                 if let Ok(mut signals) = signals_query.get_mut(entity) {
                     signals.set_integer(&key, value);
                 }
+            }
+            EntityCmd::InsertTtl { entity_id, seconds } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(Ttl::new(seconds));
             }
         }
     }
@@ -1004,6 +1010,11 @@ pub fn process_spawn_command(
     // LuaTimer
     if let Some((duration, callback)) = cmd.lua_timer {
         entity_commands.insert(LuaTimer::new(duration, callback));
+    }
+
+    // Ttl (time-to-live)
+    if let Some(seconds) = cmd.ttl {
+        entity_commands.insert(Ttl::new(seconds));
     }
 
     // SignalBinding

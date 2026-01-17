@@ -51,6 +51,12 @@ pub fn menu_spawn_system(
         let normal_color = menu.normal_color;
         let use_screen_space = menu.use_screen_space;
 
+        eprintln!(
+            "menu_spawn_system: Spawning menu entity {:?} with {} items",
+            entity,
+            menu.items.len()
+        );
+
         // Spawn DynamicText or Sprite for each menu item if needed
         for menu_item in menu.items.iter_mut() {
             let mut ecmd = commands.spawn_empty();
@@ -62,6 +68,10 @@ pub fn menu_spawn_system(
                     font_size,
                     normal_color,
                 ));
+                eprintln!(
+                    "menu_spawn_system: Spawned DynamicText for menu item id={}",
+                    menu_item.id
+                );
             } else {
                 // Static text sprite
                 let font_handle = font_store.get(&font_string).expect(&format!(
@@ -91,6 +101,10 @@ pub fn menu_spawn_system(
                     flip_h: false,
                     flip_v: false,
                 });
+                eprintln!(
+                    "menu_spawn_system: Spawned Sprite for menu item id={}, size=({}, {})",
+                    menu_item.id, width, height
+                );
             }
 
             if use_screen_space {
@@ -106,15 +120,27 @@ pub fn menu_spawn_system(
             let text_entity = ecmd.id();
             ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             menu_item.entity = Some(text_entity);
+            eprintln!(
+                "menu_spawn_system: Menu item id={} assigned entity {:?}",
+                menu_item.id, text_entity
+            );
         } // end for each menu item
 
         // Add a signals component to the menu entity for state tracking
         commands
             .entity(entity)
             .insert(Signals::default().with_flag("waiting_selection"));
+        eprintln!(
+            "menu_spawn_system: Added Signals component to menu entity {:?}",
+            entity
+        );
 
         // Spawn cursor entity if needed
         if let Some(cursor_entity) = menu.cursor_entity {
+            eprintln!(
+                "menu_spawn_system: Spawning cursor entity {:?} for menu {:?}",
+                cursor_entity, entity
+            );
             let cursor_position = menu.items[menu.selected_index].position; // make sure sprite has correct origin
             if use_screen_space {
                 commands.entity(cursor_entity).insert(ScreenPosition {
@@ -126,6 +152,10 @@ pub fn menu_spawn_system(
                 });
                 commands.entity(cursor_entity).insert(ZIndex(23));
             }
+            eprintln!(
+                "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
+                cursor_entity, cursor_position
+            );
         }
         eprintln!(
             "menu_spawn_system: Spawned menu entity {:?} with {} items",

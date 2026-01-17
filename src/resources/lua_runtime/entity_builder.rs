@@ -501,6 +501,13 @@ impl LuaUserData for LuaEntityBuilder {
             },
         );
 
+        // :with_ttl(seconds) - Add Ttl (time-to-live) component
+        // Entity will be automatically despawned after the specified duration
+        methods.add_method_mut("with_ttl", |_, this, seconds: f32| {
+            this.cmd.ttl = Some(seconds);
+            Ok(this.clone())
+        });
+
         // :with_signal_binding(key) - Bind DynamicText to a WorldSignal value
         // The text content will auto-update when the signal changes
         methods.add_method_mut("with_signal_binding", |_, this, key: String| {
@@ -1049,6 +1056,13 @@ impl LuaUserData for LuaCollisionEntityBuilder {
                 Ok(this.clone())
             },
         );
+
+        // :with_ttl(seconds) - Add Ttl (time-to-live) component
+        // Entity will be automatically despawned after the specified duration
+        methods.add_method_mut("with_ttl", |_, this, seconds: f32| {
+            this.cmd.ttl = Some(seconds);
+            Ok(this.clone())
+        });
 
         // :with_animation(animation_key) - Add Animation component
         methods.add_method_mut("with_animation", |_, this, animation_key: String| {

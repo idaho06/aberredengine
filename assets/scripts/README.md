@@ -174,6 +174,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_signal_set_string()` instead of `engine.entity_signal_set_string()`
 - `engine.collision_entity_insert_lua_timer()` instead of `engine.entity_insert_lua_timer()`
 - `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
+- `engine.collision_entity_insert_ttl()` instead of `engine.entity_insert_ttl()`
 - `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
 - `engine.collision_release_stuckto()` instead of `engine.release_stuckto()`
 - `engine.collision_entity_set_animation()` instead of `engine.entity_set_animation()`
@@ -1357,6 +1358,28 @@ end
 
 **See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
 
+#### `:with_ttl(seconds)`
+
+Add time-to-live component - entity automatically despawns after the specified duration.
+
+**Parameters:**
+
+- `seconds` (number): Time in seconds before entity despawns
+
+**Example:**
+
+```lua
+-- Spawn a projectile that despawns after 5 seconds
+engine.spawn()
+    :with_position(100, 100)
+    :with_sprite("bullet", 8, 8, 4, 4)
+    :with_velocity(200, 0)
+    :with_ttl(5.0)
+    :build()
+```
+
+**Note:** Unlike LuaTimer, TTL has no callback - it's a "fire and forget" mechanism for temporary entities like projectiles, particles, or visual effects.
+
 #### `:with_lua_collision_rule(group_a, group_b, callback)`
 
 Register collision callback between two groups.
@@ -1743,6 +1766,22 @@ function on_timer_title_test(ctx, input)
     -- Remove timer so it doesn't repeat
     engine.entity_remove_lua_timer(ctx.id)
 end
+```
+
+### `engine.entity_insert_ttl(entity_id, seconds)`
+
+Insert TTL component on entity at runtime.
+
+**Parameters:**
+
+- `entity_id` (integer): Target entity ID
+- `seconds` (number): Time in seconds before entity despawns
+
+**Example:**
+
+```lua
+-- Give an enemy 30 seconds to live
+engine.entity_insert_ttl(enemy_id, 30.0)
 ```
 
 ### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)`
@@ -2620,6 +2659,26 @@ Remove LuaTimer component from an entity during collision handling.
 function on_timer_cancel_zone(ctx)
     local entity_id = ctx.a.id
     engine.collision_entity_remove_lua_timer(entity_id)
+end
+```
+
+#### `engine.collision_entity_insert_ttl(entity_id, seconds)`
+
+Insert TTL component on an entity during collision handling.
+
+**Parameters:**
+
+- `entity_id` (integer): Target entity ID
+- `seconds` (number): Time in seconds before entity despawns
+
+**Example:**
+
+```lua
+function on_bullet_hit(ctx)
+    -- Bullet becomes a fading particle for 0.5 seconds
+    engine.collision_entity_set_velocity(ctx.a.id, 0, 0)
+    engine.collision_entity_set_animation(ctx.a.id, "bullet_fade")
+    engine.collision_entity_insert_ttl(ctx.a.id, 0.5)
 end
 ```
 

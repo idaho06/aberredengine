@@ -195,6 +195,8 @@ pub enum EntityCmd {
         key: String,
         value: i32,
     },
+    /// Insert a Ttl (time-to-live) component
+    InsertTtl { entity_id: u64, seconds: f32 },
 }
 
 /// Commands for tracked groups from Lua.

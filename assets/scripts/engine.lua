@@ -390,6 +390,11 @@ function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_timer(duration, callback) end
 
+---Add TTL (time-to-live) component - entity auto-despawns after duration
+---@param seconds number Time in seconds before entity despawns
+---@return EntityBuilder
+function EntityBuilder:with_ttl(seconds) end
+
 ---Bind DynamicText to a WorldSignal value
 ---@param key string Signal key to bind to
 ---@return EntityBuilder
@@ -725,6 +730,11 @@ function engine.entity_insert_lua_timer(entity_id, duration, callback) end
 ---@param entity_id integer Entity ID
 function engine.entity_remove_lua_timer(entity_id) end
 
+---Insert TTL component on an entity at runtime
+---@param entity_id integer Entity ID
+---@param seconds number Time in seconds before entity despawns
+function engine.entity_insert_ttl(entity_id, seconds) end
+
 ---Insert or replace TweenPosition component at runtime
 ---@param entity_id integer Entity ID
 ---@param from_x number Starting X position
@@ -855,6 +865,11 @@ function engine.collision_entity_signal_set_flag(entity_id, flag) end
 ---@param entity_id integer Entity ID
 ---@param flag string Flag key
 function engine.collision_entity_signal_clear_flag(entity_id, flag) end
+
+---Insert TTL component on an entity during collision handling
+---@param entity_id integer Entity ID
+---@param seconds number Time in seconds before entity despawns
+function engine.collision_entity_insert_ttl(entity_id, seconds) end
 
 ---Insert or replace TweenPosition component during collision handling
 ---@param entity_id integer Entity ID
@@ -1100,6 +1115,11 @@ function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@param callback string Lua function name to call (receives entity_id as parameter)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_timer(duration, callback) end
+
+---Add TTL (time-to-live) component - entity auto-despawns after duration
+---@param seconds number Time in seconds before entity despawns
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_ttl(seconds) end
 
 ---Bind DynamicText to a WorldSignal value
 ---@param key string Signal key to bind to

@@ -177,6 +177,7 @@ DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
 LuaTimer { duration: f32, elapsed: f32, callback: String }
+Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
 Menu { items: Vec<MenuItem>, selected: usize, actions: FxHashMap<String, MenuAction>, ... }
 GridLayout { path: String, group: String, zindex: i32 }
@@ -230,6 +231,7 @@ EntityCmd {
     SetAnimation { entity_id, animation_key }
     InsertLuaTimer { entity_id, duration, callback }
     RemoveLuaTimer { entity_id }
+    InsertTtl { entity_id, seconds }
     InsertTweenPosition { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards }
     InsertTweenRotation { entity_id, from, to, duration, easing, loop_mode, backwards }
     InsertTweenScale { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode }
@@ -256,7 +258,7 @@ EntityCmd {
 SpawnCmd (spawn_data.rs) {
     group, position, screen_position, sprite, text, zindex, rigidbody, collider,
     mouse_controlled, rotation, scale, persistent, signal_scalars, signal_integers,
-    signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer,
+    signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
     register_as, lua_collision_rule, animation, animation_controller
 }
@@ -324,6 +326,7 @@ engine.entity_set_animation(id, key)
 engine.entity_restart_animation(id)
 engine.entity_insert_lua_timer(id, duration, callback)
 engine.entity_remove_lua_timer(id)
+engine.entity_insert_ttl(id, seconds)
 engine.entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
 engine.entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode, backwards)
 engine.entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
@@ -370,6 +373,7 @@ engine.collision_entity_insert_stuckto(id, target_id, follow_x, follow_y, offset
 engine.collision_release_stuckto(id)
 engine.collision_entity_insert_lua_timer(id, duration, callback)
 engine.collision_entity_remove_lua_timer(id)
+engine.collision_entity_insert_ttl(id, seconds)
 engine.collision_entity_restart_animation(id)
 engine.collision_entity_set_animation(id, animation_key)
 engine.collision_entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
@@ -459,6 +463,7 @@ engine.spawn_tiles(id)
 :with_tween_scale_loop(mode)
 :with_tween_scale_backwards()
 :with_lua_timer(duration, callback)
+:with_ttl(seconds)
 :with_lua_collision_rule(group_a, group_b, callback)
 :with_grid_layout(path, group, zindex)
 :register_as(key)

@@ -297,4 +297,6 @@ pub struct SpawnCmd {
     pub animation: Option<AnimationData>,
     /// AnimationController component data
     pub animation_controller: Option<AnimationControllerData>,
+    /// TTL (time-to-live) in seconds - entity auto-despawns after this duration
+    pub ttl: Option<f32>,
 }

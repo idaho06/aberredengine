@@ -45,4 +45,5 @@ pub mod render;
 pub mod signalbinding;
 pub mod stuckto;
 pub mod time;
+pub mod ttl;
 pub mod tween;

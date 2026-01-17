@@ -86,6 +86,7 @@ use crate::systems::render::render_system;
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_world_time;
+use crate::systems::ttl::ttl_system;
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
 use crate::systems::tween::tween_scale_system;
@@ -249,6 +250,7 @@ fn main() {
     update.add_systems(tween_rotation_system);
     update.add_systems(tween_scale_system);
     update.add_systems(movement);
+    update.add_systems(ttl_system.after(movement));
     update.add_systems(collision_detector.after(mouse_controller).after(movement));
     // Run lua_phase_system AFTER collision detection so phase transitions from collision callbacks
     // are processed in the same frame (before animation_controller evaluates signals)
@@ -261,7 +263,8 @@ fn main() {
     update.add_systems(
         (game::update)
             .run_if(state_is_playing)
-            .after(check_pending_state),
+            .after(check_pending_state)
+            .after(lua_phase_system),
     );
     update.add_systems(render_system.after(collision_detector));
 

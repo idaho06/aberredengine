@@ -825,6 +825,12 @@ pub fn switch_scene(
     mut positions_query: Query<&mut MapPosition>,
 ) {
     eprintln!("switch_scene: System called!");
+
+    // Clear all command queues FIRST to discard any stale commands from the previous scene
+    // that might reference entities about to be despawned. This prevents panics when
+    // entity commands are applied after their target entities have been despawned.
+    lua_runtime.clear_all_commands();
+
     audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
     /* commands.run_system(

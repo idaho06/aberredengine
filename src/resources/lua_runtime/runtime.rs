@@ -951,6 +951,19 @@ impl LuaRuntime {
             })?,
         )?;
 
+        // engine.entity_insert_ttl(entity_id, seconds) - Insert a Ttl component
+        engine.set(
+            "entity_insert_ttl",
+            self.lua.create_function(|lua, (entity_id, seconds): (u64, f32)| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::InsertTtl { entity_id, seconds });
+                Ok(())
+            })?,
+        )?;
+
         // engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
         engine.set(
             "entity_insert_tween_position",
@@ -1669,6 +1682,20 @@ impl LuaRuntime {
                     .collision_entity_commands
                     .borrow_mut()
                     .push(EntityCmd::RemoveLuaTimer { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_insert_ttl(entity_id, seconds)
+        // Insert a Ttl component during collision handling
+        engine.set(
+            "collision_entity_insert_ttl",
+            self.lua.create_function(|lua, (entity_id, seconds): (u64, f32)| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::InsertTtl { entity_id, seconds });
                 Ok(())
             })?,
         )?;
@@ -2488,6 +2515,26 @@ impl LuaRuntime {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Clears all command queues without processing them.
+    ///
+    /// This should be called at the start of scene switches to discard any
+    /// stale commands from the previous scene that might reference despawned entities.
+    /// Only clears the main command queues, not collision-specific queues.
+    pub fn clear_all_commands(&self) {
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            data.entity_commands.borrow_mut().clear();
+            data.spawn_commands.borrow_mut().clear();
+            data.signal_commands.borrow_mut().clear();
+            data.phase_commands.borrow_mut().clear();
+            data.audio_commands.borrow_mut().clear();
+            data.group_commands.borrow_mut().clear();
+            data.camera_commands.borrow_mut().clear();
+            data.tilemap_commands.borrow_mut().clear();
+            // Note: Asset and animation commands are only used during setup,
+            // so we don't clear them here.
+        }
     }
 
     /// Drains all queued collision phase commands.
