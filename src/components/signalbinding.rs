@@ -50,6 +50,7 @@ pub enum SignalSource {
     /// Read from the global [`WorldSignals`](crate::resources::worldsignals::WorldSignals) resource.
     World,
     /// Read from a specific entity's [`Signals`](super::signals::Signals) component.
+    #[allow(dead_code)]
     Entity(Entity),
 }
 
@@ -118,6 +119,7 @@ impl SignalBinding {
     /// # Arguments
     ///
     /// * `entity` - The entity whose `Signals` component to read from.
+    #[allow(dead_code)] // TODO: research use of entities as signal sources
     pub fn with_source_entity(mut self, entity: Entity) -> Self {
         self.source = SignalSource::Entity(entity);
         self

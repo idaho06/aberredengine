@@ -79,7 +79,10 @@ pub struct LuaPhase {
 
 impl LuaPhase {
     /// Create a new LuaPhase with the given initial phase and phase definitions.
-    pub fn new(initial_phase: impl Into<String>, phases: FxHashMap<String, PhaseCallbacks>) -> Self {
+    pub fn new(
+        initial_phase: impl Into<String>,
+        phases: FxHashMap<String, PhaseCallbacks>,
+    ) -> Self {
         Self {
             current: initial_phase.into(),
             previous: None,
@@ -100,10 +103,12 @@ impl LuaPhase {
         self.phases.get(phase)
     }
 
-    /// Request a transition to another phase.
-    ///
-    /// The transition occurs on the next frame when the lua_phase_system runs.
+    // Request a transition to another phase.
+    //
+    // The transition occurs on the next frame when the lua_phase_system runs.
+    /*
     pub fn transition_to(&mut self, next_phase: impl Into<String>) {
         self.next = Some(next_phase.into());
     }
+    */
 }

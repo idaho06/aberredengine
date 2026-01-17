@@ -54,6 +54,7 @@ pub struct StuckTo {
     pub stored_velocity: Option<Vector2>,
 }
 
+#[allow(dead_code)]
 impl StuckTo {
     /// Create a new StuckTo component that follows both axes.
     pub fn new(target: Entity) -> Self {
@@ -67,6 +68,7 @@ impl StuckTo {
     }
 
     /// Create a StuckTo that only follows the X axis.
+
     pub fn follow_x_only(target: Entity) -> Self {
         Self {
             target,

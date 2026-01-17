@@ -142,6 +142,7 @@ impl RigidBody {
     }
 
     /// Check if a force exists and is enabled.
+    #[allow(dead_code)]
     pub fn is_force_enabled(&self, name: &str) -> bool {
         self.forces.get(name).map(|f| f.enabled).unwrap_or(false)
     }
@@ -158,6 +159,7 @@ impl RigidBody {
     }
 
     /// Get the value of a force by name.
+    #[allow(dead_code)]
     pub fn get_force(&self, name: &str) -> Option<&AccelerationForce> {
         self.forces.get(name)
     }
@@ -174,6 +176,7 @@ impl RigidBody {
     }
 
     /// Set the velocity of the RigidBody.
+    #[allow(dead_code)]
     pub fn set_velocity(&mut self, velocity: Vector2) {
         self.velocity = velocity;
     }
@@ -213,9 +216,7 @@ impl RigidBody {
         if current_speed > 0.0 {
             self.velocity = self.velocity.normalized() * new_speed;
         } else {
-            eprintln!(
-                "[WARN] RigidBody::set_speed called with zero velocity - operation ignored"
-            );
+            eprintln!("[WARN] RigidBody::set_speed called with zero velocity - operation ignored");
         }
     }
 }

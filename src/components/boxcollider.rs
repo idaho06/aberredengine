@@ -84,6 +84,7 @@ impl BoxCollider {
     }
 
     /// AABB vs AABB overlap test against another BoxCollider at a different entity position.
+    #[allow(dead_code)]
     pub fn overlaps(&self, position: Vector2, other: &Self, other_position: Vector2) -> bool {
         let (min_a, max_a) = self.aabb(position);
         let (min_b, max_b) = other.aabb(other_position);

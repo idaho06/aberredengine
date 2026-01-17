@@ -67,7 +67,7 @@ pub enum GridValue {
     Bool(bool),
 }
 
-impl GridValue {
+/* impl GridValue {
     /// Attempts to retrieve the value as an integer.
     pub fn as_int(&self) -> Option<i64> {
         match self {
@@ -100,7 +100,7 @@ impl GridValue {
         }
     }
 }
-
+ */
 impl GridLayoutData {
     /// Loads grid layout data from a JSON file at the specified path.
     pub fn load_from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {

@@ -22,7 +22,7 @@ pub struct MenuItem {
     pub label: String,
     pub position: Vector2,
     pub dynamic_text: bool,
-    pub enabled: bool,
+    // pub enabled: bool,
     pub entity: Option<Entity>, // If not dynamic_text, the entity holding the text sprite
 }
 
@@ -44,7 +44,7 @@ pub struct Menu {
     /// Font size in pixels.
     pub font_size: f32,
     /// Vertical spacing between menu items.
-    pub item_spacing: f32,
+    // pub item_spacing: f32,
     /// Color for unselected items.
     pub normal_color: Color,
     /// Color for the selected item.
@@ -54,7 +54,7 @@ pub struct Menu {
     /// Optional sound to play on selection change.
     pub selection_change_sound: Option<String>,
     /// Origin position of the menu.
-    pub origin: Vector2,
+    // pub origin: Vector2,
     /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
 }
@@ -79,7 +79,7 @@ impl Menu {
                     y: origin.y + i as f32 * item_spacing,
                 },
                 dynamic_text: true,
-                enabled: true,
+                // enabled: true,
                 entity: None,
             })
             .collect();
@@ -89,12 +89,12 @@ impl Menu {
             selected_index: 0,
             font: font.into(),
             font_size,
-            item_spacing,
+            // item_spacing,
             normal_color: Color::WHITE,
             selected_color: Color::YELLOW,
             cursor_entity: None,
             selection_change_sound: None,
-            origin,
+            // origin,
             use_screen_space,
         }
     }

@@ -31,7 +31,7 @@ pub struct InputControlled {
     pub right_velocity: Vector2,
 }
 
-impl InputControlled {
+/* impl InputControlled {
     /// Create a KeyboardControlled component with specified velocities.
     pub fn new(up: Vector2, down: Vector2, left: Vector2, right: Vector2) -> Self {
         Self {
@@ -41,7 +41,7 @@ impl InputControlled {
             right_velocity: right,
         }
     }
-}
+} */
 /// Movement controlled by mouse position.
 ///
 /// When attached to an entity, systems will update the entity's position
@@ -54,12 +54,12 @@ pub struct MouseControlled {
     pub follow_y: bool,
 }
 
-impl MouseControlled {
+/* impl MouseControlled {
     /// Create a new MouseControlled component.
     pub fn new(follow_x: bool, follow_y: bool) -> Self {
         Self { follow_x, follow_y }
     }
-}
+} */
 
 /// Acceleration-based movement from player keyboard input.
 ///
@@ -83,19 +83,20 @@ pub struct AccelerationControlled {
 
 impl AccelerationControlled {
     /// Create an AccelerationControlled component with specified acceleration values.
-    pub fn new(up: Vector2, down: Vector2, left: Vector2, right: Vector2) -> Self {
+    /* pub fn new(up: Vector2, down: Vector2, left: Vector2, right: Vector2) -> Self {
         Self {
             up_acceleration: up,
             down_acceleration: down,
             left_acceleration: left,
             right_acceleration: right,
         }
-    }
+    } */
 
     /// Create an AccelerationControlled with symmetric acceleration magnitude.
     ///
     /// # Arguments
     /// * `accel` - Acceleration magnitude in world units per second squared
+    #[allow(dead_code)]
     pub fn symmetric(accel: f32) -> Self {
         Self {
             up_acceleration: Vector2 { x: 0.0, y: -accel },
