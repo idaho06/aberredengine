@@ -68,6 +68,7 @@ pub struct AnalogInputs {
 #[derive(Debug, Clone, Default)]
 pub struct InputSnapshot {
     pub digital: DigitalInputs,
+    #[allow(dead_code)] // Reserved for future use
     pub analog: AnalogInputs,
 }
 
@@ -88,14 +89,16 @@ impl InputSnapshot {
                         || input.secondarydirection_up.just_released,
                 },
                 down: DigitalButtonState {
-                    pressed: input.maindirection_down.active || input.secondarydirection_down.active,
+                    pressed: input.maindirection_down.active
+                        || input.secondarydirection_down.active,
                     just_pressed: input.maindirection_down.just_pressed
                         || input.secondarydirection_down.just_pressed,
                     just_released: input.maindirection_down.just_released
                         || input.secondarydirection_down.just_released,
                 },
                 left: DigitalButtonState {
-                    pressed: input.maindirection_left.active || input.secondarydirection_left.active,
+                    pressed: input.maindirection_left.active
+                        || input.secondarydirection_left.active,
                     just_pressed: input.maindirection_left.just_pressed
                         || input.secondarydirection_left.just_pressed,
                     just_released: input.maindirection_left.just_released

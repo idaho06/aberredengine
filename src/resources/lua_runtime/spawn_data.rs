@@ -78,6 +78,7 @@ pub struct TweenPositionData {
     pub duration: f32,
     pub easing: String,
     pub loop_mode: String,
+    pub backwards: bool,
 }
 
 /// TweenRotation component data for spawning.
@@ -88,6 +89,7 @@ pub struct TweenRotationData {
     pub duration: f32,
     pub easing: String,
     pub loop_mode: String,
+    pub backwards: bool,
 }
 
 /// TweenScale component data for spawning.
@@ -100,6 +102,7 @@ pub struct TweenScaleData {
     pub duration: f32,
     pub easing: String,
     pub loop_mode: String,
+    pub backwards: bool,
 }
 
 /// LuaCollisionRule component data for spawning.

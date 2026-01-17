@@ -101,6 +101,7 @@ pub enum EntityCmd {
         duration: f32,
         easing: String,
         loop_mode: String,
+        backwards: bool,
     },
     /// Insert TweenRotation component
     InsertTweenRotation {
@@ -110,6 +111,7 @@ pub enum EntityCmd {
         duration: f32,
         easing: String,
         loop_mode: String,
+        backwards: bool,
     },
     /// Insert TweenScale component
     InsertTweenScale {
@@ -121,6 +123,7 @@ pub enum EntityCmd {
         duration: f32,
         easing: String,
         loop_mode: String,
+        backwards: bool,
     },
     /// Remove TweenPosition component
     RemoveTweenPosition { entity_id: u64 },

@@ -426,6 +426,10 @@ function EntityBuilder:with_tween_position_easing(easing) end
 ---@return EntityBuilder
 function EntityBuilder:with_tween_position_loop(loop_mode) end
 
+---Start position tween from the end (reverse playback)
+---@return EntityBuilder
+function EntityBuilder:with_tween_position_backwards() end
+
 ---Add rotation tween animation
 ---@param from number Start rotation in degrees
 ---@param to number End rotation in degrees
@@ -442,6 +446,10 @@ function EntityBuilder:with_tween_rotation_easing(easing) end
 ---@param loop_mode string Loop mode
 ---@return EntityBuilder
 function EntityBuilder:with_tween_rotation_loop(loop_mode) end
+
+---Start rotation tween from the end (reverse playback)
+---@return EntityBuilder
+function EntityBuilder:with_tween_rotation_backwards() end
 
 ---Add scale tween animation
 ---@param from_x number Start scale X
@@ -461,6 +469,10 @@ function EntityBuilder:with_tween_scale_easing(easing) end
 ---@param loop_mode string Loop mode
 ---@return EntityBuilder
 function EntityBuilder:with_tween_scale_loop(loop_mode) end
+
+---Set scale tween to start from end and play in reverse
+---@return EntityBuilder
+function EntityBuilder:with_tween_scale_backwards() end
 
 ---Add Lua collision rule
 ---@param group_a string First group name
@@ -722,7 +734,10 @@ function engine.entity_remove_lua_timer(entity_id) end
 ---@param duration number Duration in seconds
 ---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 ---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
-function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode) end
+---@param backwards boolean Start tween from end and play in reverse (optional, default false)
+function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode,
+                                             backwards)
+end
 
 ---Insert or replace TweenRotation component at runtime
 ---@param entity_id integer Entity ID
@@ -731,7 +746,8 @@ function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to
 ---@param duration number Duration in seconds
 ---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 ---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
-function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode) end
+---@param backwards boolean Start tween from end and play in reverse (optional, default false)
+function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards) end
 
 ---Insert or replace TweenScale component at runtime
 ---@param entity_id integer Entity ID
@@ -742,7 +758,8 @@ function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easi
 ---@param duration number Duration in seconds
 ---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 ---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
-function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode) end
+---@param backwards boolean Start tween from end and play in reverse (optional, default false)
+function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
 
 ---Remove TweenPosition component from an entity
 ---@param entity_id integer Entity ID
@@ -838,6 +855,44 @@ function engine.collision_entity_signal_set_flag(entity_id, flag) end
 ---@param entity_id integer Entity ID
 ---@param flag string Flag key
 function engine.collision_entity_signal_clear_flag(entity_id, flag) end
+
+---Insert or replace TweenPosition component during collision handling
+---@param entity_id integer Entity ID
+---@param from_x number Starting X position
+---@param from_y number Starting Y position
+---@param to_x number Target X position
+---@param to_y number Target Y position
+---@param duration number Duration in seconds
+---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+---@param backwards boolean Start tween from end and play in reverse (optional, default false)
+function engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode,
+                                                       backwards)
+end
+
+---Insert or replace TweenRotation component during collision handling
+---@param entity_id integer Entity ID
+---@param from number Starting rotation in degrees
+---@param to number Target rotation in degrees
+---@param duration number Duration in seconds
+---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+---@param backwards boolean Start tween from end and play in reverse (optional, default false)
+function engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards) end
+
+---Insert or replace TweenScale component during collision handling
+---@param entity_id integer Entity ID
+---@param from_x number Starting X scale
+---@param from_y number Starting Y scale
+---@param to_x number Target X scale
+---@param to_y number Target Y scale
+---@param duration number Duration in seconds
+---@param easing string Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+---@param loop_mode string Loop mode: "once", "loop", "ping_pong"
+---@param backwards boolean Start tween from end and play in reverse (optional, default false)
+function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode,
+                                                    backwards)
+end
 
 ---Insert StuckTo component on an entity during collision handling
 ---@param entity_id integer Entity ID
@@ -1110,6 +1165,10 @@ function CollisionEntityBuilder:with_tween_scale_easing(easing) end
 ---@param loop_mode string Loop mode
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_scale_loop(loop_mode) end
+
+---Set scale tween to start from end and play in reverse
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_scale_backwards() end
 
 ---Add Lua collision rule
 ---@param group_a string First group name

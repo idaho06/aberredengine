@@ -5,8 +5,8 @@
 //!
 //! Also provides `LuaCollisionEntityBuilder` for spawning entities from collision callbacks.
 
-use super::spawn_data::*;
 use super::runtime::LuaAppData;
+use super::spawn_data::*;
 use mlua::prelude::*;
 
 /// Entity builder exposed to Lua for fluent entity construction.
@@ -142,10 +142,20 @@ impl LuaUserData for LuaEntityBuilder {
             "with_accel",
             |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
                 if let Some(ref mut rb) = this.cmd.rigidbody {
-                    rb.forces.push(ForceData { name, x, y, enabled });
+                    rb.forces.push(ForceData {
+                        name,
+                        x,
+                        y,
+                        enabled,
+                    });
                 } else {
                     this.cmd.rigidbody = Some(RigidBodyData {
-                        forces: vec![ForceData { name, x, y, enabled }],
+                        forces: vec![ForceData {
+                            name,
+                            x,
+                            y,
+                            enabled,
+                        }],
                         ..RigidBodyData::default()
                     });
                 }
@@ -531,6 +541,7 @@ impl LuaUserData for LuaEntityBuilder {
                     duration,
                     easing: "linear".to_string(),
                     loop_mode: "once".to_string(),
+                    backwards: false,
                 });
                 Ok(this.clone())
             },
@@ -554,6 +565,14 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_tween_position_backwards() - Start position tween from the end, playing in reverse
+        methods.add_method_mut("with_tween_position_backwards", |_, this, ()| {
+            if let Some(ref mut tween) = this.cmd.tween_position {
+                tween.backwards = true;
+            }
+            Ok(this.clone())
+        });
+
         // :with_tween_rotation(from, to, duration) - Add TweenRotation component
         // Animates Rotation from `from` to `to` degrees over duration seconds
         // Defaults: easing = "linear", loop_mode = "once"
@@ -566,6 +585,7 @@ impl LuaUserData for LuaEntityBuilder {
                     duration,
                     easing: "linear".to_string(),
                     loop_mode: "once".to_string(),
+                    backwards: false,
                 });
                 Ok(this.clone())
             },
@@ -587,6 +607,14 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_tween_rotation_backwards() - Start rotation tween from the end, playing in reverse
+        methods.add_method_mut("with_tween_rotation_backwards", |_, this, ()| {
+            if let Some(ref mut tween) = this.cmd.tween_rotation {
+                tween.backwards = true;
+            }
+            Ok(this.clone())
+        });
+
         // :with_tween_scale(from_x, from_y, to_x, to_y, duration) - Add TweenScale component
         // Animates Scale from (from_x, from_y) to (to_x, to_y) over duration seconds
         // Defaults: easing = "linear", loop_mode = "once"
@@ -601,6 +629,7 @@ impl LuaUserData for LuaEntityBuilder {
                     duration,
                     easing: "linear".to_string(),
                     loop_mode: "once".to_string(),
+                    backwards: false,
                 });
                 Ok(this.clone())
             },
@@ -618,6 +647,14 @@ impl LuaUserData for LuaEntityBuilder {
         methods.add_method_mut("with_tween_scale_loop", |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
                 tween.loop_mode = loop_mode;
+            }
+            Ok(this.clone())
+        });
+
+        // :with_tween_scale_backwards() - Start scale tween from the end, playing in reverse
+        methods.add_method_mut("with_tween_scale_backwards", |_, this, ()| {
+            if let Some(ref mut tween) = this.cmd.tween_scale {
+                tween.backwards = true;
             }
             Ok(this.clone())
         });
@@ -908,10 +945,20 @@ impl LuaUserData for LuaCollisionEntityBuilder {
             "with_accel",
             |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
                 if let Some(ref mut rb) = this.cmd.rigidbody {
-                    rb.forces.push(ForceData { name, x, y, enabled });
+                    rb.forces.push(ForceData {
+                        name,
+                        x,
+                        y,
+                        enabled,
+                    });
                 } else {
                     this.cmd.rigidbody = Some(RigidBodyData {
-                        forces: vec![ForceData { name, x, y, enabled }],
+                        forces: vec![ForceData {
+                            name,
+                            x,
+                            y,
+                            enabled,
+                        }],
                         ..RigidBodyData::default()
                     });
                 }

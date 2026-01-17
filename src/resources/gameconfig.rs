@@ -81,6 +81,7 @@ impl GameConfig {
     }
 
     /// Create a new configuration with a custom config file path.
+    #[allow(dead_code)]
     pub fn with_path(path: impl Into<PathBuf>) -> Self {
         Self {
             config_path: path.into(),
@@ -125,7 +126,13 @@ impl GameConfig {
 
         eprintln!(
             "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}",
-            self.render_width, self.render_height, self.window_width, self.window_height, self.target_fps, self.vsync, self.fullscreen
+            self.render_width,
+            self.render_height,
+            self.window_width,
+            self.window_height,
+            self.target_fps,
+            self.vsync,
+            self.fullscreen
         );
 
         Ok(())
@@ -134,6 +141,7 @@ impl GameConfig {
     /// Save configuration to the INI file.
     ///
     /// Creates the file if it doesn't exist.
+    #[allow(dead_code)]
     pub fn save_to_file(&self) -> Result<(), String> {
         let mut config = Ini::new();
 
@@ -158,12 +166,14 @@ impl GameConfig {
     }
 
     /// Set render resolution.
+    #[allow(dead_code)]
     pub fn set_render_size(&mut self, width: u32, height: u32) {
         self.render_width = width;
         self.render_height = height;
     }
 
     /// Set window size.
+    #[allow(dead_code)]
     pub fn set_window_size(&mut self, width: u32, height: u32) {
         self.window_width = width;
         self.window_height = height;

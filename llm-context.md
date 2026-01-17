@@ -1,5 +1,7 @@
 # ABERRED ENGINE - LLM CONTEXT DATA
+
 # Machine-readable context for AI assistants working on this codebase
+
 # Last updated: 2026-01-16 (synced with codebase)
 
 ## QUICK REFERENCE
@@ -228,8 +230,8 @@ EntityCmd {
     SetAnimation { entity_id, animation_key }
     InsertLuaTimer { entity_id, duration, callback }
     RemoveLuaTimer { entity_id }
-    InsertTweenPosition { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode }
-    InsertTweenRotation { entity_id, from, to, duration, easing, loop_mode }
+    InsertTweenPosition { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards }
+    InsertTweenRotation { entity_id, from, to, duration, easing, loop_mode, backwards }
     InsertTweenScale { entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode }
     RemoveTweenPosition/Rotation/Scale { entity_id }
     SetRotation { entity_id, degrees }
@@ -322,9 +324,9 @@ engine.entity_set_animation(id, key)
 engine.entity_restart_animation(id)
 engine.entity_insert_lua_timer(id, duration, callback)
 engine.entity_remove_lua_timer(id)
-engine.entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
-engine.entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode)
-engine.entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+engine.entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
+engine.entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode, backwards)
+engine.entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
 engine.entity_remove_tween_position/rotation/scale(id)
 engine.entity_add_force(id, name, x, y, enabled)
 engine.entity_remove_force(id, name)
@@ -370,9 +372,9 @@ engine.collision_entity_insert_lua_timer(id, duration, callback)
 engine.collision_entity_remove_lua_timer(id)
 engine.collision_entity_restart_animation(id)
 engine.collision_entity_set_animation(id, animation_key)
-engine.collision_entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
-engine.collision_entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode)
-engine.collision_entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+engine.collision_entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
+engine.collision_entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode, backwards)
+engine.collision_entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
 engine.collision_entity_remove_tween_position/rotation/scale(id)
 engine.collision_entity_set_rotation(id, degrees)
 engine.collision_entity_set_scale(id, sx, sy)
@@ -447,12 +449,15 @@ engine.spawn_tiles(id)
 :with_tween_position(fx, fy, tx, ty, dur)
 :with_tween_position_easing(easing)
 :with_tween_position_loop(mode)
+:with_tween_position_backwards()
 :with_tween_rotation(from, to, dur)
 :with_tween_rotation_easing(easing)
 :with_tween_rotation_loop(mode)
+:with_tween_rotation_backwards()
 :with_tween_scale(fx, fy, tx, ty, dur)
 :with_tween_scale_easing(easing)
 :with_tween_scale_loop(mode)
+:with_tween_scale_backwards()
 :with_lua_timer(duration, callback)
 :with_lua_collision_rule(group_a, group_b, callback)
 :with_grid_layout(path, group, zindex)
@@ -508,6 +513,7 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 ## SYSTEM EXECUTION ORDER (main.rs schedule)
 
 Systems with explicit ordering constraints (`.after()`):
+
 - apply_gameconfig_changes (run_if state_is_playing)
 - stuck_to_entity_system.after(collision_detector)
 - collision_detector.after(mouse_controller).after(movement)
@@ -518,6 +524,7 @@ Systems with explicit ordering constraints (`.after()`):
 - render_system.after(collision_detector)
 
 Approximate execution order:
+
 1. apply_gameconfig_changes (run_if state_is_playing)
 2. menu_spawn_system
 3. gridlayout_spawn_system
@@ -543,21 +550,25 @@ Approximate execution order:
 
 ## KEY PATTERNS
 
-### Adding a new EntityCmd:
+### Adding a new EntityCmd
+
 1. Add variant to EntityCmd enum (commands.rs)
 2. Add Lua function in runtime.rs (register_entity_api)
 3. Process in process_entity_commands (lua_commands.rs)
 4. Add to engine.lua autocomplete stubs
 5. Document in README.md
 
-### Registering Entity-Input Systems (SystemsStore):
+### Registering Entity-Input Systems (SystemsStore)
+
 For systems that need to be called with a specific entity (like menu_despawn):
+
 1. Define system with `In(target): In<Entity>` parameter
 2. Register with `world.register_system(system_fn)` -> `SystemId<In<Entity>>`
 3. Store in `systems_store.insert_entity_system("name", system_id)`
 4. Call via `commands.run_system_with(*system_id, entity)` in EntityCmd handler
 
-### Adding a new Component:
+### Adding a new Component
+
 1. Create file in src/components/
 2. Derive Component, add fields
 3. Export from components/mod.rs
@@ -565,35 +576,40 @@ For systems that need to be called with a specific entity (like menu_despawn):
 5. Add builder method in entity_builder.rs
 6. Process in process_spawn_command (lua_commands.rs)
 
-### Adding a new System:
+### Adding a new System
+
 1. Create file in src/systems/
 2. Define system function with queries
 3. Export from systems/mod.rs
 4. Add to schedule in main.rs (correct position)
 
-### Adding a new Resource:
+### Adding a new Resource
+
 1. Create file in src/resources/
 2. Derive Resource (or use non-send pattern)
 3. Export from resources/mod.rs
 4. Insert into world in main.rs
 
-### Lua-Rust Command Flow:
+### Lua-Rust Command Flow
+
 Lua calls engine.* -> LuaAppData.commands.borrow_mut().push(Cmd)
 -> Lua returns -> game.rs processes queued commands
 -> Commands modify ECS world
 
-### Collision Flow:
+### Collision Flow
+
 movement_system moves entities
 -> collision_system detects AABB overlaps
 -> dispatches CollisionEvent or calls Lua callback
--> Lua callback uses engine.entity_* commands (work in all contexts)
+-> Lua callback uses engine.entity_*commands (work in all contexts)
 -> Collision-specific commands (engine.collision_*) use separate queues
 -> Collision commands drain immediately after callback
 
-### Entity Commands Architecture:
+### Entity Commands Architecture
+
 - Entity commands (engine.entity_*) are UNIFIED across all contexts
 - They work in phase callbacks, timer callbacks, collision callbacks, and update callbacks
-- Collision has FULL entity command parity: engine.collision_entity_* mirrors all engine.entity_* functions
+- Collision has FULL entity command parity: engine.collision_entity_*mirrors all engine.entity_* functions
 - Collision-specific commands (engine.collision_*) also include spawning, audio, signals, camera
 - Both regular and collision entity commands use the same EntityCmd enum internally
 - Collision commands drain immediately after each collision callback (separate queue)
@@ -601,6 +617,7 @@ movement_system moves entities
 ## IMPORTANT FILES TO READ FIRST
 
 For features touching:
+
 - Physics: rigidbody.rs, movement.rs
 - Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs
 - Collision: collision.rs (systems), boxcollider.rs, luacollision.rs (components)

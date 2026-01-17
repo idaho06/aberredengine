@@ -507,22 +507,27 @@ pub fn process_entity_commands(
                 duration,
                 easing,
                 loop_mode,
+                backwards,
             } => {
                 let entity = Entity::from_bits(entity_id);
                 let parsed_easing = parse_tween_easing(&easing);
                 let parsed_loop = parse_tween_loop_mode(&loop_mode);
-                commands.entity(entity).insert(
-                    TweenPosition::new(
-                        Vector2 {
-                            x: from_x,
-                            y: from_y,
-                        },
-                        Vector2 { x: to_x, y: to_y },
-                        duration,
-                    )
-                    .with_easing(parsed_easing)
-                    .with_loop_mode(parsed_loop),
-                );
+                let mut tween = TweenPosition::new(
+                    Vector2 {
+                        x: from_x,
+                        y: from_y,
+                    },
+                    Vector2 { x: to_x, y: to_y },
+                    duration,
+                )
+                .with_easing(parsed_easing)
+                .with_loop_mode(parsed_loop);
+
+                if backwards {
+                    tween = tween.with_backwards();
+                }
+
+                commands.entity(entity).insert(tween);
             }
             EntityCmd::InsertTweenRotation {
                 entity_id,
@@ -531,15 +536,20 @@ pub fn process_entity_commands(
                 duration,
                 easing,
                 loop_mode,
+                backwards,
             } => {
                 let entity = Entity::from_bits(entity_id);
                 let parsed_easing = parse_tween_easing(&easing);
                 let parsed_loop = parse_tween_loop_mode(&loop_mode);
-                commands.entity(entity).insert(
-                    TweenRotation::new(from, to, duration)
-                        .with_easing(parsed_easing)
-                        .with_loop_mode(parsed_loop),
-                );
+                let mut tween = TweenRotation::new(from, to, duration)
+                    .with_easing(parsed_easing)
+                    .with_loop_mode(parsed_loop);
+
+                if backwards {
+                    tween = tween.with_backwards();
+                }
+
+                commands.entity(entity).insert(tween);
             }
             EntityCmd::InsertTweenScale {
                 entity_id,
@@ -550,22 +560,27 @@ pub fn process_entity_commands(
                 duration,
                 easing,
                 loop_mode,
+                backwards,
             } => {
                 let entity = Entity::from_bits(entity_id);
                 let parsed_easing = parse_tween_easing(&easing);
                 let parsed_loop = parse_tween_loop_mode(&loop_mode);
-                commands.entity(entity).insert(
-                    TweenScale::new(
-                        Vector2 {
-                            x: from_x,
-                            y: from_y,
-                        },
-                        Vector2 { x: to_x, y: to_y },
-                        duration,
-                    )
-                    .with_easing(parsed_easing)
-                    .with_loop_mode(parsed_loop),
-                );
+                let mut tween = TweenScale::new(
+                    Vector2 {
+                        x: from_x,
+                        y: from_y,
+                    },
+                    Vector2 { x: to_x, y: to_y },
+                    duration,
+                )
+                .with_easing(parsed_easing)
+                .with_loop_mode(parsed_loop);
+
+                if backwards {
+                    tween = tween.with_backwards();
+                }
+
+                commands.entity(entity).insert(tween);
             }
             EntityCmd::RemoveTweenPosition { entity_id } => {
                 let entity = Entity::from_bits(entity_id);
@@ -1010,53 +1025,65 @@ pub fn process_spawn_command(
     if let Some(tween_data) = cmd.tween_position {
         let easing = parse_tween_easing(&tween_data.easing);
         let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
-        entity_commands.insert(
-            TweenPosition::new(
-                Vector2 {
-                    x: tween_data.from_x,
-                    y: tween_data.from_y,
-                },
-                Vector2 {
-                    x: tween_data.to_x,
-                    y: tween_data.to_y,
-                },
-                tween_data.duration,
-            )
-            .with_easing(easing)
-            .with_loop_mode(loop_mode),
-        );
+        let mut tween = TweenPosition::new(
+            Vector2 {
+                x: tween_data.from_x,
+                y: tween_data.from_y,
+            },
+            Vector2 {
+                x: tween_data.to_x,
+                y: tween_data.to_y,
+            },
+            tween_data.duration,
+        )
+        .with_easing(easing)
+        .with_loop_mode(loop_mode);
+
+        if tween_data.backwards {
+            tween = tween.with_backwards();
+        }
+
+        entity_commands.insert(tween);
     }
 
     // TweenRotation
     if let Some(tween_data) = cmd.tween_rotation {
         let easing = parse_tween_easing(&tween_data.easing);
         let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
-        entity_commands.insert(
-            TweenRotation::new(tween_data.from, tween_data.to, tween_data.duration)
-                .with_easing(easing)
-                .with_loop_mode(loop_mode),
-        );
+        let mut tween = TweenRotation::new(tween_data.from, tween_data.to, tween_data.duration)
+            .with_easing(easing)
+            .with_loop_mode(loop_mode);
+
+        if tween_data.backwards {
+            tween = tween.with_backwards();
+        }
+
+        entity_commands.insert(tween);
     }
 
     // TweenScale
     if let Some(tween_data) = cmd.tween_scale {
         let easing = parse_tween_easing(&tween_data.easing);
         let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
-        entity_commands.insert(
-            TweenScale::new(
-                Vector2 {
-                    x: tween_data.from_x,
-                    y: tween_data.from_y,
-                },
-                Vector2 {
-                    x: tween_data.to_x,
-                    y: tween_data.to_y,
-                },
-                tween_data.duration,
-            )
-            .with_easing(easing)
-            .with_loop_mode(loop_mode),
-        );
+        let mut tween = TweenScale::new(
+            Vector2 {
+                x: tween_data.from_x,
+                y: tween_data.from_y,
+            },
+            Vector2 {
+                x: tween_data.to_x,
+                y: tween_data.to_y,
+            },
+            tween_data.duration,
+        )
+        .with_easing(easing)
+        .with_loop_mode(loop_mode);
+
+        if tween_data.backwards {
+            tween = tween.with_backwards();
+        }
+
+        entity_commands.insert(tween);
     }
 
     // Register entity in WorldSignals if requested

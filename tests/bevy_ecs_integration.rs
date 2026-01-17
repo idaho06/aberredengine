@@ -49,9 +49,10 @@ struct Velocity {
 struct Health(i32);
 
 #[derive(Component, Debug, Clone)]
-struct Name(String);
+struct Name(#[allow(dead_code)] String);
 
 #[derive(Component, Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 struct GroupTag(String);
 
 /// Marker component used like engine's Persistent
@@ -99,6 +100,7 @@ struct CollisionEvent {
 #[derive(Event, Debug, Clone)]
 struct DamageEvent {
     entity: Entity,
+    #[allow(dead_code)]
     amount: i32,
 }
 
@@ -1612,7 +1614,7 @@ fn schedule_initialize() {
 // scene switching functionality.
 
 #[derive(Event, Debug, Clone)]
-struct PersistenceTestEvent(i32);
+struct PersistenceTestEvent(#[allow(dead_code)] i32);
 
 #[test]
 fn observer_without_persistent_is_despawned_by_cleanup() {

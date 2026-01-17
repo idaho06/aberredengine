@@ -39,6 +39,7 @@ impl FontStore {
     }
 
     /// Remove all loaded fonts.
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.fonts.clear();
     }

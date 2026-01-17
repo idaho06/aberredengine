@@ -951,21 +951,22 @@ impl LuaRuntime {
             })?,
         )?;
 
-        // engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        // engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
         engine.set(
             "entity_insert_tween_position",
             self.lua.create_function(
                 |lua,
-                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                )| {
+                 (
+                    entity_id,
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    duration,
+                    easing,
+                    loop_mode,
+                    backwards,
+                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .entity_commands
@@ -979,24 +980,26 @@ impl LuaRuntime {
                             duration,
                             easing,
                             loop_mode,
+                            backwards,
                         });
                     Ok(())
                 },
             )?,
         )?;
 
-        // engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode)
+        // engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards)
         engine.set(
             "entity_insert_tween_rotation",
             self.lua.create_function(
                 |lua,
-                 (entity_id, from, to, duration, easing, loop_mode): (
+                 (entity_id, from, to, duration, easing, loop_mode, backwards): (
                     u64,
                     f32,
                     f32,
                     f32,
                     String,
                     String,
+                    bool,
                 )| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
@@ -1009,27 +1012,29 @@ impl LuaRuntime {
                             duration,
                             easing,
                             loop_mode,
+                            backwards,
                         });
                     Ok(())
                 },
             )?,
         )?;
 
-        // engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        // engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
         engine.set(
             "entity_insert_tween_scale",
             self.lua.create_function(
                 |lua,
-                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                )| {
+                 (
+                    entity_id,
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    duration,
+                    easing,
+                    loop_mode,
+                    backwards,
+                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .entity_commands
@@ -1043,6 +1048,7 @@ impl LuaRuntime {
                             duration,
                             easing,
                             loop_mode,
+                            backwards,
                         });
                     Ok(())
                 },
@@ -1699,22 +1705,23 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        // engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
         // Inserts TweenPosition during collision handling
         engine.set(
             "collision_entity_insert_tween_position",
             self.lua.create_function(
                 |lua,
-                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                )| {
+                 (
+                    entity_id,
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    duration,
+                    easing,
+                    loop_mode,
+                    backwards,
+                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
@@ -1728,25 +1735,27 @@ impl LuaRuntime {
                             duration,
                             easing,
                             loop_mode,
+                            backwards,
                         });
                     Ok(())
                 },
             )?,
         )?;
 
-        // engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode)
+        // engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards)
         // Inserts TweenRotation during collision handling
         engine.set(
             "collision_entity_insert_tween_rotation",
             self.lua.create_function(
                 |lua,
-                 (entity_id, from, to, duration, easing, loop_mode): (
+                 (entity_id, from, to, duration, easing, loop_mode, backwards): (
                     u64,
                     f32,
                     f32,
                     f32,
                     String,
                     String,
+                    bool,
                 )| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
@@ -1759,28 +1768,30 @@ impl LuaRuntime {
                             duration,
                             easing,
                             loop_mode,
+                            backwards,
                         });
                     Ok(())
                 },
             )?,
         )?;
 
-        // engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode)
+        // engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
         // Inserts TweenScale during collision handling
         engine.set(
             "collision_entity_insert_tween_scale",
             self.lua.create_function(
                 |lua,
-                 (entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                )| {
+                 (
+                    entity_id,
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    duration,
+                    easing,
+                    loop_mode,
+                    backwards,
+                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .collision_entity_commands
@@ -1794,6 +1805,7 @@ impl LuaRuntime {
                             duration,
                             easing,
                             loop_mode,
+                            backwards,
                         });
                     Ok(())
                 },
