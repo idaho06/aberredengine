@@ -15,6 +15,17 @@ local M = {}
 --   sides = { a = {"left","top",...}, b = {...} }
 -- }
 
+function on_ship_asteroid_collision(ctx)
+    engine.log_info("Collision: Ship (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
+    -- For now, just log the collision. In a real game, we might reduce ship health, destroy asteroid, etc.
+end
+
+function on_laser_asteroid_collision(ctx)
+    engine.log_info("Collision: Laser (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
+    -- Destroy both laser and asteroid
+    engine.collision_entity_despawn(ctx.a.id)
+    engine.collision_entity_despawn(ctx.b.id)
+end
 
 -- ==================== PHASE CALLBACK FUNCTIONS ====================
 -- These are named functions called directly by the engine based on
@@ -533,6 +544,21 @@ local function spawn_template_laser()
     engine.log_info("Laser template spawned!")
 end
 
+local function spawn_collision_rules()
+    -- Define collision rules by spawning entities with CollisionRule component
+    -- Ship collides with asteroids
+    engine.spawn()
+        :with_lua_collision_rule("ship", "asteroids", "on_ship_asteroid_collision")
+        :with_group("collision_rules")
+        :build()
+    -- Lasers collide with asteroids
+    engine.spawn()
+        :with_lua_collision_rule("lasers", "asteroids", "on_laser_asteroid_collision")
+        :with_group("collision_rules")
+        :build()
+    engine.log_info("Collision rules spawned!")
+end
+
 --- Spawn the UI score texts
 --[[ local function spawn_ui_texts()
     -- Score header text "1UP   HIGH SCORE"
@@ -594,47 +620,9 @@ function M.spawn()
 
     spawn_template_laser()
 
-    --[[     -- reset ball bounce and player hit counters
-    ball_bounces = 0
-    player_hits = 0
-
-    -- Reset score and lives for a new game
-    engine.set_integer("score", 0)
-    engine.set_integer("lives", 3)
-
-    -- Set camera to center of the level
-    -- target: center of map (tile_size * map_width/2, tile_size * map_height/2)
-    -- offset: center of screen (needs screen width/height from engine)
-    -- For now we use the known tilemap dimensions: 28x32 tiles at 24px each
-    local camera_target_x = TILE_SIZE * MAP_WIDTH * 0.5  -- 24 * 28 * 0.5 = 336
-    local camera_target_y = TILE_SIZE * MAP_HEIGHT * 0.5 -- 24 * 32 * 0.5 = 384
-    -- Screen offset: assuming 672x768 window (standard Arkanoid resolution)
-    local camera_offset_x = 336.0                        -- 672 / 2
-    local camera_offset_y = 384.0                        -- 768 / 2
-    engine.set_camera(camera_target_x, camera_target_y, camera_offset_x, camera_offset_y, 0.0, 1.0)
-
-    -- Track groups for entity counting (used by phase callbacks)
-    engine.track_group("ball")
-    engine.track_group("brick")
-
-    -- Spawn tiles from loaded tilemap
-    engine.spawn_tiles("level01")
-
-    -- Spawn invisible wall colliders
-    spawn_walls()
-
-    -- Spawn the player paddle
-    spawn_player()
-
-    -- Spawn UI score texts
-    spawn_ui_texts()
-
-    -- Spawn bricks from grid layout
-    spawn_bricks()
-
     -- Spawn collision rule entities
     spawn_collision_rules()
-]]
+
     -- Spawn the scene phase entity with LuaPhase component
     -- Each phase specifies its callback function names
     engine.spawn()
