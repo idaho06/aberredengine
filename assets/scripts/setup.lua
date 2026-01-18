@@ -23,6 +23,7 @@ function M.load_assets()
     engine.load_texture("asteroids-big01", "./assets/textures/asteroids-big01.png")
     engine.load_texture("asteroids-big02", "./assets/textures/asteroids-big02.png")
     engine.load_texture("asteroids-big03", "./assets/textures/asteroids-big03.png")
+    engine.load_texture("asteroids-laser", "./assets/textures/asteroids_laser.png")
 
     --[[ engine.load_texture("title", "./assets/textures/title.png")
     engine.load_texture("background", "./assets/textures/background01.png")

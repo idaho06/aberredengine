@@ -39,6 +39,9 @@ end
 
 -- ==================== SHIP PHASE CALLBACKS AND HELPERS ====================
 
+-- Current ship rotation (degrees)
+local SHIP_ROTATION = 0.0
+
 --- Helper function to rotate the ship based on input
 --- @param ctx EntityContext Entity context table
 --- @param input Input Input state table
@@ -48,24 +51,44 @@ local function rotate_ship(ctx, input, dt)
     local propulsion_accel = 300.0 -- units per second squared
     -- engine.log_info("Current rotation: " .. tostring(CURRENT_ROTATION))
     -- Note: ctx.rotation contains current rotation if available
-    current_rotation = ctx.rotation or 0.0
+    SHIP_ROTATION = ctx.rotation or 0.0
 
     -- calculate acceleration vector based on current rotation
-    local radians = math.rad(current_rotation)
+    local radians = math.rad(SHIP_ROTATION)
     local accel_x = math.sin(radians) * propulsion_accel
     local accel_y = -math.cos(radians) * propulsion_accel
     engine.entity_set_force_value(ctx.id, "propulsion", accel_x, accel_y)
 
     if input.digital.left.pressed then
         -- engine.log_info("Rotating left")
-        current_rotation = current_rotation - rotation_speed * dt
+        SHIP_ROTATION = SHIP_ROTATION - rotation_speed * dt
     end
     if input.digital.right.pressed then
         -- engine.log_info("Rotating right")
-        current_rotation = current_rotation + rotation_speed * dt
+        SHIP_ROTATION = SHIP_ROTATION + rotation_speed * dt
     end
 
-    engine.entity_set_rotation(ctx.id, current_rotation)
+    engine.entity_set_rotation(ctx.id, SHIP_ROTATION)
+end
+
+local function fire_laser(ctx)
+    -- Fire laser
+    -- First, we calculate the spawn position at the ship's nose
+    local radians = math.rad(SHIP_ROTATION)
+    local nose_offset = 32.0 -- distance from center to nose
+    local spawn_x = ctx.pos.x + math.sin(radians) * nose_offset
+    local spawn_y = ctx.pos.y - math.cos(radians) * nose_offset
+    -- Clone the laser template
+    engine.clone("laser_template")
+        :with_group("lasers")
+        :with_position(spawn_x, spawn_y)
+        :with_rotation(SHIP_ROTATION)
+        :with_velocity(
+            math.sin(radians) * 500.0,
+            -math.cos(radians) * 500.0
+        )
+        :with_ttl(1.5)
+        :build()
 end
 
 --- @param ctx EntityContext Entity context table
@@ -93,6 +116,11 @@ function ship_phase_idle_update(ctx, input, dt)
         -- engine.phase_transition(ctx.id, "propulsion")
         return "propulsion"
     end
+
+    if input.digital.action_1.just_pressed then
+        -- Fire laser
+        fire_laser(ctx)
+    end
 end
 
 --- @param ctx EntityContext Entity context table
@@ -113,6 +141,12 @@ function ship_phase_propulsion_update(ctx, input, dt)
 
     -- Handle rotation input
     rotate_ship(ctx, input, dt)
+
+    if input.digital.action_1.just_pressed then
+        -- Fire laser
+        fire_laser(ctx)
+    end
+
     -- When "up" is released, go back to idle
     if input.digital.up.just_released then
         -- engine.phase_transition(ctx.id, "idle")
@@ -392,7 +426,7 @@ local function spawn_ship()
     engine.spawn()
         :with_group("ship")
         :with_position(0, 0)
-        :with_zindex(1)
+        :with_zindex(2)
         :with_sprite("ship_sheet", 64, 64, 32, 32)
         :with_animation("ship_idle")
         :with_collider(64, 64, 32, 32) -- Same size collider
@@ -484,6 +518,21 @@ local function spawn_asteroids()
     engine.log_info("Asteroids spawned!")
 end
 
+local function spawn_template_laser()
+    -- Spawn a template entity for the laser projectile
+    engine.spawn()
+        :with_sprite("asteroids-laser", 48, 83, 24, 21)
+    -- :with_position(0, 0) -- Offscreen
+        :with_collider(6, 6, 3, 3)
+        :with_zindex(1)
+    -- :with_velocity(0, -500)        -- Moves upward
+        :with_signals()
+        :register_as("laser_template") -- Store entity ID for cloning
+        :build()
+
+    engine.log_info("Laser template spawned!")
+end
+
 --- Spawn the UI score texts
 --[[ local function spawn_ui_texts()
     -- Score header text "1UP   HIGH SCORE"
@@ -542,6 +591,8 @@ function M.spawn()
     spawn_background()
 
     spawn_asteroids()
+
+    spawn_template_laser()
 
     --[[     -- reset ball bounce and player hit counters
     ball_bounces = 0
