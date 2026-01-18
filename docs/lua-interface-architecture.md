@@ -22,7 +22,7 @@ The Aberred Engine uses a **deferred command pattern** for Lua-Rust integration.
 
 ### High-Level Flow
 
-```
+```text
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                             GAME LOOP                                         │
 ├───────────────────────────────────────────────────────────────────────────────┤
@@ -57,7 +57,7 @@ The Aberred Engine uses a **deferred command pattern** for Lua-Rust integration.
 
 The Lua runtime is organized in `src/resources/lua_runtime/`:
 
-```
+```text
 src/resources/lua_runtime/
 ├── mod.rs              # Public exports
 ├── runtime.rs          # LuaRuntime struct, engine table API registration, context pools
@@ -71,7 +71,9 @@ src/resources/lua_runtime/
 ### Key Components
 
 #### `LuaRuntime` (runtime.rs)
+
 The main struct managing the Lua interpreter. It:
+
 - Initializes the Lua state with MLua
 - Registers the global `engine` table with all API functions
 - Manages `LuaAppData` for command queuing
@@ -79,12 +81,13 @@ The main struct managing the Lua interpreter. It:
 - Manages **context table pools** for collision and entity callbacks (see [Context Table Pooling](#context-table-pooling))
 
 #### `LuaAppData` (runtime.rs)
+
 Internal shared state accessible from Lua closures:
+
 ```rust
 pub(super) struct LuaAppData {
-    // Regular command queues (processed after callbacks return)
     asset_commands: RefCell<Vec<AssetCmd>>,
-    spawn_commands: RefCell<Vec<SpawnCmd>>,
+    pub(super) spawn_commands: RefCell<Vec<SpawnCmd>>,
     audio_commands: RefCell<Vec<AudioLuaCmd>>,
     signal_commands: RefCell<Vec<SignalCmd>>,
     phase_commands: RefCell<Vec<PhaseCmd>>,
@@ -93,24 +96,30 @@ pub(super) struct LuaAppData {
     tilemap_commands: RefCell<Vec<TilemapCmd>>,
     camera_commands: RefCell<Vec<CameraCmd>>,
     animation_commands: RefCell<Vec<AnimationCmd>>,
-    
-    // Collision-scoped queues (processed immediately after collision callbacks)
+
+    /// Clone commands for regular context (scene setup, phase callbacks)
+    pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
+
+    // Collision-scoped command queues (processed immediately after each collision callback)
     collision_entity_commands: RefCell<Vec<EntityCmd>>,
     collision_signal_commands: RefCell<Vec<SignalCmd>>,
     collision_audio_commands: RefCell<Vec<AudioLuaCmd>>,
-    collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
+    pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
     collision_phase_commands: RefCell<Vec<PhaseCmd>>,
     collision_camera_commands: RefCell<Vec<CameraCmd>>,
-    
-    // Cached read-only data (updated before Lua callbacks)
+
+    /// Clone commands for collision context (processed after collision callbacks)
+    pub(super) collision_clone_commands: RefCell<Vec<CloneCmd>>,
+
+    /// Cached world signal snapshot (read-only for Lua)
     signal_snapshot: RefCell<Arc<SignalSnapshot>>,
+    /// Cached tracked group names (read-only snapshot for Lua)
     tracked_groups: RefCell<FxHashSet<String>>,
-    input_action_back_pressed: RefCell<bool>,
-    // ...more input cache fields
 }
 ```
 
 #### Command Enums (commands.rs)
+
 Each command type is a Rust enum that encapsulates all data needed to perform an operation:
 
 ```rust
@@ -206,7 +215,7 @@ pub fn process_entity_commands(
 The engine maintains **two sets** of command queues:
 
 | Queue Type | When Processed | Use Case |
-|------------|---------------|----------|
+| ---------- | -------------- | -------- |
 | Regular (`entity_commands`, etc.) | After phase/timer/update callbacks | Normal game logic |
 | Collision (`collision_entity_commands`, etc.) | Immediately after each collision callback | Collision response |
 
@@ -215,9 +224,10 @@ This distinction matters because collision callbacks need immediate processing t
 ### Command Categories
 
 | Category | Enum | Purpose |
-|----------|------|---------|
+| -------- | ---- | ------- |
 | **Entity** | `EntityCmd` | Manipulate existing entities (velocity, position, signals, components) |
 | **Spawn** | `SpawnCmd` | Create new entities with components |
+| **Clone** | `CloneCmd` | Clone an entity registered in WorldSignals and apply builder overrides |
 | **Signal** | `SignalCmd` | Modify global WorldSignals |
 | **Audio** | `AudioLuaCmd` | Play/stop music and sounds |
 | **Phase** | `PhaseCmd` | Trigger state machine transitions |
@@ -226,6 +236,165 @@ This distinction matters because collision callbacks need immediate processing t
 | **Group** | `GroupCmd` | Manage tracked entity groups |
 | **Tilemap** | `TilemapCmd` | Spawn tiles from tilemap data |
 | **Animation** | `AnimationCmd` | Register animation definitions |
+
+In addition to the regular queues, most write APIs have a collision-scoped variant (prefixed with `collision_` or `collision_entity_`) that queues into collision-specific buffers.
+
+---
+
+## Current Lua API Index
+
+This section is meant to stay in sync with the actual implementation.
+
+- Source of truth for `engine.*`: `src/resources/lua_runtime/runtime.rs` (`engine.set(...)` registrations)
+- Source of truth for `engine.spawn()/engine.clone()` builder methods: `src/resources/lua_runtime/entity_builder.rs`
+
+### `engine` Table Functions
+
+#### Logging
+
+- `log`, `log_info`, `log_warn`, `log_error`
+
+#### Assets
+
+- `load_texture`, `load_font`, `load_music`, `load_sound`, `load_tilemap`
+
+#### Spawning / Cloning
+
+- `spawn`, `clone`
+
+#### Audio
+
+- `play_music`, `play_sound`, `stop_all_music`, `stop_all_sounds`
+
+#### Global Signals (read)
+
+- `get_scalar`, `get_integer`, `get_string`, `has_flag`, `get_group_count`, `get_entity`, `has_tracked_group`
+
+#### Global Signals (write)
+
+- `set_scalar`, `set_integer`, `set_string`, `set_flag`
+- `clear_scalar`, `clear_integer`, `clear_string`, `clear_flag`
+- `set_entity`, `remove_entity`
+
+#### Groups
+
+- `track_group`, `untrack_group`, `clear_tracked_groups`
+
+#### Phase / Camera / Tilemap / Animation
+
+- `phase_transition`
+- `set_camera`
+- `spawn_tiles`
+- `register_animation`
+
+#### Entity Commands
+
+- `entity_set_position`, `entity_set_velocity`, `entity_set_speed`, `entity_set_rotation`, `entity_set_scale`
+- `entity_add_force`, `entity_remove_force`, `entity_set_force_enabled`, `entity_set_force_value`
+- `entity_set_friction`, `entity_set_max_speed`
+- `entity_freeze`, `entity_unfreeze`
+- `entity_set_animation`, `entity_restart_animation`
+- `entity_insert_lua_timer`, `entity_remove_lua_timer`
+- `entity_insert_ttl`
+- `entity_insert_tween_position`, `entity_remove_tween_position`
+- `entity_insert_tween_rotation`, `entity_remove_tween_rotation`
+- `entity_insert_tween_scale`, `entity_remove_tween_scale`
+- `entity_insert_stuckto`, `release_stuckto`
+- `entity_signal_set_scalar`, `entity_signal_set_integer`, `entity_signal_set_string`, `entity_signal_set_flag`
+- `entity_signal_clear_flag`
+- `entity_despawn`, `entity_menu_despawn`
+
+#### Collision Context Functions
+
+- `collision_spawn`, `collision_clone`
+- `collision_play_sound`
+- `collision_phase_transition`
+- `collision_set_camera`
+- `collision_set_scalar`, `collision_set_integer`, `collision_set_string`, `collision_set_flag`
+- `collision_clear_scalar`, `collision_clear_integer`, `collision_clear_string`, `collision_clear_flag`
+
+#### Collision Entity Commands
+
+- `collision_entity_set_position`, `collision_entity_set_velocity`, `collision_entity_set_speed`, `collision_entity_set_rotation`, `collision_entity_set_scale`
+- `collision_entity_add_force`, `collision_entity_remove_force`, `collision_entity_set_force_enabled`, `collision_entity_set_force_value`
+- `collision_entity_set_friction`, `collision_entity_set_max_speed`
+- `collision_entity_freeze`, `collision_entity_unfreeze`
+- `collision_entity_set_animation`, `collision_entity_restart_animation`
+- `collision_entity_insert_lua_timer`, `collision_entity_remove_lua_timer`
+- `collision_entity_insert_ttl`
+- `collision_entity_insert_tween_position`, `collision_entity_remove_tween_position`
+- `collision_entity_insert_tween_rotation`, `collision_entity_remove_tween_rotation`
+- `collision_entity_insert_tween_scale`, `collision_entity_remove_tween_scale`
+- `collision_entity_insert_stuckto`, `collision_release_stuckto`
+- `collision_entity_signal_set_scalar`, `collision_entity_signal_set_integer`, `collision_entity_signal_set_string`, `collision_entity_signal_set_flag`
+- `collision_entity_signal_clear_flag`
+- `collision_entity_despawn`
+
+### `LuaEntityBuilder` Methods
+
+The builder returned by `engine.spawn()`, `engine.clone(source_key)`, `engine.collision_spawn()`, and `engine.collision_clone(source_key)` supports these methods:
+
+```text
+build
+register_as
+with_accel
+with_animation
+with_animation_controller
+with_animation_rule
+with_collider
+with_collider_offset
+with_friction
+with_frozen
+with_grid_layout
+with_group
+with_lua_collision_rule
+with_lua_timer
+with_max_speed
+with_menu
+with_menu_action_quit
+with_menu_action_set_scene
+with_menu_action_show_submenu
+with_menu_colors
+with_menu_cursor
+with_menu_dynamic_text
+with_menu_selection_sound
+with_mouse_controlled
+with_persistent
+with_phase
+with_position
+with_rotation
+with_scale
+with_screen_position
+with_signal_binding
+with_signal_binding_format
+with_signal_flag
+with_signal_integer
+with_signal_scalar
+with_signal_string
+with_signals
+with_sprite
+with_sprite_flip
+with_sprite_offset
+with_stuckto
+with_stuckto_offset
+with_stuckto_stored_velocity
+with_text
+with_ttl
+with_tween_position
+with_tween_position_backwards
+with_tween_position_easing
+with_tween_position_loop
+with_tween_rotation
+with_tween_rotation_backwards
+with_tween_rotation_easing
+with_tween_rotation_loop
+with_tween_scale
+with_tween_scale_backwards
+with_tween_scale_easing
+with_tween_scale_loop
+with_velocity
+with_zindex
+```
 
 ---
 
@@ -251,11 +420,20 @@ engine.spawn()
     :build()
 ```
 
+Cloning is supported via the same builder pattern:
+
+```lua
+engine.clone("some_template_key")
+    :with_position(100, 200)
+    :with_velocity(0, -120)
+    :build()
+```
+
 ### How it Works
 
-1. `engine.spawn()` returns a `LuaEntityBuilder` UserData object
+1. `engine.spawn()` / `engine.clone(source_key)` returns a `LuaEntityBuilder` UserData object
 2. Each `:with_*()` method modifies the internal `SpawnCmd` and returns `self`
-3. `:build()` pushes the `SpawnCmd` to the spawn queue
+3. `:build()` pushes a `SpawnCmd` (spawn mode) or a `CloneCmd` (clone mode) to the correct queue based on context (regular vs collision)
 4. `:register_as(key)` stores the entity ID in WorldSignals after spawning
 
 ### Builder Implementation
@@ -278,12 +456,36 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())  // Return self for chaining
         });
 
-        methods.add_method_mut("build", |lua, this, ()| {
-            lua.app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                .spawn_commands
-                .borrow_mut()
-                .push(this.cmd.clone());
+        // build() - queue spawn or clone, regular or collision context
+        methods.add_method("build", |lua, this, ()| {
+            let app_data = lua
+                .app_data_ref::<LuaAppData>()
+                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+
+            match (this.mode, this.context) {
+                (BuilderMode::Spawn, BuilderContext::Regular) => {
+                    app_data.spawn_commands.borrow_mut().push(this.cmd.clone());
+                }
+                (BuilderMode::Spawn, BuilderContext::Collision) => {
+                    app_data
+                        .collision_spawn_commands
+                        .borrow_mut()
+                        .push(this.cmd.clone());
+                }
+                (BuilderMode::Clone, BuilderContext::Regular) => {
+                    app_data.clone_commands.borrow_mut().push(CloneCmd {
+                        source_key: this.source_key.clone().unwrap_or_default(),
+                        overrides: this.cmd.clone(),
+                    });
+                }
+                (BuilderMode::Clone, BuilderContext::Collision) => {
+                    app_data.collision_clone_commands.borrow_mut().push(CloneCmd {
+                        source_key: this.source_key.clone().unwrap_or_default(),
+                        overrides: this.cmd.clone(),
+                    });
+                }
+            }
+
             Ok(())
         });
     }
@@ -299,7 +501,7 @@ Lua reads world state through a **cached snapshot**, not directly from ECS resou
 ```rust
 // Before calling Lua callbacks
 lua_runtime.update_signal_cache(world_signals.snapshot());
-lua_runtime.update_input_cache(&input);
+lua_runtime.update_tracked_groups_cache(&tracked_groups);
 
 // In Lua
 local score = engine.get_integer("score")  -- Reads from cache
@@ -316,7 +518,12 @@ local score = engine.get_integer("score")  -- Reads from cache
 ```rust
 // In game.rs or system that calls Lua
 lua_runtime.update_signal_cache(world_signals.snapshot());
+lua_runtime.update_tracked_groups_cache(&tracked_groups);
 ```
+
+### Input Data
+
+Input is not read from the signal snapshot; it is passed to callbacks via a dedicated input table built from an `InputSnapshot`.
 
 ---
 
@@ -327,6 +534,7 @@ To minimize Lua table allocations in hot paths, the engine uses **table pooling*
 ### Why Pooling?
 
 Without pooling, each callback would allocate many Lua tables:
+
 - **Collision callbacks**: ~15-17 tables per collision (ctx, ctx.a, ctx.b, pos tables, vel tables, rect tables, signals, sides, etc.)
 - **Entity callbacks** (phase/timer): ~10-14 tables per callback (ctx, pos, screen_pos, vel, scale, rect, sprite, animation, timer, signals)
 
@@ -335,24 +543,30 @@ In a game with frequent collisions or many entities with phase/timer components,
 ### Pool Architecture
 
 #### CollisionCtxPool (for collision callbacks)
+
 ```rust
 struct CollisionCtxPool {
-    ctx: LuaRegistryKey,        // Root context table
-    a: LuaRegistryKey,          // ctx.a entity table
-    b: LuaRegistryKey,          // ctx.b entity table
-    a_pos: LuaRegistryKey,      // ctx.a.pos
-    a_vel: LuaRegistryKey,      // ctx.a.vel
-    a_rect: LuaRegistryKey,     // ctx.a.rect
-    a_signals: LuaRegistryKey,  // ctx.a.signals
-    b_pos: LuaRegistryKey,      // ctx.b.pos (etc.)
-    // ... more tables
-    sides: LuaRegistryKey,      // ctx.sides
+    ctx: LuaRegistryKey,
+    entity_a: LuaRegistryKey,   // ctx.a
+    entity_b: LuaRegistryKey,   // ctx.b
+
+    pos_a: LuaRegistryKey,      // ctx.a.pos
+    vel_a: LuaRegistryKey,      // ctx.a.vel
+    rect_a: LuaRegistryKey,     // ctx.a.rect
+    signals_a: LuaRegistryKey,  // ctx.a.signals
+
+    pos_b: LuaRegistryKey,      // ctx.b.pos
+    vel_b: LuaRegistryKey,      // ctx.b.vel
+    rect_b: LuaRegistryKey,     // ctx.b.rect
+    signals_b: LuaRegistryKey,  // ctx.b.signals
+
     sides_a: LuaRegistryKey,    // ctx.sides.a
     sides_b: LuaRegistryKey,    // ctx.sides.b
 }
 ```
 
 #### EntityCtxPool (for phase/timer callbacks)
+
 ```rust
 struct EntityCtxPool {
     ctx: LuaRegistryKey,        // Root context table
@@ -384,7 +598,7 @@ struct EntityCtxPool {
 ### What Gets Pooled vs Created Fresh
 
 | Data Type | Pooled? | Reason |
-|-----------|---------|--------|
+| --------- | ------- | ------ |
 | Fixed-structure tables (ctx, pos, vel, rect, etc.) | Yes | Same structure every time |
 | Scalar/numeric values | N/A | Set directly on pooled tables |
 | Signal inner maps (flags, integers, scalars, strings) | No | Variable keys per entity |
@@ -726,6 +940,7 @@ Bevy's `Entity` type is not directly usable in Lua. Always convert:
 ### 5. Document Lua API
 
 Always update:
+
 - `assets/scripts/engine.lua` - LSP stubs for autocomplete
 - `assets/scripts/README.md` - Human-readable documentation
 - `llm-context.md` - LLM context file
@@ -768,6 +983,7 @@ The Lua interface follows these principles:
 5. **Context Awareness**: Collision callbacks have separate queues for immediate processing
 
 To add new commands:
+
 1. Add variant to appropriate command enum in `commands.rs`
 2. Register Lua function in `runtime.rs`
 3. Process command in `lua_commands.rs`
