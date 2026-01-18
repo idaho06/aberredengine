@@ -3,11 +3,33 @@
 //! This module provides the `LuaEntityBuilder` struct which implements
 //! a fluent interface for building entities from Lua scripts using method chaining.
 //!
-//! Also provides `LuaCollisionEntityBuilder` for spawning entities from collision callbacks.
+//! The builder supports both spawning new entities and cloning existing ones,
+//! in both regular and collision contexts.
 
+use super::commands::CloneCmd;
 use super::runtime::LuaAppData;
 use super::spawn_data::*;
 use mlua::prelude::*;
+
+/// Builder mode: spawn a new entity or clone an existing one.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum BuilderMode {
+    /// Spawn a new entity from scratch
+    #[default]
+    Spawn,
+    /// Clone an existing entity (looked up by WorldSignals key)
+    Clone,
+}
+
+/// Builder context: regular or collision callback.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum BuilderContext {
+    /// Regular context (scene setup, phase callbacks, timer callbacks)
+    #[default]
+    Regular,
+    /// Collision callback context (processed immediately after collision)
+    Collision,
+}
 
 /// Entity builder exposed to Lua for fluent entity construction.
 ///
@@ -15,15 +37,53 @@ use mlua::prelude::*;
 /// the colon syntax: `engine.spawn():with_position(x, y):build()`
 ///
 /// Each `with_*` method returns `Self` to allow chaining.
-/// The `build()` method queues the entity for spawning.
+/// The `build()` method queues the entity for spawning or cloning.
 #[derive(Debug, Clone, Default)]
 pub struct LuaEntityBuilder {
+    mode: BuilderMode,
+    context: BuilderContext,
+    /// Only used in Clone mode - WorldSignals key for source entity
+    source_key: Option<String>,
     cmd: SpawnCmd,
 }
 
 impl LuaEntityBuilder {
+    /// Create a new spawn builder (regular context).
     pub fn new() -> Self {
         Self {
+            mode: BuilderMode::Spawn,
+            context: BuilderContext::Regular,
+            source_key: None,
+            cmd: SpawnCmd::default(),
+        }
+    }
+
+    /// Create a new spawn builder (collision context).
+    pub fn new_collision() -> Self {
+        Self {
+            mode: BuilderMode::Spawn,
+            context: BuilderContext::Collision,
+            source_key: None,
+            cmd: SpawnCmd::default(),
+        }
+    }
+
+    /// Create a new clone builder (regular context).
+    pub fn new_clone(source_key: String) -> Self {
+        Self {
+            mode: BuilderMode::Clone,
+            context: BuilderContext::Regular,
+            source_key: Some(source_key),
+            cmd: SpawnCmd::default(),
+        }
+    }
+
+    /// Create a new clone builder (collision context).
+    pub fn new_collision_clone(source_key: String) -> Self {
+        Self {
+            mode: BuilderMode::Clone,
+            context: BuilderContext::Collision,
+            source_key: Some(source_key),
             cmd: SpawnCmd::default(),
         }
     }
@@ -810,273 +870,46 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
-        // :build() - Queue the entity for spawning
+        // :build() - Queue the entity for spawning or cloning
         methods.add_method("build", |lua, this, ()| {
-            lua.app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                .spawn_commands
-                .borrow_mut()
-                .push(this.cmd.clone());
-            Ok(())
-        });
-    }
-}
+            let app_data = lua
+                .app_data_ref::<LuaAppData>()
+                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
 
-/// Entity builder for collision callbacks.
-///
-/// Similar to `LuaEntityBuilder` but pushes to the collision spawn queue
-/// which is processed immediately after collision callbacks.
-#[derive(Debug, Clone, Default)]
-pub struct LuaCollisionEntityBuilder {
-    cmd: SpawnCmd,
-}
-
-impl LuaCollisionEntityBuilder {
-    pub fn new() -> Self {
-        Self {
-            cmd: SpawnCmd::default(),
-        }
-    }
-}
-
-impl LuaUserData for LuaCollisionEntityBuilder {
-    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
-        // :with_group(name) - Set entity group
-        methods.add_method_mut("with_group", |_, this, name: String| {
-            this.cmd.group = Some(name);
-            Ok(this.clone())
-        });
-
-        // :with_position(x, y) - Set world position
-        methods.add_method_mut("with_position", |_, this, (x, y): (f32, f32)| {
-            this.cmd.position = Some((x, y));
-            Ok(this.clone())
-        });
-
-        // :with_sprite(tex_key, width, height, origin_x, origin_y) - Set sprite
-        methods.add_method_mut(
-            "with_sprite",
-            |_, this, (tex_key, width, height, origin_x, origin_y): (String, f32, f32, f32, f32)| {
-                this.cmd.sprite = Some(SpriteData {
-                    tex_key,
-                    width,
-                    height,
-                    origin_x,
-                    origin_y,
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                    flip_h: false,
-                    flip_v: false,
-                });
-                Ok(this.clone())
-            },
-        );
-
-        // :with_sprite_offset(offset_x, offset_y) - Set sprite offset
-        methods.add_method_mut(
-            "with_sprite_offset",
-            |_, this, (offset_x, offset_y): (f32, f32)| {
-                if let Some(ref mut sprite) = this.cmd.sprite {
-                    sprite.offset_x = offset_x;
-                    sprite.offset_y = offset_y;
+            match (this.mode, this.context) {
+                (BuilderMode::Spawn, BuilderContext::Regular) => {
+                    app_data.spawn_commands.borrow_mut().push(this.cmd.clone());
                 }
-                Ok(this.clone())
-            },
-        );
-
-        // :with_sprite_flip(flip_h, flip_v) - Set sprite flipping
-        methods.add_method_mut(
-            "with_sprite_flip",
-            |_, this, (flip_h, flip_v): (bool, bool)| {
-                if let Some(ref mut sprite) = this.cmd.sprite {
-                    sprite.flip_h = flip_h;
-                    sprite.flip_v = flip_v;
+                (BuilderMode::Spawn, BuilderContext::Collision) => {
+                    app_data
+                        .collision_spawn_commands
+                        .borrow_mut()
+                        .push(this.cmd.clone());
                 }
-                Ok(this.clone())
-            },
-        );
-
-        // :with_zindex(z) - Set render order
-        methods.add_method_mut("with_zindex", |_, this, z: i32| {
-            this.cmd.zindex = Some(z);
-            Ok(this.clone())
-        });
-
-        // :with_velocity(vx, vy) - Set RigidBody velocity
-        // Creates a RigidBody if one doesn't exist, otherwise updates velocity
-        methods.add_method_mut("with_velocity", |_, this, (vx, vy): (f32, f32)| {
-            if let Some(ref mut rb) = this.cmd.rigidbody {
-                rb.velocity_x = vx;
-                rb.velocity_y = vy;
-            } else {
-                this.cmd.rigidbody = Some(RigidBodyData {
-                    velocity_x: vx,
-                    velocity_y: vy,
-                    ..RigidBodyData::default()
-                });
-            }
-            Ok(this.clone())
-        });
-
-        // :with_friction(friction) - Set RigidBody friction (velocity damping)
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut("with_friction", |_, this, friction: f32| {
-            if let Some(ref mut rb) = this.cmd.rigidbody {
-                rb.friction = friction;
-            } else {
-                this.cmd.rigidbody = Some(RigidBodyData {
-                    friction,
-                    ..RigidBodyData::default()
-                });
-            }
-            Ok(this.clone())
-        });
-
-        // :with_max_speed(speed) - Set RigidBody max_speed clamp
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut("with_max_speed", |_, this, speed: f32| {
-            if let Some(ref mut rb) = this.cmd.rigidbody {
-                rb.max_speed = Some(speed);
-            } else {
-                this.cmd.rigidbody = Some(RigidBodyData {
-                    max_speed: Some(speed),
-                    ..RigidBodyData::default()
-                });
-            }
-            Ok(this.clone())
-        });
-
-        // :with_accel(name, x, y, enabled) - Add a named acceleration force
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut(
-            "with_accel",
-            |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
-                if let Some(ref mut rb) = this.cmd.rigidbody {
-                    rb.forces.push(ForceData {
-                        name,
-                        x,
-                        y,
-                        enabled,
-                    });
-                } else {
-                    this.cmd.rigidbody = Some(RigidBodyData {
-                        forces: vec![ForceData {
-                            name,
-                            x,
-                            y,
-                            enabled,
-                        }],
-                        ..RigidBodyData::default()
+                (BuilderMode::Clone, BuilderContext::Regular) => {
+                    let source_key = this
+                        .source_key
+                        .clone()
+                        .unwrap_or_else(|| String::new());
+                    app_data.clone_commands.borrow_mut().push(CloneCmd {
+                        source_key,
+                        overrides: this.cmd.clone(),
                     });
                 }
-                Ok(this.clone())
-            },
-        );
-
-        // :with_frozen() - Mark entity as frozen (physics skipped)
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut("with_frozen", |_, this, ()| {
-            if let Some(ref mut rb) = this.cmd.rigidbody {
-                rb.frozen = true;
-            } else {
-                this.cmd.rigidbody = Some(RigidBodyData {
-                    frozen: true,
-                    ..RigidBodyData::default()
-                });
-            }
-            Ok(this.clone())
-        });
-
-        // :with_collider(width, height, origin_x, origin_y) - Set BoxCollider
-        methods.add_method_mut(
-            "with_collider",
-            |_, this, (width, height, origin_x, origin_y): (f32, f32, f32, f32)| {
-                this.cmd.collider = Some(ColliderData {
-                    width,
-                    height,
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                    origin_x,
-                    origin_y,
-                });
-                Ok(this.clone())
-            },
-        );
-
-        // :with_collider_offset(offset_x, offset_y) - Set collider offset
-        methods.add_method_mut(
-            "with_collider_offset",
-            |_, this, (offset_x, offset_y): (f32, f32)| {
-                if let Some(ref mut collider) = this.cmd.collider {
-                    collider.offset_x = offset_x;
-                    collider.offset_y = offset_y;
+                (BuilderMode::Clone, BuilderContext::Collision) => {
+                    let source_key = this
+                        .source_key
+                        .clone()
+                        .unwrap_or_else(|| String::new());
+                    app_data
+                        .collision_clone_commands
+                        .borrow_mut()
+                        .push(CloneCmd {
+                            source_key,
+                            overrides: this.cmd.clone(),
+                        });
                 }
-                Ok(this.clone())
-            },
-        );
-
-        // :with_rotation(degrees) - Set rotation
-        methods.add_method_mut("with_rotation", |_, this, degrees: f32| {
-            this.cmd.rotation = Some(degrees);
-            Ok(this.clone())
-        });
-
-        // :with_scale(sx, sy) - Set scale
-        methods.add_method_mut("with_scale", |_, this, (sx, sy): (f32, f32)| {
-            this.cmd.scale = Some((sx, sy));
-            Ok(this.clone())
-        });
-
-        // :with_signal_integer(key, value) - Add an integer signal
-        methods.add_method_mut(
-            "with_signal_integer",
-            |_, this, (key, value): (String, i32)| {
-                this.cmd.signal_integers.push((key, value));
-                Ok(this.clone())
-            },
-        );
-
-        // :with_signal_flag(key) - Add a flag signal
-        methods.add_method_mut("with_signal_flag", |_, this, key: String| {
-            this.cmd.signal_flags.push(key);
-            Ok(this.clone())
-        });
-
-        // :with_signals() - Add empty Signals component
-        methods.add_method_mut("with_signals", |_, this, ()| {
-            this.cmd.has_signals = true;
-            Ok(this.clone())
-        });
-
-        // :with_lua_timer(duration, callback) - Add LuaTimer component
-        methods.add_method_mut(
-            "with_lua_timer",
-            |_, this, (duration, callback): (f32, String)| {
-                this.cmd.lua_timer = Some((duration, callback));
-                Ok(this.clone())
-            },
-        );
-
-        // :with_ttl(seconds) - Add Ttl (time-to-live) component
-        // Entity will be automatically despawned after the specified duration
-        methods.add_method_mut("with_ttl", |_, this, seconds: f32| {
-            this.cmd.ttl = Some(seconds);
-            Ok(this.clone())
-        });
-
-        // :with_animation(animation_key) - Add Animation component
-        methods.add_method_mut("with_animation", |_, this, animation_key: String| {
-            this.cmd.animation = Some(AnimationData { animation_key });
-            Ok(this.clone())
-        });
-
-        // :build() - Queue the entity for spawning in collision context
-        methods.add_method("build", |lua, this, ()| {
-            lua.app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                .collision_spawn_commands
-                .borrow_mut()
-                .push(this.cmd.clone());
+            }
             Ok(())
         });
     }

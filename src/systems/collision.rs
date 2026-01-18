@@ -66,8 +66,8 @@ use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
-    process_audio_command, process_camera_command, process_entity_commands, process_phase_command,
-    process_signal_command, process_spawn_command,
+    process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
+    process_phase_command, process_signal_command, process_spawn_command,
 };
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
@@ -268,6 +268,11 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
             // Process collision spawn commands
             for cmd in params.lua_runtime.drain_collision_spawn_commands() {
                 process_spawn_command(&mut params.commands, cmd, &mut params.world_signals);
+            }
+
+            // Process collision clone commands
+            for cmd in params.lua_runtime.drain_collision_clone_commands() {
+                process_clone_command(&mut params.commands, cmd, &mut params.world_signals);
             }
 
             // Process collision phase commands

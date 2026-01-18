@@ -59,7 +59,7 @@ use bevy_ecs::prelude::Component;
 /// The timer accumulates time from [`WorldTime`](crate::resources::worldtime::WorldTime)
 /// and emits a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when `elapsed >= duration`.
 /// The Lua callback receives the entity ID and can perform any engine operations.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct LuaTimer {
     /// Total duration in seconds before the timer fires.
     pub duration: f32,

@@ -4,7 +4,7 @@
 //! and provides the `engine` table API to Lua scripts.
 
 use super::commands::*;
-use super::entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
+use super::entity_builder::LuaEntityBuilder;
 use super::input_snapshot::InputSnapshot;
 use super::spawn_data::*;
 use crate::resources::worldsignals::SignalSnapshot;
@@ -26,6 +26,8 @@ pub(super) struct LuaAppData {
     tilemap_commands: RefCell<Vec<TilemapCmd>>,
     camera_commands: RefCell<Vec<CameraCmd>>,
     animation_commands: RefCell<Vec<AnimationCmd>>,
+    /// Clone commands for regular context (scene setup, phase callbacks)
+    pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
     // Collision-scoped command queues (processed immediately after each collision callback)
     collision_entity_commands: RefCell<Vec<EntityCmd>>,
     collision_signal_commands: RefCell<Vec<SignalCmd>>,
@@ -33,6 +35,8 @@ pub(super) struct LuaAppData {
     pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
     collision_phase_commands: RefCell<Vec<PhaseCmd>>,
     collision_camera_commands: RefCell<Vec<CameraCmd>>,
+    /// Clone commands for collision context (processed after collision callbacks)
+    pub(super) collision_clone_commands: RefCell<Vec<CloneCmd>>,
     /// Cached world signal snapshot (read-only for Lua).
     /// Updated before calling Lua callbacks via `update_signal_cache()`.
     /// Using Arc allows cheap sharing without cloning all maps on every callback.
@@ -153,12 +157,14 @@ impl LuaRuntime {
             tilemap_commands: RefCell::new(Vec::new()),
             camera_commands: RefCell::new(Vec::new()),
             animation_commands: RefCell::new(Vec::new()),
+            clone_commands: RefCell::new(Vec::new()),
             collision_entity_commands: RefCell::new(Vec::new()),
             collision_signal_commands: RefCell::new(Vec::new()),
             collision_audio_commands: RefCell::new(Vec::new()),
             collision_spawn_commands: RefCell::new(Vec::new()),
             collision_phase_commands: RefCell::new(Vec::new()),
             collision_camera_commands: RefCell::new(Vec::new()),
+            collision_clone_commands: RefCell::new(Vec::new()),
             signal_snapshot: RefCell::new(Arc::new(SignalSnapshot::default())),
             tracked_groups: RefCell::new(FxHashSet::default()),
         });
@@ -466,6 +472,14 @@ impl LuaRuntime {
             "spawn",
             self.lua
                 .create_function(|_, ()| Ok(LuaEntityBuilder::new()))?,
+        )?;
+
+        // engine.clone(source_key) - Clone an entity from WorldSignals
+        // Returns a LuaEntityBuilder that clones the source entity and applies overrides
+        engine.set(
+            "clone",
+            self.lua
+                .create_function(|_, source_key: String| Ok(LuaEntityBuilder::new_clone(source_key)))?,
         )?;
 
         Ok(())
@@ -2196,11 +2210,19 @@ impl LuaRuntime {
         )?;
 
         // engine.collision_spawn() - Create a new entity builder for collision context
-        // Returns a LuaCollisionEntityBuilder that queues spawns for processing after collision
+        // Returns a LuaEntityBuilder that queues spawns for processing after collision
         engine.set(
             "collision_spawn",
             self.lua
-                .create_function(|_, ()| Ok(LuaCollisionEntityBuilder::new()))?,
+                .create_function(|_, ()| Ok(LuaEntityBuilder::new_collision()))?,
+        )?;
+
+        // engine.collision_clone(source_key) - Clone an entity in collision context
+        // Returns a LuaEntityBuilder that clones the source entity and applies overrides
+        engine.set(
+            "collision_clone",
+            self.lua
+                .create_function(|_, source_key: String| Ok(LuaEntityBuilder::new_collision_clone(source_key)))?,
         )?;
 
         // engine.collision_phase_transition(entity_id, phase)
@@ -2517,6 +2539,31 @@ impl LuaRuntime {
             .unwrap_or_default()
     }
 
+    /// Drains all queued clone commands.
+    /// Call this from a Rust system after Lua has queued entity clones via
+    /// `engine.clone(source_key):...:build()`. The system can then process them
+    /// with access to ECS Commands.
+    pub fn drain_clone_commands(&self) -> Vec<CloneCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| data.clone_commands.borrow_mut().drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Drains all queued collision clone commands.
+    /// Call this after processing Lua collision callbacks to clone entities.
+    pub fn drain_collision_clone_commands(&self) -> Vec<CloneCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| {
+                data.collision_clone_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Clears all command queues without processing them.
     ///
     /// This should be called at the start of scene switches to discard any
@@ -2526,6 +2573,7 @@ impl LuaRuntime {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             data.entity_commands.borrow_mut().clear();
             data.spawn_commands.borrow_mut().clear();
+            data.clone_commands.borrow_mut().clear();
             data.signal_commands.borrow_mut().clear();
             data.phase_commands.borrow_mut().clear();
             data.audio_commands.borrow_mut().clear();

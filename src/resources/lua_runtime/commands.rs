@@ -247,3 +247,17 @@ pub enum AnimationCmd {
         looped: bool,
     },
 }
+
+use super::spawn_data::SpawnCmd;
+
+/// Command for cloning an entity from Lua.
+///
+/// Clones an existing entity by looking up the source via WorldSignals key,
+/// then applies component overrides from the builder.
+#[derive(Debug, Clone, Default)]
+pub struct CloneCmd {
+    /// WorldSignals key to look up the source entity
+    pub source_key: String,
+    /// Component overrides (builder values win over template)
+    pub overrides: SpawnCmd,
+}

@@ -60,8 +60,8 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_audio_command, process_camera_command, process_entity_commands, process_phase_command,
-    process_signal_command, process_spawn_command,
+    process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
+    process_phase_command, process_signal_command, process_spawn_command,
 };
 
 /// Bundled read-only queries for building entity context.
@@ -489,6 +489,11 @@ pub fn lua_phase_system(
     // Process spawn commands from Lua (entities spawned during phase callbacks)
     for cmd in lua_runtime.drain_spawn_commands() {
         process_spawn_command(&mut commands, cmd, &mut world_signals);
+    }
+
+    // Process clone commands from Lua (entities cloned during phase callbacks)
+    for cmd in lua_runtime.drain_clone_commands() {
+        process_clone_command(&mut commands, cmd, &mut world_signals);
     }
 
     // Process entity commands from Lua (component manipulation)

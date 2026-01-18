@@ -83,8 +83,8 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     process_animation_command, process_asset_command, process_audio_command,
-    process_camera_command, process_entity_commands, process_group_command, process_phase_command,
-    process_signal_command, process_spawn_command, process_tilemap_command,
+    process_camera_command, process_clone_command, process_entity_commands, process_group_command,
+    process_phase_command, process_signal_command, process_spawn_command, process_tilemap_command,
 };
 //use rand::Rng;
 
@@ -666,6 +666,11 @@ pub fn update(
         process_spawn_command(&mut commands, cmd, &mut world_signals);
     }
 
+    // Process clone commands from Lua
+    for cmd in lua_runtime.drain_clone_commands() {
+        process_clone_command(&mut commands, cmd, &mut world_signals);
+    }
+
     // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
         process_phase_command(&mut luaphase_query, cmd);
@@ -891,6 +896,11 @@ pub fn switch_scene(
     // Process spawn commands from Lua
     for cmd in lua_runtime.drain_spawn_commands() {
         process_spawn_command(&mut commands, cmd, &mut worldsignals);
+    }
+
+    // Process clone commands from Lua
+    for cmd in lua_runtime.drain_clone_commands() {
+        process_clone_command(&mut commands, cmd, &mut worldsignals);
     }
 
     // Process group commands from Lua

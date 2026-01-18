@@ -514,6 +514,13 @@ function EntityBuilder:build() end
 ---@return EntityBuilder
 function engine.spawn() end
 
+---Clone an existing entity and apply overrides
+---Looks up the source entity by WorldSignals key, clones all components,
+---then applies any builder overrides. Animation is reset to frame 0.
+---@param source_key string WorldSignals key of the entity to clone
+---@return EntityBuilder
+function engine.clone(source_key) end
+
 -- ==================== World Signals ====================
 
 ---Get a scalar (float) signal value
@@ -1225,6 +1232,14 @@ function CollisionEntityBuilder:build() end
 ---Has the same capabilities as engine.spawn()
 ---@return CollisionEntityBuilder
 function engine.collision_spawn() end
+
+---Clone an existing entity during collision handling
+---Looks up the source entity by WorldSignals key, clones all components,
+---then applies any builder overrides. Animation is reset to frame 0.
+---Has the same capabilities as engine.clone()
+---@param source_key string WorldSignals key of the entity to clone
+---@return CollisionEntityBuilder
+function engine.collision_clone(source_key) end
 
 ---Request phase transition for an entity during collision handling
 ---@param entity_id integer Entity ID with LuaPhase component

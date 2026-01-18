@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-16 (synced with codebase)
+# Last updated: 2026-01-18 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -100,7 +100,7 @@ src/
 │       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, etc.
 │       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer)
 │       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
-│       ├── entity_builder.rs  # LuaEntityBuilder, LuaCollisionEntityBuilder fluent API
+│       ├── entity_builder.rs  # LuaEntityBuilder fluent API (unified spawn/clone, regular/collision)
 │       └── spawn_data.rs      # SpawnComponentData structures
 └── events/
     ├── mod.rs                 # Re-exports
@@ -263,6 +263,11 @@ SpawnCmd (spawn_data.rs) {
     register_as, lua_collision_rule, animation, animation_controller
 }
 
+CloneCmd (commands.rs) {
+    source_key: String,     -- WorldSignals key to look up source entity
+    overrides: SpawnCmd     -- Component overrides (builder values win over template)
+}
+
 SignalCmd { SetScalar, SetInteger, SetString, SetFlag, ClearFlag, ClearScalar, ClearInteger, ClearString, SetEntity, RemoveEntity }
 AudioLuaCmd { PlayMusic { id, looped }, PlaySound { id }, StopAllMusic, StopAllSounds }
 GroupCmd { TrackGroup { name }, UntrackGroup { name }, ClearTrackedGroups }
@@ -345,9 +350,13 @@ engine.entity_despawn(id)
 engine.entity_menu_despawn(id)  -- despawn menu + items + cursor + associated textures
 engine.entity_signal_set_integer(id, key, value)
 
+-- Entity Cloning (all contexts)
+engine.clone(source_key) -> EntityBuilder  -- Clone entity by WorldSignals key, apply overrides
+
 -- Collision-Specific Commands (collision callbacks only - for proper timing)
 -- These use separate queues that drain immediately after collision callback returns
 engine.collision_spawn() -> EntityBuilder (same capabilities as engine.spawn())
+engine.collision_clone(source_key) -> EntityBuilder  -- Clone entity in collision context
 engine.collision_play_sound(id)
 engine.collision_set_integer(key, value)
 engine.collision_set_scalar(key, value)
@@ -469,7 +478,11 @@ engine.spawn_tiles(id)
 :register_as(key)
 :build()
 
--- Collision Entity Builder (engine.collision_spawn())
+-- Clone Builder (engine.clone(source_key) / engine.collision_clone(source_key))
+-- Clones existing entity, applies overrides. Animation reset to frame 0.
+-- Source looked up by WorldSignals key. :register_as() stores NEW cloned entity.
+
+-- Collision Entity Builder (engine.collision_spawn() / engine.collision_clone())
 -- Has IDENTICAL capabilities as EntityBuilder - all methods available
 
 ## ENTITY CONTEXT (Lua callback ctx table for phase/timer callbacks)
@@ -682,3 +695,5 @@ For features touching:
 18. Rust edition 2024 is used (newer edition than typical projects)
 19. Entity context (ctx) in phase/timer callbacks is built by context.rs - includes all component data
 20. InputSnapshot (input_snapshot.rs) combines WASD+arrows into unified directional inputs
+21. Entity cloning (engine.clone/collision_clone) requires source registered via :register_as()
+22. Clone overrides always win; Animation always resets to frame 0; :register_as() stores NEW entity

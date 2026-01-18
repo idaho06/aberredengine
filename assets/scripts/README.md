@@ -465,6 +465,43 @@ All `:with_*()` methods return the builder for chaining. Call `:build()` to fina
 
 ---
 
+### Entity Cloning
+
+Clone an existing entity using `engine.clone(source_key)`. The source entity is looked up by its WorldSignals key (set via `:register_as()`). All components are cloned, and builder overrides win over the template's values. Animation is always reset to frame 0.
+
+```lua
+-- First, create a template entity (no position = won't render)
+engine.spawn()
+    :with_sprite("bullet", 8, 8, 4, 4)
+    :with_collider(8, 8, 4, 4)
+    :with_animation("bullet_anim")
+    :register_as("bullet_template")
+    :build()
+
+-- Clone with overrides
+engine.clone("bullet_template")
+    :with_group("bullets")
+    :with_position(x, y)
+    :with_velocity(vx, vy)
+    :with_ttl(3.0)
+    :build()
+```
+
+**Key behaviors:**
+
+- **Overrides win**: Builder values always override the template's components
+- **All components cloned**: Every component implementing `Clone` or `Reflect` is copied
+- **Animation reset**: Animation always starts at frame 0, even without override
+- **New entity registered**: `:register_as()` stores the NEW cloned entity's ID, not the template
+
+**When to use cloning:**
+
+- Spawning many similar entities (bullets, particles, enemies)
+- Entity templates with complex component setups
+- Performance optimization (fewer builder calls than full spawn)
+
+---
+
 ### Core Components
 
 #### `:with_group(name)`
@@ -2300,6 +2337,23 @@ function despawn_particle(entity_id)
     -- Note: This timer callback runs in regular context, but entity_despawn
     -- doesn't exist in regular API. Use phase callbacks or spawn entities
     -- with a fixed lifetime instead.
+end
+```
+
+#### `engine.collision_clone(source_key)`
+
+Clone an existing entity during collision handling. The source entity is looked up by its WorldSignals key. All components are cloned, and builder overrides win over the template's values. Animation is always reset to frame 0.
+
+All methods available on `engine.clone()` are also available on `engine.collision_clone()`. See [Entity Cloning](#entity-cloning) for details.
+
+```lua
+function on_enemy_hit(ctx)
+    -- Clone a bullet template at the enemy's position
+    engine.collision_clone("bullet_template")
+        :with_position(ctx.a.pos.x, ctx.a.pos.y)
+        :with_velocity(0, -200)
+        :with_ttl(2.0)
+        :build()
 end
 ```
 

@@ -55,8 +55,8 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
-    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, EntityCmd, GroupCmd,
-    MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
+    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd,
+    GroupCmd, MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
 };
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
@@ -1100,6 +1100,249 @@ pub fn process_spawn_command(
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         world_signals.set_entity(&key, entity);
+    }
+}
+
+/// Command to reset an entity's Animation component to frame 0.
+/// Used when cloning entities to ensure the animation starts fresh.
+struct ResetAnimationCommand;
+
+impl bevy_ecs::system::EntityCommand for ResetAnimationCommand {
+    fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
+        if let Some(mut animation) = entity.get_mut::<Animation>() {
+            animation.frame_index = 0;
+            animation.elapsed_time = 0.0;
+        }
+    }
+}
+
+/// Process a clone command from Lua and create a cloned entity.
+///
+/// This function clones an existing entity (looked up by WorldSignals key) and
+/// applies component overrides from the CloneCmd. Animation is always reset to frame 0.
+///
+/// # Parameters
+///
+/// - `commands` - Bevy Commands for entity manipulation
+/// - `cmd` - The CloneCmd containing source key and overrides
+/// - `world_signals` - WorldSignals for entity lookup and registration
+pub fn process_clone_command(
+    commands: &mut Commands,
+    cmd: CloneCmd,
+    world_signals: &mut WorldSignals,
+) {
+    // 1. Look up source entity from WorldSignals
+    let Some(source_entity) = world_signals.get_entity(&cmd.source_key).copied() else {
+        eprintln!(
+            "[Clone] Source '{}' not found in WorldSignals",
+            cmd.source_key
+        );
+        return;
+    };
+
+    // 2. Clone entity using Bevy's clone_and_spawn API
+    let mut source_commands = commands.entity(source_entity);
+    let mut entity_commands = source_commands.clone_and_spawn();
+    let cloned_entity = entity_commands.id();
+
+    // 3. Apply component overrides from the SpawnCmd
+    let overrides = cmd.overrides;
+
+    // Group (override or replace)
+    if let Some(group_name) = overrides.group {
+        entity_commands.insert(Group::new(&group_name));
+    }
+
+    // Position (override)
+    if let Some((x, y)) = overrides.position {
+        entity_commands.insert(MapPosition::new(x, y));
+    }
+
+    // Sprite (override)
+    if let Some(sprite_data) = overrides.sprite {
+        entity_commands.insert(Sprite {
+            tex_key: Arc::from(sprite_data.tex_key),
+            width: sprite_data.width,
+            height: sprite_data.height,
+            origin: Vector2 {
+                x: sprite_data.origin_x,
+                y: sprite_data.origin_y,
+            },
+            offset: Vector2 {
+                x: sprite_data.offset_x,
+                y: sprite_data.offset_y,
+            },
+            flip_h: sprite_data.flip_h,
+            flip_v: sprite_data.flip_v,
+        });
+    }
+
+    // ZIndex (override)
+    if let Some(z) = overrides.zindex {
+        entity_commands.insert(ZIndex(z));
+    }
+
+    // RigidBody (override)
+    if let Some(rb_data) = overrides.rigidbody {
+        let mut rb = RigidBody::with_physics(rb_data.friction, rb_data.max_speed);
+        rb.velocity = Vector2 {
+            x: rb_data.velocity_x,
+            y: rb_data.velocity_y,
+        };
+        rb.frozen = rb_data.frozen;
+        for force in rb_data.forces {
+            rb.add_force_with_state(
+                &force.name,
+                Vector2 {
+                    x: force.x,
+                    y: force.y,
+                },
+                force.enabled,
+            );
+        }
+        entity_commands.insert(rb);
+    }
+
+    // BoxCollider (override)
+    if let Some(collider_data) = overrides.collider {
+        entity_commands.insert(BoxCollider {
+            size: Vector2 {
+                x: collider_data.width,
+                y: collider_data.height,
+            },
+            offset: Vector2 {
+                x: collider_data.offset_x,
+                y: collider_data.offset_y,
+            },
+            origin: Vector2 {
+                x: collider_data.origin_x,
+                y: collider_data.origin_y,
+            },
+        });
+    }
+
+    // Rotation (override)
+    if let Some(degrees) = overrides.rotation {
+        entity_commands.insert(Rotation { degrees });
+    }
+
+    // Scale (override)
+    if let Some((sx, sy)) = overrides.scale {
+        entity_commands.insert(Scale {
+            scale: Vector2 { x: sx, y: sy },
+        });
+    }
+
+    // Signals (override or add)
+    if overrides.has_signals
+        || !overrides.signal_scalars.is_empty()
+        || !overrides.signal_integers.is_empty()
+        || !overrides.signal_flags.is_empty()
+        || !overrides.signal_strings.is_empty()
+    {
+        let mut signals = Signals::default();
+        for (key, value) in overrides.signal_scalars {
+            signals.set_scalar(&key, value);
+        }
+        for (key, value) in overrides.signal_integers {
+            signals.set_integer(&key, value);
+        }
+        for flag in overrides.signal_flags {
+            signals.set_flag(&flag);
+        }
+        for (key, value) in overrides.signal_strings {
+            signals.set_string(&key, &value);
+        }
+        entity_commands.insert(signals);
+    }
+
+    // TTL (override)
+    if let Some(seconds) = overrides.ttl {
+        entity_commands.insert(Ttl::new(seconds));
+    }
+
+    // Animation (override) - also resets to frame 0
+    if let Some(anim_data) = overrides.animation {
+        entity_commands.insert(Animation::new(anim_data.animation_key));
+    } else {
+        // 4. Reset Animation to frame 0 even without override
+        // We queue a command to reset the animation using a custom EntityCommand
+        entity_commands.queue(ResetAnimationCommand);
+    }
+
+    // LuaTimer (override)
+    if let Some((duration, callback)) = overrides.lua_timer {
+        entity_commands.insert(LuaTimer::new(duration, callback));
+    }
+
+    // TweenPosition (override)
+    if let Some(tween_data) = overrides.tween_position {
+        let easing = parse_tween_easing(&tween_data.easing);
+        let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
+        let mut tween = TweenPosition::new(
+            Vector2 {
+                x: tween_data.from_x,
+                y: tween_data.from_y,
+            },
+            Vector2 {
+                x: tween_data.to_x,
+                y: tween_data.to_y,
+            },
+            tween_data.duration,
+        )
+        .with_easing(easing)
+        .with_loop_mode(loop_mode);
+
+        if tween_data.backwards {
+            tween = tween.with_backwards();
+        }
+
+        entity_commands.insert(tween);
+    }
+
+    // TweenRotation (override)
+    if let Some(tween_data) = overrides.tween_rotation {
+        let easing = parse_tween_easing(&tween_data.easing);
+        let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
+        let mut tween = TweenRotation::new(tween_data.from, tween_data.to, tween_data.duration)
+            .with_easing(easing)
+            .with_loop_mode(loop_mode);
+
+        if tween_data.backwards {
+            tween = tween.with_backwards();
+        }
+
+        entity_commands.insert(tween);
+    }
+
+    // TweenScale (override)
+    if let Some(tween_data) = overrides.tween_scale {
+        let easing = parse_tween_easing(&tween_data.easing);
+        let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
+        let mut tween = TweenScale::new(
+            Vector2 {
+                x: tween_data.from_x,
+                y: tween_data.from_y,
+            },
+            Vector2 {
+                x: tween_data.to_x,
+                y: tween_data.to_y,
+            },
+            tween_data.duration,
+        )
+        .with_easing(easing)
+        .with_loop_mode(loop_mode);
+
+        if tween_data.backwards {
+            tween = tween.with_backwards();
+        }
+
+        entity_commands.insert(tween);
+    }
+
+    // 5. Register NEW cloned entity if register_as is set
+    if let Some(key) = overrides.register_as {
+        world_signals.set_entity(&key, cloned_entity);
     }
 }
 

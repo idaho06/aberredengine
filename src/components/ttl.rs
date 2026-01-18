@@ -36,7 +36,7 @@ use bevy_ecs::prelude::Component;
 ///
 /// The countdown respects [`WorldTime::time_scale`](crate::resources::worldtime::WorldTime)
 /// and continues regardless of entity frozen state.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Ttl {
     /// Remaining time in seconds before despawn.
     pub remaining: f32,
