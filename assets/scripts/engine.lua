@@ -419,7 +419,7 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---  offset: {x, y} offset from entity position (default {0,0})
 ---  particles_per_emission: Particles spawned per emission (default 1)
 ---  emissions_per_second: Emission frequency (default 10.0)
----  emissions_remaining: Emissions before stopping (default 100)
+---  emissions_remaining: Emissions before stopping (default 100, maximum 4294967295)
 ---  arc: {min, max} direction arc in degrees, 0°=up (default {0, 360})
 ---  speed: {min, max} speed range (default {50, 100})
 ---  ttl: number for fixed, {min=n, max=n} for range, nil for none

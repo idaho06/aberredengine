@@ -1364,7 +1364,7 @@ Add a particle emitter that spawns particles by cloning templates.
 | `offset` | table | `{x=0, y=0}` | Offset from entity position |
 | `particles_per_emission` | integer | `1` | Particles spawned per emission event |
 | `emissions_per_second` | number | `10.0` | Emission frequency |
-| `emissions_remaining` | integer | `100` | Emissions before stopping (0 = infinite) |
+| `emissions_remaining` | integer | `100` | Emissions before stopping (maximum 4294967295) |
 | `arc` | table | `{0, 360}` | Direction arc in degrees (0° = up) |
 | `speed` | table | `{50, 100}` | Speed range `{min, max}` for particles |
 | `ttl` | number/table/nil | `nil` | TTL config for spawned particles |

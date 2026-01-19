@@ -90,7 +90,7 @@ function M.spawn()
             shape = { type = "rect", width = 10, height = 360 },
             particles_per_emission = 1,
             emissions_per_second = 3,
-            emissions_remaining = 99999999,
+            emissions_remaining = 4294967295,
             arc = { -90, -90 },
             speed = { 50, 50 },
             ttl = 15.0,
