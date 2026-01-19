@@ -15,6 +15,7 @@ function M.load_assets()
 
     -- Textures
     engine.load_texture("cursor", "./assets/textures/cursor.png")
+    engine.load_texture("black", "./assets/textures/black.png")
     engine.load_texture("ship_sheet", "./assets/textures/asteroids_ship.png")
     engine.load_texture("space01", "./assets/textures/space01.png")
     engine.load_texture("space02", "./assets/textures/space02.png")
@@ -24,6 +25,11 @@ function M.load_assets()
     engine.load_texture("asteroids-big02", "./assets/textures/asteroids-big02.png")
     engine.load_texture("asteroids-big03", "./assets/textures/asteroids-big03.png")
     engine.load_texture("asteroids-laser", "./assets/textures/asteroids_laser.png")
+    engine.load_texture("explosion01_sheet", "./assets/textures/explosion01.png")
+    engine.load_texture("explosion02_sheet", "./assets/textures/explosion02.png")
+    engine.load_texture("explosion03_sheet", "./assets/textures/explosion03.png")
+    engine.load_texture("stars01_sheet", "./assets/textures/asteroids_stars01.png")
+
 
     --[[ engine.load_texture("title", "./assets/textures/title.png")
     engine.load_texture("background", "./assets/textures/background01.png")
@@ -57,6 +63,9 @@ function M.load_assets()
     -- Animations
     engine.register_animation("ship_idle", "ship_sheet", 0, 0, 64, 8, 15, true)
     engine.register_animation("ship_propulsion", "ship_sheet", 0, 64, 64, 8, 15, true)
+    engine.register_animation("explosion01", "explosion01_sheet", 0, 0, 64, 16, 15, false)
+    engine.register_animation("explosion02", "explosion02_sheet", 0, 0, 32, 7, 15, false)
+    engine.register_animation("explosion03", "explosion03_sheet", 0, 0, 16, 7, 15, false)
     --[[ engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
     engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false) ]]
 

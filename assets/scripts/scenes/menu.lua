@@ -10,10 +10,10 @@ function M.spawn()
     engine.log_info("Spawning menu scene entities from Lua...")
 
     -- Set camera centered at origin with screen offset at center
-    -- target: (0, 0) - center of the menu scene
-    -- offset: center of screen (480x270 window)
-    local camera_offset_x = 240.0 -- 480 / 2
-    local camera_offset_y = 135.0 -- 270 / 2
+    -- target: (0, 0) -
+    -- offset: (0, 0) - origin is at top-left corner
+    local camera_offset_x = 0.0
+    local camera_offset_y = 0.0
     engine.set_camera(0.0, 0.0, camera_offset_x, camera_offset_y, 0.0, 1.0)
 
     -- Spawn the background (scaled 3x)
@@ -25,11 +25,17 @@ function M.spawn()
         :register_as("menu_background")
         :build()
  ]]
+    -- stars particles
+    engine.spawn()
+        :with_sprite("stars01_sheet", 32, 32, 16, 16)
+        :with_zindex(-5)
+        :register_as("star_particle01")
+        :build()
 
     -- Spawn the title
-    local title_entity = engine.spawn()
+    engine.spawn()
         :with_text("DRIFTERS", "future", 64, 255, 255, 255, 255)
-        :with_screen_position(0, 32)
+        :with_screen_position(8, 32)
         :with_zindex(1)
         :register_as("menu_title")
         :build()
@@ -67,6 +73,29 @@ function M.spawn()
 
     -- Play menu music
     -- engine.play_music("menu", true)
+
+    -- Fill the background with black
+    engine.spawn()
+        :with_sprite("black", 64, 64, 0, 0)
+        :with_position(0, 0)
+        :with_zindex(-10)
+        :with_scale(10, 10)
+        :build()
+
+    -- stars generator
+    engine.spawn()
+        :with_position(660, 360 / 2)
+        :with_particle_emitter({
+            templates = { "star_particle01" },
+            shape = { type = "rect", width = 10, height = 360 },
+            particles_per_emission = 1,
+            emissions_per_second = 3,
+            emissions_remaining = 99999999,
+            arc = { -90, -90 },
+            speed = { 50, 50 },
+            ttl = 15.0,
+        })
+        :build()
 
     engine.log_info("Menu scene entities queued!")
 end
