@@ -359,6 +359,7 @@ with_menu_cursor
 with_menu_dynamic_text
 with_menu_selection_sound
 with_mouse_controlled
+with_particle_emitter
 with_persistent
 with_phase
 with_position

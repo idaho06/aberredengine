@@ -412,6 +412,21 @@ function EntityBuilder:with_signal_binding_format(format) end
 ---@return EntityBuilder
 function EntityBuilder:with_grid_layout(path, group, zindex) end
 
+---Add particle emitter component
+---Config table fields:
+---  templates: string[] - WorldSignals keys for template entities to clone
+---  shape: "point" (default) or {type="rect", width=number, height=number}
+---  offset: {x, y} offset from entity position (default {0,0})
+---  particles_per_emission: Particles spawned per emission (default 1)
+---  emissions_per_second: Emission frequency (default 10.0)
+---  emissions_remaining: Emissions before stopping (default 100)
+---  arc: {min, max} direction arc in degrees, 0°=up (default {0, 360})
+---  speed: {min, max} speed range (default {50, 100})
+---  ttl: number for fixed, {min=n, max=n} for range, nil for none
+---@param config table Particle emitter configuration
+---@return EntityBuilder
+function EntityBuilder:with_particle_emitter(config) end
+
 ---Add position tween animation
 ---@param from_x number Start X
 ---@param from_y number Start Y
@@ -1196,6 +1211,21 @@ function CollisionEntityBuilder:with_tween_scale_loop(loop_mode) end
 ---Set scale tween to start from end and play in reverse
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_scale_backwards() end
+
+---Add particle emitter component
+---Config table fields:
+---  templates: string[] - WorldSignals keys for template entities to clone
+---  shape: "point" (default) or {type="rect", width=number, height=number}
+---  offset: {x, y} offset from entity position (default {0,0})
+---  particles_per_emission: Particles spawned per emission (default 1)
+---  emissions_per_second: Emission frequency (default 10.0)
+---  emissions_remaining: Emissions before stopping (default 100)
+---  arc: {min, max} direction arc in degrees, 0°=up (default {0, 360})
+---  speed: {min, max} speed range (default {50, 100})
+---  ttl: number for fixed, {min=n, max=n} for range, nil for none
+---@param config table Particle emitter configuration
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_particle_emitter(config) end
 
 ---Add Lua collision rule
 ---@param group_a string First group name

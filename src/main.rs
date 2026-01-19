@@ -82,6 +82,7 @@ use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
+use crate::systems::particleemitter::particle_emitter_system;
 use crate::systems::render::render_system;
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
@@ -249,6 +250,7 @@ fn main() {
     update.add_systems(tween_mapposition_system);
     update.add_systems(tween_rotation_system);
     update.add_systems(tween_scale_system);
+    update.add_systems(particle_emitter_system.before(movement)); // Before movement so particles move on spawn frame
     update.add_systems(movement);
     update.add_systems(ttl_system.after(movement));
     update.add_systems(collision_detector.after(mouse_controller).after(movement));

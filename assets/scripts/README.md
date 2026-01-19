@@ -19,6 +19,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Phase Component](#phase-component)
   - [Attachment Components](#attachment-components)
   - [Tween Components](#tween-components)
+  - [Particle Emitter Component](#particle-emitter-component)
 - [World Signals](#world-signals)
 - [Entity Commands](#entity-commands)
 - [Phase Control](#phase-control)
@@ -1343,6 +1344,92 @@ Start scale tween from the end and play in reverse (requires `:with_tween_scale(
 :with_tween_scale(0.5, 0.5, 1.0, 1.0, 1.0)  -- Normally: 0.5 -> 1.0
 :with_tween_scale_backwards()  -- Now starts at 1.0, goes to 0.5
 ```
+
+---
+
+### Particle Emitter Component
+
+The particle emitter component enables entities to spawn particles by cloning template entities at configurable rates, directions, and speeds.
+
+#### `:with_particle_emitter(config)`
+
+Add a particle emitter that spawns particles by cloning templates.
+
+**Config Table Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `templates` | string[] | (required) | WorldSignals keys for template entities to clone |
+| `shape` | string or table | `"point"` | `"point"` or `{type="rect", width=N, height=N}` |
+| `offset` | table | `{x=0, y=0}` | Offset from entity position |
+| `particles_per_emission` | integer | `1` | Particles spawned per emission event |
+| `emissions_per_second` | number | `10.0` | Emission frequency |
+| `emissions_remaining` | integer | `100` | Emissions before stopping (0 = infinite) |
+| `arc` | table | `{0, 360}` | Direction arc in degrees (0° = up) |
+| `speed` | table | `{50, 100}` | Speed range `{min, max}` for particles |
+| `ttl` | number/table/nil | `nil` | TTL config for spawned particles |
+
+**TTL Configuration:**
+
+- `nil` - No TTL (particles live until manually despawned)
+- `number` - Fixed TTL (e.g., `2.0` = all particles live 2 seconds)
+- `{min=N, max=N}` - Random TTL within range
+
+**Example - Smoke Trail:**
+
+```lua
+-- First, create a particle template (no position = won't render)
+engine.spawn()
+    :with_group("particle")
+    :with_sprite("smoke", 8, 8, 4, 4)
+    :with_friction(2.0)
+    :register_as("smoke_particle")
+    :build()
+
+-- Create an emitter that spawns smoke particles
+engine.spawn()
+    :with_position(100, 100)
+    :with_particle_emitter({
+        templates = { "smoke_particle" },
+        shape = "point",
+        particles_per_emission = 3,
+        emissions_per_second = 10,
+        emissions_remaining = 100,
+        arc = { -30, 30 },      -- 60° cone facing up
+        speed = { 50, 100 },    -- Random speed between 50-100
+        ttl = { min = 0.5, max = 1.0 },  -- Particles live 0.5-1.0 seconds
+    })
+    :build()
+```
+
+**Example - Explosion Burst:**
+
+```lua
+-- One-shot burst of particles
+engine.spawn()
+    :with_position(ctx.pos.x, ctx.pos.y)
+    :with_particle_emitter({
+        templates = { "spark_particle", "debris_particle" },
+        shape = { type = "rect", width = 10, height = 10 },
+        particles_per_emission = 20,
+        emissions_per_second = 1000,  -- Instant burst
+        emissions_remaining = 1,       -- Only emit once
+        arc = { 0, 360 },              -- All directions
+        speed = { 100, 300 },
+        ttl = { min = 0.3, max = 0.8 },
+    })
+    :with_ttl(1.0)  -- Despawn emitter after 1 second
+    :build()
+```
+
+**Key Behaviors:**
+
+- **Template entities must be registered**: Use `:register_as(key)` on templates
+- **Templates are cloned**: Each particle is a clone with position/velocity/rotation/TTL overrides
+- **Template's RigidBody preserved**: Friction, max_speed, forces are kept from template
+- **Coordinate system**: 0° points up, angles increase clockwise
+- **Catch-up emission**: If dt is large, multiple emissions may occur per frame
+- **Random selection**: Templates are chosen randomly from the list
 
 ---
 

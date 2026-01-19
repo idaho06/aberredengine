@@ -233,6 +233,73 @@ pub struct MenuData {
     pub actions: Vec<(String, MenuActionData)>,
 }
 
+/// Shape of the particle emission area.
+#[derive(Debug, Clone, Default)]
+pub enum ParticleEmitterShapeData {
+    /// Emit from a single point.
+    #[default]
+    Point,
+    /// Emit from random positions within a centered rectangle.
+    Rect { width: f32, height: f32 },
+}
+
+/// TTL configuration for spawned particles.
+#[derive(Debug, Clone, Default)]
+pub enum ParticleTtlData {
+    /// No TTL - particles live until manually despawned.
+    #[default]
+    None,
+    /// Fixed TTL value for all particles.
+    Fixed(f32),
+    /// Random TTL within a range.
+    Range { min: f32, max: f32 },
+}
+
+/// Particle emitter component data for spawning.
+#[derive(Debug, Clone)]
+pub struct ParticleEmitterData {
+    /// WorldSignals keys for template entities.
+    pub template_keys: Vec<String>,
+    /// Emission shape.
+    pub shape: ParticleEmitterShapeData,
+    /// Offset from owner's position.
+    pub offset_x: f32,
+    pub offset_y: f32,
+    /// Particles spawned per emission event.
+    pub particles_per_emission: u32,
+    /// Emissions per second.
+    pub emissions_per_second: f32,
+    /// Remaining emissions before stopping.
+    pub emissions_remaining: u32,
+    /// Direction arc in degrees (min, max). 0° = up.
+    pub arc_min_deg: f32,
+    pub arc_max_deg: f32,
+    /// Speed range (min, max).
+    pub speed_min: f32,
+    pub speed_max: f32,
+    /// TTL configuration for spawned particles.
+    pub ttl: ParticleTtlData,
+}
+
+impl Default for ParticleEmitterData {
+    fn default() -> Self {
+        Self {
+            template_keys: Vec::new(),
+            shape: ParticleEmitterShapeData::Point,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            particles_per_emission: 1,
+            emissions_per_second: 10.0,
+            emissions_remaining: 100,
+            arc_min_deg: 0.0,
+            arc_max_deg: 360.0,
+            speed_min: 50.0,
+            speed_max: 100.0,
+            ttl: ParticleTtlData::None,
+        }
+    }
+}
+
 /// Command representing a full entity spawn request from Lua.
 /// Contains all optional component data that Lua can specify.
 #[derive(Debug, Clone, Default)]
@@ -299,4 +366,6 @@ pub struct SpawnCmd {
     pub animation_controller: Option<AnimationControllerData>,
     /// TTL (time-to-live) in seconds - entity auto-despawns after this duration
     pub ttl: Option<f32>,
+    /// Particle emitter component data
+    pub particle_emitter: Option<ParticleEmitterData>,
 }

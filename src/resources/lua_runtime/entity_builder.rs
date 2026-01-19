@@ -863,6 +863,136 @@ impl LuaUserData for LuaEntityBuilder {
             },
         );
 
+        // :with_particle_emitter(table) - Add ParticleEmitter component
+        // Table format:
+        // {
+        //   templates = { "key1", "key2" },  -- WorldSignals keys for template entities
+        //   shape = "point",                 -- or { kind = "rect", width = 16, height = 8 }
+        //   offset = { x = 0, y = -10 },     -- optional, defaults to {0, 0}
+        //   particles_per_emission = 6,
+        //   emissions_per_second = 12,
+        //   emissions_remaining = 30,
+        //   arc = { -30, 30 },               -- degrees, 0° = up
+        //   speed = { 50, 120 },
+        //   ttl = { min = 0.4, max = 0.9 },  -- or number for fixed, or "none"
+        // }
+        methods.add_method_mut("with_particle_emitter", |_, this, table: LuaTable| {
+            use super::spawn_data::{
+                ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData,
+            };
+
+            let mut data = ParticleEmitterData::default();
+
+            // Parse templates (required)
+            if let Ok(templates_table) = table.get::<LuaTable>("templates") {
+                let mut keys = Vec::new();
+                for value in templates_table.sequence_values::<String>() {
+                    if let Ok(key) = value {
+                        keys.push(key);
+                    }
+                }
+                data.template_keys = keys;
+            }
+
+            // Parse shape (optional, defaults to point)
+            if let Ok(shape_value) = table.get::<LuaValue>("shape") {
+                match shape_value {
+                    LuaValue::String(s) => {
+                        if s.to_string_lossy() == "point" {
+                            data.shape = ParticleEmitterShapeData::Point;
+                        }
+                    }
+                    LuaValue::Table(shape_table) => {
+                        let kind: String = shape_table
+                            .get("kind")
+                            .or_else(|_| shape_table.get("type"))
+                            .unwrap_or_default();
+                        if kind == "rect" {
+                            let width: f32 = shape_table.get("width").unwrap_or(0.0);
+                            let height: f32 = shape_table.get("height").unwrap_or(0.0);
+                            data.shape = ParticleEmitterShapeData::Rect { width, height };
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Parse offset (optional)
+            if let Ok(offset_table) = table.get::<LuaTable>("offset") {
+                data.offset_x = offset_table.get("x").unwrap_or(0.0);
+                data.offset_y = offset_table.get("y").unwrap_or(0.0);
+            }
+
+            // Parse emission parameters (optional, have defaults)
+            if let Ok(v) = table.get::<u32>("particles_per_emission") {
+                data.particles_per_emission = v;
+            }
+            if let Ok(v) = table.get::<f32>("emissions_per_second") {
+                data.emissions_per_second = v;
+            }
+            if let Ok(v) = table.get::<u32>("emissions_remaining") {
+                data.emissions_remaining = v;
+            }
+
+            // Parse arc (optional)
+            if let Ok(arc_table) = table.get::<LuaTable>("arc") {
+                let min: f32 = arc_table.get(1).unwrap_or(0.0);
+                let max: f32 = arc_table.get(2).unwrap_or(360.0);
+                // Normalize so min <= max
+                if min <= max {
+                    data.arc_min_deg = min;
+                    data.arc_max_deg = max;
+                } else {
+                    data.arc_min_deg = max;
+                    data.arc_max_deg = min;
+                }
+            }
+
+            // Parse speed (optional)
+            if let Ok(speed_table) = table.get::<LuaTable>("speed") {
+                let min: f32 = speed_table.get(1).unwrap_or(50.0);
+                let max: f32 = speed_table.get(2).unwrap_or(100.0);
+                // Normalize so min <= max
+                if min <= max {
+                    data.speed_min = min;
+                    data.speed_max = max;
+                } else {
+                    data.speed_min = max;
+                    data.speed_max = min;
+                }
+            }
+
+            // Parse ttl (optional)
+            if let Ok(ttl_value) = table.get::<LuaValue>("ttl") {
+                match ttl_value {
+                    LuaValue::String(s) => {
+                        if s.to_string_lossy() == "none" {
+                            data.ttl = ParticleTtlData::None;
+                        }
+                    }
+                    LuaValue::Number(n) => {
+                        data.ttl = ParticleTtlData::Fixed((n as f32).max(0.0));
+                    }
+                    LuaValue::Integer(n) => {
+                        data.ttl = ParticleTtlData::Fixed((n as f32).max(0.0));
+                    }
+                    LuaValue::Table(ttl_table) => {
+                        let min: f32 = ttl_table.get("min").unwrap_or(0.0);
+                        let max: f32 = ttl_table.get("max").unwrap_or(0.0);
+                        let (min, max) = if min <= max { (min, max) } else { (max, min) };
+                        data.ttl = ParticleTtlData::Range {
+                            min: min.max(0.0),
+                            max: max.max(0.0),
+                        };
+                    }
+                    _ => {}
+                }
+            }
+
+            this.cmd.particle_emitter = Some(data);
+            Ok(this.clone())
+        });
+
         // :register_as(key) - Register spawned entity in WorldSignals with this key
         // This allows Lua to retrieve the entity ID later via engine.get_entity(key)
         methods.add_method_mut("register_as", |_, this, key: String| {
@@ -887,20 +1017,14 @@ impl LuaUserData for LuaEntityBuilder {
                         .push(this.cmd.clone());
                 }
                 (BuilderMode::Clone, BuilderContext::Regular) => {
-                    let source_key = this
-                        .source_key
-                        .clone()
-                        .unwrap_or_else(|| String::new());
+                    let source_key = this.source_key.clone().unwrap_or_else(|| String::new());
                     app_data.clone_commands.borrow_mut().push(CloneCmd {
                         source_key,
                         overrides: this.cmd.clone(),
                     });
                 }
                 (BuilderMode::Clone, BuilderContext::Collision) => {
-                    let source_key = this
-                        .source_key
-                        .clone()
-                        .unwrap_or_else(|| String::new());
+                    let source_key = this.source_key.clone().unwrap_or_else(|| String::new());
                     app_data
                         .collision_clone_commands
                         .borrow_mut()

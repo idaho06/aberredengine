@@ -2,22 +2,23 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-18 (synced with codebase)
+# Last updated: 2026-01-19 (synced with codebase)
 
 ## QUICK REFERENCE
 
-STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3
+STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3 + fastrand 2.3
 GAME_TYPE: Asteroids-style arcade clone (2D)
 ENTRY: src/main.rs
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-01-16)
+## STATUS (2026-01-19)
 
-- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
+- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background, ship fires lasers); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03), sound (option.wav); music/tilemap/brick assets are not loaded.
 - Lua on_enter_play seeds signals (score, high_score, lives, level) and sets scene="menu"; scene switches via WorldSignals flag "switch_scene".
+- NEW: ParticleEmitter component and system (WIP) - emits particles by cloning template entities with configurable shape, arc, speed, TTL. Uses fastrand for RNG.
 
 ## FILE TREE (ESSENTIAL)
 
@@ -46,6 +47,7 @@ src/
 │   ├── gridlayout.rs          # JSON grid spawning
 │   ├── group.rs               # Entity grouping tag
 │   ├── persistent.rs          # Survive scene transitions
+│   ├── particleemitter.rs     # Particle emitter (templates, shape, arc, speed, TTL)
 │   ├── rotation.rs            # Rotation in degrees
 │   ├── scale.rs               # 2D scale
 │   ├── zindex.rs              # Render order
@@ -71,6 +73,7 @@ src/
 │   ├── gridlayout.rs          # Grid entity spawning
 │   ├── group.rs               # Group counting
 │   ├── menu.rs                # Menu spawn/input
+│   ├── particleemitter.rs     # Particle emission system (clones templates)
 │   ├── audio.rs               # Audio thread bridge
 │   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps)
 │   └── gamestate.rs           # State transition check
@@ -139,6 +142,8 @@ assets/
     └── Formal_Future.ttf
 
 config.ini                     # Game configuration (INI format)
+docs/
+└── particle-emitter-plan.md   # Implementation plan for ParticleEmitter
 ```
 
 ## CONFIG.INI FORMAT
@@ -189,6 +194,9 @@ ZIndex { z: i32 }
 InputControlled { up_velocity, down_velocity, left_velocity, right_velocity: Vector2 }
 AccelerationControlled { up_acceleration, down_acceleration, left_acceleration, right_acceleration: Vector2 }
 MouseControlled { follow_x: bool, follow_y: bool }
+ParticleEmitter { templates: Vec<Entity>, shape: EmitterShape, offset: Vector2, particles_per_emission: u32, emissions_per_second: f32, emissions_remaining: u32, arc_degrees: (f32, f32), speed_range: (f32, f32), ttl: TtlSpec, time_since_emit: f32 }
+EmitterShape { Point | Rect { width, height } }
+TtlSpec { None | Fixed(f32) | Range { min, max } }
 
 ## RESOURCE QUICK-REF
 
@@ -260,8 +268,16 @@ SpawnCmd (spawn_data.rs) {
     mouse_controlled, rotation, scale, persistent, signal_scalars, signal_integers,
     signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
-    register_as, lua_collision_rule, animation, animation_controller
+    register_as, lua_collision_rule, animation, animation_controller, particle_emitter
 }
+
+ParticleEmitterData (spawn_data.rs) {
+    template_keys: Vec<String>, shape: ParticleEmitterShapeData, offset_x, offset_y,
+    particles_per_emission, emissions_per_second, emissions_remaining,
+    arc_min_deg, arc_max_deg, speed_min, speed_max, ttl: ParticleTtlData
+}
+ParticleEmitterShapeData { Point | Rect { width, height } }
+ParticleTtlData { None | Fixed(f32) | Range { min, max } }
 
 CloneCmd (commands.rs) {
     source_key: String,     -- WorldSignals key to look up source entity
@@ -475,6 +491,7 @@ engine.spawn_tiles(id)
 :with_ttl(seconds)
 :with_lua_collision_rule(group_a, group_b, callback)
 :with_grid_layout(path, group, zindex)
+:with_particle_emitter(table)  -- { templates, shape, offset, particles_per_emission, emissions_per_second, emissions_remaining, arc, speed, ttl }
 :register_as(key)
 :build()
 
@@ -530,9 +547,10 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 
 ## SYSTEM EXECUTION ORDER (main.rs schedule)
 
-Systems with explicit ordering constraints (`.after()`):
+Systems with explicit ordering constraints (`.after()` / `.before()`):
 
 - apply_gameconfig_changes (run_if state_is_playing)
+- particle_emitter_system.before(movement)
 - stuck_to_entity_system.after(collision_detector)
 - collision_detector.after(mouse_controller).after(movement)
 - lua_phase_system.after(collision_detector)
@@ -554,17 +572,18 @@ Approximate execution order:
 9. input_acceleration_controller
 10. mouse_controller
 11. tween_mapposition_system, tween_rotation_system, tween_scale_system
-12. movement
-13. collision_detector
-14. stuck_to_entity_system (after collision)
-15. lua_phase_system (after collision)
-16. animation_controller (after lua_phase)
-17. animation (after animation_controller)
-18. update_lua_timers
-19. update_world_signals_binding_system
-20. dynamictext_size_system
-21. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
-22. render_system (after collision_detector)
+12. particle_emitter_system (before movement - particles move on spawn frame)
+13. movement
+14. collision_detector
+15. stuck_to_entity_system (after collision)
+16. lua_phase_system (after collision)
+17. animation_controller (after lua_phase)
+18. animation (after animation_controller)
+19. update_lua_timers
+20. update_world_signals_binding_system
+21. dynamictext_size_system
+22. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
+23. render_system (after collision_detector)
 
 ## KEY PATTERNS
 
@@ -645,6 +664,7 @@ For features touching:
 - Signals: signals.rs, worldsignals.rs
 - Text: dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
 - Input: inputcontrolled.rs (InputControlled, AccelerationControlled, MouseControlled), input.rs (InputState), input_snapshot.rs
+- Particles: particleemitter.rs (component + system), spawn_data.rs (ParticleEmitterData)
 
 ## RAYLIB NOTES
 
@@ -697,3 +717,6 @@ For features touching:
 20. InputSnapshot (input_snapshot.rs) combines WASD+arrows into unified directional inputs
 21. Entity cloning (engine.clone/collision_clone) requires source registered via :register_as()
 22. Clone overrides always win; Animation always resets to frame 0; :register_as() stores NEW entity
+23. ParticleEmitter templates must be registered via :register_as() before emitter is spawned
+24. ParticleEmitter uses Bevy's clone_and_spawn() internally; templates need MapPosition to emit
+25. Particle emitter runs before movement so particles move on their spawn frame

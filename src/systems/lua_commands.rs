@@ -1097,6 +1097,75 @@ pub fn process_spawn_command(
         entity_commands.insert(tween);
     }
 
+    // ParticleEmitter
+    if let Some(emitter_data) = cmd.particle_emitter {
+        use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+        use crate::resources::lua_runtime::{ParticleEmitterShapeData, ParticleTtlData};
+
+        // Resolve template keys to Entity IDs
+        let mut templates = Vec::new();
+        for key in &emitter_data.template_keys {
+            if let Some(entity) = world_signals.get_entity(key).copied() {
+                templates.push(entity);
+            } else {
+                eprintln!(
+                    "[ParticleEmitter] template key '{}' not found in WorldSignals; ignoring",
+                    key
+                );
+            }
+        }
+
+        if templates.is_empty() && !emitter_data.template_keys.is_empty() {
+            eprintln!(
+                "[ParticleEmitter] no valid templates resolved; emitter will not emit"
+            );
+        }
+
+        // Convert shape
+        let shape = match emitter_data.shape {
+            ParticleEmitterShapeData::Point => EmitterShape::Point,
+            ParticleEmitterShapeData::Rect { width, height } => EmitterShape::Rect { width, height },
+        };
+
+        // Convert TTL
+        let ttl = match emitter_data.ttl {
+            ParticleTtlData::None => TtlSpec::None,
+            ParticleTtlData::Fixed(v) => TtlSpec::Fixed(v),
+            ParticleTtlData::Range { min, max } => TtlSpec::Range { min, max },
+        };
+
+        // Normalize arc and speed (swap if needed)
+        let arc_degrees = if emitter_data.arc_min_deg <= emitter_data.arc_max_deg {
+            (emitter_data.arc_min_deg, emitter_data.arc_max_deg)
+        } else {
+            (emitter_data.arc_max_deg, emitter_data.arc_min_deg)
+        };
+
+        let speed_range = if emitter_data.speed_min <= emitter_data.speed_max {
+            (emitter_data.speed_min, emitter_data.speed_max)
+        } else {
+            (emitter_data.speed_max, emitter_data.speed_min)
+        };
+
+        let emitter = ParticleEmitter {
+            templates,
+            shape,
+            offset: Vector2 {
+                x: emitter_data.offset_x,
+                y: emitter_data.offset_y,
+            },
+            particles_per_emission: emitter_data.particles_per_emission,
+            emissions_per_second: emitter_data.emissions_per_second,
+            emissions_remaining: emitter_data.emissions_remaining,
+            arc_degrees,
+            speed_range,
+            ttl,
+            time_since_emit: 0.0,
+        };
+
+        entity_commands.insert(emitter);
+    }
+
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         world_signals.set_entity(&key, entity);

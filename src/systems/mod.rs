@@ -39,6 +39,7 @@ pub mod lua_commands;
 pub mod luaphase;
 pub mod luatimer;
 pub mod menu;
+pub mod particleemitter;
 pub mod mousecontroller;
 pub mod movement;
 pub mod render;
