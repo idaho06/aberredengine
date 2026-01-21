@@ -22,6 +22,7 @@ use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
 
 use crate::components::animation::{Animation, AnimationController, CmpOp, Condition};
+use crate::components::mapposition::MapPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::resources::animationstore::AnimationStore;
@@ -35,7 +36,7 @@ use crate::resources::worldtime::WorldTime;
 /// - Mutates [`Animation`] component state and [`Sprite`] frame index.
 /// - Optionally writes signal flags/scalars for transitions.
 pub fn animation(
-    mut query: Query<(&mut Animation, &mut Sprite, Option<&mut Signals>)>,
+    mut query: Query<(&mut Animation, &mut Sprite, Option<&mut Signals>), With<MapPosition>>,
     animation_store: Res<AnimationStore>,
     time: Res<WorldTime>,
 ) {

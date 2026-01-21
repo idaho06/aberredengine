@@ -63,9 +63,9 @@ function M.load_assets()
     -- Animations
     engine.register_animation("ship_idle", "ship_sheet", 0, 0, 64, 8, 15, true)
     engine.register_animation("ship_propulsion", "ship_sheet", 0, 64, 64, 8, 15, true)
-    engine.register_animation("explosion01", "explosion01_sheet", 0, 0, 64, 16, 15, false)
-    engine.register_animation("explosion02", "explosion02_sheet", 0, 0, 32, 7, 15, false)
-    engine.register_animation("explosion03", "explosion03_sheet", 0, 0, 16, 7, 15, false)
+    engine.register_animation("explosion01", "explosion01_sheet", 0, 0, 64, 16, 20, false)
+    engine.register_animation("explosion02", "explosion02_sheet", 0, 0, 32, 7, 20, false)
+    engine.register_animation("explosion03", "explosion03_sheet", 0, 0, 16, 7, 20, false)
     --[[ engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
     engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false) ]]
 

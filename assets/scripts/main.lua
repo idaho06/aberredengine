@@ -12,6 +12,15 @@ engine.log("===========================================")
 
 -- Load modules
 local setup = require("setup")
+local utils = require("lib.utils")
+local math_helpers = require("lib.math")
+
+-- Expose common helpers globally for all scripts
+Dump_value = utils.dump_value
+Lerp = math_helpers.lerp
+Lerp2 = math_helpers.lerp2
+InvLerp = math_helpers.inv_lerp
+Remap = math_helpers.remap
 
 -- Scene modules (loaded on demand)
 local scenes = {}

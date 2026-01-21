@@ -57,6 +57,11 @@ impl Animation {
             elapsed_time: 0.0,
         }
     }
+    /// Reset the animation to frame 0 and zero elapsed time.
+    pub fn reset(&mut self) {
+        self.frame_index = 0;
+        self.elapsed_time = 0.0;
+    }
 }
 
 // Animation Controller Component

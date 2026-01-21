@@ -15,16 +15,28 @@ local M = {}
 --   sides = { a = {"left","top",...}, b = {...} }
 -- }
 
-function on_ship_asteroid_collision(ctx)
+function on_asteroid_ship_collision(ctx)
     engine.log_info("Collision: Ship (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
     -- For now, just log the collision. In a real game, we might reduce ship health, destroy asteroid, etc.
 end
 
-function on_laser_asteroid_collision(ctx)
+function on_asteroid_laser_collision(ctx)
     engine.log_info("Collision: Laser (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
-    -- Destroy both laser and asteroid
-    engine.collision_entity_despawn(ctx.a.id)
-    engine.collision_entity_despawn(ctx.b.id)
+    -- entities are ordered by group name, so ctx.a is always asteroid, ctx.b is always laser
+    -- print context of entity a in debug
+    -- engine.log_info("Asteroid context:\n" .. dump_value(ctx.a, 6))
+    -- Reduce asteroid HP
+    local hp = ctx.a.signals.integers.hp or 0
+    hp = hp - 1
+    engine.entity_signal_set_integer(ctx.a.id, "hp", hp)
+    engine.log_info("Asteroid HP reduced to " .. tostring(hp))
+    if hp <= 0 then
+        engine.log_info("Asteroid destroyed!")
+        -- Change asteroid phase to exploding
+        engine.phase_transition(ctx.a.id, "exploding")
+    end
+    -- Destroy laser entity
+    engine.entity_despawn(ctx.b.id)
 end
 
 -- ==================== PHASE CALLBACK FUNCTIONS ====================
@@ -46,6 +58,29 @@ function asteroid_phase_drifting_update(ctx, input, dt)
     local rotation_speed = ctx.signals.scalars.rotation_speed or 0.0
     local new_rotation = (ctx.rotation or 0.0) + rotation_speed * dt
     engine.entity_set_rotation(ctx.id, new_rotation)
+end
+
+function asteroid_phase_exploding_enter(ctx, input)
+    engine.log_info("Asteroid exploding enter: ID " .. tostring(ctx.id))
+    -- log debug ctx
+    -- engine.log_info("Asteroid context:\n" .. Dump_value(ctx))
+    engine.spawn()
+        :with_position(ctx.pos.x, ctx.pos.y)
+        :with_particle_emitter({
+            -- templates = { "explosion01", "explosion02", "explosion03" },
+            templates = { "explosion01" },
+            shape = { type = "rect", width = 60, height = 60 },
+            particles_per_emission = 10,
+            emissions_per_second = 100,
+            emissions_remaining = 25,
+            arc = { 0, 360 },
+            speed = { 1, 60 },
+            ttl = 0.8,
+        })
+        :with_ttl(3.0)
+        :build()
+    -- Despawn asteroid entity
+    engine.entity_despawn(ctx.id)
 end
 
 -- ==================== SHIP PHASE CALLBACKS AND HELPERS ====================
@@ -511,7 +546,8 @@ local function spawn_asteroids()
             :with_velocity(math.random(-10, 10), math.random(-10, 10))
             :with_zindex(5)
             :with_collider(80, 80, 40, 40)
-            :with_signals()
+        --:with_signals()
+            :with_signal_integer("hp", 3)
             :with_phase({
                 initial = "drifting",
                 phases = {
@@ -544,16 +580,46 @@ local function spawn_template_laser()
     engine.log_info("Laser template spawned!")
 end
 
+local function spawn_template_explosions()
+    -- Spawn a template entity for the explosion animation
+    engine.spawn()
+        :with_sprite("explosion01_sheet", 64, 64, 32, 32)
+        :with_animation("explosion01")
+        :with_zindex(10)
+        :with_signals()
+        :register_as("explosion01") -- Store entity ID for cloning
+        :build()
+
+    engine.spawn()
+        :with_sprite("explosion02_sheet", 32, 32, 16, 16)
+        :with_animation("explosion02")
+        :with_zindex(10)
+        :with_signals()
+        :register_as("explosion02") -- Store entity ID for cloning
+        :build()
+
+    engine.spawn()
+        :with_sprite("explosion03_sheet", 16, 16, 8, 8)
+        :with_animation("explosion03")
+        :with_zindex(10)
+        :with_signals()
+        :register_as("explosion03") -- Store entity ID for cloning
+        :build()
+
+
+    engine.log_info("Explosion templates spawned!")
+end
+
 local function spawn_collision_rules()
     -- Define collision rules by spawning entities with CollisionRule component
     -- Ship collides with asteroids
     engine.spawn()
-        :with_lua_collision_rule("ship", "asteroids", "on_ship_asteroid_collision")
+        :with_lua_collision_rule("asteroids", "ship", "on_asteroid_ship_collision")
         :with_group("collision_rules")
         :build()
     -- Lasers collide with asteroids
     engine.spawn()
-        :with_lua_collision_rule("lasers", "asteroids", "on_laser_asteroid_collision")
+        :with_lua_collision_rule("asteroids", "lasers", "on_asteroid_laser_collision")
         :with_group("collision_rules")
         :build()
     engine.log_info("Collision rules spawned!")
@@ -620,6 +686,8 @@ function M.spawn()
 
     spawn_template_laser()
 
+    spawn_template_explosions()
+
     -- Spawn collision rule entities
     spawn_collision_rules()
 
@@ -671,7 +739,7 @@ function on_update_level01(input, dt)
         engine.set_flag("switch_scene")
     end
 
-    -- Note: Most game logic (ball physics, brick destruction, etc.) is handled
+    -- Note: Most game logic is handled
     -- by the phase system callbacks above. This is just for input handling.
 end
 

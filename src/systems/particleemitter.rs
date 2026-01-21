@@ -23,6 +23,7 @@ use bevy_ecs::prelude::*;
 use fastrand::Rng;
 use raylib::prelude::Vector2;
 
+// use crate::components::animation::Animation;
 use crate::components::mapposition::MapPosition;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rigidbody::RigidBody;
@@ -41,6 +42,7 @@ use crate::resources::worldtime::WorldTime;
 pub fn particle_emitter_system(
     mut emitter_query: Query<(&MapPosition, &mut ParticleEmitter)>,
     rigidbody_query: Query<&RigidBody>,
+    // mut animation_query: Query<&mut Animation>,
     time: Res<WorldTime>,
     mut commands: Commands,
     mut rng: Local<Rng>,
@@ -69,6 +71,7 @@ pub fn particle_emitter_system(
                 owner_pos,
                 &emitter,
                 &rigidbody_query,
+                // &mut animation_query,
                 &mut rng,
             );
             emitter.time_since_emit -= period;
@@ -94,6 +97,7 @@ fn emit_particles(
     owner_pos: &MapPosition,
     emitter: &ParticleEmitter,
     rigidbody_query: &Query<&RigidBody>,
+    // animation_query: &mut Query<&mut Animation>,
     rng: &mut Rng,
 ) {
     let base_pos = owner_pos.pos + emitter.offset;
@@ -159,6 +163,11 @@ fn emit_particles(
             rb.velocity = velocity;
             rb
         };
+
+        // get Animation component to reset frame index
+        /* if let Ok(mut animation) = animation_query.get_mut(template) {
+            animation.reset();
+        } */
 
         // Clone and spawn with overrides
         let mut source_commands = commands.entity(template);

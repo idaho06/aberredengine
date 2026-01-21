@@ -92,7 +92,7 @@ function M.spawn()
             emissions_per_second = 3,
             emissions_remaining = 4294967295,
             arc = { -90, -90 },
-            speed = { 50, 50 },
+            speed = { 60, 60 },
             ttl = 15.0,
         })
         :build()
