@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-19 (synced with codebase)
+# Last updated: 2026-01-22 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -13,12 +13,16 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-01-19)
+## STATUS (2026-01-22)
 
-- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background, ship fires lasers); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
-- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03), sound (option.wav); music/tilemap/brick assets are not loaded.
+- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background, ship fires lasers, asteroids explode on hit); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
+- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids_laser, explosion01-03, black, asteroids_stars01), sound (option.wav); music/tilemap/brick assets are not loaded.
 - Lua on_enter_play seeds signals (score, high_score, lives, level) and sets scene="menu"; scene switches via WorldSignals flag "switch_scene".
-- NEW: ParticleEmitter component and system (WIP) - emits particles by cloning template entities with configurable shape, arc, speed, TTL. Uses fastrand for RNG.
+- ParticleEmitter component and system - emits particles by cloning template entities with configurable shape, arc, speed, TTL. Uses fastrand for RNG. Animation reset to frame 0 on clones.
+- TTL (Time-to-Live) component and system - automatic entity despawn after duration, respects time scale.
+- Entity cloning API (engine.clone/collision_clone) - clone registered entities with component overrides.
+- Menu callback system - Lua callbacks for interactive menu selection with full context (menu_id, item_id, item_index).
+- Lua utility libraries: lib/math.lua (lerp, inv_lerp, remap, lerp2), lib/utils.lua (dump_value for debugging).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -49,6 +53,7 @@ src/
 │   ├── persistent.rs          # Survive scene transitions
 │   ├── particleemitter.rs     # Particle emitter (templates, shape, arc, speed, TTL)
 │   ├── rotation.rs            # Rotation in degrees
+│   ├── ttl.rs                 # Time-to-live for automatic entity despawn
 │   ├── scale.rs               # 2D scale
 │   ├── zindex.rs              # Render order
 │   └── inputcontrolled.rs     # InputControlled, AccelerationControlled, MouseControlled
@@ -74,6 +79,7 @@ src/
 │   ├── group.rs               # Group counting
 │   ├── menu.rs                # Menu spawn/input
 │   ├── particleemitter.rs     # Particle emission system (clones templates)
+│   ├── ttl.rs                 # TTL countdown and entity despawn
 │   ├── audio.rs               # Audio thread bridge
 │   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps)
 │   └── gamestate.rs           # State transition check
@@ -122,28 +128,23 @@ assets/
 │   ├── engine.lua             # LSP autocomplete stubs (45k+ lines)
 │   ├── .luarc.json            # Lua Language Server configuration for LuaJIT
 │   ├── README.md              # Lua API documentation (78k+ lines)
+│   ├── lib/
+│   │   ├── math.lua           # Math helpers (lerp, inv_lerp, remap, lerp2)
+│   │   └── utils.lua          # Debug utilities (dump_value)
 │   └── scenes/
 │       ├── menu.lua           # Menu scene (DRIFTERS title, Start Game -> level01, back=quit)
 │       └── level01.lua        # Asteroids scene (ship phases, background tiles, drifting asteroids)
 ├── textures/                  # Space/asteroid art set
-│   ├── cursor.png
-│   ├── asteroids_ship.png
-│   ├── space01.png
-│   ├── space02.png
-│   ├── space03.png
-│   ├── space04.png
-│   ├── asteroids-big01.png
-│   ├── asteroids-big02.png
-│   └── asteroids-big03.png
-├── audio/
-│   └── option.wav             # Menu selection sound
+   └── *.png
+├── audio/                     # audio files
+│   ├── *.xm 
+│   └── *.wav             
 └── fonts/
-    ├── Arcade_Cabinet.ttf
-    └── Formal_Future.ttf
+    └── *.ttf
 
 config.ini                     # Game configuration (INI format)
 docs/
-└── particle-emitter-plan.md   # Implementation plan for ParticleEmitter
+└── lua-interface-architecture.md 
 ```
 
 ## CONFIG.INI FORMAT
@@ -184,7 +185,7 @@ TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, lo
 LuaTimer { duration: f32, elapsed: f32, callback: String }
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
-Menu { items: Vec<MenuItem>, selected: usize, actions: FxHashMap<String, MenuAction>, ... }
+Menu { items: Vec<MenuItem>, selected: usize, actions: FxHashMap<String, MenuAction>, on_select_callback: Option<String>, ... }
 GridLayout { path: String, group: String, zindex: i32 }
 Group { name: String }
 Persistent (marker)
@@ -466,6 +467,7 @@ engine.spawn_tiles(id)
 :with_menu_colors(nr, ng, nb, na, sr, sg, sb, sa)
 :with_menu_dynamic_text(dynamic)
 :with_menu_cursor(key)
+:with_menu_callback(callback_name)
 :with_menu_selection_sound(sound_key)
 :with_menu_action_set_scene/show_submenu/quit(item_id, ...)
 :with_animation(key)
@@ -556,6 +558,7 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 - lua_phase_system.after(collision_detector)
 - animation_controller.after(lua_phase_system)
 - animation.after(animation_controller)
+- ttl_system.after(movement)
 - dynamictext_size_system.after(update_world_signals_binding_system)
 - render_system.after(collision_detector)
 
@@ -574,16 +577,17 @@ Approximate execution order:
 11. tween_mapposition_system, tween_rotation_system, tween_scale_system
 12. particle_emitter_system (before movement - particles move on spawn frame)
 13. movement
-14. collision_detector
-15. stuck_to_entity_system (after collision)
-16. lua_phase_system (after collision)
-17. animation_controller (after lua_phase)
-18. animation (after animation_controller)
-19. update_lua_timers
-20. update_world_signals_binding_system
-21. dynamictext_size_system
-22. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
-23. render_system (after collision_detector)
+14. ttl_system (after movement - despawns expired entities)
+15. collision_detector
+16. stuck_to_entity_system (after collision)
+17. lua_phase_system (after collision)
+18. animation_controller (after lua_phase)
+19. animation (after animation_controller)
+20. update_lua_timers
+21. update_world_signals_binding_system
+22. dynamictext_size_system
+23. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
+24. render_system (after collision_detector)
 
 ## KEY PATTERNS
 
@@ -720,3 +724,6 @@ For features touching:
 23. ParticleEmitter templates must be registered via :register_as() before emitter is spawned
 24. ParticleEmitter uses Bevy's clone_and_spawn() internally; templates need MapPosition to emit
 25. Particle emitter runs before movement so particles move on their spawn frame
+26. TTL countdown respects WorldTime::time_scale; ttl_system runs after movement
+27. Menu on_select_callback takes precedence over MenuActions - when callback is set, actions are ignored
+28. Lua global helpers available: Lerp, Lerp2, InvLerp, Remap (from lib/math.lua), Dump_value (from lib/utils.lua)
