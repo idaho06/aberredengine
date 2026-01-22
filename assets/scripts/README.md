@@ -907,6 +907,43 @@ Define quit game action (requires `:with_menu()`).
 :with_menu_action_quit("quit")
 ```
 
+#### `:with_menu_callback(callback_name)`
+
+Set a Lua callback function for menu selection (requires `:with_menu()`).
+
+When a callback is set, it handles **all** menu selections and `MenuActions` (`:with_menu_action_*`) are ignored. This provides full flexibility for custom menu behavior.
+
+The callback receives a context table with:
+- `menu_id` (u64) - Entity ID of the menu
+- `item_id` (string) - ID of the selected item (e.g., "start_game")
+- `item_index` (integer) - 0-based index of the selected item
+
+```lua
+-- Menu setup
+engine.spawn()
+    :with_menu({
+        { id = "start_game", label = "Start Game" },
+        { id = "options",    label = "Options" },
+        { id = "exit",       label = "Exit" },
+    }, 16, 64, "arcade", 16, 24, true)
+    :with_menu_colors(255, 255, 0, 255, 255, 255, 255, 255)
+    :with_menu_cursor("menu_cursor")
+    :with_menu_callback("on_main_menu_select")
+    :build()
+
+-- Callback function (global)
+function on_main_menu_select(ctx)
+    engine.log_info("Selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
+
+    if ctx.item_id == "start_game" then
+        engine.set_string("scene", "level01")
+        engine.set_flag("switch_scene")
+    elseif ctx.item_id == "exit" then
+        engine.set_flag("quit_game")
+    end
+end
+```
+
 ---
 
 ### Animation Components

@@ -46,7 +46,7 @@ function M.spawn()
         :register_as("menu_cursor")
         :build()
 
-    -- Spawn menu (Menu + MenuActions)
+    -- Spawn menu with Lua callback for selection handling
     engine.spawn()
         :with_group("main_menu")
         :with_menu(
@@ -66,9 +66,7 @@ function M.spawn()
         :with_menu_dynamic_text(true)
         :with_menu_cursor("menu_cursor")
         :with_menu_selection_sound("option")
-        :with_menu_action_set_scene("start_game", "level01")
-        :with_menu_action_show_submenu("options", "options")
-        :with_menu_action_quit("exit")
+        :with_menu_callback("on_main_menu_select")
         :build()
 
     -- Play menu music
@@ -97,7 +95,50 @@ function M.spawn()
         })
         :build()
 
+    --[[     engine.spawn()
+        :with_position(100, 360 / 2)
+        :with_sprite("explosion01_sheet", 64, 64, 32, 32)
+        :with_animation("explosion01")
+        :with_zindex(10)
+    -- :with_signals()
+    -- :register_as("explosion01") -- Store entity ID for cloning
+        :build()
+
+    engine.spawn()
+        :with_position(200, 360 / 2)
+        :with_sprite("explosion02_sheet", 32, 32, 16, 16)
+        :with_animation("explosion02")
+        :with_zindex(10)
+    -- :with_signals()
+    -- :register_as("explosion02") -- Store entity ID for cloning
+        :build()
+
+    engine.spawn()
+        :with_position(300, 360 / 2)
+        :with_sprite("explosion03_sheet", 16, 16, 8, 8)
+        :with_animation("explosion03")
+        :with_zindex(10)
+    -- :with_signals()
+    -- :register_as("explosion03") -- Store entity ID for cloning
+        :build()
+ ]]
     engine.log_info("Menu scene entities queued!")
+end
+
+--- Callback function for main menu selection.
+--- @param ctx table Context with menu_id (u64), item_id (string), item_index (integer)
+function on_main_menu_select(ctx)
+    engine.log_info("Menu selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
+
+    if ctx.item_id == "start_game" then
+        engine.set_string("scene", "level01")
+        engine.set_flag("switch_scene")
+    elseif ctx.item_id == "options" then
+        -- Options menu not implemented yet
+        engine.log_info("Options menu not implemented")
+    elseif ctx.item_id == "exit" then
+        engine.set_flag("quit_game")
+    end
 end
 
 --- Called each frame when menu scene is active.

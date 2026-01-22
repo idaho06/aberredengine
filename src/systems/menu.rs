@@ -24,6 +24,7 @@ use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::GameStates::Quitting;
 use crate::resources::gamestate::NextGameState;
+use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -299,7 +300,11 @@ pub fn menu_controller_observer(
 
 /// Executes the action associated with a selected menu item.
 ///
-/// Looks up the [`MenuAction`] for the selected item and performs it:
+/// If the menu has an `on_select_callback`, invokes the Lua callback with a
+/// context table containing `menu_id`, `item_id`, and `item_index`. When a
+/// callback is set, `MenuActions` are ignored (callback takes full control).
+///
+/// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
 /// - [`MenuAction::ShowSubMenu`] – displays a sub-menu (TODO)
@@ -307,23 +312,63 @@ pub fn menu_controller_observer(
 pub fn menu_selection_observer(
     trigger: On<MenuSelectionEvent>,
     mut commands: Commands,
-    menus: Query<&MenuActions>,
+    menus: Query<(&Menu, Option<&MenuActions>)>,
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
     let event = trigger.event();
     eprintln!(
         "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
         event.menu, event.item_id
     );
-    let Ok(menu_actions) = menus.get(event.menu) else {
+
+    let Ok((menu, menu_actions_opt)) = menus.get(event.menu) else {
+        eprintln!(
+            "menu_selection_observer: Menu entity {:?} not found",
+            event.menu
+        );
+        return;
+    };
+
+    // If menu has a Lua callback, invoke it
+    if let Some(ref callback_name) = menu.on_select_callback {
+        if lua_runtime.has_function(callback_name) {
+            // Build context table
+            let ctx = lua_runtime.lua().create_table().unwrap();
+            ctx.set("menu_id", event.menu.to_bits()).unwrap();
+            ctx.set("item_id", event.item_id.clone()).unwrap();
+
+            // Find item index
+            let item_index = menu
+                .items
+                .iter()
+                .position(|item| item.id == event.item_id)
+                .unwrap_or(0);
+            ctx.set("item_index", item_index).unwrap();
+
+            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, ctx) {
+                eprintln!("[Lua] Error in menu callback '{}': {}", callback_name, e);
+            }
+        } else {
+            eprintln!(
+                "[Lua] Warning: menu callback '{}' not found",
+                callback_name
+            );
+        }
+        return; // Callback handles everything, skip MenuActions
+    }
+
+    // Fallback to existing MenuActions logic
+    let Some(menu_actions) = menu_actions_opt else {
         eprintln!(
             "menu_selection_observer: No MenuActions found for menu entity {:?}, item_id {:?}",
             event.menu, event.item_id
         );
         return;
     };
+
     eprintln!(
         "menu_selection_observer: Found MenuActions, looking up action for item_id={}",
         event.item_id

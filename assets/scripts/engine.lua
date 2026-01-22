@@ -360,6 +360,13 @@ function EntityBuilder:with_menu_action_show_submenu(item_id, submenu) end
 ---@return EntityBuilder
 function EntityBuilder:with_menu_action_quit(item_id) end
 
+---Set Lua callback for menu selection (alternative to MenuActions)
+---When set, the callback handles all menu selections and MenuActions are ignored.
+---The callback receives a context table with: menu_id (u64), item_id (string), item_index (integer)
+---@param callback_name string Name of the global Lua function to call
+---@return EntityBuilder
+function EntityBuilder:with_menu_callback(callback_name) end
+
 ---Add Lua phase state machine to entity
 ---@param phase_table table Phase definition: {initial: string, phases: table}
 ---@return EntityBuilder

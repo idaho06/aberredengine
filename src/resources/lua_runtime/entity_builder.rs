@@ -483,6 +483,17 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_menu_callback(callback_name) - Set Lua callback for menu selection
+        methods.add_method_mut("with_menu_callback", |_, this, callback: String| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_callback() requires with_menu() first",
+                ));
+            };
+            menu.on_select_callback = Some(callback);
+            Ok(this.clone())
+        });
+
         // :with_signals() - Add empty Signals component
         methods.add_method_mut("with_signals", |_, this, ()| {
             this.cmd.has_signals = true;

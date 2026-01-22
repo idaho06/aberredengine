@@ -57,6 +57,8 @@ pub struct Menu {
     // pub origin: Vector2,
     /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
+    /// Optional Lua callback invoked when any item is selected.
+    pub on_select_callback: Option<String>,
 }
 
 impl Menu {
@@ -96,6 +98,7 @@ impl Menu {
             selection_change_sound: None,
             // origin,
             use_screen_space,
+            on_select_callback: None,
         }
     }
     pub fn with_cursor(mut self, cursor_entity: Entity) -> Self {
@@ -115,6 +118,10 @@ impl Menu {
     }
     pub fn with_selection_sound(mut self, sound_key: impl Into<String>) -> Self {
         self.selection_change_sound = Some(sound_key.into());
+        self
+    }
+    pub fn with_on_select_callback(mut self, callback: impl Into<String>) -> Self {
+        self.on_select_callback = Some(callback.into());
         self
     }
 }

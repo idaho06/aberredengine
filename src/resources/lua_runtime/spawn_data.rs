@@ -231,6 +231,8 @@ pub struct MenuData {
     pub selection_change_sound: Option<String>,
     /// (item_id, action)
     pub actions: Vec<(String, MenuActionData)>,
+    /// Optional Lua callback invoked when any item is selected.
+    pub on_select_callback: Option<String>,
 }
 
 /// Shape of the particle emission area.

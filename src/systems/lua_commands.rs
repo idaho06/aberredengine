@@ -952,6 +952,10 @@ pub fn process_spawn_command(
             }
         }
 
+        if let Some(callback) = menu_data.on_select_callback {
+            menu = menu.with_on_select_callback(callback);
+        }
+
         let mut actions = MenuActions::new();
         for (item_id, action_data) in menu_data.actions {
             let action = match action_data {
