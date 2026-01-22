@@ -357,6 +357,7 @@ with_menu_action_show_submenu
 with_menu_colors
 with_menu_cursor
 with_menu_dynamic_text
+with_menu_callback
 with_menu_selection_sound
 with_mouse_controlled
 with_particle_emitter
@@ -429,6 +430,27 @@ engine.clone("some_template_key")
     :with_velocity(0, -120)
     :build()
 ```
+
+### Menu Selection Callback
+
+Menus can optionally invoke a Lua callback when an item is selected.
+
+- Set the callback via `:with_menu_callback("callback_name")`.
+- When a callback is set, `MenuActions` are ignored (the callback takes full control).
+
+The callback receives a single context table:
+
+```lua
+-- ctx = { menu_id = <u64>, item_id = <string>, item_index = <number> }
+function on_menu_select(ctx)
+    -- Use engine.* to queue commands (scene switching, signals, despawn, etc.)
+end
+```
+
+Notes:
+
+- The callback is invoked from the menu selection observer (i.e. it is not passed `input` or `dt`).
+- If the function name is not found, a warning is logged and the selection does nothing.
 
 ### How it Works
 
