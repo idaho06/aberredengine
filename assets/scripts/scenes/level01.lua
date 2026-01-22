@@ -64,19 +64,24 @@ function asteroid_phase_exploding_enter(ctx, input)
     engine.log_info("Asteroid exploding enter: ID " .. tostring(ctx.id))
     -- log debug ctx
     -- engine.log_info("Asteroid context:\n" .. Dump_value(ctx))
-    engine.spawn()
+    --[[ engine.spawn()
         :with_position(ctx.pos.x, ctx.pos.y)
         :with_particle_emitter({
-            -- templates = { "explosion01", "explosion02", "explosion03" },
+            -- templates = { "explosion02", "explosion03" },
             templates = { "explosion01" },
             shape = { type = "rect", width = 60, height = 60 },
             particles_per_emission = 10,
             emissions_per_second = 100,
             emissions_remaining = 25,
             arc = { 0, 360 },
-            speed = { 1, 60 },
+            speed = { 0, 200 },
             ttl = 0.8,
         })
+        :with_ttl(3.0)
+        :build() ]]
+    -- Clone explosion emitter at asteroid position
+    engine.clone("explosion_emitter")
+        :with_position(ctx.pos.x, ctx.pos.y)
         :with_ttl(3.0)
         :build()
     -- Despawn asteroid entity
@@ -587,7 +592,7 @@ local function spawn_template_explosions()
         :with_animation("explosion01")
         :with_zindex(10)
         :with_signals()
-        :register_as("explosion01") -- Store entity ID for cloning
+        :register_as("explosion01_animation") -- Store entity ID for cloning
         :build()
 
     engine.spawn()
@@ -595,7 +600,7 @@ local function spawn_template_explosions()
         :with_animation("explosion02")
         :with_zindex(10)
         :with_signals()
-        :register_as("explosion02") -- Store entity ID for cloning
+        :register_as("explosion02_animation") -- Store entity ID for cloning
         :build()
 
     engine.spawn()
@@ -603,7 +608,22 @@ local function spawn_template_explosions()
         :with_animation("explosion03")
         :with_zindex(10)
         :with_signals()
-        :register_as("explosion03") -- Store entity ID for cloning
+        :register_as("explosion03_animation") -- Store entity ID for cloning
+        :build()
+
+    engine.spawn()
+        :with_particle_emitter({
+            -- templates = { "explosion02_animation", "explosion03_animation" },
+            templates = { "explosion01_animation" },
+            shape = { type = "rect", width = 60, height = 60 },
+            particles_per_emission = 10,
+            emissions_per_second = 100,
+            emissions_remaining = 25,
+            arc = { 0, 360 },
+            speed = { 0, 200 },
+            ttl = 0.8,
+        })
+        :register_as("explosion_emitter") -- Store entity ID for cloning
         :build()
 
 
