@@ -31,8 +31,10 @@ use bevy_ecs::{
     system::ResMut,
 };
 use crossbeam_channel::{Receiver, Sender};
-use raylib::core::audio::{Music, RaylibAudio, Sound};
+use raylib::core::audio::{Music, RaylibAudio};
+use raylib::ffi;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::ffi::CString;
 
 // FxPlayingState removed; we now track only the set of FX ids considered playing.
 
@@ -107,8 +109,8 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let mut musics: FxHashMap<String, Music> = FxHashMap::default();
     let mut playing: FxHashSet<String> = FxHashSet::default();
     let mut looped: FxHashSet<String> = FxHashSet::default();
-    let mut sounds: FxHashMap<String, Sound> = FxHashMap::default();
-    let mut fx_playing: FxHashSet<String> = FxHashSet::default();
+    let mut sounds: FxHashMap<String, ffi::Sound> = FxHashMap::default();
+    let mut active_aliases: Vec<ffi::Sound> = Vec::new();
 
     'run: loop {
         // 1) Drain commands
@@ -205,44 +207,65 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     looped.clear();
                     let _ = tx_evt.send(AudioMessage::MusicUnloadedAll);
                 }
-                AudioCmd::LoadFx { id, path } => match audio.new_sound(&path) {
-                    Ok(sound) => {
+                AudioCmd::LoadFx { id, path } => {
+                    let c_path = match CString::new(path.clone()) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!(
+                                "[audio] fx load failed id='{}' path='{}' error='invalid path: {}'",
+                                id, path, e
+                            );
+                            let _ = tx_evt.send(AudioMessage::FxLoadFailed {
+                                id,
+                                error: format!("invalid path: {}", e),
+                            });
+                            continue;
+                        }
+                    };
+                    let sound = unsafe { ffi::LoadSound(c_path.as_ptr()) };
+                    if sound.stream.buffer.is_null() {
+                        eprintln!(
+                            "[audio] fx load failed id='{}' path='{}' error='failed to load'",
+                            id, path
+                        );
+                        let _ = tx_evt.send(AudioMessage::FxLoadFailed {
+                            id,
+                            error: "failed to load".to_string(),
+                        });
+                    } else {
                         eprintln!("[audio] fx loaded id='{}' path='{}'", id, path);
                         sounds.insert(id.clone(), sound);
                         let _ = tx_evt.send(AudioMessage::FxLoaded { id });
                     }
-                    Err(e) => {
-                        eprintln!(
-                            "[audio] fx load failed id='{}' path='{}' error='{}'",
-                            id, path, e
-                        );
-                        let _ = tx_evt.send(AudioMessage::FxLoadFailed {
-                            id,
-                            error: e.to_string(),
-                        });
-                    }
-                },
+                }
                 AudioCmd::PlayFx { id } => {
                     if let Some(sound) = sounds.get(&id) {
                         eprintln!("[audio] fx play id='{}'", id);
-                        sound.play();
-                        fx_playing.insert(id.clone());
+                        let alias = unsafe { ffi::LoadSoundAlias(*sound) };
+                        unsafe { ffi::PlaySound(alias) };
+                        active_aliases.push(alias);
                     } else {
                         eprintln!("[audio] fx play failed id='{}' reason='not loaded'", id);
                     }
                 }
                 AudioCmd::UnloadFx { id } => {
-                    if let Some(sound) = sounds.remove(&id) {
-                        eprintln!("[audio] fx unload id='{}'", id);
-                        drop(sound);
-                        fx_playing.remove(&id);
-                        let _ = tx_evt.send(AudioMessage::FxUnloaded { id });
-                    }
+                    // Individual unload is a no-op with SoundAlias approach
+                    // Sounds are kept loaded for the lifetime of the scene
+                    eprintln!(
+                        "[audio] fx unload id='{}' (ignored - use UnloadAllFx instead)",
+                        id
+                    );
                 }
                 AudioCmd::UnloadAllFx => {
                     eprintln!("[audio] fx unload all");
-                    sounds.clear();
-                    fx_playing.clear();
+                    // First unload all active aliases
+                    for alias in active_aliases.drain(..) {
+                        unsafe { ffi::UnloadSoundAlias(alias) };
+                    }
+                    // Then unload all base sounds
+                    for (_, sound) in sounds.drain() {
+                        unsafe { ffi::UnloadSound(sound) };
+                    }
                     let _ = tx_evt.send(AudioMessage::FxUnloadedAll);
                 }
                 AudioCmd::Shutdown => {
@@ -253,8 +276,14 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     playing.clear();
                     looped.clear();
                     let _ = tx_evt.send(AudioMessage::MusicUnloadedAll);
-                    sounds.clear();
-                    fx_playing.clear();
+                    // Clean up aliases first
+                    for alias in active_aliases.drain(..) {
+                        unsafe { ffi::UnloadSoundAlias(alias) };
+                    }
+                    // Then unload base sounds
+                    for (_, sound) in sounds.drain() {
+                        unsafe { ffi::UnloadSound(sound) };
+                    }
                     let _ = tx_evt.send(AudioMessage::FxUnloadedAll);
                     break 'run;
                 }
@@ -294,25 +323,14 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
             }
         }
 
-        // FX end detection: if an id is tracked as playing and Raylib reports it
-        // is no longer playing (or the sound handle is missing), emit FxFinished
-        // once and stop tracking it.
-        let mut fx_ended: Vec<String> = Vec::new();
-        for id in fx_playing.iter() {
-            let still_playing = sounds
-                .get(id)
-                .map(|sound| sound.is_playing())
-                .unwrap_or(false);
+        // Clean up finished sound aliases - unload those that have stopped playing
+        active_aliases.retain(|alias| {
+            let still_playing = unsafe { ffi::IsSoundPlaying(*alias) };
             if !still_playing {
-                fx_ended.push(id.clone());
+                unsafe { ffi::UnloadSoundAlias(*alias) };
             }
-        }
-
-        for id in fx_ended.iter() {
-            eprintln!("[audio] fx finished id='{}'", id);
-            fx_playing.remove(id);
-            let _ = tx_evt.send(AudioMessage::FxFinished { id: id.clone() });
-        }
+            still_playing
+        });
         std::thread::sleep(std::time::Duration::from_millis(10));
     } // 'run
 

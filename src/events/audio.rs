@@ -111,6 +111,4 @@ pub enum AudioMessage {
     FxUnloadedAll,
     /// Sound effect with `id` failed to load with `error`.
     FxLoadFailed { id: String, error: String },
-    /// One-shot sound effect `id` finished playing.
-    FxFinished { id: String },
 }
