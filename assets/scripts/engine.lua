@@ -367,6 +367,14 @@ function EntityBuilder:with_menu_action_quit(item_id) end
 ---@return EntityBuilder
 function EntityBuilder:with_menu_callback(callback_name) end
 
+---Set maximum visible items for scrollable menus (requires :with_menu())
+---When set, only `count` items are visible. Navigation is bounded (no wrap-around)
+---and scrolling occurs when selection moves outside the visible window.
+---"..." indicators show when more items exist above/below.
+---@param count integer Maximum number of visible items
+---@return EntityBuilder
+function EntityBuilder:with_menu_visible_count(count) end
+
 ---Add Lua phase state machine to entity
 ---@param phase_table table Phase definition: {initial: string, phases: table}
 ---@return EntityBuilder
@@ -1114,6 +1122,11 @@ function CollisionEntityBuilder:with_text(content, font, font_size, r, g, b, a) 
 ---@param use_screen_space boolean Use screen coordinates
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu(items, origin_x, origin_y, font, font_size, item_spacing, use_screen_space) end
+
+---Set maximum visible items for scrollable menus (requires :with_menu())
+---@param count integer Maximum number of visible items
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_visible_count(count) end
 
 ---Add Lua phase state machine to entity
 ---@param phase_table table Phase definition: {initial: string, phases: table}

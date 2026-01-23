@@ -14,13 +14,12 @@ use rustc_hash::FxHashMap;
 
 /// A single item within a [`Menu`].
 ///
-/// Stores the item's identifier, display label, position, and optional entity
+/// Stores the item's identifier, display label, and optional entity
 /// reference for rendering.
 #[derive(Clone, Debug)]
 pub struct MenuItem {
     pub id: String,
     pub label: String,
-    pub position: Vector2,
     pub dynamic_text: bool,
     // pub enabled: bool,
     pub entity: Option<Entity>, // If not dynamic_text, the entity holding the text sprite
@@ -44,7 +43,7 @@ pub struct Menu {
     /// Font size in pixels.
     pub font_size: f32,
     /// Vertical spacing between menu items.
-    // pub item_spacing: f32,
+    pub item_spacing: f32,
     /// Color for unselected items.
     pub normal_color: Color,
     /// Color for the selected item.
@@ -54,11 +53,19 @@ pub struct Menu {
     /// Optional sound to play on selection change.
     pub selection_change_sound: Option<String>,
     /// Origin position of the menu.
-    // pub origin: Vector2,
+    pub origin: Vector2,
     /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
     /// Optional Lua callback invoked when any item is selected.
     pub on_select_callback: Option<String>,
+    /// Maximum number of visible items (None = show all).
+    pub visible_count: Option<usize>,
+    /// Index of first visible item when scrolling.
+    pub scroll_offset: usize,
+    /// Entity for "..." indicator above visible items.
+    pub top_indicator_entity: Option<Entity>,
+    /// Entity for "..." indicator below visible items.
+    pub bottom_indicator_entity: Option<Entity>,
 }
 
 impl Menu {
@@ -72,14 +79,9 @@ impl Menu {
     ) -> Self {
         let options = labels
             .iter()
-            .enumerate()
-            .map(|(i, (id, label))| MenuItem {
+            .map(|(id, label)| MenuItem {
                 id: id.to_string(),
                 label: label.to_string(),
-                position: Vector2 {
-                    x: origin.x,
-                    y: origin.y + i as f32 * item_spacing,
-                },
                 dynamic_text: true,
                 // enabled: true,
                 entity: None,
@@ -91,14 +93,18 @@ impl Menu {
             selected_index: 0,
             font: font.into(),
             font_size,
-            // item_spacing,
+            item_spacing,
             normal_color: Color::WHITE,
             selected_color: Color::YELLOW,
             cursor_entity: None,
             selection_change_sound: None,
-            // origin,
+            origin,
             use_screen_space,
             on_select_callback: None,
+            visible_count: None,
+            scroll_offset: 0,
+            top_indicator_entity: None,
+            bottom_indicator_entity: None,
         }
     }
     pub fn with_cursor(mut self, cursor_entity: Entity) -> Self {
@@ -122,6 +128,10 @@ impl Menu {
     }
     pub fn with_on_select_callback(mut self, callback: impl Into<String>) -> Self {
         self.on_select_callback = Some(callback.into());
+        self
+    }
+    pub fn with_visible_count(mut self, count: usize) -> Self {
+        self.visible_count = Some(count);
         self
     }
 }

@@ -956,6 +956,10 @@ pub fn process_spawn_command(
             menu = menu.with_on_select_callback(callback);
         }
 
+        if let Some(count) = menu_data.visible_count {
+            menu = menu.with_visible_count(count);
+        }
+
         let mut actions = MenuActions::new();
         for (item_id, action_data) in menu_data.actions {
             let action = match action_data {

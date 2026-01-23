@@ -233,6 +233,8 @@ pub struct MenuData {
     pub actions: Vec<(String, MenuActionData)>,
     /// Optional Lua callback invoked when any item is selected.
     pub on_select_callback: Option<String>,
+    /// Maximum number of visible items (None = show all, enables scrolling).
+    pub visible_count: Option<usize>,
 }
 
 /// Shape of the particle emission area.

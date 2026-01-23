@@ -944,6 +944,42 @@ function on_main_menu_select(ctx)
 end
 ```
 
+#### `:with_menu_visible_count(count)`
+
+Enable viewport scrolling for long menus (requires `:with_menu()`).
+
+When set, only `count` items are visible at a time. Navigation is bounded (no wrap-around), and scrolling occurs when selection moves outside the visible window. "..." indicators appear above/below to show more items exist.
+
+**Parameters:**
+
+- `count` - Maximum number of visible items
+
+**Behavior:**
+- Navigation up/down is bounded (no wrap-around when scrolling enabled)
+- Scrolling triggers automatically when selection moves outside visible range
+- "..." indicators show when more items exist above or below
+- Cursor position is calculated relative to the visible viewport
+
+```lua
+-- Menu with 10 items, showing only 5 at a time
+engine.spawn()
+    :with_menu({
+        { id = "item1",  label = "Item 1" },
+        { id = "item2",  label = "Item 2" },
+        { id = "item3",  label = "Item 3" },
+        { id = "item4",  label = "Item 4" },
+        { id = "item5",  label = "Item 5" },
+        { id = "item6",  label = "Item 6" },
+        { id = "item7",  label = "Item 7" },
+        { id = "item8",  label = "Item 8" },
+        { id = "item9",  label = "Item 9" },
+        { id = "item10", label = "Item 10" },
+    }, 100, 50, "arcade", 16, 20, true)
+    :with_menu_visible_count(5)  -- Only show 5 items at once
+    :with_menu_cursor("menu_cursor")
+    :build()
+```
+
 ---
 
 ### Animation Components

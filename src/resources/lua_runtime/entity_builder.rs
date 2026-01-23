@@ -494,6 +494,17 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_menu_visible_count(count) - Set maximum visible items (enables scrolling)
+        methods.add_method_mut("with_menu_visible_count", |_, this, count: usize| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_visible_count() requires with_menu() first",
+                ));
+            };
+            menu.visible_count = Some(count);
+            Ok(this.clone())
+        });
+
         // :with_signals() - Add empty Signals component
         methods.add_method_mut("with_signals", |_, this, ()| {
             this.cmd.has_signals = true;

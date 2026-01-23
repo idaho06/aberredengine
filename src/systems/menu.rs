@@ -37,6 +37,9 @@ use raylib::prelude::Vector2;
 /// For each menu item, spawns a text entity (either [`DynamicText`] or a
 /// static sprite) and positions it in world or screen space. Also spawns
 /// the cursor entity if configured.
+///
+/// When `visible_count` is set, only positions items within the visible window
+/// and spawns "..." indicator entities for scrolling.
 pub fn menu_spawn_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Menu), Added<Menu>>,
@@ -50,7 +53,13 @@ pub fn menu_spawn_system(
         let font_string = menu.font.clone();
         let font_size = menu.font_size;
         let normal_color = menu.normal_color;
+        let selected_color = menu.selected_color;
+        let selected_index = menu.selected_index;
         let use_screen_space = menu.use_screen_space;
+        let origin = menu.origin;
+        let item_spacing = menu.item_spacing;
+        let visible_count = menu.visible_count;
+        let scroll_offset = menu.scroll_offset;
 
         eprintln!(
             "menu_spawn_system: Spawning menu entity {:?} with {} items",
@@ -58,16 +67,29 @@ pub fn menu_spawn_system(
             menu.items.len()
         );
 
-        // Spawn DynamicText or Sprite for each menu item if needed
-        for menu_item in menu.items.iter_mut() {
+        // Calculate visible range
+        let visible_end = if let Some(vc) = visible_count {
+            (scroll_offset + vc).min(menu.items.len())
+        } else {
+            menu.items.len()
+        };
+
+        // Spawn DynamicText or Sprite for each menu item
+        for (i, menu_item) in menu.items.iter_mut().enumerate() {
             let mut ecmd = commands.spawn_empty();
             if menu_item.dynamic_text {
                 // Dynamic text will be updated each frame
+                // Use selected_color for the initially selected item
+                let color = if i == selected_index {
+                    selected_color
+                } else {
+                    normal_color
+                };
                 ecmd.insert(DynamicText::new(
                     &menu_item.label,
                     font_string.clone(),
                     font_size,
-                    normal_color,
+                    color,
                 ));
                 eprintln!(
                     "menu_spawn_system: Spawned DynamicText for menu item id={}",
@@ -108,24 +130,85 @@ pub fn menu_spawn_system(
                 );
             }
 
-            if use_screen_space {
-                ecmd.insert(ScreenPosition {
-                    pos: menu_item.position,
-                });
-            } else {
-                ecmd.insert(MapPosition {
-                    pos: menu_item.position,
-                });
+            // For world-space, add ZIndex to ALL items (needed when they become visible)
+            if !use_screen_space {
                 ecmd.insert(ZIndex(23));
             }
+
+            // Only add position component for visible items
+            let is_visible = i >= scroll_offset && i < visible_end;
+            if is_visible {
+                // Calculate position within visible viewport
+                let viewport_index = i - scroll_offset;
+                let pos = Vector2 {
+                    x: origin.x,
+                    y: origin.y + (viewport_index as f32) * item_spacing,
+                };
+                if use_screen_space {
+                    ecmd.insert(ScreenPosition { pos });
+                } else {
+                    ecmd.insert(MapPosition { pos });
+                }
+            }
+            // Non-visible items don't get position component, so render system skips them
+
             let text_entity = ecmd.id();
             ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             menu_item.entity = Some(text_entity);
             eprintln!(
-                "menu_spawn_system: Menu item id={} assigned entity {:?}",
-                menu_item.id, text_entity
+                "menu_spawn_system: Menu item id={} assigned entity {:?} (visible={})",
+                menu_item.id, text_entity, is_visible
             );
         } // end for each menu item
+
+        // Spawn "..." indicators if visible_count is set
+        if let Some(vc) = visible_count {
+            // Top indicator (shown when scroll_offset > 0)
+            let mut top_cmd = commands
+                .spawn(DynamicText::new("...", font_string.clone(), font_size, normal_color));
+            top_cmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
+            // For world-space, add ZIndex always (needed when indicator becomes visible)
+            if !use_screen_space {
+                top_cmd.insert(ZIndex(23));
+            }
+            let top_indicator = top_cmd.id();
+            // Position only if needed (scroll_offset > 0)
+            if scroll_offset > 0 {
+                let pos = Vector2 {
+                    x: origin.x,
+                    y: origin.y - item_spacing,
+                };
+                if use_screen_space {
+                    commands.entity(top_indicator).insert(ScreenPosition { pos });
+                } else {
+                    commands.entity(top_indicator).insert(MapPosition { pos });
+                }
+            }
+            menu.top_indicator_entity = Some(top_indicator);
+
+            // Bottom indicator (shown when more items below)
+            let mut bottom_cmd = commands
+                .spawn(DynamicText::new("...", font_string.clone(), font_size, normal_color));
+            bottom_cmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
+            // For world-space, add ZIndex always (needed when indicator becomes visible)
+            if !use_screen_space {
+                bottom_cmd.insert(ZIndex(23));
+            }
+            let bottom_indicator = bottom_cmd.id();
+            // Position only if needed (visible_end < items.len())
+            if visible_end < menu.items.len() {
+                let pos = Vector2 {
+                    x: origin.x,
+                    y: origin.y + (vc as f32) * item_spacing,
+                };
+                if use_screen_space {
+                    commands.entity(bottom_indicator).insert(ScreenPosition { pos });
+                } else {
+                    commands.entity(bottom_indicator).insert(MapPosition { pos });
+                }
+            }
+            menu.bottom_indicator_entity = Some(bottom_indicator);
+        }
 
         // Add a signals component to the menu entity for state tracking
         commands
@@ -142,7 +225,12 @@ pub fn menu_spawn_system(
                 "menu_spawn_system: Spawning cursor entity {:?} for menu {:?}",
                 cursor_entity, entity
             );
-            let cursor_position = menu.items[menu.selected_index].position; // make sure sprite has correct origin
+            // Position cursor at selected item's viewport position
+            let selected_viewport_index = menu.selected_index.saturating_sub(scroll_offset);
+            let cursor_position = Vector2 {
+                x: origin.x,
+                y: origin.y + (selected_viewport_index as f32) * item_spacing,
+            };
             if use_screen_space {
                 commands.entity(cursor_entity).insert(ScreenPosition {
                     pos: cursor_position,
@@ -159,17 +247,18 @@ pub fn menu_spawn_system(
             );
         }
         eprintln!(
-            "menu_spawn_system: Spawned menu entity {:?} with {} items",
+            "menu_spawn_system: Spawned menu entity {:?} with {} items (visible_count={:?})",
             entity,
-            menu.items.len()
+            menu.items.len(),
+            visible_count
         );
     }
 }
 
 /// Despawns a specific menu entity and its related entities.
 ///
-/// Removes menu item entities, cursor entity, and the menu entity itself.
-/// Called via `world.run_system_with(system_id, entity)`.
+/// Removes menu item entities, cursor entity, indicator entities, and the
+/// menu entity itself. Called via `world.run_system_with(system_id, entity)`.
 ///
 /// # Parameters
 ///
@@ -199,6 +288,14 @@ pub fn menu_despawn(
         }
     }
 
+    // Despawn indicator entities if applicable
+    if let Some(top_entity) = menu.top_indicator_entity {
+        commands.entity(top_entity).despawn();
+    }
+    if let Some(bottom_entity) = menu.bottom_indicator_entity {
+        commands.entity(bottom_entity).despawn();
+    }
+
     // Despawn cursor entity if applicable
     if let Some(cursor_entity) = menu.cursor_entity {
         commands.entity(cursor_entity).despawn();
@@ -213,9 +310,13 @@ pub fn menu_despawn(
 /// Responds to secondary direction inputs (arrow keys) to move selection
 /// and action buttons to confirm. Triggers [`MenuSelectionEvent`] when
 /// an item is selected.
+///
+/// When `visible_count` is set, navigation is bounded (no wrap-around) and
+/// scrolling occurs when selection moves outside the visible window.
 pub fn menu_controller_observer(
     trigger: On<InputEvent>,
     mut query: Query<(Entity, &mut Menu, &mut Signals)>,
+    mut dynamic_text_query: Query<&mut DynamicText>,
     mut commands: Commands,
     mut audio_cmds: MessageWriter<AudioCmd>,
 ) {
@@ -238,18 +339,49 @@ pub fn menu_controller_observer(
         }
 
         let mut changed_selection = false;
+        let mut needs_reposition = false;
+        let old_selected_index = menu.selected_index;
+
         match event.action {
             InputAction::SecondaryDirectionUp => {
                 if !menu.items.is_empty() {
-                    menu.selected_index =
-                        (menu.selected_index + menu.items.len() - 1) % menu.items.len();
-                    changed_selection = true;
+                    if menu.visible_count.is_some() {
+                        // Bounded navigation (no wrap-around when scrolling enabled)
+                        if menu.selected_index > 0 {
+                            menu.selected_index -= 1;
+                            // Scroll up if selection above visible window
+                            if menu.selected_index < menu.scroll_offset {
+                                menu.scroll_offset = menu.selected_index;
+                                needs_reposition = true;
+                            }
+                            changed_selection = true;
+                        }
+                    } else {
+                        // Original wrap-around behavior
+                        menu.selected_index =
+                            (menu.selected_index + menu.items.len() - 1) % menu.items.len();
+                        changed_selection = true;
+                    }
                 }
             }
             InputAction::SecondaryDirectionDown => {
                 if !menu.items.is_empty() {
-                    menu.selected_index = (menu.selected_index + 1) % menu.items.len();
-                    changed_selection = true;
+                    if let Some(visible_count) = menu.visible_count {
+                        // Bounded navigation (no wrap-around when scrolling enabled)
+                        if menu.selected_index < menu.items.len() - 1 {
+                            menu.selected_index += 1;
+                            // Scroll down if selection below visible window
+                            if menu.selected_index >= menu.scroll_offset + visible_count {
+                                menu.scroll_offset = menu.selected_index - visible_count + 1;
+                                needs_reposition = true;
+                            }
+                            changed_selection = true;
+                        }
+                    } else {
+                        // Original wrap-around behavior
+                        menu.selected_index = (menu.selected_index + 1) % menu.items.len();
+                        changed_selection = true;
+                    }
                 }
             }
             InputAction::Action1 | InputAction::Action2 => {
@@ -271,13 +403,36 @@ pub fn menu_controller_observer(
             _ => {}
         }
 
-        // Update cursor position if applicable
+        // Reposition items if scrolling occurred
+        if needs_reposition {
+            reposition_menu_items(&mut commands, &menu);
+        }
+
+        // Update cursor position and colors if applicable
         if changed_selection {
-            // TODO: change colors of selected/unselected items
-            // TODO: sounds
-            // TODO: Use Tween for cursor movement
+            // Update colors for old and new selected items (only for DynamicText)
+            if let Some(old_item) = menu.items.get(old_selected_index) {
+                if let Some(entity) = old_item.entity {
+                    if let Ok(mut text) = dynamic_text_query.get_mut(entity) {
+                        text.color = menu.normal_color;
+                    }
+                }
+            }
+            if let Some(new_item) = menu.items.get(menu.selected_index) {
+                if let Some(entity) = new_item.entity {
+                    if let Ok(mut text) = dynamic_text_query.get_mut(entity) {
+                        text.color = menu.selected_color;
+                    }
+                }
+            }
+
             if let Some(cursor_entity) = menu.cursor_entity {
-                let cursor_position = menu.items[menu.selected_index].position;
+                // Calculate cursor position based on visible viewport
+                let viewport_index = menu.selected_index.saturating_sub(menu.scroll_offset);
+                let cursor_position = Vector2 {
+                    x: menu.origin.x,
+                    y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
+                };
                 if menu.use_screen_space {
                     commands.entity(cursor_entity).insert(ScreenPosition {
                         pos: cursor_position,
@@ -293,6 +448,87 @@ pub fn menu_controller_observer(
                 audio_cmds.write(AudioCmd::PlayFx {
                     id: sound_key.clone(),
                 });
+            }
+        }
+    }
+}
+
+/// Repositions menu items and indicators after scrolling.
+///
+/// Items within the visible window get position components added/updated,
+/// while items outside the window have their position components removed.
+fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
+    let visible_count = menu.visible_count.unwrap_or(menu.items.len());
+    let visible_end = (menu.scroll_offset + visible_count).min(menu.items.len());
+
+    // Reposition all menu items
+    for (i, item) in menu.items.iter().enumerate() {
+        if let Some(entity) = item.entity {
+            let is_visible = i >= menu.scroll_offset && i < visible_end;
+
+            if is_visible {
+                // Add/update position component
+                let viewport_index = i - menu.scroll_offset;
+                let new_pos = Vector2 {
+                    x: menu.origin.x,
+                    y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
+                };
+                if menu.use_screen_space {
+                    commands.entity(entity).insert(ScreenPosition { pos: new_pos });
+                } else {
+                    commands.entity(entity).insert(MapPosition { pos: new_pos });
+                }
+            } else {
+                // Remove position component to hide (render system skips)
+                if menu.use_screen_space {
+                    commands.entity(entity).remove::<ScreenPosition>();
+                } else {
+                    commands.entity(entity).remove::<MapPosition>();
+                }
+            }
+        }
+    }
+
+    // Update indicators
+    let show_top = menu.scroll_offset > 0;
+    let show_bottom = visible_end < menu.items.len();
+
+    if let Some(top_entity) = menu.top_indicator_entity {
+        if show_top {
+            let pos = Vector2 {
+                x: menu.origin.x,
+                y: menu.origin.y - menu.item_spacing,
+            };
+            if menu.use_screen_space {
+                commands.entity(top_entity).insert(ScreenPosition { pos });
+            } else {
+                commands.entity(top_entity).insert(MapPosition { pos });
+            }
+        } else {
+            if menu.use_screen_space {
+                commands.entity(top_entity).remove::<ScreenPosition>();
+            } else {
+                commands.entity(top_entity).remove::<MapPosition>();
+            }
+        }
+    }
+
+    if let Some(bottom_entity) = menu.bottom_indicator_entity {
+        if show_bottom {
+            let pos = Vector2 {
+                x: menu.origin.x,
+                y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
+            };
+            if menu.use_screen_space {
+                commands.entity(bottom_entity).insert(ScreenPosition { pos });
+            } else {
+                commands.entity(bottom_entity).insert(MapPosition { pos });
+            }
+        } else {
+            if menu.use_screen_space {
+                commands.entity(bottom_entity).remove::<ScreenPosition>();
+            } else {
+                commands.entity(bottom_entity).remove::<MapPosition>();
             }
         }
     }

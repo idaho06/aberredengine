@@ -60,13 +60,14 @@ function M.spawn()
             "arcade",
             16,
             24,
-            true
+            false
         )
-        :with_menu_colors(255, 255, 0, 255, 255, 255, 255, 255)
-        :with_menu_dynamic_text(true)
+    -- :with_menu_colors(255, 255, 0, 255, 255, 0, 0, 255)
+    -- :with_menu_dynamic_text(true)
         :with_menu_cursor("menu_cursor")
         :with_menu_selection_sound("option")
         :with_menu_callback("on_main_menu_select")
+    -- :with_menu_visible_count(5)
         :build()
 
     -- Play menu music
