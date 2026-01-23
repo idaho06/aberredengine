@@ -53,6 +53,8 @@ function M.load_assets()
 
     -- Sound effects
     engine.load_sound("option", "./assets/audio/option.wav")
+    engine.load_sound("blaster", "./assets/audio/blaster.ogg")
+    engine.load_sound("scanner", "./assets/audio/scanner.ogg")
     --[[ engine.load_sound("ding", "./assets/audio/ding.wav")
     engine.load_sound("ping", "./assets/audio/ping.wav")
      ]]

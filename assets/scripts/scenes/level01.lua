@@ -140,6 +140,8 @@ local function fire_laser(ctx)
         )
         :with_ttl(1.5)
         :build()
+    -- Play blaster sound
+    engine.play_sound("blaster")
 end
 
 --- @param ctx EntityContext Entity context table
