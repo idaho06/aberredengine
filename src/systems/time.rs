@@ -10,9 +10,11 @@ use crate::resources::worldtime::WorldTime;
 ///
 /// `dt` is expected to be the unscaled frame delta in seconds. The system
 /// applies the current `time_scale` and writes both `elapsed` and `delta`.
+/// Also increments the frame counter.
 pub fn update_world_time(world: &mut World, dt: f32) {
     let mut wt = world.resource_mut::<WorldTime>();
     let scaled_dt = dt * wt.time_scale;
     wt.elapsed += scaled_dt;
     wt.delta = scaled_dt;
+    wt.frame_count += 1;
 }

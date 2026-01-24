@@ -8,6 +8,7 @@
 //! world and screen coordinates.
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
+use raylib::ffi;
 use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
@@ -22,10 +23,14 @@ use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::fontstore::FontStore;
+use crate::resources::lua_runtime::UniformValue;
+use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::worldtime::WorldTime;
 
 /// Bundled render resources to reduce system parameter count.
 #[derive(SystemParam)]
@@ -34,6 +39,8 @@ pub struct RenderResources<'w> {
     pub screensize: Res<'w, ScreenSize>,
     pub window_size: Res<'w, WindowSize>,
     pub textures: Res<'w, TextureStore>,
+    pub world_time: Res<'w, WorldTime>,
+    pub post_process: Res<'w, PostProcessShader>,
     pub maybe_debug: Option<Res<'w, DebugMode>>,
 }
 
@@ -49,6 +56,7 @@ pub fn render_system(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
     mut render_target: NonSendMut<RenderTarget>,
+    mut shader_store: NonSendMut<ShaderStore>,
     res: RenderResources,
     query_map_sprites: Query<(
         &Sprite,
@@ -390,27 +398,246 @@ pub fn render_system(
     } // End texture mode - render target is complete
 
     // ========== PHASE 2: Blit render target to window with letterboxing ==========
+    // Unpack additional resources
+    let world_time = &res.world_time;
+    let post_process = &res.post_process;
+
+    // Source rectangle (the entire render target, Y-flipped for OpenGL)
+    let src = render_target.source_rect();
+
+    // Destination rectangle (letterboxed to fit window)
+    let dest =
+        window_size.calculate_letterbox(render_target.game_width, render_target.game_height);
+
+    // Clone the shader key to avoid borrowing issues
+    let shader_key_opt = post_process.key.clone();
+
+    // Check if post-process shader is active and set uniforms
+    let mut use_shader = false;
+    if let Some(ref shader_key) = shader_key_opt {
+        if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+            if entry.shader.is_shader_valid() {
+                use_shader = true;
+
+                // Set standard uniforms
+                set_standard_uniforms(
+                    &mut entry.shader,
+                    &mut entry.locations,
+                    world_time,
+                    screensize,
+                    window_size,
+                    &dest,
+                );
+
+                // Set user uniforms
+                for (name, value) in post_process.uniforms.iter() {
+                    set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
+                }
+            } else {
+                eprintln!(
+                    "[Render] Warning: Post-process shader '{}' is invalid, rendering without shader",
+                    shader_key
+                );
+            }
+        } else {
+            eprintln!(
+                "[Render] Warning: Post-process shader '{}' not found, rendering without shader",
+                shader_key
+            );
+        }
+    }
+
     {
         let mut d = rl.begin_drawing(&th);
         d.clear_background(Color::BLACK); // Black bars for letterboxing
 
-        // Source rectangle (the entire render target, Y-flipped for OpenGL)
-        let src = render_target.source_rect();
+        if use_shader {
+            // Get mutable shader for drawing
+            if let Some(ref shader_key) = shader_key_opt {
+                if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+                    let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+                    d_shader.draw_texture_pro(
+                        &render_target.texture,
+                        src,
+                        dest,
+                        Vector2 { x: 0.0, y: 0.0 },
+                        0.0,
+                        Color::WHITE,
+                    );
+                }
+            }
+        } else {
+            // Draw without shader
+            d.draw_texture_pro(
+                &render_target.texture,
+                src,
+                dest,
+                Vector2 { x: 0.0, y: 0.0 },
+                0.0,
+                Color::WHITE,
+            );
+        }
+    }
+}
 
-        // Destination rectangle (letterboxed to fit window)
-        let dest = window_size.calculate_letterbox(
-            render_target.game_width,
-            render_target.game_height,
-        );
+/// Set standard uniforms on a shader for post-processing.
+///
+/// Standard uniforms:
+/// - uTime: elapsed time in seconds
+/// - uDeltaTime: frame delta time in seconds
+/// - uResolution: render target resolution (game resolution)
+/// - uFrame: frame count
+/// - uWindowResolution: window resolution
+/// - uLetterbox: letterbox destination rectangle (x, y, w, h)
+fn set_standard_uniforms(
+    shader: &mut Shader,
+    locations: &mut rustc_hash::FxHashMap<String, i32>,
+    world_time: &WorldTime,
+    screensize: &ScreenSize,
+    window_size: &WindowSize,
+    dest: &Rectangle,
+) {
+    // Helper to get or cache uniform location
+    let get_loc = |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
+        *locations.entry(name.to_string()).or_insert_with(|| {
+            shader.get_shader_location(name)
+        })
+    };
 
-        // Draw the render target scaled to fit the window
-        d.draw_texture_pro(
-            &render_target.texture,
-            src,
-            dest,
-            Vector2 { x: 0.0, y: 0.0 },
-            0.0,
-            Color::WHITE,
-        );
+    // uTime (float)
+    let loc = get_loc(shader, locations, "uTime");
+    if loc >= 0 {
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                &world_time.elapsed as *const f32 as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
+            );
+        }
+    }
+
+    // uDeltaTime (float)
+    let loc = get_loc(shader, locations, "uDeltaTime");
+    if loc >= 0 {
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                &world_time.delta as *const f32 as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
+            );
+        }
+    }
+
+    // uResolution (vec2) - game resolution
+    let loc = get_loc(shader, locations, "uResolution");
+    if loc >= 0 {
+        let resolution = [screensize.w as f32, screensize.h as f32];
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                resolution.as_ptr() as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
+            );
+        }
+    }
+
+    // uFrame (int)
+    let loc = get_loc(shader, locations, "uFrame");
+    if loc >= 0 {
+        let frame = world_time.frame_count as i32;
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                &frame as *const i32 as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_INT as i32,
+            );
+        }
+    }
+
+    // uWindowResolution (vec2)
+    let loc = get_loc(shader, locations, "uWindowResolution");
+    if loc >= 0 {
+        let window_res = [window_size.w as f32, window_size.h as f32];
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                window_res.as_ptr() as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
+            );
+        }
+    }
+
+    // uLetterbox (vec4) - destination rectangle
+    let loc = get_loc(shader, locations, "uLetterbox");
+    if loc >= 0 {
+        let letterbox = [dest.x, dest.y, dest.width, dest.height];
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                letterbox.as_ptr() as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
+            );
+        }
+    }
+}
+
+/// Set a user-defined uniform value on a shader.
+fn set_uniform_value(
+    shader: &mut Shader,
+    locations: &mut rustc_hash::FxHashMap<String, i32>,
+    name: &str,
+    value: &UniformValue,
+) {
+    let loc = *locations.entry(name.to_string()).or_insert_with(|| {
+        shader.get_shader_location(name)
+    });
+
+    if loc < 0 {
+        return; // Uniform not found in shader, silently skip
+    }
+
+    unsafe {
+        match value {
+            UniformValue::Float(v) => {
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    v as *const f32 as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
+                );
+            }
+            UniformValue::Int(v) => {
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    v as *const i32 as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_INT as i32,
+                );
+            }
+            UniformValue::Vec2 { x, y } => {
+                let vec = [*x, *y];
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    vec.as_ptr() as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
+                );
+            }
+            UniformValue::Vec4 { x, y, z, w } => {
+                let vec = [*x, *y, *z, *w];
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    vec.as_ptr() as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
+                );
+            }
+        }
     }
 }
