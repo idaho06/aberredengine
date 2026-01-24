@@ -56,8 +56,10 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
     AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd,
-    GroupCmd, MenuActionData, PhaseCmd, SignalCmd, SpawnCmd, TilemapCmd,
+    GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd, SpawnCmd, TilemapCmd,
 };
+use crate::resources::postprocessshader::PostProcessShader;
+use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
@@ -285,6 +287,7 @@ pub fn process_asset_command<F1, F2>(
     tex_store: &mut TextureStore,
     tilemaps_store: &mut TilemapStore,
     fonts: &mut FontStore,
+    shader_store: &mut ShaderStore,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     load_font_fn: F1,
     load_tilemap_fn: F2,
@@ -333,6 +336,67 @@ pub fn process_asset_command<F1, F2>(
             );
             tex_store.insert(&id, tilemap_tex);
             tilemaps_store.insert(&id, tilemap);
+        }
+        AssetCmd::LoadShader {
+            id,
+            vs_path,
+            fs_path,
+        } => {
+            // Load shader from file paths. If a path is None, pass null pointer to raylib
+            let vs_path_c = vs_path.as_deref();
+            let fs_path_c = fs_path.as_deref();
+
+            let shader = rl.load_shader(th, vs_path_c, fs_path_c);
+            if shader.is_shader_valid() {
+                eprintln!(
+                    "[Rust] Loaded shader '{}' (vs: {:?}, fs: {:?})",
+                    id, vs_path, fs_path
+                );
+                shader_store.add(&id, shader);
+            } else {
+                eprintln!(
+                    "[Rust] Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
+                    id, vs_path, fs_path
+                );
+            }
+        }
+    }
+}
+
+/// Process a single render command from Lua and update post-process state.
+///
+/// This function handles render-related commands including:
+/// - Setting/clearing the active post-process shader
+/// - Setting/clearing shader uniforms
+///
+/// # Parameters
+///
+/// - `cmd` - The RenderCmd to process
+/// - `post_process` - PostProcessShader resource to update
+pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShader) {
+    match cmd {
+        RenderCmd::SetPostProcessShader { id } => {
+            post_process.set_shader(id.as_deref());
+            if let Some(ref shader_id) = id {
+                eprintln!("[Rust] Post-process shader set to '{}'", shader_id);
+            } else {
+                eprintln!("[Rust] Post-process shader disabled");
+            }
+        }
+        RenderCmd::SetPostProcessUniform { name, value } => {
+            let is_reserved = post_process.set_uniform(&name, value);
+            if is_reserved {
+                eprintln!(
+                    "[Rust] Warning: '{}' is a reserved uniform name and will be overwritten by the engine",
+                    name
+                );
+            }
+        }
+        RenderCmd::ClearPostProcessUniform { name } => {
+            post_process.clear_uniform(&name);
+        }
+        RenderCmd::ClearPostProcessUniforms => {
+            post_process.clear_uniforms();
         }
     }
 }
@@ -1124,15 +1188,15 @@ pub fn process_spawn_command(
         }
 
         if templates.is_empty() && !emitter_data.template_keys.is_empty() {
-            eprintln!(
-                "[ParticleEmitter] no valid templates resolved; emitter will not emit"
-            );
+            eprintln!("[ParticleEmitter] no valid templates resolved; emitter will not emit");
         }
 
         // Convert shape
         let shape = match emitter_data.shape {
             ParticleEmitterShapeData::Point => EmitterShape::Point,
-            ParticleEmitterShapeData::Rect { width, height } => EmitterShape::Rect { width, height },
+            ParticleEmitterShapeData::Rect { width, height } => {
+                EmitterShape::Rect { width, height }
+            }
         };
 
         // Convert TTL

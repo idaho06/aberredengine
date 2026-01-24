@@ -77,6 +77,8 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::postprocessshader::PostProcessShader;
+use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
@@ -84,7 +86,8 @@ use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_clone_command, process_entity_commands, process_group_command,
-    process_phase_command, process_signal_command, process_spawn_command, process_tilemap_command,
+    process_phase_command, process_render_command, process_signal_command, process_spawn_command,
+    process_tilemap_command,
 };
 //use rand::Rng;
 
@@ -206,6 +209,7 @@ pub fn setup(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     th: NonSend<raylib::RaylibThread>,
     mut fonts: NonSendMut<FontStore>,
+    mut shaders: NonSendMut<ShaderStore>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
@@ -248,6 +252,7 @@ pub fn setup(
             &mut tex_store,
             &mut tilemaps_store,
             &mut fonts,
+            &mut shaders,
             &mut audio_cmd_writer,
             load_font_with_mipmaps,
             load_tilemap,
@@ -591,6 +596,7 @@ pub fn update(
     systems_store: Res<SystemsStore>,
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
+    mut post_process: ResMut<PostProcessShader>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     stuckto_query: Query<&StuckTo>,
@@ -684,6 +690,11 @@ pub fn update(
     // Process camera commands from Lua
     for cmd in lua_runtime.drain_camera_commands() {
         process_camera_command(&mut commands, cmd);
+    }
+
+    // Process render commands from Lua (post-process shader control)
+    for cmd in lua_runtime.drain_render_commands() {
+        process_render_command(cmd, &mut post_process);
     }
 
     // Check for quit flag (set by Lua)
@@ -814,6 +825,7 @@ pub fn switch_scene(
     mut commands: Commands,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     mut worldsignals: ResMut<WorldSignals>,
+    mut post_process: ResMut<PostProcessShader>,
     systems_store: Res<SystemsStore>,
     tilemaps_store: Res<TilemapStore>,
     tex_store: Res<TextureStore>,
@@ -919,6 +931,11 @@ pub fn switch_scene(
     // Process camera commands from Lua
     for cmd in lua_runtime.drain_camera_commands() {
         process_camera_command(&mut commands, cmd);
+    }
+
+    // Process render commands from Lua (post-process shader control)
+    for cmd in lua_runtime.drain_render_commands() {
+        process_render_command(cmd, &mut post_process);
     }
 
     // for reference, here is the old hardcoded scene setup logic, now replaced by Lua scripts

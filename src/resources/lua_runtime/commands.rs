@@ -3,6 +3,15 @@
 //! These enums represent commands that Lua scripts can queue for execution
 //! by Rust systems. Commands are processed after Lua callbacks return.
 
+/// Value types for shader uniforms.
+#[derive(Debug, Clone)]
+pub enum UniformValue {
+    Float(f32),
+    Int(i32),
+    Vec2 { x: f32, y: f32 },
+    Vec4 { x: f32, y: f32, z: f32, w: f32 },
+}
+
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.
 #[derive(Debug, Clone)]
@@ -17,6 +26,25 @@ pub enum AssetCmd {
     LoadSound { id: String, path: String },
     /// Load a tilemap from a directory path
     LoadTilemap { id: String, path: String },
+    /// Load a shader from vertex and/or fragment shader files
+    LoadShader {
+        id: String,
+        vs_path: Option<String>,
+        fs_path: Option<String>,
+    },
+}
+
+/// Commands for render-related operations from Lua.
+#[derive(Debug, Clone)]
+pub enum RenderCmd {
+    /// Set the active post-process shader (None to disable)
+    SetPostProcessShader { id: Option<String> },
+    /// Set a uniform value on the post-process shader
+    SetPostProcessUniform { name: String, value: UniformValue },
+    /// Clear a single uniform from the post-process shader
+    ClearPostProcessUniform { name: String },
+    /// Clear all uniforms from the post-process shader
+    ClearPostProcessUniforms,
 }
 
 /// Audio commands that Lua can queue.

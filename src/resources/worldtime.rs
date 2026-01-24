@@ -14,6 +14,8 @@ pub struct WorldTime {
     pub delta: f32,
     /// Multiplier applied by systems that honor time scaling.
     pub time_scale: f32,
+    /// Total number of frames since start.
+    pub frame_count: u64,
 }
 
 impl Default for WorldTime {
@@ -22,6 +24,7 @@ impl Default for WorldTime {
             elapsed: 0.0,
             delta: 0.0,
             time_scale: 1.0,
+            frame_count: 0,
         }
     }
 }

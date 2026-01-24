@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-22 (synced with codebase)
+# Last updated: 2026-01-24 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -103,6 +103,8 @@ src/
 │   ├── debugmode.rs           # Debug render toggle
 │   ├── systemsstore.rs        # Named system lookup
 │   ├── audio.rs               # AudioBridge channels
+│   ├── shaderstore.rs         # ShaderStore (loaded shaders with cached uniform locations)
+│   ├── postprocessshader.rs   # PostProcessShader resource (active shader + user uniforms)
 │   └── lua_runtime/
 │       ├── mod.rs             # Public exports
 │       ├── runtime.rs         # LuaRuntime, engine table API registration
@@ -132,13 +134,16 @@ assets/
 │   │   ├── math.lua           # Math helpers (lerp, inv_lerp, remap, lerp2)
 │   │   └── utils.lua          # Debug utilities (dump_value)
 │   └── scenes/
-│       ├── menu.lua           # Menu scene (DRIFTERS title, Start Game -> level01, back=quit)
-│       └── level01.lua        # Asteroids scene (ship phases, background tiles, drifting asteroids)
-├── textures/                  # Space/asteroid art set
-   └── *.png
+│       ├── menu.lua           # Menu scene
+│       └── level01.lua        # First level of the current game
+├── textures/                  # Game art set
+│   └── *.png                  # Mostly png files, but can be any image format supported by raylib
+├── shaders/                   # OpenGL 3.3 Shader files
+│   ├── *.fs                   # Fragment shaders
+│   └── *.vs                   # Vertex shaders
 ├── audio/                     # audio files
-│   ├── *.xm 
-│   └── *.wav             
+│   ├── *.xm                   # xm, wav, ogg, and any other sound format supported by raylib
+│   └── *.wav
 └── fonts/
     └── *.ttf
 
@@ -202,7 +207,7 @@ TtlSpec { None | Fixed(f32) | Range { min, max } }
 ## RESOURCE QUICK-REF
 
 GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, config_path }
-WorldTime { delta: f32, scale: f32 }
+WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
 InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }
 BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
 InputSnapshot { digital: DigitalInputs, analog: AnalogInputs } - frozen snapshot for Lua callbacks
@@ -227,6 +232,9 @@ FullScreen (marker) - presence indicates fullscreen mode
 SystemsStore { map: FxHashMap<String, SystemId>, entity_map: FxHashMap<String, SystemId<In<Entity>>> }
 LuaRuntime { lua: Lua, ... } - NON_SEND
 AudioBridge { sender, receiver }
+ShaderStore { shaders: FxHashMap<String, ShaderEntry> } - NON_SEND (stores Shader + cached uniform locations)
+ShaderEntry { shader: Shader, locations: FxHashMap<String, i32> }
+PostProcessShader { key: Option<Arc<str>>, uniforms: FxHashMap<Arc<str>, UniformValue> }
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
@@ -291,8 +299,10 @@ GroupCmd { TrackGroup { name }, UntrackGroup { name }, ClearTrackedGroups }
 PhaseCmd { TransitionTo { entity_id, phase } }
 CameraCmd { SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom } }
 TilemapCmd { SpawnTiles { id } }
-AssetCmd { LoadTexture { id, path }, LoadFont { id, path, size }, LoadMusic { id, path }, LoadSound { id, path }, LoadTilemap { id, path } }
+AssetCmd { LoadTexture { id, path }, LoadFont { id, path, size }, LoadMusic { id, path }, LoadSound { id, path }, LoadTilemap { id, path }, LoadShader { id, vs_path, fs_path } }
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
+RenderCmd { SetPostProcessShader { id }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
+UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ## LUA API STRUCTURE (runtime.rs)
 
@@ -305,6 +315,7 @@ engine.load_font(id, path, size)
 engine.load_music(id, path)
 engine.load_sound(id, path)
 engine.load_tilemap(id, path)
+engine.load_shader(id, vs_path|nil, fs_path|nil)  -- at least one path required
 engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)
 
 -- Audio
@@ -438,6 +449,16 @@ engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 
 -- Tilemap
 engine.spawn_tiles(id)
+
+-- Post-Process Shaders (on_switch_scene, on_update callbacks)
+engine.post_process_shader(id|nil)  -- set active shader or nil to disable
+engine.post_process_set_float(name, value)
+engine.post_process_set_int(name, value)
+engine.post_process_set_vec2(name, x, y)
+engine.post_process_set_vec4(name, x, y, z, w)
+engine.post_process_clear_uniform(name)
+engine.post_process_clear_uniforms()
+-- Standard uniforms (set automatically): uTime, uDeltaTime, uResolution, uFrame, uWindowResolution, uLetterbox
 
 -- Entity Builder (engine.spawn())
 :with_group(name)
@@ -662,7 +683,7 @@ For features touching:
 - Physics: rigidbody.rs, movement.rs
 - Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs
 - Collision: collision.rs (systems), boxcollider.rs, luacollision.rs (components)
-- Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs
+- Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs
 - Animation: animation.rs (component + controller), animationstore.rs
 - State machines: luaphase.rs (component + system)
 - Signals: signals.rs, worldsignals.rs
@@ -727,3 +748,6 @@ For features touching:
 26. TTL countdown respects WorldTime::time_scale; ttl_system runs after movement
 27. Menu on_select_callback takes precedence over MenuActions - when callback is set, actions are ignored
 28. Lua global helpers available: Lerp, Lerp2, InvLerp, Remap (from lib/math.lua), Dump_value (from lib/utils.lua)
+29. Post-process shaders: load in on_setup, activate in on_switch_scene/on_update via engine.post_process_shader(id)
+30. Reserved shader uniforms (uTime, uDeltaTime, uResolution, uFrame, uWindowResolution, uLetterbox) are set automatically each frame
+31. ShaderStore is NON_SEND (contains raylib Shader); PostProcessShader is a regular Resource

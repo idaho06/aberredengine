@@ -54,6 +54,8 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::postprocessshader::PostProcessShader;
+use crate::resources::shaderstore::ShaderStore;
 // use crate::resources::rendertarget::RenderFilter;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
@@ -149,6 +151,8 @@ fn main() {
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_non_send_resource(FontStore::new());
+    world.insert_non_send_resource(ShaderStore::new());
+    world.insert_resource(PostProcessShader::new());
 
     // Initialize Lua runtime and load main script
     let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");

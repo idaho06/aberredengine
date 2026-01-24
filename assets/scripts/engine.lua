@@ -1385,3 +1385,48 @@ function engine.spawn_tiles(tilemap_id) end
 ---@param fps number Frames per second
 ---@param looped boolean Whether animation loops
 function engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped) end
+
+-- ==================== Shader Loading ====================
+
+---Load a shader from disk (at least one path must be provided)
+---@param id string Shader identifier for later reference
+---@param vs_path string|nil Path to vertex shader file (nil for default)
+---@param fs_path string|nil Path to fragment shader file (nil for default)
+function engine.load_shader(id, vs_path, fs_path) end
+
+-- ==================== Post-Process Shaders ====================
+
+---Set or clear the active post-process shader
+---@param id string|nil Shader identifier (from load_shader) or nil to disable
+function engine.post_process_shader(id) end
+
+---Set a float uniform on the post-process shader
+---@param name string Uniform name
+---@param value number Float value
+function engine.post_process_set_float(name, value) end
+
+---Set an integer uniform on the post-process shader
+---@param name string Uniform name
+---@param value integer Integer value
+function engine.post_process_set_int(name, value) end
+
+---Set a vec2 uniform on the post-process shader
+---@param name string Uniform name
+---@param x number X component
+---@param y number Y component
+function engine.post_process_set_vec2(name, x, y) end
+
+---Set a vec4 uniform on the post-process shader
+---@param name string Uniform name
+---@param x number X component
+---@param y number Y component
+---@param z number Z component
+---@param w number W component
+function engine.post_process_set_vec4(name, x, y, z, w) end
+
+---Clear a single uniform from the post-process shader
+---@param name string Uniform name to clear
+function engine.post_process_clear_uniform(name) end
+
+---Clear all user uniforms from the post-process shader
+function engine.post_process_clear_uniforms() end

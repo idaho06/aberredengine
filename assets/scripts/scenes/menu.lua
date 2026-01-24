@@ -123,6 +123,13 @@ function M.spawn()
     -- :register_as("explosion03") -- Store entity ID for cloning
         :build()
  ]]
+    -- post-process shader
+    engine.post_process_shader("wave")
+    engine.post_process_set_float("amplitude", 0.003)
+    engine.post_process_set_float("lenght", 100.0)
+    engine.post_process_set_float("speed", 3.0)
+    -- engine.post_process_shader("invert")
+
     engine.log_info("Menu scene entities queued!")
 end
 

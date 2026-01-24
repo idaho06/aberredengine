@@ -71,6 +71,10 @@ function M.load_assets()
     --[[ engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
     engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false) ]]
 
+    -- Shaders
+    engine.load_shader("invert", nil, "./assets/shaders/invert.fs")
+    engine.load_shader("wave", nil, "./assets/shaders/wave.fs")
+
 
     engine.log_info("Assets queued for loading!")
 end

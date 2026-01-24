@@ -26,6 +26,7 @@ pub(super) struct LuaAppData {
     tilemap_commands: RefCell<Vec<TilemapCmd>>,
     camera_commands: RefCell<Vec<CameraCmd>>,
     animation_commands: RefCell<Vec<AnimationCmd>>,
+    render_commands: RefCell<Vec<RenderCmd>>,
     /// Clone commands for regular context (scene setup, phase callbacks)
     pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
     // Collision-scoped command queues (processed immediately after each collision callback)
@@ -157,6 +158,7 @@ impl LuaRuntime {
             tilemap_commands: RefCell::new(Vec::new()),
             camera_commands: RefCell::new(Vec::new()),
             animation_commands: RefCell::new(Vec::new()),
+            render_commands: RefCell::new(Vec::new()),
             clone_commands: RefCell::new(Vec::new()),
             collision_entity_commands: RefCell::new(Vec::new()),
             collision_signal_commands: RefCell::new(Vec::new()),
@@ -192,6 +194,7 @@ impl LuaRuntime {
         runtime.register_camera_api()?;
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
+        runtime.register_render_api()?;
 
         Ok(runtime)
     }
@@ -478,8 +481,9 @@ impl LuaRuntime {
         // Returns a LuaEntityBuilder that clones the source entity and applies overrides
         engine.set(
             "clone",
-            self.lua
-                .create_function(|_, source_key: String| Ok(LuaEntityBuilder::new_clone(source_key)))?,
+            self.lua.create_function(|_, source_key: String| {
+                Ok(LuaEntityBuilder::new_clone(source_key))
+            })?,
         )?;
 
         Ok(())
@@ -968,14 +972,15 @@ impl LuaRuntime {
         // engine.entity_insert_ttl(entity_id, seconds) - Insert a Ttl component
         engine.set(
             "entity_insert_ttl",
-            self.lua.create_function(|lua, (entity_id, seconds): (u64, f32)| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::InsertTtl { entity_id, seconds });
-                Ok(())
-            })?,
+            self.lua
+                .create_function(|lua, (entity_id, seconds): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTtl { entity_id, seconds });
+                    Ok(())
+                })?,
         )?;
 
         // engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
@@ -1704,14 +1709,15 @@ impl LuaRuntime {
         // Insert a Ttl component during collision handling
         engine.set(
             "collision_entity_insert_ttl",
-            self.lua.create_function(|lua, (entity_id, seconds): (u64, f32)| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::InsertTtl { entity_id, seconds });
-                Ok(())
-            })?,
+            self.lua
+                .create_function(|lua, (entity_id, seconds): (u64, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::InsertTtl { entity_id, seconds });
+                    Ok(())
+                })?,
         )?;
 
         // engine.collision_entity_restart_animation(entity_id)
@@ -2221,8 +2227,9 @@ impl LuaRuntime {
         // Returns a LuaEntityBuilder that clones the source entity and applies overrides
         engine.set(
             "collision_clone",
-            self.lua
-                .create_function(|_, source_key: String| Ok(LuaEntityBuilder::new_collision_clone(source_key)))?,
+            self.lua.create_function(|_, source_key: String| {
+                Ok(LuaEntityBuilder::new_collision_clone(source_key))
+            })?,
         )?;
 
         // engine.collision_phase_transition(entity_id, phase)
@@ -2395,6 +2402,140 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Registers render/post-processing functions in the `engine` table.
+    fn register_render_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+
+        // engine.load_shader(id, vs_path_or_nil, fs_path_or_nil) - Queue shader loading
+        // At least one of vs_path or fs_path must be provided
+        engine.set(
+            "load_shader",
+            self.lua
+                .create_function(|lua, (id, vs_path, fs_path): (String, Option<String>, Option<String>)| {
+                    if vs_path.is_none() && fs_path.is_none() {
+                        return Err(LuaError::runtime(
+                            "load_shader: at least one of vs_path or fs_path must be provided",
+                        ));
+                    }
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .asset_commands
+                        .borrow_mut()
+                        .push(AssetCmd::LoadShader { id, vs_path, fs_path });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.post_process_shader(id_or_nil) - Set active post-process shader (nil to disable)
+        engine.set(
+            "post_process_shader",
+            self.lua.create_function(|lua, id: Option<String>| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .render_commands
+                    .borrow_mut()
+                    .push(RenderCmd::SetPostProcessShader { id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.post_process_set_float(name, value) - Set a float uniform
+        engine.set(
+            "post_process_set_float",
+            self.lua
+                .create_function(|lua, (name, value): (String, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .render_commands
+                        .borrow_mut()
+                        .push(RenderCmd::SetPostProcessUniform {
+                            name,
+                            value: UniformValue::Float(value),
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.post_process_set_int(name, value) - Set an integer uniform
+        engine.set(
+            "post_process_set_int",
+            self.lua
+                .create_function(|lua, (name, value): (String, i32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .render_commands
+                        .borrow_mut()
+                        .push(RenderCmd::SetPostProcessUniform {
+                            name,
+                            value: UniformValue::Int(value),
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.post_process_set_vec2(name, x, y) - Set a vec2 uniform
+        engine.set(
+            "post_process_set_vec2",
+            self.lua
+                .create_function(|lua, (name, x, y): (String, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .render_commands
+                        .borrow_mut()
+                        .push(RenderCmd::SetPostProcessUniform {
+                            name,
+                            value: UniformValue::Vec2 { x, y },
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.post_process_set_vec4(name, x, y, z, w) - Set a vec4 uniform
+        engine.set(
+            "post_process_set_vec4",
+            self.lua
+                .create_function(|lua, (name, x, y, z, w): (String, f32, f32, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .render_commands
+                        .borrow_mut()
+                        .push(RenderCmd::SetPostProcessUniform {
+                            name,
+                            value: UniformValue::Vec4 { x, y, z, w },
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.post_process_clear_uniform(name) - Clear a single uniform
+        engine.set(
+            "post_process_clear_uniform",
+            self.lua.create_function(|lua, name: String| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .render_commands
+                    .borrow_mut()
+                    .push(RenderCmd::ClearPostProcessUniform { name });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.post_process_clear_uniforms() - Clear all uniforms
+        engine.set(
+            "post_process_clear_uniforms",
+            self.lua.create_function(|lua, ()| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .render_commands
+                    .borrow_mut()
+                    .push(RenderCmd::ClearPostProcessUniforms);
+                Ok(())
+            })?,
+        )?;
+
+        Ok(())
+    }
+
     /// Drains all queued asset commands.
     ///
     /// Call this from a Rust system after Lua has queued commands via
@@ -2480,6 +2621,14 @@ impl LuaRuntime {
         self.lua
             .app_data_ref::<LuaAppData>()
             .map(|data| data.animation_commands.borrow_mut().drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Drains all queued render commands.
+    pub fn drain_render_commands(&self) -> Vec<RenderCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| data.render_commands.borrow_mut().drain(..).collect())
             .unwrap_or_default()
     }
 
@@ -2580,6 +2729,7 @@ impl LuaRuntime {
             data.group_commands.borrow_mut().clear();
             data.camera_commands.borrow_mut().clear();
             data.tilemap_commands.borrow_mut().clear();
+            data.render_commands.borrow_mut().clear();
             // Note: Asset and animation commands are only used during setup,
             // so we don't clear them here.
         }

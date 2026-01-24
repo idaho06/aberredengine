@@ -27,6 +27,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Camera Control](#camera-control)
 - [Group Tracking](#group-tracking)
 - [Tilemap Rendering](#tilemap-rendering)
+- [Post-Process Shaders](#post-process-shaders)
 - [Complete Example: Player Paddle](#complete-example-player-paddle)
 - [Tips and Best Practices](#tips-and-best-practices)
 - [Debugging](#debugging)
@@ -131,10 +132,10 @@ Different callbacks process different types of engine commands. Here's what comm
 
 | Callback | Processed Commands | Use Cases |
 |----------|-------------------|-----------|
-| `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps; register animations |
+| `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera | **Most complete** - spawn entities; set signals; play audio; set camera |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera | Per-frame logic - camera effects, but avoid spawning (see warning below) |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, Render | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader |
+| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, Render | Per-frame logic - camera effects, post-process control, but avoid spawning (see warning below) |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
@@ -145,8 +146,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera |
-| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render |
+| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Phase → Camera |
 
@@ -384,6 +385,25 @@ Load a tilemap from directory (requires PNG atlas and JSON metadata).
 
 ```lua
 engine.load_tilemap("level01", "./assets/tilemaps/level01")
+```
+
+### `engine.load_shader(id, vs_path, fs_path)`
+
+Load a shader for post-processing effects. At least one of `vs_path` or `fs_path` must be provided (the other can be `nil` to use the default).
+
+**Parameters:**
+
+- `id` - Unique shader identifier
+- `vs_path` - Path to vertex shader file (or `nil` for default)
+- `fs_path` - Path to fragment shader file (or `nil` for default)
+
+```lua
+-- Fragment-only shader (most common for post-processing)
+engine.load_shader("invert", nil, "./assets/shaders/invert.fs")
+engine.load_shader("crt", nil, "./assets/shaders/crt.fs")
+
+-- Custom vertex and fragment shader
+engine.load_shader("custom", "./assets/shaders/custom.vs", "./assets/shaders/custom.fs")
 ```
 
 ### `engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)`
@@ -3306,6 +3326,123 @@ function player_hit_update(ctx, input, dt)
         engine.phase_transition(ctx.id, "glowing")
     end
 end
+```
+
+---
+
+## Post-Process Shaders
+
+Post-process shaders are applied during the final blit from render target to window, allowing screen-wide visual effects like CRT filters, color grading, or distortions.
+
+### Loading Shaders
+
+Shaders are loaded during `on_setup()` using `engine.load_shader()`:
+
+```lua
+function on_setup()
+    -- Load fragment-only shaders (most common for post-processing)
+    engine.load_shader("invert", nil, "./assets/shaders/invert.fs")
+    engine.load_shader("wave", nil, "./assets/shaders/wave.fs")
+    engine.load_shader("crt", nil, "./assets/shaders/crt.fs")
+end
+```
+
+### Activating Shaders
+
+Use `engine.post_process_shader(id)` to enable a shader, or pass `nil` to disable:
+
+```lua
+-- Enable post-process shader
+engine.post_process_shader("invert")
+
+-- Disable post-processing
+engine.post_process_shader(nil)
+```
+
+### Setting Uniforms
+
+Custom uniforms can be set for shader parameters:
+
+```lua
+-- Set float uniform
+engine.post_process_set_float("uIntensity", 0.5)
+
+-- Set integer uniform
+engine.post_process_set_int("uFrameCount", 100)
+
+-- Set vec2 uniform
+engine.post_process_set_vec2("uOffset", 0.1, 0.2)
+
+-- Set vec4 uniform
+engine.post_process_set_vec4("uTint", 1.0, 0.8, 0.6, 1.0)
+
+-- Clear a single uniform
+engine.post_process_clear_uniform("uIntensity")
+
+-- Clear all uniforms
+engine.post_process_clear_uniforms()
+```
+
+### Standard Uniforms
+
+The engine automatically provides these uniforms to all post-process shaders:
+
+| Uniform | Type | Description |
+|---------|------|-------------|
+| `uTime` | float | Elapsed time in seconds |
+| `uDeltaTime` | float | Frame delta time in seconds |
+| `uResolution` | vec2 | Game resolution (render target size) |
+| `uFrame` | int | Frame count since start |
+| `uWindowResolution` | vec2 | Window resolution |
+| `uLetterbox` | vec4 | Letterbox rectangle (x, y, width, height) |
+
+**Note:** These uniform names are reserved. Setting them via Lua will log a warning and the value will be overwritten by the engine each frame.
+
+### Example: Time-Based Wave Effect
+
+```glsl
+// wave.fs
+#version 330
+
+in vec2 fragTexCoord;
+uniform sampler2D texture0;
+uniform float uTime;
+
+out vec4 finalColor;
+
+void main() {
+    vec2 uv = fragTexCoord;
+    uv.x += sin(uv.y * 20.0 + uTime * 3.0) * 0.003;
+    finalColor = texture(texture0, uv);
+}
+```
+
+```lua
+-- In Lua
+function on_switch_scene(scene)
+    if scene == "level01" then
+        engine.post_process_shader("wave")
+    else
+        engine.post_process_shader(nil)
+    end
+end
+```
+
+### Example: Invert Colors
+
+```glsl
+// invert.fs
+#version 330
+
+in vec2 fragTexCoord;
+uniform sampler2D texture0;
+
+out vec4 finalColor;
+
+void main() {
+    vec4 color = texture(texture0, fragTexCoord);
+    finalColor = vec4(1.0 - color.rgb, color.a);
+}
 ```
 
 ---
