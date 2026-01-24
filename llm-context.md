@@ -451,14 +451,18 @@ engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 engine.spawn_tiles(id)
 
 -- Post-Process Shaders (on_switch_scene, on_update callbacks)
-engine.post_process_shader(id|nil)  -- set active shader or nil to disable
-engine.post_process_set_float(name, value)
+-- Multi-pass chaining: shaders applied in order, uses ping-pong buffers for intermediate passes
+engine.post_process_shader({"shader1", "shader2"})  -- chain multiple shaders in order
+engine.post_process_shader({"single"})              -- single shader (existing behavior)
+engine.post_process_shader(nil)                     -- disable all post-processing
+engine.post_process_set_float(name, value)          -- uniforms applied to all shaders in chain
 engine.post_process_set_int(name, value)
 engine.post_process_set_vec2(name, x, y)
 engine.post_process_set_vec4(name, x, y, z, w)
 engine.post_process_clear_uniform(name)
 engine.post_process_clear_uniforms()
 -- Standard uniforms (set automatically): uTime, uDeltaTime, uResolution, uFrame, uWindowResolution, uLetterbox
+-- Missing shaders in chain: warning logged, pass skipped, remaining shaders still apply
 
 -- Entity Builder (engine.spawn())
 :with_group(name)
@@ -748,6 +752,6 @@ For features touching:
 26. TTL countdown respects WorldTime::time_scale; ttl_system runs after movement
 27. Menu on_select_callback takes precedence over MenuActions - when callback is set, actions are ignored
 28. Lua global helpers available: Lerp, Lerp2, InvLerp, Remap (from lib/math.lua), Dump_value (from lib/utils.lua)
-29. Post-process shaders: load in on_setup, activate in on_switch_scene/on_update via engine.post_process_shader(id)
+29. Post-process shaders: load in on_setup, activate in on_switch_scene/on_update via engine.post_process_shader({"id1", "id2"}) for multi-pass chaining
 30. Reserved shader uniforms (uTime, uDeltaTime, uResolution, uFrame, uWindowResolution, uLetterbox) are set automatically each frame
 31. ShaderStore is NON_SEND (contains raylib Shader); PostProcessShader is a regular Resource

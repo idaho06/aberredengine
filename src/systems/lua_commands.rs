@@ -375,12 +375,15 @@ pub fn process_asset_command<F1, F2>(
 /// - `post_process` - PostProcessShader resource to update
 pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShader) {
     match cmd {
-        RenderCmd::SetPostProcessShader { id } => {
-            post_process.set_shader(id.as_deref());
-            if let Some(ref shader_id) = id {
-                eprintln!("[Rust] Post-process shader set to '{}'", shader_id);
-            } else {
-                eprintln!("[Rust] Post-process shader disabled");
+        RenderCmd::SetPostProcessShader { ids } => {
+            post_process.set_shader_chain(ids.clone());
+            match &ids {
+                Some(list) if !list.is_empty() => {
+                    eprintln!("[Rust] Post-process shader chain: [{}]", list.join(", "));
+                }
+                _ => {
+                    eprintln!("[Rust] Post-process shader disabled");
+                }
             }
         }
         RenderCmd::SetPostProcessUniform { name, value } => {

@@ -26,12 +26,19 @@ pub enum RenderFilter {
 /// The render system draws all game content to this texture, then scales it
 /// to fit the window with letterboxing/pillarboxing as needed.
 ///
+/// For multi-pass post-processing, ping-pong buffers are lazily created on
+/// first use to avoid memory overhead for single-pass or no-shader scenarios.
+///
 /// # Note
 /// This is a NonSend resource because `RenderTexture2D` contains GPU resources
 /// that must be accessed from the main thread.
 pub struct RenderTarget {
-    /// The underlying raylib render texture.
+    /// The underlying raylib render texture (main game scene).
     pub texture: RenderTexture2D,
+    /// Ping buffer for multi-pass post-processing (lazy init).
+    pub ping: Option<RenderTexture2D>,
+    /// Pong buffer for multi-pass post-processing (lazy init).
+    pub pong: Option<RenderTexture2D>,
     /// Game's internal render width in pixels.
     pub game_width: u32,
     /// Game's internal render height in pixels.
@@ -44,6 +51,7 @@ impl RenderTarget {
     /// Create a new render target at the specified game resolution.
     ///
     /// Initializes with nearest-neighbor filtering by default.
+    /// Ping-pong buffers are created lazily on first multi-pass use.
     pub fn new(
         rl: &mut RaylibHandle,
         th: &RaylibThread,
@@ -56,6 +64,8 @@ impl RenderTarget {
 
         let mut target = Self {
             texture,
+            ping: None,
+            pong: None,
             game_width: width,
             game_height: height,
             filter: RenderFilter::default(),
@@ -67,6 +77,41 @@ impl RenderTarget {
         Ok(target)
     }
 
+    /// Ensure ping-pong buffers exist for multi-pass post-processing.
+    ///
+    /// Creates the buffers lazily on first call, avoiding memory overhead
+    /// when only single-pass or no post-processing is used.
+    pub fn ensure_ping_pong_buffers(
+        &mut self,
+        rl: &mut RaylibHandle,
+        th: &RaylibThread,
+    ) -> Result<(), String> {
+        let filter_value = match self.filter {
+            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
+            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
+        };
+
+        if self.ping.is_none() {
+            let ping = rl
+                .load_render_texture(th, self.game_width, self.game_height)
+                .map_err(|e| format!("Failed to create ping buffer: {}", e))?;
+            unsafe {
+                ffi::SetTextureFilter(ping.texture, filter_value);
+            }
+            self.ping = Some(ping);
+        }
+        if self.pong.is_none() {
+            let pong = rl
+                .load_render_texture(th, self.game_width, self.game_height)
+                .map_err(|e| format!("Failed to create pong buffer: {}", e))?;
+            unsafe {
+                ffi::SetTextureFilter(pong.texture, filter_value);
+            }
+            self.pong = Some(pong);
+        }
+        Ok(())
+    }
+
     /// Set the texture filtering mode.
     ///
     /// Changes take effect immediately.
@@ -76,7 +121,7 @@ impl RenderTarget {
         self.apply_filter();
     }
 
-    /// Apply the current filter setting to the texture via FFI.
+    /// Apply the current filter setting to the main texture via FFI.
     fn apply_filter(&mut self) {
         let filter_value = match self.filter {
             RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
@@ -96,6 +141,7 @@ impl RenderTarget {
     /// Recreate the render texture at a new resolution.
     ///
     /// Useful for changing the game's internal resolution at runtime.
+    /// Also recreates ping/pong buffers if they exist.
     pub fn recreate(
         &mut self,
         rl: &mut RaylibHandle,
@@ -111,6 +157,31 @@ impl RenderTarget {
         self.game_width = width;
         self.game_height = height;
         self.apply_filter();
+
+        // Recreate ping/pong buffers if they exist
+        let filter_value = match self.filter {
+            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
+            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
+        };
+
+        if self.ping.is_some() {
+            let ping = rl
+                .load_render_texture(th, width, height)
+                .map_err(|e| format!("Failed to recreate ping buffer: {}", e))?;
+            unsafe {
+                ffi::SetTextureFilter(ping.texture, filter_value);
+            }
+            self.ping = Some(ping);
+        }
+        if self.pong.is_some() {
+            let pong = rl
+                .load_render_texture(th, width, height)
+                .map_err(|e| format!("Failed to recreate pong buffer: {}", e))?;
+            unsafe {
+                ffi::SetTextureFilter(pong.texture, filter_value);
+            }
+            self.pong = Some(pong);
+        }
 
         Ok(())
     }

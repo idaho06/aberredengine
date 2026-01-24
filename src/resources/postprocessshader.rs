@@ -23,13 +23,13 @@ pub const RESERVED_UNIFORMS: &[&str] = &[
 
 /// Resource controlling post-process shader selection and uniforms.
 ///
-/// When `key` is `Some`, the render system will apply the named shader
-/// during the final blit. When `None`, no post-processing is applied.
+/// When `keys` is non-empty, the render system will apply the named shaders
+/// in sequence during the final blit. When empty, no post-processing is applied.
 #[derive(Resource, Default)]
 pub struct PostProcessShader {
-    /// The key of the currently active shader, or None for no post-processing.
-    pub key: Option<Arc<str>>,
-    /// User-defined uniforms to pass to the shader.
+    /// Ordered list of shader keys to apply (empty = no post-processing).
+    pub keys: Vec<Arc<str>>,
+    /// User-defined uniforms to pass to all shaders in the chain.
     pub uniforms: FxHashMap<Arc<str>, UniformValue>,
 }
 
@@ -39,11 +39,21 @@ impl PostProcessShader {
         Self::default()
     }
 
-    /// Sets the active post-process shader by key.
+    /// Sets the active post-process shader chain.
     ///
-    /// Pass `None` to disable post-processing.
-    pub fn set_shader(&mut self, key: Option<&str>) {
-        self.key = key.map(Arc::from);
+    /// Pass `None` or empty vec to disable post-processing.
+    pub fn set_shader_chain(&mut self, keys: Option<Vec<String>>) {
+        self.keys = keys
+            .unwrap_or_default()
+            .into_iter()
+            .map(Arc::from)
+            .collect();
+    }
+
+    /// Returns true if post-processing is enabled (at least one shader in chain).
+    #[allow(dead_code)]
+    pub fn is_enabled(&self) -> bool {
+        !self.keys.is_empty()
     }
 
     /// Sets a user uniform value.

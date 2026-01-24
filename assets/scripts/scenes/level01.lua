@@ -747,6 +747,8 @@ function M.spawn()
         })
         :build()
 
+    engine.post_process_shader({ "bloom" })
+
     engine.log_info("Scene phase entity spawned with LuaPhase")
     engine.log_info("Level01 scene entities queued!")
 end

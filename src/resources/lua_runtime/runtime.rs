@@ -2426,15 +2426,36 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.post_process_shader(id_or_nil) - Set active post-process shader (nil to disable)
+        // engine.post_process_shader(nil | {"shader1", "shader2", ...}) - Set shader chain
         engine.set(
             "post_process_shader",
-            self.lua.create_function(|lua, id: Option<String>| {
+            self.lua.create_function(|lua, value: LuaValue| {
+                let ids: Option<Vec<String>> = match value {
+                    LuaValue::Nil => None,
+                    LuaValue::Table(t) => {
+                        let mut vec = Vec::new();
+                        for pair in t.pairs::<i64, String>() {
+                            let (_, id) = pair?;
+                            vec.push(id);
+                        }
+                        if vec.is_empty() {
+                            return Err(LuaError::runtime(
+                                "post_process_shader: table must contain at least one shader ID",
+                            ));
+                        }
+                        Some(vec)
+                    }
+                    _ => {
+                        return Err(LuaError::runtime(
+                            "post_process_shader: expected nil or table of shader IDs",
+                        ))
+                    }
+                };
                 lua.app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                     .render_commands
                     .borrow_mut()
-                    .push(RenderCmd::SetPostProcessShader { id });
+                    .push(RenderCmd::SetPostProcessShader { ids });
                 Ok(())
             })?,
         )?;

@@ -13,7 +13,7 @@ uniform vec2 uResolution;
 
 // Custom uniforms (set from Lua)
 uniform float amplitude;
-uniform float lenght;
+uniform float length;
 uniform float speed;
 
 // Output
@@ -24,7 +24,7 @@ void main() {
     vec2 uv = fragTexCoord;
 
     // Add time-based wave distortion
-    float wave = sin(uv.y * lenght + uTime * speed) * amplitude;
+    float wave = sin(uv.y * length + uTime * speed) * amplitude;
     uv.x += wave;
 
     vec4 color = texture(texture0, uv);

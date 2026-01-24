@@ -37,8 +37,8 @@ pub enum AssetCmd {
 /// Commands for render-related operations from Lua.
 #[derive(Debug, Clone)]
 pub enum RenderCmd {
-    /// Set the active post-process shader (None to disable)
-    SetPostProcessShader { id: Option<String> },
+    /// Set the active post-process shader chain (None or empty to disable)
+    SetPostProcessShader { ids: Option<Vec<String>> },
     /// Set a uniform value on the post-process shader
     SetPostProcessUniform { name: String, value: UniformValue },
     /// Clear a single uniform from the post-process shader

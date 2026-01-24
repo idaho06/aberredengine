@@ -124,11 +124,16 @@ function M.spawn()
         :build()
  ]]
     -- post-process shader
-    engine.post_process_shader("wave")
-    engine.post_process_set_float("amplitude", 0.003)
-    engine.post_process_set_float("lenght", 100.0)
-    engine.post_process_set_float("speed", 3.0)
-    -- engine.post_process_shader("invert")
+    engine.post_process_shader({ "wave" })
+    -- engine.post_process_shader({ "bloom" })
+    engine.post_process_set_float("threshold", 0.7)
+    engine.post_process_set_float("intensity", 1.8)
+    engine.post_process_set_float("radius", 2.0)
+
+    engine.post_process_set_float("amplitude", 0.01)
+    engine.post_process_set_float("length", 10.0)
+    engine.post_process_set_float("speed", 2.0)
+
 
     engine.log_info("Menu scene entities queued!")
 end

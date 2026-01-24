@@ -397,7 +397,7 @@ pub fn render_system(
         }
     } // End texture mode - render target is complete
 
-    // ========== PHASE 2: Blit render target to window with letterboxing ==========
+    // ========== PHASE 2: Multi-pass post-processing and final blit ==========
     // Unpack additional resources
     let world_time = &res.world_time;
     let post_process = &res.post_process;
@@ -409,12 +409,34 @@ pub fn render_system(
     let dest =
         window_size.calculate_letterbox(render_target.game_width, render_target.game_height);
 
-    // Clone the shader key to avoid borrowing issues
-    let shader_key_opt = post_process.key.clone();
+    // Full-screen destination for intermediate passes (no letterboxing)
+    let full_dest = Rectangle {
+        x: 0.0,
+        y: 0.0,
+        width: render_target.game_width as f32,
+        height: render_target.game_height as f32,
+    };
 
-    // Check if post-process shader is active and set uniforms
-    let mut use_shader = false;
-    if let Some(ref shader_key) = shader_key_opt {
+    // Clone shader chain to avoid borrowing issues
+    let shader_chain: Vec<_> = post_process.keys.iter().cloned().collect();
+
+    if shader_chain.is_empty() {
+        // No post-processing - draw directly to window
+        let mut d = rl.begin_drawing(&th);
+        d.clear_background(Color::BLACK);
+        d.draw_texture_pro(
+            &render_target.texture,
+            src,
+            dest,
+            Vector2 { x: 0.0, y: 0.0 },
+            0.0,
+            Color::WHITE,
+        );
+    } else if shader_chain.len() == 1 {
+        // Single shader - draw directly to window (existing behavior)
+        let shader_key = &shader_chain[0];
+        let mut use_shader = false;
+
         if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
             if entry.shader.is_shader_valid() {
                 use_shader = true;
@@ -445,29 +467,188 @@ pub fn render_system(
                 shader_key
             );
         }
-    }
 
-    {
         let mut d = rl.begin_drawing(&th);
-        d.clear_background(Color::BLACK); // Black bars for letterboxing
+        d.clear_background(Color::BLACK);
 
         if use_shader {
-            // Get mutable shader for drawing
-            if let Some(ref shader_key) = shader_key_opt {
+            if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+                let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+                d_shader.draw_texture_pro(
+                    &render_target.texture,
+                    src,
+                    dest,
+                    Vector2 { x: 0.0, y: 0.0 },
+                    0.0,
+                    Color::WHITE,
+                );
+            }
+        } else {
+            d.draw_texture_pro(
+                &render_target.texture,
+                src,
+                dest,
+                Vector2 { x: 0.0, y: 0.0 },
+                0.0,
+                Color::WHITE,
+            );
+        }
+    } else {
+        // Multi-pass: ensure ping-pong buffers exist
+        if let Err(e) = render_target.ensure_ping_pong_buffers(&mut rl, &th) {
+            eprintln!("[Render] Failed to create ping-pong buffers: {}", e);
+            // Fallback: draw without shader
+            let mut d = rl.begin_drawing(&th);
+            d.clear_background(Color::BLACK);
+            d.draw_texture_pro(
+                &render_target.texture,
+                src,
+                dest,
+                Vector2 { x: 0.0, y: 0.0 },
+                0.0,
+                Color::WHITE,
+            );
+            return;
+        }
+
+        // Source buffer tracking: 0=main, 1=ping, 2=pong
+        #[derive(Clone, Copy)]
+        enum SourceBuffer {
+            Main,
+            Ping,
+            Pong,
+        }
+        let mut source_buffer = SourceBuffer::Main;
+        let mut valid_passes = 0;
+
+        // Source rect with Y-flip for all textures
+        let pass_src = Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: render_target.game_width as f32,
+            height: -(render_target.game_height as f32),
+        };
+
+        // Get raw pointers to independently borrow texture, ping, and pong
+        // SAFETY: These fields are independent and don't alias
+        let main_tex_ptr = &render_target.texture as *const RenderTexture2D;
+        let ping_tex_ptr = render_target.ping.as_ref().unwrap() as *const RenderTexture2D;
+        let pong_tex_ptr = render_target.pong.as_ref().unwrap() as *const RenderTexture2D;
+
+        for (i, shader_key) in shader_chain.iter().enumerate() {
+            let is_last_pass = i == shader_chain.len() - 1;
+
+            // Validate shader exists and is valid
+            let shader_valid = shader_store
+                .get(shader_key.as_ref())
+                .map(|e| e.shader.is_shader_valid())
+                .unwrap_or(false);
+
+            if !shader_valid {
+                if shader_store.get(shader_key.as_ref()).is_none() {
+                    eprintln!(
+                        "[Render] Warning: shader '{}' not found, skipping pass",
+                        shader_key
+                    );
+                } else {
+                    eprintln!(
+                        "[Render] Warning: shader '{}' invalid, skipping pass",
+                        shader_key
+                    );
+                }
+                continue;
+            }
+
+            // Set uniforms
+            if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+                set_standard_uniforms(
+                    &mut entry.shader,
+                    &mut entry.locations,
+                    world_time,
+                    screensize,
+                    window_size,
+                    &dest,
+                );
+                for (name, value) in post_process.uniforms.iter() {
+                    set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
+                }
+            }
+
+            // SAFETY: We're only reading from source_tex and writing to dest_tex,
+            // and they never alias (main->ping, ping->pong, pong->ping, etc.)
+            let source_tex: &RenderTexture2D = unsafe {
+                match source_buffer {
+                    SourceBuffer::Main => &*main_tex_ptr,
+                    SourceBuffer::Ping => &*ping_tex_ptr,
+                    SourceBuffer::Pong => &*pong_tex_ptr,
+                }
+            };
+
+            if is_last_pass {
+                // Draw to window
+                let mut d = rl.begin_drawing(&th);
+                d.clear_background(Color::BLACK);
+
                 if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
                     let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                     d_shader.draw_texture_pro(
-                        &render_target.texture,
-                        src,
+                        source_tex,
+                        pass_src,
                         dest,
                         Vector2 { x: 0.0, y: 0.0 },
                         0.0,
                         Color::WHITE,
                     );
                 }
+            } else {
+                // Draw to intermediate buffer
+                // Choose destination buffer (opposite of source for ping-pong)
+                let write_to_ping = matches!(source_buffer, SourceBuffer::Main | SourceBuffer::Pong);
+
+                if write_to_ping {
+                    let dest_tex = render_target.ping.as_mut().unwrap();
+                    let mut d = rl.begin_texture_mode(&th, dest_tex);
+                    d.clear_background(Color::BLACK);
+
+                    if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+                        let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+                        d_shader.draw_texture_pro(
+                            source_tex,
+                            pass_src,
+                            full_dest,
+                            Vector2 { x: 0.0, y: 0.0 },
+                            0.0,
+                            Color::WHITE,
+                        );
+                    }
+                    source_buffer = SourceBuffer::Ping;
+                } else {
+                    let dest_tex = render_target.pong.as_mut().unwrap();
+                    let mut d = rl.begin_texture_mode(&th, dest_tex);
+                    d.clear_background(Color::BLACK);
+
+                    if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+                        let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+                        d_shader.draw_texture_pro(
+                            source_tex,
+                            pass_src,
+                            full_dest,
+                            Vector2 { x: 0.0, y: 0.0 },
+                            0.0,
+                            Color::WHITE,
+                        );
+                    }
+                    source_buffer = SourceBuffer::Pong;
+                }
             }
-        } else {
-            // Draw without shader
+
+            valid_passes += 1;
+        }
+
+        // If no valid passes ran, draw without shader
+        if valid_passes == 0 {
+            let mut d = rl.begin_drawing(&th);
+            d.clear_background(Color::BLACK);
             d.draw_texture_pro(
                 &render_target.texture,
                 src,

@@ -1396,9 +1396,9 @@ function engine.load_shader(id, vs_path, fs_path) end
 
 -- ==================== Post-Process Shaders ====================
 
----Set or clear the active post-process shader
----@param id string|nil Shader identifier (from load_shader) or nil to disable
-function engine.post_process_shader(id) end
+---Set active post-process shader chain
+---@param ids string[]|nil Table of shader IDs in order, or nil to disable
+function engine.post_process_shader(ids) end
 
 ---Set a float uniform on the post-process shader
 ---@param name string Uniform name
