@@ -43,6 +43,7 @@ use rustc_hash::FxHashMap;
 use crate::components::animation::Animation;
 // use crate::components::animation::{AnimationController, CmpOp, Condition};
 // use crate::components::boxcollider::BoxCollider;
+use crate::components::entityshader::EntityShader;
 // use crate::components::collision::{
 //     BoxSide, CollisionCallback, CollisionContext, CollisionRule, get_colliding_sides,
 // };
@@ -87,7 +88,7 @@ use crate::systems::lua_commands::{
     process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_clone_command, process_entity_commands, process_group_command,
     process_phase_command, process_render_command, process_signal_command, process_spawn_command,
-    process_tilemap_command,
+    process_tilemap_command, EntityCmdQueries,
 };
 //use rand::Rng;
 
@@ -605,6 +606,7 @@ pub fn update(
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
     mut rigid_bodies_query: Query<&mut RigidBody>,
     mut positions_query: Query<&mut MapPosition>,
+    mut shader_query: Query<&mut EntityShader>,
 ) {
     let delta_sec = time.delta;
 
@@ -663,6 +665,7 @@ pub fn update(
         &mut animation_query,
         &mut rigid_bodies_query,
         &mut positions_query,
+        &mut shader_query,
         &systems_store,
     );
 
@@ -834,12 +837,8 @@ pub fn switch_scene(
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     //th: NonSend<raylib::RaylibThread>,
     lua_runtime: NonSend<LuaRuntime>,
-    stuckto_query: Query<&StuckTo>,
-    mut signals_query: Query<&mut Signals>,
-    mut animation_query: Query<&mut Animation>,
+    mut entity_cmd_queries: EntityCmdQueries,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
-    mut rigid_bodies_query: Query<&mut RigidBody>,
-    mut positions_query: Query<&mut MapPosition>,
 ) {
     eprintln!("switch_scene: System called!");
 
@@ -887,11 +886,12 @@ pub fn switch_scene(
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &stuckto_query,
-        &mut signals_query,
-        &mut animation_query,
-        &mut rigid_bodies_query,
-        &mut positions_query,
+        &entity_cmd_queries.stuckto,
+        &mut entity_cmd_queries.signals,
+        &mut entity_cmd_queries.animation,
+        &mut entity_cmd_queries.rigid_bodies,
+        &mut entity_cmd_queries.positions,
+        &mut entity_cmd_queries.shaders,
         &systems_store,
     );
 

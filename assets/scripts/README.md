@@ -28,6 +28,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Group Tracking](#group-tracking)
 - [Tilemap Rendering](#tilemap-rendering)
 - [Post-Process Shaders](#post-process-shaders)
+- [Per-Entity Shaders](#per-entity-shaders)
 - [Complete Example: Player Paddle](#complete-example-player-paddle)
 - [Tips and Best Practices](#tips-and-best-practices)
 - [Debugging](#debugging)
@@ -3443,6 +3444,182 @@ void main() {
     vec4 color = texture(texture0, fragTexCoord);
     finalColor = vec4(1.0 - color.rgb, color.a);
 }
+```
+
+---
+
+## Per-Entity Shaders
+
+Per-entity shaders allow individual sprites and text to render with custom shaders, independent of the global post-process shader. This enables effects like outlines, glows, or color adjustments on specific entities.
+
+### Adding Shaders via Builder
+
+Use `:with_shader()` when spawning entities:
+
+```lua
+engine.spawn()
+    :with_sprite("player", 32, 32, 16, 16)
+    :with_position(400, 300)
+    :with_shader("outline", {
+        uThickness = 2.0,
+        uColor = {1.0, 0.0, 0.0, 1.0}  -- Red outline
+    })
+    :build()
+```
+
+**Parameters:**
+
+- `shader_key` (string) - ID of shader loaded via `engine.load_shader()`
+- `uniforms` (table, optional) - Initial uniform values:
+  - Numbers are treated as `float`
+  - Tables of 2 elements are `vec2`: `{x, y}`
+  - Tables of 4 elements are `vec4`: `{x, y, z, w}`
+
+### Runtime Shader Control
+
+#### `engine.entity_set_shader(entity_id, shader_key)`
+
+Set or replace an entity's shader at runtime.
+
+```lua
+local player_id = engine.get_entity("player")
+engine.entity_set_shader(player_id, "glow")
+```
+
+#### `engine.entity_remove_shader(entity_id)`
+
+Remove shader from an entity (return to normal rendering).
+
+```lua
+engine.entity_remove_shader(player_id)
+```
+
+### Setting Uniforms at Runtime
+
+Use typed functions to set uniform values:
+
+```lua
+-- Set float uniform
+engine.entity_shader_set_float(entity_id, "uIntensity", 0.8)
+
+-- Set integer uniform
+engine.entity_shader_set_int(entity_id, "uMode", 2)
+
+-- Set vec2 uniform
+engine.entity_shader_set_vec2(entity_id, "uOffset", 10.0, 20.0)
+
+-- Set vec4 uniform (color, etc.)
+engine.entity_shader_set_vec4(entity_id, "uColor", 1.0, 0.0, 0.0, 1.0)
+
+-- Clear a single uniform
+engine.entity_shader_clear_uniform(entity_id, "uIntensity")
+
+-- Clear all uniforms
+engine.entity_shader_clear_uniforms(entity_id)
+```
+
+### Collision Context Variants
+
+All entity shader functions have collision variants for use in collision callbacks:
+
+```lua
+function on_player_powerup(ctx)
+    -- Apply glow effect when player picks up powerup
+    engine.collision_entity_set_shader(ctx.a.id, "glow")
+    engine.collision_entity_shader_set_vec4(ctx.a.id, "uColor", 1.0, 1.0, 0.0, 1.0)
+end
+```
+
+Available collision variants:
+
+- `engine.collision_entity_set_shader(entity_id, shader_key)`
+- `engine.collision_entity_remove_shader(entity_id)`
+- `engine.collision_entity_shader_set_float(entity_id, name, value)`
+- `engine.collision_entity_shader_set_int(entity_id, name, value)`
+- `engine.collision_entity_shader_set_vec2(entity_id, name, x, y)`
+- `engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w)`
+- `engine.collision_entity_shader_clear_uniform(entity_id, name)`
+- `engine.collision_entity_shader_clear_uniforms(entity_id)`
+
+### Standard Uniforms
+
+Entity shaders receive all post-process standard uniforms plus entity-specific ones:
+
+| Uniform | Type | Description |
+|---------|------|-------------|
+| `uTime` | float | Elapsed time in seconds |
+| `uDeltaTime` | float | Frame delta time in seconds |
+| `uResolution` | vec2 | Game resolution |
+| `uFrame` | int | Frame count since start |
+| `uWindowResolution` | vec2 | Window resolution |
+| `uLetterbox` | vec4 | Letterbox rectangle |
+| `uEntityId` | int | Entity ID (lower 32 bits) |
+| `uEntityPos` | vec2 | Entity world position |
+| `uSpriteSize` | vec2 | Sprite dimensions in pixels |
+| `uRotation` | float | Rotation in degrees (if Rotation component present) |
+| `uScale` | vec2 | Scale factor (if Scale component present) |
+| `uVelocity` | vec2 | Velocity (if RigidBody component present) |
+
+### Example: Outline Shader
+
+```glsl
+// outline.fs
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+uniform sampler2D texture0;
+uniform float uThickness;
+uniform vec4 uColor;
+
+out vec4 finalColor;
+
+void main() {
+    vec4 texColor = texture(texture0, fragTexCoord);
+    vec2 texSize = vec2(textureSize(texture0, 0));
+    vec2 pixelSize = 1.0 / texSize;
+    float thickness = max(uThickness, 1.0);
+
+    float maxAlpha = 0.0;
+    for (float x = -thickness; x <= thickness; x += 1.0) {
+        for (float y = -thickness; y <= thickness; y += 1.0) {
+            if (x == 0.0 && y == 0.0) continue;
+            if (length(vec2(x, y)) > thickness) continue;
+            vec2 sampleCoord = clamp(fragTexCoord + vec2(x, y) * pixelSize, vec2(0.0), vec2(1.0));
+            maxAlpha = max(maxAlpha, texture(texture0, sampleCoord).a);
+        }
+    }
+
+    if (texColor.a < 0.1 && maxAlpha > 0.1) {
+        finalColor = uColor;
+    } else {
+        finalColor = texColor * fragColor;
+    }
+}
+```
+
+```lua
+-- Load shader
+engine.load_shader("outline", nil, "./assets/shaders/outline.fs")
+
+-- Spawn entity with outline
+engine.spawn()
+    :with_sprite("enemy", 32, 32, 16, 16)
+    :with_position(200, 200)
+    :with_shader("outline", { uThickness = 2.0, uColor = {1, 0, 0, 1} })
+    :build()
+```
+
+### DynamicText Support
+
+Entity shaders also apply to DynamicText entities:
+
+```lua
+engine.spawn()
+    :with_dynamic_text("GAME OVER", "arcade", 32, 255, 255, 255)
+    :with_position(400, 300)
+    :with_shader("glow", { uIntensity = 0.5 })
+    :build()
 ```
 
 ---

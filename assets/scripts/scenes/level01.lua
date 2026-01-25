@@ -501,7 +501,12 @@ local function spawn_ship()
                 }
             }
         })
-        :register_as("ship") -- Store entity ID for ball attachment
+        :with_shader("outline",
+            {
+                uThickness = 2.5,
+                uColor = { 1.0, 0.0, 0.0, 1.0 } -- Red outline
+            })
+        :register_as("ship")                    -- Store entity ID for ball attachment
         :build()
 
     engine.log_info("Ship spawned!")
@@ -748,6 +753,9 @@ function M.spawn()
         :build()
 
     engine.post_process_shader({ "bloom" })
+    engine.post_process_set_float("threshold", 0.7)
+    engine.post_process_set_float("intensity", 1.8)
+    engine.post_process_set_float("radius", 2.0)
 
     engine.log_info("Scene phase entity spawned with LuaPhase")
     engine.log_info("Level01 scene entities queued!")

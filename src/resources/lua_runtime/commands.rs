@@ -225,6 +225,42 @@ pub enum EntityCmd {
     },
     /// Insert a Ttl (time-to-live) component
     InsertTtl { entity_id: u64, seconds: f32 },
+    /// Set or replace entity shader
+    SetShader { entity_id: u64, key: String },
+    /// Remove entity shader
+    RemoveShader { entity_id: u64 },
+    /// Set float uniform on entity shader
+    ShaderSetFloat {
+        entity_id: u64,
+        name: String,
+        value: f32,
+    },
+    /// Set int uniform on entity shader
+    ShaderSetInt {
+        entity_id: u64,
+        name: String,
+        value: i32,
+    },
+    /// Set vec2 uniform on entity shader
+    ShaderSetVec2 {
+        entity_id: u64,
+        name: String,
+        x: f32,
+        y: f32,
+    },
+    /// Set vec4 uniform on entity shader
+    ShaderSetVec4 {
+        entity_id: u64,
+        name: String,
+        x: f32,
+        y: f32,
+        z: f32,
+        w: f32,
+    },
+    /// Clear a single uniform from entity shader
+    ShaderClearUniform { entity_id: u64, name: String },
+    /// Clear all uniforms from entity shader
+    ShaderClearUniforms { entity_id: u64 },
 }
 
 /// Commands for tracked groups from Lua.

@@ -28,11 +28,13 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemParam;
 use raylib::prelude::{Camera2D, Vector2};
 
 use crate::components::animation::{Animation, Condition};
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
+use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luatimer::LuaTimer;
@@ -56,7 +58,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
     AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd,
-    GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd, SpawnCmd, TilemapCmd,
+    GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd, SpawnCmd, TilemapCmd, UniformValue,
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
@@ -65,6 +67,20 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
+
+/// Bundled queries for entity command processing.
+///
+/// This SystemParam groups queries needed by `process_entity_commands` to reduce
+/// the number of system parameters in calling functions.
+#[derive(SystemParam)]
+pub struct EntityCmdQueries<'w, 's> {
+    pub stuckto: Query<'w, 's, &'static StuckTo>,
+    pub signals: Query<'w, 's, &'static mut Signals>,
+    pub animation: Query<'w, 's, &'static mut Animation>,
+    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
+    pub positions: Query<'w, 's, &'static mut MapPosition>,
+    pub shaders: Query<'w, 's, &'static mut EntityShader>,
+}
 
 /// Process a single audio command from Lua and write to the audio command channel.
 ///
@@ -450,9 +466,10 @@ pub fn process_animation_command(
 /// Process all EntityCmd commands queued by Lua.
 ///
 /// This function handles all runtime entity manipulation commands including:
-/// - Component insertion/removal (StuckTo, LuaTimer, Tweens, Timer)
+/// - Component insertion/removal (StuckTo, LuaTimer, Tweens, Timer, EntityShader)
 /// - Entity state changes (position, velocity, animation, signals)
 /// - RigidBody physics (forces, friction, freeze)
+/// - Shader uniform manipulation
 /// - Entity despawning
 ///
 /// # Parameters
@@ -464,6 +481,7 @@ pub fn process_animation_command(
 /// - `animation_query` - Query for modifying Animation components
 /// - `rigid_bodies_query` - Query for modifying RigidBody components
 /// - `positions_query` - Query for modifying MapPosition components
+/// - `shader_query` - Query for modifying EntityShader components
 /// - `systems_store` - SystemsStore for calling registered systems
 pub fn process_entity_commands(
     commands: &mut Commands,
@@ -473,6 +491,7 @@ pub fn process_entity_commands(
     animation_query: &mut Query<&mut Animation>,
     rigid_bodies_query: &mut Query<&mut RigidBody>,
     positions_query: &mut Query<&mut MapPosition>,
+    shader_query: &mut Query<&mut EntityShader>,
     systems_store: &SystemsStore,
 ) {
     for cmd in entity_commands {
@@ -796,6 +815,82 @@ pub fn process_entity_commands(
             EntityCmd::InsertTtl { entity_id, seconds } => {
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).insert(Ttl::new(seconds));
+            }
+            EntityCmd::SetShader { entity_id, key } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut entity_cmds) = commands.get_entity(entity) {
+                    entity_cmds.insert(EntityShader::new(key));
+                }
+            }
+            EntityCmd::RemoveShader { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut entity_cmds) = commands.get_entity(entity) {
+                    entity_cmds.remove::<EntityShader>();
+                }
+            }
+            EntityCmd::ShaderSetFloat {
+                entity_id,
+                name,
+                value,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut shader) = shader_query.get_mut(entity) {
+                    shader
+                        .uniforms
+                        .insert(Arc::from(name), UniformValue::Float(value));
+                }
+            }
+            EntityCmd::ShaderSetInt {
+                entity_id,
+                name,
+                value,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut shader) = shader_query.get_mut(entity) {
+                    shader
+                        .uniforms
+                        .insert(Arc::from(name), UniformValue::Int(value));
+                }
+            }
+            EntityCmd::ShaderSetVec2 {
+                entity_id,
+                name,
+                x,
+                y,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut shader) = shader_query.get_mut(entity) {
+                    shader
+                        .uniforms
+                        .insert(Arc::from(name), UniformValue::Vec2 { x, y });
+                }
+            }
+            EntityCmd::ShaderSetVec4 {
+                entity_id,
+                name,
+                x,
+                y,
+                z,
+                w,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut shader) = shader_query.get_mut(entity) {
+                    shader
+                        .uniforms
+                        .insert(Arc::from(name), UniformValue::Vec4 { x, y, z, w });
+                }
+            }
+            EntityCmd::ShaderClearUniform { entity_id, name } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut shader) = shader_query.get_mut(entity) {
+                    shader.uniforms.remove(name.as_str());
+                }
+            }
+            EntityCmd::ShaderClearUniforms { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut shader) = shader_query.get_mut(entity) {
+                    shader.uniforms.clear();
+                }
             }
         }
     }
@@ -1241,6 +1336,15 @@ pub fn process_spawn_command(
         entity_commands.insert(emitter);
     }
 
+    // EntityShader
+    if let Some(shader_data) = cmd.shader {
+        let mut entity_shader = EntityShader::new(shader_data.key);
+        for (name, value) in shader_data.uniforms {
+            entity_shader.uniforms.insert(Arc::from(name), value);
+        }
+        entity_commands.insert(entity_shader);
+    }
+
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         world_signals.set_entity(&key, entity);
@@ -1482,6 +1586,15 @@ pub fn process_clone_command(
         }
 
         entity_commands.insert(tween);
+    }
+
+    // EntityShader (override)
+    if let Some(shader_data) = overrides.shader {
+        let mut entity_shader = EntityShader::new(shader_data.key);
+        for (name, value) in shader_data.uniforms {
+            entity_shader.uniforms.insert(Arc::from(name), value);
+        }
+        entity_commands.insert(entity_shader);
     }
 
     // 5. Register NEW cloned entity if register_as is set

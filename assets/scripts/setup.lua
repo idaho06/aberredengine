@@ -75,7 +75,7 @@ function M.load_assets()
     engine.load_shader("invert", nil, "./assets/shaders/invert.fs")
     engine.load_shader("wave", nil, "./assets/shaders/wave.fs")
     engine.load_shader("bloom", nil, "./assets/shaders/bloom.fs")
-
+    engine.load_shader("outline", nil, "./assets/shaders/outline.fs")
 
     engine.log_info("Assets queued for loading!")
 end

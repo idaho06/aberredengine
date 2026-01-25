@@ -442,6 +442,14 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---@return EntityBuilder
 function EntityBuilder:with_particle_emitter(config) end
 
+---Add per-entity shader component
+---Applies a shader when rendering this entity's sprite or text.
+---Uniforms table: numbers are float, {x,y} are vec2, {x,y,z,w} are vec4.
+---@param shader_key string Shader identifier (from load_shader)
+---@param uniforms table|nil Optional table of {uniform_name = value}
+---@return EntityBuilder
+function EntityBuilder:with_shader(shader_key, uniforms) end
+
 ---Add position tween animation
 ---@param from_x number Start X
 ---@param from_y number Start Y
@@ -819,6 +827,54 @@ function engine.entity_remove_tween_rotation(entity_id) end
 ---Remove TweenScale component from an entity
 ---@param entity_id integer Entity ID
 function engine.entity_remove_tween_scale(entity_id) end
+
+-- ==================== Entity Shader Commands ====================
+
+---Set or replace an entity's shader
+---@param entity_id integer Entity ID
+---@param shader_key string Shader identifier (from load_shader)
+function engine.entity_set_shader(entity_id, shader_key) end
+
+---Remove shader from an entity (return to normal rendering)
+---@param entity_id integer Entity ID
+function engine.entity_remove_shader(entity_id) end
+
+---Set a float uniform on an entity's shader
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param value number Float value
+function engine.entity_shader_set_float(entity_id, name, value) end
+
+---Set an integer uniform on an entity's shader
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param value integer Integer value
+function engine.entity_shader_set_int(entity_id, name, value) end
+
+---Set a vec2 uniform on an entity's shader
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param x number X component
+---@param y number Y component
+function engine.entity_shader_set_vec2(entity_id, name, x, y) end
+
+---Set a vec4 uniform on an entity's shader
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param x number X component
+---@param y number Y component
+---@param z number Z component
+---@param w number W component
+function engine.entity_shader_set_vec4(entity_id, name, x, y, z, w) end
+
+---Clear a single uniform from an entity's shader
+---@param entity_id integer Entity ID
+---@param name string Uniform name to clear
+function engine.entity_shader_clear_uniform(entity_id, name) end
+
+---Clear all user uniforms from an entity's shader
+---@param entity_id integer Entity ID
+function engine.entity_shader_clear_uniforms(entity_id) end
 
 -- ==================== Phase Control ====================
 
@@ -1247,6 +1303,14 @@ function CollisionEntityBuilder:with_tween_scale_backwards() end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_particle_emitter(config) end
 
+---Add per-entity shader component
+---Applies a shader when rendering this entity's sprite or text.
+---Uniforms table: numbers are float, {x,y} are vec2, {x,y,z,w} are vec4.
+---@param shader_key string Shader identifier (from load_shader)
+---@param uniforms table|nil Optional table of {uniform_name = value}
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shader(shader_key, uniforms) end
+
 ---Add Lua collision rule
 ---@param group_a string First group name
 ---@param group_b string Second group name
@@ -1332,6 +1396,54 @@ function engine.collision_entity_set_force_enabled(entity_id, name, enabled) end
 ---@param entity_id integer Entity ID
 ---@param speed number New speed magnitude
 function engine.collision_entity_set_speed(entity_id, speed) end
+
+-- ==================== Collision Entity Shader Commands ====================
+
+---Set or replace an entity's shader during collision handling
+---@param entity_id integer Entity ID
+---@param shader_key string Shader identifier (from load_shader)
+function engine.collision_entity_set_shader(entity_id, shader_key) end
+
+---Remove shader from an entity during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_remove_shader(entity_id) end
+
+---Set a float uniform on an entity's shader during collision handling
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param value number Float value
+function engine.collision_entity_shader_set_float(entity_id, name, value) end
+
+---Set an integer uniform on an entity's shader during collision handling
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param value integer Integer value
+function engine.collision_entity_shader_set_int(entity_id, name, value) end
+
+---Set a vec2 uniform on an entity's shader during collision handling
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param x number X component
+---@param y number Y component
+function engine.collision_entity_shader_set_vec2(entity_id, name, x, y) end
+
+---Set a vec4 uniform on an entity's shader during collision handling
+---@param entity_id integer Entity ID
+---@param name string Uniform name
+---@param x number X component
+---@param y number Y component
+---@param z number Z component
+---@param w number W component
+function engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w) end
+
+---Clear a single uniform from an entity's shader during collision handling
+---@param entity_id integer Entity ID
+---@param name string Uniform name to clear
+function engine.collision_entity_shader_clear_uniform(entity_id, name) end
+
+---Clear all user uniforms from an entity's shader during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_shader_clear_uniforms(entity_id) end
 
 -- ==================== Group Tracking ====================
 

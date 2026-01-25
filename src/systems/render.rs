@@ -13,7 +13,9 @@ use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
+use crate::components::entityshader::EntityShader;
 use crate::components::mapposition::MapPosition;
+use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
@@ -59,20 +61,23 @@ pub fn render_system(
     mut shader_store: NonSendMut<ShaderStore>,
     res: RenderResources,
     query_map_sprites: Query<(
+        Entity,
         &Sprite,
         &MapPosition,
         &ZIndex,
         Option<&Scale>,
         Option<&Rotation>,
+        Option<&EntityShader>,
     )>,
     query_colliders: Query<(&BoxCollider, &MapPosition)>,
     query_positions: Query<(&MapPosition, Option<&Signals>)>,
-    query_map_dynamic_texts: Query<(&DynamicText, &MapPosition, &ZIndex)>,
+    query_map_dynamic_texts: Query<(Entity, &DynamicText, &MapPosition, &ZIndex, Option<&EntityShader>)>,
+    query_rigidbodies: Query<&RigidBody>,
     query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition)>,
     query_screen_sprites: Query<(&Sprite, &ScreenPosition)>,
     fonts: NonSend<FontStore>,
-    mut sprite_buffer: Local<Vec<(Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>)>>,
-    mut text_buffer: Local<Vec<(DynamicText, MapPosition, ZIndex)>>,
+    mut sprite_buffer: Local<Vec<(Entity, Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>, Option<EntityShader>)>>,
+    mut text_buffer: Local<Vec<(Entity, DynamicText, MapPosition, ZIndex, Option<EntityShader>)>>,
 ) {
     // Unpack bundled resources for easier access
     let camera = &res.camera;
@@ -109,7 +114,7 @@ pub fn render_system(
 
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
-                |(s, p, z, maybe_scale, maybe_rot)| {
+                |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader)| {
                     let min = Vector2 {
                         x: p.pos.x - s.origin.x,
                         y: p.pos.y - s.origin.y,
@@ -123,12 +128,12 @@ pub fn render_system(
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((s.clone(), *p, *z, maybe_scale.copied(), maybe_rot.copied()))
+                    overlap.then_some((entity, s.clone(), *p, *z, maybe_scale.copied(), maybe_rot.copied(), maybe_shader.cloned()))
                 },
             ));
 
-            sprite_buffer.sort_unstable_by_key(|(_, _, z, _, _)| *z);
-            for (sprite, pos, _z, maybe_scale, maybe_rot) in sprite_buffer.iter() {
+            sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _)| *z);
+            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader) in sprite_buffer.iter() {
                 if let Some(tex) = textures.get(&sprite.tex_key) {
                     let mut src = Rectangle {
                         x: sprite.offset.x,
@@ -169,12 +174,56 @@ pub fn render_system(
                         0.0
                     };
 
-                    d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                    // Apply entity shader if present
+                    if let Some(entity_shader) = maybe_shader {
+                        if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
+                            if entry.shader.is_shader_valid() {
+                                // Set standard uniforms
+                                set_standard_uniforms(
+                                    &mut entry.shader,
+                                    &mut entry.locations,
+                                    &res.world_time,
+                                    screensize,
+                                    window_size,
+                                    &dest,
+                                );
+
+                                // Set entity-specific uniforms
+                                set_entity_uniforms(
+                                    &mut entry.shader,
+                                    &mut entry.locations,
+                                    *entity,
+                                    pos,
+                                    maybe_rot.as_ref(),
+                                    maybe_scale.as_ref(),
+                                    sprite,
+                                    &query_rigidbodies,
+                                );
+
+                                // Set user-defined uniforms
+                                for (name, value) in &entity_shader.uniforms {
+                                    set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
+                                }
+
+                                // Draw with shader
+                                let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
+                                d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                            } else {
+                                eprintln!("[Render] Warning: Entity shader '{}' is invalid, rendering without shader", entity_shader.shader_key);
+                                d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                            }
+                        } else {
+                            eprintln!("[Render] Warning: Entity shader '{}' not found, rendering without shader", entity_shader.shader_key);
+                            d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                        }
+                    } else {
+                        d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                    }
                 }
             } // End sprite drawing in camera space
 
             text_buffer.clear();
-            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(t, p, z)| {
+            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(entity, t, p, z, maybe_shader)| {
                 let text_size = t.size();
 
                 let min = Vector2 {
@@ -190,10 +239,10 @@ pub fn render_system(
                     || min.x > view_max.x
                     || max.y < view_min.y
                     || min.y > view_max.y);
-                overlap.then_some((t.clone(), *p, *z))
+                overlap.then_some((entity, t.clone(), *p, *z, maybe_shader.cloned()))
             }));
-            text_buffer.sort_unstable_by_key(|(_, _, z)| *z);
-            for (text, pos, _z) in text_buffer.iter() {
+            text_buffer.sort_unstable_by_key(|(_, _, _, z, _)| *z);
+            for (_entity, text, pos, _z, _maybe_shader) in text_buffer.iter() {
                 if let Some(font) = fonts.get(&text.font) {
                     d2.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, text.color);
                     if maybe_debug.is_some() {
@@ -817,6 +866,122 @@ fn set_uniform_value(
                     loc,
                     vec.as_ptr() as *const std::ffi::c_void,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
+                );
+            }
+        }
+    }
+}
+
+/// Set entity-specific uniforms on a shader for per-entity rendering.
+///
+/// Entity-specific uniforms:
+/// - uEntityId (int) - entity index
+/// - uEntityPos (vec2) - world position
+/// - uSpriteSize (vec2) - sprite dimensions
+/// - uRotation (float) - rotation degrees (if present)
+/// - uScale (vec2) - scale factor (if present)
+/// - uVelocity (vec2) - velocity (if RigidBody present)
+fn set_entity_uniforms(
+    shader: &mut Shader,
+    locations: &mut rustc_hash::FxHashMap<String, i32>,
+    entity: Entity,
+    pos: &MapPosition,
+    rotation: Option<&Rotation>,
+    scale: Option<&Scale>,
+    sprite: &Sprite,
+    rigidbody_query: &Query<&RigidBody>,
+) {
+    // Helper to get or cache uniform location
+    let get_loc = |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
+        *locations.entry(name.to_string()).or_insert_with(|| {
+            shader.get_shader_location(name)
+        })
+    };
+
+    // uEntityId (int) - use bits representation truncated to i32
+    let loc = get_loc(shader, locations, "uEntityId");
+    if loc >= 0 {
+        let entity_id = (entity.to_bits() & 0xFFFFFFFF) as i32;
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                &entity_id as *const i32 as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_INT as i32,
+            );
+        }
+    }
+
+    // uEntityPos (vec2)
+    let loc = get_loc(shader, locations, "uEntityPos");
+    if loc >= 0 {
+        let entity_pos = [pos.pos.x, pos.pos.y];
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                entity_pos.as_ptr() as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
+            );
+        }
+    }
+
+    // uSpriteSize (vec2)
+    let loc = get_loc(shader, locations, "uSpriteSize");
+    if loc >= 0 {
+        let sprite_size = [sprite.width, sprite.height];
+        unsafe {
+            ffi::SetShaderValue(
+                **shader,
+                loc,
+                sprite_size.as_ptr() as *const std::ffi::c_void,
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
+            );
+        }
+    }
+
+    // uRotation (float) - only if Rotation component present
+    if let Some(rot) = rotation {
+        let loc = get_loc(shader, locations, "uRotation");
+        if loc >= 0 {
+            unsafe {
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    &rot.degrees as *const f32 as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
+                );
+            }
+        }
+    }
+
+    // uScale (vec2) - only if Scale component present
+    if let Some(s) = scale {
+        let loc = get_loc(shader, locations, "uScale");
+        if loc >= 0 {
+            let scale_vec = [s.scale.x, s.scale.y];
+            unsafe {
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    scale_vec.as_ptr() as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
+                );
+            }
+        }
+    }
+
+    // uVelocity (vec2) - only if RigidBody component present
+    if let Ok(rb) = rigidbody_query.get(entity) {
+        let loc = get_loc(shader, locations, "uVelocity");
+        if loc >= 0 {
+            let velocity = [rb.velocity.x, rb.velocity.y];
+            unsafe {
+                ffi::SetShaderValue(
+                    **shader,
+                    loc,
+                    velocity.as_ptr() as *const std::ffi::c_void,
+                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
                 );
             }
         }

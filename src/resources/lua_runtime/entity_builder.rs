@@ -6,10 +6,43 @@
 //! The builder supports both spawning new entities and cloning existing ones,
 //! in both regular and collision contexts.
 
-use super::commands::CloneCmd;
+use super::commands::{CloneCmd, UniformValue};
 use super::runtime::LuaAppData;
 use super::spawn_data::*;
 use mlua::prelude::*;
+
+/// Parse a Lua value into a UniformValue.
+///
+/// Numbers are treated as Float, tables of length 2 as Vec2, and tables of length 4 as Vec4.
+fn parse_uniform_value(val: LuaValue) -> LuaResult<UniformValue> {
+    match val {
+        LuaValue::Number(n) => Ok(UniformValue::Float(n as f32)),
+        LuaValue::Integer(n) => Ok(UniformValue::Float(n as f32)),
+        LuaValue::Table(t) => {
+            let len = t.raw_len();
+            match len {
+                2 => {
+                    let x: f32 = t.get(1)?;
+                    let y: f32 = t.get(2)?;
+                    Ok(UniformValue::Vec2 { x, y })
+                }
+                4 => {
+                    let x: f32 = t.get(1)?;
+                    let y: f32 = t.get(2)?;
+                    let z: f32 = t.get(3)?;
+                    let w: f32 = t.get(4)?;
+                    Ok(UniformValue::Vec4 { x, y, z, w })
+                }
+                _ => Err(LuaError::runtime(
+                    "Uniform table must be array of length 2 (vec2) or 4 (vec4)",
+                )),
+            }
+        }
+        _ => Err(LuaError::runtime(
+            "Uniform value must be number or array table",
+        )),
+    }
+}
 
 /// Builder mode: spawn a new entity or clone an existing one.
 #[derive(Debug, Clone, Copy, Default)]
@@ -1012,6 +1045,42 @@ impl LuaUserData for LuaEntityBuilder {
             }
 
             this.cmd.particle_emitter = Some(data);
+            Ok(this.clone())
+        });
+
+        // :with_shader(shader_key, uniforms_table?) - Add EntityShader component
+        // shader_key is the shader ID from engine.load_shader()
+        // uniforms_table is an optional table of { name = value } where value is:
+        //   - number (Float)
+        //   - {x, y} array (Vec2)
+        //   - {x, y, z, w} array (Vec4)
+        methods.add_method_mut("with_shader", |_, this, args: mlua::MultiValue| {
+            let mut iter = args.into_iter();
+            let key_val = iter
+                .next()
+                .ok_or_else(|| LuaError::runtime("with_shader requires shader_key"))?;
+            let shader_key: String = key_val
+                .as_string()
+                .and_then(|s| s.to_str().ok())
+                .ok_or_else(|| LuaError::runtime("shader_key must be string"))?
+                .to_string();
+
+            let mut uniforms = Vec::new();
+
+            if let Some(table_val) = iter.next() {
+                if let Some(table) = table_val.as_table() {
+                    for pair in table.pairs::<String, LuaValue>() {
+                        let (name, val) = pair?;
+                        let uniform = parse_uniform_value(val)?;
+                        uniforms.push((name, uniform));
+                    }
+                }
+            }
+
+            this.cmd.shader = Some(EntityShaderData {
+                key: shader_key,
+                uniforms,
+            });
             Ok(this.clone())
         });
 

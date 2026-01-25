@@ -9,6 +9,7 @@
 //! - [`boxcollider`] – axis-aligned rectangular collider for collision detection
 //! - [`collision`] – collision callback rules and context for collision observers
 //! - [`dynamictext`] – text component for rendering variable strings
+//! - [`entityshader`] – per-entity shader for custom rendering effects
 //! - [`gridlayout`] – data-driven grid spawner for tile-based layouts
 //! - [`group`] – tag component for grouping entities by name
 //! - [`inputcontrolled`] – input-driven movement intent for keyboard and mouse
@@ -32,6 +33,7 @@ pub mod animation;
 pub mod boxcollider;
 pub mod collision;
 pub mod dynamictext;
+pub mod entityshader;
 pub mod gridlayout;
 pub mod group;
 pub mod inputcontrolled;

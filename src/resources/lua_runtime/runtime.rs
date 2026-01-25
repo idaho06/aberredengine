@@ -1368,6 +1368,139 @@ impl LuaRuntime {
                 })?,
         )?;
 
+        // ============== Entity Shader API ==============
+
+        // engine.entity_set_shader(entity_id, key) - Set or replace entity shader
+        engine.set(
+            "entity_set_shader",
+            self.lua
+                .create_function(|lua, (entity_id, key): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetShader { entity_id, key });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_remove_shader(entity_id) - Remove entity shader
+        engine.set(
+            "entity_remove_shader",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveShader { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.entity_shader_set_float(entity_id, name, value) - Set float uniform
+        engine.set(
+            "entity_shader_set_float",
+            self.lua
+                .create_function(|lua, (entity_id, name, value): (u64, String, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetFloat {
+                            entity_id,
+                            name,
+                            value,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_shader_set_int(entity_id, name, value) - Set int uniform
+        engine.set(
+            "entity_shader_set_int",
+            self.lua
+                .create_function(|lua, (entity_id, name, value): (u64, String, i32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetInt {
+                            entity_id,
+                            name,
+                            value,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_shader_set_vec2(entity_id, name, x, y) - Set vec2 uniform
+        engine.set(
+            "entity_shader_set_vec2",
+            self.lua
+                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetVec2 {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_shader_set_vec4(entity_id, name, x, y, z, w) - Set vec4 uniform
+        engine.set(
+            "entity_shader_set_vec4",
+            self.lua.create_function(
+                |lua, (entity_id, name, x, y, z, w): (u64, String, f32, f32, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetVec4 {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                            z,
+                            w,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.entity_shader_clear_uniform(entity_id, name) - Clear a single uniform
+        engine.set(
+            "entity_shader_clear_uniform",
+            self.lua
+                .create_function(|lua, (entity_id, name): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderClearUniform { entity_id, name });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_shader_clear_uniforms(entity_id) - Clear all uniforms
+        engine.set(
+            "entity_shader_clear_uniforms",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::ShaderClearUniforms { entity_id });
+                Ok(())
+            })?,
+        )?;
+
         Ok(())
     }
 
@@ -2355,6 +2488,139 @@ impl LuaRuntime {
                         .push(EntityCmd::SetSpeed { entity_id, speed });
                     Ok(())
                 })?,
+        )?;
+
+        // ============== Collision Entity Shader API ==============
+
+        // engine.collision_entity_set_shader(entity_id, key) - Set or replace entity shader during collision
+        engine.set(
+            "collision_entity_set_shader",
+            self.lua
+                .create_function(|lua, (entity_id, key): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetShader { entity_id, key });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_remove_shader(entity_id) - Remove entity shader during collision
+        engine.set(
+            "collision_entity_remove_shader",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveShader { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_shader_set_float(entity_id, name, value) - Set float uniform during collision
+        engine.set(
+            "collision_entity_shader_set_float",
+            self.lua
+                .create_function(|lua, (entity_id, name, value): (u64, String, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetFloat {
+                            entity_id,
+                            name,
+                            value,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_shader_set_int(entity_id, name, value) - Set int uniform during collision
+        engine.set(
+            "collision_entity_shader_set_int",
+            self.lua
+                .create_function(|lua, (entity_id, name, value): (u64, String, i32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetInt {
+                            entity_id,
+                            name,
+                            value,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_shader_set_vec2(entity_id, name, x, y) - Set vec2 uniform during collision
+        engine.set(
+            "collision_entity_shader_set_vec2",
+            self.lua
+                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetVec2 {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w) - Set vec4 uniform during collision
+        engine.set(
+            "collision_entity_shader_set_vec4",
+            self.lua.create_function(
+                |lua, (entity_id, name, x, y, z, w): (u64, String, f32, f32, f32, f32)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderSetVec4 {
+                            entity_id,
+                            name,
+                            x,
+                            y,
+                            z,
+                            w,
+                        });
+                    Ok(())
+                },
+            )?,
+        )?;
+
+        // engine.collision_entity_shader_clear_uniform(entity_id, name) - Clear a single uniform during collision
+        engine.set(
+            "collision_entity_shader_clear_uniform",
+            self.lua
+                .create_function(|lua, (entity_id, name): (u64, String)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::ShaderClearUniform { entity_id, name });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_shader_clear_uniforms(entity_id) - Clear all uniforms during collision
+        engine.set(
+            "collision_entity_shader_clear_uniforms",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::ShaderClearUniforms { entity_id });
+                Ok(())
+            })?,
         )?;
 
         Ok(())

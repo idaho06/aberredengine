@@ -44,6 +44,7 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
+use crate::components::entityshader::EntityShader;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
@@ -248,6 +249,7 @@ pub fn lua_timer_observer(
     mut animation_query: Query<&mut Animation>,
     mut rigid_bodies_query: Query<&mut RigidBody>,
     mut positions_query: Query<&mut MapPosition>,
+    mut shader_query: Query<&mut EntityShader>,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
     // Resources
     mut world_signals: ResMut<WorldSignals>,
@@ -331,6 +333,7 @@ pub fn lua_timer_observer(
         &mut animation_query,
         &mut rigid_bodies_query,
         &mut positions_query,
+        &mut shader_query,
         &systems_store,
     );
 

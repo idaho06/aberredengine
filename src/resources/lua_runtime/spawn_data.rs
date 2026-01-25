@@ -3,6 +3,8 @@
 //! These structs hold component data that Lua scripts specify when spawning entities.
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
+use crate::resources::lua_runtime::UniformValue;
+
 /// Sprite component data for spawning.
 #[derive(Debug, Clone, Default)]
 pub struct SpriteData {
@@ -304,6 +306,15 @@ impl Default for ParticleEmitterData {
     }
 }
 
+/// EntityShader component data for spawning.
+#[derive(Debug, Clone)]
+pub struct EntityShaderData {
+    /// Key referencing a shader in the ShaderStore.
+    pub key: String,
+    /// Uniform values to set on the shader.
+    pub uniforms: Vec<(String, UniformValue)>,
+}
+
 /// Command representing a full entity spawn request from Lua.
 /// Contains all optional component data that Lua can specify.
 #[derive(Debug, Clone, Default)]
@@ -372,4 +383,6 @@ pub struct SpawnCmd {
     pub ttl: Option<f32>,
     /// Particle emitter component data
     pub particle_emitter: Option<ParticleEmitterData>,
+    /// Per-entity shader data
+    pub shader: Option<EntityShaderData>,
 }
