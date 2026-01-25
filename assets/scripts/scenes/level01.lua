@@ -4,8 +4,106 @@
 
 local M = {}
 
--- local ball_bounces = 0
--- local player_hits = 0
+local function spawn_big_asteroids()
+    -- Spawn a few asteroids at random positions
+    local asteroid_textures = { "asteroids-big01", "asteroids-big02", "asteroids-big03" }
+    for i = 1, 10 do
+        local texture_index = math.random(1, #asteroid_textures)
+        local texture_name = asteroid_textures[texture_index]
+        local pos_x = math.random(0, 2048)
+        local pos_y = math.random(0, 2048)
+        engine.spawn()
+            :with_group("asteroids")
+            :with_position(pos_x, pos_y)
+            :with_sprite(texture_name, 128, 128, 64, 64)
+            :with_rotation(math.random(0, 360))
+            :with_velocity(math.random(-10, 10), math.random(-10, 10))
+            :with_zindex(5)
+            :with_collider(80, 80, 40, 40)
+        --:with_signals()
+            :with_signal_integer("hp", 3)
+            :with_signal_integer("asteroid_type", 3) -- Big asteroid
+            :with_phase({
+                initial = "drifting",
+                phases = {
+                    drifting = {
+                        on_enter = "asteroid_phase_drifting_enter",  -- Setup vars in signals
+                        on_update = "asteroid_phase_drifting_update" -- Handle movement
+                    },
+                    exploding = {
+                        on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
+                    }
+                }
+            })
+            :build()
+    end
+    engine.log_info("Asteroids spawned!")
+end
+
+local function spawn_medium_asteroids(x, y)
+    -- Spawn medium asteroids (not implemented yet)
+    local asteroid_textures = { "asteroids-medium01", "asteroids-medium02", "asteroids-medium03" }
+    for i = 1, 3 do
+        local texture_index = math.random(1, #asteroid_textures)
+        local texture_name = asteroid_textures[texture_index]
+        engine.spawn()
+            :with_group("asteroids")
+            :with_position(x + math.random(-20, 20), y + math.random(-20, 20))
+            :with_sprite(texture_name, 64, 64, 32, 32)
+            :with_rotation(math.random(0, 360))
+            :with_velocity(math.random(-30, 30), math.random(-30, 30))
+            :with_zindex(5)
+            :with_collider(40, 40, 20, 20)
+        --:with_signals()
+            :with_signal_integer("hp", 2)
+            :with_signal_integer("asteroid_type", 2) -- Medium asteroid
+            :with_phase({
+                initial = "drifting",
+                phases = {
+                    drifting = {
+                        on_enter = "asteroid_phase_drifting_enter",  -- Setup vars in signals
+                        on_update = "asteroid_phase_drifting_update" -- Handle movement
+                    },
+                    exploding = {
+                        on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
+                    }
+                }
+            })
+            :build()
+    end
+end
+
+local function spawn_small_asteroids(x, y)
+    local asteroid_textures = { "asteroids-small01", "asteroids-small02", "asteroids-small03" }
+    for i = 1, 6 do
+        local texture_index = math.random(1, #asteroid_textures)
+        local texture_name = asteroid_textures[texture_index]
+        engine.spawn()
+            :with_group("asteroids")
+            :with_position(x + math.random(-20, 20), y + math.random(-20, 20))
+            :with_sprite(texture_name, 32, 32, 16, 16)
+            :with_rotation(math.random(0, 360))
+            :with_velocity(math.random(-60, 60), math.random(-60, 60))
+            :with_zindex(5)
+            :with_collider(40, 40, 20, 20)
+        --:with_signals()
+            :with_signal_integer("hp", 1)
+            :with_signal_integer("asteroid_type", 1) -- Small asteroid
+            :with_phase({
+                initial = "drifting",
+                phases = {
+                    drifting = {
+                        on_enter = "asteroid_phase_drifting_enter",  -- Setup vars in signals
+                        on_update = "asteroid_phase_drifting_update" -- Handle movement
+                    },
+                    exploding = {
+                        on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
+                    }
+                }
+            })
+            :build()
+    end
+end
 
 -- ==================== COLLISION CALLBACK FUNCTIONS ====================
 -- These are called when collisions occur between entities with matching groups.
@@ -64,26 +162,33 @@ function asteroid_phase_exploding_enter(ctx, input)
     engine.log_info("Asteroid exploding enter: ID " .. tostring(ctx.id))
     -- log debug ctx
     -- engine.log_info("Asteroid context:\n" .. Dump_value(ctx))
-    --[[ engine.spawn()
-        :with_position(ctx.pos.x, ctx.pos.y)
-        :with_particle_emitter({
-            -- templates = { "explosion02", "explosion03" },
-            templates = { "explosion01" },
-            shape = { type = "rect", width = 60, height = 60 },
-            particles_per_emission = 10,
-            emissions_per_second = 100,
-            emissions_remaining = 25,
-            arc = { 0, 360 },
-            speed = { 0, 200 },
-            ttl = 0.8,
-        })
-        :with_ttl(3.0)
-        :build() ]]
-    -- Clone explosion emitter at asteroid position
-    engine.clone("explosion_emitter")
-        :with_position(ctx.pos.x, ctx.pos.y)
-        :with_ttl(3.0)
-        :build()
+    -- Get type of asteroid by signal "asteroid_type" (big = 3, medium = 2, small = 1)
+    local asteroid_type = ctx.signals.integers.asteroid_type or 3
+    if asteroid_type == 3 then
+        -- Big asteroid - spawn 2 medium asteroids
+        spawn_medium_asteroids(ctx.pos.x, ctx.pos.y)
+        engine.clone("explosion_big_emitter")
+            :with_position(ctx.pos.x, ctx.pos.y)
+            :with_ttl(3.0)
+            :build()
+    end
+    if asteroid_type == 2 then
+        -- Medium asteroid - spawn 2 small asteroids
+        spawn_small_asteroids(ctx.pos.x, ctx.pos.y)
+        engine.clone("explosion_medium_emitter")
+            :with_position(ctx.pos.x, ctx.pos.y)
+            :with_ttl(3.0)
+            :build()
+    end
+
+    if asteroid_type == 1 then
+        -- Small asteroid - just explode
+        engine.clone("explosion_small_emitter")
+            :with_position(ctx.pos.x, ctx.pos.y)
+            :with_ttl(3.0)
+            :build()
+    end
+
     -- Despawn asteroid entity
     engine.entity_despawn(ctx.id)
 end
@@ -501,12 +606,12 @@ local function spawn_ship()
                 }
             }
         })
-        :with_shader("outline",
-            {
-                uThickness = 2.5,
-                uColor = { 1.0, 0.0, 0.0, 1.0 } -- Red outline
-            })
-        :register_as("ship")                    -- Store entity ID for ball attachment
+    -- :with_shader("outline",
+    --     {
+    --         uThickness = 2.5,
+    --         uColor = { 1.0, 0.0, 0.0, 1.0 } -- Red outline
+    --     })
+        :register_as("ship") -- Store entity ID
         :build()
 
     engine.log_info("Ship spawned!")
@@ -542,40 +647,7 @@ local function spawn_background()
     end
 end
 
-local function spawn_asteroids()
-    -- Spawn a few asteroids at random positions
-    local asteroid_textures = { "asteroids-big01", "asteroids-big02", "asteroids-big03" }
-    for i = 1, 10 do
-        local texture_index = math.random(1, #asteroid_textures)
-        local texture_name = asteroid_textures[texture_index]
-        local pos_x = math.random(0, 2048)
-        local pos_y = math.random(0, 2048)
-        engine.spawn()
-            :with_group("asteroids")
-            :with_position(pos_x, pos_y)
-            :with_sprite(texture_name, 128, 128, 64, 64)
-            :with_rotation(math.random(0, 360))
-            :with_velocity(math.random(-10, 10), math.random(-10, 10))
-            :with_zindex(5)
-            :with_collider(80, 80, 40, 40)
-        --:with_signals()
-            :with_signal_integer("hp", 3)
-            :with_phase({
-                initial = "drifting",
-                phases = {
-                    drifting = {
-                        on_enter = "asteroid_phase_drifting_enter",  -- Setup vars in signals
-                        on_update = "asteroid_phase_drifting_update" -- Handle movement
-                    },
-                    exploding = {
-                        on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
-                    }
-                }
-            })
-            :build()
-    end
-    engine.log_info("Asteroids spawned!")
-end
+
 
 local function spawn_template_laser()
     -- Spawn a template entity for the laser projectile
@@ -630,9 +702,37 @@ local function spawn_template_explosions()
             speed = { 0, 200 },
             ttl = 0.8,
         })
-        :register_as("explosion_emitter") -- Store entity ID for cloning
+        :register_as("explosion_big_emitter") -- Store entity ID for cloning
         :build()
 
+    engine.spawn()
+        :with_particle_emitter({
+            -- templates = { "explosion02_animation", "explosion03_animation" },
+            templates = { "explosion02_animation" },
+            shape = { type = "rect", width = 30, height = 30 },
+            particles_per_emission = 5,
+            emissions_per_second = 50,
+            emissions_remaining = 25,
+            arc = { 0, 360 },
+            speed = { 0, 100 },
+            ttl = 0.4,
+        })
+        :register_as("explosion_medium_emitter") -- Store entity ID for cloning
+        :build()
+    engine.spawn()
+        :with_particle_emitter({
+            -- templates = { "explosion02_animation", "explosion03_animation" },
+            templates = { "explosion03_animation" },
+            shape = { type = "rect", width = 15, height = 15 },
+            particles_per_emission = 5,
+            emissions_per_second = 50,
+            emissions_remaining = 15,
+            arc = { 0, 360 },
+            speed = { 0, 50 },
+            ttl = 0.4,
+        })
+        :register_as("explosion_small_emitter") -- Store entity ID for cloning
+        :build()
 
     engine.log_info("Explosion templates spawned!")
 end
@@ -709,7 +809,7 @@ function M.spawn()
 
     spawn_background()
 
-    spawn_asteroids()
+    spawn_big_asteroids()
 
     spawn_template_laser()
 
