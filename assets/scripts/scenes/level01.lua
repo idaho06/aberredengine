@@ -852,10 +852,15 @@ function M.spawn()
         })
         :build()
 
-    engine.post_process_shader({ "bloom" })
+    engine.post_process_shader({ "bloom", "crt" })
     engine.post_process_set_float("threshold", 0.7)
     engine.post_process_set_float("intensity", 1.8)
     engine.post_process_set_float("radius", 2.0)
+
+    engine.post_process_set_float("uCurvature", 0.1)
+    engine.post_process_set_float("uScanline", 0.5)
+    engine.post_process_set_float("uVignette", 0.3)
+    engine.post_process_set_float("uFlicker", 0.25)
 
     engine.log_info("Scene phase entity spawned with LuaPhase")
     engine.log_info("Level01 scene entities queued!")
