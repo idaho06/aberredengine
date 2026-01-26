@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-24 (synced with codebase)
+# Last updated: 2026-01-26 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -13,16 +13,19 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-01-22)
+## STATUS (2026-01-26)
 
-- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids, tiled space background, ship fires lasers, asteroids explode on hit); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
-- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids_laser, explosion01-03, black, asteroids_stars01), sound (option.wav); music/tilemap/brick assets are not loaded.
+- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
+- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg); music/tilemap/brick assets are not loaded.
 - Lua on_enter_play seeds signals (score, high_score, lives, level) and sets scene="menu"; scene switches via WorldSignals flag "switch_scene".
 - ParticleEmitter component and system - emits particles by cloning template entities with configurable shape, arc, speed, TTL. Uses fastrand for RNG. Animation reset to frame 0 on clones.
 - TTL (Time-to-Live) component and system - automatic entity despawn after duration, respects time scale.
 - Entity cloning API (engine.clone/collision_clone) - clone registered entities with component overrides.
 - Menu callback system - Lua callbacks for interactive menu selection with full context (menu_id, item_id, item_index).
 - Lua utility libraries: lib/math.lua (lerp, inv_lerp, remap, lerp2), lib/utils.lua (dump_value for debugging).
+- EntityShader component - per-entity shader support for custom rendering effects on individual sprites/text.
+- Multi-pass post-processing shader chain support.
+- Shaders loaded: invert, wave, bloom, outline.
 
 ## FILE TREE (ESSENTIAL)
 
@@ -43,6 +46,7 @@ src/
 │   ├── luaphase.rs            # Lua-based phase state machine
 │   ├── signals.rs             # Per-entity signals (scalars/ints/flags/strings)
 │   ├── dynamictext.rs         # Text rendering component with cached size
+│   ├── entityshader.rs        # Per-entity shader for custom rendering effects
 │   ├── signalbinding.rs       # Bind text to world signals
 │   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
 │   ├── luatimer.rs            # Lua callback timer
@@ -203,6 +207,7 @@ MouseControlled { follow_x: bool, follow_y: bool }
 ParticleEmitter { templates: Vec<Entity>, shape: EmitterShape, offset: Vector2, particles_per_emission: u32, emissions_per_second: f32, emissions_remaining: u32, arc_degrees: (f32, f32), speed_range: (f32, f32), ttl: TtlSpec, time_since_emit: f32 }
 EmitterShape { Point | Rect { width, height } }
 TtlSpec { None | Fixed(f32) | Range { min, max } }
+EntityShader { shader_key: Arc<str>, uniforms: FxHashMap<Arc<str>, UniformValue> }
 
 ## RESOURCE QUICK-REF
 
@@ -257,6 +262,7 @@ EntityCmd {
     SetScale { entity_id, sx, sy }
     SignalSetScalar { entity_id, key, value }
     SignalSetString { entity_id, key, value }
+    SignalSetInteger { entity_id, key, value }
     AddForce { entity_id, name, x, y, enabled }
     RemoveForce { entity_id, name }
     SetForceEnabled { entity_id, name, enabled }
@@ -269,7 +275,14 @@ EntityCmd {
     SetPosition { entity_id, x, y }
     Despawn { entity_id }
     MenuDespawn { entity_id }  -- despawn menu + items + cursor + textures via SystemsStore
-    SignalSetInteger { entity_id, key, value }
+    SetShader { entity_id, key }
+    RemoveShader { entity_id }
+    ShaderSetFloat { entity_id, name, value }
+    ShaderSetInt { entity_id, name, value }
+    ShaderSetVec2 { entity_id, name, x, y }
+    ShaderSetVec4 { entity_id, name, x, y, z, w }
+    ShaderClearUniform { entity_id, name }
+    ShaderClearUniforms { entity_id }
 }
 
 SpawnCmd (spawn_data.rs) {
@@ -277,7 +290,8 @@ SpawnCmd (spawn_data.rs) {
     mouse_controlled, rotation, scale, persistent, signal_scalars, signal_integers,
     signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
-    register_as, lua_collision_rule, animation, animation_controller, particle_emitter
+    register_as, lua_collision_rule, animation, animation_controller, particle_emitter,
+    shader
 }
 
 ParticleEmitterData (spawn_data.rs) {
@@ -287,6 +301,7 @@ ParticleEmitterData (spawn_data.rs) {
 }
 ParticleEmitterShapeData { Point | Rect { width, height } }
 ParticleTtlData { None | Fixed(f32) | Range { min, max } }
+EntityShaderData { key: String, uniforms: Vec<(String, UniformValue)> }
 
 CloneCmd (commands.rs) {
     source_key: String,     -- WorldSignals key to look up source entity
@@ -377,6 +392,14 @@ engine.entity_set_position(id, x, y)
 engine.entity_despawn(id)
 engine.entity_menu_despawn(id)  -- despawn menu + items + cursor + associated textures
 engine.entity_signal_set_integer(id, key, value)
+engine.entity_set_shader(id, key)
+engine.entity_remove_shader(id)
+engine.entity_shader_set_float(id, name, value)
+engine.entity_shader_set_int(id, name, value)
+engine.entity_shader_set_vec2(id, name, x, y)
+engine.entity_shader_set_vec4(id, name, x, y, z, w)
+engine.entity_shader_clear_uniform(id, name)
+engine.entity_shader_clear_uniforms(id)
 
 -- Entity Cloning (all contexts)
 engine.clone(source_key) -> EntityBuilder  -- Clone entity by WorldSignals key, apply overrides
@@ -428,6 +451,14 @@ engine.collision_entity_set_max_speed(id, max_speed|nil)
 engine.collision_entity_freeze(id)
 engine.collision_entity_unfreeze(id)
 engine.collision_entity_set_speed(id, speed)
+engine.collision_entity_set_shader(id, key)
+engine.collision_entity_remove_shader(id)
+engine.collision_entity_shader_set_float(id, name, value)
+engine.collision_entity_shader_set_int(id, name, value)
+engine.collision_entity_shader_set_vec2(id, name, x, y)
+engine.collision_entity_shader_set_vec4(id, name, x, y, z, w)
+engine.collision_entity_shader_clear_uniform(id, name)
+engine.collision_entity_shader_clear_uniforms(id)
 
 -- Phase Control
 engine.phase_transition(id, phase)
@@ -519,6 +550,7 @@ engine.post_process_clear_uniforms()
 :with_lua_collision_rule(group_a, group_b, callback)
 :with_grid_layout(path, group, zindex)
 :with_particle_emitter(table)  -- { templates, shape, offset, particles_per_emission, emissions_per_second, emissions_remaining, arc, speed, ttl }
+:with_shader(shader_key, uniforms_table?)  -- { name = value, ... } where value is float, int, {x,y}, or {x,y,z,w}
 :register_as(key)
 :build()
 
@@ -687,7 +719,7 @@ For features touching:
 - Physics: rigidbody.rs, movement.rs
 - Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs
 - Collision: collision.rs (systems), boxcollider.rs, luacollision.rs (components)
-- Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs
+- Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs, entityshader.rs
 - Animation: animation.rs (component + controller), animationstore.rs
 - State machines: luaphase.rs (component + system)
 - Signals: signals.rs, worldsignals.rs
@@ -755,3 +787,5 @@ For features touching:
 29. Post-process shaders: load in on_setup, activate in on_switch_scene/on_update via engine.post_process_shader({"id1", "id2"}) for multi-pass chaining
 30. Reserved shader uniforms (uTime, uDeltaTime, uResolution, uFrame, uWindowResolution, uLetterbox) are set automatically each frame
 31. ShaderStore is NON_SEND (contains raylib Shader); PostProcessShader is a regular Resource
+32. EntityShader uses the same ShaderStore; uniforms are per-entity and set before drawing each entity
+33. Entity shader commands (engine.entity_shader_*) have full parity with collision context (engine.collision_entity_shader_*)

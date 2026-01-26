@@ -3365,6 +3365,12 @@ engine.post_process_shader(nil)
 Custom uniforms can be set for shader parameters:
 
 ```lua
+-- CRT shader uniforms
+engine.post_process_set_float("uCurvature", 1.0)
+engine.post_process_set_float("uScanline", 1.0)
+engine.post_process_set_float("uVignette", 1.0)
+engine.post_process_set_float("uFlicker", 1.0)
+
 -- Set float uniform
 engine.post_process_set_float("uIntensity", 0.5)
 
