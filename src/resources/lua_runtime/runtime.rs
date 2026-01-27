@@ -1397,6 +1397,39 @@ impl LuaRuntime {
             })?,
         )?;
 
+        // engine.entity_set_tint(entity_id, r, g, b, a) - Set entity tint color
+        engine.set(
+            "entity_set_tint",
+            self.lua
+                .create_function(|lua, (entity_id, r, g, b, a): (u64, u8, u8, u8, u8)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetTint {
+                            entity_id,
+                            r,
+                            g,
+                            b,
+                            a,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.entity_remove_tint(entity_id) - Remove entity tint
+        engine.set(
+            "entity_remove_tint",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveTint { entity_id });
+                Ok(())
+            })?,
+        )?;
+
         // engine.entity_shader_set_float(entity_id, name, value) - Set float uniform
         engine.set(
             "entity_shader_set_float",
@@ -2515,6 +2548,39 @@ impl LuaRuntime {
                     .collision_entity_commands
                     .borrow_mut()
                     .push(EntityCmd::RemoveShader { entity_id });
+                Ok(())
+            })?,
+        )?;
+
+        // engine.collision_entity_set_tint(entity_id, r, g, b, a) - Set entity tint during collision
+        engine.set(
+            "collision_entity_set_tint",
+            self.lua
+                .create_function(|lua, (entity_id, r, g, b, a): (u64, u8, u8, u8, u8)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .collision_entity_commands
+                        .borrow_mut()
+                        .push(EntityCmd::SetTint {
+                            entity_id,
+                            r,
+                            g,
+                            b,
+                            a,
+                        });
+                    Ok(())
+                })?,
+        )?;
+
+        // engine.collision_entity_remove_tint(entity_id) - Remove entity tint during collision
+        engine.set(
+            "collision_entity_remove_tint",
+            self.lua.create_function(|lua, entity_id: u64| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .collision_entity_commands
+                    .borrow_mut()
+                    .push(EntityCmd::RemoveTint { entity_id });
                 Ok(())
             })?,
         )?;

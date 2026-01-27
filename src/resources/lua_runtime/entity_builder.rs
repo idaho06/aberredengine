@@ -1048,6 +1048,16 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_tint(r, g, b, a) - Set color tint for rendering
+        // RGBA values are 0-255
+        methods.add_method_mut(
+            "with_tint",
+            |_, this, (r, g, b, a): (u8, u8, u8, u8)| {
+                this.cmd.tint = Some((r, g, b, a));
+                Ok(this.clone())
+            },
+        );
+
         // :with_shader(shader_key, uniforms_table?) - Add EntityShader component
         // shader_key is the shader ID from engine.load_shader()
         // uniforms_table is an optional table of { name = value } where value is:

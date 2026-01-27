@@ -385,4 +385,6 @@ pub struct SpawnCmd {
     pub particle_emitter: Option<ParticleEmitterData>,
     /// Per-entity shader data
     pub shader: Option<EntityShaderData>,
+    /// Color tint (r, g, b, a) for rendering modulation
+    pub tint: Option<(u8, u8, u8, u8)>,
 }

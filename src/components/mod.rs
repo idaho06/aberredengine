@@ -25,6 +25,7 @@
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component
 //! - [`stuckto`] – attaches an entity's position to another entity
+//! - [`tint`] – color tint for rendering sprites and text
 //! - [`luatimer`] – Lua callback timer for delayed actions
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`zindex`] – rendering order hint for 2D drawing
@@ -51,6 +52,7 @@ pub mod signalbinding;
 pub mod signals;
 pub mod sprite;
 pub mod stuckto;
+pub mod tint;
 pub mod particleemitter;
 pub mod ttl;
 pub mod tween;

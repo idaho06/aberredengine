@@ -21,6 +21,7 @@ use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
@@ -68,16 +69,17 @@ pub fn render_system(
         Option<&Scale>,
         Option<&Rotation>,
         Option<&EntityShader>,
+        Option<&Tint>,
     )>,
     query_colliders: Query<(&BoxCollider, &MapPosition)>,
     query_positions: Query<(&MapPosition, Option<&Signals>)>,
-    query_map_dynamic_texts: Query<(Entity, &DynamicText, &MapPosition, &ZIndex, Option<&EntityShader>)>,
+    query_map_dynamic_texts: Query<(Entity, &DynamicText, &MapPosition, &ZIndex, Option<&EntityShader>, Option<&Tint>)>,
     query_rigidbodies: Query<&RigidBody>,
-    query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition)>,
-    query_screen_sprites: Query<(&Sprite, &ScreenPosition)>,
+    query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition, Option<&Tint>)>,
+    query_screen_sprites: Query<(&Sprite, &ScreenPosition, Option<&Tint>)>,
     fonts: NonSend<FontStore>,
-    mut sprite_buffer: Local<Vec<(Entity, Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>, Option<EntityShader>)>>,
-    mut text_buffer: Local<Vec<(Entity, DynamicText, MapPosition, ZIndex, Option<EntityShader>)>>,
+    mut sprite_buffer: Local<Vec<(Entity, Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>, Option<EntityShader>, Option<Tint>)>>,
+    mut text_buffer: Local<Vec<(Entity, DynamicText, MapPosition, ZIndex, Option<EntityShader>, Option<Tint>)>>,
 ) {
     // Unpack bundled resources for easier access
     let camera = &res.camera;
@@ -114,7 +116,7 @@ pub fn render_system(
 
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
-                |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader)| {
+                |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint)| {
                     let min = Vector2 {
                         x: p.pos.x - s.origin.x,
                         y: p.pos.y - s.origin.y,
@@ -128,12 +130,12 @@ pub fn render_system(
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((entity, s.clone(), *p, *z, maybe_scale.copied(), maybe_rot.copied(), maybe_shader.cloned()))
+                    overlap.then_some((entity, s.clone(), *p, *z, maybe_scale.copied(), maybe_rot.copied(), maybe_shader.cloned(), maybe_tint.copied()))
                 },
             ));
 
-            sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _)| *z);
-            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader) in sprite_buffer.iter() {
+            sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _, _)| *z);
+            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint) in sprite_buffer.iter() {
                 if let Some(tex) = textures.get(&sprite.tex_key) {
                     let mut src = Rectangle {
                         x: sprite.offset.x,
@@ -206,24 +208,28 @@ pub fn render_system(
                                 }
 
                                 // Draw with shader
+                                let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
-                                d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                                d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
                             } else {
                                 eprintln!("[Render] Warning: Entity shader '{}' is invalid, rendering without shader", entity_shader.shader_key);
-                                d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                                let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                                d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
                             }
                         } else {
                             eprintln!("[Render] Warning: Entity shader '{}' not found, rendering without shader", entity_shader.shader_key);
-                            d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                            let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                            d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
                         }
                     } else {
-                        d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, Color::WHITE);
+                        let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                        d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
                     }
                 }
             } // End sprite drawing in camera space
 
             text_buffer.clear();
-            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(entity, t, p, z, maybe_shader)| {
+            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(entity, t, p, z, maybe_shader, maybe_tint)| {
                 let text_size = t.size();
 
                 let min = Vector2 {
@@ -239,12 +245,13 @@ pub fn render_system(
                     || min.x > view_max.x
                     || max.y < view_min.y
                     || min.y > view_max.y);
-                overlap.then_some((entity, t.clone(), *p, *z, maybe_shader.cloned()))
+                overlap.then_some((entity, t.clone(), *p, *z, maybe_shader.cloned(), maybe_tint.copied()))
             }));
-            text_buffer.sort_unstable_by_key(|(_, _, _, z, _)| *z);
-            for (_entity, text, pos, _z, _maybe_shader) in text_buffer.iter() {
+            text_buffer.sort_unstable_by_key(|(_, _, _, z, _, _)| *z);
+            for (_entity, text, pos, _z, _maybe_shader, maybe_tint) in text_buffer.iter() {
                 if let Some(font) = fonts.get(&text.font) {
-                    d2.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, text.color);
+                    let final_color = maybe_tint.map(|t| t.multiply(text.color)).unwrap_or(text.color);
+                    d2.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
                     if maybe_debug.is_some() {
                         d2.draw_rectangle_lines(
                             pos.pos.x as i32,
@@ -320,7 +327,7 @@ pub fn render_system(
         } // End Camera2D mode
 
         // Draw in screen coordinates (UI layer) - still on the render target
-        for (sprite, pos) in query_screen_sprites.iter() {
+        for (sprite, pos, maybe_tint) in query_screen_sprites.iter() {
             if let Some(tex) = textures.get(&sprite.tex_key) {
                 let mut src = Rectangle {
                     x: sprite.offset.x,
@@ -342,6 +349,7 @@ pub fn render_system(
                     height: sprite.height,
                 };
 
+                let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                 d.draw_texture_pro(
                     tex,
                     src,
@@ -351,7 +359,7 @@ pub fn render_system(
                         y: sprite.origin.y,
                     },
                     0.0,
-                    Color::WHITE,
+                    tint_color,
                 );
             }
             if maybe_debug.is_some() {
@@ -379,9 +387,10 @@ pub fn render_system(
             }
         }
 
-        for (text, pos) in query_screen_dynamic_texts.iter() {
+        for (text, pos, maybe_tint) in query_screen_dynamic_texts.iter() {
             if let Some(font) = fonts.get(&text.font) {
-                d.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, text.color);
+                let final_color = maybe_tint.map(|t| t.multiply(text.color)).unwrap_or(text.color);
+                d.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
                 if maybe_debug.is_some() {
                     d.draw_rectangle_lines(
                         pos.pos.x as i32,

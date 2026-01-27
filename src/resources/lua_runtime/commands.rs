@@ -261,6 +261,16 @@ pub enum EntityCmd {
     ShaderClearUniform { entity_id: u64, name: String },
     /// Clear all uniforms from entity shader
     ShaderClearUniforms { entity_id: u64 },
+    /// Set or replace entity tint color
+    SetTint {
+        entity_id: u64,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    },
+    /// Remove entity tint
+    RemoveTint { entity_id: u64 },
 }
 
 /// Commands for tracked groups from Lua.

@@ -29,6 +29,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Tilemap Rendering](#tilemap-rendering)
 - [Post-Process Shaders](#post-process-shaders)
 - [Per-Entity Shaders](#per-entity-shaders)
+- [Tint Component](#tint-component)
 - [Complete Example: Player Paddle](#complete-example-player-paddle)
 - [Tips and Best Practices](#tips-and-best-practices)
 - [Debugging](#debugging)
@@ -199,6 +200,8 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_freeze()` instead of `engine.entity_freeze()`
 - `engine.collision_entity_unfreeze()` instead of `engine.entity_unfreeze()`
 - `engine.collision_entity_set_speed()` instead of `engine.entity_set_speed()`
+- `engine.collision_entity_set_tint()` instead of `engine.entity_set_tint()`
+- `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
 
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 
@@ -572,10 +575,10 @@ Add sprite component for rendering.
 
 #### `:with_sprite_offset(offset_x, offset_y)`
 
-Offset sprite from entity position (requires `:with_sprite()`).
+Position of the source rectangle in the texture. To be used with atlas textures. (0,0) if not used. (requires `:with_sprite()`).
 
 ```lua
-:with_sprite_offset(0, -5)
+:with_sprite_offset(64, 32)
 ```
 
 #### `:with_sprite_flip(flip_h, flip_v)`
@@ -3626,6 +3629,154 @@ engine.spawn()
     :with_position(400, 300)
     :with_shader("glow", { uIntensity = 0.5 })
     :build()
+```
+
+---
+
+## Tint Component
+
+The Tint component applies color modulation to sprites and text during rendering. This is useful for damage flashes, powerup effects, fade effects, or any color-based visual feedback.
+
+### How Tint Works
+
+- **For sprites**: The tint color replaces `Color::WHITE` in draw calls, effectively multiplying the sprite's colors
+- **For text**: The tint color is multiplied with the text's existing color (set via `:with_text()`)
+
+### Adding Tint via Builder
+
+Use `:with_tint()` when spawning entities:
+
+```lua
+-- Red-tinted enemy (damage state)
+engine.spawn()
+    :with_sprite("enemy", 32, 32, 16, 16)
+    :with_position(200, 200)
+    :with_tint(255, 100, 100, 255)  -- RGBA values 0-255
+    :build()
+
+-- Semi-transparent ghost effect
+engine.spawn()
+    :with_sprite("ghost", 32, 32, 16, 16)
+    :with_position(300, 200)
+    :with_tint(255, 255, 255, 128)  -- 50% transparent
+    :build()
+
+-- Tinted text (green success message)
+engine.spawn()
+    :with_text("SUCCESS!", "arcade", 24, 255, 255, 255, 255)
+    :with_position(400, 300)
+    :with_tint(100, 255, 100, 255)  -- Green tint multiplied with white text
+    :build()
+```
+
+**Parameters:**
+
+- `r` (integer 0-255) - Red component
+- `g` (integer 0-255) - Green component
+- `b` (integer 0-255) - Blue component
+- `a` (integer 0-255) - Alpha component
+
+### Runtime Tint Control
+
+#### `engine.entity_set_tint(entity_id, r, g, b, a)`
+
+Set or replace an entity's tint at runtime.
+
+```lua
+local player_id = engine.get_entity("player")
+
+-- Flash red when taking damage
+engine.entity_set_tint(player_id, 255, 0, 0, 255)
+
+-- Fade to semi-transparent
+engine.entity_set_tint(player_id, 255, 255, 255, 128)
+```
+
+#### `engine.entity_remove_tint(entity_id)`
+
+Remove tint from an entity (return to normal rendering).
+
+```lua
+-- After damage flash, return to normal
+engine.entity_remove_tint(player_id)
+```
+
+### Collision Context Variants
+
+Tint functions have collision variants for use in collision callbacks:
+
+```lua
+function on_player_hit(ctx)
+    -- Flash the player red on hit
+    engine.collision_entity_set_tint(ctx.a.id, 255, 0, 0, 255)
+
+    -- Could also set a timer to remove the tint later
+    engine.collision_entity_insert_lua_timer(ctx.a.id, 0.1, "clear_damage_flash")
+end
+
+function clear_damage_flash(ctx)
+    engine.entity_remove_tint(ctx.id)
+end
+```
+
+Available collision variants:
+
+- `engine.collision_entity_set_tint(entity_id, r, g, b, a)`
+- `engine.collision_entity_remove_tint(entity_id)`
+
+### Tint vs Shaders
+
+| Feature | Tint | Per-Entity Shader |
+|---------|------|-------------------|
+| Performance | Very fast (single color multiply) | Slower (custom shader execution) |
+| Complexity | Simple color modulation | Any visual effect possible |
+| Use cases | Damage flash, fade, color overlay | Outline, glow, distortion, etc. |
+| Setup | No shader loading required | Requires `load_shader()` |
+
+**Recommendation**: Use Tint for simple color effects. Use shaders for complex visual effects.
+
+### Common Patterns
+
+#### Damage Flash
+
+```lua
+-- In collision callback
+function on_enemy_hit(ctx)
+    engine.collision_entity_set_tint(ctx.b.id, 255, 50, 50, 255)
+    engine.collision_entity_insert_lua_timer(ctx.b.id, 0.15, "clear_tint")
+end
+
+function clear_tint(ctx)
+    engine.entity_remove_tint(ctx.id)
+end
+```
+
+#### Powerup Glow
+
+```lua
+-- Golden powerup effect
+engine.spawn()
+    :with_sprite("player", 32, 32, 16, 16)
+    :with_tint(255, 215, 0, 255)  -- Gold color
+    :register_as("powered_player")
+    :build()
+```
+
+#### Fade Out Effect
+
+```lua
+-- In a timer callback that runs repeatedly
+function fade_out(ctx)
+    local alpha = ctx.signals.integers["alpha"] or 255
+    alpha = alpha - 15
+    if alpha <= 0 then
+        engine.entity_despawn(ctx.id)
+    else
+        engine.entity_signal_set_integer(ctx.id, "alpha", alpha)
+        engine.entity_set_tint(ctx.id, 255, 255, 255, alpha)
+        engine.entity_insert_lua_timer(ctx.id, 0.05, "fade_out")
+    end
+end
 ```
 
 ---

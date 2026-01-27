@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-26 (synced with codebase)
+# Last updated: 2026-01-27 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -13,7 +13,7 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-01-26)
+## STATUS (2026-01-27)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg); music/tilemap/brick assets are not loaded.
@@ -24,6 +24,7 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 - Menu callback system - Lua callbacks for interactive menu selection with full context (menu_id, item_id, item_index).
 - Lua utility libraries: lib/math.lua (lerp, inv_lerp, remap, lerp2), lib/utils.lua (dump_value for debugging).
 - EntityShader component - per-entity shader support for custom rendering effects on individual sprites/text.
+- Tint component - color modulation for sprites (replaces Color::WHITE) and text (multiplies with text color).
 - Multi-pass post-processing shader chain support.
 - Shaders loaded: invert, wave, bloom, outline.
 
@@ -51,6 +52,7 @@ src/
 │   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
 │   ├── luatimer.rs            # Lua callback timer
 │   ├── stuckto.rs             # Attach entity to another
+│   ├── tint.rs                # Color tint for rendering (sprites/text)
 │   ├── menu.rs                # Interactive menu
 │   ├── gridlayout.rs          # JSON grid spawning
 │   ├── group.rs               # Entity grouping tag
@@ -208,6 +210,7 @@ ParticleEmitter { templates: Vec<Entity>, shape: EmitterShape, offset: Vector2, 
 EmitterShape { Point | Rect { width, height } }
 TtlSpec { None | Fixed(f32) | Range { min, max } }
 EntityShader { shader_key: Arc<str>, uniforms: FxHashMap<Arc<str>, UniformValue> }
+Tint { color: Color } -- for sprites: replaces Color::WHITE; for text: multiplies with text.color
 
 ## RESOURCE QUICK-REF
 
@@ -283,6 +286,8 @@ EntityCmd {
     ShaderSetVec4 { entity_id, name, x, y, z, w }
     ShaderClearUniform { entity_id, name }
     ShaderClearUniforms { entity_id }
+    SetTint { entity_id, r, g, b, a }
+    RemoveTint { entity_id }
 }
 
 SpawnCmd (spawn_data.rs) {
@@ -291,7 +296,7 @@ SpawnCmd (spawn_data.rs) {
     signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
     register_as, lua_collision_rule, animation, animation_controller, particle_emitter,
-    shader
+    shader, tint
 }
 
 ParticleEmitterData (spawn_data.rs) {
@@ -400,6 +405,8 @@ engine.entity_shader_set_vec2(id, name, x, y)
 engine.entity_shader_set_vec4(id, name, x, y, z, w)
 engine.entity_shader_clear_uniform(id, name)
 engine.entity_shader_clear_uniforms(id)
+engine.entity_set_tint(id, r, g, b, a)  -- r,g,b,a are 0-255
+engine.entity_remove_tint(id)
 
 -- Entity Cloning (all contexts)
 engine.clone(source_key) -> EntityBuilder  -- Clone entity by WorldSignals key, apply overrides
@@ -459,6 +466,8 @@ engine.collision_entity_shader_set_vec2(id, name, x, y)
 engine.collision_entity_shader_set_vec4(id, name, x, y, z, w)
 engine.collision_entity_shader_clear_uniform(id, name)
 engine.collision_entity_shader_clear_uniforms(id)
+engine.collision_entity_set_tint(id, r, g, b, a)  -- r,g,b,a are 0-255
+engine.collision_entity_remove_tint(id)
 
 -- Phase Control
 engine.phase_transition(id, phase)
@@ -551,6 +560,7 @@ engine.post_process_clear_uniforms()
 :with_grid_layout(path, group, zindex)
 :with_particle_emitter(table)  -- { templates, shape, offset, particles_per_emission, emissions_per_second, emissions_remaining, arc, speed, ttl }
 :with_shader(shader_key, uniforms_table?)  -- { name = value, ... } where value is float, int, {x,y}, or {x,y,z,w}
+:with_tint(r, g, b, a)  -- color modulation (0-255); sprites: replaces WHITE; text: multiplies with text color
 :register_as(key)
 :build()
 
@@ -789,3 +799,4 @@ For features touching:
 31. ShaderStore is NON_SEND (contains raylib Shader); PostProcessShader is a regular Resource
 32. EntityShader uses the same ShaderStore; uniforms are per-entity and set before drawing each entity
 33. Entity shader commands (engine.entity_shader_*) have full parity with collision context (engine.collision_entity_shader_*)
+34. Tint component: for sprites replaces Color::WHITE (color multiply); for text multiplies with DynamicText.color; RGBA values 0-255

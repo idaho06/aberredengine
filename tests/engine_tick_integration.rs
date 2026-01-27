@@ -80,12 +80,13 @@ fn tick_collision_detector(world: &mut World) {
 
 #[test]
 fn movement_integrates_velocity_into_position() {
-    let mut world = make_world(0.5);
+    let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
     rb.velocity = Vector2 { x: 10.0, y: 0.0 };
 
     let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
 
+    update_world_time(&mut world, 0.5);
     tick_movement(&mut world);
 
     let pos = world.get::<MapPosition>(entity).unwrap();
@@ -95,12 +96,13 @@ fn movement_integrates_velocity_into_position() {
 
 #[test]
 fn movement_applies_acceleration_forces() {
-    let mut world = make_world(1.0);
+    let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
     rb.add_force("thrust", Vector2 { x: 2.0, y: 0.0 });
 
     let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
 
+    update_world_time(&mut world, 1.0);
     tick_movement(&mut world);
 
     let rb = world.get::<RigidBody>(entity).unwrap();
@@ -113,7 +115,7 @@ fn movement_applies_acceleration_forces() {
 
 #[test]
 fn movement_sets_signals_moving_and_speed_sq() {
-    let mut world = make_world(1.0);
+    let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
     rb.velocity = Vector2 { x: 3.0, y: 4.0 };
 
@@ -121,6 +123,7 @@ fn movement_sets_signals_moving_and_speed_sq() {
         .spawn((MapPosition::new(0.0, 0.0), rb, Signals::default()))
         .id();
 
+    update_world_time(&mut world, 1.0);
     tick_movement(&mut world);
 
     let signals = world.get::<Signals>(entity).unwrap();
@@ -130,7 +133,7 @@ fn movement_sets_signals_moving_and_speed_sq() {
 
 #[test]
 fn movement_skips_frozen_but_clears_signals() {
-    let mut world = make_world(1.0);
+    let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
     rb.velocity = Vector2 { x: 5.0, y: 0.0 };
     rb.freeze();
@@ -140,6 +143,7 @@ fn movement_skips_frozen_but_clears_signals() {
 
     let entity = world.spawn((MapPosition::new(1.0, 1.0), rb, signals)).id();
 
+    update_world_time(&mut world, 1.0);
     tick_movement(&mut world);
 
     let pos = world.get::<MapPosition>(entity).unwrap();

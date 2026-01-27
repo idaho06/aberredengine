@@ -450,6 +450,16 @@ function EntityBuilder:with_particle_emitter(config) end
 ---@return EntityBuilder
 function EntityBuilder:with_shader(shader_key, uniforms) end
 
+---Set color tint for rendering
+---For sprites: replaces Color::WHITE in draw calls
+---For text: multiplies with the existing text color
+---@param r integer Red (0-255)
+---@param g integer Green (0-255)
+---@param b integer Blue (0-255)
+---@param a integer Alpha (0-255)
+---@return EntityBuilder
+function EntityBuilder:with_tint(r, g, b, a) end
+
 ---Add position tween animation
 ---@param from_x number Start X
 ---@param from_y number Start Y
@@ -875,6 +885,22 @@ function engine.entity_shader_clear_uniform(entity_id, name) end
 ---Clear all user uniforms from an entity's shader
 ---@param entity_id integer Entity ID
 function engine.entity_shader_clear_uniforms(entity_id) end
+
+-- ==================== Entity Tint Commands ====================
+
+---Set or replace entity tint color
+---For sprites: tint replaces Color::WHITE in draw calls
+---For text: tint is multiplied with the existing text color
+---@param entity_id integer Entity ID
+---@param r integer Red (0-255)
+---@param g integer Green (0-255)
+---@param b integer Blue (0-255)
+---@param a integer Alpha (0-255)
+function engine.entity_set_tint(entity_id, r, g, b, a) end
+
+---Remove tint from an entity (return to normal rendering)
+---@param entity_id integer Entity ID
+function engine.entity_remove_tint(entity_id) end
 
 -- ==================== Phase Control ====================
 
@@ -1311,6 +1337,16 @@ function CollisionEntityBuilder:with_particle_emitter(config) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shader(shader_key, uniforms) end
 
+---Set color tint for rendering
+---For sprites: replaces Color::WHITE in draw calls
+---For text: multiplies with the existing text color
+---@param r integer Red (0-255)
+---@param g integer Green (0-255)
+---@param b integer Blue (0-255)
+---@param a integer Alpha (0-255)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tint(r, g, b, a) end
+
 ---Add Lua collision rule
 ---@param group_a string First group name
 ---@param group_b string Second group name
@@ -1444,6 +1480,22 @@ function engine.collision_entity_shader_clear_uniform(entity_id, name) end
 ---Clear all user uniforms from an entity's shader during collision handling
 ---@param entity_id integer Entity ID
 function engine.collision_entity_shader_clear_uniforms(entity_id) end
+
+-- ==================== Collision Entity Tint Commands ====================
+
+---Set or replace entity tint color during collision handling
+---For sprites: tint replaces Color::WHITE in draw calls
+---For text: tint is multiplied with the existing text color
+---@param entity_id integer Entity ID
+---@param r integer Red (0-255)
+---@param g integer Green (0-255)
+---@param b integer Blue (0-255)
+---@param a integer Alpha (0-255)
+function engine.collision_entity_set_tint(entity_id, r, g, b, a) end
+
+---Remove tint from an entity during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_remove_tint(entity_id) end
 
 -- ==================== Group Tracking ====================
 

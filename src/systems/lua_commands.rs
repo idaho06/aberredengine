@@ -48,6 +48,7 @@ use crate::components::signalbinding::SignalBinding;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
+use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
@@ -892,6 +893,20 @@ pub fn process_entity_commands(
                     shader.uniforms.clear();
                 }
             }
+            EntityCmd::SetTint {
+                entity_id,
+                r,
+                g,
+                b,
+                a,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(Tint::new(r, g, b, a));
+            }
+            EntityCmd::RemoveTint { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).remove::<Tint>();
+            }
         }
     }
 }
@@ -1345,6 +1360,11 @@ pub fn process_spawn_command(
         entity_commands.insert(entity_shader);
     }
 
+    // Tint
+    if let Some((r, g, b, a)) = cmd.tint {
+        entity_commands.insert(Tint::new(r, g, b, a));
+    }
+
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         world_signals.set_entity(&key, entity);
@@ -1595,6 +1615,11 @@ pub fn process_clone_command(
             entity_shader.uniforms.insert(Arc::from(name), value);
         }
         entity_commands.insert(entity_shader);
+    }
+
+    // Tint (override)
+    if let Some((r, g, b, a)) = overrides.tint {
+        entity_commands.insert(Tint::new(r, g, b, a));
     }
 
     // 5. Register NEW cloned entity if register_as is set
