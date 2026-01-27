@@ -73,13 +73,40 @@ pub fn render_system(
     )>,
     query_colliders: Query<(&BoxCollider, &MapPosition)>,
     query_positions: Query<(&MapPosition, Option<&Signals>)>,
-    query_map_dynamic_texts: Query<(Entity, &DynamicText, &MapPosition, &ZIndex, Option<&EntityShader>, Option<&Tint>)>,
+    query_map_dynamic_texts: Query<(
+        Entity,
+        &DynamicText,
+        &MapPosition,
+        &ZIndex,
+        Option<&EntityShader>,
+        Option<&Tint>,
+    )>,
     query_rigidbodies: Query<&RigidBody>,
     query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition, Option<&Tint>)>,
     query_screen_sprites: Query<(&Sprite, &ScreenPosition, Option<&Tint>)>,
     fonts: NonSend<FontStore>,
-    mut sprite_buffer: Local<Vec<(Entity, Sprite, MapPosition, ZIndex, Option<Scale>, Option<Rotation>, Option<EntityShader>, Option<Tint>)>>,
-    mut text_buffer: Local<Vec<(Entity, DynamicText, MapPosition, ZIndex, Option<EntityShader>, Option<Tint>)>>,
+    mut sprite_buffer: Local<
+        Vec<(
+            Entity,
+            Sprite,
+            MapPosition,
+            ZIndex,
+            Option<Scale>,
+            Option<Rotation>,
+            Option<EntityShader>,
+            Option<Tint>,
+        )>,
+    >,
+    mut text_buffer: Local<
+        Vec<(
+            Entity,
+            DynamicText,
+            MapPosition,
+            ZIndex,
+            Option<EntityShader>,
+            Option<Tint>,
+        )>,
+    >,
 ) {
     // Unpack bundled resources for easier access
     let camera = &res.camera;
@@ -130,12 +157,26 @@ pub fn render_system(
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((entity, s.clone(), *p, *z, maybe_scale.copied(), maybe_rot.copied(), maybe_shader.cloned(), maybe_tint.copied()))
+                    overlap.then_some((
+                        entity,
+                        s.clone(),
+                        *p,
+                        *z,
+                        maybe_scale.copied(),
+                        maybe_rot.copied(),
+                        maybe_shader.cloned(),
+                        maybe_tint.copied(),
+                    ))
                 },
             ));
 
-            sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _, _)| *z);
-            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint) in sprite_buffer.iter() {
+            // sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _, _)| *z);
+            sprite_buffer.sort_unstable_by(|a, b| {
+                a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint) in
+                sprite_buffer.iter()
+            {
                 if let Some(tex) = textures.get(&sprite.tex_key) {
                     let mut src = Rectangle {
                         x: sprite.offset.x,
@@ -204,22 +245,56 @@ pub fn render_system(
 
                                 // Set user-defined uniforms
                                 for (name, value) in &entity_shader.uniforms {
-                                    set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
+                                    set_uniform_value(
+                                        &mut entry.shader,
+                                        &mut entry.locations,
+                                        name,
+                                        value,
+                                    );
                                 }
 
                                 // Draw with shader
-                                let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                                let tint_color =
+                                    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
-                                d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+                                d_shader.draw_texture_pro(
+                                    tex,
+                                    src,
+                                    dest,
+                                    origin_scaled,
+                                    rotation,
+                                    tint_color,
+                                );
                             } else {
-                                eprintln!("[Render] Warning: Entity shader '{}' is invalid, rendering without shader", entity_shader.shader_key);
-                                let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
-                                d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+                                eprintln!(
+                                    "[Render] Warning: Entity shader '{}' is invalid, rendering without shader",
+                                    entity_shader.shader_key
+                                );
+                                let tint_color =
+                                    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                                d2.draw_texture_pro(
+                                    tex,
+                                    src,
+                                    dest,
+                                    origin_scaled,
+                                    rotation,
+                                    tint_color,
+                                );
                             }
                         } else {
-                            eprintln!("[Render] Warning: Entity shader '{}' not found, rendering without shader", entity_shader.shader_key);
+                            eprintln!(
+                                "[Render] Warning: Entity shader '{}' not found, rendering without shader",
+                                entity_shader.shader_key
+                            );
                             let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
-                            d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+                            d2.draw_texture_pro(
+                                tex,
+                                src,
+                                dest,
+                                origin_scaled,
+                                rotation,
+                                tint_color,
+                            );
                         }
                     } else {
                         let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
@@ -229,28 +304,42 @@ pub fn render_system(
             } // End sprite drawing in camera space
 
             text_buffer.clear();
-            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(|(entity, t, p, z, maybe_shader, maybe_tint)| {
-                let text_size = t.size();
+            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
+                |(entity, t, p, z, maybe_shader, maybe_tint)| {
+                    let text_size = t.size();
 
-                let min = Vector2 {
-                    x: p.pos.x,
-                    y: p.pos.y,
-                };
-                let max = Vector2 {
-                    x: min.x + text_size.x,
-                    y: min.y + text_size.y,
-                };
+                    let min = Vector2 {
+                        x: p.pos.x,
+                        y: p.pos.y,
+                    };
+                    let max = Vector2 {
+                        x: min.x + text_size.x,
+                        y: min.y + text_size.y,
+                    };
 
-                let overlap = !(max.x < view_min.x
-                    || min.x > view_max.x
-                    || max.y < view_min.y
-                    || min.y > view_max.y);
-                overlap.then_some((entity, t.clone(), *p, *z, maybe_shader.cloned(), maybe_tint.copied()))
-            }));
-            text_buffer.sort_unstable_by_key(|(_, _, _, z, _, _)| *z);
+                    let overlap = !(max.x < view_min.x
+                        || min.x > view_max.x
+                        || max.y < view_min.y
+                        || min.y > view_max.y);
+                    overlap.then_some((
+                        entity,
+                        t.clone(),
+                        *p,
+                        *z,
+                        maybe_shader.cloned(),
+                        maybe_tint.copied(),
+                    ))
+                },
+            ));
+            //text_buffer.sort_unstable_by_key(|(_, _, _, z, _, _)| *z);
+            text_buffer.sort_unstable_by(|a, b| {
+                a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+            });
             for (_entity, text, pos, _z, _maybe_shader, maybe_tint) in text_buffer.iter() {
                 if let Some(font) = fonts.get(&text.font) {
-                    let final_color = maybe_tint.map(|t| t.multiply(text.color)).unwrap_or(text.color);
+                    let final_color = maybe_tint
+                        .map(|t| t.multiply(text.color))
+                        .unwrap_or(text.color);
                     d2.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
                     if maybe_debug.is_some() {
                         d2.draw_rectangle_lines(
@@ -389,7 +478,9 @@ pub fn render_system(
 
         for (text, pos, maybe_tint) in query_screen_dynamic_texts.iter() {
             if let Some(font) = fonts.get(&text.font) {
-                let final_color = maybe_tint.map(|t| t.multiply(text.color)).unwrap_or(text.color);
+                let final_color = maybe_tint
+                    .map(|t| t.multiply(text.color))
+                    .unwrap_or(text.color);
                 d.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
                 if maybe_debug.is_some() {
                     d.draw_rectangle_lines(
@@ -464,8 +555,7 @@ pub fn render_system(
     let src = render_target.source_rect();
 
     // Destination rectangle (letterboxed to fit window)
-    let dest =
-        window_size.calculate_letterbox(render_target.game_width, render_target.game_height);
+    let dest = window_size.calculate_letterbox(render_target.game_width, render_target.game_height);
 
     // Full-screen destination for intermediate passes (no letterboxing)
     let full_dest = Rectangle {
@@ -661,7 +751,8 @@ pub fn render_system(
             } else {
                 // Draw to intermediate buffer
                 // Choose destination buffer (opposite of source for ping-pong)
-                let write_to_ping = matches!(source_buffer, SourceBuffer::Main | SourceBuffer::Pong);
+                let write_to_ping =
+                    matches!(source_buffer, SourceBuffer::Main | SourceBuffer::Pong);
 
                 if write_to_ping {
                     let dest_tex = render_target.ping.as_mut().unwrap();
@@ -737,11 +828,12 @@ fn set_standard_uniforms(
     dest: &Rectangle,
 ) {
     // Helper to get or cache uniform location
-    let get_loc = |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
-        *locations.entry(name.to_string()).or_insert_with(|| {
-            shader.get_shader_location(name)
-        })
-    };
+    let get_loc =
+        |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
+            *locations
+                .entry(name.to_string())
+                .or_insert_with(|| shader.get_shader_location(name))
+        };
 
     // uTime (float)
     let loc = get_loc(shader, locations, "uTime");
@@ -833,9 +925,9 @@ fn set_uniform_value(
     name: &str,
     value: &UniformValue,
 ) {
-    let loc = *locations.entry(name.to_string()).or_insert_with(|| {
-        shader.get_shader_location(name)
-    });
+    let loc = *locations
+        .entry(name.to_string())
+        .or_insert_with(|| shader.get_shader_location(name));
 
     if loc < 0 {
         return; // Uniform not found in shader, silently skip
@@ -901,11 +993,12 @@ fn set_entity_uniforms(
     rigidbody_query: &Query<&RigidBody>,
 ) {
     // Helper to get or cache uniform location
-    let get_loc = |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
-        *locations.entry(name.to_string()).or_insert_with(|| {
-            shader.get_shader_location(name)
-        })
-    };
+    let get_loc =
+        |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
+            *locations
+                .entry(name.to_string())
+                .or_insert_with(|| shader.get_shader_location(name))
+        };
 
     // uEntityId (int) - use bits representation truncated to i32
     let loc = get_loc(shader, locations, "uEntityId");

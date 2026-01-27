@@ -330,7 +330,7 @@ pub struct SpawnCmd {
     /// Dynamic text component data
     pub text: Option<TextData>,
     /// Z-index for render ordering
-    pub zindex: Option<i32>,
+    pub zindex: Option<f32>,
     /// RigidBody velocity data
     pub rigidbody: Option<RigidBodyData>,
     /// BoxCollider data
@@ -362,7 +362,7 @@ pub struct SpawnCmd {
     /// SignalBinding component data (key, optional format)
     pub signal_binding: Option<(String, Option<String>)>,
     /// GridLayout component data (path, group, zindex)
-    pub grid_layout: Option<(String, String, i32)>,
+    pub grid_layout: Option<(String, String, f32)>,
     /// TweenPosition component data
     pub tween_position: Option<TweenPositionData>,
     /// TweenRotation component data

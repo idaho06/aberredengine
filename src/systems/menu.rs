@@ -132,7 +132,7 @@ pub fn menu_spawn_system(
 
             // For world-space, add ZIndex to ALL items (needed when they become visible)
             if !use_screen_space {
-                ecmd.insert(ZIndex(23));
+                ecmd.insert(ZIndex(23.0));
             }
 
             // Only add position component for visible items
@@ -164,12 +164,16 @@ pub fn menu_spawn_system(
         // Spawn "..." indicators if visible_count is set
         if let Some(vc) = visible_count {
             // Top indicator (shown when scroll_offset > 0)
-            let mut top_cmd = commands
-                .spawn(DynamicText::new("...", font_string.clone(), font_size, normal_color));
+            let mut top_cmd = commands.spawn(DynamicText::new(
+                "...",
+                font_string.clone(),
+                font_size,
+                normal_color,
+            ));
             top_cmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             // For world-space, add ZIndex always (needed when indicator becomes visible)
             if !use_screen_space {
-                top_cmd.insert(ZIndex(23));
+                top_cmd.insert(ZIndex(23.0));
             }
             let top_indicator = top_cmd.id();
             // Position only if needed (scroll_offset > 0)
@@ -179,7 +183,9 @@ pub fn menu_spawn_system(
                     y: origin.y - item_spacing,
                 };
                 if use_screen_space {
-                    commands.entity(top_indicator).insert(ScreenPosition { pos });
+                    commands
+                        .entity(top_indicator)
+                        .insert(ScreenPosition { pos });
                 } else {
                     commands.entity(top_indicator).insert(MapPosition { pos });
                 }
@@ -187,12 +193,16 @@ pub fn menu_spawn_system(
             menu.top_indicator_entity = Some(top_indicator);
 
             // Bottom indicator (shown when more items below)
-            let mut bottom_cmd = commands
-                .spawn(DynamicText::new("...", font_string.clone(), font_size, normal_color));
+            let mut bottom_cmd = commands.spawn(DynamicText::new(
+                "...",
+                font_string.clone(),
+                font_size,
+                normal_color,
+            ));
             bottom_cmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             // For world-space, add ZIndex always (needed when indicator becomes visible)
             if !use_screen_space {
-                bottom_cmd.insert(ZIndex(23));
+                bottom_cmd.insert(ZIndex(23.0));
             }
             let bottom_indicator = bottom_cmd.id();
             // Position only if needed (visible_end < items.len())
@@ -202,9 +212,13 @@ pub fn menu_spawn_system(
                     y: origin.y + (vc as f32) * item_spacing,
                 };
                 if use_screen_space {
-                    commands.entity(bottom_indicator).insert(ScreenPosition { pos });
+                    commands
+                        .entity(bottom_indicator)
+                        .insert(ScreenPosition { pos });
                 } else {
-                    commands.entity(bottom_indicator).insert(MapPosition { pos });
+                    commands
+                        .entity(bottom_indicator)
+                        .insert(MapPosition { pos });
                 }
             }
             menu.bottom_indicator_entity = Some(bottom_indicator);
@@ -239,7 +253,7 @@ pub fn menu_spawn_system(
                 commands.entity(cursor_entity).insert(MapPosition {
                     pos: cursor_position,
                 });
-                commands.entity(cursor_entity).insert(ZIndex(23));
+                commands.entity(cursor_entity).insert(ZIndex(23.0));
             }
             eprintln!(
                 "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
@@ -474,7 +488,9 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
                 if menu.use_screen_space {
-                    commands.entity(entity).insert(ScreenPosition { pos: new_pos });
+                    commands
+                        .entity(entity)
+                        .insert(ScreenPosition { pos: new_pos });
                 } else {
                     commands.entity(entity).insert(MapPosition { pos: new_pos });
                 }
@@ -520,7 +536,9 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
             };
             if menu.use_screen_space {
-                commands.entity(bottom_entity).insert(ScreenPosition { pos });
+                commands
+                    .entity(bottom_entity)
+                    .insert(ScreenPosition { pos });
             } else {
                 commands.entity(bottom_entity).insert(MapPosition { pos });
             }
@@ -588,10 +606,7 @@ pub fn menu_selection_observer(
                 eprintln!("[Lua] Error in menu callback '{}': {}", callback_name, e);
             }
         } else {
-            eprintln!(
-                "[Lua] Warning: menu callback '{}' not found",
-                callback_name
-            );
+            eprintln!("[Lua] Warning: menu callback '{}' not found", callback_name);
         }
         return; // Callback handles everything, skip MenuActions
     }

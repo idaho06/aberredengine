@@ -197,12 +197,12 @@ LuaTimer { duration: f32, elapsed: f32, callback: String }
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
 Menu { items: Vec<MenuItem>, selected: usize, actions: FxHashMap<String, MenuAction>, on_select_callback: Option<String>, ... }
-GridLayout { path: String, group: String, zindex: i32 }
+GridLayout { path: String, group: String, z_index: f32 }
 Group { name: String }
 Persistent (marker)
 Rotation { angle: f32 }
 Scale { x: f32, y: f32 }
-ZIndex { z: i32 }
+ZIndex(f32)
 InputControlled { up_velocity, down_velocity, left_velocity, right_velocity: Vector2 }
 AccelerationControlled { up_acceleration, down_acceleration, left_acceleration, right_acceleration: Vector2 }
 MouseControlled { follow_x: bool, follow_y: bool }
@@ -365,7 +365,7 @@ engine.set_entity(key, entity_id)
 engine.remove_entity(key)
 
 -- Entity Commands (all contexts - phase/timer/collision/update callbacks)
--- All entity commands work in all Lua callback contexts
+-- All entity commands must work in all Lua callback contexts
 engine.entity_set_velocity(id, vx, vy)
 engine.entity_set_rotation(id, deg)
 engine.entity_set_scale(id, sx, sy)

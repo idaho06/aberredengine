@@ -591,11 +591,17 @@ Flip sprite horizontally and/or vertically (requires `:with_sprite()`).
 
 #### `:with_zindex(z)`
 
-Set rendering order (higher values render on top).
+Set rendering order (higher values render on top). Accepts floating-point values for fine-grained control.
+
+**Parameters:**
+
+- `z` (number): Z-index value (supports decimals, e.g., `1.5` renders between `1` and `2`)
 
 ```lua
-:with_zindex(10)   -- Game entities
-:with_zindex(100)  -- UI elements
+:with_zindex(10)     -- Game entities
+:with_zindex(100)    -- UI elements
+:with_zindex(10.5)   -- Between two existing layers
+:with_zindex(-1)     -- Behind default (0) layer
 ```
 
 #### `:with_velocity(vx, vy)`

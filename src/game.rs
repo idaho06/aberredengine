@@ -77,18 +77,18 @@ use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
-use crate::resources::systemsstore::SystemsStore;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
+use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_animation_command, process_asset_command, process_audio_command,
+    EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_clone_command, process_entity_commands, process_group_command,
     process_phase_command, process_render_command, process_signal_command, process_spawn_command,
-    process_tilemap_command, EntityCmdQueries,
+    process_tilemap_command,
 };
 //use rand::Rng;
 
@@ -155,10 +155,10 @@ fn spawn_tiles(
     // how many tiles per row in the texture
     let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
 
-    let layer_count = tilemap.layers.len() as i32;
+    let layer_count = tilemap.layers.len() as f32;
     // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
     for (layer_index, layer) in tilemap.layers.iter().enumerate() {
-        let z = -(layer_count - (layer_index as i32));
+        let z = -(layer_count - (layer_index as f32));
 
         for pos in layer.positions.iter() {
             // world position = tile coords * tile_size

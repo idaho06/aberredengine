@@ -21,14 +21,14 @@ pub struct GridLayout {
     /// Group
     pub group: String,
     /// Z-Index
-    pub z_index: i32,
+    pub z_index: f32,
     /// whether this layout has been initialized
     pub spawned: bool,
 }
 
 impl GridLayout {
     /// Creates a new GridLayout component.
-    pub fn new(path: impl Into<String>, group: impl Into<String>, z_index: i32) -> Self {
+    pub fn new(path: impl Into<String>, group: impl Into<String>, z_index: f32) -> Self {
         Self {
             path: path.into(),
             group: group.into(),
