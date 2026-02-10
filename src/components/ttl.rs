@@ -52,3 +52,32 @@ impl Ttl {
         Ttl { remaining: seconds }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    #[test]
+    fn test_new() {
+        let ttl = Ttl::new(5.0);
+        assert!(approx_eq(ttl.remaining, 5.0));
+    }
+
+    #[test]
+    fn test_zero_ttl() {
+        let ttl = Ttl::new(0.0);
+        assert!(approx_eq(ttl.remaining, 0.0));
+    }
+
+    #[test]
+    fn test_negative_ttl() {
+        let ttl = Ttl::new(-1.0);
+        assert!(approx_eq(ttl.remaining, -1.0));
+    }
+}

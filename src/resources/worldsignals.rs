@@ -318,3 +318,275 @@ impl WorldSignals {
         Arc::clone(&self.snapshot)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    #[test]
+    fn test_default_all_empty() {
+        let ws = WorldSignals::default();
+        assert!(ws.scalars.is_empty());
+        assert!(ws.integers.is_empty());
+        assert!(ws.strings.is_empty());
+        assert!(ws.flags.is_empty());
+        assert!(ws.entities.is_empty());
+        assert!(!ws.dirty);
+    }
+
+    // --- Scalars ---
+
+    #[test]
+    fn test_set_and_get_scalar() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("speed", 42.0);
+        assert_eq!(ws.get_scalar("speed"), Some(42.0));
+    }
+
+    #[test]
+    fn test_scalar_missing_returns_none() {
+        let ws = WorldSignals::default();
+        assert_eq!(ws.get_scalar("nope"), None);
+    }
+
+    #[test]
+    fn test_clear_scalar() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("x", 1.0);
+        let removed = ws.clear_scalar("x");
+        assert!(approx_eq(removed.unwrap(), 1.0));
+        assert_eq!(ws.get_scalar("x"), None);
+    }
+
+    #[test]
+    fn test_clear_scalar_nonexistent() {
+        let mut ws = WorldSignals::default();
+        assert_eq!(ws.clear_scalar("nope"), None);
+    }
+
+    // --- Integers ---
+
+    #[test]
+    fn test_set_and_get_integer() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("score", 100);
+        assert_eq!(ws.get_integer("score"), Some(100));
+    }
+
+    #[test]
+    fn test_integer_missing_returns_none() {
+        let ws = WorldSignals::default();
+        assert_eq!(ws.get_integer("nope"), None);
+    }
+
+    #[test]
+    fn test_clear_integer() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("lives", 3);
+        let removed = ws.clear_integer("lives");
+        assert_eq!(removed, Some(3));
+        assert_eq!(ws.get_integer("lives"), None);
+    }
+
+    // --- Strings ---
+
+    #[test]
+    fn test_set_and_get_string() {
+        let mut ws = WorldSignals::default();
+        ws.set_string("scene", "menu");
+        assert_eq!(ws.get_string("scene").map(|s| s.as_str()), Some("menu"));
+    }
+
+    #[test]
+    fn test_string_missing_returns_none() {
+        let ws = WorldSignals::default();
+        assert_eq!(ws.get_string("nope"), None);
+    }
+
+    #[test]
+    fn test_remove_string() {
+        let mut ws = WorldSignals::default();
+        ws.set_string("scene", "menu");
+        let removed = ws.remove_string("scene");
+        assert_eq!(removed.as_deref(), Some("menu"));
+        assert_eq!(ws.get_string("scene"), None);
+    }
+
+    #[test]
+    fn test_remove_string_nonexistent() {
+        let mut ws = WorldSignals::default();
+        assert_eq!(ws.remove_string("nope"), None);
+    }
+
+    // --- Flags ---
+
+    #[test]
+    fn test_set_and_has_flag() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("paused");
+        assert!(ws.has_flag("paused"));
+    }
+
+    #[test]
+    fn test_clear_flag() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("paused");
+        ws.clear_flag("paused");
+        assert!(!ws.has_flag("paused"));
+    }
+
+    #[test]
+    fn test_clear_flag_nonexistent() {
+        let mut ws = WorldSignals::default();
+        ws.clear_flag("nope"); // should not panic
+        assert!(!ws.has_flag("nope"));
+    }
+
+    // --- Entities ---
+
+    #[test]
+    fn test_set_and_get_entity() {
+        let mut ws = WorldSignals::default();
+        let entity = Entity::from_bits(42);
+        ws.set_entity("player", entity);
+        assert_eq!(ws.get_entity("player"), Some(&entity));
+    }
+
+    #[test]
+    fn test_remove_entity() {
+        let mut ws = WorldSignals::default();
+        let entity = Entity::from_bits(42);
+        ws.set_entity("player", entity);
+        let removed = ws.remove_entity("player");
+        assert_eq!(removed, Some(entity));
+        assert_eq!(ws.get_entity("player"), None);
+    }
+
+    #[test]
+    fn test_remove_entity_nonexistent() {
+        let mut ws = WorldSignals::default();
+        assert_eq!(ws.remove_entity("nope"), None);
+    }
+
+    // --- Group counts ---
+
+    #[test]
+    fn test_set_and_get_group_count() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 5);
+        assert_eq!(ws.get_group_count("enemy"), Some(5));
+    }
+
+    #[test]
+    fn test_set_group_count_noop_same_value() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 5);
+        // Clear dirty flag via snapshot
+        ws.snapshot();
+        ws.set_group_count("enemy", 5); // same value, should not mark dirty
+        assert!(!ws.dirty);
+    }
+
+    #[test]
+    fn test_set_group_count_marks_dirty_on_change() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 5);
+        ws.snapshot();
+        ws.set_group_count("enemy", 6);
+        assert!(ws.dirty);
+    }
+
+    #[test]
+    fn test_clear_group_counts() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 5);
+        ws.set_group_count("bullet", 10);
+        ws.set_integer("score", 100); // non-group integer
+        ws.clear_group_counts();
+        assert_eq!(ws.get_group_count("enemy"), None);
+        assert_eq!(ws.get_group_count("bullet"), None);
+        assert_eq!(ws.get_integer("score"), Some(100)); // preserved
+    }
+
+    #[test]
+    fn test_clear_integer_prefix() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("prefix_a", 1);
+        ws.set_integer("prefix_b", 2);
+        ws.set_integer("other", 3);
+        ws.clear_integer_prefix("prefix_");
+        assert_eq!(ws.get_integer("prefix_a"), None);
+        assert_eq!(ws.get_integer("prefix_b"), None);
+        assert_eq!(ws.get_integer("other"), Some(3));
+    }
+
+    #[test]
+    fn test_group_counts_extraction() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 5);
+        ws.set_group_count("bullet", 10);
+        let counts = ws.group_counts();
+        assert_eq!(counts.get("enemy"), Some(&5u32));
+        assert_eq!(counts.get("bullet"), Some(&10u32));
+        assert_eq!(counts.len(), 2);
+    }
+
+    // --- Snapshot system ---
+
+    #[test]
+    fn test_snapshot_after_mutation() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("x", 1.0);
+        ws.set_integer("n", 42);
+        ws.set_string("s", "hello");
+        ws.set_flag("f");
+        let snap = ws.snapshot();
+        assert_eq!(snap.scalars.get("x").copied(), Some(1.0));
+        assert_eq!(snap.integers.get("n").copied(), Some(42));
+        assert_eq!(snap.strings.get("s").map(|s| s.as_str()), Some("hello"));
+        assert!(snap.flags.contains("f"));
+    }
+
+    #[test]
+    fn test_snapshot_without_mutation_returns_same_arc() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("x", 1.0);
+        let snap1 = ws.snapshot();
+        let snap2 = ws.snapshot();
+        assert!(Arc::ptr_eq(&snap1, &snap2));
+    }
+
+    #[test]
+    fn test_snapshot_rebuilds_after_mutation() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("x", 1.0);
+        let snap1 = ws.snapshot();
+        ws.set_scalar("x", 2.0);
+        let snap2 = ws.snapshot();
+        assert!(!Arc::ptr_eq(&snap1, &snap2));
+        assert!(approx_eq(snap2.scalars["x"], 2.0));
+    }
+
+    #[test]
+    fn test_snapshot_group_counts() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 3);
+        let snap = ws.snapshot();
+        assert_eq!(snap.group_counts.get("enemy"), Some(&3u32));
+    }
+
+    #[test]
+    fn test_snapshot_entities() {
+        let mut ws = WorldSignals::default();
+        let entity = Entity::from_bits(7);
+        ws.set_entity("player", entity);
+        let snap = ws.snapshot();
+        assert_eq!(snap.entities.get("player"), Some(&entity.to_bits()));
+    }
+}

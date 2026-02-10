@@ -143,3 +143,91 @@ impl Default for ParticleEmitter {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    #[test]
+    fn test_particle_emitter_default_templates_empty() {
+        let e = ParticleEmitter::default();
+        assert!(e.templates.is_empty());
+    }
+
+    #[test]
+    fn test_particle_emitter_default_shape_is_point() {
+        let e = ParticleEmitter::default();
+        assert!(matches!(e.shape, EmitterShape::Point));
+    }
+
+    #[test]
+    fn test_particle_emitter_default_values() {
+        let e = ParticleEmitter::default();
+        assert!(approx_eq(e.offset.x, 0.0));
+        assert!(approx_eq(e.offset.y, 0.0));
+        assert_eq!(e.particles_per_emission, 1);
+        assert!(approx_eq(e.emissions_per_second, 10.0));
+        assert_eq!(e.emissions_remaining, 100);
+        assert!(approx_eq(e.arc_degrees.0, 0.0));
+        assert!(approx_eq(e.arc_degrees.1, 360.0));
+        assert!(approx_eq(e.speed_range.0, 50.0));
+        assert!(approx_eq(e.speed_range.1, 100.0));
+        assert!(approx_eq(e.time_since_emit, 0.0));
+    }
+
+    #[test]
+    fn test_emitter_shape_default_is_point() {
+        let shape = EmitterShape::default();
+        assert!(matches!(shape, EmitterShape::Point));
+    }
+
+    #[test]
+    fn test_emitter_shape_rect() {
+        let shape = EmitterShape::Rect {
+            width: 10.0,
+            height: 20.0,
+        };
+        if let EmitterShape::Rect { width, height } = shape {
+            assert!(approx_eq(width, 10.0));
+            assert!(approx_eq(height, 20.0));
+        } else {
+            panic!("Expected Rect variant");
+        }
+    }
+
+    #[test]
+    fn test_ttl_spec_default_is_none() {
+        let ttl = TtlSpec::default();
+        assert!(matches!(ttl, TtlSpec::None));
+    }
+
+    #[test]
+    fn test_ttl_spec_fixed() {
+        let ttl = TtlSpec::Fixed(2.5);
+        if let TtlSpec::Fixed(v) = ttl {
+            assert!(approx_eq(v, 2.5));
+        } else {
+            panic!("Expected Fixed variant");
+        }
+    }
+
+    #[test]
+    fn test_ttl_spec_range() {
+        let ttl = TtlSpec::Range {
+            min: 0.5,
+            max: 1.5,
+        };
+        if let TtlSpec::Range { min, max } = ttl {
+            assert!(approx_eq(min, 0.5));
+            assert!(approx_eq(max, 1.5));
+        } else {
+            panic!("Expected Range variant");
+        }
+    }
+}
+

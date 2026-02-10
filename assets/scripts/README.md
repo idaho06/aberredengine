@@ -102,11 +102,11 @@ function M.spawn()
 end
 
 -- Called every frame while this scene is active (runs at 60 FPS)
-function on_update_level01(dt)
-    -- dt: delta time in seconds
+function on_update_level01(input, dt)
+    -- input: input state table, dt: delta time in seconds
 
     -- Handle input for this scene
-    if engine.is_action_back_just_pressed() then
+    if input.digital.back.just_pressed then
         engine.set_string("scene", "menu")
         engine.set_flag("switch_scene")
     end
@@ -297,9 +297,9 @@ Each digital button has three boolean properties:
 | `left` | A, Left Arrow |
 | `right` | D, Right Arrow |
 | `action_1` | Space |
-| `action_2` | Left Shift |
+| `action_2` | Enter |
 | `back` | Escape |
-| `special` | Enter |
+| `special` | F12 |
 
 ### Usage Examples
 
@@ -944,6 +944,7 @@ Set a Lua callback function for menu selection (requires `:with_menu()`).
 When a callback is set, it handles **all** menu selections and `MenuActions` (`:with_menu_action_*`) are ignored. This provides full flexibility for custom menu behavior.
 
 The callback receives a context table with:
+
 - `menu_id` (u64) - Entity ID of the menu
 - `item_id` (string) - ID of the selected item (e.g., "start_game")
 - `item_index` (integer) - 0-based index of the selected item
@@ -985,6 +986,7 @@ When set, only `count` items are visible at a time. Navigation is bounded (no wr
 - `count` - Maximum number of visible items
 
 **Behavior:**
+
 - Navigation up/down is bounded (no wrap-around when scrolling enabled)
 - Scrolling triggers automatically when selection moves outside visible range
 - "..." indicators show when more items exist above or below
@@ -2417,8 +2419,8 @@ function on_ball_player(ctx)
     local player_signals = ctx.b.signals
 
     local sides = ctx.sides            -- Collision sides
-    -- sides.a contains: "top", "bottom", "left", "right"
-    -- sides.b contains: "top", "bottom", "left", "right"
+    -- sides.a is a 1-indexed array of strings: {"left", "top", ...}
+    -- sides.b is a 1-indexed array of strings: {"right", ...}
 
     -- Manipulate entities using collision-specific functions
     engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
@@ -2523,10 +2525,10 @@ function on_ball_brick(ctx)
     engine.collision_entity_despawn(ctx.b.id)
 end
 
-function despawn_particle(entity_id)
-    -- Note: This timer callback runs in regular context, but entity_despawn
-    -- doesn't exist in regular API. Use phase callbacks or spawn entities
-    -- with a fixed lifetime instead.
+function despawn_particle(ctx, input)
+    -- Timer callbacks receive (ctx, input) - use ctx.id for the entity
+    engine.entity_despawn(ctx.id)
+    engine.entity_remove_lua_timer(ctx.id)
 end
 ```
 
@@ -2599,16 +2601,18 @@ Set an entity's velocity during collision handling. Essential for implementing b
 function on_ball_wall(ctx)
     local ball_id = ctx.a.id
     local ball_vel = ctx.a.vel
-    local sides = ctx.sides.a
 
     local new_vx = ball_vel.x
     local new_vy = ball_vel.y
 
-    if sides.left or sides.right then
-        new_vx = -new_vx
-    end
-    if sides.top or sides.bottom then
-        new_vy = -new_vy
+    -- sides.a is a 1-indexed array of strings like {"left", "top"}
+    for _, side in ipairs(ctx.sides.a) do
+        if side == "left" or side == "right" then
+            new_vx = -new_vx
+        end
+        if side == "top" or side == "bottom" then
+            new_vy = -new_vy
+        end
     end
 
     engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
@@ -3179,15 +3183,17 @@ function on_ball_brick(ctx)
     end
 
     -- Bounce ball
-    local sides = ctx.sides.a
     local new_vx = ball_vel.x
     local new_vy = ball_vel.y
 
-    if sides.top or sides.bottom then
-        new_vy = -new_vy
-    end
-    if sides.left or sides.right then
-        new_vx = -new_vx
+    -- sides.a is a 1-indexed array of strings like {"left", "top"}
+    for _, side in ipairs(ctx.sides.a) do
+        if side == "top" or side == "bottom" then
+            new_vy = -new_vy
+        end
+        if side == "left" or side == "right" then
+            new_vx = -new_vx
+        end
     end
 
     engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
@@ -3353,17 +3359,20 @@ function on_setup()
     -- Load fragment-only shaders (most common for post-processing)
     engine.load_shader("invert", nil, "./assets/shaders/invert.fs")
     engine.load_shader("wave", nil, "./assets/shaders/wave.fs")
-    engine.load_shader("crt", nil, "./assets/shaders/crt.fs")
+    engine.load_shader("crt", nil, "./assets/shaders/crt2.fs")
 end
 ```
 
 ### Activating Shaders
 
-Use `engine.post_process_shader(id)` to enable a shader, or pass `nil` to disable:
+Use `engine.post_process_shader()` to enable shaders (pass a table of shader IDs for single or multi-pass chaining), or pass `nil` to disable:
 
 ```lua
--- Enable post-process shader
-engine.post_process_shader("invert")
+-- Enable single post-process shader
+engine.post_process_shader({"invert"})
+
+-- Chain multiple shaders (applied in order, ping-pong buffers for intermediate passes)
+engine.post_process_shader({"bloom", "crt"})
 
 -- Disable post-processing
 engine.post_process_shader(nil)
@@ -3437,7 +3446,7 @@ void main() {
 -- In Lua
 function on_switch_scene(scene)
     if scene == "level01" then
-        engine.post_process_shader("wave")
+        engine.post_process_shader({"wave"})
     else
         engine.post_process_shader(nil)
     end
@@ -3631,7 +3640,7 @@ Entity shaders also apply to DynamicText entities:
 
 ```lua
 engine.spawn()
-    :with_dynamic_text("GAME OVER", "arcade", 32, 255, 255, 255)
+    :with_text("GAME OVER", "arcade", 32, 255, 255, 255, 255)
     :with_position(400, 300)
     :with_shader("glow", { uIntensity = 0.5 })
     :build()

@@ -47,3 +47,64 @@ impl Default for Tint {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        let t = Tint::new(100, 150, 200, 255);
+        assert_eq!(t.color.r, 100);
+        assert_eq!(t.color.g, 150);
+        assert_eq!(t.color.b, 200);
+        assert_eq!(t.color.a, 255);
+    }
+
+    #[test]
+    fn test_default_is_white() {
+        let t = Tint::default();
+        assert_eq!(t.color.r, 255);
+        assert_eq!(t.color.g, 255);
+        assert_eq!(t.color.b, 255);
+        assert_eq!(t.color.a, 255);
+    }
+
+    #[test]
+    fn test_multiply_with_white_is_identity() {
+        let t = Tint::new(100, 150, 200, 255);
+        let result = t.multiply(Color::WHITE);
+        assert_eq!(result.r, 100);
+        assert_eq!(result.g, 150);
+        assert_eq!(result.b, 200);
+        assert_eq!(result.a, 255);
+    }
+
+    #[test]
+    fn test_multiply_with_black_zeroes_out() {
+        let t = Tint::new(100, 150, 200, 255);
+        let result = t.multiply(Color::new(0, 0, 0, 0));
+        assert_eq!(result.r, 0);
+        assert_eq!(result.g, 0);
+        assert_eq!(result.b, 0);
+        assert_eq!(result.a, 0);
+    }
+
+    #[test]
+    fn test_multiply_partial_values() {
+        let t = Tint::new(255, 255, 255, 255);
+        let result = t.multiply(Color::new(128, 64, 32, 255));
+        assert_eq!(result.r, 128);
+        assert_eq!(result.g, 64);
+        assert_eq!(result.b, 32);
+        assert_eq!(result.a, 255);
+    }
+
+    #[test]
+    fn test_copy_trait() {
+        let t = Tint::new(10, 20, 30, 40);
+        let t2 = t;
+        assert_eq!(t.color.r, 10);
+        assert_eq!(t2.color.r, 10);
+    }
+}

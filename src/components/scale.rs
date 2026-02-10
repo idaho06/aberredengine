@@ -27,3 +27,49 @@ impl Default for Scale {
         Self::new(1.0, 1.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    #[test]
+    fn test_new() {
+        let s = Scale::new(2.0, 3.0);
+        assert!(approx_eq(s.scale.x, 2.0));
+        assert!(approx_eq(s.scale.y, 3.0));
+    }
+
+    #[test]
+    fn test_default_is_one_one() {
+        let s = Scale::default();
+        assert!(approx_eq(s.scale.x, 1.0));
+        assert!(approx_eq(s.scale.y, 1.0));
+    }
+
+    #[test]
+    fn test_non_uniform_scale() {
+        let s = Scale::new(0.5, 2.0);
+        assert!(approx_eq(s.scale.x, 0.5));
+        assert!(approx_eq(s.scale.y, 2.0));
+    }
+
+    #[test]
+    fn test_zero_scale() {
+        let s = Scale::new(0.0, 0.0);
+        assert!(approx_eq(s.scale.x, 0.0));
+        assert!(approx_eq(s.scale.y, 0.0));
+    }
+
+    #[test]
+    fn test_negative_scale() {
+        let s = Scale::new(-1.0, -1.0);
+        assert!(approx_eq(s.scale.x, -1.0));
+        assert!(approx_eq(s.scale.y, -1.0));
+    }
+}

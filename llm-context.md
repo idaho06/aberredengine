@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-01-27 (synced with codebase)
+# Last updated: 2026-02-09 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -13,10 +13,10 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-01-27)
+## STATUS (2026-02-09)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
-- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg); music/tilemap/brick assets are not loaded.
+- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg, explosion01.ogg); music/tilemap/brick assets are not loaded.
 - Lua on_enter_play seeds signals (score, high_score, lives, level) and sets scene="menu"; scene switches via WorldSignals flag "switch_scene".
 - ParticleEmitter component and system - emits particles by cloning template entities with configurable shape, arc, speed, TTL. Uses fastrand for RNG. Animation reset to frame 0 on clones.
 - TTL (Time-to-Live) component and system - automatic entity despawn after duration, respects time scale.
@@ -26,7 +26,7 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 - EntityShader component - per-entity shader support for custom rendering effects on individual sprites/text.
 - Tint component - color modulation for sprites (replaces Color::WHITE) and text (multiplies with text color).
 - Multi-pass post-processing shader chain support.
-- Shaders loaded: invert, wave, bloom, outline.
+- Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -68,7 +68,7 @@ src/
 │   ├── movement.rs            # Physics: accel→vel→pos, friction, max_speed
 │   ├── collision.rs           # AABB detection, Lua callback dispatch
 │   ├── render.rs              # Raylib drawing, camera, debug overlays, letterboxing
-│   ├── input.rs               # Poll keyboard state
+│   ├── input.rs               # Poll keyboard state, emit InputEvent for all actions
 │   ├── inputsimplecontroller.rs    # Input→velocity
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
@@ -123,7 +123,7 @@ src/
     ├── mod.rs                 # Re-exports
     ├── collision.rs           # CollisionEvent
     ├── gamestate.rs           # GameStateTransition
-    ├── input.rs               # InputAction events
+    ├── input.rs               # InputEvent + InputAction enum (all directions, actions, special)
     ├── menu.rs                # MenuSelection
     ├── luatimer.rs            # LuaTimerEvent
     ├── switchdebug.rs         # DebugToggle (F11)
@@ -145,7 +145,7 @@ assets/
 ├── textures/                  # Game art set
 │   └── *.png                  # Mostly png files, but can be any image format supported by raylib
 ├── shaders/                   # OpenGL 3.3 Shader files
-│   ├── *.fs                   # Fragment shaders
+│   ├── *.fs                   # Fragment shaders (invert, wave, bloom, outline, crt, crt2)
 │   └── *.vs                   # Vertex shaders
 ├── audio/                     # audio files
 │   ├── *.xm                   # xm, wav, ogg, and any other sound format supported by raylib
@@ -218,6 +218,8 @@ GameConfig { render_width, render_height, window_width, window_height, target_fp
 WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
 InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }
 BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
+InputEvent { action: InputAction, pressed: bool } -- triggered for every action press/release
+InputAction { MainDirectionUp/Down/Left/Right, SecondaryDirectionUp/Down/Left/Right, Back, Action1, Action2, Special }
 InputSnapshot { digital: DigitalInputs, analog: AnalogInputs } - frozen snapshot for Lua callbacks
 DigitalInputs { up, down, left, right, action_1, action_2, back, special: DigitalButtonState }
 DigitalButtonState { pressed: bool, just_pressed: bool, just_released: bool }
@@ -682,7 +684,7 @@ For systems that need to be called with a specific entity (like menu_despawn):
 3. Export from components/mod.rs
 4. Add to SpawnComponentData if spawnable (spawn_data.rs)
 5. Add builder method in entity_builder.rs
-6. Process in process_spawn_command (lua_commands.rs)
+6. Process in apply_components (lua_commands.rs) — shared by both spawn and clone
 
 ### Adding a new System
 
@@ -770,7 +772,7 @@ For features touching:
 2. All entity commands (engine.entity_*) work in all contexts (no collision-only restrictions)
 3. Collision-specific commands (engine.collision_*) use separate queues that drain immediately
 4. Use engine.collision_spawn() in collision callbacks for proper timing (not engine.spawn())
-5. SpawnCmd processed in lua_commands.rs, defined in spawn_data.rs
+5. SpawnCmd processed by apply_components() in lua_commands.rs (shared by spawn and clone), defined in spawn_data.rs
 6. Entity IDs are u64 in Lua (Entity::to_bits)
 7. Raylib Vector2 methods differ from other math libs
 8. Signals component auto-created if using :with_signal_* builders
@@ -800,3 +802,5 @@ For features touching:
 32. EntityShader uses the same ShaderStore; uniforms are per-entity and set before drawing each entity
 33. Entity shader commands (engine.entity_shader_*) have full parity with collision context (engine.collision_entity_shader_*)
 34. Tint component: for sprites replaces Color::WHITE (color multiply); for text multiplies with DynamicText.color; RGBA values 0-255
+35. Input system emits InputEvent for ALL actions (directions, action_1/2, back, special) with pressed/released - systems can observe these instead of polling InputState
+36. The "crt" shader is loaded from crt2.fs (not crt.fs) in setup.lua

@@ -95,6 +95,7 @@ pub fn update_input_state(
         input.action_1.just_released = false;
     }
     if is_key_pressed(input.action_2.key_binding) {
+        eprintln!("update_input_state: Action 2 key pressed");
         input.action_2.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Action2,
@@ -104,6 +105,7 @@ pub fn update_input_state(
         input.action_2.just_pressed = false;
     }
     if is_key_released(input.action_2.key_binding) {
+        eprintln!("update_input_state: Action 2 key released");
         input.action_2.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Action2,

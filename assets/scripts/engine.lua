@@ -188,8 +188,8 @@ function EntityBuilder:with_sprite_offset(offset_x, offset_y) end
 ---@return EntityBuilder
 function EntityBuilder:with_sprite_flip(flip_h, flip_v) end
 
----Set entity's Z-index for render order
----@param z integer Z-index (higher = rendered on top)
+---Set entity's Z-index for render order (supports decimals, e.g. 1.5)
+---@param z number Z-index (higher = rendered on top)
 ---@return EntityBuilder
 function EntityBuilder:with_zindex(z) end
 
@@ -401,7 +401,7 @@ function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 
 ---Add Lua timer component (calls Lua function when timer expires)
 ---@param duration number Timer duration in seconds
----@param callback string Lua function name to call (receives entity_id as parameter)
+---@param callback string Lua function name to call (receives ctx, input as parameters)
 ---@return EntityBuilder
 function EntityBuilder:with_lua_timer(duration, callback) end
 
@@ -423,7 +423,7 @@ function EntityBuilder:with_signal_binding_format(format) end
 ---Add grid layout spawner
 ---@param path string Path to JSON grid layout file
 ---@param group string Group name for spawned entities
----@param zindex integer Z-index for spawned entities
+---@param zindex number Z-index for spawned entities
 ---@return EntityBuilder
 function EntityBuilder:with_grid_layout(path, group, zindex) end
 
@@ -1041,6 +1041,86 @@ function engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, 
                                                 stored_vy)
 end
 
+---Release entity from StuckTo during collision handling, restore stored velocity
+---@param entity_id integer Entity ID
+function engine.collision_release_stuckto(entity_id) end
+
+---Set entity scalar signal during collision handling
+---@param entity_id integer Entity ID
+---@param key string Signal key
+---@param value number Signal value
+function engine.collision_entity_signal_set_scalar(entity_id, key, value) end
+
+---Set entity string signal during collision handling
+---@param entity_id integer Entity ID
+---@param key string Signal key
+---@param value string Signal value
+function engine.collision_entity_signal_set_string(entity_id, key, value) end
+
+---Insert LuaTimer component on an entity during collision handling
+---@param entity_id integer Entity ID
+---@param duration number Timer duration in seconds
+---@param callback string Lua function name to call (receives ctx, input as parameters)
+function engine.collision_entity_insert_lua_timer(entity_id, duration, callback) end
+
+---Remove LuaTimer component from an entity during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_remove_lua_timer(entity_id) end
+
+---Restart entity's current animation from frame 0 during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_restart_animation(entity_id) end
+
+---Change entity's animation during collision handling
+---@param entity_id integer Entity ID
+---@param animation_key string Animation identifier
+function engine.collision_entity_set_animation(entity_id, animation_key) end
+
+---Remove TweenPosition component during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_remove_tween_position(entity_id) end
+
+---Remove TweenRotation component during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_remove_tween_rotation(entity_id) end
+
+---Remove TweenScale component during collision handling
+---@param entity_id integer Entity ID
+function engine.collision_entity_remove_tween_scale(entity_id) end
+
+---Set entity's rotation during collision handling
+---@param entity_id integer Entity ID
+---@param degrees number Rotation angle in degrees
+function engine.collision_entity_set_rotation(entity_id, degrees) end
+
+---Set entity's scale during collision handling
+---@param entity_id integer Entity ID
+---@param sx number Scale X (1.0 = normal size)
+---@param sy number Scale Y (1.0 = normal size)
+function engine.collision_entity_set_scale(entity_id, sx, sy) end
+
+---Remove a named force from entity's RigidBody during collision handling
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+function engine.collision_entity_remove_force(entity_id, name) end
+
+---Update a named force value on entity's RigidBody during collision handling
+---@param entity_id integer Entity ID
+---@param name string Force identifier
+---@param x number Force X component
+---@param y number Force Y component
+function engine.collision_entity_set_force_value(entity_id, name, x, y) end
+
+---Set RigidBody friction during collision handling
+---@param entity_id integer Entity ID
+---@param friction number Friction value (0.0 = no friction)
+function engine.collision_entity_set_friction(entity_id, friction) end
+
+---Set RigidBody max speed during collision handling (pass nil to remove limit)
+---@param entity_id integer Entity ID
+---@param max_speed number|nil Maximum speed or nil to remove clamp
+function engine.collision_entity_set_max_speed(entity_id, max_speed) end
+
 ---@class CollisionEntityBuilder
 ---Fluent builder for creating entities during collision callbacks.
 ---Has the same capabilities as EntityBuilder - all methods are available.
@@ -1082,8 +1162,8 @@ function CollisionEntityBuilder:with_sprite_offset(offset_x, offset_y) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_sprite_flip(flip_h, flip_v) end
 
----Set entity's Z-index for render order
----@param z integer Z-index (higher = rendered on top)
+---Set entity's Z-index for render order (supports decimals, e.g. 1.5)
+---@param z number Z-index (higher = rendered on top)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_zindex(z) end
 
@@ -1210,6 +1290,55 @@ function CollisionEntityBuilder:with_menu(items, origin_x, origin_y, font, font_
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu_visible_count(count) end
 
+---Set menu colors
+---@param nr integer Normal red
+---@param ng integer Normal green
+---@param nb integer Normal blue
+---@param na integer Normal alpha
+---@param sr integer Selected red
+---@param sg integer Selected green
+---@param sb integer Selected blue
+---@param sa integer Selected alpha
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_colors(nr, ng, nb, na, sr, sg, sb, sa) end
+
+---Set menu dynamic text mode
+---@param dynamic boolean Enable dynamic text
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_dynamic_text(dynamic) end
+
+---Set menu cursor entity
+---@param key string WorldSignals key for cursor entity
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_cursor(key) end
+
+---Set menu selection sound
+---@param sound_key string Sound identifier
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_selection_sound(sound_key) end
+
+---Add menu action to set scene
+---@param item_id string Menu item ID
+---@param scene string Scene name
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_action_set_scene(item_id, scene) end
+
+---Add menu action to show submenu
+---@param item_id string Menu item ID
+---@param submenu string Submenu name
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_action_show_submenu(item_id, submenu) end
+
+---Add menu action to quit game
+---@param item_id string Menu item ID
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_action_quit(item_id) end
+
+---Set Lua callback for menu selection
+---@param callback_name string Name of the global Lua function to call
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_callback(callback_name) end
+
 ---Add Lua phase state machine to entity
 ---@param phase_table table Phase definition: {initial: string, phases: table}
 ---@return CollisionEntityBuilder
@@ -1236,7 +1365,7 @@ function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 
 ---Add Lua timer component (calls Lua function when timer expires)
 ---@param duration number Timer duration in seconds
----@param callback string Lua function name to call (receives entity_id as parameter)
+---@param callback string Lua function name to call (receives ctx, input as parameters)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_timer(duration, callback) end
 
@@ -1274,6 +1403,10 @@ function CollisionEntityBuilder:with_tween_position_easing(easing) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_position_loop(loop_mode) end
 
+---Start position tween from the end (reverse playback)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_position_backwards() end
+
 ---Add rotation tween animation
 ---@param from number Start rotation in degrees
 ---@param to number End rotation in degrees
@@ -1290,6 +1423,10 @@ function CollisionEntityBuilder:with_tween_rotation_easing(easing) end
 ---@param loop_mode string Loop mode
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_rotation_loop(loop_mode) end
+
+---Start rotation tween from the end (reverse playback)
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_rotation_backwards() end
 
 ---Add scale tween animation
 ---@param from_x number Start scale X
@@ -1353,6 +1490,13 @@ function CollisionEntityBuilder:with_tint(r, g, b, a) end
 ---@param callback string Lua callback function name
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+
+---Add grid layout spawner
+---@param path string Path to JSON grid layout file
+---@param group string Group name for spawned entities
+---@param zindex number Z-index for spawned entities
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
 
 ---Add animation component
 ---@param animation_key string Animation identifier

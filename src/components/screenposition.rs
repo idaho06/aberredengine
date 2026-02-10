@@ -99,3 +99,124 @@ impl ScreenPosition {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: f32 = 1e-6;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < EPSILON
+    }
+
+    #[test]
+    fn test_new_creates_correct_position() {
+        let pos = ScreenPosition::new(10.0, 20.0);
+        assert!(approx_eq(pos.pos.x, 10.0));
+        assert!(approx_eq(pos.pos.y, 20.0));
+    }
+
+    #[test]
+    fn test_new_with_negative_values() {
+        let pos = ScreenPosition::new(-5.0, -10.0);
+        assert!(approx_eq(pos.pos.x, -5.0));
+        assert!(approx_eq(pos.pos.y, -10.0));
+    }
+
+    #[test]
+    fn test_default_is_zero() {
+        let pos = ScreenPosition::default();
+        assert!(approx_eq(pos.pos.x, 0.0));
+        assert!(approx_eq(pos.pos.y, 0.0));
+    }
+
+    #[test]
+    fn test_from_vec() {
+        let vec = Vector2 { x: 15.0, y: 25.0 };
+        let pos = ScreenPosition::from_vec(vec);
+        assert!(approx_eq(pos.pos.x, 15.0));
+        assert!(approx_eq(pos.pos.y, 25.0));
+    }
+
+    #[test]
+    fn test_pos_getter() {
+        let pos = ScreenPosition::new(1.0, 2.0);
+        let vec = pos.pos();
+        assert!(approx_eq(vec.x, 1.0));
+        assert!(approx_eq(vec.y, 2.0));
+    }
+
+    #[test]
+    fn test_x_getter() {
+        let pos = ScreenPosition::new(7.0, 8.0);
+        assert!(approx_eq(pos.x(), 7.0));
+    }
+
+    #[test]
+    fn test_y_getter() {
+        let pos = ScreenPosition::new(7.0, 8.0);
+        assert!(approx_eq(pos.y(), 8.0));
+    }
+
+    #[test]
+    fn test_set_pos() {
+        let mut pos = ScreenPosition::new(0.0, 0.0);
+        pos.set_pos(Vector2 { x: 100.0, y: 200.0 });
+        assert!(approx_eq(pos.pos.x, 100.0));
+        assert!(approx_eq(pos.pos.y, 200.0));
+    }
+
+    #[test]
+    fn test_set_x() {
+        let mut pos = ScreenPosition::new(1.0, 2.0);
+        pos.set_x(99.0);
+        assert!(approx_eq(pos.pos.x, 99.0));
+        assert!(approx_eq(pos.pos.y, 2.0));
+    }
+
+    #[test]
+    fn test_set_y() {
+        let mut pos = ScreenPosition::new(1.0, 2.0);
+        pos.set_y(99.0);
+        assert!(approx_eq(pos.pos.x, 1.0));
+        assert!(approx_eq(pos.pos.y, 99.0));
+    }
+
+    #[test]
+    fn test_translate() {
+        let mut pos = ScreenPosition::new(10.0, 20.0);
+        pos.translate(5.0, -3.0);
+        assert!(approx_eq(pos.pos.x, 15.0));
+        assert!(approx_eq(pos.pos.y, 17.0));
+    }
+
+    #[test]
+    fn test_translate_with_zero() {
+        let mut pos = ScreenPosition::new(10.0, 20.0);
+        pos.translate(0.0, 0.0);
+        assert!(approx_eq(pos.pos.x, 10.0));
+        assert!(approx_eq(pos.pos.y, 20.0));
+    }
+
+    #[test]
+    fn test_with_x_builder() {
+        let pos = ScreenPosition::new(1.0, 2.0).with_x(50.0);
+        assert!(approx_eq(pos.pos.x, 50.0));
+        assert!(approx_eq(pos.pos.y, 2.0));
+    }
+
+    #[test]
+    fn test_with_y_builder() {
+        let pos = ScreenPosition::new(1.0, 2.0).with_y(50.0);
+        assert!(approx_eq(pos.pos.x, 1.0));
+        assert!(approx_eq(pos.pos.y, 50.0));
+    }
+
+    #[test]
+    fn test_builder_chaining() {
+        let pos = ScreenPosition::new(0.0, 0.0).with_x(10.0).with_y(20.0);
+        assert!(approx_eq(pos.pos.x, 10.0));
+        assert!(approx_eq(pos.pos.y, 20.0));
+    }
+}
