@@ -133,6 +133,146 @@ pub struct LuaRuntime {
     entity_ctx_pool: Option<EntityCtxPool>,
 }
 
+/// Registers a Lua function that pushes a command to a queue in `LuaAppData`.
+macro_rules! register_cmd {
+    ($engine:expr, $lua:expr, $name:expr, $queue:ident,
+     |$args:pat_param| $arg_ty:ty, $cmd:expr) => {
+        $engine.set(
+            $name,
+            $lua.create_function(|lua, $args: $arg_ty| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .$queue
+                    .borrow_mut()
+                    .push($cmd);
+                Ok(())
+            })?,
+        )?;
+    };
+}
+
+/// Registers a batch of entity commands with a name prefix to a specific queue.
+macro_rules! register_entity_cmds {
+    ($engine:expr, $lua:expr, $prefix:literal, $queue:ident, [
+        $( ($name:literal, |$args:pat_param| $arg_ty:ty, $cmd:expr) ),* $(,)?
+    ]) => {
+        $(
+            register_cmd!($engine, $lua, concat!($prefix, $name), $queue,
+                |$args| $arg_ty, $cmd);
+        )*
+    };
+}
+
+/// Defines and registers all entity commands for a given prefix and queue.
+/// Called with `""` prefix for regular commands, `"collision_"` for collision commands.
+macro_rules! define_entity_cmds {
+    ($engine:expr, $lua:expr, $prefix:literal, $queue:ident) => {
+        register_entity_cmds!($engine, $lua, $prefix, $queue, [
+            ("entity_despawn", |entity_id| u64, EntityCmd::Despawn { entity_id }),
+            ("entity_menu_despawn", |entity_id| u64, EntityCmd::MenuDespawn { entity_id }),
+            ("release_stuckto", |entity_id| u64, EntityCmd::ReleaseStuckTo { entity_id }),
+            ("entity_signal_set_flag",
+                |(entity_id, flag)| (u64, String), EntityCmd::SignalSetFlag { entity_id, flag }),
+            ("entity_signal_clear_flag",
+                |(entity_id, flag)| (u64, String), EntityCmd::SignalClearFlag { entity_id, flag }),
+            ("entity_set_velocity",
+                |(entity_id, vx, vy)| (u64, f32, f32), EntityCmd::SetVelocity { entity_id, vx, vy }),
+            ("entity_insert_stuckto",
+                |(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)|
+                (u64, u64, bool, bool, f32, f32, f32, f32),
+                EntityCmd::InsertStuckTo {
+                    entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy,
+                }),
+            ("entity_restart_animation", |entity_id| u64, EntityCmd::RestartAnimation { entity_id }),
+            ("entity_set_animation",
+                |(entity_id, animation_key)| (u64, String), EntityCmd::SetAnimation { entity_id, animation_key }),
+            ("entity_insert_lua_timer",
+                |(entity_id, duration, callback)| (u64, f32, String),
+                EntityCmd::InsertLuaTimer { entity_id, duration, callback }),
+            ("entity_remove_lua_timer", |entity_id| u64, EntityCmd::RemoveLuaTimer { entity_id }),
+            ("entity_insert_ttl",
+                |(entity_id, seconds)| (u64, f32), EntityCmd::InsertTtl { entity_id, seconds }),
+            ("entity_insert_tween_position",
+                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)|
+                (u64, f32, f32, f32, f32, f32, String, String, bool),
+                EntityCmd::InsertTweenPosition {
+                    entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards,
+                }),
+            ("entity_insert_tween_rotation",
+                |(entity_id, from, to, duration, easing, loop_mode, backwards)|
+                (u64, f32, f32, f32, String, String, bool),
+                EntityCmd::InsertTweenRotation {
+                    entity_id, from, to, duration, easing, loop_mode, backwards,
+                }),
+            ("entity_insert_tween_scale",
+                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)|
+                (u64, f32, f32, f32, f32, f32, String, String, bool),
+                EntityCmd::InsertTweenScale {
+                    entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards,
+                }),
+            ("entity_remove_tween_position", |entity_id| u64, EntityCmd::RemoveTweenPosition { entity_id }),
+            ("entity_remove_tween_rotation", |entity_id| u64, EntityCmd::RemoveTweenRotation { entity_id }),
+            ("entity_remove_tween_scale", |entity_id| u64, EntityCmd::RemoveTweenScale { entity_id }),
+            ("entity_set_rotation",
+                |(entity_id, degrees)| (u64, f32), EntityCmd::SetRotation { entity_id, degrees }),
+            ("entity_set_scale",
+                |(entity_id, sx, sy)| (u64, f32, f32), EntityCmd::SetScale { entity_id, sx, sy }),
+            ("entity_signal_set_scalar",
+                |(entity_id, key, value)| (u64, String, f32),
+                EntityCmd::SignalSetScalar { entity_id, key, value }),
+            ("entity_signal_set_string",
+                |(entity_id, key, value)| (u64, String, String),
+                EntityCmd::SignalSetString { entity_id, key, value }),
+            ("entity_add_force",
+                |(entity_id, name, x, y, enabled)| (u64, String, f32, f32, bool),
+                EntityCmd::AddForce { entity_id, name, x, y, enabled }),
+            ("entity_remove_force",
+                |(entity_id, name)| (u64, String), EntityCmd::RemoveForce { entity_id, name }),
+            ("entity_set_force_enabled",
+                |(entity_id, name, enabled)| (u64, String, bool),
+                EntityCmd::SetForceEnabled { entity_id, name, enabled }),
+            ("entity_set_force_value",
+                |(entity_id, name, x, y)| (u64, String, f32, f32),
+                EntityCmd::SetForceValue { entity_id, name, x, y }),
+            ("entity_set_friction",
+                |(entity_id, friction)| (u64, f32), EntityCmd::SetFriction { entity_id, friction }),
+            ("entity_set_max_speed",
+                |(entity_id, max_speed)| (u64, Option<f32>), EntityCmd::SetMaxSpeed { entity_id, max_speed }),
+            ("entity_freeze", |entity_id| u64, EntityCmd::FreezeEntity { entity_id }),
+            ("entity_unfreeze", |entity_id| u64, EntityCmd::UnfreezeEntity { entity_id }),
+            ("entity_set_speed",
+                |(entity_id, speed)| (u64, f32), EntityCmd::SetSpeed { entity_id, speed }),
+            ("entity_set_position",
+                |(entity_id, x, y)| (u64, f32, f32), EntityCmd::SetPosition { entity_id, x, y }),
+            ("entity_signal_set_integer",
+                |(entity_id, key, value)| (u64, String, i32),
+                EntityCmd::SignalSetInteger { entity_id, key, value }),
+            ("entity_set_shader",
+                |(entity_id, key)| (u64, String), EntityCmd::SetShader { entity_id, key }),
+            ("entity_remove_shader", |entity_id| u64, EntityCmd::RemoveShader { entity_id }),
+            ("entity_set_tint",
+                |(entity_id, r, g, b, a)| (u64, u8, u8, u8, u8),
+                EntityCmd::SetTint { entity_id, r, g, b, a }),
+            ("entity_remove_tint", |entity_id| u64, EntityCmd::RemoveTint { entity_id }),
+            ("entity_shader_set_float",
+                |(entity_id, name, value)| (u64, String, f32),
+                EntityCmd::ShaderSetFloat { entity_id, name, value }),
+            ("entity_shader_set_int",
+                |(entity_id, name, value)| (u64, String, i32),
+                EntityCmd::ShaderSetInt { entity_id, name, value }),
+            ("entity_shader_set_vec2",
+                |(entity_id, name, x, y)| (u64, String, f32, f32),
+                EntityCmd::ShaderSetVec2 { entity_id, name, x, y }),
+            ("entity_shader_set_vec4",
+                |(entity_id, name, x, y, z, w)| (u64, String, f32, f32, f32, f32),
+                EntityCmd::ShaderSetVec4 { entity_id, name, x, y, z, w }),
+            ("entity_shader_clear_uniform",
+                |(entity_id, name)| (u64, String), EntityCmd::ShaderClearUniform { entity_id, name }),
+            ("entity_shader_clear_uniforms", |entity_id| u64, EntityCmd::ShaderClearUniforms { entity_id }),
+        ]);
+    };
+}
+
 impl LuaRuntime {
     /// Creates a new Lua runtime and registers the base engine API.
     ///
@@ -389,80 +529,18 @@ impl LuaRuntime {
         Ok(())
     }
 
-    /// Registers asset loading functions in the `engine` table.
     fn register_asset_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.load_texture(id, path) - Queue texture loading
-        engine.set(
-            "load_texture",
-            self.lua
-                .create_function(|lua, (id, path): (String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .asset_commands
-                        .borrow_mut()
-                        .push(AssetCmd::LoadTexture { id, path });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.load_font(id, path, size) - Queue font loading
-        engine.set(
-            "load_font",
-            self.lua
-                .create_function(|lua, (id, path, size): (String, String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .asset_commands
-                        .borrow_mut()
-                        .push(AssetCmd::LoadFont { id, path, size });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.load_music(id, path) - Queue music loading
-        engine.set(
-            "load_music",
-            self.lua
-                .create_function(|lua, (id, path): (String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .asset_commands
-                        .borrow_mut()
-                        .push(AssetCmd::LoadMusic { id, path });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.load_sound(id, path) - Queue sound effect loading
-        engine.set(
-            "load_sound",
-            self.lua
-                .create_function(|lua, (id, path): (String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .asset_commands
-                        .borrow_mut()
-                        .push(AssetCmd::LoadSound { id, path });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.load_tilemap(id, path) - Queue tilemap loading
-        engine.set(
-            "load_tilemap",
-            self.lua
-                .create_function(|lua, (id, path): (String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .asset_commands
-                        .borrow_mut()
-                        .push(AssetCmd::LoadTilemap { id, path });
-                    Ok(())
-                })?,
-        )?;
-
+        register_cmd!(engine, self.lua, "load_texture", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadTexture { id, path });
+        register_cmd!(engine, self.lua, "load_font", asset_commands,
+            |(id, path, size)| (String, String, i32), AssetCmd::LoadFont { id, path, size });
+        register_cmd!(engine, self.lua, "load_music", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadMusic { id, path });
+        register_cmd!(engine, self.lua, "load_sound", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadSound { id, path });
+        register_cmd!(engine, self.lua, "load_tilemap", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadTilemap { id, path });
         Ok(())
     }
 
@@ -489,63 +567,16 @@ impl LuaRuntime {
         Ok(())
     }
 
-    /// Registers audio functions in the `engine` table.
     fn register_audio_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.play_music(id, looped) - Queue music playback
-        engine.set(
-            "play_music",
-            self.lua
-                .create_function(|lua, (id, looped): (String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .audio_commands
-                        .borrow_mut()
-                        .push(AudioLuaCmd::PlayMusic { id, looped });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.play_sound(id) - Queue sound effect playback
-        engine.set(
-            "play_sound",
-            self.lua.create_function(|lua, id: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .audio_commands
-                    .borrow_mut()
-                    .push(AudioLuaCmd::PlaySound { id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.stop_all_music() - Stop all music
-        engine.set(
-            "stop_all_music",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .audio_commands
-                    .borrow_mut()
-                    .push(AudioLuaCmd::StopAllMusic);
-                Ok(())
-            })?,
-        )?;
-
-        // engine.stop_all_sounds() - Stop all sound effects
-        engine.set(
-            "stop_all_sounds",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .audio_commands
-                    .borrow_mut()
-                    .push(AudioLuaCmd::StopAllSounds);
-                Ok(())
-            })?,
-        )?;
-
+        register_cmd!(engine, self.lua, "play_music", audio_commands,
+            |(id, looped)| (String, bool), AudioLuaCmd::PlayMusic { id, looped });
+        register_cmd!(engine, self.lua, "play_sound", audio_commands,
+            |id| String, AudioLuaCmd::PlaySound { id });
+        register_cmd!(engine, self.lua, "stop_all_music", audio_commands,
+            |()| (), AudioLuaCmd::StopAllMusic);
+        register_cmd!(engine, self.lua, "stop_all_sounds", audio_commands,
+            |()| (), AudioLuaCmd::StopAllSounds);
         Ok(())
     }
 
@@ -629,959 +660,53 @@ impl LuaRuntime {
 
         // ===== WRITE functions (queue commands) =====
 
-        // engine.set_scalar(key, value)
-        engine.set(
-            "set_scalar",
-            self.lua
-                .create_function(|lua, (key, value): (String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetScalar { key, value });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.set_integer(key, value)
-        engine.set(
-            "set_integer",
-            self.lua
-                .create_function(|lua, (key, value): (String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetInteger { key, value });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.set_string(key, value)
-        engine.set(
-            "set_string",
-            self.lua
-                .create_function(|lua, (key, value): (String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetString { key, value });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.set_flag(key)
-        engine.set(
-            "set_flag",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::SetFlag { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.clear_flag(key)
-        engine.set(
-            "clear_flag",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearFlag { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.clear_scalar(key)
-        engine.set(
-            "clear_scalar",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearScalar { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.clear_integer(key)
-        engine.set(
-            "clear_integer",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearInteger { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.clear_string(key)
-        engine.set(
-            "clear_string",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearString { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.set_entity(key, entity_id)
-        engine.set(
-            "set_entity",
-            self.lua
-                .create_function(|lua, (key, entity_id): (String, u64)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetEntity { key, entity_id });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.remove_entity(key)
-        engine.set(
-            "remove_entity",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::RemoveEntity { key });
-                Ok(())
-            })?,
-        )?;
+        register_cmd!(engine, self.lua, "set_scalar", signal_commands,
+            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value });
+        register_cmd!(engine, self.lua, "set_integer", signal_commands,
+            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value });
+        register_cmd!(engine, self.lua, "set_string", signal_commands,
+            |(key, value)| (String, String), SignalCmd::SetString { key, value });
+        register_cmd!(engine, self.lua, "set_flag", signal_commands,
+            |key| String, SignalCmd::SetFlag { key });
+        register_cmd!(engine, self.lua, "clear_flag", signal_commands,
+            |key| String, SignalCmd::ClearFlag { key });
+        register_cmd!(engine, self.lua, "clear_scalar", signal_commands,
+            |key| String, SignalCmd::ClearScalar { key });
+        register_cmd!(engine, self.lua, "clear_integer", signal_commands,
+            |key| String, SignalCmd::ClearInteger { key });
+        register_cmd!(engine, self.lua, "clear_string", signal_commands,
+            |key| String, SignalCmd::ClearString { key });
+        register_cmd!(engine, self.lua, "set_entity", signal_commands,
+            |(key, entity_id)| (String, u64), SignalCmd::SetEntity { key, entity_id });
+        register_cmd!(engine, self.lua, "remove_entity", signal_commands,
+            |key| String, SignalCmd::RemoveEntity { key });
 
         Ok(())
     }
 
-    /// Registers phase transition functions in the `engine` table.
     fn register_phase_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.phase_transition(entity_id, phase) - Request phase transition for specific entity
-        engine.set(
-            "phase_transition",
-            self.lua
-                .create_function(|lua, (entity_id, phase): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .phase_commands
-                        .borrow_mut()
-                        .push(PhaseCmd::TransitionTo { entity_id, phase });
-                    Ok(())
-                })?,
-        )?;
-
+        register_cmd!(engine, self.lua, "phase_transition", phase_commands,
+            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase });
         Ok(())
     }
 
-    /// Registers entity manipulation functions in the `engine` table.
     fn register_entity_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.entity_despawn(entity_id) - Despawn an entity
-        engine.set(
-            "entity_despawn",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::Despawn { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_menu_despawn(entity_id) - Despawn a menu and its items/cursor/textures
-        engine.set(
-            "entity_menu_despawn",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::MenuDespawn { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.release_stuckto(entity_id) - Release entity from StuckTo, restore velocity
-        engine.set(
-            "release_stuckto",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::ReleaseStuckTo { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_signal_set_flag(entity_id, flag) - Set a flag on entity's Signals
-        engine.set(
-            "entity_signal_set_flag",
-            self.lua
-                .create_function(|lua, (entity_id, flag): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetFlag { entity_id, flag });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_signal_clear_flag(entity_id, flag) - Clear a flag on entity's Signals
-        engine.set(
-            "entity_signal_clear_flag",
-            self.lua
-                .create_function(|lua, (entity_id, flag): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalClearFlag { entity_id, flag });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_velocity(entity_id, vx, vy) - Set entity velocity
-        engine.set(
-            "entity_set_velocity",
-            self.lua
-                .create_function(|lua, (entity_id, vx, vy): (u64, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetVelocity { entity_id, vx, vy });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
-        // Insert a StuckTo component on an entity
-        engine.set(
-            "entity_insert_stuckto",
-            self.lua.create_function(
-                |lua,
-                 (
-                    entity_id,
-                    target_id,
-                    follow_x,
-                    follow_y,
-                    offset_x,
-                    offset_y,
-                    stored_vx,
-                    stored_vy,
-                ): (u64, u64, bool, bool, f32, f32, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertStuckTo {
-                            entity_id,
-                            target_id,
-                            follow_x,
-                            follow_y,
-                            offset_x,
-                            offset_y,
-                            stored_vx,
-                            stored_vy,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_restart_animation(entity_id) - Restart entity's current animation from frame 0
-        engine.set(
-            "entity_restart_animation",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RestartAnimation { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_set_animation(entity_id, animation_key) - Set entity's animation to a specific key
-        engine.set(
-            "entity_set_animation",
-            self.lua
-                .create_function(|lua, (entity_id, animation_key): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetAnimation {
-                            entity_id,
-                            animation_key,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_insert_lua_timer(entity_id, duration, callback) - Insert a LuaTimer component
-        engine.set(
-            "entity_insert_lua_timer",
-            self.lua.create_function(
-                |lua, (entity_id, duration, callback): (u64, f32, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertLuaTimer {
-                            entity_id,
-                            duration,
-                            callback,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_remove_lua_timer(entity_id) - Remove a LuaTimer component
-        engine.set(
-            "entity_remove_lua_timer",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveLuaTimer { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_insert_ttl(entity_id, seconds) - Insert a Ttl component
-        engine.set(
-            "entity_insert_ttl",
-            self.lua
-                .create_function(|lua, (entity_id, seconds): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTtl { entity_id, seconds });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
-        engine.set(
-            "entity_insert_tween_position",
-            self.lua.create_function(
-                |lua,
-                 (
-                    entity_id,
-                    from_x,
-                    from_y,
-                    to_x,
-                    to_y,
-                    duration,
-                    easing,
-                    loop_mode,
-                    backwards,
-                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenPosition {
-                            entity_id,
-                            from_x,
-                            from_y,
-                            to_x,
-                            to_y,
-                            duration,
-                            easing,
-                            loop_mode,
-                            backwards,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards)
-        engine.set(
-            "entity_insert_tween_rotation",
-            self.lua.create_function(
-                |lua,
-                 (entity_id, from, to, duration, easing, loop_mode, backwards): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                    bool,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenRotation {
-                            entity_id,
-                            from,
-                            to,
-                            duration,
-                            easing,
-                            loop_mode,
-                            backwards,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
-        engine.set(
-            "entity_insert_tween_scale",
-            self.lua.create_function(
-                |lua,
-                 (
-                    entity_id,
-                    from_x,
-                    from_y,
-                    to_x,
-                    to_y,
-                    duration,
-                    easing,
-                    loop_mode,
-                    backwards,
-                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenScale {
-                            entity_id,
-                            from_x,
-                            from_y,
-                            to_x,
-                            to_y,
-                            duration,
-                            easing,
-                            loop_mode,
-                            backwards,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_remove_tween_position(entity_id)
-        engine.set(
-            "entity_remove_tween_position",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenPosition { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_remove_tween_rotation(entity_id)
-        engine.set(
-            "entity_remove_tween_rotation",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenRotation { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_remove_tween_scale(entity_id)
-        engine.set(
-            "entity_remove_tween_scale",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenScale { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_set_rotation(entity_id, degrees) - Set entity rotation
-        engine.set(
-            "entity_set_rotation",
-            self.lua
-                .create_function(|lua, (entity_id, degrees): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetRotation { entity_id, degrees });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_scale(entity_id, sx, sy) - Set entity scale
-        engine.set(
-            "entity_set_scale",
-            self.lua
-                .create_function(|lua, (entity_id, sx, sy): (u64, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetScale { entity_id, sx, sy });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_signal_set_scalar(entity_id, key, value) - Set scalar signal on entity
-        engine.set(
-            "entity_signal_set_scalar",
-            self.lua
-                .create_function(|lua, (entity_id, key, value): (u64, String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetScalar {
-                            entity_id,
-                            key,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_signal_set_string(entity_id, key, value) - Set string signal on entity
-        engine.set(
-            "entity_signal_set_string",
-            self.lua
-                .create_function(|lua, (entity_id, key, value): (u64, String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetString {
-                            entity_id,
-                            key,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_add_force(entity_id, name, x, y, enabled) - Add/update a named force on RigidBody
-        engine.set(
-            "entity_add_force",
-            self.lua.create_function(
-                |lua, (entity_id, name, x, y, enabled): (u64, String, f32, f32, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::AddForce {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                            enabled,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_remove_force(entity_id, name) - Remove a named force from RigidBody
-        engine.set(
-            "entity_remove_force",
-            self.lua
-                .create_function(|lua, (entity_id, name): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::RemoveForce { entity_id, name });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_force_enabled(entity_id, name, enabled) - Enable/disable a force
-        engine.set(
-            "entity_set_force_enabled",
-            self.lua
-                .create_function(|lua, (entity_id, name, enabled): (u64, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetForceEnabled {
-                            entity_id,
-                            name,
-                            enabled,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_force_value(entity_id, name, x, y) - Update force value
-        engine.set(
-            "entity_set_force_value",
-            self.lua
-                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetForceValue {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_friction(entity_id, friction) - Set RigidBody friction
-        engine.set(
-            "entity_set_friction",
-            self.lua
-                .create_function(|lua, (entity_id, friction): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetFriction {
-                            entity_id,
-                            friction,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_max_speed(entity_id, max_speed) - Set RigidBody max_speed (nil to remove limit)
-        engine.set(
-            "entity_set_max_speed",
-            self.lua
-                .create_function(|lua, (entity_id, max_speed): (u64, Option<f32>)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetMaxSpeed {
-                            entity_id,
-                            max_speed,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_freeze(entity_id) - Freeze entity (skip physics calculations)
-        engine.set(
-            "entity_freeze",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::FreezeEntity { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_unfreeze(entity_id) - Unfreeze entity (resume physics calculations)
-        engine.set(
-            "entity_unfreeze",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::UnfreezeEntity { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction
-        engine.set(
-            "entity_set_speed",
-            self.lua
-                .create_function(|lua, (entity_id, speed): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetSpeed { entity_id, speed });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_set_position(entity_id, x, y) - Set entity position
-        engine.set(
-            "entity_set_position",
-            self.lua
-                .create_function(|lua, (entity_id, x, y): (u64, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetPosition { entity_id, x, y });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_signal_set_integer(entity_id, key, value) - Set integer signal on entity
-        engine.set(
-            "entity_signal_set_integer",
-            self.lua
-                .create_function(|lua, (entity_id, key, value): (u64, String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetInteger {
-                            entity_id,
-                            key,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // ============== Entity Shader API ==============
-
-        // engine.entity_set_shader(entity_id, key) - Set or replace entity shader
-        engine.set(
-            "entity_set_shader",
-            self.lua
-                .create_function(|lua, (entity_id, key): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetShader { entity_id, key });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_remove_shader(entity_id) - Remove entity shader
-        engine.set(
-            "entity_remove_shader",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveShader { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_set_tint(entity_id, r, g, b, a) - Set entity tint color
-        engine.set(
-            "entity_set_tint",
-            self.lua
-                .create_function(|lua, (entity_id, r, g, b, a): (u64, u8, u8, u8, u8)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetTint {
-                            entity_id,
-                            r,
-                            g,
-                            b,
-                            a,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_remove_tint(entity_id) - Remove entity tint
-        engine.set(
-            "entity_remove_tint",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTint { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.entity_shader_set_float(entity_id, name, value) - Set float uniform
-        engine.set(
-            "entity_shader_set_float",
-            self.lua
-                .create_function(|lua, (entity_id, name, value): (u64, String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetFloat {
-                            entity_id,
-                            name,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_shader_set_int(entity_id, name, value) - Set int uniform
-        engine.set(
-            "entity_shader_set_int",
-            self.lua
-                .create_function(|lua, (entity_id, name, value): (u64, String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetInt {
-                            entity_id,
-                            name,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_shader_set_vec2(entity_id, name, x, y) - Set vec2 uniform
-        engine.set(
-            "entity_shader_set_vec2",
-            self.lua
-                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetVec2 {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_shader_set_vec4(entity_id, name, x, y, z, w) - Set vec4 uniform
-        engine.set(
-            "entity_shader_set_vec4",
-            self.lua.create_function(
-                |lua, (entity_id, name, x, y, z, w): (u64, String, f32, f32, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetVec4 {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                            z,
-                            w,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.entity_shader_clear_uniform(entity_id, name) - Clear a single uniform
-        engine.set(
-            "entity_shader_clear_uniform",
-            self.lua
-                .create_function(|lua, (entity_id, name): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderClearUniform { entity_id, name });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.entity_shader_clear_uniforms(entity_id) - Clear all uniforms
-        engine.set(
-            "entity_shader_clear_uniforms",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::ShaderClearUniforms { entity_id });
-                Ok(())
-            })?,
-        )?;
-
+        define_entity_cmds!(engine, self.lua, "", entity_commands);
         Ok(())
     }
 
-    /// Registers tracked group functions in the `engine` table.
     fn register_group_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
+        register_cmd!(engine, self.lua, "track_group", group_commands,
+            |name| String, GroupCmd::TrackGroup { name });
+        register_cmd!(engine, self.lua, "untrack_group", group_commands,
+            |name| String, GroupCmd::UntrackGroup { name });
+        register_cmd!(engine, self.lua, "clear_tracked_groups", group_commands,
+            |()| (), GroupCmd::ClearTrackedGroups);
 
-        // engine.track_group(name) - Register a group for entity counting
-        engine.set(
-            "track_group",
-            self.lua.create_function(|lua, name: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .group_commands
-                    .borrow_mut()
-                    .push(GroupCmd::TrackGroup { name });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.untrack_group(name) - Stop tracking a group
-        engine.set(
-            "untrack_group",
-            self.lua.create_function(|lua, name: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .group_commands
-                    .borrow_mut()
-                    .push(GroupCmd::UntrackGroup { name });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.clear_tracked_groups() - Clear all tracked groups
-        engine.set(
-            "clear_tracked_groups",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .group_commands
-                    .borrow_mut()
-                    .push(GroupCmd::ClearTrackedGroups);
-                Ok(())
-            })?,
-        )?;
-
-        // engine.has_tracked_group(name) -> boolean
-        // Check if a group is being tracked (reads from cached data)
+        // Read function (returns value, not push-to-queue)
         engine.set(
             "has_tracked_group",
             self.lua.create_function(|lua, name: String| {
@@ -1596,801 +721,61 @@ impl LuaRuntime {
         Ok(())
     }
 
-    /// Registers tilemap functions in the `engine` table.
     fn register_tilemap_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.spawn_tiles(id) - Queue tile spawning from a loaded tilemap
-        engine.set(
-            "spawn_tiles",
-            self.lua.create_function(|lua, id: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .tilemap_commands
-                    .borrow_mut()
-                    .push(TilemapCmd::SpawnTiles { id });
-                Ok(())
-            })?,
-        )?;
-
+        register_cmd!(engine, self.lua, "spawn_tiles", tilemap_commands,
+            |id| String, TilemapCmd::SpawnTiles { id });
         Ok(())
     }
 
-    /// Registers camera functions in the `engine` table.
     fn register_camera_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
-        // Set the 2D camera parameters
-        engine.set(
-            "set_camera",
-            self.lua.create_function(
-                |lua,
-                 (target_x, target_y, offset_x, offset_y, rotation, zoom): (
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .camera_commands
-                        .borrow_mut()
-                        .push(CameraCmd::SetCamera2D {
-                            target_x,
-                            target_y,
-                            offset_x,
-                            offset_y,
-                            rotation,
-                            zoom,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
+        register_cmd!(engine, self.lua, "set_camera", camera_commands,
+            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
+            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom });
         Ok(())
     }
 
     fn register_collision_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
 
-        // engine.collision_entity_set_position(entity_id, x, y)
-        // Sets the position of an entity during collision handling
-        engine.set(
-            "collision_entity_set_position",
-            self.lua
-                .create_function(|lua, (entity_id, x, y): (u64, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetPosition { entity_id, x, y });
-                    Ok(())
-                })?,
-        )?;
+        // All entity commands, collision-prefixed
+        define_entity_cmds!(engine, self.lua, "collision_", collision_entity_commands);
 
-        // engine.collision_entity_set_velocity(entity_id, vx, vy)
-        // Sets the velocity of an entity during collision handling
-        engine.set(
-            "collision_entity_set_velocity",
-            self.lua
-                .create_function(|lua, (entity_id, vx, vy): (u64, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetVelocity { entity_id, vx, vy });
-                    Ok(())
-                })?,
-        )?;
+        // Non-entity collision commands
+        register_cmd!(engine, self.lua, "collision_play_sound", collision_audio_commands,
+            |id| String, AudioLuaCmd::PlaySound { id });
 
-        // engine.collision_entity_despawn(entity_id)
-        // Despawns an entity during collision handling
-        engine.set(
-            "collision_entity_despawn",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::Despawn { entity_id });
-                Ok(())
-            })?,
-        )?;
+        register_cmd!(engine, self.lua, "collision_set_scalar", collision_signal_commands,
+            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value });
+        register_cmd!(engine, self.lua, "collision_set_integer", collision_signal_commands,
+            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value });
+        register_cmd!(engine, self.lua, "collision_set_string", collision_signal_commands,
+            |(key, value)| (String, String), SignalCmd::SetString { key, value });
+        register_cmd!(engine, self.lua, "collision_set_flag", collision_signal_commands,
+            |flag| String, SignalCmd::SetFlag { key: flag });
+        register_cmd!(engine, self.lua, "collision_clear_flag", collision_signal_commands,
+            |flag| String, SignalCmd::ClearFlag { key: flag });
+        register_cmd!(engine, self.lua, "collision_clear_scalar", collision_signal_commands,
+            |key| String, SignalCmd::ClearScalar { key });
+        register_cmd!(engine, self.lua, "collision_clear_integer", collision_signal_commands,
+            |key| String, SignalCmd::ClearInteger { key });
+        register_cmd!(engine, self.lua, "collision_clear_string", collision_signal_commands,
+            |key| String, SignalCmd::ClearString { key });
 
-        // engine.collision_entity_signal_set_integer(entity_id, key, value)
-        // Sets an integer signal on an entity during collision handling
-        engine.set(
-            "collision_entity_signal_set_integer",
-            self.lua
-                .create_function(|lua, (entity_id, key, value): (u64, String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetInteger {
-                            entity_id,
-                            key,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
+        register_cmd!(engine, self.lua, "collision_phase_transition", collision_phase_commands,
+            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase });
 
-        // engine.collision_entity_signal_set_flag(entity_id, flag)
-        // Sets a flag signal on an entity during collision handling
-        engine.set(
-            "collision_entity_signal_set_flag",
-            self.lua
-                .create_function(|lua, (entity_id, flag): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetFlag { entity_id, flag });
-                    Ok(())
-                })?,
-        )?;
+        register_cmd!(engine, self.lua, "collision_set_camera", collision_camera_commands,
+            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
+            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom });
 
-        // engine.collision_entity_signal_clear_flag(entity_id, flag)
-        // Clears a flag signal on an entity during collision handling
-        engine.set(
-            "collision_entity_signal_clear_flag",
-            self.lua
-                .create_function(|lua, (entity_id, flag): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalClearFlag { entity_id, flag });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
-        // Inserts a StuckTo component on an entity during collision handling
-        engine.set(
-            "collision_entity_insert_stuckto",
-            self.lua.create_function(
-                |lua,
-                 (
-                    entity_id,
-                    target_id,
-                    follow_x,
-                    follow_y,
-                    offset_x,
-                    offset_y,
-                    stored_vx,
-                    stored_vy,
-                ): (u64, u64, bool, bool, f32, f32, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertStuckTo {
-                            entity_id,
-                            target_id,
-                            follow_x,
-                            follow_y,
-                            offset_x,
-                            offset_y,
-                            stored_vx,
-                            stored_vy,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_release_stuckto(entity_id)
-        // Release entity from StuckTo during collision handling
-        engine.set(
-            "collision_release_stuckto",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::ReleaseStuckTo { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_signal_set_scalar(entity_id, key, value)
-        // Sets a scalar signal on an entity during collision handling
-        engine.set(
-            "collision_entity_signal_set_scalar",
-            self.lua
-                .create_function(|lua, (entity_id, key, value): (u64, String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetScalar {
-                            entity_id,
-                            key,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_signal_set_string(entity_id, key, value)
-        // Sets a string signal on an entity during collision handling
-        engine.set(
-            "collision_entity_signal_set_string",
-            self.lua
-                .create_function(|lua, (entity_id, key, value): (u64, String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SignalSetString {
-                            entity_id,
-                            key,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_insert_lua_timer(entity_id, duration, callback)
-        // Inserts a LuaTimer component on an entity during collision handling
-        engine.set(
-            "collision_entity_insert_lua_timer",
-            self.lua.create_function(
-                |lua, (entity_id, duration, callback): (u64, f32, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertLuaTimer {
-                            entity_id,
-                            duration,
-                            callback,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_remove_lua_timer(entity_id)
-        // Removes a LuaTimer component during collision handling
-        engine.set(
-            "collision_entity_remove_lua_timer",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveLuaTimer { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_insert_ttl(entity_id, seconds)
-        // Insert a Ttl component during collision handling
-        engine.set(
-            "collision_entity_insert_ttl",
-            self.lua
-                .create_function(|lua, (entity_id, seconds): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTtl { entity_id, seconds });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_restart_animation(entity_id)
-        // Restarts entity animation during collision handling
-        engine.set(
-            "collision_entity_restart_animation",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RestartAnimation { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_set_animation(entity_id, animation_key)
-        // Sets entity animation during collision handling
-        engine.set(
-            "collision_entity_set_animation",
-            self.lua
-                .create_function(|lua, (entity_id, animation_key): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetAnimation {
-                            entity_id,
-                            animation_key,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
-        // Inserts TweenPosition during collision handling
-        engine.set(
-            "collision_entity_insert_tween_position",
-            self.lua.create_function(
-                |lua,
-                 (
-                    entity_id,
-                    from_x,
-                    from_y,
-                    to_x,
-                    to_y,
-                    duration,
-                    easing,
-                    loop_mode,
-                    backwards,
-                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenPosition {
-                            entity_id,
-                            from_x,
-                            from_y,
-                            to_x,
-                            to_y,
-                            duration,
-                            easing,
-                            loop_mode,
-                            backwards,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards)
-        // Inserts TweenRotation during collision handling
-        engine.set(
-            "collision_entity_insert_tween_rotation",
-            self.lua.create_function(
-                |lua,
-                 (entity_id, from, to, duration, easing, loop_mode, backwards): (
-                    u64,
-                    f32,
-                    f32,
-                    f32,
-                    String,
-                    String,
-                    bool,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenRotation {
-                            entity_id,
-                            from,
-                            to,
-                            duration,
-                            easing,
-                            loop_mode,
-                            backwards,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
-        // Inserts TweenScale during collision handling
-        engine.set(
-            "collision_entity_insert_tween_scale",
-            self.lua.create_function(
-                |lua,
-                 (
-                    entity_id,
-                    from_x,
-                    from_y,
-                    to_x,
-                    to_y,
-                    duration,
-                    easing,
-                    loop_mode,
-                    backwards,
-                ): (u64, f32, f32, f32, f32, f32, String, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::InsertTweenScale {
-                            entity_id,
-                            from_x,
-                            from_y,
-                            to_x,
-                            to_y,
-                            duration,
-                            easing,
-                            loop_mode,
-                            backwards,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_remove_tween_position(entity_id)
-        // Removes TweenPosition during collision handling
-        engine.set(
-            "collision_entity_remove_tween_position",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenPosition { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_remove_tween_rotation(entity_id)
-        // Removes TweenRotation during collision handling
-        engine.set(
-            "collision_entity_remove_tween_rotation",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenRotation { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_remove_tween_scale(entity_id)
-        // Removes TweenScale during collision handling
-        engine.set(
-            "collision_entity_remove_tween_scale",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTweenScale { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_set_rotation(entity_id, degrees)
-        // Sets entity rotation during collision handling
-        engine.set(
-            "collision_entity_set_rotation",
-            self.lua
-                .create_function(|lua, (entity_id, degrees): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetRotation { entity_id, degrees });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_set_scale(entity_id, sx, sy)
-        // Sets entity scale during collision handling
-        engine.set(
-            "collision_entity_set_scale",
-            self.lua
-                .create_function(|lua, (entity_id, sx, sy): (u64, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetScale { entity_id, sx, sy });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_add_force(entity_id, name, x, y, enabled)
-        // Adds a force to entity during collision handling
-        engine.set(
-            "collision_entity_add_force",
-            self.lua.create_function(
-                |lua, (entity_id, name, x, y, enabled): (u64, String, f32, f32, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::AddForce {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                            enabled,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_remove_force(entity_id, name)
-        // Removes a force from entity during collision handling
-        engine.set(
-            "collision_entity_remove_force",
-            self.lua
-                .create_function(|lua, (entity_id, name): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::RemoveForce { entity_id, name });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_set_force_enabled(entity_id, name, enabled)
-        // Enables/disables a force during collision handling
-        engine.set(
-            "collision_entity_set_force_enabled",
-            self.lua
-                .create_function(|lua, (entity_id, name, enabled): (u64, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetForceEnabled {
-                            entity_id,
-                            name,
-                            enabled,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_set_force_value(entity_id, name, x, y)
-        // Updates force value during collision handling
-        engine.set(
-            "collision_entity_set_force_value",
-            self.lua
-                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetForceValue {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_set_friction(entity_id, friction)
-        // Sets entity friction during collision handling
-        engine.set(
-            "collision_entity_set_friction",
-            self.lua
-                .create_function(|lua, (entity_id, friction): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetFriction {
-                            entity_id,
-                            friction,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_set_max_speed(entity_id, max_speed)
-        // Sets entity max speed during collision handling (nil to remove limit)
-        engine.set(
-            "collision_entity_set_max_speed",
-            self.lua
-                .create_function(|lua, (entity_id, max_speed): (u64, Option<f32>)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetMaxSpeed {
-                            entity_id,
-                            max_speed,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_freeze(entity_id)
-        // Freezes entity during collision handling
-        engine.set(
-            "collision_entity_freeze",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::FreezeEntity { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_unfreeze(entity_id)
-        // Unfreezes entity during collision handling
-        engine.set(
-            "collision_entity_unfreeze",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::UnfreezeEntity { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_set_speed(entity_id, speed)
-        // Sets entity speed during collision handling
-        engine.set(
-            "collision_entity_set_speed",
-            self.lua
-                .create_function(|lua, (entity_id, speed): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetSpeed { entity_id, speed });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_play_sound(sound_name)
-        // Plays a sound effect during collision handling
-        engine.set(
-            "collision_play_sound",
-            self.lua.create_function(|lua, id: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_audio_commands
-                    .borrow_mut()
-                    .push(AudioLuaCmd::PlaySound { id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_set_integer(key, value)
-        // Sets a global integer signal during collision handling
-        engine.set(
-            "collision_set_integer",
-            self.lua
-                .create_function(|lua, (key, value): (String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetInteger { key, value });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_set_flag(flag)
-        // Sets a global flag signal during collision handling
-        engine.set(
-            "collision_set_flag",
-            self.lua.create_function(|lua, flag: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::SetFlag { key: flag });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_clear_flag(flag)
-        // Clears a global flag signal during collision handling
-        engine.set(
-            "collision_clear_flag",
-            self.lua.create_function(|lua, flag: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearFlag { key: flag });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_set_scalar(key, value)
-        // Sets a global scalar signal during collision handling
-        engine.set(
-            "collision_set_scalar",
-            self.lua
-                .create_function(|lua, (key, value): (String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetScalar { key, value });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_set_string(key, value)
-        // Sets a global string signal during collision handling
-        engine.set(
-            "collision_set_string",
-            self.lua
-                .create_function(|lua, (key, value): (String, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_signal_commands
-                        .borrow_mut()
-                        .push(SignalCmd::SetString { key, value });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_clear_scalar(key)
-        // Clears a global scalar signal during collision handling
-        engine.set(
-            "collision_clear_scalar",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearScalar { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_clear_integer(key)
-        // Clears a global integer signal during collision handling
-        engine.set(
-            "collision_clear_integer",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearInteger { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_clear_string(key)
-        // Clears a global string signal during collision handling
-        engine.set(
-            "collision_clear_string",
-            self.lua.create_function(|lua, key: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ClearString { key });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_spawn() - Create a new entity builder for collision context
-        // Returns a LuaEntityBuilder that queues spawns for processing after collision
+        // Spawn/clone (return LuaEntityBuilder, not push-to-queue)
         engine.set(
             "collision_spawn",
             self.lua
                 .create_function(|_, ()| Ok(LuaEntityBuilder::new_collision()))?,
         )?;
-
-        // engine.collision_clone(source_key) - Clone an entity in collision context
-        // Returns a LuaEntityBuilder that clones the source entity and applies overrides
         engine.set(
             "collision_clone",
             self.lua.create_function(|_, source_key: String| {
@@ -2398,348 +783,24 @@ impl LuaRuntime {
             })?,
         )?;
 
-        // engine.collision_phase_transition(entity_id, phase)
-        // Request a phase transition for an entity during collision handling
-        engine.set(
-            "collision_phase_transition",
-            self.lua
-                .create_function(|lua, (entity_id, phase): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_phase_commands
-                        .borrow_mut()
-                        .push(PhaseCmd::TransitionTo { entity_id, phase });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
-        // Set the camera during collision handling (for camera shake, zoom effects, etc.)
-        engine.set(
-            "collision_set_camera",
-            self.lua.create_function(
-                |lua,
-                 (target_x, target_y, offset_x, offset_y, rotation, zoom): (
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                    f32,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_camera_commands
-                        .borrow_mut()
-                        .push(CameraCmd::SetCamera2D {
-                            target_x,
-                            target_y,
-                            offset_x,
-                            offset_y,
-                            rotation,
-                            zoom,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_freeze(entity_id) - Freeze entity during collision handling
-        engine.set(
-            "collision_entity_freeze",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::FreezeEntity { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_unfreeze(entity_id) - Unfreeze entity during collision handling
-        engine.set(
-            "collision_entity_unfreeze",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::UnfreezeEntity { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_add_force(entity_id, name, x, y, enabled) - Add/update force during collision
-        engine.set(
-            "collision_entity_add_force",
-            self.lua.create_function(
-                |lua, (entity_id, name, x, y, enabled): (u64, String, f32, f32, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::AddForce {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                            enabled,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_set_force_enabled(entity_id, name, enabled) - Enable/disable force during collision
-        engine.set(
-            "collision_entity_set_force_enabled",
-            self.lua
-                .create_function(|lua, (entity_id, name, enabled): (u64, String, bool)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetForceEnabled {
-                            entity_id,
-                            name,
-                            enabled,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_set_speed(entity_id, speed) - Set speed while maintaining velocity direction during collision
-        engine.set(
-            "collision_entity_set_speed",
-            self.lua
-                .create_function(|lua, (entity_id, speed): (u64, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetSpeed { entity_id, speed });
-                    Ok(())
-                })?,
-        )?;
-
-        // ============== Collision Entity Shader API ==============
-
-        // engine.collision_entity_set_shader(entity_id, key) - Set or replace entity shader during collision
-        engine.set(
-            "collision_entity_set_shader",
-            self.lua
-                .create_function(|lua, (entity_id, key): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetShader { entity_id, key });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_remove_shader(entity_id) - Remove entity shader during collision
-        engine.set(
-            "collision_entity_remove_shader",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveShader { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_set_tint(entity_id, r, g, b, a) - Set entity tint during collision
-        engine.set(
-            "collision_entity_set_tint",
-            self.lua
-                .create_function(|lua, (entity_id, r, g, b, a): (u64, u8, u8, u8, u8)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::SetTint {
-                            entity_id,
-                            r,
-                            g,
-                            b,
-                            a,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_remove_tint(entity_id) - Remove entity tint during collision
-        engine.set(
-            "collision_entity_remove_tint",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::RemoveTint { entity_id });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.collision_entity_shader_set_float(entity_id, name, value) - Set float uniform during collision
-        engine.set(
-            "collision_entity_shader_set_float",
-            self.lua
-                .create_function(|lua, (entity_id, name, value): (u64, String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetFloat {
-                            entity_id,
-                            name,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_shader_set_int(entity_id, name, value) - Set int uniform during collision
-        engine.set(
-            "collision_entity_shader_set_int",
-            self.lua
-                .create_function(|lua, (entity_id, name, value): (u64, String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetInt {
-                            entity_id,
-                            name,
-                            value,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_shader_set_vec2(entity_id, name, x, y) - Set vec2 uniform during collision
-        engine.set(
-            "collision_entity_shader_set_vec2",
-            self.lua
-                .create_function(|lua, (entity_id, name, x, y): (u64, String, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetVec2 {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w) - Set vec4 uniform during collision
-        engine.set(
-            "collision_entity_shader_set_vec4",
-            self.lua.create_function(
-                |lua, (entity_id, name, x, y, z, w): (u64, String, f32, f32, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderSetVec4 {
-                            entity_id,
-                            name,
-                            x,
-                            y,
-                            z,
-                            w,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
-        // engine.collision_entity_shader_clear_uniform(entity_id, name) - Clear a single uniform during collision
-        engine.set(
-            "collision_entity_shader_clear_uniform",
-            self.lua
-                .create_function(|lua, (entity_id, name): (u64, String)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .collision_entity_commands
-                        .borrow_mut()
-                        .push(EntityCmd::ShaderClearUniform { entity_id, name });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.collision_entity_shader_clear_uniforms(entity_id) - Clear all uniforms during collision
-        engine.set(
-            "collision_entity_shader_clear_uniforms",
-            self.lua.create_function(|lua, entity_id: u64| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .collision_entity_commands
-                    .borrow_mut()
-                    .push(EntityCmd::ShaderClearUniforms { entity_id });
-                Ok(())
-            })?,
-        )?;
-
         Ok(())
     }
 
-    /// Registers animation functions in the `engine` table.
     fn register_animation_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-
-        // engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)
-        // Registers an animation resource in the AnimationStore
-        engine.set(
-            "register_animation",
-            self.lua.create_function(
-                |lua,
-                 (id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped): (
-                    String,
-                    String,
-                    f32,
-                    f32,
-                    f32,
-                    usize,
-                    f32,
-                    bool,
-                )| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .animation_commands
-                        .borrow_mut()
-                        .push(AnimationCmd::RegisterAnimation {
-                            id,
-                            tex_key,
-                            pos_x,
-                            pos_y,
-                            displacement,
-                            frame_count,
-                            fps,
-                            looped,
-                        });
-                    Ok(())
-                },
-            )?,
-        )?;
-
+        register_cmd!(engine, self.lua, "register_animation", animation_commands,
+            |(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)|
+            (String, String, f32, f32, f32, usize, f32, bool),
+            AnimationCmd::RegisterAnimation {
+                id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped,
+            });
         Ok(())
     }
 
-    /// Registers render/post-processing functions in the `engine` table.
     fn register_render_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
 
-        // engine.load_shader(id, vs_path_or_nil, fs_path_or_nil) - Queue shader loading
-        // At least one of vs_path or fs_path must be provided
+        // load_shader has validation before push — keep manual
         engine.set(
             "load_shader",
             self.lua
@@ -2758,7 +819,7 @@ impl LuaRuntime {
                 })?,
         )?;
 
-        // engine.post_process_shader(nil | {"shader1", "shader2", ...}) - Set shader chain
+        // post_process_shader has complex table parsing — keep manual
         engine.set(
             "post_process_shader",
             self.lua.create_function(|lua, value: LuaValue| {
@@ -2792,99 +853,22 @@ impl LuaRuntime {
             })?,
         )?;
 
-        // engine.post_process_set_float(name, value) - Set a float uniform
-        engine.set(
-            "post_process_set_float",
-            self.lua
-                .create_function(|lua, (name, value): (String, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .render_commands
-                        .borrow_mut()
-                        .push(RenderCmd::SetPostProcessUniform {
-                            name,
-                            value: UniformValue::Float(value),
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.post_process_set_int(name, value) - Set an integer uniform
-        engine.set(
-            "post_process_set_int",
-            self.lua
-                .create_function(|lua, (name, value): (String, i32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .render_commands
-                        .borrow_mut()
-                        .push(RenderCmd::SetPostProcessUniform {
-                            name,
-                            value: UniformValue::Int(value),
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.post_process_set_vec2(name, x, y) - Set a vec2 uniform
-        engine.set(
-            "post_process_set_vec2",
-            self.lua
-                .create_function(|lua, (name, x, y): (String, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .render_commands
-                        .borrow_mut()
-                        .push(RenderCmd::SetPostProcessUniform {
-                            name,
-                            value: UniformValue::Vec2 { x, y },
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.post_process_set_vec4(name, x, y, z, w) - Set a vec4 uniform
-        engine.set(
-            "post_process_set_vec4",
-            self.lua
-                .create_function(|lua, (name, x, y, z, w): (String, f32, f32, f32, f32)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .render_commands
-                        .borrow_mut()
-                        .push(RenderCmd::SetPostProcessUniform {
-                            name,
-                            value: UniformValue::Vec4 { x, y, z, w },
-                        });
-                    Ok(())
-                })?,
-        )?;
-
-        // engine.post_process_clear_uniform(name) - Clear a single uniform
-        engine.set(
-            "post_process_clear_uniform",
-            self.lua.create_function(|lua, name: String| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .render_commands
-                    .borrow_mut()
-                    .push(RenderCmd::ClearPostProcessUniform { name });
-                Ok(())
-            })?,
-        )?;
-
-        // engine.post_process_clear_uniforms() - Clear all uniforms
-        engine.set(
-            "post_process_clear_uniforms",
-            self.lua.create_function(|lua, ()| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .render_commands
-                    .borrow_mut()
-                    .push(RenderCmd::ClearPostProcessUniforms);
-                Ok(())
-            })?,
-        )?;
+        register_cmd!(engine, self.lua, "post_process_set_float", render_commands,
+            |(name, value)| (String, f32),
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Float(value) });
+        register_cmd!(engine, self.lua, "post_process_set_int", render_commands,
+            |(name, value)| (String, i32),
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Int(value) });
+        register_cmd!(engine, self.lua, "post_process_set_vec2", render_commands,
+            |(name, x, y)| (String, f32, f32),
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec2 { x, y } });
+        register_cmd!(engine, self.lua, "post_process_set_vec4", render_commands,
+            |(name, x, y, z, w)| (String, f32, f32, f32, f32),
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec4 { x, y, z, w } });
+        register_cmd!(engine, self.lua, "post_process_clear_uniform", render_commands,
+            |name| String, RenderCmd::ClearPostProcessUniform { name });
+        register_cmd!(engine, self.lua, "post_process_clear_uniforms", render_commands,
+            |()| (), RenderCmd::ClearPostProcessUniforms);
 
         Ok(())
     }

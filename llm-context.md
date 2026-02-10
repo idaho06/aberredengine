@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-09 (synced with codebase)
+# Last updated: 2026-02-10 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -13,7 +13,7 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-02-09)
+## STATUS (2026-02-10)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg, explosion01.ogg); music/tilemap/brick assets are not loaded.
@@ -113,7 +113,7 @@ src/
 │   ├── postprocessshader.rs   # PostProcessShader resource (active shader + user uniforms)
 │   └── lua_runtime/
 │       ├── mod.rs             # Public exports
-│       ├── runtime.rs         # LuaRuntime, engine table API registration
+│       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!)
 │       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, etc.
 │       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer)
 │       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
@@ -326,7 +326,7 @@ AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, fram
 RenderCmd { SetPostProcessShader { id }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
-## LUA API STRUCTURE (runtime.rs)
+## LUA API STRUCTURE (runtime.rs — macro-based registration)
 
 -- Logging
 engine.log(msg), engine.log_info(msg), engine.log_warn(msg), engine.log_error(msg)
@@ -663,7 +663,7 @@ Approximate execution order:
 ### Adding a new EntityCmd
 
 1. Add variant to EntityCmd enum (commands.rs)
-2. Add Lua function in runtime.rs (register_entity_api)
+2. Add entry to `define_entity_cmds!` macro in runtime.rs (one line; auto-registers for both regular and collision contexts)
 3. Process in process_entity_commands (lua_commands.rs)
 4. Add to engine.lua autocomplete stubs
 5. Document in README.md
@@ -719,10 +719,11 @@ movement_system moves entities
 
 - Entity commands (engine.entity_*) are UNIFIED across all contexts
 - They work in phase callbacks, timer callbacks, collision callbacks, and update callbacks
-- Collision has FULL entity command parity: engine.collision_entity_*mirrors all engine.entity_* functions
+- Collision has FULL entity command parity: `define_entity_cmds!` macro registers all entity commands to both regular ("") and collision ("collision_") prefixed queues from one definition
 - Collision-specific commands (engine.collision_*) also include spawning, audio, signals, camera
 - Both regular and collision entity commands use the same EntityCmd enum internally
 - Collision commands drain immediately after each collision callback (separate queue)
+- runtime.rs uses `register_cmd!` macro for all push-to-queue registrations; ~17 functions with non-push logic (reads, builders, validation) remain manual
 
 ## IMPORTANT FILES TO READ FIRST
 
@@ -765,6 +766,8 @@ For features touching:
 - LuaError::runtime("message") for errors
 - table.set("key", value), table.get::<Type>("key")
 - Function::call::<ReturnType>(args)
+- Most Lua API registrations use `register_cmd!` macro: `register_cmd!(engine, self.lua, "name", queue, |args| ArgType, Cmd::Variant { args })`
+- Entity commands use `define_entity_cmds!` macro (single definition shared by regular + collision contexts)
 
 ## COMMON GOTCHAS
 
