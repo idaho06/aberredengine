@@ -335,12 +335,11 @@ pub fn lua_phase_system(
 
     for (entity, mut lua_phase) in query.iter_mut() {
         let entity_id = entity.to_bits();
-        let current_phase = lua_phase.current.clone();
 
         // Handle initial enter callback: (ctx, input) with previous_phase = nil
         if lua_phase.needs_enter_callback {
             lua_phase.needs_enter_callback = false;
-            if let Some(callbacks) = lua_phase.get_callbacks(&current_phase) {
+            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
                 if let Some(ref fn_name) = callbacks.on_enter {
                     // Build context with no previous_phase
                     match build_phase_context(
@@ -360,7 +359,7 @@ pub fn lua_phase_system(
                                 fn_name,
                                 &ctx,
                                 &input_table,
-                                &current_phase,
+                                &lua_phase.current,
                             ) {
                                 callback_transitions.push((entity_id, next));
                             }
@@ -398,8 +397,7 @@ pub fn lua_phase_system(
             }
 
             // Call enter callback for new phase: (ctx, input) with previous_phase set
-            let new_current = lua_phase.current.clone();
-            if let Some(callbacks) = lua_phase.get_callbacks(&new_current) {
+            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
                 if let Some(ref fn_name) = callbacks.on_enter {
                     match build_phase_context(
                         &lua_runtime,
@@ -418,7 +416,7 @@ pub fn lua_phase_system(
                                 fn_name,
                                 &ctx,
                                 &input_table,
-                                &new_current,
+                                &lua_phase.current,
                             ) {
                                 callback_transitions.push((entity_id, next));
                             }
@@ -430,7 +428,6 @@ pub fn lua_phase_system(
         }
 
         // Call update callback: (ctx, input, dt)
-        let update_current = lua_phase.current.clone();
         if let Some(callbacks) = lua_phase.current_callbacks() {
             if let Some(ref fn_name) = callbacks.on_update {
                 match build_phase_context(
@@ -451,7 +448,7 @@ pub fn lua_phase_system(
                             &ctx,
                             &input_table,
                             delta,
-                            &update_current,
+                            &lua_phase.current,
                         ) {
                             callback_transitions.push((entity_id, next));
                         }
