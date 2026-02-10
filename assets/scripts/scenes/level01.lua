@@ -133,6 +133,20 @@ function on_asteroid_laser_collision(ctx)
         -- Change asteroid phase to exploding
         engine.phase_transition(ctx.a.id, "exploding")
     end
+    -- change tint color depending on remaining hp
+    if hp == 2 then
+        engine.entity_set_tint(ctx.a.id, 255, 200, 200, 255) -- Light red
+    elseif hp == 1 then
+        engine.entity_set_tint(ctx.a.id, 255, 100, 100, 255) -- Darker red
+    end
+    -- Spawn a small explosion at the collision point, facing 180 degrees (from laser direction)
+    local laser_pos = ctx.b.pos
+    local laser_rotation = ctx.b.rotation or 0.0
+    engine.clone("explosion03_animation")
+        :with_position(laser_pos.x, laser_pos.y)
+        :with_rotation(laser_rotation + 180.0)
+        :with_ttl(0.4)
+        :build()
     -- Destroy laser entity
     engine.entity_despawn(ctx.b.id)
 end
@@ -188,6 +202,8 @@ function asteroid_phase_exploding_enter(ctx, input)
             :with_ttl(3.0)
             :build()
     end
+
+    engine.play_sound("explosion01")
 
     -- Despawn asteroid entity
     engine.entity_despawn(ctx.id)
@@ -852,7 +868,8 @@ function M.spawn()
         })
         :build()
 
-    engine.post_process_shader({ "bloom", "crt" })
+    -- engine.post_process_shader({ "bloom", "crt" })
+    engine.post_process_shader({ "bloom" })
     engine.post_process_set_float("threshold", 0.7)
     engine.post_process_set_float("intensity", 1.8)
     engine.post_process_set_float("radius", 2.0)
