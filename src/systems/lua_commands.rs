@@ -928,7 +928,18 @@ pub fn process_spawn_command(
 ) {
     let mut entity_commands = commands.spawn_empty();
     let entity = entity_commands.id();
+    apply_components(&mut entity_commands, cmd, world_signals, entity);
+}
 
+/// Apply all components from a `SpawnCmd` to an entity.
+///
+/// Shared helper used by both [`process_spawn_command`] and [`process_clone_command`].
+fn apply_components(
+    entity_commands: &mut EntityCommands,
+    cmd: SpawnCmd,
+    world_signals: &mut WorldSignals,
+    entity: Entity,
+) {
     // Group
     if let Some(group_name) = cmd.group {
         entity_commands.insert(Group::new(&group_name));
@@ -1413,218 +1424,15 @@ pub fn process_clone_command(
     let mut entity_commands = source_commands.clone_and_spawn();
     let cloned_entity = entity_commands.id();
 
-    // 3. Apply component overrides from the SpawnCmd
-    let overrides = cmd.overrides;
+    // 3. Check if animation override is provided before moving overrides
+    let has_animation_override = cmd.overrides.animation.is_some();
 
-    // Group (override or replace)
-    if let Some(group_name) = overrides.group {
-        entity_commands.insert(Group::new(&group_name));
-    }
+    // 4. Apply all component overrides (same logic as spawn)
+    apply_components(&mut entity_commands, cmd.overrides, world_signals, cloned_entity);
 
-    // Position (override)
-    if let Some((x, y)) = overrides.position {
-        entity_commands.insert(MapPosition::new(x, y));
-    }
-
-    // Sprite (override)
-    if let Some(sprite_data) = overrides.sprite {
-        entity_commands.insert(Sprite {
-            tex_key: Arc::from(sprite_data.tex_key),
-            width: sprite_data.width,
-            height: sprite_data.height,
-            origin: Vector2 {
-                x: sprite_data.origin_x,
-                y: sprite_data.origin_y,
-            },
-            offset: Vector2 {
-                x: sprite_data.offset_x,
-                y: sprite_data.offset_y,
-            },
-            flip_h: sprite_data.flip_h,
-            flip_v: sprite_data.flip_v,
-        });
-    }
-
-    // ZIndex (override)
-    if let Some(z) = overrides.zindex {
-        entity_commands.insert(ZIndex(z));
-    }
-
-    // RigidBody (override)
-    if let Some(rb_data) = overrides.rigidbody {
-        let mut rb = RigidBody::with_physics(rb_data.friction, rb_data.max_speed);
-        rb.velocity = Vector2 {
-            x: rb_data.velocity_x,
-            y: rb_data.velocity_y,
-        };
-        rb.frozen = rb_data.frozen;
-        for force in rb_data.forces {
-            rb.add_force_with_state(
-                &force.name,
-                Vector2 {
-                    x: force.x,
-                    y: force.y,
-                },
-                force.enabled,
-            );
-        }
-        entity_commands.insert(rb);
-    }
-
-    // BoxCollider (override)
-    if let Some(collider_data) = overrides.collider {
-        entity_commands.insert(BoxCollider {
-            size: Vector2 {
-                x: collider_data.width,
-                y: collider_data.height,
-            },
-            offset: Vector2 {
-                x: collider_data.offset_x,
-                y: collider_data.offset_y,
-            },
-            origin: Vector2 {
-                x: collider_data.origin_x,
-                y: collider_data.origin_y,
-            },
-        });
-    }
-
-    // Rotation (override)
-    if let Some(degrees) = overrides.rotation {
-        entity_commands.insert(Rotation { degrees });
-    }
-
-    // Scale (override)
-    if let Some((sx, sy)) = overrides.scale {
-        entity_commands.insert(Scale {
-            scale: Vector2 { x: sx, y: sy },
-        });
-    }
-
-    // Signals (override or add)
-    if overrides.has_signals
-        || !overrides.signal_scalars.is_empty()
-        || !overrides.signal_integers.is_empty()
-        || !overrides.signal_flags.is_empty()
-        || !overrides.signal_strings.is_empty()
-    {
-        let mut signals = Signals::default();
-        for (key, value) in overrides.signal_scalars {
-            signals.set_scalar(&key, value);
-        }
-        for (key, value) in overrides.signal_integers {
-            signals.set_integer(&key, value);
-        }
-        for flag in overrides.signal_flags {
-            signals.set_flag(&flag);
-        }
-        for (key, value) in overrides.signal_strings {
-            signals.set_string(&key, &value);
-        }
-        entity_commands.insert(signals);
-    }
-
-    // TTL (override)
-    if let Some(seconds) = overrides.ttl {
-        entity_commands.insert(Ttl::new(seconds));
-    }
-
-    // Animation (override) - also resets to frame 0
-    if let Some(anim_data) = overrides.animation {
-        entity_commands.insert(Animation::new(anim_data.animation_key));
-    } else {
-        // 4. Reset Animation to frame 0 even without override
-        // We queue a command to reset the animation using a custom EntityCommand
+    // 5. If no animation override was provided, reset to frame 0
+    if !has_animation_override {
         entity_commands.queue(ResetAnimationCommand);
-    }
-
-    // LuaTimer (override)
-    if let Some((duration, callback)) = overrides.lua_timer {
-        entity_commands.insert(LuaTimer::new(duration, callback));
-    }
-
-    // TweenPosition (override)
-    if let Some(tween_data) = overrides.tween_position {
-        let easing = parse_tween_easing(&tween_data.easing);
-        let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
-        let mut tween = TweenPosition::new(
-            Vector2 {
-                x: tween_data.from_x,
-                y: tween_data.from_y,
-            },
-            Vector2 {
-                x: tween_data.to_x,
-                y: tween_data.to_y,
-            },
-            tween_data.duration,
-        )
-        .with_easing(easing)
-        .with_loop_mode(loop_mode);
-
-        if tween_data.backwards {
-            tween = tween.with_backwards();
-        }
-
-        entity_commands.insert(tween);
-    }
-
-    // TweenRotation (override)
-    if let Some(tween_data) = overrides.tween_rotation {
-        let easing = parse_tween_easing(&tween_data.easing);
-        let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
-        let mut tween = TweenRotation::new(tween_data.from, tween_data.to, tween_data.duration)
-            .with_easing(easing)
-            .with_loop_mode(loop_mode);
-
-        if tween_data.backwards {
-            tween = tween.with_backwards();
-        }
-
-        entity_commands.insert(tween);
-    }
-
-    // TweenScale (override)
-    if let Some(tween_data) = overrides.tween_scale {
-        let easing = parse_tween_easing(&tween_data.easing);
-        let loop_mode = parse_tween_loop_mode(&tween_data.loop_mode);
-        let mut tween = TweenScale::new(
-            Vector2 {
-                x: tween_data.from_x,
-                y: tween_data.from_y,
-            },
-            Vector2 {
-                x: tween_data.to_x,
-                y: tween_data.to_y,
-            },
-            tween_data.duration,
-        )
-        .with_easing(easing)
-        .with_loop_mode(loop_mode);
-
-        if tween_data.backwards {
-            tween = tween.with_backwards();
-        }
-
-        entity_commands.insert(tween);
-    }
-
-    // EntityShader (override)
-    if let Some(shader_data) = overrides.shader {
-        let mut entity_shader = EntityShader::new(shader_data.key);
-        for (name, value) in shader_data.uniforms {
-            entity_shader.uniforms.insert(Arc::from(name), value);
-        }
-        entity_commands.insert(entity_shader);
-    }
-
-    // Tint (override)
-    if let Some((r, g, b, a)) = overrides.tint {
-        entity_commands.insert(Tint::new(r, g, b, a));
-    }
-
-    // 5. Register NEW cloned entity if register_as is set
-    if let Some(key) = overrides.register_as {
-        world_signals.set_entity(&key, cloned_entity);
     }
 }
 
@@ -1730,5 +1538,90 @@ fn convert_animation_condition(data: AnimationConditionData) -> Condition {
         AnimationConditionData::Not(inner) => {
             Condition::Not(Box::new(convert_animation_condition(*inner)))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::tween::{Easing, LoopMode};
+
+    #[test]
+    fn test_parse_tween_easing_linear() {
+        assert!(matches!(parse_tween_easing("linear"), Easing::Linear));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_quad_in() {
+        assert!(matches!(parse_tween_easing("quad_in"), Easing::QuadIn));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_quad_out() {
+        assert!(matches!(parse_tween_easing("quad_out"), Easing::QuadOut));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_quad_in_out() {
+        assert!(matches!(
+            parse_tween_easing("quad_in_out"),
+            Easing::QuadInOut
+        ));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_cubic_in() {
+        assert!(matches!(parse_tween_easing("cubic_in"), Easing::CubicIn));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_cubic_out() {
+        assert!(matches!(parse_tween_easing("cubic_out"), Easing::CubicOut));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_cubic_in_out() {
+        assert!(matches!(
+            parse_tween_easing("cubic_in_out"),
+            Easing::CubicInOut
+        ));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_unknown_defaults_to_linear() {
+        assert!(matches!(parse_tween_easing("unknown"), Easing::Linear));
+    }
+
+    #[test]
+    fn test_parse_tween_easing_empty_defaults_to_linear() {
+        assert!(matches!(parse_tween_easing(""), Easing::Linear));
+    }
+
+    #[test]
+    fn test_parse_tween_loop_mode_once() {
+        assert!(matches!(parse_tween_loop_mode("once"), LoopMode::Once));
+    }
+
+    #[test]
+    fn test_parse_tween_loop_mode_loop() {
+        assert!(matches!(parse_tween_loop_mode("loop"), LoopMode::Loop));
+    }
+
+    #[test]
+    fn test_parse_tween_loop_mode_ping_pong() {
+        assert!(matches!(
+            parse_tween_loop_mode("ping_pong"),
+            LoopMode::PingPong
+        ));
+    }
+
+    #[test]
+    fn test_parse_tween_loop_mode_unknown_defaults_to_once() {
+        assert!(matches!(parse_tween_loop_mode("unknown"), LoopMode::Once));
+    }
+
+    #[test]
+    fn test_parse_tween_loop_mode_empty_defaults_to_once() {
+        assert!(matches!(parse_tween_loop_mode(""), LoopMode::Once));
     }
 }
