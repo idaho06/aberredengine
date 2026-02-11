@@ -96,6 +96,7 @@ pub(super) struct LuaAppData {
     tilemap_commands: RefCell<Vec<TilemapCmd>>,
     camera_commands: RefCell<Vec<CameraCmd>>,
     animation_commands: RefCell<Vec<AnimationCmd>>,
+    render_commands: RefCell<Vec<RenderCmd>>,
 
     /// Clone commands for regular context (scene setup, phase callbacks)
     pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
@@ -123,19 +124,50 @@ pub(super) struct LuaAppData {
 Each command type is a Rust enum that encapsulates all data needed to perform an operation:
 
 ```rust
+/// Value types for shader uniforms.
+pub enum UniformValue {
+    Float(f32),
+    Int(i32),
+    Vec2 { x: f32, y: f32 },
+    Vec4 { x: f32, y: f32, z: f32, w: f32 },
+}
+
+/// Commands for render-related operations from Lua.
+pub enum RenderCmd {
+    SetPostProcessShader { ids: Option<Vec<String>> },
+    SetPostProcessUniform { name: String, value: UniformValue },
+    ClearPostProcessUniform { name: String },
+    ClearPostProcessUniforms,
+}
+
 pub enum EntityCmd {
     SetVelocity { entity_id: u64, vx: f32, vy: f32 },
     Despawn { entity_id: u64 },
     SignalSetFlag { entity_id: u64, flag: String },
-    // ... many more variants
+    // ... physics, tween, signal variants ...
+    SetShader { entity_id: u64, key: String },
+    RemoveShader { entity_id: u64 },
+    ShaderSetFloat { entity_id: u64, name: String, value: f32 },
+    ShaderSetInt { entity_id: u64, name: String, value: i32 },
+    ShaderSetVec2 { entity_id: u64, name: String, x: f32, y: f32 },
+    ShaderSetVec4 { entity_id: u64, name: String, x: f32, y: f32, z: f32, w: f32 },
+    ShaderClearUniform { entity_id: u64, name: String },
+    ShaderClearUniforms { entity_id: u64 },
+    SetTint { entity_id: u64, r: u8, g: u8, b: u8, a: u8 },
+    RemoveTint { entity_id: u64 },
 }
 
 pub enum SignalCmd {
     SetScalar { key: String, value: f32 },
     SetInteger { key: String, value: i32 },
+    SetString { key: String, value: String },
     SetFlag { key: String },
     ClearFlag { key: String },
-    SetString { key: String, value: String },
+    ClearScalar { key: String },
+    ClearInteger { key: String },
+    ClearString { key: String },
+    SetEntity { key: String, entity_id: u64 },
+    RemoveEntity { key: String },
 }
 ```
 
@@ -236,6 +268,7 @@ This distinction matters because collision callbacks need immediate processing t
 | **Group** | `GroupCmd` | Manage tracked entity groups |
 | **Tilemap** | `TilemapCmd` | Spawn tiles from tilemap data |
 | **Animation** | `AnimationCmd` | Register animation definitions |
+| **Render** | `RenderCmd` | Configure post-process shaders and uniforms |
 
 In addition to the regular queues, most write APIs have a collision-scoped variant (prefixed with `collision_` or `collision_entity_`) that queues into collision-specific buffers.
 
@@ -256,7 +289,7 @@ This section is meant to stay in sync with the actual implementation.
 
 #### Assets
 
-- `load_texture`, `load_font`, `load_music`, `load_sound`, `load_tilemap`
+- `load_texture`, `load_font`, `load_music`, `load_sound`, `load_tilemap`, `load_shader`
 
 #### Spawning / Cloning
 
@@ -287,6 +320,12 @@ This section is meant to stay in sync with the actual implementation.
 - `spawn_tiles`
 - `register_animation`
 
+#### Post-Process Shaders
+
+- `post_process_shader`
+- `post_process_set_float`, `post_process_set_int`, `post_process_set_vec2`, `post_process_set_vec4`
+- `post_process_clear_uniform`, `post_process_clear_uniforms`
+
 #### Entity Commands
 
 - `entity_set_position`, `entity_set_velocity`, `entity_set_speed`, `entity_set_rotation`, `entity_set_scale`
@@ -303,6 +342,10 @@ This section is meant to stay in sync with the actual implementation.
 - `entity_signal_set_scalar`, `entity_signal_set_integer`, `entity_signal_set_string`, `entity_signal_set_flag`
 - `entity_signal_clear_flag`
 - `entity_despawn`, `entity_menu_despawn`
+- `entity_set_shader`, `entity_remove_shader`
+- `entity_shader_set_float`, `entity_shader_set_int`, `entity_shader_set_vec2`, `entity_shader_set_vec4`
+- `entity_shader_clear_uniform`, `entity_shader_clear_uniforms`
+- `entity_set_tint`, `entity_remove_tint`
 
 #### Collision Context Functions
 
@@ -329,6 +372,10 @@ This section is meant to stay in sync with the actual implementation.
 - `collision_entity_signal_set_scalar`, `collision_entity_signal_set_integer`, `collision_entity_signal_set_string`, `collision_entity_signal_set_flag`
 - `collision_entity_signal_clear_flag`
 - `collision_entity_despawn`
+- `collision_entity_set_shader`, `collision_entity_remove_shader`
+- `collision_entity_shader_set_float`, `collision_entity_shader_set_int`, `collision_entity_shader_set_vec2`, `collision_entity_shader_set_vec4`
+- `collision_entity_shader_clear_uniform`, `collision_entity_shader_clear_uniforms`
+- `collision_entity_set_tint`, `collision_entity_remove_tint`
 
 ### `LuaEntityBuilder` Methods
 
@@ -359,6 +406,7 @@ with_menu_cursor
 with_menu_dynamic_text
 with_menu_callback
 with_menu_selection_sound
+with_menu_visible_count
 with_mouse_controlled
 with_particle_emitter
 with_persistent
@@ -390,6 +438,8 @@ with_tween_rotation
 with_tween_rotation_backwards
 with_tween_rotation_easing
 with_tween_rotation_loop
+with_shader
+with_tint
 with_tween_scale
 with_tween_scale_backwards
 with_tween_scale_easing
