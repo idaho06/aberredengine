@@ -9,6 +9,8 @@ use bevy_ecs::prelude::*;
 use raylib::ffi;
 use raylib::math::Vector2;
 
+use log::{debug, warn};
+
 use crate::components::dynamictext::DynamicText;
 use crate::resources::fontstore::FontStore;
 
@@ -21,12 +23,9 @@ pub fn dynamictext_size_system(
     fonts: NonSend<FontStore>,
 ) {
     for mut text in query.iter_mut() {
-        eprintln!("Calculating size for DynamicText: '{}'", text.text);
+        debug!("Calculating size for DynamicText: '{}'", text.text);
         let Some(font) = fonts.get(&*text.font) else {
-            eprintln!(
-                "Warning: font '{}' not found in FontStore, text size will be zero",
-                text.font
-            );
+            warn!("Font '{}' not found in FontStore, text size will be zero", text.font);
             continue;
         };
 

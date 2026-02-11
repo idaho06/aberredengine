@@ -30,6 +30,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
 use bevy_ecs::prelude::*;
+use log::{info, debug, error, warn};
 use raylib::prelude::Vector2;
 
 /// Spawns entities for newly added [`Menu`] components.
@@ -61,7 +62,7 @@ pub fn menu_spawn_system(
         let visible_count = menu.visible_count;
         let scroll_offset = menu.scroll_offset;
 
-        eprintln!(
+        debug!(
             "menu_spawn_system: Spawning menu entity {:?} with {} items",
             entity,
             menu.items.len()
@@ -91,7 +92,7 @@ pub fn menu_spawn_system(
                     font_size,
                     color,
                 ));
-                eprintln!(
+                debug!(
                     "menu_spawn_system: Spawned DynamicText for menu item id={}",
                     menu_item.id
                 );
@@ -124,7 +125,7 @@ pub fn menu_spawn_system(
                     flip_h: false,
                     flip_v: false,
                 });
-                eprintln!(
+                debug!(
                     "menu_spawn_system: Spawned Sprite for menu item id={}, size=({}, {})",
                     menu_item.id, width, height
                 );
@@ -155,7 +156,7 @@ pub fn menu_spawn_system(
             let text_entity = ecmd.id();
             ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
             menu_item.entity = Some(text_entity);
-            eprintln!(
+            debug!(
                 "menu_spawn_system: Menu item id={} assigned entity {:?} (visible={})",
                 menu_item.id, text_entity, is_visible
             );
@@ -228,14 +229,14 @@ pub fn menu_spawn_system(
         commands
             .entity(entity)
             .insert(Signals::default().with_flag("waiting_selection"));
-        eprintln!(
+        debug!(
             "menu_spawn_system: Added Signals component to menu entity {:?}",
             entity
         );
 
         // Spawn cursor entity if needed
         if let Some(cursor_entity) = menu.cursor_entity {
-            eprintln!(
+            debug!(
                 "menu_spawn_system: Spawning cursor entity {:?} for menu {:?}",
                 cursor_entity, entity
             );
@@ -255,12 +256,12 @@ pub fn menu_spawn_system(
                 });
                 commands.entity(cursor_entity).insert(ZIndex(23.0));
             }
-            eprintln!(
+            debug!(
                 "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
                 cursor_entity, cursor_position
             );
         }
-        eprintln!(
+        debug!(
             "menu_spawn_system: Spawned menu entity {:?} with {} items (visible_count={:?})",
             entity,
             menu.items.len(),
@@ -284,7 +285,7 @@ pub fn menu_despawn(
     mut texture_store: ResMut<TextureStore>,
 ) {
     let Ok(menu) = query.get(target) else {
-        eprintln!(
+        warn!(
             "menu_despawn: Entity {:?} not found or has no Menu component",
             target
         );
@@ -335,12 +336,12 @@ pub fn menu_controller_observer(
     mut audio_cmds: MessageWriter<AudioCmd>,
 ) {
     for (entity, mut menu, mut signals) in query.iter_mut() {
-        eprintln!(
+        debug!(
             "menu_controller_observer: Handling input for menu entity {:?}",
             entity
         );
         if !menu.active {
-            eprintln!(
+            debug!(
                 "menu_controller_observer: Menu entity {:?} is not active, skipping",
                 entity
             );
@@ -348,7 +349,7 @@ pub fn menu_controller_observer(
         }
         let event = trigger.event();
         if !event.pressed {
-            eprintln!("menu_controller_observer: Input event is a release, skipping");
+            debug!("menu_controller_observer: Input event is a release, skipping");
             continue; // Only handle key press, not release
         }
 
@@ -401,7 +402,7 @@ pub fn menu_controller_observer(
             InputAction::Action1 | InputAction::Action2 => {
                 if let Some(item) = menu.items.get(menu.selected_index) {
                     let selected_id = item.id.clone();
-                    eprintln!(
+                    debug!(
                         "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelectionEvent",
                         selected_id
                     );
@@ -573,13 +574,13 @@ pub fn menu_selection_observer(
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     let event = trigger.event();
-    eprintln!(
+    debug!(
         "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
         event.menu, event.item_id
     );
 
     let Ok((menu, menu_actions_opt)) = menus.get(event.menu) else {
-        eprintln!(
+        warn!(
             "menu_selection_observer: Menu entity {:?} not found",
             event.menu
         );
@@ -603,30 +604,30 @@ pub fn menu_selection_observer(
             ctx.set("item_index", item_index).unwrap();
 
             if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, ctx) {
-                eprintln!("[Lua] Error in menu callback '{}': {}", callback_name, e);
+                error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
             }
         } else {
-            eprintln!("[Lua] Warning: menu callback '{}' not found", callback_name);
+            warn!(target: "lua", "menu callback '{}' not found", callback_name);
         }
         return; // Callback handles everything, skip MenuActions
     }
 
     // Fallback to existing MenuActions logic
     let Some(menu_actions) = menu_actions_opt else {
-        eprintln!(
+        warn!(
             "menu_selection_observer: No MenuActions found for menu entity {:?}, item_id {:?}",
             event.menu, event.item_id
         );
         return;
     };
 
-    eprintln!(
+    debug!(
         "menu_selection_observer: Found MenuActions, looking up action for item_id={}",
         event.item_id
     );
     match menu_actions.get(&event.item_id) {
         MenuAction::SetScene(scene_name) => {
-            eprintln!(
+            info!(
                 "menu_selection_observer: SetScene action found, scene_name={}",
                 scene_name
             );

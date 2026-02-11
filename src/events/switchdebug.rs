@@ -6,6 +6,7 @@
 use crate::resources::debugmode::DebugMode;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
+use log::info;
 
 /// Event used to toggle the [`DebugMode`] resource on/off.
 ///
@@ -25,15 +26,15 @@ pub fn switch_debug_observer(
 ) {
     // This observer is triggered when a SwitchDebugEvent is fired.
     // It toggles the DebugMode resource.
-    println!("SwitchDebugEvent triggered");
+    info!("SwitchDebugEvent triggered");
 
     // Toggle the DebugMode resource
     if debug_mode.is_some() {
         // If it exists, we remove it
         commands.remove_resource::<DebugMode>();
-        eprintln!("Debug mode disabled");
+        info!("Debug mode disabled");
     } else {
-        eprintln!("Debug mode resource not found, creating new one");
+        info!("Debug mode enabled");
         commands.insert_resource(DebugMode {});
     }
 }

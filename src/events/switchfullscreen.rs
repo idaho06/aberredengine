@@ -9,6 +9,7 @@ use crate::resources::fullscreen::FullScreen;
 use crate::resources::gameconfig::GameConfig;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
+use log::{info, error};
 use raylib::ffi;
 
 /// Event triggered to toggle fullscreen mode.
@@ -33,7 +34,7 @@ pub fn switch_fullscreen_observer(
 ) {
     // This observer is triggered when a SwitchFullScreenEvent is fired.
     // It toggles the FullScreen resource.
-    eprintln!("SwitchFullScreenEvent triggered");
+    info!("SwitchFullScreenEvent triggered");
     if fullscreen.is_some() {
         // If it exists, we remove it
         commands.remove_resource::<FullScreen>();
@@ -57,13 +58,13 @@ pub fn switch_fullscreen_observer(
             }
 
             if !rl.is_window_fullscreen() {
-                eprintln!("Full screen disabled");
+                info!("Full screen disabled");
             } else {
-                eprintln!("Failed to disable full screen");
+                error!("Failed to disable full screen");
             }
         }
     } else {
-        eprintln!("Full screen resource not found, creating new one");
+        info!("Entering full screen mode");
         commands.insert_resource(FullScreen {});
 
         if !rl.is_window_fullscreen() {
@@ -75,7 +76,7 @@ pub fn switch_fullscreen_observer(
                 let monitor: i32 = unsafe { ffi::GetCurrentMonitor() };
                 let monitor_width = unsafe { ffi::GetMonitorWidth(monitor) };
                 let monitor_height = unsafe { ffi::GetMonitorHeight(monitor) };
-                eprintln!("Monitor dimensions: {}x{}", monitor_width, monitor_height);
+                info!("Monitor dimensions: {}x{}", monitor_width, monitor_height);
                 // resize window to monitor dimensions
                 rl.set_window_size(monitor_width, monitor_height);
             }
@@ -93,9 +94,9 @@ pub fn switch_fullscreen_observer(
             }
 
             if rl.is_window_fullscreen() {
-                eprintln!("Full screen enabled");
+                info!("Full screen enabled");
             } else {
-                eprintln!("Failed to enable full screen");
+                error!("Failed to enable full screen");
             }
         }
     }

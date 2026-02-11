@@ -35,6 +35,7 @@ use raylib::core::audio::{Music, RaylibAudio};
 use raylib::ffi;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::ffi::CString;
+use log::{info, error, debug};
 
 // FxPlayingState removed; we now track only the set of FX ids considered playing.
 
@@ -101,8 +102,8 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
         }
     };
 
-    eprintln!(
-        "[audio] thread starting (id={:?})",
+    info!(
+        target: "audio", "thread starting (id={:?})",
         std::thread::current().id()
     );
 
@@ -119,13 +120,13 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 AudioCmd::LoadMusic { id, path } => match audio.new_music(&path) {
                     Ok(music) => {
                         // log then insert/send
-                        eprintln!("[audio] loaded id='{}' path='{}'", id, path);
+                        info!(target: "audio", "loaded id='{}' path='{}'", id, path);
                         musics.insert(id.clone(), music);
                         let _ = tx_evt.send(AudioMessage::MusicLoaded { id });
                     }
                     Err(e) => {
-                        eprintln!(
-                            "[audio] load failed id='{}' path='{}' error='{}'",
+                        error!(
+                            target: "audio", "load failed id='{}' path='{}' error='{}'",
                             id, path, e
                         );
                         let _ = tx_evt.send(AudioMessage::MusicLoadFailed {
@@ -139,7 +140,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     looped: want_loop,
                 } => {
                     if let Some(music) = musics.get(&id) {
-                        eprintln!("[audio] play start id='{}' looped={}", id, want_loop);
+                        debug!(target: "audio", "play start id='{}' looped={}", id, want_loop);
                         music.seek_stream(0.0);
                         music.play_stream();
                         playing.insert(id.clone());
@@ -153,7 +154,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 }
                 AudioCmd::StopMusic { id } => {
                     if let Some(music) = musics.get(&id) {
-                        eprintln!("[audio] stop id='{}'", id);
+                        debug!(target: "audio", "stop id='{}'", id);
                         music.stop_stream();
                         playing.remove(&id);
                         looped.remove(&id);
@@ -161,7 +162,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     }
                 }
                 AudioCmd::StopAllMusic => {
-                    eprintln!("[audio] stop all");
+                    debug!(target: "audio", "stop all");
                     for id in playing.drain() {
                         if let Some(music) = musics.get(&id) {
                             music.stop_stream();
@@ -172,7 +173,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 }
                 AudioCmd::PauseMusic { id } => {
                     if let Some(music) = musics.get(&id) {
-                        eprintln!("[audio] pause id='{}'", id);
+                        debug!(target: "audio", "pause id='{}'", id);
                         music.pause_stream();
                         playing.remove(&id);
                         let _ = tx_evt.send(AudioMessage::MusicStopped { id });
@@ -180,7 +181,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 }
                 AudioCmd::ResumeMusic { id } => {
                     if let Some(music) = musics.get(&id) {
-                        eprintln!("[audio] resume id='{}'", id);
+                        debug!(target: "audio", "resume id='{}'", id);
                         music.resume_stream();
                         playing.insert(id.clone());
                         let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id });
@@ -188,20 +189,20 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 }
                 AudioCmd::VolumeMusic { id, vol } => {
                     if let Some(music) = musics.get(&id) {
-                        eprintln!("[audio] volume id='{}' vol={}", id, vol);
+                        debug!(target: "audio", "volume id='{}' vol={}", id, vol);
                         music.set_volume(vol);
                         let _ = tx_evt.send(AudioMessage::MusicVolumeChanged { id, vol });
                     }
                 }
                 AudioCmd::UnloadMusic { id } => {
                     if let Some(music) = musics.remove(&id) {
-                        eprintln!("[audio] unload id='{}'", id);
+                        debug!(target: "audio", "unload id='{}'", id);
                         drop(music);
                         let _ = tx_evt.send(AudioMessage::MusicUnloaded { id });
                     }
                 }
                 AudioCmd::UnloadAllMusic => {
-                    eprintln!("[audio] unload all");
+                    debug!(target: "audio", "unload all");
                     musics.clear();
                     playing.clear();
                     looped.clear();
@@ -211,8 +212,8 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     let c_path = match CString::new(path.clone()) {
                         Ok(s) => s,
                         Err(e) => {
-                            eprintln!(
-                                "[audio] fx load failed id='{}' path='{}' error='invalid path: {}'",
+                            error!(
+                                target: "audio", "fx load failed id='{}' path='{}' error='invalid path: {}'",
                                 id, path, e
                             );
                             let _ = tx_evt.send(AudioMessage::FxLoadFailed {
@@ -224,8 +225,8 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     };
                     let sound = unsafe { ffi::LoadSound(c_path.as_ptr()) };
                     if sound.stream.buffer.is_null() {
-                        eprintln!(
-                            "[audio] fx load failed id='{}' path='{}' error='failed to load'",
+                        error!(
+                            target: "audio", "fx load failed id='{}' path='{}' error='failed to load'",
                             id, path
                         );
                         let _ = tx_evt.send(AudioMessage::FxLoadFailed {
@@ -233,31 +234,31 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                             error: "failed to load".to_string(),
                         });
                     } else {
-                        eprintln!("[audio] fx loaded id='{}' path='{}'", id, path);
+                        info!(target: "audio", "fx loaded id='{}' path='{}'", id, path);
                         sounds.insert(id.clone(), sound);
                         let _ = tx_evt.send(AudioMessage::FxLoaded { id });
                     }
                 }
                 AudioCmd::PlayFx { id } => {
                     if let Some(sound) = sounds.get(&id) {
-                        eprintln!("[audio] fx play id='{}'", id);
+                        debug!(target: "audio", "fx play id='{}'", id);
                         let alias = unsafe { ffi::LoadSoundAlias(*sound) };
                         unsafe { ffi::PlaySound(alias) };
                         active_aliases.push(alias);
                     } else {
-                        eprintln!("[audio] fx play failed id='{}' reason='not loaded'", id);
+                        error!(target: "audio", "fx play failed id='{}' reason='not loaded'", id);
                     }
                 }
                 AudioCmd::UnloadFx { id } => {
                     // Individual unload is a no-op with SoundAlias approach
                     // Sounds are kept loaded for the lifetime of the scene
-                    eprintln!(
-                        "[audio] fx unload id='{}' (ignored - use UnloadAllFx instead)",
+                    debug!(
+                        target: "audio", "fx unload id='{}' (ignored - use UnloadAllFx instead)",
                         id
                     );
                 }
                 AudioCmd::UnloadAllFx => {
-                    eprintln!("[audio] fx unload all");
+                    debug!(target: "audio", "fx unload all");
                     // First unload all active aliases
                     for alias in active_aliases.drain(..) {
                         unsafe { ffi::UnloadSoundAlias(alias) };
@@ -269,9 +270,9 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                     let _ = tx_evt.send(AudioMessage::FxUnloadedAll);
                 }
                 AudioCmd::Shutdown => {
-                    eprintln!("[audio] shutdown requested");
+                    info!(target: "audio", "shutdown requested");
                     // unload all locally before exiting
-                    eprintln!("[audio] unload all");
+                    debug!(target: "audio", "unload all");
                     musics.clear();
                     playing.clear();
                     looped.clear();
@@ -307,14 +308,14 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
             if looped.contains(id) {
                 // Restart
                 if let Some(music) = musics.get(id) {
-                    eprintln!("[audio] restarting looped id='{}'", id);
+                    debug!(target: "audio", "restarting looped id='{}'", id);
                     music.stop_stream();
                     //music.seek_stream(0.0);
                     music.play_stream();
                     let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id: id.clone() });
                 }
             } else {
-                eprintln!("[audio] finished id='{}'", id);
+                debug!(target: "audio", "finished id='{}'", id);
                 if let Some(music) = musics.get(id) {
                     music.stop_stream();
                 };
@@ -334,8 +335,8 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
         std::thread::sleep(std::time::Duration::from_millis(10));
     } // 'run
 
-    eprintln!(
-        "[audio] thread exiting (id={:?})",
+    info!(
+        target: "audio", "thread exiting (id={:?})",
         std::thread::current().id()
     );
 

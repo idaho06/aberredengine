@@ -20,6 +20,7 @@
 
 use bevy_ecs::prelude::*;
 use configparser::ini::Ini;
+use log::info;
 use std::path::PathBuf;
 
 /// Default safe values for startup
@@ -124,7 +125,7 @@ impl GameConfig {
             self.fullscreen = fullscreen;
         }
 
-        eprintln!(
+        info!(
             "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}",
             self.render_width,
             self.render_height,
@@ -160,7 +161,7 @@ impl GameConfig {
             .write(&self.config_path)
             .map_err(|e| format!("Failed to save config file: {}", e))?;
 
-        eprintln!("Saved config to {:?}", self.config_path);
+        info!("Saved config to {:?}", self.config_path);
 
         Ok(())
     }

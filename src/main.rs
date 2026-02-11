@@ -99,7 +99,8 @@ use bevy_ecs::prelude::*;
 //use raylib::prelude::*;
 
 fn main() {
-    println!("Hello, world! This is the Aberred Engine!");
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    log::info!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
     // GameConfig - will load from config.ini on first frame via apply_gameconfig_changes
     let mut config = GameConfig::new();
@@ -157,7 +158,7 @@ fn main() {
     // Initialize Lua runtime and load main script
     let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
     if let Err(e) = lua_runtime.run_script("./assets/scripts/main.lua") {
-        eprintln!("Failed to load main.lua: {}", e);
+        log::error!("Failed to load main.lua: {}", e);
     }
     world.insert_non_send_resource(lua_runtime);
 

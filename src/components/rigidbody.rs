@@ -216,7 +216,7 @@ impl RigidBody {
         if current_speed > 0.0 {
             self.velocity = self.velocity.normalized() * new_speed;
         } else {
-            eprintln!("[WARN] RigidBody::set_speed called with zero velocity - operation ignored");
+            log::warn!("RigidBody::set_speed called with zero velocity - operation ignored");
         }
     }
 }

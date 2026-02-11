@@ -13,6 +13,7 @@ use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
 use bevy_ecs::prelude::*;
+use log::{info, error};
 use raylib::ffi;
 //use std::time::Duration;
 
@@ -57,7 +58,7 @@ pub fn apply_gameconfig_changes(
         if render_target.game_width != config.render_width
             || render_target.game_height != config.render_height
         {
-            eprintln!(
+            info!(
                 "Resizing render target: {}x{} -> {}x{}",
                 render_target.game_width,
                 render_target.game_height,
@@ -67,7 +68,7 @@ pub fn apply_gameconfig_changes(
             if let Err(e) =
                 render_target.recreate(&mut rl, &th, config.render_width, config.render_height)
             {
-                eprintln!("Failed to resize render target: {}", e);
+                error!("Failed to resize render target: {}", e);
             } else {
                 screen_size.w = config.render_width as i32;
                 screen_size.h = config.render_height as i32;
@@ -78,7 +79,7 @@ pub fn apply_gameconfig_changes(
         let is_fullscreen = fullscreen.is_some();
         if config.fullscreen != is_fullscreen {
             // Config and window state don't match - fire event to toggle
-            eprintln!(
+            info!(
                 "Fullscreen mismatch: config={}, window={} - triggering toggle",
                 config.fullscreen, is_fullscreen
             );
@@ -108,17 +109,17 @@ pub fn apply_gameconfig_changes(
         unsafe {
             if config.vsync {
                 ffi::SetWindowState(ffi::ConfigFlags::FLAG_VSYNC_HINT as u32);
-                eprintln!("VSync enabled");
+                info!("VSync enabled");
             } else {
                 ffi::ClearWindowState(ffi::ConfigFlags::FLAG_VSYNC_HINT as u32);
-                eprintln!("VSync disabled");
+                info!("VSync disabled");
             }
         }
 
         // Apply target FPS
         rl.set_target_fps(config.target_fps);
 
-        eprintln!("GameConfig changes applied.");
+        info!("GameConfig changes applied.");
     }
     // clean up change detection flag
     // config.bypass_change_detection();

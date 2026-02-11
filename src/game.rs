@@ -90,6 +90,7 @@ use crate::systems::lua_commands::{
     process_phase_command, process_render_command, process_signal_command, process_spawn_command,
     process_tilemap_command,
 };
+use log::{info, error};
 //use rand::Rng;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
@@ -236,7 +237,7 @@ pub fn setup(
     // Call Lua on_setup function to queue asset loading commands
     if lua_runtime.has_function("on_setup") {
         if let Err(e) = lua_runtime.call_function::<_, ()>("on_setup", ()) {
-            eprintln!("[Rust] Error calling on_setup: {}", e);
+            error!("Error calling on_setup: {}", e);
         }
     }
 
@@ -274,7 +275,7 @@ pub fn setup(
 
     // Change GameState to Playing
     next_state.set(GameStates::Playing);
-    eprintln!("Game setup() done, next state set to Playing");
+    info!("Game setup() done, next state set to Playing");
 }
 
 pub fn quit_game(
@@ -282,7 +283,7 @@ pub fn quit_game(
     //mut rl: NonSendMut<raylib::RaylibHandle>,
     mut world_signals: ResMut<WorldSignals>,
 ) {
-    eprintln!("Quitting game...");
+    info!("Quitting game...");
 
     // Perform any necessary cleanup here
 
@@ -308,10 +309,10 @@ pub fn enter_play(
     if lua_runtime.has_function("on_enter_play") {
         match lua_runtime.call_function::<_, String>("on_enter_play", ()) {
             Ok(result) => {
-                eprintln!("[Rust] Lua on_enter_play returned: {}", result);
+                info!("Lua on_enter_play returned: {}", result);
             }
             Err(e) => {
-                eprintln!("[Rust] Error calling on_enter_play: {}", e);
+                error!("Error calling on_enter_play: {}", e);
             }
         }
     }
@@ -637,7 +638,7 @@ pub fn update(
     let input_table = match lua_runtime.create_input_table(&input_snapshot) {
         Ok(table) => table,
         Err(e) => {
-            eprintln!("[Rust] Error creating input table: {}", e);
+            error!("Error creating input table: {}", e);
             return;
         }
     };
@@ -647,7 +648,7 @@ pub fn update(
     if lua_runtime.has_function(&callback_name) {
         if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, (input_table, delta_sec))
         {
-            eprintln!("[Rust] Error calling {}: {}", callback_name, e);
+            error!("Error calling {}: {}", callback_name, e);
         }
     }
 
@@ -709,7 +710,7 @@ pub fn update(
 
     // Check for scene switch flag (set by Lua)
     if world_signals.has_flag("switch_scene") {
-        eprintln!("Scene switch requested in world signals.");
+        info!("Scene switch requested in world signals.");
         world_signals.clear_flag("switch_scene");
         let switch_scene_system = systems_store
             .get("switch_scene")
@@ -840,7 +841,7 @@ pub fn switch_scene(
     mut entity_cmd_queries: EntityCmdQueries,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
 ) {
-    eprintln!("switch_scene: System called!");
+    info!("switch_scene: System called!");
 
     // Clear all command queues FIRST to discard any stale commands from the previous scene
     // that might reference entities about to be despawned. This prevents panics when
@@ -874,7 +875,7 @@ pub fn switch_scene(
     // Call Lua on_switch_scene function if it exists
     if lua_runtime.has_function("on_switch_scene") {
         if let Err(e) = lua_runtime.call_function::<_, ()>("on_switch_scene", scene.clone()) {
-            eprintln!("[Rust] Error calling on_switch_scene: {}", e);
+            error!("Error calling on_switch_scene: {}", e);
         }
     }
 

@@ -68,6 +68,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use raylib::prelude::Color;
+use log::{info, error, warn};
 
 /// Bundled queries for entity command processing.
 ///
@@ -207,12 +208,12 @@ pub fn process_tilemap_command<F>(
                 if let Some(tilemap_tex) = tex_store.get(&id) {
                     let tiles_width = tilemap_tex.width;
                     spawn_tiles_fn(commands, id.clone(), tiles_width, tilemap_info);
-                    eprintln!("[Rust] Spawned tiles for tilemap '{}'", id);
+                    info!("Spawned tiles for tilemap '{}'", id);
                 } else {
-                    eprintln!("[Rust] Tilemap texture '{}' not found", id);
+                    error!("Tilemap texture '{}' not found", id);
                 }
             } else {
-                eprintln!("[Rust] Tilemap '{}' not found in store", id);
+                error!("Tilemap '{}' not found in store", id);
             }
         }
     }
@@ -324,31 +325,31 @@ pub fn process_asset_command<F1, F2>(
     match cmd {
         AssetCmd::LoadTexture { id, path } => match rl.load_texture(th, &path) {
             Ok(tex) => {
-                eprintln!("[Rust] Loaded texture '{}' from '{}'", id, path);
+                info!("Loaded texture '{}' from '{}'", id, path);
                 tex_store.insert(&id, tex);
             }
             Err(e) => {
-                eprintln!("[Rust] Failed to load texture '{}': {}", path, e);
+                error!("Failed to load texture '{}': {}", path, e);
             }
         },
         AssetCmd::LoadFont { id, path, size } => {
             let font = load_font_fn(rl, th, &path, size);
-            eprintln!("[Rust] Loaded font '{}' from '{}'", id, path);
+            info!("Loaded font '{}' from '{}'", id, path);
             fonts.add(&id, font);
         }
         AssetCmd::LoadMusic { id, path } => {
-            eprintln!("[Rust] Queuing music '{}' from '{}'", id, path);
+            info!("Queuing music '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
         }
         AssetCmd::LoadSound { id, path } => {
-            eprintln!("[Rust] Queuing sound '{}' from '{}'", id, path);
+            info!("Queuing sound '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
         }
         AssetCmd::LoadTilemap { id, path } => {
             let (tilemap_tex, tilemap) = load_tilemap_fn(rl, th, &path);
             let tiles_width = tilemap_tex.width;
-            eprintln!(
-                "[Rust] Loaded tilemap '{}' from '{}' ({}x{} texture, tile_size={})",
+            info!(
+                "Loaded tilemap '{}' from '{}' ({}x{} texture, tile_size={})",
                 id, path, tiles_width, tilemap_tex.height, tilemap.tile_size
             );
             tex_store.insert(&id, tilemap_tex);
@@ -365,14 +366,14 @@ pub fn process_asset_command<F1, F2>(
 
             let shader = rl.load_shader(th, vs_path_c, fs_path_c);
             if shader.is_shader_valid() {
-                eprintln!(
-                    "[Rust] Loaded shader '{}' (vs: {:?}, fs: {:?})",
+                info!(
+                    "Loaded shader '{}' (vs: {:?}, fs: {:?})",
                     id, vs_path, fs_path
                 );
                 shader_store.add(&id, shader);
             } else {
-                eprintln!(
-                    "[Rust] Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
+                error!(
+                    "Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
                     id, vs_path, fs_path
                 );
             }
@@ -396,18 +397,18 @@ pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShad
             post_process.set_shader_chain(ids.clone());
             match &ids {
                 Some(list) if !list.is_empty() => {
-                    eprintln!("[Rust] Post-process shader chain: [{}]", list.join(", "));
+                    info!("Post-process shader chain: [{}]", list.join(", "));
                 }
                 _ => {
-                    eprintln!("[Rust] Post-process shader disabled");
+                    info!("Post-process shader disabled");
                 }
             }
         }
         RenderCmd::SetPostProcessUniform { name, value } => {
             let is_reserved = post_process.set_uniform(&name, value);
             if is_reserved {
-                eprintln!(
-                    "[Rust] Warning: '{}' is a reserved uniform name and will be overwritten by the engine",
+                warn!(
+                    "'{}' is a reserved uniform name and will be overwritten by the engine",
                     name
                 );
             }
@@ -456,8 +457,8 @@ pub fn process_animation_command(
                     looped,
                 },
             );
-            eprintln!(
-                "[Rust] Registered animation '{}' ({} frames, {} fps)",
+            info!(
+                "Registered animation '{}' ({} frames, {} fps)",
                 id, frame_count, fps
             );
         }
@@ -1133,8 +1134,8 @@ fn apply_components(
             if let Some(cursor_entity) = world_signals.get_entity(&cursor_key).copied() {
                 menu = menu.with_cursor(cursor_entity);
             } else {
-                eprintln!(
-                    "[Rust] Menu cursor entity key '{}' not found in WorldSignals",
+                warn!(
+                    "Menu cursor entity key '{}' not found in WorldSignals",
                     cursor_key
                 );
             }
@@ -1304,15 +1305,15 @@ fn apply_components(
             if let Some(entity) = world_signals.get_entity(key).copied() {
                 templates.push(entity);
             } else {
-                eprintln!(
-                    "[ParticleEmitter] template key '{}' not found in WorldSignals; ignoring",
+                warn!(
+                    "ParticleEmitter template key '{}' not found in WorldSignals; ignoring",
                     key
                 );
             }
         }
 
         if templates.is_empty() && !emitter_data.template_keys.is_empty() {
-            eprintln!("[ParticleEmitter] no valid templates resolved; emitter will not emit");
+            warn!("ParticleEmitter: no valid templates resolved; emitter will not emit");
         }
 
         // Convert shape
@@ -1412,8 +1413,8 @@ pub fn process_clone_command(
 ) {
     // 1. Look up source entity from WorldSignals
     let Some(source_entity) = world_signals.get_entity(&cmd.source_key).copied() else {
-        eprintln!(
-            "[Clone] Source '{}' not found in WorldSignals",
+        error!(
+            "Clone source '{}' not found in WorldSignals",
             cmd.source_key
         );
         return;

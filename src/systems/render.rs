@@ -34,6 +34,7 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldtime::WorldTime;
+use log::{warn, error};
 
 /// Bundled render resources to reduce system parameter count.
 #[derive(SystemParam)]
@@ -266,10 +267,7 @@ pub fn render_system(
                                     tint_color,
                                 );
                             } else {
-                                eprintln!(
-                                    "[Render] Warning: Entity shader '{}' is invalid, rendering without shader",
-                                    entity_shader.shader_key
-                                );
+                                warn!("Entity shader '{}' is invalid, rendering without shader", entity_shader.shader_key);
                                 let tint_color =
                                     maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 d2.draw_texture_pro(
@@ -282,10 +280,7 @@ pub fn render_system(
                                 );
                             }
                         } else {
-                            eprintln!(
-                                "[Render] Warning: Entity shader '{}' not found, rendering without shader",
-                                entity_shader.shader_key
-                            );
+                            warn!("Entity shader '{}' not found, rendering without shader", entity_shader.shader_key);
                             let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                             d2.draw_texture_pro(
                                 tex,
@@ -604,16 +599,10 @@ pub fn render_system(
                     set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
                 }
             } else {
-                eprintln!(
-                    "[Render] Warning: Post-process shader '{}' is invalid, rendering without shader",
-                    shader_key
-                );
+                warn!("Post-process shader '{}' is invalid, rendering without shader", shader_key);
             }
         } else {
-            eprintln!(
-                "[Render] Warning: Post-process shader '{}' not found, rendering without shader",
-                shader_key
-            );
+            warn!("Post-process shader '{}' not found, rendering without shader", shader_key);
         }
 
         let mut d = rl.begin_drawing(&th);
@@ -644,7 +633,7 @@ pub fn render_system(
     } else {
         // Multi-pass: ensure ping-pong buffers exist
         if let Err(e) = render_target.ensure_ping_pong_buffers(&mut rl, &th) {
-            eprintln!("[Render] Failed to create ping-pong buffers: {}", e);
+            error!("Failed to create ping-pong buffers: {}", e);
             // Fallback: draw without shader
             let mut d = rl.begin_drawing(&th);
             d.clear_background(Color::BLACK);
@@ -694,15 +683,9 @@ pub fn render_system(
 
             if !shader_valid {
                 if shader_store.get(shader_key.as_ref()).is_none() {
-                    eprintln!(
-                        "[Render] Warning: shader '{}' not found, skipping pass",
-                        shader_key
-                    );
+                    warn!("Shader '{}' not found, skipping pass", shader_key);
                 } else {
-                    eprintln!(
-                        "[Render] Warning: shader '{}' invalid, skipping pass",
-                        shader_key
-                    );
+                    warn!("Shader '{}' invalid, skipping pass", shader_key);
                 }
                 continue;
             }

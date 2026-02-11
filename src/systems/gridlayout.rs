@@ -39,6 +39,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
+use log::{error, info};
 
 /// System that processes GridLayout components and spawns child entities accordingly.
 pub fn gridlayout_spawn_system(
@@ -54,10 +55,7 @@ pub fn gridlayout_spawn_system(
         let layout_data = match GridLayoutData::load_from_file(&grid_layout.path) {
             Ok(data) => data,
             Err(err) => {
-                eprintln!(
-                    "Failed to load grid layout from {}: {}",
-                    grid_layout.path, err
-                );
+                error!("Failed to load grid layout from {}: {}", grid_layout.path, err);
                 grid_layout.spawned = true; // Prevent retrying
                 continue;
             }
@@ -119,9 +117,6 @@ pub fn gridlayout_spawn_system(
         }
         grid_layout.spawned = true;
 
-        eprintln!(
-            "Spawned grid layout from {} with group '{}'",
-            grid_layout.path, grid_layout.group
-        );
+        info!("Spawned grid layout from {} with group '{}'", grid_layout.path, grid_layout.group);
     }
 }

@@ -13,6 +13,7 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::systemsstore::SystemsStore;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
+use log::{info, debug, warn};
 
 /// Event used to indicate that a pending game state transition should be
 /// applied.
@@ -45,7 +46,7 @@ pub fn observe_gamestate_change_event(
 ) {
     // This observer is triggered when a GameStateChangedEvent is fired.
     // It checks the NextGameState resource and updates the GameState resource accordingly.
-    eprintln!("GameStateChangedEvent triggered");
+    debug!("GameStateChangedEvent triggered");
 
     if let (Some(next_game_state), Some(game_state)) =
         (next_game_state.as_deref_mut(), game_state.as_deref_mut())
@@ -55,27 +56,22 @@ pub fn observe_gamestate_change_event(
         match next_state_value {
             Pending(new_state) => {
                 let old_state = game_state.get().clone();
-                eprintln!(
-                    "Transitioning from {:?} to {:?}",
-                    game_state.get(),
-                    new_state
-                );
+                info!("Transitioning from {:?} to {:?}", game_state.get(), new_state);
                 game_state.set(new_state.clone());
                 next_game_state.reset();
-                eprintln!("Calling on_state_exit()");
+                debug!("Calling on_state_exit()");
                 on_state_exit(&old_state, &mut commands, &systems_store);
-                eprintln!("Calling on_state_enter()");
+                debug!("Calling on_state_enter()");
                 let systems_store = systems_store.as_ref();
                 on_state_enter(&new_state, &mut commands, &systems_store);
             }
             Unchanged => {
-                eprintln!("No state change pending.");
+                debug!("No state change pending.");
             }
         }
     } else {
-        eprintln!(
-            "One or more resources missing in observe_gamestate_change_event.
-             next_state: {:?}, game_state: {:?}",
+        warn!(
+            "One or more resources missing in observe_gamestate_change_event. next_state: {:?}, game_state: {:?}",
             next_game_state.is_some(),
             game_state.is_some()
         );
@@ -85,7 +81,7 @@ pub fn observe_gamestate_change_event(
 /// Internal: run state-specific "enter" systems for the given state.
 fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &SystemsStore) {
     match state {
-        GameStates::None => eprintln!("Entered None state"),
+        GameStates::None => debug!("Entered None state"),
         GameStates::Setup => {
             let setup_system_id = systems_store
                 .get("setup")
@@ -112,10 +108,10 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
 /// Internal: run state-specific "exit" systems for the given state.
 fn on_state_exit(state: &GameStates, _commands: &mut Commands, _systems_store: &SystemsStore) {
     match state {
-        GameStates::None => eprintln!("Exited None state"),
-        GameStates::Setup => eprintln!("Exited Setup state"),
-        GameStates::Playing => eprintln!("Exited Playing state"),
-        // GameStates::Paused => eprintln!("Exited Paused state"),
-        GameStates::Quitting => eprintln!("Exited Quitting state"),
+        GameStates::None => debug!("Exited None state"),
+        GameStates::Setup => debug!("Exited Setup state"),
+        GameStates::Playing => debug!("Exited Playing state"),
+        // GameStates::Paused => debug!("Exited Paused state"),
+        GameStates::Quitting => debug!("Exited Quitting state"),
     }
 }

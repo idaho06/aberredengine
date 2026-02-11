@@ -64,6 +64,7 @@ use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
     process_phase_command, process_signal_command, process_spawn_command,
 };
+use log::{error, warn};
 
 /// Bundled read-only queries for building entity context.
 ///
@@ -212,24 +213,18 @@ fn process_callback_return(
                     }
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[Lua] Error converting return value in {}(): {}",
-                        fn_name, e
-                    );
+                    error!(target: "lua", "Error converting return value in {}(): {}", fn_name, e);
                     None
                 }
             }
         }
         Ok(LuaValue::Nil) => None,
         Ok(_) => {
-            eprintln!(
-                "[Lua] Warning: phase callback '{}' returned non-string, non-nil value",
-                fn_name
-            );
+            warn!(target: "lua", "Phase callback '{}' returned non-string, non-nil value", fn_name);
             None
         }
         Err(e) => {
-            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+            error!(target: "lua", "Error in {}(): {}", fn_name, e);
             None
         }
     }
@@ -249,7 +244,7 @@ fn call_phase_enter(
             .call_function::<_, LuaValue>(fn_name, (ctx_table.clone(), input_table.clone()));
         process_callback_return(result, current_phase, fn_name)
     } else {
-        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+        warn!(target: "lua", "Phase callback '{}' not found", fn_name);
         None
     }
 }
@@ -269,7 +264,7 @@ fn call_phase_update(
             .call_function::<_, LuaValue>(fn_name, (ctx_table.clone(), input_table.clone(), dt));
         process_callback_return(result, current_phase, fn_name)
     } else {
-        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+        warn!(target: "lua", "Phase callback '{}' not found", fn_name);
         None
     }
 }
@@ -278,10 +273,10 @@ fn call_phase_update(
 fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, ctx_table: &LuaTable) {
     if lua_runtime.has_function(fn_name) {
         if let Err(e) = lua_runtime.call_function::<_, ()>(fn_name, ctx_table.clone()) {
-            eprintln!("[Lua] Error in {}(): {}", fn_name, e);
+            error!(target: "lua", "Error in {}(): {}", fn_name, e);
         }
     } else {
-        eprintln!("[Lua] Warning: phase callback '{}' not found", fn_name);
+        warn!(target: "lua", "Phase callback '{}' not found", fn_name);
     }
 }
 
@@ -326,7 +321,7 @@ pub fn lua_phase_system(
     let input_table = match lua_runtime.create_input_table(&input_snapshot) {
         Ok(table) => table,
         Err(e) => {
-            eprintln!("[Rust] Error creating input table for phase system: {}", e);
+            error!("Error creating input table for phase system: {}", e);
             return;
         }
     };
@@ -364,7 +359,7 @@ pub fn lua_phase_system(
                                 callback_transitions.push((entity_id, next));
                             }
                         }
-                        Err(e) => eprintln!("[Rust] Error building context: {}", e),
+                        Err(e) => error!("Error building context: {}", e),
                     }
                 }
             }
@@ -391,7 +386,7 @@ pub fn lua_phase_system(
                         &signals_query,
                     ) {
                         Ok(ctx) => call_phase_exit(&lua_runtime, fn_name, &ctx),
-                        Err(e) => eprintln!("[Rust] Error building context: {}", e),
+                        Err(e) => error!("Error building context: {}", e),
                     }
                 }
             }
@@ -421,7 +416,7 @@ pub fn lua_phase_system(
                                 callback_transitions.push((entity_id, next));
                             }
                         }
-                        Err(e) => eprintln!("[Rust] Error building context: {}", e),
+                        Err(e) => error!("Error building context: {}", e),
                     }
                 }
             }
@@ -453,7 +448,7 @@ pub fn lua_phase_system(
                             callback_transitions.push((entity_id, next));
                         }
                     }
-                    Err(e) => eprintln!("[Rust] Error building context: {}", e),
+                    Err(e) => error!("Error building context: {}", e),
                 }
             }
         }

@@ -13,6 +13,8 @@ use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use log::{info, warn, error};
+
 /// Shared state accessible from Lua function closures.
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
 pub(super) struct LuaAppData {
@@ -492,7 +494,7 @@ impl LuaRuntime {
         engine.set(
             "log",
             self.lua.create_function(|_, msg: String| {
-                eprintln!("[Lua] {}", msg);
+                info!(target: "lua", "{}", msg);
                 Ok(())
             })?,
         )?;
@@ -501,7 +503,7 @@ impl LuaRuntime {
         engine.set(
             "log_info",
             self.lua.create_function(|_, msg: String| {
-                eprintln!("[Lua INFO] {}", msg);
+                info!(target: "lua", "{}", msg);
                 Ok(())
             })?,
         )?;
@@ -510,7 +512,7 @@ impl LuaRuntime {
         engine.set(
             "log_warn",
             self.lua.create_function(|_, msg: String| {
-                eprintln!("[Lua WARN] {}", msg);
+                warn!(target: "lua", "{}", msg);
                 Ok(())
             })?,
         )?;
@@ -519,7 +521,7 @@ impl LuaRuntime {
         engine.set(
             "log_error",
             self.lua.create_function(|_, msg: String| {
-                eprintln!("[Lua ERROR] {}", msg);
+                error!(target: "lua", "{}", msg);
                 Ok(())
             })?,
         )?;

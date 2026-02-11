@@ -7,6 +7,8 @@
 use bevy_ecs::prelude::*;
 use raylib::ffi::KeyboardKey;
 
+use log::debug;
+
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
@@ -43,19 +45,19 @@ pub fn update_input_state(
 
     // Emit input events for actions that were just pressed or released
     if is_key_pressed(input.mode_debug.key_binding) {
-        eprintln!("update_input_state: Debug mode key pressed");
+        debug!("Debug mode key pressed");
         input.mode_debug.just_pressed = true;
         commands.trigger(SwitchDebugEvent {});
     } else {
         input.mode_debug.just_pressed = false;
     }
     if is_key_pressed(input.fullscreen_toggle.key_binding) {
-        eprintln!("update_input_state: Fullscreen toggle key pressed");
+        debug!("Fullscreen toggle key pressed");
         commands.trigger(SwitchFullScreenEvent {});
     }
 
     if is_key_pressed(input.action_special.key_binding) {
-        eprintln!("update_input_state: Action Special key pressed");
+        debug!("Action Special key pressed");
         input.action_special.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Special,
@@ -65,7 +67,7 @@ pub fn update_input_state(
         input.action_special.just_pressed = false;
     }
     if is_key_released(input.action_special.key_binding) {
-        eprintln!("update_input_state: Action Special key released");
+        debug!("Action Special key released");
         input.action_special.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Special,
@@ -75,7 +77,7 @@ pub fn update_input_state(
         input.action_special.just_released = false;
     }
     if is_key_pressed(input.action_1.key_binding) {
-        eprintln!("update_input_state: Action 1 key pressed");
+        debug!("Action 1 key pressed");
         input.action_1.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Action1,
@@ -85,7 +87,7 @@ pub fn update_input_state(
         input.action_1.just_pressed = false;
     }
     if is_key_released(input.action_1.key_binding) {
-        eprintln!("update_input_state: Action 1 key released");
+        debug!("Action 1 key released");
         input.action_1.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Action1,
@@ -95,7 +97,7 @@ pub fn update_input_state(
         input.action_1.just_released = false;
     }
     if is_key_pressed(input.action_2.key_binding) {
-        eprintln!("update_input_state: Action 2 key pressed");
+        debug!("Action 2 key pressed");
         input.action_2.just_pressed = true;
         commands.trigger(InputEvent {
             action: InputAction::Action2,
@@ -105,7 +107,7 @@ pub fn update_input_state(
         input.action_2.just_pressed = false;
     }
     if is_key_released(input.action_2.key_binding) {
-        eprintln!("update_input_state: Action 2 key released");
+        debug!("Action 2 key released");
         input.action_2.just_released = true;
         commands.trigger(InputEvent {
             action: InputAction::Action2,

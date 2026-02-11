@@ -70,6 +70,7 @@ use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
     process_phase_command, process_signal_command, process_spawn_command,
 };
+use log::error;
 // use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
 /// Broad-phase pairwise overlap test with event emission.
@@ -238,10 +239,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 group_a.as_deref(),
                 group_b.as_deref(),
             ) {
-                eprintln!(
-                    "[Lua Collision] Error calling callback '{}': {}",
-                    callback_name, e
-                );
+                error!(target: "lua", "Collision callback '{}' error: {}", callback_name, e);
                 return;
             }
 

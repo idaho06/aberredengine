@@ -62,6 +62,7 @@ use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
     process_phase_command, process_signal_command, process_spawn_command,
 };
+use log::{error, warn};
 
 /// Update all Lua timer components and emit events when they expire.
 ///
@@ -268,7 +269,7 @@ pub fn lua_timer_observer(
     let input_table = match lua_runtime.create_input_table(&input_snapshot) {
         Ok(table) => table,
         Err(e) => {
-            eprintln!("[Rust] Error creating input table for timer callback: {}", e);
+            error!("Error creating input table for timer callback: {}", e);
             return;
         }
     };
@@ -280,7 +281,7 @@ pub fn lua_timer_observer(
     ) {
         Ok(ctx) => ctx,
         Err(e) => {
-            eprintln!("[Rust] Error building context for timer callback: {}", e);
+            error!("Error building context for timer callback: {}", e);
             return;
         }
     };
@@ -290,13 +291,10 @@ pub fn lua_timer_observer(
         if let Err(e) =
             lua_runtime.call_function::<_, ()>(&event.callback, (ctx_table, input_table))
         {
-            eprintln!("[Lua] Error in {}(): {}", event.callback, e);
+            error!(target: "lua", "Error in {}(): {}", event.callback, e);
         }
     } else {
-        eprintln!(
-            "[Lua] Warning: timer callback '{}' not found",
-            event.callback
-        );
+        warn!(target: "lua", "Timer callback '{}' not found", event.callback);
     }
 
     // Process phase commands from Lua
