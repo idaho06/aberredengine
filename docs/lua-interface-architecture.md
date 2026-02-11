@@ -75,10 +75,17 @@ src/resources/lua_runtime/
 The main struct managing the Lua interpreter. It:
 
 - Initializes the Lua state with MLua
-- Registers the global `engine` table with all API functions
+- Registers the global `engine` table with all API functions via `register_*_api()` methods
+- Populates `engine.__meta` with structured metadata for introspection (via `register_cmd!` macro and `push_fn_meta()` helper)
+- Registers builder class metadata via `register_builder_meta()` in `engine.__meta.classes`
 - Manages `LuaAppData` for command queuing
 - Provides `drain_*_commands()` methods for Rust to retrieve queued commands
+- Provides `clear_all_commands()` to discard stale commands on scene switches
 - Manages **context table pools** for collision and entity callbacks (see [Context Table Pooling](#context-table-pooling))
+- Uses three macros for registration:
+  - `register_cmd!` — registers a single Lua function that pushes to a queue, with metadata
+  - `register_entity_cmds!` — batch-registers entity commands with a name prefix
+  - `define_entity_cmds!` — defines all entity commands once; called with `""` and `"collision_"` prefixes
 
 #### `LuaAppData` (runtime.rs)
 
@@ -185,21 +192,35 @@ engine.set_flag("switch_scene")
 
 ### Step 2: Command is Queued
 
-The registered Lua function pushes a command to the appropriate queue:
+Most Lua functions are registered via the `register_cmd!` macro, which generates the closure, pushes to the correct queue, and registers metadata in `engine.__meta` — all in one declaration:
 
 ```rust
-// In runtime.rs, during register_entity_api()
-engine.set(
-    "entity_set_velocity",
-    self.lua.create_function(|lua, (entity_id, vx, vy): (u64, f32, f32)| {
-        lua.app_data_ref::<LuaAppData>()
-            .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-            .entity_commands        // <- The queue to push to
-            .borrow_mut()
-            .push(EntityCmd::SetVelocity { entity_id, vx, vy });
-        Ok(())
-    })?,
-)?;
+// In runtime.rs — macro-based registration (typical pattern)
+register_cmd!(engine, self.lua, meta_fns, "set_scalar", signal_commands,
+    |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
+    desc = "Set a world signal scalar value", cat = "signal",
+    params = [("key", "string"), ("value", "number")]);
+```
+
+Entity commands are registered in bulk via `define_entity_cmds!`, which calls `register_entity_cmds!` under the hood. A single definition under `define_entity_cmds!` is invoked twice — once with `""` prefix for regular commands and once with `"collision_"` for collision commands:
+
+```rust
+// In runtime.rs
+define_entity_cmds!(engine, self.lua, meta_fns, "", entity_commands);
+define_entity_cmds!(engine, self.lua, meta_fns, "collision_", collision_entity_commands);
+```
+
+For the ~17 functions with non-push logic (reads, builders, validation), registration is still manual with a separate `push_fn_meta()` call for metadata:
+
+```rust
+// Manual registration example (read function)
+engine.set("get_scalar", self.lua.create_function(|lua, key: String| {
+    let value = lua.app_data_ref::<LuaAppData>()
+        .and_then(|data| data.signal_snapshot.borrow().scalars.get(&key).copied());
+    Ok(value)
+})?);
+push_fn_meta(&self.lua, &meta_fns, "get_scalar", "Get a world signal scalar value", "signal",
+    &[("key", "string")], Some("number?"));
 ```
 
 ### Step 3: Rust Drains Commands
@@ -222,7 +243,13 @@ The `process_*` functions in `lua_commands.rs` apply changes to the ECS:
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
-    // ... query parameters
+    stuckto_query: &Query<&StuckTo>,
+    signals_query: &mut Query<&mut Signals>,
+    animation_query: &mut Query<&mut Animation>,
+    rigid_bodies_query: &mut Query<&mut RigidBody>,
+    positions_query: &mut Query<&mut MapPosition>,
+    shader_query: &mut Query<&mut EntityShader>,
+    systems_store: &SystemsStore,
 ) {
     for cmd in entity_commands {
         match cmd {
@@ -565,6 +592,14 @@ impl LuaUserData for LuaEntityBuilder {
 }
 ```
 
+### Builder Metadata
+
+Builder methods are documented in `engine.__meta.classes` via `register_builder_meta()` in `runtime.rs`. All `with_*` methods, `register_as`, and `build` are listed with descriptions and parameter types for both `EntityBuilder` and `CollisionEntityBuilder` classes. When adding a new builder method, add its entry to the `builder_methods` array in `register_builder_meta()`.
+
+### Spawn Processing
+
+Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support.
+
 ---
 
 ## Signal Snapshot System
@@ -721,29 +756,33 @@ pub enum EntityCmd {
 
 #### Step 2: Register Lua Function
 
-In `src/resources/lua_runtime/runtime.rs`, add to `register_entity_api()`:
+In `src/resources/lua_runtime/runtime.rs`, add the entry to the `define_entity_cmds!` macro. This single entry auto-registers both the regular (`entity_set_health`) and collision (`collision_entity_set_health`) variants, along with metadata:
 
 ```rust
-fn register_entity_api(&self) -> LuaResult<()> {
-    let engine: LuaTable = self.lua.globals().get("engine")?;
+// In runtime.rs, inside define_entity_cmds! macro body
+macro_rules! define_entity_cmds {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident) => {
+        register_entity_cmds!($engine, $lua, $meta_fns, $prefix, $queue, [
+            // ... existing entries ...
 
-    // ... existing functions ...
-
-    // engine.entity_set_health(entity_id, health)
-    engine.set(
-        "entity_set_health",
-        self.lua.create_function(|lua, (entity_id, health): (u64, f32)| {
-            lua.app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                .entity_commands  // Use collision_entity_commands if for collision callbacks
-                .borrow_mut()
-                .push(EntityCmd::SetHealth { entity_id, health });
-            Ok(())
-        })?,
-    )?;
-
-    Ok(())
+            ("entity_set_health",
+                |(entity_id, health)| (u64, f32),
+                EntityCmd::SetHealth { entity_id, health },
+                desc = "Set entity health signal",
+                params = [("entity_id", "integer"), ("health", "number")]),
+        ]);
+    };
 }
+```
+
+For non-entity commands (signals, audio, etc.), use `register_cmd!` directly in the appropriate `register_*_api()` function:
+
+```rust
+// In the relevant register_*_api() function
+register_cmd!(engine, self.lua, meta_fns, "set_health", health_commands,
+    |(entity_id, health)| (u64, f32), HealthCmd::SetHealth { entity_id, health },
+    desc = "Set entity health", cat = "entity",
+    params = [("entity_id", "integer"), ("health", "number")]);
 ```
 
 #### Step 3: Process the Command
@@ -759,6 +798,8 @@ pub fn process_entity_commands(
     animation_query: &mut Query<&mut Animation>,
     rigid_bodies_query: &mut Query<&mut RigidBody>,
     positions_query: &mut Query<&mut MapPosition>,
+    shader_query: &mut Query<&mut EntityShader>,
+    systems_store: &SystemsStore,
 ) {
     for cmd in entity_commands {
         match cmd {
@@ -796,6 +837,8 @@ Sets the "health" scalar signal on an entity.
 - `entity_id`: Entity ID (u64)
 - `health`: Health value (float)
 ```
+
+> **Note**: Because entity commands are registered via `define_entity_cmds!`, the collision-prefixed variant (`collision_entity_set_health`) is automatically available — no extra registration step is needed. Metadata for `engine.__meta` is also generated automatically by the macro.
 
 ---
 
@@ -849,21 +892,18 @@ impl LuaRuntime {
 
 #### Step 4: Register API Functions
 
+Use `register_cmd!` macro for push-to-queue functions (preferred), or manual registration for functions with custom logic:
+
 ```rust
 fn register_health_api(&self) -> LuaResult<()> {
     let engine: LuaTable = self.lua.globals().get("engine")?;
+    let meta: LuaTable = engine.get("__meta")?;
+    let meta_fns: LuaTable = meta.get("functions")?;
 
-    engine.set(
-        "heal_entity",
-        self.lua.create_function(|lua, (entity_id, amount): (u64, f32)| {
-            lua.app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                .health_commands
-                .borrow_mut()
-                .push(HealthCmd::HealEntity { entity_id, amount });
-            Ok(())
-        })?,
-    )?;
+    register_cmd!(engine, self.lua, meta_fns, "heal_entity", health_commands,
+        |(entity_id, amount)| (u64, f32), HealthCmd::HealEntity { entity_id, amount },
+        desc = "Heal an entity by amount", cat = "health",
+        params = [("entity_id", "integer"), ("amount", "number")]);
 
     Ok(())
 }
@@ -934,26 +974,33 @@ pub struct SpawnCmd {
 #### Step 3: Add Builder Method
 
 ```rust
-// In entity_builder.rs
-impl LuaUserData for LuaEntityBuilder {
-    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
-        // ... existing methods ...
-        
-        methods.add_method_mut("with_health", |_, this, (initial, max): (f32, f32)| {
-            this.cmd.health = Some(HealthData {
-                initial_health: initial,
-                max_health: max,
-            });
-            Ok(this.clone())
-        });
-    }
-}
+// In entity_builder.rs, inside impl LuaUserData for LuaEntityBuilder
+methods.add_method_mut("with_health", |_, this, (initial, max): (f32, f32)| {
+    this.cmd.health = Some(HealthData {
+        initial_health: initial,
+        max_health: max,
+    });
+    Ok(this.clone())  // Return self for chaining
+});
 ```
 
-#### Step 4: Process During Spawn
+#### Step 4: Register Builder Metadata
+
+In `register_builder_meta()` in `runtime.rs`, add the method to the `builder_methods` array:
 
 ```rust
-// In lua_commands.rs process_spawn_command()
+let builder_methods: &[(&str, &str, &[(&str, &str)])] = &[
+    // ... existing entries ...
+    ("with_health", "Set initial and max health", &[("initial", "number"), ("max", "number")]),
+];
+```
+
+This populates `engine.__meta.classes.EntityBuilder.methods` and `engine.__meta.classes.CollisionEntityBuilder.methods`.
+
+#### Step 5: Process During Spawn
+
+```rust
+// In lua_commands.rs, inside apply_components() (shared by spawn and clone)
 if let Some(health_data) = cmd.health {
     // Ensure Signals component exists
     if cmd.signals.is_none() {
@@ -1033,14 +1080,22 @@ end
 
 ### 7. Consider Collision Context
 
-If a command makes sense in collision callbacks, provide a `collision_*` variant:
+For entity commands, the `define_entity_cmds!` macro automatically registers both regular and collision variants from a single definition — no manual duplication needed.
+
+For other command types, provide a separate `collision_*` registration using `register_cmd!` with the collision-scoped queue:
 
 ```rust
 // Regular context
-engine.set("entity_set_health", /* pushes to entity_commands */);
+register_cmd!(engine, self.lua, meta_fns, "play_sound", audio_commands,
+    |id| String, AudioLuaCmd::PlaySound { id },
+    desc = "Play a sound effect", cat = "audio",
+    params = [("id", "string")]);
 
 // Collision context
-engine.set("collision_entity_set_health", /* pushes to collision_entity_commands */);
+register_cmd!(engine, self.lua, meta_fns, "collision_play_sound", collision_audio_commands,
+    |id| String, AudioLuaCmd::PlaySound { id },
+    desc = "Play a sound effect (collision context)", cat = "collision",
+    params = [("id", "string")]);
 ```
 
 ---
@@ -1058,7 +1113,7 @@ The Lua interface follows these principles:
 To add new commands:
 
 1. Add variant to appropriate command enum in `commands.rs`
-2. Register Lua function in `runtime.rs`
+2. Register Lua function in `runtime.rs` (use `register_cmd!` macro for push-to-queue, or add to `define_entity_cmds!` for entity commands)
 3. Process command in `lua_commands.rs`
-4. Optionally add builder method in `entity_builder.rs`
+4. Optionally add builder method in `entity_builder.rs` + update `register_builder_meta()` in `runtime.rs`
 5. Update documentation files

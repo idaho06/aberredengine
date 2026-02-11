@@ -113,7 +113,7 @@ src/
 │   ├── postprocessshader.rs   # PostProcessShader resource (active shader + user uniforms)
 │   └── lua_runtime/
 │       ├── mod.rs             # Public exports
-│       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!)
+│       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!), __meta table
 │       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, etc.
 │       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer)
 │       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
@@ -327,6 +327,31 @@ RenderCmd { SetPostProcessShader { id }, SetPostProcessUniform { name, value: Un
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ## LUA API STRUCTURE (runtime.rs — macro-based registration)
+
+### Metadata Introspection (engine.__meta)
+
+The engine exposes structured metadata about all registered functions and builder methods
+at runtime via `engine.__meta`. This table is populated during LuaRuntime initialization
+and can be used for introspection, documentation generation, and LSP stub generation.
+
+```lua
+engine.__meta.functions[name] = {
+    description = "...",
+    category = "base"|"asset"|"spawn"|"audio"|"signal"|"phase"|"entity"|"group"|"tilemap"|"camera"|"collision"|"animation"|"render",
+    params = { { name = "...", type = "..." }, ... },
+    returns = { type = "..." } | nil
+}
+engine.__meta.classes[class_name] = {
+    description = "...",
+    methods = {
+        [method_name] = { description, params, returns }
+    }
+}
+```
+
+Classes: `EntityBuilder`, `CollisionEntityBuilder` (same methods, different context).
+Metadata is co-located with registration code — `register_cmd!` macro includes metadata inline,
+manual registrations use `push_fn_meta()` helper.
 
 -- Logging
 engine.log(msg), engine.log_info(msg), engine.log_warn(msg), engine.log_error(msg)

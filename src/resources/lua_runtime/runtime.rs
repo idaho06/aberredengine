@@ -135,10 +135,45 @@ pub struct LuaRuntime {
     entity_ctx_pool: Option<EntityCtxPool>,
 }
 
+/// Pushes function metadata to `engine.__meta.functions[name]`.
+fn push_fn_meta(
+    lua: &Lua,
+    meta_fns: &LuaTable,
+    name: &str,
+    desc: &str,
+    category: &str,
+    params: &[(&str, &str)],
+    returns: Option<&str>,
+) -> LuaResult<()> {
+    let tbl = lua.create_table()?;
+    tbl.set("description", desc)?;
+    tbl.set("category", category)?;
+    let params_tbl = lua.create_table()?;
+    for (i, (pname, ptype)) in params.iter().enumerate() {
+        let p = lua.create_table()?;
+        p.set("name", *pname)?;
+        p.set("type", *ptype)?;
+        params_tbl.set(i + 1, p)?;
+    }
+    tbl.set("params", params_tbl)?;
+    if let Some(ret) = returns {
+        let r = lua.create_table()?;
+        r.set("type", ret)?;
+        tbl.set("returns", r)?;
+    }
+    meta_fns.set(name, tbl)?;
+    Ok(())
+}
+
 /// Registers a Lua function that pushes a command to a queue in `LuaAppData`.
 macro_rules! register_cmd {
-    ($engine:expr, $lua:expr, $name:expr, $queue:ident,
-     |$args:pat_param| $arg_ty:ty, $cmd:expr) => {
+    // Variant with metadata
+    ($engine:expr, $lua:expr, $meta_fns:expr, $name:expr, $queue:ident,
+     |$args:pat_param| $arg_ty:ty, $cmd:expr,
+     desc = $desc:expr, cat = $cat:expr,
+     params = [ $( ($pname:expr, $pty:expr) ),* $(,)? ]
+     $(, returns = $ret:expr )?
+    ) => {
         $engine.set(
             $name,
             $lua.create_function(|lua, $args: $arg_ty| {
@@ -150,17 +185,31 @@ macro_rules! register_cmd {
                 Ok(())
             })?,
         )?;
+        push_fn_meta(
+            &$lua, &$meta_fns, $name, $desc, $cat,
+            &[ $(($pname, $pty)),* ],
+            register_cmd!(@opt_ret $($ret)?)
+        )?;
     };
+    // Helper to produce Option<&str> from optional returns
+    (@opt_ret $ret:expr) => { Some($ret) };
+    (@opt_ret) => { None };
 }
 
 /// Registers a batch of entity commands with a name prefix to a specific queue.
 macro_rules! register_entity_cmds {
-    ($engine:expr, $lua:expr, $prefix:literal, $queue:ident, [
-        $( ($name:literal, |$args:pat_param| $arg_ty:ty, $cmd:expr) ),* $(,)?
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, [
+        $( ($name:literal,
+            |$args:pat_param| $arg_ty:ty, $cmd:expr,
+            desc = $desc:expr,
+            params = [ $( ($pname:expr, $pty:expr) ),* $(,)? ]
+        ) ),* $(,)?
     ]) => {
         $(
-            register_cmd!($engine, $lua, concat!($prefix, $name), $queue,
-                |$args| $arg_ty, $cmd);
+            register_cmd!($engine, $lua, $meta_fns, concat!($prefix, $name), $queue,
+                |$args| $arg_ty, $cmd,
+                desc = $desc, cat = "entity",
+                params = [ $( ($pname, $pty) ),* ]);
         )*
     };
 }
@@ -168,109 +217,207 @@ macro_rules! register_entity_cmds {
 /// Defines and registers all entity commands for a given prefix and queue.
 /// Called with `""` prefix for regular commands, `"collision_"` for collision commands.
 macro_rules! define_entity_cmds {
-    ($engine:expr, $lua:expr, $prefix:literal, $queue:ident) => {
-        register_entity_cmds!($engine, $lua, $prefix, $queue, [
-            ("entity_despawn", |entity_id| u64, EntityCmd::Despawn { entity_id }),
-            ("entity_menu_despawn", |entity_id| u64, EntityCmd::MenuDespawn { entity_id }),
-            ("release_stuckto", |entity_id| u64, EntityCmd::ReleaseStuckTo { entity_id }),
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident) => {
+        register_entity_cmds!($engine, $lua, $meta_fns, $prefix, $queue, [
+            ("entity_despawn", |entity_id| u64, EntityCmd::Despawn { entity_id },
+                desc = "Despawn an entity",
+                params = [("entity_id", "integer")]),
+            ("entity_menu_despawn", |entity_id| u64, EntityCmd::MenuDespawn { entity_id },
+                desc = "Despawn a menu entity and its children",
+                params = [("entity_id", "integer")]),
+            ("release_stuckto", |entity_id| u64, EntityCmd::ReleaseStuckTo { entity_id },
+                desc = "Release entity from its StuckTo target, restoring stored velocity",
+                params = [("entity_id", "integer")]),
             ("entity_signal_set_flag",
-                |(entity_id, flag)| (u64, String), EntityCmd::SignalSetFlag { entity_id, flag }),
+                |(entity_id, flag)| (u64, String), EntityCmd::SignalSetFlag { entity_id, flag },
+                desc = "Set a flag on an entity's signals",
+                params = [("entity_id", "integer"), ("flag", "string")]),
             ("entity_signal_clear_flag",
-                |(entity_id, flag)| (u64, String), EntityCmd::SignalClearFlag { entity_id, flag }),
+                |(entity_id, flag)| (u64, String), EntityCmd::SignalClearFlag { entity_id, flag },
+                desc = "Clear a flag on an entity's signals",
+                params = [("entity_id", "integer"), ("flag", "string")]),
             ("entity_set_velocity",
-                |(entity_id, vx, vy)| (u64, f32, f32), EntityCmd::SetVelocity { entity_id, vx, vy }),
+                |(entity_id, vx, vy)| (u64, f32, f32), EntityCmd::SetVelocity { entity_id, vx, vy },
+                desc = "Set entity velocity",
+                params = [("entity_id", "integer"), ("vx", "number"), ("vy", "number")]),
             ("entity_insert_stuckto",
                 |(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)|
                 (u64, u64, bool, bool, f32, f32, f32, f32),
                 EntityCmd::InsertStuckTo {
                     entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy,
-                }),
-            ("entity_restart_animation", |entity_id| u64, EntityCmd::RestartAnimation { entity_id }),
+                },
+                desc = "Attach entity to a target entity",
+                params = [("entity_id", "integer"), ("target_id", "integer"),
+                          ("follow_x", "boolean"), ("follow_y", "boolean"),
+                          ("offset_x", "number"), ("offset_y", "number"),
+                          ("stored_vx", "number"), ("stored_vy", "number")]),
+            ("entity_restart_animation", |entity_id| u64, EntityCmd::RestartAnimation { entity_id },
+                desc = "Restart entity animation from frame 0",
+                params = [("entity_id", "integer")]),
             ("entity_set_animation",
-                |(entity_id, animation_key)| (u64, String), EntityCmd::SetAnimation { entity_id, animation_key }),
+                |(entity_id, animation_key)| (u64, String), EntityCmd::SetAnimation { entity_id, animation_key },
+                desc = "Set entity animation by key",
+                params = [("entity_id", "integer"), ("animation_key", "string")]),
             ("entity_insert_lua_timer",
                 |(entity_id, duration, callback)| (u64, f32, String),
-                EntityCmd::InsertLuaTimer { entity_id, duration, callback }),
-            ("entity_remove_lua_timer", |entity_id| u64, EntityCmd::RemoveLuaTimer { entity_id }),
+                EntityCmd::InsertLuaTimer { entity_id, duration, callback },
+                desc = "Insert a Lua timer on an entity",
+                params = [("entity_id", "integer"), ("duration", "number"), ("callback", "string")]),
+            ("entity_remove_lua_timer", |entity_id| u64, EntityCmd::RemoveLuaTimer { entity_id },
+                desc = "Remove the Lua timer from an entity",
+                params = [("entity_id", "integer")]),
             ("entity_insert_ttl",
-                |(entity_id, seconds)| (u64, f32), EntityCmd::InsertTtl { entity_id, seconds }),
+                |(entity_id, seconds)| (u64, f32), EntityCmd::InsertTtl { entity_id, seconds },
+                desc = "Insert a time-to-live component on an entity",
+                params = [("entity_id", "integer"), ("seconds", "number")]),
             ("entity_insert_tween_position",
                 |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool),
                 EntityCmd::InsertTweenPosition {
                     entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards,
-                }),
+                },
+                desc = "Insert a position tween on an entity",
+                params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),
+                          ("to_x", "number"), ("to_y", "number"), ("duration", "number"),
+                          ("easing", "string"), ("loop_mode", "string"), ("backwards", "boolean")]),
             ("entity_insert_tween_rotation",
                 |(entity_id, from, to, duration, easing, loop_mode, backwards)|
                 (u64, f32, f32, f32, String, String, bool),
                 EntityCmd::InsertTweenRotation {
                     entity_id, from, to, duration, easing, loop_mode, backwards,
-                }),
+                },
+                desc = "Insert a rotation tween on an entity",
+                params = [("entity_id", "integer"), ("from", "number"), ("to", "number"),
+                          ("duration", "number"), ("easing", "string"), ("loop_mode", "string"),
+                          ("backwards", "boolean")]),
             ("entity_insert_tween_scale",
                 |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool),
                 EntityCmd::InsertTweenScale {
                     entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards,
-                }),
-            ("entity_remove_tween_position", |entity_id| u64, EntityCmd::RemoveTweenPosition { entity_id }),
-            ("entity_remove_tween_rotation", |entity_id| u64, EntityCmd::RemoveTweenRotation { entity_id }),
-            ("entity_remove_tween_scale", |entity_id| u64, EntityCmd::RemoveTweenScale { entity_id }),
+                },
+                desc = "Insert a scale tween on an entity",
+                params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),
+                          ("to_x", "number"), ("to_y", "number"), ("duration", "number"),
+                          ("easing", "string"), ("loop_mode", "string"), ("backwards", "boolean")]),
+            ("entity_remove_tween_position", |entity_id| u64, EntityCmd::RemoveTweenPosition { entity_id },
+                desc = "Remove position tween from an entity",
+                params = [("entity_id", "integer")]),
+            ("entity_remove_tween_rotation", |entity_id| u64, EntityCmd::RemoveTweenRotation { entity_id },
+                desc = "Remove rotation tween from an entity",
+                params = [("entity_id", "integer")]),
+            ("entity_remove_tween_scale", |entity_id| u64, EntityCmd::RemoveTweenScale { entity_id },
+                desc = "Remove scale tween from an entity",
+                params = [("entity_id", "integer")]),
             ("entity_set_rotation",
-                |(entity_id, degrees)| (u64, f32), EntityCmd::SetRotation { entity_id, degrees }),
+                |(entity_id, degrees)| (u64, f32), EntityCmd::SetRotation { entity_id, degrees },
+                desc = "Set entity rotation in degrees",
+                params = [("entity_id", "integer"), ("degrees", "number")]),
             ("entity_set_scale",
-                |(entity_id, sx, sy)| (u64, f32, f32), EntityCmd::SetScale { entity_id, sx, sy }),
+                |(entity_id, sx, sy)| (u64, f32, f32), EntityCmd::SetScale { entity_id, sx, sy },
+                desc = "Set entity scale",
+                params = [("entity_id", "integer"), ("sx", "number"), ("sy", "number")]),
             ("entity_signal_set_scalar",
                 |(entity_id, key, value)| (u64, String, f32),
-                EntityCmd::SignalSetScalar { entity_id, key, value }),
+                EntityCmd::SignalSetScalar { entity_id, key, value },
+                desc = "Set a scalar signal on an entity",
+                params = [("entity_id", "integer"), ("key", "string"), ("value", "number")]),
             ("entity_signal_set_string",
                 |(entity_id, key, value)| (u64, String, String),
-                EntityCmd::SignalSetString { entity_id, key, value }),
+                EntityCmd::SignalSetString { entity_id, key, value },
+                desc = "Set a string signal on an entity",
+                params = [("entity_id", "integer"), ("key", "string"), ("value", "string")]),
             ("entity_add_force",
                 |(entity_id, name, x, y, enabled)| (u64, String, f32, f32, bool),
-                EntityCmd::AddForce { entity_id, name, x, y, enabled }),
+                EntityCmd::AddForce { entity_id, name, x, y, enabled },
+                desc = "Add a named acceleration force to an entity",
+                params = [("entity_id", "integer"), ("name", "string"),
+                          ("x", "number"), ("y", "number"), ("enabled", "boolean")]),
             ("entity_remove_force",
-                |(entity_id, name)| (u64, String), EntityCmd::RemoveForce { entity_id, name }),
+                |(entity_id, name)| (u64, String), EntityCmd::RemoveForce { entity_id, name },
+                desc = "Remove a named force from an entity",
+                params = [("entity_id", "integer"), ("name", "string")]),
             ("entity_set_force_enabled",
                 |(entity_id, name, enabled)| (u64, String, bool),
-                EntityCmd::SetForceEnabled { entity_id, name, enabled }),
+                EntityCmd::SetForceEnabled { entity_id, name, enabled },
+                desc = "Enable or disable a named force on an entity",
+                params = [("entity_id", "integer"), ("name", "string"), ("enabled", "boolean")]),
             ("entity_set_force_value",
                 |(entity_id, name, x, y)| (u64, String, f32, f32),
-                EntityCmd::SetForceValue { entity_id, name, x, y }),
+                EntityCmd::SetForceValue { entity_id, name, x, y },
+                desc = "Set the acceleration value of a named force",
+                params = [("entity_id", "integer"), ("name", "string"), ("x", "number"), ("y", "number")]),
             ("entity_set_friction",
-                |(entity_id, friction)| (u64, f32), EntityCmd::SetFriction { entity_id, friction }),
+                |(entity_id, friction)| (u64, f32), EntityCmd::SetFriction { entity_id, friction },
+                desc = "Set entity friction",
+                params = [("entity_id", "integer"), ("friction", "number")]),
             ("entity_set_max_speed",
-                |(entity_id, max_speed)| (u64, Option<f32>), EntityCmd::SetMaxSpeed { entity_id, max_speed }),
-            ("entity_freeze", |entity_id| u64, EntityCmd::FreezeEntity { entity_id }),
-            ("entity_unfreeze", |entity_id| u64, EntityCmd::UnfreezeEntity { entity_id }),
+                |(entity_id, max_speed)| (u64, Option<f32>), EntityCmd::SetMaxSpeed { entity_id, max_speed },
+                desc = "Set entity max speed (nil to remove)",
+                params = [("entity_id", "integer"), ("max_speed", "number?")]),
+            ("entity_freeze", |entity_id| u64, EntityCmd::FreezeEntity { entity_id },
+                desc = "Freeze entity (zero velocity, ignore forces)",
+                params = [("entity_id", "integer")]),
+            ("entity_unfreeze", |entity_id| u64, EntityCmd::UnfreezeEntity { entity_id },
+                desc = "Unfreeze entity",
+                params = [("entity_id", "integer")]),
             ("entity_set_speed",
-                |(entity_id, speed)| (u64, f32), EntityCmd::SetSpeed { entity_id, speed }),
+                |(entity_id, speed)| (u64, f32), EntityCmd::SetSpeed { entity_id, speed },
+                desc = "Set entity speed (scales velocity to this magnitude)",
+                params = [("entity_id", "integer"), ("speed", "number")]),
             ("entity_set_position",
-                |(entity_id, x, y)| (u64, f32, f32), EntityCmd::SetPosition { entity_id, x, y }),
+                |(entity_id, x, y)| (u64, f32, f32), EntityCmd::SetPosition { entity_id, x, y },
+                desc = "Set entity world position",
+                params = [("entity_id", "integer"), ("x", "number"), ("y", "number")]),
             ("entity_signal_set_integer",
                 |(entity_id, key, value)| (u64, String, i32),
-                EntityCmd::SignalSetInteger { entity_id, key, value }),
+                EntityCmd::SignalSetInteger { entity_id, key, value },
+                desc = "Set an integer signal on an entity",
+                params = [("entity_id", "integer"), ("key", "string"), ("value", "integer")]),
             ("entity_set_shader",
-                |(entity_id, key)| (u64, String), EntityCmd::SetShader { entity_id, key }),
-            ("entity_remove_shader", |entity_id| u64, EntityCmd::RemoveShader { entity_id }),
+                |(entity_id, key)| (u64, String), EntityCmd::SetShader { entity_id, key },
+                desc = "Set per-entity shader by key",
+                params = [("entity_id", "integer"), ("key", "string")]),
+            ("entity_remove_shader", |entity_id| u64, EntityCmd::RemoveShader { entity_id },
+                desc = "Remove per-entity shader",
+                params = [("entity_id", "integer")]),
             ("entity_set_tint",
                 |(entity_id, r, g, b, a)| (u64, u8, u8, u8, u8),
-                EntityCmd::SetTint { entity_id, r, g, b, a }),
-            ("entity_remove_tint", |entity_id| u64, EntityCmd::RemoveTint { entity_id }),
+                EntityCmd::SetTint { entity_id, r, g, b, a },
+                desc = "Set entity tint color (RGBA 0-255)",
+                params = [("entity_id", "integer"), ("r", "integer"), ("g", "integer"),
+                          ("b", "integer"), ("a", "integer")]),
+            ("entity_remove_tint", |entity_id| u64, EntityCmd::RemoveTint { entity_id },
+                desc = "Remove entity tint",
+                params = [("entity_id", "integer")]),
             ("entity_shader_set_float",
                 |(entity_id, name, value)| (u64, String, f32),
-                EntityCmd::ShaderSetFloat { entity_id, name, value }),
+                EntityCmd::ShaderSetFloat { entity_id, name, value },
+                desc = "Set a float uniform on entity shader",
+                params = [("entity_id", "integer"), ("name", "string"), ("value", "number")]),
             ("entity_shader_set_int",
                 |(entity_id, name, value)| (u64, String, i32),
-                EntityCmd::ShaderSetInt { entity_id, name, value }),
+                EntityCmd::ShaderSetInt { entity_id, name, value },
+                desc = "Set an int uniform on entity shader",
+                params = [("entity_id", "integer"), ("name", "string"), ("value", "integer")]),
             ("entity_shader_set_vec2",
                 |(entity_id, name, x, y)| (u64, String, f32, f32),
-                EntityCmd::ShaderSetVec2 { entity_id, name, x, y }),
+                EntityCmd::ShaderSetVec2 { entity_id, name, x, y },
+                desc = "Set a vec2 uniform on entity shader",
+                params = [("entity_id", "integer"), ("name", "string"), ("x", "number"), ("y", "number")]),
             ("entity_shader_set_vec4",
                 |(entity_id, name, x, y, z, w)| (u64, String, f32, f32, f32, f32),
-                EntityCmd::ShaderSetVec4 { entity_id, name, x, y, z, w }),
+                EntityCmd::ShaderSetVec4 { entity_id, name, x, y, z, w },
+                desc = "Set a vec4 uniform on entity shader",
+                params = [("entity_id", "integer"), ("name", "string"),
+                          ("x", "number"), ("y", "number"), ("z", "number"), ("w", "number")]),
             ("entity_shader_clear_uniform",
-                |(entity_id, name)| (u64, String), EntityCmd::ShaderClearUniform { entity_id, name }),
-            ("entity_shader_clear_uniforms", |entity_id| u64, EntityCmd::ShaderClearUniforms { entity_id }),
+                |(entity_id, name)| (u64, String), EntityCmd::ShaderClearUniform { entity_id, name },
+                desc = "Clear a uniform on entity shader",
+                params = [("entity_id", "integer"), ("name", "string")]),
+            ("entity_shader_clear_uniforms", |entity_id| u64, EntityCmd::ShaderClearUniforms { entity_id },
+                desc = "Clear all uniforms on entity shader",
+                params = [("entity_id", "integer")]),
         ]);
     };
 }
@@ -337,6 +484,7 @@ impl LuaRuntime {
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
         runtime.register_render_api()?;
+        runtime.register_builder_meta()?;
 
         Ok(runtime)
     }
@@ -490,6 +638,14 @@ impl LuaRuntime {
     fn register_base_api(&self) -> LuaResult<()> {
         let engine = self.lua.create_table()?;
 
+        // Create __meta table with functions and classes subtables
+        let meta = self.lua.create_table()?;
+        let meta_fns = self.lua.create_table()?;
+        let meta_classes = self.lua.create_table()?;
+        meta.set("functions", &meta_fns)?;
+        meta.set("classes", &meta_classes)?;
+        engine.set("__meta", meta)?;
+
         // engine.log(message) - General purpose logging
         engine.set(
             "log",
@@ -498,6 +654,8 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "log", "General purpose logging", "base",
+            &[("message", "string")], None)?;
 
         // engine.log_info(message) - Info level logging
         engine.set(
@@ -507,6 +665,8 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "log_info", "Info level logging", "base",
+            &[("message", "string")], None)?;
 
         // engine.log_warn(message) - Warning level logging
         engine.set(
@@ -516,6 +676,8 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "log_warn", "Warning level logging", "base",
+            &[("message", "string")], None)?;
 
         // engine.log_error(message) - Error level logging
         engine.set(
@@ -525,6 +687,8 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "log_error", "Error level logging", "base",
+            &[("message", "string")], None)?;
 
         self.lua.globals().set("engine", engine)?;
 
@@ -533,22 +697,36 @@ impl LuaRuntime {
 
     fn register_asset_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "load_texture", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadTexture { id, path });
-        register_cmd!(engine, self.lua, "load_font", asset_commands,
-            |(id, path, size)| (String, String, i32), AssetCmd::LoadFont { id, path, size });
-        register_cmd!(engine, self.lua, "load_music", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadMusic { id, path });
-        register_cmd!(engine, self.lua, "load_sound", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadSound { id, path });
-        register_cmd!(engine, self.lua, "load_tilemap", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadTilemap { id, path });
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "load_texture", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadTexture { id, path },
+            desc = "Load a texture from file", cat = "asset",
+            params = [("id", "string"), ("path", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "load_font", asset_commands,
+            |(id, path, size)| (String, String, i32), AssetCmd::LoadFont { id, path, size },
+            desc = "Load a font from file", cat = "asset",
+            params = [("id", "string"), ("path", "string"), ("size", "integer")]);
+        register_cmd!(engine, self.lua, meta_fns, "load_music", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadMusic { id, path },
+            desc = "Load music from file", cat = "asset",
+            params = [("id", "string"), ("path", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "load_sound", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadSound { id, path },
+            desc = "Load a sound effect from file", cat = "asset",
+            params = [("id", "string"), ("path", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "load_tilemap", asset_commands,
+            |(id, path)| (String, String), AssetCmd::LoadTilemap { id, path },
+            desc = "Load a tilemap from file", cat = "asset",
+            params = [("id", "string"), ("path", "string")]);
         Ok(())
     }
 
     /// Registers entity spawning functions in the `engine` table.
     fn register_spawn_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
 
         // engine.spawn() - Create a new entity builder
         engine.set(
@@ -556,6 +734,8 @@ impl LuaRuntime {
             self.lua
                 .create_function(|_, ()| Ok(LuaEntityBuilder::new()))?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "spawn", "Create a new entity builder", "spawn",
+            &[], Some("EntityBuilder"))?;
 
         // engine.clone(source_key) - Clone an entity from WorldSignals
         // Returns a LuaEntityBuilder that clones the source entity and applies overrides
@@ -565,26 +745,40 @@ impl LuaRuntime {
                 Ok(LuaEntityBuilder::new_clone(source_key))
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "clone", "Clone a registered entity with optional overrides", "spawn",
+            &[("source_key", "string")], Some("EntityBuilder"))?;
 
         Ok(())
     }
 
     fn register_audio_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "play_music", audio_commands,
-            |(id, looped)| (String, bool), AudioLuaCmd::PlayMusic { id, looped });
-        register_cmd!(engine, self.lua, "play_sound", audio_commands,
-            |id| String, AudioLuaCmd::PlaySound { id });
-        register_cmd!(engine, self.lua, "stop_all_music", audio_commands,
-            |()| (), AudioLuaCmd::StopAllMusic);
-        register_cmd!(engine, self.lua, "stop_all_sounds", audio_commands,
-            |()| (), AudioLuaCmd::StopAllSounds);
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "play_music", audio_commands,
+            |(id, looped)| (String, bool), AudioLuaCmd::PlayMusic { id, looped },
+            desc = "Play music track", cat = "audio",
+            params = [("id", "string"), ("looped", "boolean")]);
+        register_cmd!(engine, self.lua, meta_fns, "play_sound", audio_commands,
+            |id| String, AudioLuaCmd::PlaySound { id },
+            desc = "Play a sound effect", cat = "audio",
+            params = [("id", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "stop_all_music", audio_commands,
+            |()| (), AudioLuaCmd::StopAllMusic,
+            desc = "Stop all playing music", cat = "audio",
+            params = []);
+        register_cmd!(engine, self.lua, meta_fns, "stop_all_sounds", audio_commands,
+            |()| (), AudioLuaCmd::StopAllSounds,
+            desc = "Stop all playing sounds", cat = "audio",
+            params = []);
         Ok(())
     }
 
     /// Registers signal read/write functions in the `engine` table.
     fn register_signal_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
 
         // ===== READ functions (from cached snapshot) =====
 
@@ -598,6 +792,8 @@ impl LuaRuntime {
                 Ok(value)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "get_scalar", "Get a world signal scalar value", "signal",
+            &[("key", "string")], Some("number?"))?;
 
         // engine.get_integer(key) -> integer or nil
         engine.set(
@@ -609,6 +805,8 @@ impl LuaRuntime {
                 Ok(value)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "get_integer", "Get a world signal integer value", "signal",
+            &[("key", "string")], Some("integer?"))?;
 
         // engine.get_string(key) -> string or nil
         engine.set(
@@ -620,6 +818,8 @@ impl LuaRuntime {
                 Ok(value)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "get_string", "Get a world signal string value", "signal",
+            &[("key", "string")], Some("string?"))?;
 
         // engine.has_flag(key) -> boolean
         engine.set(
@@ -632,6 +832,8 @@ impl LuaRuntime {
                 Ok(has)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "has_flag", "Check if a world signal flag is set", "signal",
+            &[("key", "string")], Some("boolean"))?;
 
         // engine.get_group_count(group) -> integer or nil
         engine.set(
@@ -647,6 +849,8 @@ impl LuaRuntime {
                 Ok(count)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "get_group_count", "Get the count of entities in a tracked group", "signal",
+            &[("group", "string")], Some("integer?"))?;
 
         // engine.get_entity(key) -> integer (entity ID) or nil
         // Returns the entity ID as a u64 that can be used with with_stuckto()
@@ -659,54 +863,90 @@ impl LuaRuntime {
                 Ok(entity_id)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "get_entity", "Get a registered entity ID by key", "signal",
+            &[("key", "string")], Some("integer?"))?;
 
         // ===== WRITE functions (queue commands) =====
 
-        register_cmd!(engine, self.lua, "set_scalar", signal_commands,
-            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value });
-        register_cmd!(engine, self.lua, "set_integer", signal_commands,
-            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value });
-        register_cmd!(engine, self.lua, "set_string", signal_commands,
-            |(key, value)| (String, String), SignalCmd::SetString { key, value });
-        register_cmd!(engine, self.lua, "set_flag", signal_commands,
-            |key| String, SignalCmd::SetFlag { key });
-        register_cmd!(engine, self.lua, "clear_flag", signal_commands,
-            |key| String, SignalCmd::ClearFlag { key });
-        register_cmd!(engine, self.lua, "clear_scalar", signal_commands,
-            |key| String, SignalCmd::ClearScalar { key });
-        register_cmd!(engine, self.lua, "clear_integer", signal_commands,
-            |key| String, SignalCmd::ClearInteger { key });
-        register_cmd!(engine, self.lua, "clear_string", signal_commands,
-            |key| String, SignalCmd::ClearString { key });
-        register_cmd!(engine, self.lua, "set_entity", signal_commands,
-            |(key, entity_id)| (String, u64), SignalCmd::SetEntity { key, entity_id });
-        register_cmd!(engine, self.lua, "remove_entity", signal_commands,
-            |key| String, SignalCmd::RemoveEntity { key });
+        register_cmd!(engine, self.lua, meta_fns, "set_scalar", signal_commands,
+            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
+            desc = "Set a world signal scalar value", cat = "signal",
+            params = [("key", "string"), ("value", "number")]);
+        register_cmd!(engine, self.lua, meta_fns, "set_integer", signal_commands,
+            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value },
+            desc = "Set a world signal integer value", cat = "signal",
+            params = [("key", "string"), ("value", "integer")]);
+        register_cmd!(engine, self.lua, meta_fns, "set_string", signal_commands,
+            |(key, value)| (String, String), SignalCmd::SetString { key, value },
+            desc = "Set a world signal string value", cat = "signal",
+            params = [("key", "string"), ("value", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "set_flag", signal_commands,
+            |key| String, SignalCmd::SetFlag { key },
+            desc = "Set a world signal flag", cat = "signal",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "clear_flag", signal_commands,
+            |key| String, SignalCmd::ClearFlag { key },
+            desc = "Clear a world signal flag", cat = "signal",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "clear_scalar", signal_commands,
+            |key| String, SignalCmd::ClearScalar { key },
+            desc = "Clear a world signal scalar", cat = "signal",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "clear_integer", signal_commands,
+            |key| String, SignalCmd::ClearInteger { key },
+            desc = "Clear a world signal integer", cat = "signal",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "clear_string", signal_commands,
+            |key| String, SignalCmd::ClearString { key },
+            desc = "Clear a world signal string", cat = "signal",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "set_entity", signal_commands,
+            |(key, entity_id)| (String, u64), SignalCmd::SetEntity { key, entity_id },
+            desc = "Register an entity ID in world signals", cat = "signal",
+            params = [("key", "string"), ("entity_id", "integer")]);
+        register_cmd!(engine, self.lua, meta_fns, "remove_entity", signal_commands,
+            |key| String, SignalCmd::RemoveEntity { key },
+            desc = "Remove a registered entity from world signals", cat = "signal",
+            params = [("key", "string")]);
 
         Ok(())
     }
 
     fn register_phase_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "phase_transition", phase_commands,
-            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase });
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "phase_transition", phase_commands,
+            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase },
+            desc = "Transition an entity to a new phase", cat = "phase",
+            params = [("entity_id", "integer"), ("phase", "string")]);
         Ok(())
     }
 
     fn register_entity_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        define_entity_cmds!(engine, self.lua, "", entity_commands);
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        define_entity_cmds!(engine, self.lua, meta_fns, "", entity_commands);
         Ok(())
     }
 
     fn register_group_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "track_group", group_commands,
-            |name| String, GroupCmd::TrackGroup { name });
-        register_cmd!(engine, self.lua, "untrack_group", group_commands,
-            |name| String, GroupCmd::UntrackGroup { name });
-        register_cmd!(engine, self.lua, "clear_tracked_groups", group_commands,
-            |()| (), GroupCmd::ClearTrackedGroups);
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "track_group", group_commands,
+            |name| String, GroupCmd::TrackGroup { name },
+            desc = "Start tracking a named entity group", cat = "group",
+            params = [("name", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "untrack_group", group_commands,
+            |name| String, GroupCmd::UntrackGroup { name },
+            desc = "Stop tracking a named entity group", cat = "group",
+            params = [("name", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "clear_tracked_groups", group_commands,
+            |()| (), GroupCmd::ClearTrackedGroups,
+            desc = "Stop tracking all entity groups", cat = "group",
+            params = []);
 
         // Read function (returns value, not push-to-queue)
         engine.set(
@@ -719,58 +959,96 @@ impl LuaRuntime {
                 Ok(has)
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "has_tracked_group", "Check if a group is being tracked", "group",
+            &[("name", "string")], Some("boolean"))?;
 
         Ok(())
     }
 
     fn register_tilemap_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "spawn_tiles", tilemap_commands,
-            |id| String, TilemapCmd::SpawnTiles { id });
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "spawn_tiles", tilemap_commands,
+            |id| String, TilemapCmd::SpawnTiles { id },
+            desc = "Spawn tilemap entities from a loaded tilemap", cat = "tilemap",
+            params = [("id", "string")]);
         Ok(())
     }
 
     fn register_camera_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "set_camera", camera_commands,
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "set_camera", camera_commands,
             |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
-            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom });
+            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom },
+            desc = "Set the 2D camera target, offset, rotation and zoom", cat = "camera",
+            params = [("target_x", "number"), ("target_y", "number"),
+                      ("offset_x", "number"), ("offset_y", "number"),
+                      ("rotation", "number"), ("zoom", "number")]);
         Ok(())
     }
 
     fn register_collision_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
 
         // All entity commands, collision-prefixed
-        define_entity_cmds!(engine, self.lua, "collision_", collision_entity_commands);
+        define_entity_cmds!(engine, self.lua, meta_fns, "collision_", collision_entity_commands);
 
         // Non-entity collision commands
-        register_cmd!(engine, self.lua, "collision_play_sound", collision_audio_commands,
-            |id| String, AudioLuaCmd::PlaySound { id });
+        register_cmd!(engine, self.lua, meta_fns, "collision_play_sound", collision_audio_commands,
+            |id| String, AudioLuaCmd::PlaySound { id },
+            desc = "Play a sound effect (collision context)", cat = "collision",
+            params = [("id", "string")]);
 
-        register_cmd!(engine, self.lua, "collision_set_scalar", collision_signal_commands,
-            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value });
-        register_cmd!(engine, self.lua, "collision_set_integer", collision_signal_commands,
-            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value });
-        register_cmd!(engine, self.lua, "collision_set_string", collision_signal_commands,
-            |(key, value)| (String, String), SignalCmd::SetString { key, value });
-        register_cmd!(engine, self.lua, "collision_set_flag", collision_signal_commands,
-            |flag| String, SignalCmd::SetFlag { key: flag });
-        register_cmd!(engine, self.lua, "collision_clear_flag", collision_signal_commands,
-            |flag| String, SignalCmd::ClearFlag { key: flag });
-        register_cmd!(engine, self.lua, "collision_clear_scalar", collision_signal_commands,
-            |key| String, SignalCmd::ClearScalar { key });
-        register_cmd!(engine, self.lua, "collision_clear_integer", collision_signal_commands,
-            |key| String, SignalCmd::ClearInteger { key });
-        register_cmd!(engine, self.lua, "collision_clear_string", collision_signal_commands,
-            |key| String, SignalCmd::ClearString { key });
+        register_cmd!(engine, self.lua, meta_fns, "collision_set_scalar", collision_signal_commands,
+            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
+            desc = "Set a world signal scalar (collision context)", cat = "collision",
+            params = [("key", "string"), ("value", "number")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_set_integer", collision_signal_commands,
+            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value },
+            desc = "Set a world signal integer (collision context)", cat = "collision",
+            params = [("key", "string"), ("value", "integer")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_set_string", collision_signal_commands,
+            |(key, value)| (String, String), SignalCmd::SetString { key, value },
+            desc = "Set a world signal string (collision context)", cat = "collision",
+            params = [("key", "string"), ("value", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_set_flag", collision_signal_commands,
+            |flag| String, SignalCmd::SetFlag { key: flag },
+            desc = "Set a world signal flag (collision context)", cat = "collision",
+            params = [("flag", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_clear_flag", collision_signal_commands,
+            |flag| String, SignalCmd::ClearFlag { key: flag },
+            desc = "Clear a world signal flag (collision context)", cat = "collision",
+            params = [("flag", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_clear_scalar", collision_signal_commands,
+            |key| String, SignalCmd::ClearScalar { key },
+            desc = "Clear a world signal scalar (collision context)", cat = "collision",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_clear_integer", collision_signal_commands,
+            |key| String, SignalCmd::ClearInteger { key },
+            desc = "Clear a world signal integer (collision context)", cat = "collision",
+            params = [("key", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "collision_clear_string", collision_signal_commands,
+            |key| String, SignalCmd::ClearString { key },
+            desc = "Clear a world signal string (collision context)", cat = "collision",
+            params = [("key", "string")]);
 
-        register_cmd!(engine, self.lua, "collision_phase_transition", collision_phase_commands,
-            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase });
+        register_cmd!(engine, self.lua, meta_fns, "collision_phase_transition", collision_phase_commands,
+            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase },
+            desc = "Transition an entity to a new phase (collision context)", cat = "collision",
+            params = [("entity_id", "integer"), ("phase", "string")]);
 
-        register_cmd!(engine, self.lua, "collision_set_camera", collision_camera_commands,
+        register_cmd!(engine, self.lua, meta_fns, "collision_set_camera", collision_camera_commands,
             |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
-            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom });
+            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom },
+            desc = "Set the 2D camera (collision context)", cat = "collision",
+            params = [("target_x", "number"), ("target_y", "number"),
+                      ("offset_x", "number"), ("offset_y", "number"),
+                      ("rotation", "number"), ("zoom", "number")]);
 
         // Spawn/clone (return LuaEntityBuilder, not push-to-queue)
         engine.set(
@@ -778,29 +1056,42 @@ impl LuaRuntime {
             self.lua
                 .create_function(|_, ()| Ok(LuaEntityBuilder::new_collision()))?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "collision_spawn", "Create a new entity builder (collision context)", "collision",
+            &[], Some("CollisionEntityBuilder"))?;
+
         engine.set(
             "collision_clone",
             self.lua.create_function(|_, source_key: String| {
                 Ok(LuaEntityBuilder::new_collision_clone(source_key))
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "collision_clone", "Clone a registered entity (collision context)", "collision",
+            &[("source_key", "string")], Some("CollisionEntityBuilder"))?;
 
         Ok(())
     }
 
     fn register_animation_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
-        register_cmd!(engine, self.lua, "register_animation", animation_commands,
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(engine, self.lua, meta_fns, "register_animation", animation_commands,
             |(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)|
             (String, String, f32, f32, f32, usize, f32, bool),
             AnimationCmd::RegisterAnimation {
                 id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped,
-            });
+            },
+            desc = "Register an animation definition", cat = "animation",
+            params = [("id", "string"), ("tex_key", "string"),
+                      ("pos_x", "number"), ("pos_y", "number"), ("displacement", "number"),
+                      ("frame_count", "integer"), ("fps", "number"), ("looped", "boolean")]);
         Ok(())
     }
 
     fn register_render_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
 
         // load_shader has validation before push — keep manual
         engine.set(
@@ -820,6 +1111,8 @@ impl LuaRuntime {
                     Ok(())
                 })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "load_shader", "Load a shader (at least one of vs_path/fs_path required)", "render",
+            &[("id", "string"), ("vs_path", "string?"), ("fs_path", "string?")], None)?;
 
         // post_process_shader has complex table parsing — keep manual
         engine.set(
@@ -854,23 +1147,37 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
+        push_fn_meta(&self.lua, &meta_fns, "post_process_shader", "Set active post-processing shader chain (nil to clear)", "render",
+            &[("shader_ids", "string[]?")], None)?;
 
-        register_cmd!(engine, self.lua, "post_process_set_float", render_commands,
+        register_cmd!(engine, self.lua, meta_fns, "post_process_set_float", render_commands,
             |(name, value)| (String, f32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Float(value) });
-        register_cmd!(engine, self.lua, "post_process_set_int", render_commands,
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Float(value) },
+            desc = "Set a float uniform on post-process shader", cat = "render",
+            params = [("name", "string"), ("value", "number")]);
+        register_cmd!(engine, self.lua, meta_fns, "post_process_set_int", render_commands,
             |(name, value)| (String, i32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Int(value) });
-        register_cmd!(engine, self.lua, "post_process_set_vec2", render_commands,
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Int(value) },
+            desc = "Set an int uniform on post-process shader", cat = "render",
+            params = [("name", "string"), ("value", "integer")]);
+        register_cmd!(engine, self.lua, meta_fns, "post_process_set_vec2", render_commands,
             |(name, x, y)| (String, f32, f32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec2 { x, y } });
-        register_cmd!(engine, self.lua, "post_process_set_vec4", render_commands,
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec2 { x, y } },
+            desc = "Set a vec2 uniform on post-process shader", cat = "render",
+            params = [("name", "string"), ("x", "number"), ("y", "number")]);
+        register_cmd!(engine, self.lua, meta_fns, "post_process_set_vec4", render_commands,
             |(name, x, y, z, w)| (String, f32, f32, f32, f32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec4 { x, y, z, w } });
-        register_cmd!(engine, self.lua, "post_process_clear_uniform", render_commands,
-            |name| String, RenderCmd::ClearPostProcessUniform { name });
-        register_cmd!(engine, self.lua, "post_process_clear_uniforms", render_commands,
-            |()| (), RenderCmd::ClearPostProcessUniforms);
+            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec4 { x, y, z, w } },
+            desc = "Set a vec4 uniform on post-process shader", cat = "render",
+            params = [("name", "string"), ("x", "number"), ("y", "number"), ("z", "number"), ("w", "number")]);
+        register_cmd!(engine, self.lua, meta_fns, "post_process_clear_uniform", render_commands,
+            |name| String, RenderCmd::ClearPostProcessUniform { name },
+            desc = "Clear a uniform on post-process shader", cat = "render",
+            params = [("name", "string")]);
+        register_cmd!(engine, self.lua, meta_fns, "post_process_clear_uniforms", render_commands,
+            |()| (), RenderCmd::ClearPostProcessUniforms,
+            desc = "Clear all uniforms on post-process shader", cat = "render",
+            params = []);
 
         Ok(())
     }
@@ -1229,6 +1536,113 @@ impl LuaRuntime {
     /// Use this for advanced operations like registering custom userdata types.
     pub fn lua(&self) -> &Lua {
         &self.lua
+    }
+
+    /// Registers builder class metadata in `engine.__meta.classes`.
+    fn register_builder_meta(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_classes: LuaTable = meta.get("classes")?;
+
+        // Builder method definitions: (name, description, params as &[(&str, &str)])
+        let builder_methods: &[(&str, &str, &[(&str, &str)])] = &[
+            ("with_group", "Set entity group", &[("name", "string")]),
+            ("with_position", "Set world position", &[("x", "number"), ("y", "number")]),
+            ("with_sprite", "Set sprite", &[("tex_key", "string"), ("width", "number"), ("height", "number"), ("origin_x", "number"), ("origin_y", "number")]),
+            ("with_sprite_offset", "Set sprite offset", &[("offset_x", "number"), ("offset_y", "number")]),
+            ("with_sprite_flip", "Set sprite flipping", &[("flip_h", "boolean"), ("flip_v", "boolean")]),
+            ("with_zindex", "Set render order", &[("z", "number")]),
+            ("with_velocity", "Set velocity (creates RigidBody if needed)", &[("vx", "number"), ("vy", "number")]),
+            ("with_friction", "Set friction (creates RigidBody if needed)", &[("friction", "number")]),
+            ("with_max_speed", "Set max speed clamp (creates RigidBody if needed)", &[("speed", "number")]),
+            ("with_accel", "Add a named acceleration force", &[("name", "string"), ("x", "number"), ("y", "number"), ("enabled", "boolean")]),
+            ("with_frozen", "Mark entity as frozen (physics skipped)", &[]),
+            ("with_collider", "Set box collider", &[("width", "number"), ("height", "number"), ("origin_x", "number"), ("origin_y", "number")]),
+            ("with_collider_offset", "Set collider offset", &[("offset_x", "number"), ("offset_y", "number")]),
+            ("with_mouse_controlled", "Enable mouse position tracking", &[("follow_x", "boolean"), ("follow_y", "boolean")]),
+            ("with_rotation", "Set rotation in degrees", &[("degrees", "number")]),
+            ("with_scale", "Set scale", &[("sx", "number"), ("sy", "number")]),
+            ("with_persistent", "Survive scene transitions", &[]),
+            ("with_signal_scalar", "Add a scalar signal", &[("key", "string"), ("value", "number")]),
+            ("with_signal_integer", "Add an integer signal", &[("key", "string"), ("value", "integer")]),
+            ("with_signal_flag", "Add a flag signal", &[("key", "string")]),
+            ("with_signal_string", "Add a string signal", &[("key", "string"), ("value", "string")]),
+            ("with_screen_position", "Set screen position (UI elements)", &[("x", "number"), ("y", "number")]),
+            ("with_text", "Set DynamicText component", &[("content", "string"), ("font", "string"), ("font_size", "number"), ("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")]),
+            ("with_menu", "Add interactive menu", &[("items", "table"), ("origin_x", "number"), ("origin_y", "number"), ("font", "string"), ("font_size", "number"), ("item_spacing", "number"), ("use_screen_space", "boolean")]),
+            ("with_menu_colors", "Set menu normal/selected colors (RGBA)", &[("nr", "integer"), ("ng", "integer"), ("nb", "integer"), ("na", "integer"), ("sr", "integer"), ("sg", "integer"), ("sb", "integer"), ("sa", "integer")]),
+            ("with_menu_dynamic_text", "Enable dynamic text updates for menu items", &[("dynamic", "boolean")]),
+            ("with_menu_cursor", "Set cursor entity for menu", &[("key", "string")]),
+            ("with_menu_selection_sound", "Set sound for menu selection changes", &[("sound_key", "string")]),
+            ("with_menu_action_set_scene", "Set scene-switch action for menu item", &[("item_id", "string"), ("scene", "string")]),
+            ("with_menu_action_show_submenu", "Set submenu action for menu item", &[("item_id", "string"), ("submenu", "string")]),
+            ("with_menu_action_quit", "Set quit action for menu item", &[("item_id", "string")]),
+            ("with_menu_callback", "Set Lua callback for menu selection", &[("callback", "string")]),
+            ("with_menu_visible_count", "Set max visible menu items (enables scrolling)", &[("count", "integer")]),
+            ("with_signals", "Add empty Signals component", &[]),
+            ("with_phase", "Add phase state machine", &[("table", "table")]),
+            ("with_stuckto", "Attach entity to a target entity", &[("target_entity_id", "integer"), ("follow_x", "boolean"), ("follow_y", "boolean")]),
+            ("with_stuckto_offset", "Set offset for StuckTo", &[("offset_x", "number"), ("offset_y", "number")]),
+            ("with_stuckto_stored_velocity", "Set velocity to restore when unstuck", &[("vx", "number"), ("vy", "number")]),
+            ("with_lua_timer", "Add a Lua timer callback", &[("duration", "number"), ("callback", "string")]),
+            ("with_ttl", "Set time-to-live (auto-despawn)", &[("seconds", "number")]),
+            ("with_signal_binding", "Bind text to a WorldSignal value", &[("key", "string")]),
+            ("with_signal_binding_format", "Set format string for signal binding (use {} as placeholder)", &[("format", "string")]),
+            ("with_grid_layout", "Spawn entities from a JSON grid layout", &[("path", "string"), ("group", "string"), ("zindex", "number")]),
+            ("with_tween_position", "Add position tween animation", &[("from_x", "number"), ("from_y", "number"), ("to_x", "number"), ("to_y", "number"), ("duration", "number")]),
+            ("with_tween_position_easing", "Set easing for position tween", &[("easing", "string")]),
+            ("with_tween_position_loop", "Set loop mode for position tween", &[("loop_mode", "string")]),
+            ("with_tween_position_backwards", "Start position tween in reverse", &[]),
+            ("with_tween_rotation", "Add rotation tween animation", &[("from", "number"), ("to", "number"), ("duration", "number")]),
+            ("with_tween_rotation_easing", "Set easing for rotation tween", &[("easing", "string")]),
+            ("with_tween_rotation_loop", "Set loop mode for rotation tween", &[("loop_mode", "string")]),
+            ("with_tween_rotation_backwards", "Start rotation tween in reverse", &[]),
+            ("with_tween_scale", "Add scale tween animation", &[("from_x", "number"), ("from_y", "number"), ("to_x", "number"), ("to_y", "number"), ("duration", "number")]),
+            ("with_tween_scale_easing", "Set easing for scale tween", &[("easing", "string")]),
+            ("with_tween_scale_loop", "Set loop mode for scale tween", &[("loop_mode", "string")]),
+            ("with_tween_scale_backwards", "Start scale tween in reverse", &[]),
+            ("with_lua_collision_rule", "Add collision callback between two groups", &[("group_a", "string"), ("group_b", "string"), ("callback", "string")]),
+            ("with_animation", "Set animation by key", &[("animation_key", "string")]),
+            ("with_animation_controller", "Add animation controller with fallback", &[("fallback_key", "string")]),
+            ("with_animation_rule", "Add animation rule to controller", &[("condition_table", "table"), ("set_key", "string")]),
+            ("with_particle_emitter", "Add particle emitter", &[("table", "table")]),
+            ("with_tint", "Set color tint (RGBA 0-255)", &[("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")]),
+            ("with_shader", "Set per-entity shader with optional uniforms", &[("shader_key", "string"), ("uniforms", "table?")]),
+            ("register_as", "Register entity in WorldSignals for later retrieval", &[("key", "string")]),
+            ("build", "Queue entity for spawning or cloning", &[]),
+        ];
+
+        // Generate metadata for both EntityBuilder and CollisionEntityBuilder
+        for class_name in &["EntityBuilder", "CollisionEntityBuilder"] {
+            let class_tbl = self.lua.create_table()?;
+            class_tbl.set("description", format!("Fluent builder for entity construction ({})",
+                if *class_name == "EntityBuilder" { "regular context" } else { "collision context" }))?;
+
+            let methods_tbl = self.lua.create_table()?;
+            for (name, desc, params) in builder_methods {
+                let method_tbl = self.lua.create_table()?;
+                method_tbl.set("description", *desc)?;
+                let params_tbl = self.lua.create_table()?;
+                for (i, (pname, ptype)) in params.iter().enumerate() {
+                    let p = self.lua.create_table()?;
+                    p.set("name", *pname)?;
+                    p.set("type", *ptype)?;
+                    params_tbl.set(i + 1, p)?;
+                }
+                method_tbl.set("params", params_tbl)?;
+                // All with_* methods return Self, build() returns nil
+                if *name != "build" {
+                    let ret = self.lua.create_table()?;
+                    ret.set("type", *class_name)?;
+                    method_tbl.set("returns", ret)?;
+                }
+                methods_tbl.set(*name, method_tbl)?;
+            }
+            class_tbl.set("methods", methods_tbl)?;
+            meta_classes.set(*class_name, class_tbl)?;
+        }
+
+        Ok(())
     }
 }
 

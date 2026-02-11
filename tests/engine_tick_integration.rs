@@ -848,3 +848,34 @@ fn time_scale_doubles_effective_movement() {
     let pos = world.get::<MapPosition>(entity).unwrap();
     assert!(approx_eq(pos.pos.x, 10.0)); // vel * delta = 10 * 1.0
 }
+
+#[test]
+fn meta_table_has_functions_and_classes() {
+    let rt = LuaRuntime::new().unwrap();
+    let lua = rt.lua();
+    lua.load(r#"
+        assert(engine.__meta, "__meta table missing")
+        assert(engine.__meta.functions, "__meta.functions missing")
+        assert(engine.__meta.classes, "__meta.classes missing")
+
+        local fn_count = 0
+        for k, v in pairs(engine.__meta.functions) do
+            fn_count = fn_count + 1
+            assert(v.description, "missing description for " .. k)
+            assert(v.category, "missing category for " .. k)
+            assert(v.params, "missing params for " .. k)
+        end
+        assert(fn_count > 50, "expected >50 functions, got " .. fn_count)
+
+        assert(engine.__meta.functions.spawn.returns.type == "EntityBuilder",
+            "spawn should return EntityBuilder")
+        assert(engine.__meta.classes.EntityBuilder.methods.with_position,
+            "missing with_position on EntityBuilder")
+
+        local method_count = 0
+        for _ in pairs(engine.__meta.classes.EntityBuilder.methods) do
+            method_count = method_count + 1
+        end
+        assert(method_count > 50, "expected >50 builder methods, got " .. method_count)
+    "#).exec().unwrap();
+}
