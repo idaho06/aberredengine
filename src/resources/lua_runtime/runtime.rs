@@ -485,6 +485,9 @@ impl LuaRuntime {
         runtime.register_animation_api()?;
         runtime.register_render_api()?;
         runtime.register_builder_meta()?;
+        runtime.register_types_meta()?;
+        runtime.register_enums_meta()?;
+        runtime.register_callbacks_meta()?;
 
         Ok(runtime)
     }
@@ -642,8 +645,14 @@ impl LuaRuntime {
         let meta = self.lua.create_table()?;
         let meta_fns = self.lua.create_table()?;
         let meta_classes = self.lua.create_table()?;
+        let meta_types = self.lua.create_table()?;
+        let meta_enums = self.lua.create_table()?;
+        let meta_callbacks = self.lua.create_table()?;
         meta.set("functions", &meta_fns)?;
         meta.set("classes", &meta_classes)?;
+        meta.set("types", &meta_types)?;
+        meta.set("enums", &meta_enums)?;
+        meta.set("callbacks", &meta_callbacks)?;
         engine.set("__meta", meta)?;
 
         // engine.log(message) - General purpose logging
@@ -1612,6 +1621,14 @@ impl LuaRuntime {
             ("build", "Queue entity for spawning or cloning", &[]),
         ];
 
+        // Schema references for complex table params: (method_name, param_name, schema_type)
+        let schema_refs: &[(&str, &str, &str)] = &[
+            ("with_phase", "table", "PhaseDefinition"),
+            ("with_particle_emitter", "table", "ParticleEmitterConfig"),
+            ("with_animation_rule", "condition_table", "AnimationRuleCondition"),
+            ("with_menu", "items", "MenuItem[]"),
+        ];
+
         // Generate metadata for both EntityBuilder and CollisionEntityBuilder
         for class_name in &["EntityBuilder", "CollisionEntityBuilder"] {
             let class_tbl = self.lua.create_table()?;
@@ -1627,6 +1644,12 @@ impl LuaRuntime {
                     let p = self.lua.create_table()?;
                     p.set("name", *pname)?;
                     p.set("type", *ptype)?;
+                    // Add schema reference if this param has one
+                    for (method, param, schema) in schema_refs {
+                        if *method == *name && *param == *pname {
+                            p.set("schema", *schema)?;
+                        }
+                    }
                     params_tbl.set(i + 1, p)?;
                 }
                 method_tbl.set("params", params_tbl)?;
@@ -1644,6 +1667,337 @@ impl LuaRuntime {
 
         Ok(())
     }
+
+    /// Registers type shape definitions in `engine.__meta.types`.
+    fn register_types_meta(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_types: LuaTable = meta.get("types")?;
+
+        // Type definitions: (name, description, fields as &[(name, type, optional, description?)])
+        let type_defs: &[(&str, &str, &[(&str, &str, bool, Option<&str>)])] = &[
+            ("Vector2", "2D vector / point", &[
+                ("x", "number", false, None),
+                ("y", "number", false, None),
+            ]),
+            ("Rect", "Axis-aligned rectangle", &[
+                ("x", "number", false, None),
+                ("y", "number", false, None),
+                ("w", "number", false, None),
+                ("h", "number", false, None),
+            ]),
+            ("SpriteInfo", "Sprite state snapshot", &[
+                ("tex_key", "string", false, None),
+                ("flip_h", "boolean", false, None),
+                ("flip_v", "boolean", false, None),
+            ]),
+            ("AnimationInfo", "Animation state snapshot", &[
+                ("key", "string", false, None),
+                ("frame_index", "integer", false, None),
+                ("elapsed", "number", false, None),
+            ]),
+            ("TimerInfo", "Lua timer state snapshot", &[
+                ("duration", "number", false, None),
+                ("elapsed", "number", false, None),
+                ("callback", "string", false, None),
+            ]),
+            ("SignalSet", "Entity signal snapshot", &[
+                ("flags", "string[]", false, None),
+                ("integers", "{[string]: integer}", false, None),
+                ("scalars", "{[string]: number}", false, None),
+                ("strings", "{[string]: string}", false, None),
+            ]),
+            ("EntityContext", "Entity state passed to phase/timer callbacks", &[
+                ("id", "integer", false, Some("Entity ID")),
+                ("group", "string", true, None),
+                ("pos", "Vector2", true, None),
+                ("screen_pos", "Vector2", true, None),
+                ("vel", "Vector2", true, None),
+                ("speed_sq", "number", true, None),
+                ("frozen", "boolean", true, None),
+                ("rotation", "number", true, None),
+                ("scale", "Vector2", true, None),
+                ("rect", "Rect", true, None),
+                ("sprite", "SpriteInfo", true, None),
+                ("animation", "AnimationInfo", true, None),
+                ("signals", "SignalSet", true, None),
+                ("phase", "string", true, None),
+                ("time_in_phase", "number", true, None),
+                ("previous_phase", "string", true, Some("Only in on_enter")),
+                ("timer", "TimerInfo", true, None),
+            ]),
+            ("CollisionEntity", "Entity data in a collision context", &[
+                ("id", "integer", false, Some("Entity ID")),
+                ("group", "string", false, None),
+                ("pos", "Vector2", false, None),
+                ("vel", "Vector2", false, None),
+                ("speed_sq", "number", false, None),
+                ("rect", "Rect", false, None),
+                ("signals", "SignalSet", false, None),
+            ]),
+            ("CollisionSides", "Collision contact sides", &[
+                ("a", "string[]", false, Some("Sides of entity A in contact")),
+                ("b", "string[]", false, Some("Sides of entity B in contact")),
+            ]),
+            ("CollisionContext", "Context passed to collision callbacks", &[
+                ("a", "CollisionEntity", false, None),
+                ("b", "CollisionEntity", false, None),
+                ("sides", "CollisionSides", false, None),
+            ]),
+            ("DigitalButtonState", "State of a single digital button", &[
+                ("pressed", "boolean", false, None),
+                ("just_pressed", "boolean", false, None),
+                ("just_released", "boolean", false, None),
+            ]),
+            ("DigitalInputs", "All digital button states", &[
+                ("up", "DigitalButtonState", false, None),
+                ("down", "DigitalButtonState", false, None),
+                ("left", "DigitalButtonState", false, None),
+                ("right", "DigitalButtonState", false, None),
+                ("action_1", "DigitalButtonState", false, None),
+                ("action_2", "DigitalButtonState", false, None),
+                ("back", "DigitalButtonState", false, None),
+                ("special", "DigitalButtonState", false, None),
+            ]),
+            ("InputSnapshot", "Input state passed to callbacks", &[
+                ("digital", "DigitalInputs", false, None),
+                ("analog", "table", false, Some("Reserved for future gamepad support")),
+            ]),
+            ("PhaseCallbacks", "Callbacks for a single phase", &[
+                ("on_enter", "string", true, Some("Function name called on phase enter")),
+                ("on_update", "string", true, Some("Function name called each frame")),
+                ("on_exit", "string", true, Some("Function name called on phase exit")),
+            ]),
+            ("PhaseDefinition", "Phase state machine definition", &[
+                ("initial", "string", false, Some("Initial phase name")),
+                ("phases", "{[string]: PhaseCallbacks}", false, Some("Map of phase name to callbacks")),
+            ]),
+            ("ParticleEmitterConfig", "Particle emitter configuration table", &[
+                ("templates", "string[]", false, Some("Entity template keys to emit")),
+                ("shape", "string", true, Some("Emitter shape: 'point' or 'rect'")),
+                ("offset", "table", true, Some("{x, y} offset from entity position")),
+                ("particles_per_emission", "integer", true, None),
+                ("emissions_per_second", "number", true, None),
+                ("emissions_remaining", "integer", true, Some("nil = infinite")),
+                ("arc", "table", true, Some("{min, max} angle in degrees")),
+                ("speed", "table", true, Some("{min, max} or single number")),
+                ("ttl", "table", true, Some("{min, max}, number, or 'none'")),
+            ]),
+            ("MenuItem", "Menu item definition", &[
+                ("id", "string", false, None),
+                ("label", "string", false, None),
+            ]),
+            ("AnimationRuleCondition", "Animation rule condition (polymorphic)", &[
+                ("type", "string", false, Some("Condition type: has_flag, lacks_flag, scalar_cmp, scalar_range, integer_cmp, integer_range, all, any, not")),
+                ("key", "string", true, Some("Signal key (for flag/scalar/integer conditions)")),
+                ("op", "string", true, Some("Comparison operator (for cmp conditions)")),
+                ("value", "number", true, Some("Comparison value (for cmp conditions)")),
+                ("min", "number", true, Some("Range minimum (for range conditions)")),
+                ("max", "number", true, Some("Range maximum (for range conditions)")),
+                ("conditions", "AnimationRuleCondition[]", true, Some("Sub-conditions (for all/any/not)")),
+            ]),
+        ];
+
+        for (name, description, fields_def) in type_defs {
+            let tbl = self.lua.create_table()?;
+            tbl.set("description", *description)?;
+            let fields = self.lua.create_table()?;
+            for (i, (fname, ftype, optional, fdesc)) in fields_def.iter().enumerate() {
+                push_type_field(&self.lua, &fields, i, fname, ftype, *optional, *fdesc)?;
+            }
+            tbl.set("fields", fields)?;
+            meta_types.set(*name, tbl)?;
+        }
+
+        Ok(())
+    }
+
+    /// Registers enum value sets in `engine.__meta.enums`.
+    fn register_enums_meta(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_enums: LuaTable = meta.get("enums")?;
+
+        let enum_defs: &[(&str, &str, &[&str])] = &[
+            ("Easing", "Tween easing function", &[
+                "linear", "quad_in", "quad_out", "quad_in_out",
+                "cubic_in", "cubic_out", "cubic_in_out",
+            ]),
+            ("LoopMode", "Tween loop mode", &[
+                "once", "loop", "ping_pong",
+            ]),
+            ("BoxSide", "Collision side", &[
+                "left", "right", "top", "bottom",
+            ]),
+            ("ComparisonOp", "Comparison operator for animation rules", &[
+                "lt", "le", "gt", "ge", "eq", "ne",
+            ]),
+            ("ConditionType", "Animation rule condition type", &[
+                "has_flag", "lacks_flag", "scalar_cmp", "scalar_range",
+                "integer_cmp", "integer_range", "all", "any", "not",
+            ]),
+            ("EmitterShape", "Particle emitter shape type", &[
+                "point", "rect",
+            ]),
+            ("TtlSpec", "Time-to-live specification (number, {min,max} table, or 'none')", &[
+                "none",
+            ]),
+            ("Category", "Function category", &[
+                "base", "asset", "spawn", "audio", "signal", "phase",
+                "entity", "group", "tilemap", "camera", "collision",
+                "animation", "render",
+            ]),
+        ];
+
+        for (name, description, values) in enum_defs {
+            let tbl = self.lua.create_table()?;
+            tbl.set("description", *description)?;
+            let vals = self.lua.create_table()?;
+            for (i, val) in values.iter().enumerate() {
+                vals.set(i + 1, *val)?;
+            }
+            tbl.set("values", vals)?;
+            meta_enums.set(*name, tbl)?;
+        }
+
+        Ok(())
+    }
+
+    /// Registers well-known callback signatures in `engine.__meta.callbacks`.
+    fn register_callbacks_meta(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_callbacks: LuaTable = meta.get("callbacks")?;
+
+        // Callback definitions: (name, description, params, returns?, context?, note?)
+        struct CbDef {
+            name: &'static str,
+            description: &'static str,
+            params: &'static [(&'static str, &'static str)],
+            returns: Option<&'static str>,
+            context: Option<&'static str>,
+            note: Option<&'static str>,
+        }
+
+        let callback_defs: &[CbDef] = &[
+            CbDef {
+                name: "on_setup",
+                description: "Called once during game setup for asset loading",
+                params: &[],
+                returns: None, context: Some("setup"), note: None,
+            },
+            CbDef {
+                name: "on_enter_play",
+                description: "Called when entering Playing state",
+                params: &[],
+                returns: None, context: Some("play"), note: None,
+            },
+            CbDef {
+                name: "on_switch_scene",
+                description: "Called when switching scenes",
+                params: &[("scene", "string")],
+                returns: None, context: Some("play"), note: None,
+            },
+            CbDef {
+                name: "on_update_<scene>",
+                description: "Called each frame during a scene",
+                params: &[("input", "InputSnapshot"), ("dt", "number")],
+                returns: None, context: Some("play"),
+                note: Some("Function name is dynamic: on_update_ + scene name"),
+            },
+            CbDef {
+                name: "phase_on_enter",
+                description: "Called when entering a phase",
+                params: &[("ctx", "EntityContext"), ("input", "InputSnapshot")],
+                returns: Some("string?"),
+                context: Some("play"),
+                note: Some("Return phase name to trigger transition"),
+            },
+            CbDef {
+                name: "phase_on_update",
+                description: "Called each frame during a phase",
+                params: &[("ctx", "EntityContext"), ("input", "InputSnapshot"), ("dt", "number")],
+                returns: Some("string?"),
+                context: Some("play"),
+                note: Some("Return phase name to trigger transition"),
+            },
+            CbDef {
+                name: "phase_on_exit",
+                description: "Called when exiting a phase",
+                params: &[("ctx", "EntityContext")],
+                returns: None, context: Some("play"), note: None,
+            },
+            CbDef {
+                name: "timer_callback",
+                description: "Called when a Lua timer fires",
+                params: &[("ctx", "EntityContext"), ("input", "InputSnapshot")],
+                returns: None, context: Some("play"), note: None,
+            },
+            CbDef {
+                name: "collision_callback",
+                description: "Called when two colliding groups overlap",
+                params: &[("ctx", "CollisionContext")],
+                returns: None, context: Some("play"), note: None,
+            },
+            CbDef {
+                name: "menu_callback",
+                description: "Called when a menu item is selected",
+                params: &[("menu_id", "integer"), ("item_id", "string"), ("item_index", "integer")],
+                returns: None, context: Some("play"), note: None,
+            },
+        ];
+
+        for cb in callback_defs {
+            let tbl = self.lua.create_table()?;
+            tbl.set("description", cb.description)?;
+
+            let params_tbl = self.lua.create_table()?;
+            for (i, (pname, ptype)) in cb.params.iter().enumerate() {
+                let p = self.lua.create_table()?;
+                p.set("name", *pname)?;
+                p.set("type", *ptype)?;
+                params_tbl.set(i + 1, p)?;
+            }
+            tbl.set("params", params_tbl)?;
+
+            if let Some(ret) = cb.returns {
+                let r = self.lua.create_table()?;
+                r.set("type", ret)?;
+                tbl.set("returns", r)?;
+            }
+            if let Some(ctx) = cb.context {
+                tbl.set("context", ctx)?;
+            }
+            if let Some(note) = cb.note {
+                tbl.set("note", note)?;
+            }
+
+            meta_callbacks.set(cb.name, tbl)?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Helper to push a type field entry to a fields table.
+fn push_type_field(
+    lua: &Lua,
+    fields: &LuaTable,
+    index: usize,
+    name: &str,
+    typ: &str,
+    optional: bool,
+    description: Option<&str>,
+) -> LuaResult<()> {
+    let f = lua.create_table()?;
+    f.set("name", name)?;
+    f.set("type", typ)?;
+    f.set("optional", optional)?;
+    if let Some(desc) = description {
+        f.set("description", desc)?;
+    }
+    fields.set(index + 1, f)?;
+    Ok(())
 }
 
 impl Default for LuaRuntime {

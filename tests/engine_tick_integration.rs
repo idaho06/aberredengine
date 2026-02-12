@@ -879,3 +879,288 @@ fn meta_table_has_functions_and_classes() {
         assert(method_count > 50, "expected >50 builder methods, got " .. method_count)
     "#).exec().unwrap();
 }
+
+// =============================================================================
+// Meta Schema Drift Protection Tests
+// =============================================================================
+
+#[test]
+fn meta_types_table_is_populated() {
+    let rt = LuaRuntime::new().unwrap();
+    let lua = rt.lua();
+    lua.load(r#"
+        local types = engine.__meta.types
+        assert(types, "__meta.types missing")
+
+        -- Key types must exist
+        local required = {"EntityContext", "CollisionContext", "InputSnapshot", "Vector2",
+                          "Rect", "SpriteInfo", "AnimationInfo", "TimerInfo", "SignalSet",
+                          "CollisionEntity", "CollisionSides", "DigitalButtonState",
+                          "DigitalInputs", "PhaseDefinition", "PhaseCallbacks",
+                          "ParticleEmitterConfig", "MenuItem", "AnimationRuleCondition"}
+        for _, name in ipairs(required) do
+            assert(types[name], "missing type: " .. name)
+            assert(types[name].description, "missing description for type " .. name)
+            assert(types[name].fields, "missing fields for type " .. name)
+
+            -- Each field must have name, type, optional
+            for i, field in ipairs(types[name].fields) do
+                assert(field.name, name .. " field #" .. i .. " missing name")
+                assert(field.type, name .. " field #" .. i .. " missing type")
+                assert(field.optional ~= nil, name .. "." .. field.name .. " missing optional")
+            end
+        end
+
+        -- Spot-check EntityContext fields
+        local ec = types.EntityContext
+        local ec_field_names = {}
+        for _, f in ipairs(ec.fields) do ec_field_names[f.name] = f end
+        assert(ec_field_names.id, "EntityContext missing id field")
+        assert(ec_field_names.id.type == "integer", "EntityContext.id should be integer")
+        assert(ec_field_names.id.optional == false, "EntityContext.id should not be optional")
+        assert(ec_field_names.pos, "EntityContext missing pos field")
+        assert(ec_field_names.pos.type == "Vector2", "EntityContext.pos should be Vector2")
+        assert(ec_field_names.signals, "EntityContext missing signals field")
+        assert(ec_field_names.previous_phase, "EntityContext missing previous_phase")
+
+        -- Spot-check Vector2
+        local v2 = types.Vector2
+        assert(#v2.fields == 2, "Vector2 should have 2 fields")
+    "#).exec().unwrap();
+}
+
+#[test]
+fn meta_enums_table_is_populated() {
+    let rt = LuaRuntime::new().unwrap();
+    let lua = rt.lua();
+    lua.load(r#"
+        local enums = engine.__meta.enums
+        assert(enums, "__meta.enums missing")
+
+        -- Key enums must exist
+        local required = {"Easing", "LoopMode", "BoxSide", "ComparisonOp",
+                          "ConditionType", "EmitterShape", "TtlSpec", "Category"}
+        for _, name in ipairs(required) do
+            assert(enums[name], "missing enum: " .. name)
+            assert(enums[name].description, "missing description for enum " .. name)
+            assert(enums[name].values, "missing values for enum " .. name)
+            assert(#enums[name].values > 0, "empty values for enum " .. name)
+        end
+
+        -- Hard-code expected Easing values for drift detection
+        local expected_easings = {"linear", "quad_in", "quad_out", "quad_in_out",
+                                  "cubic_in", "cubic_out", "cubic_in_out"}
+        local actual_easings = {}
+        for _, v in ipairs(enums.Easing.values) do actual_easings[v] = true end
+        for _, e in ipairs(expected_easings) do
+            assert(actual_easings[e], "Easing missing value: " .. e)
+        end
+        assert(#enums.Easing.values == #expected_easings,
+            "Easing value count mismatch: expected " .. #expected_easings ..
+            " got " .. #enums.Easing.values)
+
+        -- Hard-code expected LoopMode values
+        local expected_loops = {"once", "loop", "ping_pong"}
+        assert(#enums.LoopMode.values == #expected_loops,
+            "LoopMode value count mismatch")
+
+        -- Hard-code expected BoxSide values
+        local expected_sides = {"left", "right", "top", "bottom"}
+        assert(#enums.BoxSide.values == #expected_sides,
+            "BoxSide value count mismatch")
+
+        -- Hard-code expected Category values
+        local expected_cats = {"base", "asset", "spawn", "audio", "signal", "phase",
+                               "entity", "group", "tilemap", "camera", "collision",
+                               "animation", "render"}
+        assert(#enums.Category.values == #expected_cats,
+            "Category value count mismatch: expected " .. #expected_cats ..
+            " got " .. #enums.Category.values)
+    "#).exec().unwrap();
+}
+
+#[test]
+fn meta_callbacks_table_is_populated() {
+    let rt = LuaRuntime::new().unwrap();
+    let lua = rt.lua();
+    lua.load(r#"
+        local cbs = engine.__meta.callbacks
+        assert(cbs, "__meta.callbacks missing")
+
+        -- Key callbacks must exist
+        local required = {"on_setup", "on_enter_play", "on_switch_scene",
+                          "on_update_<scene>", "phase_on_enter", "phase_on_update",
+                          "phase_on_exit", "timer_callback", "collision_callback",
+                          "menu_callback"}
+        for _, name in ipairs(required) do
+            assert(cbs[name], "missing callback: " .. name)
+            assert(cbs[name].description, "missing description for callback " .. name)
+            assert(cbs[name].params, "missing params for callback " .. name)
+        end
+
+        -- Spot-check param shapes
+        local pe = cbs.phase_on_enter
+        assert(#pe.params == 2, "phase_on_enter should have 2 params, got " .. #pe.params)
+        assert(pe.params[1].name == "ctx", "phase_on_enter param 1 should be ctx")
+        assert(pe.params[1].type == "EntityContext", "phase_on_enter ctx should be EntityContext")
+        assert(pe.returns and pe.returns.type == "string?", "phase_on_enter should return string?")
+
+        local cc = cbs.collision_callback
+        assert(#cc.params == 1, "collision_callback should have 1 param")
+        assert(cc.params[1].type == "CollisionContext", "collision_callback param should be CollisionContext")
+
+        local mc = cbs.menu_callback
+        assert(#mc.params == 3, "menu_callback should have 3 params")
+
+        -- on_setup has no params
+        assert(#cbs.on_setup.params == 0, "on_setup should have 0 params")
+    "#).exec().unwrap();
+}
+
+#[test]
+fn meta_functions_complete() {
+    let rt = LuaRuntime::new().unwrap();
+    let lua = rt.lua();
+    lua.load(r#"
+        local fns = engine.__meta.functions
+
+        -- Expected function names (comprehensive list)
+        local expected = {
+            -- base
+            "log", "log_info", "log_warn", "log_error",
+            -- asset
+            "load_texture", "load_font", "load_music", "load_sound", "load_tilemap",
+            -- spawn
+            "spawn", "clone",
+            -- audio
+            "play_music", "play_sound", "stop_all_music", "stop_all_sounds",
+            -- signal reads
+            "get_scalar", "get_integer", "get_string", "has_flag",
+            "get_group_count", "get_entity",
+            -- signal writes
+            "set_scalar", "set_integer", "set_string", "set_flag", "clear_flag",
+            "clear_scalar", "clear_integer", "clear_string",
+            "set_entity", "remove_entity",
+            -- phase
+            "phase_transition",
+            -- group
+            "track_group", "untrack_group", "clear_tracked_groups", "has_tracked_group",
+            -- tilemap
+            "spawn_tiles",
+            -- camera
+            "set_camera",
+            -- render
+            "load_shader", "post_process_shader",
+            "post_process_set_float", "post_process_set_int",
+            "post_process_set_vec2", "post_process_set_vec4",
+            "post_process_clear_uniform", "post_process_clear_uniforms",
+            -- animation
+            "register_animation",
+            -- collision context
+            "collision_spawn", "collision_clone",
+            "collision_play_sound",
+            "collision_set_scalar", "collision_set_integer", "collision_set_string",
+            "collision_set_flag", "collision_clear_flag",
+            "collision_clear_scalar", "collision_clear_integer", "collision_clear_string",
+            "collision_phase_transition", "collision_set_camera",
+        }
+
+        local missing = {}
+        for _, name in ipairs(expected) do
+            if not fns[name] then
+                table.insert(missing, name)
+            end
+        end
+        assert(#missing == 0,
+            "Missing functions in __meta: " .. table.concat(missing, ", "))
+
+        -- Entity commands should exist for both regular and collision prefix
+        local entity_cmds = {
+            "entity_despawn", "entity_menu_despawn", "entity_set_velocity",
+            "entity_set_position", "entity_freeze", "entity_unfreeze",
+            "entity_signal_set_flag", "entity_signal_clear_flag",
+            "entity_insert_lua_timer", "entity_remove_lua_timer",
+            "entity_insert_ttl", "entity_set_rotation", "entity_set_scale",
+            "entity_set_speed", "entity_set_friction", "entity_set_max_speed",
+            "entity_insert_tween_position", "entity_insert_tween_rotation",
+            "entity_insert_tween_scale", "entity_remove_tween_position",
+            "entity_remove_tween_rotation", "entity_remove_tween_scale",
+            "entity_signal_set_scalar", "entity_signal_set_string",
+            "entity_signal_set_integer", "entity_add_force", "entity_remove_force",
+            "entity_set_force_enabled", "entity_set_force_value",
+            "release_stuckto", "entity_insert_stuckto",
+            "entity_restart_animation", "entity_set_animation",
+            "entity_set_shader", "entity_remove_shader",
+            "entity_set_tint", "entity_remove_tint",
+            "entity_shader_set_float", "entity_shader_set_int",
+            "entity_shader_set_vec2", "entity_shader_set_vec4",
+            "entity_shader_clear_uniform", "entity_shader_clear_uniforms",
+        }
+
+        -- Check regular entity commands exist
+        local missing_entity = {}
+        for _, name in ipairs(entity_cmds) do
+            if not fns[name] then
+                table.insert(missing_entity, name)
+            end
+        end
+        assert(#missing_entity == 0,
+            "Missing entity functions: " .. table.concat(missing_entity, ", "))
+
+        -- Check collision-prefixed entity commands have parity
+        local missing_collision = {}
+        for _, name in ipairs(entity_cmds) do
+            local collision_name = "collision_" .. name
+            if not fns[collision_name] then
+                table.insert(missing_collision, collision_name)
+            end
+        end
+        assert(#missing_collision == 0,
+            "Missing collision entity functions (parity check): " ..
+            table.concat(missing_collision, ", "))
+    "#).exec().unwrap();
+}
+
+#[test]
+fn meta_builder_methods_have_schema_refs() {
+    let rt = LuaRuntime::new().unwrap();
+    let lua = rt.lua();
+    lua.load(r#"
+        local types = engine.__meta.types
+        local classes = engine.__meta.classes
+        local builder = classes.EntityBuilder.methods
+
+        -- Helper to find a param by name in a method
+        local function find_param(method_name, param_name)
+            local method = builder[method_name]
+            assert(method, "missing builder method: " .. method_name)
+            for _, p in ipairs(method.params) do
+                if p.name == param_name then return p end
+            end
+            error("missing param " .. param_name .. " in " .. method_name)
+        end
+
+        -- Check schema references
+        local p1 = find_param("with_phase", "table")
+        assert(p1.schema == "PhaseDefinition",
+            "with_phase.table should have schema PhaseDefinition, got " .. tostring(p1.schema))
+
+        local p2 = find_param("with_particle_emitter", "table")
+        assert(p2.schema == "ParticleEmitterConfig",
+            "with_particle_emitter.table should have schema ParticleEmitterConfig")
+
+        local p3 = find_param("with_animation_rule", "condition_table")
+        assert(p3.schema == "AnimationRuleCondition",
+            "with_animation_rule.condition_table should have schema AnimationRuleCondition")
+
+        local p4 = find_param("with_menu", "items")
+        assert(p4.schema == "MenuItem[]",
+            "with_menu.items should have schema MenuItem[]")
+
+        -- Verify referenced schemas exist in types (strip [] suffix)
+        local schemas = {"PhaseDefinition", "ParticleEmitterConfig", "AnimationRuleCondition", "MenuItem"}
+        for _, s in ipairs(schemas) do
+            assert(types[s], "schema type " .. s .. " not found in __meta.types")
+        end
+    "#).exec().unwrap();
+}

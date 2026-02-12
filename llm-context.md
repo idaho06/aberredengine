@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-10 (synced with codebase)
+# Last updated: 2026-02-12 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -330,9 +330,9 @@ UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ### Metadata Introspection (engine.__meta)
 
-The engine exposes structured metadata about all registered functions and builder methods
-at runtime via `engine.__meta`. This table is populated during LuaRuntime initialization
-and can be used for introspection, documentation generation, and LSP stub generation.
+The engine exposes a complete, introspectable API contract at runtime via `engine.__meta`.
+Populated during LuaRuntime initialization. Used for introspection, stub generation, and
+drift protection tests.
 
 ```lua
 engine.__meta.functions[name] = {
@@ -345,13 +345,47 @@ engine.__meta.classes[class_name] = {
     description = "...",
     methods = {
         [method_name] = { description, params, returns }
+        -- Complex table params may have `schema` field pointing to a type name:
+        -- e.g. with_phase "table" param has schema = "PhaseDefinition"
     }
+}
+engine.__meta.types[type_name] = {
+    description = "...",
+    fields = { { name = "...", type = "...", optional = bool, description? = "..." }, ... }
+}
+engine.__meta.enums[enum_name] = {
+    description = "...",
+    values = { "value1", "value2", ... }
+}
+engine.__meta.callbacks[callback_name] = {
+    description = "...",
+    params = { { name = "...", type = "..." }, ... },
+    returns = { type = "..." } | nil,
+    context = "setup"|"play" | nil,
+    note = "..." | nil
 }
 ```
 
 Classes: `EntityBuilder`, `CollisionEntityBuilder` (same methods, different context).
 Metadata is co-located with registration code — `register_cmd!` macro includes metadata inline,
 manual registrations use `push_fn_meta()` helper.
+
+Types (register_types_meta): Vector2, Rect, SpriteInfo, AnimationInfo, TimerInfo, SignalSet,
+EntityContext, CollisionEntity, CollisionSides, CollisionContext, DigitalButtonState,
+DigitalInputs, InputSnapshot, PhaseCallbacks, PhaseDefinition, ParticleEmitterConfig,
+MenuItem, AnimationRuleCondition.
+
+Enums (register_enums_meta): Easing, LoopMode, BoxSide, ComparisonOp, ConditionType,
+EmitterShape, TtlSpec, Category.
+
+Callbacks (register_callbacks_meta): on_setup, on_enter_play, on_switch_scene,
+on_update_<scene>, phase_on_enter, phase_on_update, phase_on_exit, timer_callback,
+collision_callback, menu_callback.
+
+Schema refs on builder params: with_phase→PhaseDefinition, with_particle_emitter→ParticleEmitterConfig,
+with_animation_rule→AnimationRuleCondition, with_menu→MenuItem[].
+
+Drift protection tests in tests/engine_tick_integration.rs verify all meta tables stay in sync.
 
 -- Logging
 engine.log(msg), engine.log_info(msg), engine.log_warn(msg), engine.log_error(msg)
@@ -690,8 +724,9 @@ Approximate execution order:
 1. Add variant to EntityCmd enum (commands.rs)
 2. Add entry to `define_entity_cmds!` macro in runtime.rs (one line; auto-registers for both regular and collision contexts)
 3. Process in process_entity_commands (lua_commands.rs)
-4. Add to engine.lua autocomplete stubs
-5. Document in README.md
+4. If new types/enums/callbacks introduced, update register_types_meta/register_enums_meta/register_callbacks_meta in runtime.rs
+5. Add to engine.lua autocomplete stubs
+6. Document in README.md
 
 ### Registering Entity-Input Systems (SystemsStore)
 
@@ -708,8 +743,9 @@ For systems that need to be called with a specific entity (like menu_despawn):
 2. Derive Component, add fields
 3. Export from components/mod.rs
 4. Add to SpawnComponentData if spawnable (spawn_data.rs)
-5. Add builder method in entity_builder.rs
+5. Add builder method in entity_builder.rs + entry in register_builder_meta() in runtime.rs
 6. Process in apply_components (lua_commands.rs) — shared by both spawn and clone
+7. If builder accepts complex table arg, add type in register_types_meta() and schema ref in register_builder_meta()
 
 ### Adding a new System
 

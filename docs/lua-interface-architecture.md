@@ -11,8 +11,9 @@ This document describes the Lua scripting interface architecture and provides a 
 5. [Entity Builder Pattern](#entity-builder-pattern)
 6. [Signal Snapshot System](#signal-snapshot-system)
 7. [Context Table Pooling](#context-table-pooling)
-8. [How to Add New Lua Commands](#how-to-add-new-lua-commands)
-9. [Best Practices](#best-practices)
+8. [Meta Schema (`engine.__meta`)](#meta-schema-enginemeta)
+9. [How to Add New Lua Commands](#how-to-add-new-lua-commands)
+10. [Best Practices](#best-practices)
 
 ---
 
@@ -77,7 +78,10 @@ The main struct managing the Lua interpreter. It:
 - Initializes the Lua state with MLua
 - Registers the global `engine` table with all API functions via `register_*_api()` methods
 - Populates `engine.__meta` with structured metadata for introspection (via `register_cmd!` macro and `push_fn_meta()` helper)
-- Registers builder class metadata via `register_builder_meta()` in `engine.__meta.classes`
+- Registers builder class metadata via `register_builder_meta()` in `engine.__meta.classes` (includes `schema` refs for complex table params)
+- Registers type shape definitions via `register_types_meta()` in `engine.__meta.types`
+- Registers enum value sets via `register_enums_meta()` in `engine.__meta.enums`
+- Registers callback signatures via `register_callbacks_meta()` in `engine.__meta.callbacks`
 - Manages `LuaAppData` for command queuing
 - Provides `drain_*_commands()` methods for Rust to retrieve queued commands
 - Provides `clear_all_commands()` to discard stale commands on scene switches
@@ -596,6 +600,23 @@ impl LuaUserData for LuaEntityBuilder {
 
 Builder methods are documented in `engine.__meta.classes` via `register_builder_meta()` in `runtime.rs`. All `with_*` methods, `register_as`, and `build` are listed with descriptions and parameter types for both `EntityBuilder` and `CollisionEntityBuilder` classes. When adding a new builder method, add its entry to the `builder_methods` array in `register_builder_meta()`.
 
+For builder methods that accept complex table arguments, a `schema` field on the param points to a type name in `engine.__meta.types`:
+
+```lua
+-- Example: with_phase's "table" param has schema = "PhaseDefinition"
+local p = engine.__meta.classes.EntityBuilder.methods.with_phase.params[1]
+assert(p.schema == "PhaseDefinition")
+assert(engine.__meta.types.PhaseDefinition)  -- full type definition
+```
+
+Current schema mappings:
+- `with_phase` → `"PhaseDefinition"`
+- `with_particle_emitter` → `"ParticleEmitterConfig"`
+- `with_animation_rule` → `"AnimationRuleCondition"`
+- `with_menu` → `"MenuItem[]"`
+
+When adding a new builder method that accepts a table, add a `schema_refs` entry in `register_builder_meta()`.
+
 ### Spawn Processing
 
 Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support.
@@ -733,6 +754,85 @@ local saved_y = ctx.pos.y
 
 ---
 
+## Meta Schema (`engine.__meta`)
+
+The `engine.__meta` table provides a complete, introspectable API contract for the Lua interface. It is populated during `LuaRuntime::new()` and can be used for automated stub generation, documentation, and drift protection tests.
+
+### Structure
+
+```lua
+engine.__meta = {
+    functions  = { ... },  -- All engine.* function signatures
+    classes    = { ... },  -- EntityBuilder / CollisionEntityBuilder method signatures
+    types      = { ... },  -- Type shape definitions (table schemas)
+    enums      = { ... },  -- Valid string literal value sets
+    callbacks  = { ... },  -- Well-known callback signatures the engine invokes
+}
+```
+
+### `__meta.types` — Type Shape Definitions
+
+Each entry describes a Lua table shape with typed fields. Registered by `register_types_meta()`.
+
+```lua
+engine.__meta.types["EntityContext"] = {
+    description = "Entity state passed to phase/timer callbacks",
+    fields = {
+        { name = "id",    type = "integer",  optional = false, description = "Entity ID" },
+        { name = "pos",   type = "Vector2",  optional = true },
+        { name = "phase", type = "string",   optional = true },
+        -- ...
+    }
+}
+```
+
+Current types: `Vector2`, `Rect`, `SpriteInfo`, `AnimationInfo`, `TimerInfo`, `SignalSet`, `EntityContext`, `CollisionEntity`, `CollisionSides`, `CollisionContext`, `DigitalButtonState`, `DigitalInputs`, `InputSnapshot`, `PhaseCallbacks`, `PhaseDefinition`, `ParticleEmitterConfig`, `MenuItem`, `AnimationRuleCondition`.
+
+### `__meta.enums` — String Literal Value Sets
+
+Each entry lists the valid string values for a domain concept. Registered by `register_enums_meta()`.
+
+```lua
+engine.__meta.enums["Easing"] = {
+    description = "Tween easing function",
+    values = { "linear", "quad_in", "quad_out", "quad_in_out",
+               "cubic_in", "cubic_out", "cubic_in_out" }
+}
+```
+
+Current enums: `Easing`, `LoopMode`, `BoxSide`, `ComparisonOp`, `ConditionType`, `EmitterShape`, `TtlSpec`, `Category`.
+
+### `__meta.callbacks` — Engine-Invoked Callback Signatures
+
+Each entry documents a global Lua function the engine calls, including parameter types, return types, and context. Registered by `register_callbacks_meta()`.
+
+```lua
+engine.__meta.callbacks["phase_on_enter"] = {
+    description = "Called when entering a phase",
+    params  = { { name = "ctx", type = "EntityContext" },
+                { name = "input", type = "InputSnapshot" } },
+    returns = { type = "string?" },
+    context = "play",
+    note    = "Return phase name to trigger transition"
+}
+```
+
+Current callbacks: `on_setup`, `on_enter_play`, `on_switch_scene`, `on_update_<scene>`, `phase_on_enter`, `phase_on_update`, `phase_on_exit`, `timer_callback`, `collision_callback`, `menu_callback`.
+
+### Drift Protection
+
+Tests in `tests/engine_tick_integration.rs` verify the meta schema stays in sync with the implementation:
+
+- `meta_types_table_is_populated` — all type entries have `description` + `fields` with `name`/`type`/`optional`
+- `meta_enums_table_is_populated` — hard-coded expected values for `Easing`, `LoopMode`, `BoxSide`, `Category`
+- `meta_callbacks_table_is_populated` — all callback entries have `params` with correct shapes
+- `meta_functions_complete` — comprehensive function list + collision/entity command parity check
+- `meta_builder_methods_have_schema_refs` — schema references point to existing types
+
+When adding new Rust types, easing functions, callback conventions, or API functions, update the corresponding `register_*_meta()` method. If you don't, these tests will fail.
+
+---
+
 ## How to Add New Lua Commands
 
 This section provides step-by-step instructions for adding new Lua commands.
@@ -816,7 +916,11 @@ pub fn process_entity_commands(
 }
 ```
 
-#### Step 4: Update LSP Stubs (Optional but Recommended)
+#### Step 4: Update Meta Schema (If Applicable)
+
+If the new command introduces new string literal values (e.g. a new easing mode or condition type), update `register_enums_meta()` in `runtime.rs`. If it introduces a new callback convention, update `register_callbacks_meta()`. If it accepts a complex table argument, add a type definition in `register_types_meta()`.
+
+#### Step 5: Update LSP Stubs (Optional but Recommended)
 
 In `assets/scripts/engine.lua`:
 
@@ -827,7 +931,7 @@ In `assets/scripts/engine.lua`:
 function engine.entity_set_health(entity_id, health) end
 ```
 
-#### Step 5: Document in README (Optional)
+#### Step 6: Document in README (Optional)
 
 Add to `assets/scripts/README.md`:
 
@@ -1116,4 +1220,5 @@ To add new commands:
 2. Register Lua function in `runtime.rs` (use `register_cmd!` macro for push-to-queue, or add to `define_entity_cmds!` for entity commands)
 3. Process command in `lua_commands.rs`
 4. Optionally add builder method in `entity_builder.rs` + update `register_builder_meta()` in `runtime.rs`
-5. Update documentation files
+5. Update `register_types_meta()` / `register_enums_meta()` / `register_callbacks_meta()` if the command introduces new types, enum values, or callback conventions
+6. Update documentation files
