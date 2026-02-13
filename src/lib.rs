@@ -7,4 +7,5 @@ pub mod components;
 pub mod events;
 pub mod game;
 pub mod resources;
+pub mod stub_generator;
 pub mod systems;

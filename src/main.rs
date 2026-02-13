@@ -40,6 +40,7 @@ mod components;
 mod events;
 mod game;
 mod resources;
+mod stub_generator;
 mod systems;
 
 use crate::components::persistent::Persistent;
@@ -95,11 +96,48 @@ use crate::systems::tween::tween_rotation_system;
 use crate::systems::tween::tween_scale_system;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
+use clap::Parser;
+use std::path::PathBuf;
 //use raylib::collision;
 //use raylib::prelude::*;
 
+/// Aberred Engine 2D
+#[derive(Parser)]
+#[command(version, author = "Idaho06 from AkinoSoft! cesar.idaho@gmail.com",
+          about = "This is the Aberred Engine 2D! https://github.com/idaho06/aberredengine/")]
+struct Cli {
+    /// Generate Lua LSP stubs from engine metadata and exit.
+    /// Optionally provide a path (default: assets/scripts/engine.lua).
+    #[arg(long, value_name = "PATH")]
+    create_lua_stubs: Option<Option<PathBuf>>,
+}
+
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let cli = Cli::parse();
+
+    // Early-exit: generate Lua stubs and quit (no window/audio needed)
+    if let Some(maybe_path) = cli.create_lua_stubs {
+        let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/engine.lua"));
+        let runtime =
+            LuaRuntime::new().expect("Failed to create Lua runtime for stub generation");
+        match stub_generator::generate_stubs(&runtime) {
+            Ok(content) => {
+                if let Err(e) = stub_generator::write_stubs(&path, &content) {
+                    eprintln!("Error: {e}");
+                    std::process::exit(1);
+                }
+                println!("Lua stubs written to {}", path.display());
+            }
+            Err(e) => {
+                eprintln!("Error generating stubs: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     log::info!("Hello, world! This is the Aberred Engine!");
     // --------------- Raylib window & assets ---------------
     // GameConfig - will load from config.ini on first frame via apply_gameconfig_changes
