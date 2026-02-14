@@ -26,17 +26,13 @@ raylib = { version = "5.5.1", features = ["wayland","noscreenshot"] }
 raylib = { version = "5.5.1", features = ["noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
-winres = "0.1"
-
-[package.metadata.winres]
-OriginalFilename = "ABERRED.EXE"
-LegalCopyright = "© 2026 AkinoSoft"
+embed-resource = "3"
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-strip = true 
+strip = "debuginfo"
 
 # RUSTFLAGS="-C target-cpu=native" cargo build --release

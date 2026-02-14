@@ -1,13 +1,8 @@
 // build.rs
 
 #[cfg(windows)]
-extern crate winres;
-
-#[cfg(windows)]
 fn main() {
-    let mut res = winres::WindowsResource::new();
-    res.set_icon("./aberred.ico");
-    res.compile().unwrap();
+    let _ = embed_resource::compile("aberred.rc", embed_resource::NONE);
 }
 
 #[cfg(unix)]

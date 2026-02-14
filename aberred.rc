@@ -1,0 +1,30 @@
+#pragma code_page(65001)
+
+1 VERSIONINFO
+FILEVERSION 0, 1, 0, 0
+PRODUCTVERSION 0, 1, 0, 0
+FILEFLAGS 0x0
+FILEOS 0x40004
+FILETYPE 0x1
+FILEFLAGSMASK 0x3f
+FILESUBTYPE 0x0
+{
+    BLOCK "StringFileInfo"
+    {
+        BLOCK "000004b0"
+        {
+            VALUE "FileDescription", "Aberred Engine"
+            VALUE "FileVersion", "0.1.0"
+            VALUE "LegalCopyright", "\251 2026 AkinoSoft"
+            VALUE "OriginalFilename", "ABERRED.EXE"
+            VALUE "ProductName", "aberredengine"
+            VALUE "ProductVersion", "0.1.0"
+        }
+    }
+    BLOCK "VarFileInfo"
+    {
+        VALUE "Translation", 0x0, 0x04b0
+    }
+}
+
+1 ICON "aberred.ico"
