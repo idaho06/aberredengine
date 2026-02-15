@@ -124,14 +124,14 @@ engine = {}
 ---Particle emitter configuration table
 ---@class ParticleEmitterConfig
 ---@field templates string[] Entity template keys to emit
----@field shape string|nil Emitter shape: 'point' or 'rect'
+---@field shape string|table|nil Emitter shape: 'point' or table {type='rect', width, height}
 ---@field offset table|nil {x, y} offset from entity position
 ---@field particles_per_emission integer|nil
 ---@field emissions_per_second number|nil
 ---@field emissions_remaining integer|nil nil = infinite
 ---@field arc table|nil {min, max} angle in degrees
 ---@field speed table|nil {min, max} or single number
----@field ttl table|nil {min, max}, number, or 'none'
+---@field ttl number|table|nil {min, max}, number, or 'none'
 
 ---Menu item definition
 ---@class MenuItem
@@ -1079,7 +1079,7 @@ function EntityBuilder:with_animation(animation_key) end
 function EntityBuilder:with_animation_controller(fallback_key) end
 
 ---Add animation rule to controller
----@param condition_table table @see AnimationRuleCondition
+---@param condition_table AnimationRuleCondition
 ---@param set_key string
 ---@return EntityBuilder
 function EntityBuilder:with_animation_rule(condition_table, set_key) end
@@ -1138,7 +1138,7 @@ function EntityBuilder:with_lua_timer(duration, callback) end
 function EntityBuilder:with_max_speed(speed) end
 
 ---Add interactive menu
----@param items table @see MenuItem[]
+---@param items MenuItem[]
 ---@param origin_x number
 ---@param origin_y number
 ---@param font string
@@ -1209,7 +1209,7 @@ function EntityBuilder:with_menu_visible_count(count) end
 function EntityBuilder:with_mouse_controlled(follow_x, follow_y) end
 
 ---Add particle emitter
----@param table table @see ParticleEmitterConfig
+---@param table ParticleEmitterConfig
 ---@return EntityBuilder
 function EntityBuilder:with_particle_emitter(table) end
 
@@ -1218,7 +1218,24 @@ function EntityBuilder:with_particle_emitter(table) end
 function EntityBuilder:with_persistent() end
 
 ---Add phase state machine
----@param table table @see PhaseDefinition
+---
+---Example:
+---```lua
+---engine.spawn()
+---    :with_phase({
+---        initial = "idle",
+---        phases = {
+---            idle = {
+---                on_enter = "on_idle_enter",
+---                on_update = "on_idle_update",
+---                on_exit = "on_idle_exit"
+---            },
+---            moving = { on_enter = "on_moving_enter" }
+---        }
+---    })
+---    :build()
+---```
+---@param table PhaseDefinition
 ---@return EntityBuilder
 function EntityBuilder:with_phase(table) end
 
@@ -1463,7 +1480,7 @@ function CollisionEntityBuilder:with_animation(animation_key) end
 function CollisionEntityBuilder:with_animation_controller(fallback_key) end
 
 ---Add animation rule to controller
----@param condition_table table @see AnimationRuleCondition
+---@param condition_table AnimationRuleCondition
 ---@param set_key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_animation_rule(condition_table, set_key) end
@@ -1522,7 +1539,7 @@ function CollisionEntityBuilder:with_lua_timer(duration, callback) end
 function CollisionEntityBuilder:with_max_speed(speed) end
 
 ---Add interactive menu
----@param items table @see MenuItem[]
+---@param items MenuItem[]
 ---@param origin_x number
 ---@param origin_y number
 ---@param font string
@@ -1593,7 +1610,7 @@ function CollisionEntityBuilder:with_menu_visible_count(count) end
 function CollisionEntityBuilder:with_mouse_controlled(follow_x, follow_y) end
 
 ---Add particle emitter
----@param table table @see ParticleEmitterConfig
+---@param table ParticleEmitterConfig
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_particle_emitter(table) end
 
@@ -1602,7 +1619,24 @@ function CollisionEntityBuilder:with_particle_emitter(table) end
 function CollisionEntityBuilder:with_persistent() end
 
 ---Add phase state machine
----@param table table @see PhaseDefinition
+---
+---Example:
+---```lua
+---engine.spawn()
+---    :with_phase({
+---        initial = "idle",
+---        phases = {
+---            idle = {
+---                on_enter = "on_idle_enter",
+---                on_update = "on_idle_update",
+---                on_exit = "on_idle_exit"
+---            },
+---            moving = { on_enter = "on_moving_enter" }
+---        }
+---    })
+---    :build()
+---```
+---@param table PhaseDefinition
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_phase(table) end
 

@@ -2,18 +2,20 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-12 (synced with codebase)
+# Last updated: 2026-02-15 (synced with codebase)
 
 ## QUICK REFERENCE
 
-STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3 + fastrand 2.3
+STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3 + fastrand 2.3 + clap (CLI)
 GAME_TYPE: Asteroids-style arcade clone (2D)
 ENTRY: src/main.rs
+LIB_ENTRY: src/lib.rs (reusable library crate)
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
+CLI: --create-lua-stubs [PATH] (generate LSP stubs, default: assets/scripts/engine.lua)
 
-## STATUS (2026-02-10)
+## STATUS (2026-02-15)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg, explosion01.ogg); music/tilemap/brick assets are not loaded.
@@ -27,13 +29,17 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 - Tint component - color modulation for sprites (replaces Color::WHITE) and text (multiplies with text color).
 - Multi-pass post-processing shader chain support.
 - Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs).
+- Lua stubs generator (stub_generator.rs) - reads engine.__meta at runtime and emits deterministic engine.lua with EmmyLua type annotations for LSP support. CLI: `--create-lua-stubs [PATH]`.
+- Library crate (lib.rs) - exposes components, events, game, resources, systems, stub_generator for integration tests and reuse.
 
 ## FILE TREE (ESSENTIAL)
 
 ```
 src/
-├── main.rs                    # App entry, ECS world setup, main loop, system schedule
+├── main.rs                    # App entry, ECS world setup, main loop, system schedule, CLI (clap)
+├── lib.rs                     # Library crate entry (components, events, game, resources, systems, stub_generator)
 ├── game.rs                    # GameState logic, scene switching, Lua callbacks
+├── stub_generator.rs          # Lua EmmyLua stub generator (reads __meta, emits engine.lua)
 ├── components/
 │   ├── mod.rs                 # Re-exports all components
 │   ├── mapposition.rs         # MapPosition (world-space position)
@@ -133,7 +139,7 @@ assets/
 ├── scripts/
 │   ├── main.lua               # Entry: on_setup, on_enter_play, on_switch_scene, on_update_*
 │   ├── setup.lua              # Asset loading helpers (require in on_setup)
-│   ├── engine.lua             # LSP autocomplete stubs (45k+ lines)
+│   ├── engine.lua             # Auto-generated LSP stubs (EmmyLua annotations, ~1.8k lines, via --create-lua-stubs)
 │   ├── .luarc.json            # Lua Language Server configuration for LuaJIT
 │   ├── README.md              # Lua API documentation (78k+ lines)
 │   ├── lib/
@@ -182,8 +188,8 @@ code is currently commented out).
 
 MapPosition { pos: Vector2 }
 ScreenPosition { pos: Vector2 }
-RigidBody { velocity: Vector2, friction: Option<f32>, max_speed: Option<f32>, forces: FxHashMap<String, AccelForce>, frozen: bool }
-AccelForce { acceleration: Vector2, enabled: bool }
+RigidBody { velocity: Vector2, friction: Option<f32>, max_speed: Option<f32>, forces: FxHashMap<String, AccelerationForce>, frozen: bool }
+AccelerationForce { value: Vector2, enabled: bool }
 BoxCollider { offset: Vector2, origin: Vector2, size: Vector2 }
 Sprite { tex_key: String, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
 Animation { animation_key: String, frame_index: usize, elapsed: f32 }
@@ -225,7 +231,7 @@ DigitalInputs { up, down, left, right, action_1, action_2, back, special: Digita
 DigitalButtonState { pressed: bool, just_pressed: bool, just_released: bool }
 TextureStore(FxHashMap<String, Texture2D>)
 FontStore(FxHashMap<String, Font>) - NON_SEND
-AnimationStore(FxHashMap<String, AnimationDef>)
+AnimationStore { animations: FxHashMap<String, AnimationResource> }
 TilemapStore(FxHashMap<String, TilemapData>)
 GameState { None, Setup, Playing, Quitting }
 NextGameState(Option<GameState>)
@@ -323,7 +329,7 @@ CameraCmd { SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom
 TilemapCmd { SpawnTiles { id } }
 AssetCmd { LoadTexture { id, path }, LoadFont { id, path, size }, LoadMusic { id, path }, LoadSound { id, path }, LoadTilemap { id, path }, LoadShader { id, vs_path, fs_path } }
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
-RenderCmd { SetPostProcessShader { id }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
+RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ## LUA API STRUCTURE (runtime.rs — macro-based registration)
@@ -725,7 +731,7 @@ Approximate execution order:
 2. Add entry to `define_entity_cmds!` macro in runtime.rs (one line; auto-registers for both regular and collision contexts)
 3. Process in process_entity_commands (lua_commands.rs)
 4. If new types/enums/callbacks introduced, update register_types_meta/register_enums_meta/register_callbacks_meta in runtime.rs
-5. Add to engine.lua autocomplete stubs
+5. Regenerate engine.lua stubs: `cargo run -- --create-lua-stubs`
 6. Document in README.md
 
 ### Registering Entity-Input Systems (SystemsStore)

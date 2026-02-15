@@ -11,8 +11,19 @@ use std::path::Path;
 
 /// Category display order for deterministic output.
 const CATEGORY_ORDER: &[&str] = &[
-    "base", "asset", "spawn", "audio", "signal", "phase", "entity", "group",
-    "tilemap", "camera", "collision", "animation", "render",
+    "base",
+    "asset",
+    "spawn",
+    "audio",
+    "signal",
+    "phase",
+    "entity",
+    "group",
+    "tilemap",
+    "camera",
+    "collision",
+    "animation",
+    "render",
 ];
 
 /// Human-readable section titles for each category.
@@ -173,8 +184,14 @@ fn extract_functions(meta: &LuaTable) -> Result<Vec<FnMeta>, LuaError> {
     }
     // Sort by category order, then alphabetically within category
     result.sort_by(|a, b| {
-        let ca = CATEGORY_ORDER.iter().position(|c| *c == a.category).unwrap_or(99);
-        let cb = CATEGORY_ORDER.iter().position(|c| *c == b.category).unwrap_or(99);
+        let ca = CATEGORY_ORDER
+            .iter()
+            .position(|c| *c == a.category)
+            .unwrap_or(99);
+        let cb = CATEGORY_ORDER
+            .iter()
+            .position(|c| *c == b.category)
+            .unwrap_or(99);
         ca.cmp(&cb).then_with(|| a.name.cmp(&b.name))
     });
     Ok(result)
@@ -291,12 +308,7 @@ fn extract_types(meta: &LuaTable) -> Result<Vec<TypeMeta>, LuaError> {
         "MenuItem",
         "AnimationRuleCondition",
     ];
-    result.sort_by_key(|t| {
-        type_order
-            .iter()
-            .position(|n| *n == t.name)
-            .unwrap_or(99)
-    });
+    result.sort_by_key(|t| type_order.iter().position(|n| *n == t.name).unwrap_or(99));
     Ok(result)
 }
 
@@ -391,11 +403,7 @@ fn render_stubs(
     .unwrap();
     writeln!(out).unwrap();
     writeln!(out, "---@class engine").unwrap();
-    writeln!(
-        out,
-        "---Engine API provided by Aberred Engine (Rust)"
-    )
-    .unwrap();
+    writeln!(out, "---Engine API provided by Aberred Engine (Rust)").unwrap();
     writeln!(
         out,
         "---All functions are available globally via the `engine` table"
@@ -491,13 +499,7 @@ fn render_callbacks(out: &mut String, callbacks: &[CallbackMeta]) {
         // For dynamic names (e.g., on_update_<scene>), emit params as comments to avoid LSP errors
         if is_dynamic {
             for (pname, ptype) in &cb.params {
-                writeln!(
-                    out,
-                    "--- param: {} {}",
-                    pname,
-                    lua_type_annotation(ptype)
-                )
-                .unwrap();
+                writeln!(out, "--- param: {} {}", pname, lua_type_annotation(ptype)).unwrap();
             }
             if let Some(ref ret) = cb.returns {
                 writeln!(out, "--- returns: {}", lua_type_annotation(ret)).unwrap();
@@ -511,24 +513,12 @@ fn render_callbacks(out: &mut String, callbacks: &[CallbackMeta]) {
             .unwrap();
         } else {
             for (pname, ptype) in &cb.params {
-                writeln!(
-                    out,
-                    "---@param {} {}",
-                    pname,
-                    lua_type_annotation(ptype)
-                )
-                .unwrap();
+                writeln!(out, "---@param {} {}", pname, lua_type_annotation(ptype)).unwrap();
             }
             if let Some(ref ret) = cb.returns {
                 writeln!(out, "---@return {}", lua_type_annotation(ret)).unwrap();
             }
-            writeln!(
-                out,
-                "function {}({}) end",
-                cb.name,
-                param_names.join(", ")
-            )
-            .unwrap();
+            writeln!(out, "function {}({}) end", cb.name, param_names.join(", ")).unwrap();
         }
         writeln!(out).unwrap();
     }
@@ -541,7 +531,12 @@ fn render_functions(out: &mut String, functions: &[FnMeta]) {
         if f.category != current_category {
             current_category = &f.category;
             let title = category_title(current_category);
-            writeln!(out, "-- ==================== {} ====================", title).unwrap();
+            writeln!(
+                out,
+                "-- ==================== {} ====================",
+                title
+            )
+            .unwrap();
             writeln!(out).unwrap();
         }
         render_function(out, f);
@@ -549,15 +544,9 @@ fn render_functions(out: &mut String, functions: &[FnMeta]) {
 }
 
 fn render_function(out: &mut String, f: &FnMeta) {
-    writeln!(out, "---{}", f.description).unwrap();
+    write_description(out, &f.description);
     for (pname, ptype) in &f.params {
-        writeln!(
-            out,
-            "---@param {} {}",
-            pname,
-            lua_type_annotation(ptype)
-        )
-        .unwrap();
+        writeln!(out, "---@param {} {}", pname, lua_type_annotation(ptype)).unwrap();
     }
     if let Some(ref ret) = f.returns {
         writeln!(out, "---@return {}", lua_type_annotation(ret)).unwrap();
@@ -571,6 +560,13 @@ fn render_function(out: &mut String, f: &FnMeta) {
     )
     .unwrap();
     writeln!(out).unwrap();
+}
+
+/// Writes a description as doc-comment lines, handling multi-line descriptions.
+fn write_description(out: &mut String, description: &str) {
+    for line in description.lines() {
+        writeln!(out, "---{}", line).unwrap();
+    }
 }
 
 fn render_class(out: &mut String, class: &ClassMeta) {
@@ -592,19 +588,14 @@ fn render_class(out: &mut String, class: &ClassMeta) {
     writeln!(out).unwrap();
 
     for m in &class.methods {
-        writeln!(out, "---{}", m.description).unwrap();
+        write_description(out, &m.description);
         for p in &m.params {
-            let ann = lua_type_annotation(&p.type_name);
-            if let Some(ref schema) = p.schema {
-                writeln!(
-                    out,
-                    "---@param {} {} @see {}",
-                    p.name, ann, schema
-                )
-                .unwrap();
+            let ann = if let Some(ref schema) = p.schema {
+                schema.clone()
             } else {
-                writeln!(out, "---@param {} {}", p.name, ann).unwrap();
-            }
+                lua_type_annotation(&p.type_name)
+            };
+            writeln!(out, "---@param {} {}", p.name, ann).unwrap();
         }
         if let Some(ref ret) = m.returns {
             writeln!(out, "---@return {}", lua_type_annotation(ret)).unwrap();

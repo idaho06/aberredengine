@@ -153,7 +153,7 @@ function on_main_menu_select(ctx)
 end
 
 --- Called each frame when menu scene is active.
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function on_update_menu(input, dt)
     -- Check for back button to quit game

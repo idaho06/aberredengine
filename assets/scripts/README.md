@@ -32,6 +32,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Tint Component](#tint-component)
 - [Complete Example: Player Paddle](#complete-example-player-paddle)
 - [Tips and Best Practices](#tips-and-best-practices)
+- [Lua Helper Libraries](#lua-helper-libraries)
 - [Debugging](#debugging)
 - [License](#license)
 
@@ -47,9 +48,22 @@ Aberred Engine provides a comprehensive Lua API through the global `engine` tabl
 assets/scripts/
 ├── main.lua           # Entry point - loaded first by Rust
 ├── setup.lua          # Asset loading configuration
+├── engine.lua         # Auto-generated LSP stubs (do not edit manually)
+├── .luarc.json        # Lua Language Server configuration for LuaJIT
+├── lib/
+│   ├── math.lua       # Math helpers (lerp, inv_lerp, remap, lerp2)
+│   └── utils.lua      # Debug utilities (dump_value)
 └── scenes/
     ├── menu.lua       # Menu scene spawning logic
     └── level01.lua    # Level 01 gameplay logic
+```
+
+**LSP Support:** The `engine.lua` file provides EmmyLua type annotations for IDE autocompletion. It is auto-generated from the engine's runtime metadata. To regenerate after code changes:
+
+```bash
+cargo run -- --create-lua-stubs
+# Or with a custom output path:
+cargo run -- --create-lua-stubs path/to/output.lua
 ```
 
 ---
@@ -3153,6 +3167,26 @@ function on_player_speed_limit_zone(ctx)
 end
 ```
 
+#### `engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)`
+
+Configure 2D camera during collision handling. Useful for camera shake or focus effects triggered by impacts.
+
+**Parameters:**
+
+- `target_x`, `target_y` - World position to center on
+- `offset_x`, `offset_y` - Screen-space offset
+- `rotation` - Camera rotation in degrees
+- `zoom` - Zoom level (1.0 = normal)
+
+```lua
+function on_player_explosion(ctx)
+    -- Shake camera by offsetting target slightly
+    local pos = ctx.a.pos
+    engine.collision_set_camera(pos.x + 5, pos.y - 3, 320, 180, 0.0, 1.0)
+    engine.collision_play_sound("explosion")
+end
+```
+
 ### Example: Ball-Brick Collision
 
 ```lua
@@ -3829,6 +3863,71 @@ end
 7. **Load assets in `on_setup()`** - Assets must be queued before entering Playing state.
 
 8. **Scene scripts are lazy-loaded** - Only loaded when `on_switch_scene()` requires them.
+
+---
+
+## Lua Helper Libraries
+
+The engine includes utility libraries loaded in `main.lua` and exposed as globals.
+
+### Math Helpers (`lib/math.lua`)
+
+Imported in `main.lua` as global functions:
+
+#### `Lerp(a, b, t)`
+
+Linear interpolation between two numbers.
+
+```lua
+local value = Lerp(0, 100, 0.5)  -- Returns 50
+```
+
+#### `Lerp2(ax, ay, bx, by, t)`
+
+2D linear interpolation between two points.
+
+```lua
+local x, y = Lerp2(0, 0, 100, 200, 0.5)  -- Returns 50, 100
+```
+
+#### `InvLerp(a, b, v)`
+
+Inverse linear interpolation. Returns the `t` value that would produce `v` in `Lerp(a, b, t)`.
+
+```lua
+local t = InvLerp(0, 100, 25)  -- Returns 0.25
+```
+
+#### `Remap(in_min, in_max, out_min, out_max, v)`
+
+Remap a value from one range to another.
+
+```lua
+-- Map health (0-100) to alpha (50-255)
+local alpha = Remap(0, 100, 50, 255, health)
+```
+
+### Debug Utilities (`lib/utils.lua`)
+
+#### `Dump_value(value, max_depth, indent, visited, force_float)`
+
+Pretty-print Lua values (tables, numbers, strings) for debugging. Handles nested tables with cycle detection and sorted keys for stable output.
+
+**Parameters:**
+
+- `value` - Any Lua value to dump
+- `max_depth` (optional, default 6) - Maximum recursion depth
+- `indent` (optional, default 0) - Current indentation level
+- `visited` (optional) - Cycle detection table
+- `force_float` (optional, default true) - Format numbers as floats
+
+```lua
+-- Dump entity context for debugging
+engine.log(Dump_value(ctx))
+
+-- Dump with limited depth
+engine.log(Dump_value(some_table, 3))
+```
 
 ---
 

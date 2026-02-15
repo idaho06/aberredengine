@@ -216,7 +216,7 @@ local SHIP_ROTATION = 0.0
 
 --- Helper function to rotate the ship based on input
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function rotate_ship(ctx, input, dt)
     local rotation_speed = 360.0   -- degrees per second
@@ -266,7 +266,7 @@ local function fire_laser(ctx)
 end
 
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 function ship_phase_idle_enter(ctx, input)
     engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
     -- set animation to idle
@@ -275,7 +275,7 @@ function ship_phase_idle_enter(ctx, input)
 end
 
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function ship_phase_idle_update(ctx, input, dt)
     -- engine.log_info("Ship idle phase update")
@@ -298,7 +298,7 @@ function ship_phase_idle_update(ctx, input, dt)
 end
 
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 function ship_phase_propulsion_enter(ctx, input)
     engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
     -- set animation to propulsion
@@ -307,7 +307,7 @@ function ship_phase_propulsion_enter(ctx, input)
 end
 
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function ship_phase_propulsion_update(ctx, input, dt)
     -- set camera ship's position
@@ -338,7 +338,7 @@ end
 --[[
 --- Called when entering "init" phase (not used, we just transition immediately)
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function scene_init_update(ctx, input, dt)
     -- Immediately transition to get_started
@@ -356,7 +356,7 @@ end
 --- - Play "player_ready" music
 --- - Spawn the ball (stuck to player paddle)
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 function scene_get_started_enter(ctx, input)
     engine.log_info("Entering get_started phase")
 
@@ -409,7 +409,7 @@ end
 
 --- Called each frame in "get_started" phase
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function scene_get_started_update(ctx, input, dt)
     -- Transition to playing after setup
@@ -420,7 +420,7 @@ end
 --- - Check for level cleared (no bricks)
 --- - Check for ball lost (no balls)
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function scene_playing_update(ctx, input, dt)
     --[[     -- Skip first few frames to let group counts update
@@ -449,7 +449,7 @@ end
 --- - Decrement lives
 --- - Transition to game_over or get_started
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function scene_lose_life_update(ctx, input, dt)
     --[[     local lives = engine.get_integer("lives") or 0
@@ -467,7 +467,7 @@ end
 --- Called when entering "game_over" phase
 --- - Spawn "GAME OVER" text
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 function scene_game_over_enter(ctx, input)
     --[[     engine.log_info("Game Over!")
 
@@ -483,7 +483,7 @@ end
 --- Called each frame in "game_over" phase
 --- - After 3 seconds, switch to menu scene
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function scene_game_over_update(ctx, input, dt)
     --[[     if ctx.time_in_phase >= 3.0 then
@@ -501,7 +501,7 @@ end
 --- - Play success music
 --- - Spawn "LEVEL CLEARED" text
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 function scene_level_cleared_enter(ctx, input)
     --[[     engine.log_info("Level Cleared!")
 
@@ -520,7 +520,7 @@ end
 --- Called each frame in "level_cleared" phase
 --- - After 4 seconds, switch to menu scene
 --- @param ctx EntityContext Entity context table
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function scene_level_cleared_update(ctx, input, dt)
     --[[     if ctx.time_in_phase >= 4.0 then
@@ -887,7 +887,7 @@ function M.spawn()
 end
 
 --- Called each frame when level01 scene is active.
---- @param input Input Input state table
+--- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 function on_update_level01(input, dt)
     -- Check for back button to return to menu

@@ -13,7 +13,7 @@ use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use log::{info, warn, error};
+use log::{error, info, warn};
 
 /// Shared state accessible from Lua function closures.
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
@@ -663,8 +663,15 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "log", "General purpose logging", "base",
-            &[("message", "string")], None)?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "log",
+            "General purpose logging",
+            "base",
+            &[("message", "string")],
+            None,
+        )?;
 
         // engine.log_info(message) - Info level logging
         engine.set(
@@ -674,8 +681,15 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "log_info", "Info level logging", "base",
-            &[("message", "string")], None)?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "log_info",
+            "Info level logging",
+            "base",
+            &[("message", "string")],
+            None,
+        )?;
 
         // engine.log_warn(message) - Warning level logging
         engine.set(
@@ -685,8 +699,15 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "log_warn", "Warning level logging", "base",
-            &[("message", "string")], None)?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "log_warn",
+            "Warning level logging",
+            "base",
+            &[("message", "string")],
+            None,
+        )?;
 
         // engine.log_error(message) - Error level logging
         engine.set(
@@ -696,8 +717,15 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "log_error", "Error level logging", "base",
-            &[("message", "string")], None)?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "log_error",
+            "Error level logging",
+            "base",
+            &[("message", "string")],
+            None,
+        )?;
 
         self.lua.globals().set("engine", engine)?;
 
@@ -708,26 +736,66 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "load_texture", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadTexture { id, path },
-            desc = "Load a texture from file", cat = "asset",
-            params = [("id", "string"), ("path", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "load_font", asset_commands,
-            |(id, path, size)| (String, String, i32), AssetCmd::LoadFont { id, path, size },
-            desc = "Load a font from file", cat = "asset",
-            params = [("id", "string"), ("path", "string"), ("size", "integer")]);
-        register_cmd!(engine, self.lua, meta_fns, "load_music", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadMusic { id, path },
-            desc = "Load music from file", cat = "asset",
-            params = [("id", "string"), ("path", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "load_sound", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadSound { id, path },
-            desc = "Load a sound effect from file", cat = "asset",
-            params = [("id", "string"), ("path", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "load_tilemap", asset_commands,
-            |(id, path)| (String, String), AssetCmd::LoadTilemap { id, path },
-            desc = "Load a tilemap from file", cat = "asset",
-            params = [("id", "string"), ("path", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "load_texture",
+            asset_commands,
+            |(id, path)| (String, String),
+            AssetCmd::LoadTexture { id, path },
+            desc = "Load a texture from file",
+            cat = "asset",
+            params = [("id", "string"), ("path", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "load_font",
+            asset_commands,
+            |(id, path, size)| (String, String, i32),
+            AssetCmd::LoadFont { id, path, size },
+            desc = "Load a font from file",
+            cat = "asset",
+            params = [("id", "string"), ("path", "string"), ("size", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "load_music",
+            asset_commands,
+            |(id, path)| (String, String),
+            AssetCmd::LoadMusic { id, path },
+            desc = "Load music from file",
+            cat = "asset",
+            params = [("id", "string"), ("path", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "load_sound",
+            asset_commands,
+            |(id, path)| (String, String),
+            AssetCmd::LoadSound { id, path },
+            desc = "Load a sound effect from file",
+            cat = "asset",
+            params = [("id", "string"), ("path", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "load_tilemap",
+            asset_commands,
+            |(id, path)| (String, String),
+            AssetCmd::LoadTilemap { id, path },
+            desc = "Load a tilemap from file",
+            cat = "asset",
+            params = [("id", "string"), ("path", "string")]
+        );
         Ok(())
     }
 
@@ -743,8 +811,15 @@ impl LuaRuntime {
             self.lua
                 .create_function(|_, ()| Ok(LuaEntityBuilder::new()))?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "spawn", "Create a new entity builder", "spawn",
-            &[], Some("EntityBuilder"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "spawn",
+            "Create a new entity builder",
+            "spawn",
+            &[],
+            Some("EntityBuilder"),
+        )?;
 
         // engine.clone(source_key) - Clone an entity from WorldSignals
         // Returns a LuaEntityBuilder that clones the source entity and applies overrides
@@ -754,8 +829,15 @@ impl LuaRuntime {
                 Ok(LuaEntityBuilder::new_clone(source_key))
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "clone", "Clone a registered entity with optional overrides", "spawn",
-            &[("source_key", "string")], Some("EntityBuilder"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "clone",
+            "Clone a registered entity with optional overrides",
+            "spawn",
+            &[("source_key", "string")],
+            Some("EntityBuilder"),
+        )?;
 
         Ok(())
     }
@@ -764,22 +846,54 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "play_music", audio_commands,
-            |(id, looped)| (String, bool), AudioLuaCmd::PlayMusic { id, looped },
-            desc = "Play music track", cat = "audio",
-            params = [("id", "string"), ("looped", "boolean")]);
-        register_cmd!(engine, self.lua, meta_fns, "play_sound", audio_commands,
-            |id| String, AudioLuaCmd::PlaySound { id },
-            desc = "Play a sound effect", cat = "audio",
-            params = [("id", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "stop_all_music", audio_commands,
-            |()| (), AudioLuaCmd::StopAllMusic,
-            desc = "Stop all playing music", cat = "audio",
-            params = []);
-        register_cmd!(engine, self.lua, meta_fns, "stop_all_sounds", audio_commands,
-            |()| (), AudioLuaCmd::StopAllSounds,
-            desc = "Stop all playing sounds", cat = "audio",
-            params = []);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "play_music",
+            audio_commands,
+            |(id, looped)| (String, bool),
+            AudioLuaCmd::PlayMusic { id, looped },
+            desc = "Play music track",
+            cat = "audio",
+            params = [("id", "string"), ("looped", "boolean")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "play_sound",
+            audio_commands,
+            |id| String,
+            AudioLuaCmd::PlaySound { id },
+            desc = "Play a sound effect",
+            cat = "audio",
+            params = [("id", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "stop_all_music",
+            audio_commands,
+            |()| (),
+            AudioLuaCmd::StopAllMusic,
+            desc = "Stop all playing music",
+            cat = "audio",
+            params = []
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "stop_all_sounds",
+            audio_commands,
+            |()| (),
+            AudioLuaCmd::StopAllSounds,
+            desc = "Stop all playing sounds",
+            cat = "audio",
+            params = []
+        );
         Ok(())
     }
 
@@ -801,8 +915,15 @@ impl LuaRuntime {
                 Ok(value)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "get_scalar", "Get a world signal scalar value", "signal",
-            &[("key", "string")], Some("number?"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_scalar",
+            "Get a world signal scalar value",
+            "signal",
+            &[("key", "string")],
+            Some("number?"),
+        )?;
 
         // engine.get_integer(key) -> integer or nil
         engine.set(
@@ -814,8 +935,15 @@ impl LuaRuntime {
                 Ok(value)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "get_integer", "Get a world signal integer value", "signal",
-            &[("key", "string")], Some("integer?"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_integer",
+            "Get a world signal integer value",
+            "signal",
+            &[("key", "string")],
+            Some("integer?"),
+        )?;
 
         // engine.get_string(key) -> string or nil
         engine.set(
@@ -827,8 +955,15 @@ impl LuaRuntime {
                 Ok(value)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "get_string", "Get a world signal string value", "signal",
-            &[("key", "string")], Some("string?"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_string",
+            "Get a world signal string value",
+            "signal",
+            &[("key", "string")],
+            Some("string?"),
+        )?;
 
         // engine.has_flag(key) -> boolean
         engine.set(
@@ -841,8 +976,15 @@ impl LuaRuntime {
                 Ok(has)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "has_flag", "Check if a world signal flag is set", "signal",
-            &[("key", "string")], Some("boolean"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "has_flag",
+            "Check if a world signal flag is set",
+            "signal",
+            &[("key", "string")],
+            Some("boolean"),
+        )?;
 
         // engine.get_group_count(group) -> integer or nil
         engine.set(
@@ -858,8 +1000,15 @@ impl LuaRuntime {
                 Ok(count)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "get_group_count", "Get the count of entities in a tracked group", "signal",
-            &[("group", "string")], Some("integer?"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_group_count",
+            "Get the count of entities in a tracked group",
+            "signal",
+            &[("group", "string")],
+            Some("integer?"),
+        )?;
 
         // engine.get_entity(key) -> integer (entity ID) or nil
         // Returns the entity ID as a u64 that can be used with with_stuckto()
@@ -872,51 +1021,138 @@ impl LuaRuntime {
                 Ok(entity_id)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "get_entity", "Get a registered entity ID by key", "signal",
-            &[("key", "string")], Some("integer?"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_entity",
+            "Get a registered entity ID by key",
+            "signal",
+            &[("key", "string")],
+            Some("integer?"),
+        )?;
 
         // ===== WRITE functions (queue commands) =====
 
-        register_cmd!(engine, self.lua, meta_fns, "set_scalar", signal_commands,
-            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
-            desc = "Set a world signal scalar value", cat = "signal",
-            params = [("key", "string"), ("value", "number")]);
-        register_cmd!(engine, self.lua, meta_fns, "set_integer", signal_commands,
-            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value },
-            desc = "Set a world signal integer value", cat = "signal",
-            params = [("key", "string"), ("value", "integer")]);
-        register_cmd!(engine, self.lua, meta_fns, "set_string", signal_commands,
-            |(key, value)| (String, String), SignalCmd::SetString { key, value },
-            desc = "Set a world signal string value", cat = "signal",
-            params = [("key", "string"), ("value", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "set_flag", signal_commands,
-            |key| String, SignalCmd::SetFlag { key },
-            desc = "Set a world signal flag", cat = "signal",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "clear_flag", signal_commands,
-            |key| String, SignalCmd::ClearFlag { key },
-            desc = "Clear a world signal flag", cat = "signal",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "clear_scalar", signal_commands,
-            |key| String, SignalCmd::ClearScalar { key },
-            desc = "Clear a world signal scalar", cat = "signal",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "clear_integer", signal_commands,
-            |key| String, SignalCmd::ClearInteger { key },
-            desc = "Clear a world signal integer", cat = "signal",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "clear_string", signal_commands,
-            |key| String, SignalCmd::ClearString { key },
-            desc = "Clear a world signal string", cat = "signal",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "set_entity", signal_commands,
-            |(key, entity_id)| (String, u64), SignalCmd::SetEntity { key, entity_id },
-            desc = "Register an entity ID in world signals", cat = "signal",
-            params = [("key", "string"), ("entity_id", "integer")]);
-        register_cmd!(engine, self.lua, meta_fns, "remove_entity", signal_commands,
-            |key| String, SignalCmd::RemoveEntity { key },
-            desc = "Remove a registered entity from world signals", cat = "signal",
-            params = [("key", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_scalar",
+            signal_commands,
+            |(key, value)| (String, f32),
+            SignalCmd::SetScalar { key, value },
+            desc = "Set a world signal scalar value",
+            cat = "signal",
+            params = [("key", "string"), ("value", "number")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_integer",
+            signal_commands,
+            |(key, value)| (String, i32),
+            SignalCmd::SetInteger { key, value },
+            desc = "Set a world signal integer value",
+            cat = "signal",
+            params = [("key", "string"), ("value", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_string",
+            signal_commands,
+            |(key, value)| (String, String),
+            SignalCmd::SetString { key, value },
+            desc = "Set a world signal string value",
+            cat = "signal",
+            params = [("key", "string"), ("value", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_flag",
+            signal_commands,
+            |key| String,
+            SignalCmd::SetFlag { key },
+            desc = "Set a world signal flag",
+            cat = "signal",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "clear_flag",
+            signal_commands,
+            |key| String,
+            SignalCmd::ClearFlag { key },
+            desc = "Clear a world signal flag",
+            cat = "signal",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "clear_scalar",
+            signal_commands,
+            |key| String,
+            SignalCmd::ClearScalar { key },
+            desc = "Clear a world signal scalar",
+            cat = "signal",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "clear_integer",
+            signal_commands,
+            |key| String,
+            SignalCmd::ClearInteger { key },
+            desc = "Clear a world signal integer",
+            cat = "signal",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "clear_string",
+            signal_commands,
+            |key| String,
+            SignalCmd::ClearString { key },
+            desc = "Clear a world signal string",
+            cat = "signal",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_entity",
+            signal_commands,
+            |(key, entity_id)| (String, u64),
+            SignalCmd::SetEntity { key, entity_id },
+            desc = "Register an entity ID in world signals",
+            cat = "signal",
+            params = [("key", "string"), ("entity_id", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "remove_entity",
+            signal_commands,
+            |key| String,
+            SignalCmd::RemoveEntity { key },
+            desc = "Remove a registered entity from world signals",
+            cat = "signal",
+            params = [("key", "string")]
+        );
 
         Ok(())
     }
@@ -925,10 +1161,18 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "phase_transition", phase_commands,
-            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase },
-            desc = "Transition an entity to a new phase", cat = "phase",
-            params = [("entity_id", "integer"), ("phase", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "phase_transition",
+            phase_commands,
+            |(entity_id, phase)| (u64, String),
+            PhaseCmd::TransitionTo { entity_id, phase },
+            desc = "Transition an entity to a new phase",
+            cat = "phase",
+            params = [("entity_id", "integer"), ("phase", "string")]
+        );
         Ok(())
     }
 
@@ -944,18 +1188,42 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "track_group", group_commands,
-            |name| String, GroupCmd::TrackGroup { name },
-            desc = "Start tracking a named entity group", cat = "group",
-            params = [("name", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "untrack_group", group_commands,
-            |name| String, GroupCmd::UntrackGroup { name },
-            desc = "Stop tracking a named entity group", cat = "group",
-            params = [("name", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "clear_tracked_groups", group_commands,
-            |()| (), GroupCmd::ClearTrackedGroups,
-            desc = "Stop tracking all entity groups", cat = "group",
-            params = []);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "track_group",
+            group_commands,
+            |name| String,
+            GroupCmd::TrackGroup { name },
+            desc = "Start tracking a named entity group",
+            cat = "group",
+            params = [("name", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "untrack_group",
+            group_commands,
+            |name| String,
+            GroupCmd::UntrackGroup { name },
+            desc = "Stop tracking a named entity group",
+            cat = "group",
+            params = [("name", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "clear_tracked_groups",
+            group_commands,
+            |()| (),
+            GroupCmd::ClearTrackedGroups,
+            desc = "Stop tracking all entity groups",
+            cat = "group",
+            params = []
+        );
 
         // Read function (returns value, not push-to-queue)
         engine.set(
@@ -968,8 +1236,15 @@ impl LuaRuntime {
                 Ok(has)
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "has_tracked_group", "Check if a group is being tracked", "group",
-            &[("name", "string")], Some("boolean"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "has_tracked_group",
+            "Check if a group is being tracked",
+            "group",
+            &[("name", "string")],
+            Some("boolean"),
+        )?;
 
         Ok(())
     }
@@ -978,10 +1253,18 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "spawn_tiles", tilemap_commands,
-            |id| String, TilemapCmd::SpawnTiles { id },
-            desc = "Spawn tilemap entities from a loaded tilemap", cat = "tilemap",
-            params = [("id", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "spawn_tiles",
+            tilemap_commands,
+            |id| String,
+            TilemapCmd::SpawnTiles { id },
+            desc = "Spawn tilemap entities from a loaded tilemap",
+            cat = "tilemap",
+            params = [("id", "string")]
+        );
         Ok(())
     }
 
@@ -989,13 +1272,34 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "set_camera", camera_commands,
-            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
-            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom },
-            desc = "Set the 2D camera target, offset, rotation and zoom", cat = "camera",
-            params = [("target_x", "number"), ("target_y", "number"),
-                      ("offset_x", "number"), ("offset_y", "number"),
-                      ("rotation", "number"), ("zoom", "number")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_camera",
+            camera_commands,
+            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (
+                f32, f32, f32, f32, f32, f32
+            ),
+            CameraCmd::SetCamera2D {
+                target_x,
+                target_y,
+                offset_x,
+                offset_y,
+                rotation,
+                zoom
+            },
+            desc = "Set the 2D camera target, offset, rotation and zoom",
+            cat = "camera",
+            params = [
+                ("target_x", "number"),
+                ("target_y", "number"),
+                ("offset_x", "number"),
+                ("offset_y", "number"),
+                ("rotation", "number"),
+                ("zoom", "number")
+            ]
+        );
         Ok(())
     }
 
@@ -1005,59 +1309,166 @@ impl LuaRuntime {
         let meta_fns: LuaTable = meta.get("functions")?;
 
         // All entity commands, collision-prefixed
-        define_entity_cmds!(engine, self.lua, meta_fns, "collision_", collision_entity_commands);
+        define_entity_cmds!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_",
+            collision_entity_commands
+        );
 
         // Non-entity collision commands
-        register_cmd!(engine, self.lua, meta_fns, "collision_play_sound", collision_audio_commands,
-            |id| String, AudioLuaCmd::PlaySound { id },
-            desc = "Play a sound effect (collision context)", cat = "collision",
-            params = [("id", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_play_sound",
+            collision_audio_commands,
+            |id| String,
+            AudioLuaCmd::PlaySound { id },
+            desc = "Play a sound effect (collision context)",
+            cat = "collision",
+            params = [("id", "string")]
+        );
 
-        register_cmd!(engine, self.lua, meta_fns, "collision_set_scalar", collision_signal_commands,
-            |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
-            desc = "Set a world signal scalar (collision context)", cat = "collision",
-            params = [("key", "string"), ("value", "number")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_set_integer", collision_signal_commands,
-            |(key, value)| (String, i32), SignalCmd::SetInteger { key, value },
-            desc = "Set a world signal integer (collision context)", cat = "collision",
-            params = [("key", "string"), ("value", "integer")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_set_string", collision_signal_commands,
-            |(key, value)| (String, String), SignalCmd::SetString { key, value },
-            desc = "Set a world signal string (collision context)", cat = "collision",
-            params = [("key", "string"), ("value", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_set_flag", collision_signal_commands,
-            |flag| String, SignalCmd::SetFlag { key: flag },
-            desc = "Set a world signal flag (collision context)", cat = "collision",
-            params = [("flag", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_clear_flag", collision_signal_commands,
-            |flag| String, SignalCmd::ClearFlag { key: flag },
-            desc = "Clear a world signal flag (collision context)", cat = "collision",
-            params = [("flag", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_clear_scalar", collision_signal_commands,
-            |key| String, SignalCmd::ClearScalar { key },
-            desc = "Clear a world signal scalar (collision context)", cat = "collision",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_clear_integer", collision_signal_commands,
-            |key| String, SignalCmd::ClearInteger { key },
-            desc = "Clear a world signal integer (collision context)", cat = "collision",
-            params = [("key", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "collision_clear_string", collision_signal_commands,
-            |key| String, SignalCmd::ClearString { key },
-            desc = "Clear a world signal string (collision context)", cat = "collision",
-            params = [("key", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_set_scalar",
+            collision_signal_commands,
+            |(key, value)| (String, f32),
+            SignalCmd::SetScalar { key, value },
+            desc = "Set a world signal scalar (collision context)",
+            cat = "collision",
+            params = [("key", "string"), ("value", "number")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_set_integer",
+            collision_signal_commands,
+            |(key, value)| (String, i32),
+            SignalCmd::SetInteger { key, value },
+            desc = "Set a world signal integer (collision context)",
+            cat = "collision",
+            params = [("key", "string"), ("value", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_set_string",
+            collision_signal_commands,
+            |(key, value)| (String, String),
+            SignalCmd::SetString { key, value },
+            desc = "Set a world signal string (collision context)",
+            cat = "collision",
+            params = [("key", "string"), ("value", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_set_flag",
+            collision_signal_commands,
+            |flag| String,
+            SignalCmd::SetFlag { key: flag },
+            desc = "Set a world signal flag (collision context)",
+            cat = "collision",
+            params = [("flag", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_clear_flag",
+            collision_signal_commands,
+            |flag| String,
+            SignalCmd::ClearFlag { key: flag },
+            desc = "Clear a world signal flag (collision context)",
+            cat = "collision",
+            params = [("flag", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_clear_scalar",
+            collision_signal_commands,
+            |key| String,
+            SignalCmd::ClearScalar { key },
+            desc = "Clear a world signal scalar (collision context)",
+            cat = "collision",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_clear_integer",
+            collision_signal_commands,
+            |key| String,
+            SignalCmd::ClearInteger { key },
+            desc = "Clear a world signal integer (collision context)",
+            cat = "collision",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_clear_string",
+            collision_signal_commands,
+            |key| String,
+            SignalCmd::ClearString { key },
+            desc = "Clear a world signal string (collision context)",
+            cat = "collision",
+            params = [("key", "string")]
+        );
 
-        register_cmd!(engine, self.lua, meta_fns, "collision_phase_transition", collision_phase_commands,
-            |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase },
-            desc = "Transition an entity to a new phase (collision context)", cat = "collision",
-            params = [("entity_id", "integer"), ("phase", "string")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_phase_transition",
+            collision_phase_commands,
+            |(entity_id, phase)| (u64, String),
+            PhaseCmd::TransitionTo { entity_id, phase },
+            desc = "Transition an entity to a new phase (collision context)",
+            cat = "collision",
+            params = [("entity_id", "integer"), ("phase", "string")]
+        );
 
-        register_cmd!(engine, self.lua, meta_fns, "collision_set_camera", collision_camera_commands,
-            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
-            CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom },
-            desc = "Set the 2D camera (collision context)", cat = "collision",
-            params = [("target_x", "number"), ("target_y", "number"),
-                      ("offset_x", "number"), ("offset_y", "number"),
-                      ("rotation", "number"), ("zoom", "number")]);
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_set_camera",
+            collision_camera_commands,
+            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (
+                f32, f32, f32, f32, f32, f32
+            ),
+            CameraCmd::SetCamera2D {
+                target_x,
+                target_y,
+                offset_x,
+                offset_y,
+                rotation,
+                zoom
+            },
+            desc = "Set the 2D camera (collision context)",
+            cat = "collision",
+            params = [
+                ("target_x", "number"),
+                ("target_y", "number"),
+                ("offset_x", "number"),
+                ("offset_y", "number"),
+                ("rotation", "number"),
+                ("zoom", "number")
+            ]
+        );
 
         // Spawn/clone (return LuaEntityBuilder, not push-to-queue)
         engine.set(
@@ -1065,8 +1476,15 @@ impl LuaRuntime {
             self.lua
                 .create_function(|_, ()| Ok(LuaEntityBuilder::new_collision()))?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "collision_spawn", "Create a new entity builder (collision context)", "collision",
-            &[], Some("CollisionEntityBuilder"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "collision_spawn",
+            "Create a new entity builder (collision context)",
+            "collision",
+            &[],
+            Some("CollisionEntityBuilder"),
+        )?;
 
         engine.set(
             "collision_clone",
@@ -1074,8 +1492,15 @@ impl LuaRuntime {
                 Ok(LuaEntityBuilder::new_collision_clone(source_key))
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "collision_clone", "Clone a registered entity (collision context)", "collision",
-            &[("source_key", "string")], Some("CollisionEntityBuilder"))?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "collision_clone",
+            "Clone a registered entity (collision context)",
+            "collision",
+            &[("source_key", "string")],
+            Some("CollisionEntityBuilder"),
+        )?;
 
         Ok(())
     }
@@ -1084,16 +1509,38 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(engine, self.lua, meta_fns, "register_animation", animation_commands,
-            |(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)|
-            (String, String, f32, f32, f32, usize, f32, bool),
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "register_animation",
+            animation_commands,
+            |(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)| (
+                String, String, f32, f32, f32, usize, f32, bool
+            ),
             AnimationCmd::RegisterAnimation {
-                id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped,
+                id,
+                tex_key,
+                pos_x,
+                pos_y,
+                displacement,
+                frame_count,
+                fps,
+                looped,
             },
-            desc = "Register an animation definition", cat = "animation",
-            params = [("id", "string"), ("tex_key", "string"),
-                      ("pos_x", "number"), ("pos_y", "number"), ("displacement", "number"),
-                      ("frame_count", "integer"), ("fps", "number"), ("looped", "boolean")]);
+            desc = "Register an animation definition",
+            cat = "animation",
+            params = [
+                ("id", "string"),
+                ("tex_key", "string"),
+                ("pos_x", "number"),
+                ("pos_y", "number"),
+                ("displacement", "number"),
+                ("frame_count", "integer"),
+                ("fps", "number"),
+                ("looped", "boolean")
+            ]
+        );
         Ok(())
     }
 
@@ -1105,8 +1552,8 @@ impl LuaRuntime {
         // load_shader has validation before push — keep manual
         engine.set(
             "load_shader",
-            self.lua
-                .create_function(|lua, (id, vs_path, fs_path): (String, Option<String>, Option<String>)| {
+            self.lua.create_function(
+                |lua, (id, vs_path, fs_path): (String, Option<String>, Option<String>)| {
                     if vs_path.is_none() && fs_path.is_none() {
                         return Err(LuaError::runtime(
                             "load_shader: at least one of vs_path or fs_path must be provided",
@@ -1116,12 +1563,28 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .asset_commands
                         .borrow_mut()
-                        .push(AssetCmd::LoadShader { id, vs_path, fs_path });
+                        .push(AssetCmd::LoadShader {
+                            id,
+                            vs_path,
+                            fs_path,
+                        });
                     Ok(())
-                })?,
+                },
+            )?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "load_shader", "Load a shader (at least one of vs_path/fs_path required)", "render",
-            &[("id", "string"), ("vs_path", "string?"), ("fs_path", "string?")], None)?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "load_shader",
+            "Load a shader (at least one of vs_path/fs_path required)",
+            "render",
+            &[
+                ("id", "string"),
+                ("vs_path", "string?"),
+                ("fs_path", "string?"),
+            ],
+            None,
+        )?;
 
         // post_process_shader has complex table parsing — keep manual
         engine.set(
@@ -1145,7 +1608,7 @@ impl LuaRuntime {
                     _ => {
                         return Err(LuaError::runtime(
                             "post_process_shader: expected nil or table of shader IDs",
-                        ))
+                        ));
                     }
                 };
                 lua.app_data_ref::<LuaAppData>()
@@ -1156,37 +1619,106 @@ impl LuaRuntime {
                 Ok(())
             })?,
         )?;
-        push_fn_meta(&self.lua, &meta_fns, "post_process_shader", "Set active post-processing shader chain (nil to clear)", "render",
-            &[("shader_ids", "string[]?")], None)?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "post_process_shader",
+            "Set active post-processing shader chain (nil to clear)",
+            "render",
+            &[("shader_ids", "string[]?")],
+            None,
+        )?;
 
-        register_cmd!(engine, self.lua, meta_fns, "post_process_set_float", render_commands,
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "post_process_set_float",
+            render_commands,
             |(name, value)| (String, f32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Float(value) },
-            desc = "Set a float uniform on post-process shader", cat = "render",
-            params = [("name", "string"), ("value", "number")]);
-        register_cmd!(engine, self.lua, meta_fns, "post_process_set_int", render_commands,
+            RenderCmd::SetPostProcessUniform {
+                name,
+                value: UniformValue::Float(value)
+            },
+            desc = "Set a float uniform on post-process shader",
+            cat = "render",
+            params = [("name", "string"), ("value", "number")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "post_process_set_int",
+            render_commands,
             |(name, value)| (String, i32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Int(value) },
-            desc = "Set an int uniform on post-process shader", cat = "render",
-            params = [("name", "string"), ("value", "integer")]);
-        register_cmd!(engine, self.lua, meta_fns, "post_process_set_vec2", render_commands,
+            RenderCmd::SetPostProcessUniform {
+                name,
+                value: UniformValue::Int(value)
+            },
+            desc = "Set an int uniform on post-process shader",
+            cat = "render",
+            params = [("name", "string"), ("value", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "post_process_set_vec2",
+            render_commands,
             |(name, x, y)| (String, f32, f32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec2 { x, y } },
-            desc = "Set a vec2 uniform on post-process shader", cat = "render",
-            params = [("name", "string"), ("x", "number"), ("y", "number")]);
-        register_cmd!(engine, self.lua, meta_fns, "post_process_set_vec4", render_commands,
+            RenderCmd::SetPostProcessUniform {
+                name,
+                value: UniformValue::Vec2 { x, y }
+            },
+            desc = "Set a vec2 uniform on post-process shader",
+            cat = "render",
+            params = [("name", "string"), ("x", "number"), ("y", "number")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "post_process_set_vec4",
+            render_commands,
             |(name, x, y, z, w)| (String, f32, f32, f32, f32),
-            RenderCmd::SetPostProcessUniform { name, value: UniformValue::Vec4 { x, y, z, w } },
-            desc = "Set a vec4 uniform on post-process shader", cat = "render",
-            params = [("name", "string"), ("x", "number"), ("y", "number"), ("z", "number"), ("w", "number")]);
-        register_cmd!(engine, self.lua, meta_fns, "post_process_clear_uniform", render_commands,
-            |name| String, RenderCmd::ClearPostProcessUniform { name },
-            desc = "Clear a uniform on post-process shader", cat = "render",
-            params = [("name", "string")]);
-        register_cmd!(engine, self.lua, meta_fns, "post_process_clear_uniforms", render_commands,
-            |()| (), RenderCmd::ClearPostProcessUniforms,
-            desc = "Clear all uniforms on post-process shader", cat = "render",
-            params = []);
+            RenderCmd::SetPostProcessUniform {
+                name,
+                value: UniformValue::Vec4 { x, y, z, w }
+            },
+            desc = "Set a vec4 uniform on post-process shader",
+            cat = "render",
+            params = [
+                ("name", "string"),
+                ("x", "number"),
+                ("y", "number"),
+                ("z", "number"),
+                ("w", "number")
+            ]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "post_process_clear_uniform",
+            render_commands,
+            |name| String,
+            RenderCmd::ClearPostProcessUniform { name },
+            desc = "Clear a uniform on post-process shader",
+            cat = "render",
+            params = [("name", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "post_process_clear_uniforms",
+            render_commands,
+            |()| (),
+            RenderCmd::ClearPostProcessUniforms,
+            desc = "Clear all uniforms on post-process shader",
+            cat = "render",
+            params = []
+        );
 
         Ok(())
     }
@@ -1556,68 +2088,374 @@ impl LuaRuntime {
         // Builder method definitions: (name, description, params as &[(&str, &str)])
         let builder_methods: &[(&str, &str, &[(&str, &str)])] = &[
             ("with_group", "Set entity group", &[("name", "string")]),
-            ("with_position", "Set world position", &[("x", "number"), ("y", "number")]),
-            ("with_sprite", "Set sprite", &[("tex_key", "string"), ("width", "number"), ("height", "number"), ("origin_x", "number"), ("origin_y", "number")]),
-            ("with_sprite_offset", "Set sprite offset", &[("offset_x", "number"), ("offset_y", "number")]),
-            ("with_sprite_flip", "Set sprite flipping", &[("flip_h", "boolean"), ("flip_v", "boolean")]),
+            (
+                "with_position",
+                "Set world position",
+                &[("x", "number"), ("y", "number")],
+            ),
+            (
+                "with_sprite",
+                "Set sprite",
+                &[
+                    ("tex_key", "string"),
+                    ("width", "number"),
+                    ("height", "number"),
+                    ("origin_x", "number"),
+                    ("origin_y", "number"),
+                ],
+            ),
+            (
+                "with_sprite_offset",
+                "Set sprite offset",
+                &[("offset_x", "number"), ("offset_y", "number")],
+            ),
+            (
+                "with_sprite_flip",
+                "Set sprite flipping",
+                &[("flip_h", "boolean"), ("flip_v", "boolean")],
+            ),
             ("with_zindex", "Set render order", &[("z", "number")]),
-            ("with_velocity", "Set velocity (creates RigidBody if needed)", &[("vx", "number"), ("vy", "number")]),
-            ("with_friction", "Set friction (creates RigidBody if needed)", &[("friction", "number")]),
-            ("with_max_speed", "Set max speed clamp (creates RigidBody if needed)", &[("speed", "number")]),
-            ("with_accel", "Add a named acceleration force", &[("name", "string"), ("x", "number"), ("y", "number"), ("enabled", "boolean")]),
-            ("with_frozen", "Mark entity as frozen (physics skipped)", &[]),
-            ("with_collider", "Set box collider", &[("width", "number"), ("height", "number"), ("origin_x", "number"), ("origin_y", "number")]),
-            ("with_collider_offset", "Set collider offset", &[("offset_x", "number"), ("offset_y", "number")]),
-            ("with_mouse_controlled", "Enable mouse position tracking", &[("follow_x", "boolean"), ("follow_y", "boolean")]),
-            ("with_rotation", "Set rotation in degrees", &[("degrees", "number")]),
-            ("with_scale", "Set scale", &[("sx", "number"), ("sy", "number")]),
+            (
+                "with_velocity",
+                "Set velocity (creates RigidBody if needed)",
+                &[("vx", "number"), ("vy", "number")],
+            ),
+            (
+                "with_friction",
+                "Set friction (creates RigidBody if needed)",
+                &[("friction", "number")],
+            ),
+            (
+                "with_max_speed",
+                "Set max speed clamp (creates RigidBody if needed)",
+                &[("speed", "number")],
+            ),
+            (
+                "with_accel",
+                "Add a named acceleration force",
+                &[
+                    ("name", "string"),
+                    ("x", "number"),
+                    ("y", "number"),
+                    ("enabled", "boolean"),
+                ],
+            ),
+            (
+                "with_frozen",
+                "Mark entity as frozen (physics skipped)",
+                &[],
+            ),
+            (
+                "with_collider",
+                "Set box collider",
+                &[
+                    ("width", "number"),
+                    ("height", "number"),
+                    ("origin_x", "number"),
+                    ("origin_y", "number"),
+                ],
+            ),
+            (
+                "with_collider_offset",
+                "Set collider offset",
+                &[("offset_x", "number"), ("offset_y", "number")],
+            ),
+            (
+                "with_mouse_controlled",
+                "Enable mouse position tracking",
+                &[("follow_x", "boolean"), ("follow_y", "boolean")],
+            ),
+            (
+                "with_rotation",
+                "Set rotation in degrees",
+                &[("degrees", "number")],
+            ),
+            (
+                "with_scale",
+                "Set scale",
+                &[("sx", "number"), ("sy", "number")],
+            ),
             ("with_persistent", "Survive scene transitions", &[]),
-            ("with_signal_scalar", "Add a scalar signal", &[("key", "string"), ("value", "number")]),
-            ("with_signal_integer", "Add an integer signal", &[("key", "string"), ("value", "integer")]),
-            ("with_signal_flag", "Add a flag signal", &[("key", "string")]),
-            ("with_signal_string", "Add a string signal", &[("key", "string"), ("value", "string")]),
-            ("with_screen_position", "Set screen position (UI elements)", &[("x", "number"), ("y", "number")]),
-            ("with_text", "Set DynamicText component", &[("content", "string"), ("font", "string"), ("font_size", "number"), ("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")]),
-            ("with_menu", "Add interactive menu", &[("items", "table"), ("origin_x", "number"), ("origin_y", "number"), ("font", "string"), ("font_size", "number"), ("item_spacing", "number"), ("use_screen_space", "boolean")]),
-            ("with_menu_colors", "Set menu normal/selected colors (RGBA)", &[("nr", "integer"), ("ng", "integer"), ("nb", "integer"), ("na", "integer"), ("sr", "integer"), ("sg", "integer"), ("sb", "integer"), ("sa", "integer")]),
-            ("with_menu_dynamic_text", "Enable dynamic text updates for menu items", &[("dynamic", "boolean")]),
-            ("with_menu_cursor", "Set cursor entity for menu", &[("key", "string")]),
-            ("with_menu_selection_sound", "Set sound for menu selection changes", &[("sound_key", "string")]),
-            ("with_menu_action_set_scene", "Set scene-switch action for menu item", &[("item_id", "string"), ("scene", "string")]),
-            ("with_menu_action_show_submenu", "Set submenu action for menu item", &[("item_id", "string"), ("submenu", "string")]),
-            ("with_menu_action_quit", "Set quit action for menu item", &[("item_id", "string")]),
-            ("with_menu_callback", "Set Lua callback for menu selection", &[("callback", "string")]),
-            ("with_menu_visible_count", "Set max visible menu items (enables scrolling)", &[("count", "integer")]),
+            (
+                "with_signal_scalar",
+                "Add a scalar signal",
+                &[("key", "string"), ("value", "number")],
+            ),
+            (
+                "with_signal_integer",
+                "Add an integer signal",
+                &[("key", "string"), ("value", "integer")],
+            ),
+            (
+                "with_signal_flag",
+                "Add a flag signal",
+                &[("key", "string")],
+            ),
+            (
+                "with_signal_string",
+                "Add a string signal",
+                &[("key", "string"), ("value", "string")],
+            ),
+            (
+                "with_screen_position",
+                "Set screen position (UI elements)",
+                &[("x", "number"), ("y", "number")],
+            ),
+            (
+                "with_text",
+                "Set DynamicText component",
+                &[
+                    ("content", "string"),
+                    ("font", "string"),
+                    ("font_size", "number"),
+                    ("r", "integer"),
+                    ("g", "integer"),
+                    ("b", "integer"),
+                    ("a", "integer"),
+                ],
+            ),
+            (
+                "with_menu",
+                "Add interactive menu",
+                &[
+                    ("items", "table"),
+                    ("origin_x", "number"),
+                    ("origin_y", "number"),
+                    ("font", "string"),
+                    ("font_size", "number"),
+                    ("item_spacing", "number"),
+                    ("use_screen_space", "boolean"),
+                ],
+            ),
+            (
+                "with_menu_colors",
+                "Set menu normal/selected colors (RGBA)",
+                &[
+                    ("nr", "integer"),
+                    ("ng", "integer"),
+                    ("nb", "integer"),
+                    ("na", "integer"),
+                    ("sr", "integer"),
+                    ("sg", "integer"),
+                    ("sb", "integer"),
+                    ("sa", "integer"),
+                ],
+            ),
+            (
+                "with_menu_dynamic_text",
+                "Enable dynamic text updates for menu items",
+                &[("dynamic", "boolean")],
+            ),
+            (
+                "with_menu_cursor",
+                "Set cursor entity for menu",
+                &[("key", "string")],
+            ),
+            (
+                "with_menu_selection_sound",
+                "Set sound for menu selection changes",
+                &[("sound_key", "string")],
+            ),
+            (
+                "with_menu_action_set_scene",
+                "Set scene-switch action for menu item",
+                &[("item_id", "string"), ("scene", "string")],
+            ),
+            (
+                "with_menu_action_show_submenu",
+                "Set submenu action for menu item",
+                &[("item_id", "string"), ("submenu", "string")],
+            ),
+            (
+                "with_menu_action_quit",
+                "Set quit action for menu item",
+                &[("item_id", "string")],
+            ),
+            (
+                "with_menu_callback",
+                "Set Lua callback for menu selection",
+                &[("callback", "string")],
+            ),
+            (
+                "with_menu_visible_count",
+                "Set max visible menu items (enables scrolling)",
+                &[("count", "integer")],
+            ),
             ("with_signals", "Add empty Signals component", &[]),
-            ("with_phase", "Add phase state machine", &[("table", "table")]),
-            ("with_stuckto", "Attach entity to a target entity", &[("target_entity_id", "integer"), ("follow_x", "boolean"), ("follow_y", "boolean")]),
-            ("with_stuckto_offset", "Set offset for StuckTo", &[("offset_x", "number"), ("offset_y", "number")]),
-            ("with_stuckto_stored_velocity", "Set velocity to restore when unstuck", &[("vx", "number"), ("vy", "number")]),
-            ("with_lua_timer", "Add a Lua timer callback", &[("duration", "number"), ("callback", "string")]),
-            ("with_ttl", "Set time-to-live (auto-despawn)", &[("seconds", "number")]),
-            ("with_signal_binding", "Bind text to a WorldSignal value", &[("key", "string")]),
-            ("with_signal_binding_format", "Set format string for signal binding (use {} as placeholder)", &[("format", "string")]),
-            ("with_grid_layout", "Spawn entities from a JSON grid layout", &[("path", "string"), ("group", "string"), ("zindex", "number")]),
-            ("with_tween_position", "Add position tween animation", &[("from_x", "number"), ("from_y", "number"), ("to_x", "number"), ("to_y", "number"), ("duration", "number")]),
-            ("with_tween_position_easing", "Set easing for position tween", &[("easing", "string")]),
-            ("with_tween_position_loop", "Set loop mode for position tween", &[("loop_mode", "string")]),
-            ("with_tween_position_backwards", "Start position tween in reverse", &[]),
-            ("with_tween_rotation", "Add rotation tween animation", &[("from", "number"), ("to", "number"), ("duration", "number")]),
-            ("with_tween_rotation_easing", "Set easing for rotation tween", &[("easing", "string")]),
-            ("with_tween_rotation_loop", "Set loop mode for rotation tween", &[("loop_mode", "string")]),
-            ("with_tween_rotation_backwards", "Start rotation tween in reverse", &[]),
-            ("with_tween_scale", "Add scale tween animation", &[("from_x", "number"), ("from_y", "number"), ("to_x", "number"), ("to_y", "number"), ("duration", "number")]),
-            ("with_tween_scale_easing", "Set easing for scale tween", &[("easing", "string")]),
-            ("with_tween_scale_loop", "Set loop mode for scale tween", &[("loop_mode", "string")]),
-            ("with_tween_scale_backwards", "Start scale tween in reverse", &[]),
-            ("with_lua_collision_rule", "Add collision callback between two groups", &[("group_a", "string"), ("group_b", "string"), ("callback", "string")]),
-            ("with_animation", "Set animation by key", &[("animation_key", "string")]),
-            ("with_animation_controller", "Add animation controller with fallback", &[("fallback_key", "string")]),
-            ("with_animation_rule", "Add animation rule to controller", &[("condition_table", "table"), ("set_key", "string")]),
-            ("with_particle_emitter", "Add particle emitter", &[("table", "table")]),
-            ("with_tint", "Set color tint (RGBA 0-255)", &[("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")]),
-            ("with_shader", "Set per-entity shader with optional uniforms", &[("shader_key", "string"), ("uniforms", "table?")]),
-            ("register_as", "Register entity in WorldSignals for later retrieval", &[("key", "string")]),
+            (
+                "with_phase",
+                "Add phase state machine\n\nExample:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
+                &[("table", "table")],
+            ),
+            (
+                "with_stuckto",
+                "Attach entity to a target entity",
+                &[
+                    ("target_entity_id", "integer"),
+                    ("follow_x", "boolean"),
+                    ("follow_y", "boolean"),
+                ],
+            ),
+            (
+                "with_stuckto_offset",
+                "Set offset for StuckTo",
+                &[("offset_x", "number"), ("offset_y", "number")],
+            ),
+            (
+                "with_stuckto_stored_velocity",
+                "Set velocity to restore when unstuck",
+                &[("vx", "number"), ("vy", "number")],
+            ),
+            (
+                "with_lua_timer",
+                "Add a Lua timer callback",
+                &[("duration", "number"), ("callback", "string")],
+            ),
+            (
+                "with_ttl",
+                "Set time-to-live (auto-despawn)",
+                &[("seconds", "number")],
+            ),
+            (
+                "with_signal_binding",
+                "Bind text to a WorldSignal value",
+                &[("key", "string")],
+            ),
+            (
+                "with_signal_binding_format",
+                "Set format string for signal binding (use {} as placeholder)",
+                &[("format", "string")],
+            ),
+            (
+                "with_grid_layout",
+                "Spawn entities from a JSON grid layout",
+                &[
+                    ("path", "string"),
+                    ("group", "string"),
+                    ("zindex", "number"),
+                ],
+            ),
+            (
+                "with_tween_position",
+                "Add position tween animation",
+                &[
+                    ("from_x", "number"),
+                    ("from_y", "number"),
+                    ("to_x", "number"),
+                    ("to_y", "number"),
+                    ("duration", "number"),
+                ],
+            ),
+            (
+                "with_tween_position_easing",
+                "Set easing for position tween",
+                &[("easing", "string")],
+            ),
+            (
+                "with_tween_position_loop",
+                "Set loop mode for position tween",
+                &[("loop_mode", "string")],
+            ),
+            (
+                "with_tween_position_backwards",
+                "Start position tween in reverse",
+                &[],
+            ),
+            (
+                "with_tween_rotation",
+                "Add rotation tween animation",
+                &[("from", "number"), ("to", "number"), ("duration", "number")],
+            ),
+            (
+                "with_tween_rotation_easing",
+                "Set easing for rotation tween",
+                &[("easing", "string")],
+            ),
+            (
+                "with_tween_rotation_loop",
+                "Set loop mode for rotation tween",
+                &[("loop_mode", "string")],
+            ),
+            (
+                "with_tween_rotation_backwards",
+                "Start rotation tween in reverse",
+                &[],
+            ),
+            (
+                "with_tween_scale",
+                "Add scale tween animation",
+                &[
+                    ("from_x", "number"),
+                    ("from_y", "number"),
+                    ("to_x", "number"),
+                    ("to_y", "number"),
+                    ("duration", "number"),
+                ],
+            ),
+            (
+                "with_tween_scale_easing",
+                "Set easing for scale tween",
+                &[("easing", "string")],
+            ),
+            (
+                "with_tween_scale_loop",
+                "Set loop mode for scale tween",
+                &[("loop_mode", "string")],
+            ),
+            (
+                "with_tween_scale_backwards",
+                "Start scale tween in reverse",
+                &[],
+            ),
+            (
+                "with_lua_collision_rule",
+                "Add collision callback between two groups",
+                &[
+                    ("group_a", "string"),
+                    ("group_b", "string"),
+                    ("callback", "string"),
+                ],
+            ),
+            (
+                "with_animation",
+                "Set animation by key",
+                &[("animation_key", "string")],
+            ),
+            (
+                "with_animation_controller",
+                "Add animation controller with fallback",
+                &[("fallback_key", "string")],
+            ),
+            (
+                "with_animation_rule",
+                "Add animation rule to controller",
+                &[("condition_table", "table"), ("set_key", "string")],
+            ),
+            (
+                "with_particle_emitter",
+                "Add particle emitter",
+                &[("table", "table")],
+            ),
+            (
+                "with_tint",
+                "Set color tint (RGBA 0-255)",
+                &[
+                    ("r", "integer"),
+                    ("g", "integer"),
+                    ("b", "integer"),
+                    ("a", "integer"),
+                ],
+            ),
+            (
+                "with_shader",
+                "Set per-entity shader with optional uniforms",
+                &[("shader_key", "string"), ("uniforms", "table?")],
+            ),
+            (
+                "register_as",
+                "Register entity in WorldSignals for later retrieval",
+                &[("key", "string")],
+            ),
             ("build", "Queue entity for spawning or cloning", &[]),
         ];
 
@@ -1625,15 +2463,28 @@ impl LuaRuntime {
         let schema_refs: &[(&str, &str, &str)] = &[
             ("with_phase", "table", "PhaseDefinition"),
             ("with_particle_emitter", "table", "ParticleEmitterConfig"),
-            ("with_animation_rule", "condition_table", "AnimationRuleCondition"),
+            (
+                "with_animation_rule",
+                "condition_table",
+                "AnimationRuleCondition",
+            ),
             ("with_menu", "items", "MenuItem[]"),
         ];
 
         // Generate metadata for both EntityBuilder and CollisionEntityBuilder
         for class_name in &["EntityBuilder", "CollisionEntityBuilder"] {
             let class_tbl = self.lua.create_table()?;
-            class_tbl.set("description", format!("Fluent builder for entity construction ({})",
-                if *class_name == "EntityBuilder" { "regular context" } else { "collision context" }))?;
+            class_tbl.set(
+                "description",
+                format!(
+                    "Fluent builder for entity construction ({})",
+                    if *class_name == "EntityBuilder" {
+                        "regular context"
+                    } else {
+                        "collision context"
+                    }
+                ),
+            )?;
 
             let methods_tbl = self.lua.create_table()?;
             for (name, desc, params) in builder_methods {
@@ -1676,126 +2527,282 @@ impl LuaRuntime {
 
         // Type definitions: (name, description, fields as &[(name, type, optional, description?)])
         let type_defs: &[(&str, &str, &[(&str, &str, bool, Option<&str>)])] = &[
-            ("Vector2", "2D vector / point", &[
-                ("x", "number", false, None),
-                ("y", "number", false, None),
-            ]),
-            ("Rect", "Axis-aligned rectangle", &[
-                ("x", "number", false, None),
-                ("y", "number", false, None),
-                ("w", "number", false, None),
-                ("h", "number", false, None),
-            ]),
-            ("SpriteInfo", "Sprite state snapshot", &[
-                ("tex_key", "string", false, None),
-                ("flip_h", "boolean", false, None),
-                ("flip_v", "boolean", false, None),
-            ]),
-            ("AnimationInfo", "Animation state snapshot", &[
-                ("key", "string", false, None),
-                ("frame_index", "integer", false, None),
-                ("elapsed", "number", false, None),
-            ]),
-            ("TimerInfo", "Lua timer state snapshot", &[
-                ("duration", "number", false, None),
-                ("elapsed", "number", false, None),
-                ("callback", "string", false, None),
-            ]),
-            ("SignalSet", "Entity signal snapshot", &[
-                ("flags", "string[]", false, None),
-                ("integers", "{[string]: integer}", false, None),
-                ("scalars", "{[string]: number}", false, None),
-                ("strings", "{[string]: string}", false, None),
-            ]),
-            ("EntityContext", "Entity state passed to phase/timer callbacks", &[
-                ("id", "integer", false, Some("Entity ID")),
-                ("group", "string", true, None),
-                ("pos", "Vector2", true, None),
-                ("screen_pos", "Vector2", true, None),
-                ("vel", "Vector2", true, None),
-                ("speed_sq", "number", true, None),
-                ("frozen", "boolean", true, None),
-                ("rotation", "number", true, None),
-                ("scale", "Vector2", true, None),
-                ("rect", "Rect", true, None),
-                ("sprite", "SpriteInfo", true, None),
-                ("animation", "AnimationInfo", true, None),
-                ("signals", "SignalSet", true, None),
-                ("phase", "string", true, None),
-                ("time_in_phase", "number", true, None),
-                ("previous_phase", "string", true, Some("Only in on_enter")),
-                ("timer", "TimerInfo", true, None),
-            ]),
-            ("CollisionEntity", "Entity data in a collision context", &[
-                ("id", "integer", false, Some("Entity ID")),
-                ("group", "string", false, None),
-                ("pos", "Vector2", false, None),
-                ("vel", "Vector2", false, None),
-                ("speed_sq", "number", false, None),
-                ("rect", "Rect", false, None),
-                ("signals", "SignalSet", false, None),
-            ]),
-            ("CollisionSides", "Collision contact sides", &[
-                ("a", "string[]", false, Some("Sides of entity A in contact")),
-                ("b", "string[]", false, Some("Sides of entity B in contact")),
-            ]),
-            ("CollisionContext", "Context passed to collision callbacks", &[
-                ("a", "CollisionEntity", false, None),
-                ("b", "CollisionEntity", false, None),
-                ("sides", "CollisionSides", false, None),
-            ]),
-            ("DigitalButtonState", "State of a single digital button", &[
-                ("pressed", "boolean", false, None),
-                ("just_pressed", "boolean", false, None),
-                ("just_released", "boolean", false, None),
-            ]),
-            ("DigitalInputs", "All digital button states", &[
-                ("up", "DigitalButtonState", false, None),
-                ("down", "DigitalButtonState", false, None),
-                ("left", "DigitalButtonState", false, None),
-                ("right", "DigitalButtonState", false, None),
-                ("action_1", "DigitalButtonState", false, None),
-                ("action_2", "DigitalButtonState", false, None),
-                ("back", "DigitalButtonState", false, None),
-                ("special", "DigitalButtonState", false, None),
-            ]),
-            ("InputSnapshot", "Input state passed to callbacks", &[
-                ("digital", "DigitalInputs", false, None),
-                ("analog", "table", false, Some("Reserved for future gamepad support")),
-            ]),
-            ("PhaseCallbacks", "Callbacks for a single phase", &[
-                ("on_enter", "string", true, Some("Function name called on phase enter")),
-                ("on_update", "string", true, Some("Function name called each frame")),
-                ("on_exit", "string", true, Some("Function name called on phase exit")),
-            ]),
-            ("PhaseDefinition", "Phase state machine definition", &[
-                ("initial", "string", false, Some("Initial phase name")),
-                ("phases", "{[string]: PhaseCallbacks}", false, Some("Map of phase name to callbacks")),
-            ]),
-            ("ParticleEmitterConfig", "Particle emitter configuration table", &[
-                ("templates", "string[]", false, Some("Entity template keys to emit")),
-                ("shape", "string", true, Some("Emitter shape: 'point' or 'rect'")),
-                ("offset", "table", true, Some("{x, y} offset from entity position")),
-                ("particles_per_emission", "integer", true, None),
-                ("emissions_per_second", "number", true, None),
-                ("emissions_remaining", "integer", true, Some("nil = infinite")),
-                ("arc", "table", true, Some("{min, max} angle in degrees")),
-                ("speed", "table", true, Some("{min, max} or single number")),
-                ("ttl", "table", true, Some("{min, max}, number, or 'none'")),
-            ]),
-            ("MenuItem", "Menu item definition", &[
-                ("id", "string", false, None),
-                ("label", "string", false, None),
-            ]),
-            ("AnimationRuleCondition", "Animation rule condition (polymorphic)", &[
-                ("type", "string", false, Some("Condition type: has_flag, lacks_flag, scalar_cmp, scalar_range, integer_cmp, integer_range, all, any, not")),
-                ("key", "string", true, Some("Signal key (for flag/scalar/integer conditions)")),
-                ("op", "string", true, Some("Comparison operator (for cmp conditions)")),
-                ("value", "number", true, Some("Comparison value (for cmp conditions)")),
-                ("min", "number", true, Some("Range minimum (for range conditions)")),
-                ("max", "number", true, Some("Range maximum (for range conditions)")),
-                ("conditions", "AnimationRuleCondition[]", true, Some("Sub-conditions (for all/any/not)")),
-            ]),
+            (
+                "Vector2",
+                "2D vector / point",
+                &[("x", "number", false, None), ("y", "number", false, None)],
+            ),
+            (
+                "Rect",
+                "Axis-aligned rectangle",
+                &[
+                    ("x", "number", false, None),
+                    ("y", "number", false, None),
+                    ("w", "number", false, None),
+                    ("h", "number", false, None),
+                ],
+            ),
+            (
+                "SpriteInfo",
+                "Sprite state snapshot",
+                &[
+                    ("tex_key", "string", false, None),
+                    ("flip_h", "boolean", false, None),
+                    ("flip_v", "boolean", false, None),
+                ],
+            ),
+            (
+                "AnimationInfo",
+                "Animation state snapshot",
+                &[
+                    ("key", "string", false, None),
+                    ("frame_index", "integer", false, None),
+                    ("elapsed", "number", false, None),
+                ],
+            ),
+            (
+                "TimerInfo",
+                "Lua timer state snapshot",
+                &[
+                    ("duration", "number", false, None),
+                    ("elapsed", "number", false, None),
+                    ("callback", "string", false, None),
+                ],
+            ),
+            (
+                "SignalSet",
+                "Entity signal snapshot",
+                &[
+                    ("flags", "string[]", false, None),
+                    ("integers", "{[string]: integer}", false, None),
+                    ("scalars", "{[string]: number}", false, None),
+                    ("strings", "{[string]: string}", false, None),
+                ],
+            ),
+            (
+                "EntityContext",
+                "Entity state passed to phase/timer callbacks",
+                &[
+                    ("id", "integer", false, Some("Entity ID")),
+                    ("group", "string", true, None),
+                    ("pos", "Vector2", true, None),
+                    ("screen_pos", "Vector2", true, None),
+                    ("vel", "Vector2", true, None),
+                    ("speed_sq", "number", true, None),
+                    ("frozen", "boolean", true, None),
+                    ("rotation", "number", true, None),
+                    ("scale", "Vector2", true, None),
+                    ("rect", "Rect", true, None),
+                    ("sprite", "SpriteInfo", true, None),
+                    ("animation", "AnimationInfo", true, None),
+                    ("signals", "SignalSet", true, None),
+                    ("phase", "string", true, None),
+                    ("time_in_phase", "number", true, None),
+                    ("previous_phase", "string", true, Some("Only in on_enter")),
+                    ("timer", "TimerInfo", true, None),
+                ],
+            ),
+            (
+                "CollisionEntity",
+                "Entity data in a collision context",
+                &[
+                    ("id", "integer", false, Some("Entity ID")),
+                    ("group", "string", false, None),
+                    ("pos", "Vector2", false, None),
+                    ("vel", "Vector2", false, None),
+                    ("speed_sq", "number", false, None),
+                    ("rect", "Rect", false, None),
+                    ("signals", "SignalSet", false, None),
+                ],
+            ),
+            (
+                "CollisionSides",
+                "Collision contact sides",
+                &[
+                    ("a", "string[]", false, Some("Sides of entity A in contact")),
+                    ("b", "string[]", false, Some("Sides of entity B in contact")),
+                ],
+            ),
+            (
+                "CollisionContext",
+                "Context passed to collision callbacks",
+                &[
+                    ("a", "CollisionEntity", false, None),
+                    ("b", "CollisionEntity", false, None),
+                    ("sides", "CollisionSides", false, None),
+                ],
+            ),
+            (
+                "DigitalButtonState",
+                "State of a single digital button",
+                &[
+                    ("pressed", "boolean", false, None),
+                    ("just_pressed", "boolean", false, None),
+                    ("just_released", "boolean", false, None),
+                ],
+            ),
+            (
+                "DigitalInputs",
+                "All digital button states",
+                &[
+                    ("up", "DigitalButtonState", false, None),
+                    ("down", "DigitalButtonState", false, None),
+                    ("left", "DigitalButtonState", false, None),
+                    ("right", "DigitalButtonState", false, None),
+                    ("action_1", "DigitalButtonState", false, None),
+                    ("action_2", "DigitalButtonState", false, None),
+                    ("back", "DigitalButtonState", false, None),
+                    ("special", "DigitalButtonState", false, None),
+                ],
+            ),
+            (
+                "InputSnapshot",
+                "Input state passed to callbacks",
+                &[
+                    ("digital", "DigitalInputs", false, None),
+                    (
+                        "analog",
+                        "table",
+                        false,
+                        Some("Reserved for future gamepad support"),
+                    ),
+                ],
+            ),
+            (
+                "PhaseCallbacks",
+                "Callbacks for a single phase",
+                &[
+                    (
+                        "on_enter",
+                        "string",
+                        true,
+                        Some("Function name called on phase enter"),
+                    ),
+                    (
+                        "on_update",
+                        "string",
+                        true,
+                        Some("Function name called each frame"),
+                    ),
+                    (
+                        "on_exit",
+                        "string",
+                        true,
+                        Some("Function name called on phase exit"),
+                    ),
+                ],
+            ),
+            (
+                "PhaseDefinition",
+                "Phase state machine definition",
+                &[
+                    ("initial", "string", false, Some("Initial phase name")),
+                    (
+                        "phases",
+                        "{[string]: PhaseCallbacks}",
+                        false,
+                        Some("Map of phase name to callbacks"),
+                    ),
+                ],
+            ),
+            (
+                "ParticleEmitterConfig",
+                "Particle emitter configuration table",
+                &[
+                    (
+                        "templates",
+                        "string[]",
+                        false,
+                        Some("Entity template keys to emit"),
+                    ),
+                    (
+                        "shape",
+                        "string|table",
+                        true,
+                        Some("Emitter shape: 'point' or table {type='rect', width, height}"),
+                    ),
+                    (
+                        "offset",
+                        "table",
+                        true,
+                        Some("{x, y} offset from entity position"),
+                    ),
+                    ("particles_per_emission", "integer", true, None),
+                    ("emissions_per_second", "number", true, None),
+                    (
+                        "emissions_remaining",
+                        "integer",
+                        true,
+                        Some("nil = infinite"),
+                    ),
+                    ("arc", "table", true, Some("{min, max} angle in degrees")),
+                    ("speed", "table", true, Some("{min, max} or single number")),
+                    (
+                        "ttl",
+                        "number|table",
+                        true,
+                        Some("{min, max}, number, or 'none'"),
+                    ),
+                ],
+            ),
+            (
+                "MenuItem",
+                "Menu item definition",
+                &[
+                    ("id", "string", false, None),
+                    ("label", "string", false, None),
+                ],
+            ),
+            (
+                "AnimationRuleCondition",
+                "Animation rule condition (polymorphic)",
+                &[
+                    (
+                        "type",
+                        "string",
+                        false,
+                        Some(
+                            "Condition type: has_flag, lacks_flag, scalar_cmp, scalar_range, integer_cmp, integer_range, all, any, not",
+                        ),
+                    ),
+                    (
+                        "key",
+                        "string",
+                        true,
+                        Some("Signal key (for flag/scalar/integer conditions)"),
+                    ),
+                    (
+                        "op",
+                        "string",
+                        true,
+                        Some("Comparison operator (for cmp conditions)"),
+                    ),
+                    (
+                        "value",
+                        "number",
+                        true,
+                        Some("Comparison value (for cmp conditions)"),
+                    ),
+                    (
+                        "min",
+                        "number",
+                        true,
+                        Some("Range minimum (for range conditions)"),
+                    ),
+                    (
+                        "max",
+                        "number",
+                        true,
+                        Some("Range maximum (for range conditions)"),
+                    ),
+                    (
+                        "conditions",
+                        "AnimationRuleCondition[]",
+                        true,
+                        Some("Sub-conditions (for all/any/not)"),
+                    ),
+                ],
+            ),
         ];
 
         for (name, description, fields_def) in type_defs {
@@ -1819,34 +2826,78 @@ impl LuaRuntime {
         let meta_enums: LuaTable = meta.get("enums")?;
 
         let enum_defs: &[(&str, &str, &[&str])] = &[
-            ("Easing", "Tween easing function", &[
-                "linear", "quad_in", "quad_out", "quad_in_out",
-                "cubic_in", "cubic_out", "cubic_in_out",
-            ]),
-            ("LoopMode", "Tween loop mode", &[
-                "once", "loop", "ping_pong",
-            ]),
-            ("BoxSide", "Collision side", &[
-                "left", "right", "top", "bottom",
-            ]),
-            ("ComparisonOp", "Comparison operator for animation rules", &[
-                "lt", "le", "gt", "ge", "eq", "ne",
-            ]),
-            ("ConditionType", "Animation rule condition type", &[
-                "has_flag", "lacks_flag", "scalar_cmp", "scalar_range",
-                "integer_cmp", "integer_range", "all", "any", "not",
-            ]),
-            ("EmitterShape", "Particle emitter shape type", &[
-                "point", "rect",
-            ]),
-            ("TtlSpec", "Time-to-live specification (number, {min,max} table, or 'none')", &[
-                "none",
-            ]),
-            ("Category", "Function category", &[
-                "base", "asset", "spawn", "audio", "signal", "phase",
-                "entity", "group", "tilemap", "camera", "collision",
-                "animation", "render",
-            ]),
+            (
+                "Easing",
+                "Tween easing function",
+                &[
+                    "linear",
+                    "quad_in",
+                    "quad_out",
+                    "quad_in_out",
+                    "cubic_in",
+                    "cubic_out",
+                    "cubic_in_out",
+                ],
+            ),
+            (
+                "LoopMode",
+                "Tween loop mode",
+                &["once", "loop", "ping_pong"],
+            ),
+            (
+                "BoxSide",
+                "Collision side",
+                &["left", "right", "top", "bottom"],
+            ),
+            (
+                "ComparisonOp",
+                "Comparison operator for animation rules",
+                &["lt", "le", "gt", "ge", "eq", "ne"],
+            ),
+            (
+                "ConditionType",
+                "Animation rule condition type",
+                &[
+                    "has_flag",
+                    "lacks_flag",
+                    "scalar_cmp",
+                    "scalar_range",
+                    "integer_cmp",
+                    "integer_range",
+                    "all",
+                    "any",
+                    "not",
+                ],
+            ),
+            (
+                "EmitterShape",
+                "Particle emitter shape type",
+                &["point", "rect"],
+            ),
+            (
+                "TtlSpec",
+                "Time-to-live specification (number, {min,max} table, or 'none')",
+                &["none"],
+            ),
+            (
+                "Category",
+                "Function category",
+                &[
+                    "base",
+                    "asset",
+                    "spawn",
+                    "audio",
+                    "signal",
+                    "phase",
+                    "entity",
+                    "group",
+                    "tilemap",
+                    "camera",
+                    "collision",
+                    "animation",
+                    "render",
+                ],
+            ),
         ];
 
         for (name, description, values) in enum_defs {
@@ -1884,25 +2935,32 @@ impl LuaRuntime {
                 name: "on_setup",
                 description: "Called once during game setup for asset loading",
                 params: &[],
-                returns: None, context: Some("setup"), note: None,
+                returns: None,
+                context: Some("setup"),
+                note: None,
             },
             CbDef {
                 name: "on_enter_play",
                 description: "Called when entering Playing state",
                 params: &[],
-                returns: None, context: Some("play"), note: None,
+                returns: None,
+                context: Some("play"),
+                note: None,
             },
             CbDef {
                 name: "on_switch_scene",
                 description: "Called when switching scenes",
                 params: &[("scene", "string")],
-                returns: None, context: Some("play"), note: None,
+                returns: None,
+                context: Some("play"),
+                note: None,
             },
             CbDef {
                 name: "on_update_<scene>",
                 description: "Called each frame during a scene",
                 params: &[("input", "InputSnapshot"), ("dt", "number")],
-                returns: None, context: Some("play"),
+                returns: None,
+                context: Some("play"),
                 note: Some("Function name is dynamic: on_update_ + scene name"),
             },
             CbDef {
@@ -1916,7 +2974,11 @@ impl LuaRuntime {
             CbDef {
                 name: "phase_on_update",
                 description: "Called each frame during a phase",
-                params: &[("ctx", "EntityContext"), ("input", "InputSnapshot"), ("dt", "number")],
+                params: &[
+                    ("ctx", "EntityContext"),
+                    ("input", "InputSnapshot"),
+                    ("dt", "number"),
+                ],
                 returns: Some("string?"),
                 context: Some("play"),
                 note: Some("Return phase name to trigger transition"),
@@ -1925,25 +2987,37 @@ impl LuaRuntime {
                 name: "phase_on_exit",
                 description: "Called when exiting a phase",
                 params: &[("ctx", "EntityContext")],
-                returns: None, context: Some("play"), note: None,
+                returns: None,
+                context: Some("play"),
+                note: None,
             },
             CbDef {
                 name: "timer_callback",
                 description: "Called when a Lua timer fires",
                 params: &[("ctx", "EntityContext"), ("input", "InputSnapshot")],
-                returns: None, context: Some("play"), note: None,
+                returns: None,
+                context: Some("play"),
+                note: None,
             },
             CbDef {
                 name: "collision_callback",
                 description: "Called when two colliding groups overlap",
                 params: &[("ctx", "CollisionContext")],
-                returns: None, context: Some("play"), note: None,
+                returns: None,
+                context: Some("play"),
+                note: None,
             },
             CbDef {
                 name: "menu_callback",
                 description: "Called when a menu item is selected",
-                params: &[("menu_id", "integer"), ("item_id", "string"), ("item_index", "integer")],
-                returns: None, context: Some("play"), note: None,
+                params: &[
+                    ("menu_id", "integer"),
+                    ("item_id", "string"),
+                    ("item_index", "integer"),
+                ],
+                returns: None,
+                context: Some("play"),
+                note: None,
             },
         ];
 
