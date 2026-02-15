@@ -175,6 +175,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 
 - `engine.collision_spawn()` instead of `engine.spawn()`
 - `engine.collision_play_sound()` instead of `engine.play_sound()`
+- `engine.collision_play_sound_pitched()` instead of `engine.play_sound_pitched()`
 - `engine.collision_set_flag()` / `engine.collision_clear_flag()` instead of `engine.set_flag()` / `engine.clear_flag()`
 - `engine.collision_set_integer()` instead of `engine.set_integer()`
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
@@ -466,6 +467,16 @@ Play a sound effect.
 ```lua
 engine.play_sound("ping")
 engine.play_sound("explosion")
+```
+
+### `engine.play_sound_pitched(id, pitch)`
+
+Play a sound effect with a pitch override. Pitch `1.0` is the normal rate. Values below `1.0` lower the pitch, values above `1.0` raise it. Each call is independent — the pitch applies only to that specific playback instance and does not affect other concurrent or future plays of the same sound.
+
+```lua
+engine.play_sound_pitched("laser", 1.5)    -- Higher pitch
+engine.play_sound_pitched("boom", 0.7)     -- Lower pitch
+engine.play_sound_pitched("coin", 1.0)     -- Same as engine.play_sound("coin")
 ```
 
 ### `engine.stop_all_music()`
@@ -2452,6 +2463,15 @@ Play sound during collision.
 
 ```lua
 engine.collision_play_sound("ping")
+```
+
+#### `engine.collision_play_sound_pitched(id, pitch)`
+
+Play sound during collision with a pitch override. Pitch `1.0` is normal. Each call is independent — only affects that specific playback instance.
+
+```lua
+engine.collision_play_sound_pitched("ping", 1.2)   -- Slightly higher pitch
+engine.collision_play_sound_pitched("thud", 0.6)   -- Lower pitch
 ```
 
 #### `engine.collision_set_integer(key, value)`
