@@ -40,6 +40,7 @@ mod components;
 mod events;
 mod game;
 mod resources;
+mod luarc_generator;
 mod stub_generator;
 mod systems;
 
@@ -110,6 +111,11 @@ struct Cli {
     /// Optionally provide a path (default: assets/scripts/engine.lua).
     #[arg(long, value_name = "PATH")]
     create_lua_stubs: Option<Option<PathBuf>>,
+
+    /// Generate .luarc.json for Lua Language Server and exit.
+    /// Optionally provide a path (default: assets/scripts/.luarc.json).
+    #[arg(long, value_name = "PATH")]
+    create_luarc: Option<Option<PathBuf>>,
 }
 
 fn main() {
@@ -132,6 +138,27 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("Error generating stubs: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // Early-exit: generate .luarc.json and quit (no window/audio needed)
+    if let Some(maybe_path) = cli.create_luarc {
+        let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/.luarc.json"));
+        let runtime =
+            LuaRuntime::new().expect("Failed to create Lua runtime for .luarc.json generation");
+        match luarc_generator::generate_luarc(&runtime, "engine.lua") {
+            Ok(content) => {
+                if let Err(e) = luarc_generator::write_luarc(&path, &content) {
+                    eprintln!("Error: {e}");
+                    std::process::exit(1);
+                }
+                println!(".luarc.json written to {}", path.display());
+            }
+            Err(e) => {
+                eprintln!("Error generating .luarc.json: {e}");
                 std::process::exit(1);
             }
         }

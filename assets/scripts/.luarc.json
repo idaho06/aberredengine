@@ -1,14 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
-  "runtime.version": "LuaJIT",
+  "completion.autoRequire": false,
   "diagnostics.globals": [
     "engine"
   ],
+  "runtime.version": "LuaJIT",
   "workspace.library": [
     "engine.lua"
-  ],
-  "completion.autoRequire": false,
-  "diagnostics.disable": [
-    "lowercase-global"
   ]
 }

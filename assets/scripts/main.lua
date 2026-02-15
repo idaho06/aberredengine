@@ -43,7 +43,7 @@ local function get_scene(name)
 end
 
 -- Game configuration table
-game = {
+local game = {
     title = "Asteroids Clone",
     version = "0.1.0",
     author = "Idaho",

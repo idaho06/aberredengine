@@ -14,6 +14,7 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 CLI: --create-lua-stubs [PATH] (generate LSP stubs, default: assets/scripts/engine.lua)
+CLI: --create-luarc [PATH] (generate .luarc.json for Lua Language Server, default: assets/scripts/.luarc.json)
 
 ## STATUS (2026-02-15)
 
@@ -30,16 +31,18 @@ CLI: --create-lua-stubs [PATH] (generate LSP stubs, default: assets/scripts/engi
 - Multi-pass post-processing shader chain support.
 - Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs).
 - Lua stubs generator (stub_generator.rs) - reads engine.__meta at runtime and emits deterministic engine.lua with EmmyLua type annotations for LSP support. CLI: `--create-lua-stubs [PATH]`.
-- Library crate (lib.rs) - exposes components, events, game, resources, systems, stub_generator for integration tests and reuse.
+- Luarc generator (luarc_generator.rs) - generates .luarc.json for Lua Language Server configuration (globals, workspace library, runtime version) from engine metadata. CLI: `--create-luarc [PATH]`.
+- Library crate (lib.rs) - exposes components, events, game, resources, systems, stub_generator, luarc_generator for integration tests and reuse.
 
 ## FILE TREE (ESSENTIAL)
 
 ```
 src/
 ├── main.rs                    # App entry, ECS world setup, main loop, system schedule, CLI (clap)
-├── lib.rs                     # Library crate entry (components, events, game, resources, systems, stub_generator)
+├── lib.rs                     # Library crate entry (components, events, game, resources, systems, stub_generator, luarc_generator)
 ├── game.rs                    # GameState logic, scene switching, Lua callbacks
 ├── stub_generator.rs          # Lua EmmyLua stub generator (reads __meta, emits engine.lua)
+├── luarc_generator.rs         # .luarc.json generator (Lua Language Server config from __meta)
 ├── components/
 │   ├── mod.rs                 # Re-exports all components
 │   ├── mapposition.rs         # MapPosition (world-space position)
@@ -140,7 +143,7 @@ assets/
 │   ├── main.lua               # Entry: on_setup, on_enter_play, on_switch_scene, on_update_*
 │   ├── setup.lua              # Asset loading helpers (require in on_setup)
 │   ├── engine.lua             # Auto-generated LSP stubs (EmmyLua annotations, ~1.8k lines, via --create-lua-stubs)
-│   ├── .luarc.json            # Lua Language Server configuration for LuaJIT
+│   ├── .luarc.json            # Auto-generated Lua Language Server config (via --create-luarc)
 │   ├── README.md              # Lua API documentation (78k+ lines)
 │   ├── lib/
 │   │   ├── math.lua           # Math helpers (lerp, inv_lerp, remap, lerp2)
@@ -733,7 +736,7 @@ Approximate execution order:
 2. Add entry to `define_entity_cmds!` macro in runtime.rs (one line; auto-registers for both regular and collision contexts)
 3. Process in process_entity_commands (lua_commands.rs)
 4. If new types/enums/callbacks introduced, update register_types_meta/register_enums_meta/register_callbacks_meta in runtime.rs
-5. Regenerate engine.lua stubs: `cargo run -- --create-lua-stubs`
+5. Regenerate stubs and LSP config: `cargo run -- --create-lua-stubs` and `cargo run -- --create-luarc`
 6. Document in README.md
 
 ### Registering Entity-Input Systems (SystemsStore)
