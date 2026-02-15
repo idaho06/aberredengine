@@ -322,7 +322,7 @@ CloneCmd (commands.rs) {
 }
 
 SignalCmd { SetScalar, SetInteger, SetString, SetFlag, ClearFlag, ClearScalar, ClearInteger, ClearString, SetEntity, RemoveEntity }
-AudioLuaCmd { PlayMusic { id, looped }, PlaySound { id }, StopAllMusic, StopAllSounds }
+AudioLuaCmd { PlayMusic { id, looped }, PlaySound { id }, PlaySoundPitched { id, pitch }, StopAllMusic, StopAllSounds }
 GroupCmd { TrackGroup { name }, UntrackGroup { name }, ClearTrackedGroups }
 PhaseCmd { TransitionTo { entity_id, phase } }
 CameraCmd { SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom } }
@@ -408,6 +408,7 @@ engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, 
 -- Audio
 engine.play_music(id, looped)
 engine.play_sound(id)
+engine.play_sound_pitched(id, pitch)  -- pitch: 1.0 = normal, <1.0 = lower, >1.0 = higher
 engine.stop_all_music()
 engine.stop_all_sounds()
 
@@ -483,6 +484,7 @@ engine.clone(source_key) -> EntityBuilder  -- Clone entity by WorldSignals key, 
 engine.collision_spawn() -> EntityBuilder (same capabilities as engine.spawn())
 engine.collision_clone(source_key) -> EntityBuilder  -- Clone entity in collision context
 engine.collision_play_sound(id)
+engine.collision_play_sound_pitched(id, pitch)  -- pitch: 1.0 = normal, <1.0 = lower, >1.0 = higher
 engine.collision_set_integer(key, value)
 engine.collision_set_scalar(key, value)
 engine.collision_set_string(key, value)

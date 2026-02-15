@@ -306,6 +306,11 @@ function engine.play_music(id, looped) end
 ---@param id string
 function engine.play_sound(id) end
 
+---Play a sound effect with pitch override (1.0 = normal)
+---@param id string
+---@param pitch number
+function engine.play_sound_pitched(id, pitch) end
+
 ---Stop all playing music
 function engine.stop_all_music() end
 
@@ -965,6 +970,11 @@ function engine.collision_phase_transition(entity_id, phase) end
 ---Play a sound effect (collision context)
 ---@param id string
 function engine.collision_play_sound(id) end
+
+---Play a sound effect with pitch override (collision context)
+---@param id string
+---@param pitch number
+function engine.collision_play_sound_pitched(id, pitch) end
 
 ---Set the 2D camera (collision context)
 ---@param target_x number

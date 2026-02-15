@@ -54,6 +54,8 @@ pub enum AudioLuaCmd {
     PlayMusic { id: String, looped: bool },
     /// Play a sound effect
     PlaySound { id: String },
+    /// Play a sound effect with pitch override (1.0 = normal)
+    PlaySoundPitched { id: String, pitch: f32 },
     /// Stop all music
     StopAllMusic,
     /// Stop all sounds

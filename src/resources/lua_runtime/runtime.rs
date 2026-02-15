@@ -874,6 +874,18 @@ impl LuaRuntime {
             engine,
             self.lua,
             meta_fns,
+            "play_sound_pitched",
+            audio_commands,
+            |(id, pitch)| (String, f32),
+            AudioLuaCmd::PlaySoundPitched { id, pitch },
+            desc = "Play a sound effect with pitch override (1.0 = normal)",
+            cat = "audio",
+            params = [("id", "string"), ("pitch", "number")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
             "stop_all_music",
             audio_commands,
             |()| (),
@@ -1329,6 +1341,18 @@ impl LuaRuntime {
             desc = "Play a sound effect (collision context)",
             cat = "collision",
             params = [("id", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_play_sound_pitched",
+            collision_audio_commands,
+            |(id, pitch)| (String, f32),
+            AudioLuaCmd::PlaySoundPitched { id, pitch },
+            desc = "Play a sound effect with pitch override (collision context)",
+            cat = "collision",
+            params = [("id", "string"), ("pitch", "number")]
         );
 
         register_cmd!(

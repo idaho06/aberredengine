@@ -31,11 +31,11 @@ use bevy_ecs::{
     system::ResMut,
 };
 use crossbeam_channel::{Receiver, Sender};
+use log::{debug, error, info};
 use raylib::core::audio::{Music, RaylibAudio};
 use raylib::ffi;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::ffi::CString;
-use log::{info, error, debug};
 
 // FxPlayingState removed; we now track only the set of FX ids considered playing.
 
@@ -247,6 +247,17 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                         active_aliases.push(alias);
                     } else {
                         error!(target: "audio", "fx play failed id='{}' reason='not loaded'", id);
+                    }
+                }
+                AudioCmd::PlayFxPitched { id, pitch } => {
+                    if let Some(sound) = sounds.get(&id) {
+                        debug!(target: "audio", "fx play pitched id='{}' pitch={}", id, pitch);
+                        let alias = unsafe { ffi::LoadSoundAlias(*sound) };
+                        unsafe { ffi::SetSoundPitch(alias, pitch) };
+                        unsafe { ffi::PlaySound(alias) };
+                        active_aliases.push(alias);
+                    } else {
+                        error!(target: "audio", "fx play pitched failed id='{}' reason='not loaded'", id);
                     }
                 }
                 AudioCmd::UnloadFx { id } => {

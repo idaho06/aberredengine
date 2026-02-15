@@ -262,7 +262,8 @@ local function fire_laser(ctx)
         :with_ttl(1.5)
         :build()
     -- Play blaster sound
-    engine.play_sound("blaster")
+    -- engine.play_sound("blaster")
+    engine.play_sound_pitched("blaster", 1.0 + (math.random() - 0.5) * 0.2) -- Slight random pitch variation
 end
 
 --- @param ctx EntityContext Entity context table

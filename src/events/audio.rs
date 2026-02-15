@@ -76,6 +76,8 @@ pub enum AudioCmd {
     LoadFx { id: String, path: String },
     /// Play a previously loaded sound effect `id` (one-shot).
     PlayFx { id: String },
+    /// Play a previously loaded sound effect `id` with pitch override (1.0 is base level).
+    PlayFxPitched { id: String, pitch: f32 },
     /// Unload a previously loaded sound effect `id`.
     UnloadFx { id: String },
     /// Unload all sound effects.

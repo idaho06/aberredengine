@@ -67,8 +67,8 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
+use log::{error, info, warn};
 use raylib::prelude::Color;
-use log::{info, error, warn};
 
 /// Bundled queries for entity command processing.
 ///
@@ -101,6 +101,9 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
         }
         AudioLuaCmd::PlaySound { id } => {
             audio_cmd_writer.write(AudioCmd::PlayFx { id });
+        }
+        AudioLuaCmd::PlaySoundPitched { id, pitch } => {
+            audio_cmd_writer.write(AudioCmd::PlayFxPitched { id, pitch });
         }
         AudioLuaCmd::StopAllMusic => {
             audio_cmd_writer.write(AudioCmd::StopAllMusic);
@@ -1429,7 +1432,12 @@ pub fn process_clone_command(
     let has_animation_override = cmd.overrides.animation.is_some();
 
     // 4. Apply all component overrides (same logic as spawn)
-    apply_components(&mut entity_commands, cmd.overrides, world_signals, cloned_entity);
+    apply_components(
+        &mut entity_commands,
+        cmd.overrides,
+        world_signals,
+        cloned_entity,
+    );
 
     // 5. If no animation override was provided, reset to frame 0
     if !has_animation_override {
