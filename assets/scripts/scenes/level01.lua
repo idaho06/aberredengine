@@ -35,6 +35,11 @@ local function spawn_big_asteroids()
                     }
                 }
             })
+            :with_shader("blink", {
+                colBlink   = { 1.0, 0.0, 0.0, 1.0 },
+                uCycleTime = 0.6,
+                uBlinkPct  = 0.0,
+            })
             :build()
     end
     engine.log_info("Asteroids spawned!")
@@ -69,6 +74,11 @@ local function spawn_medium_asteroids(x, y)
                     }
                 }
             })
+            :with_shader("blink", {
+                colBlink   = { 1.0, 0.0, 0.0, 1.0 },
+                uCycleTime = 0.6,
+                uBlinkPct  = 0.0,
+            })
             :build()
     end
 end
@@ -100,6 +110,11 @@ local function spawn_small_asteroids(x, y)
                         on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
                     }
                 }
+            })
+            :with_shader("blink", {
+                colBlink   = { 1.0, 0.0, 0.0, 1.0 },
+                uCycleTime = 0.6,
+                uBlinkPct  = 0.0,
             })
             :build()
     end
@@ -133,11 +148,13 @@ function on_asteroid_laser_collision(ctx)
         -- Change asteroid phase to exploding
         engine.phase_transition(ctx.a.id, "exploding")
     end
-    -- change tint color depending on remaining hp
+    -- change blink timing depending on remaining hp
     if hp == 2 then
-        engine.entity_set_tint(ctx.a.id, 255, 200, 200, 255) -- Light red
+        engine.entity_shader_set_float(ctx.a.id, "uCycleTime", 1.0)
+        engine.entity_shader_set_float(ctx.a.id, "uBlinkPct", 0.1)
     elseif hp == 1 then
-        engine.entity_set_tint(ctx.a.id, 255, 100, 100, 255) -- Darker red
+        engine.entity_shader_set_float(ctx.a.id, "uCycleTime", 0.5)
+        engine.entity_shader_set_float(ctx.a.id, "uBlinkPct", 0.1)
     end
     -- Spawn a small explosion at the collision point, facing 180 degrees (from laser direction)
     local laser_pos = ctx.b.pos
