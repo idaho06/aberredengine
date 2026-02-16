@@ -122,8 +122,7 @@ function on_update_level01(input, dt)
 
     -- Handle input for this scene
     if input.digital.back.just_pressed then
-        engine.set_string("scene", "menu")
-        engine.set_flag("switch_scene")
+        engine.change_scene("menu")
     end
 
     -- Most game logic goes in phase callbacks, not here
@@ -140,7 +139,7 @@ return M
 
 **Global Flags**:
 
-- `"switch_scene"` - Set this flag to trigger a scene change (cleared by engine after processing)
+- `"switch_scene"` - Set this flag to trigger a scene change (cleared by engine after processing). Prefer using `engine.change_scene(name)` which sets both the scene string and this flag automatically.
 - `"quit_game"` - Set this flag to exit the game (cleared by engine after processing)
 
 ### 3. Callback Command Processing
@@ -338,8 +337,7 @@ end
 -- Common pattern: Return to menu on ESC press
 function on_update_level01(input, dt)
     if input.digital.back.just_pressed then
-        engine.set_string("scene", "menu")
-        engine.set_flag("switch_scene")
+        engine.change_scene("menu")
     end
 end
 ```
@@ -993,8 +991,7 @@ function on_main_menu_select(ctx)
     engine.log_info("Selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
 
     if ctx.item_id == "start_game" then
-        engine.set_string("scene", "level01")
-        engine.set_flag("switch_scene")
+        engine.change_scene("level01")
     elseif ctx.item_id == "exit" then
         engine.set_flag("quit_game")
     end
@@ -1830,6 +1827,20 @@ Remove an entity registration from world signals.
 
 ```lua
 engine.remove_entity("special_enemy")
+```
+
+### Scene Management
+
+#### `engine.change_scene(scene_name)`
+
+Convenience function to switch to a new scene. Equivalent to calling both `engine.set_string("scene", scene_name)` and `engine.set_flag("switch_scene")`.
+
+```lua
+-- These two forms are equivalent:
+engine.change_scene("level01")
+
+-- engine.set_string("scene", "level01")
+-- engine.set_flag("switch_scene")
 ```
 
 ---

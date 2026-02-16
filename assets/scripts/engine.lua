@@ -240,6 +240,10 @@ function menu_callback(menu_id, item_id, item_index) end
 
 -- ==================== Logging Functions ====================
 
+---Switch to a new scene by name (sets scene string + switch_scene flag)
+---@param scene_name string
+function engine.change_scene(scene_name) end
+
 ---General purpose logging
 ---@param message string
 function engine.log(message) end

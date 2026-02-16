@@ -1121,6 +1121,33 @@ impl LuaRuntime {
             cat = "signal",
             params = [("key", "string")]
         );
+        // engine.change_scene(scene_name) — convenience for set_string("scene", name) + set_flag("switch_scene")
+        engine.set(
+            "change_scene",
+            self.lua.create_function(|lua, scene_name: String| {
+                let data = lua
+                    .app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+                let mut cmds = data.signal_commands.borrow_mut();
+                cmds.push(SignalCmd::SetString {
+                    key: "scene".into(),
+                    value: scene_name,
+                });
+                cmds.push(SignalCmd::SetFlag {
+                    key: "switch_scene".into(),
+                });
+                Ok(())
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "change_scene",
+            "Switch to a new scene by name (sets scene string + switch_scene flag)",
+            "base",
+            &[("scene_name", "string")],
+            None,
+        )?;
         register_cmd!(
             engine,
             self.lua,

@@ -893,8 +893,7 @@ end
 function on_update_level01(input, dt)
     -- Check for back button to return to menu
     if input.digital.back.just_pressed then
-        engine.set_string("scene", "menu")
-        engine.set_flag("switch_scene")
+        engine.change_scene("menu")
     end
 
     -- Note: Most game logic is handled

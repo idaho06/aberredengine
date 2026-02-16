@@ -435,6 +435,9 @@ engine.clear_string(key)
 engine.set_entity(key, entity_id)
 engine.remove_entity(key)
 
+-- Scene Management
+engine.change_scene(scene_name)     -- convenience: sets scene string + switch_scene flag
+
 -- Entity Commands (all contexts - phase/timer/collision/update callbacks)
 -- All entity commands must work in all Lua callback contexts
 engine.entity_set_velocity(id, vx, vy)

@@ -142,8 +142,7 @@ function on_main_menu_select(ctx)
     engine.log_info("Menu selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
 
     if ctx.item_id == "start_game" then
-        engine.set_string("scene", "level01")
-        engine.set_flag("switch_scene")
+        engine.change_scene("level01")
     elseif ctx.item_id == "options" then
         -- Options menu not implemented yet
         engine.log_info("Options menu not implemented")
