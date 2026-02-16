@@ -140,7 +140,7 @@ return M
 **Global Flags**:
 
 - `"switch_scene"` - Set this flag to trigger a scene change (cleared by engine after processing). Prefer using `engine.change_scene(name)` which sets both the scene string and this flag automatically.
-- `"quit_game"` - Set this flag to exit the game (cleared by engine after processing)
+- `"quit_game"` - Set this flag to exit the game (cleared by engine after processing). Prefer using `engine.quit()` instead.
 
 ### 3. Callback Command Processing
 
@@ -993,7 +993,7 @@ function on_main_menu_select(ctx)
     if ctx.item_id == "start_game" then
         engine.change_scene("level01")
     elseif ctx.item_id == "exit" then
-        engine.set_flag("quit_game")
+        engine.quit()
     end
 end
 ```
@@ -1841,6 +1841,14 @@ engine.change_scene("level01")
 
 -- engine.set_string("scene", "level01")
 -- engine.set_flag("switch_scene")
+```
+
+#### `engine.quit()`
+
+Convenience function to quit the game engine. Equivalent to `engine.set_flag("quit_game")`.
+
+```lua
+engine.quit()
 ```
 
 ---

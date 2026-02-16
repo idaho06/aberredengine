@@ -147,7 +147,7 @@ function on_main_menu_select(ctx)
         -- Options menu not implemented yet
         engine.log_info("Options menu not implemented")
     elseif ctx.item_id == "exit" then
-        engine.set_flag("quit_game")
+        engine.quit()
     end
 end
 
@@ -157,7 +157,7 @@ end
 function on_update_menu(input, dt)
     -- Check for back button to quit game
     if input.digital.back.just_pressed then
-        engine.set_flag("quit_game")
+        engine.quit()
     end
 
     -- Note: Menu actions (scene switching) are handled by the menu system,

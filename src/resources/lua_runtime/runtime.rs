@@ -1148,6 +1148,32 @@ impl LuaRuntime {
             &[("scene_name", "string")],
             None,
         )?;
+
+        // engine.quit() — convenience for set_flag("quit_game")
+        engine.set(
+            "quit",
+            self.lua.create_function(|lua, ()| {
+                let data = lua
+                    .app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+                data.signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::SetFlag {
+                        key: "quit_game".into(),
+                    });
+                Ok(())
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "quit",
+            "Quit the game engine (sets quit_game flag)",
+            "base",
+            &[],
+            None,
+        )?;
+
         register_cmd!(
             engine,
             self.lua,

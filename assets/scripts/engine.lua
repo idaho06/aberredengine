@@ -260,6 +260,9 @@ function engine.log_info(message) end
 ---@param message string
 function engine.log_warn(message) end
 
+---Quit the game engine (sets quit_game flag)
+function engine.quit() end
+
 -- ==================== Asset Loading ====================
 
 ---Load a font from file

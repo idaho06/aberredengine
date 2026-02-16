@@ -437,6 +437,7 @@ engine.remove_entity(key)
 
 -- Scene Management
 engine.change_scene(scene_name)     -- convenience: sets scene string + switch_scene flag
+engine.quit()                       -- convenience: sets quit_game flag to exit the engine
 
 -- Entity Commands (all contexts - phase/timer/collision/update callbacks)
 -- All entity commands must work in all Lua callback contexts
