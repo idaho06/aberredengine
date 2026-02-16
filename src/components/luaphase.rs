@@ -112,3 +112,95 @@ impl LuaPhase {
     }
     */
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_phases() -> FxHashMap<String, PhaseCallbacks> {
+        let mut phases = FxHashMap::default();
+        phases.insert(
+            "idle".to_string(),
+            PhaseCallbacks {
+                on_enter: Some("idle_enter".to_string()),
+                on_update: Some("idle_update".to_string()),
+                on_exit: None,
+            },
+        );
+        phases.insert(
+            "moving".to_string(),
+            PhaseCallbacks {
+                on_enter: None,
+                on_update: Some("moving_update".to_string()),
+                on_exit: Some("moving_exit".to_string()),
+            },
+        );
+        phases
+    }
+
+    #[test]
+    fn test_new_sets_initial_phase() {
+        let phase = LuaPhase::new("idle", make_phases());
+        assert_eq!(phase.current, "idle");
+    }
+
+    #[test]
+    fn test_new_defaults() {
+        let phase = LuaPhase::new("idle", make_phases());
+        assert!(phase.previous.is_none());
+        assert!(phase.next.is_none());
+        assert_eq!(phase.time_in_phase, 0.0);
+        assert!(phase.needs_enter_callback);
+    }
+
+    #[test]
+    fn test_new_accepts_string() {
+        let phase = LuaPhase::new(String::from("moving"), make_phases());
+        assert_eq!(phase.current, "moving");
+    }
+
+    #[test]
+    fn test_current_callbacks_found() {
+        let phase = LuaPhase::new("idle", make_phases());
+        let cbs = phase.current_callbacks().unwrap();
+        assert_eq!(cbs.on_enter.as_deref(), Some("idle_enter"));
+        assert_eq!(cbs.on_update.as_deref(), Some("idle_update"));
+        assert!(cbs.on_exit.is_none());
+    }
+
+    #[test]
+    fn test_current_callbacks_not_found() {
+        let phase = LuaPhase::new("nonexistent", make_phases());
+        assert!(phase.current_callbacks().is_none());
+    }
+
+    #[test]
+    fn test_get_callbacks_found() {
+        let phase = LuaPhase::new("idle", make_phases());
+        let cbs = phase.get_callbacks("moving").unwrap();
+        assert!(cbs.on_enter.is_none());
+        assert_eq!(cbs.on_update.as_deref(), Some("moving_update"));
+        assert_eq!(cbs.on_exit.as_deref(), Some("moving_exit"));
+    }
+
+    #[test]
+    fn test_get_callbacks_not_found() {
+        let phase = LuaPhase::new("idle", make_phases());
+        assert!(phase.get_callbacks("unknown").is_none());
+    }
+
+    #[test]
+    fn test_phase_callbacks_default_all_none() {
+        let cbs = PhaseCallbacks::default();
+        assert!(cbs.on_enter.is_none());
+        assert!(cbs.on_update.is_none());
+        assert!(cbs.on_exit.is_none());
+    }
+
+    #[test]
+    fn test_new_with_empty_phases() {
+        let phase = LuaPhase::new("start", FxHashMap::default());
+        assert_eq!(phase.current, "start");
+        assert!(phase.current_callbacks().is_none());
+    }
+}

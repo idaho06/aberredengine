@@ -103,3 +103,60 @@ impl DynamicText {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use raylib::prelude::Color;
+
+    #[test]
+    fn test_new_stores_fields() {
+        let dt = DynamicText::new("Hello", "arcade", 16.0, Color::WHITE);
+        assert_eq!(&*dt.text, "Hello");
+        assert_eq!(&*dt.font, "arcade");
+        assert_eq!(dt.font_size, 16.0);
+        assert_eq!(dt.color, Color::WHITE);
+    }
+
+    #[test]
+    fn test_new_size_is_zero() {
+        let dt = DynamicText::new("test", "font", 12.0, Color::RED);
+        assert_eq!(dt.size().x, 0.0);
+        assert_eq!(dt.size().y, 0.0);
+    }
+
+    #[test]
+    fn test_set_size() {
+        let mut dt = DynamicText::new("test", "font", 12.0, Color::RED);
+        dt.set_size(Vector2 { x: 100.0, y: 20.0 });
+        assert_eq!(dt.size().x, 100.0);
+        assert_eq!(dt.size().y, 20.0);
+    }
+
+    #[test]
+    fn test_set_text_changed() {
+        let mut dt = DynamicText::new("old", "font", 12.0, Color::WHITE);
+        assert!(dt.set_text("new"));
+        assert_eq!(&*dt.text, "new");
+    }
+
+    #[test]
+    fn test_set_text_unchanged() {
+        let mut dt = DynamicText::new("same", "font", 12.0, Color::WHITE);
+        assert!(!dt.set_text("same"));
+    }
+
+    #[test]
+    fn test_set_text_empty_to_nonempty() {
+        let mut dt = DynamicText::new("", "font", 12.0, Color::WHITE);
+        assert!(dt.set_text("content"));
+        assert_eq!(&*dt.text, "content");
+    }
+
+    #[test]
+    fn test_new_accepts_string_types() {
+        let dt = DynamicText::new(String::from("hi"), String::from("myfont"), 8.0, Color::BLUE);
+        assert_eq!(&*dt.text, "hi");
+        assert_eq!(&*dt.font, "myfont");
+    }
+}

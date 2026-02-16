@@ -125,3 +125,46 @@ impl SignalBinding {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_defaults_to_world_source() {
+        let binding = SignalBinding::new("score");
+        assert_eq!(binding.signal_key, "score");
+        assert!(binding.format.is_none());
+        assert!(matches!(binding.source, SignalSource::World));
+    }
+
+    #[test]
+    fn test_new_accepts_string() {
+        let binding = SignalBinding::new(String::from("lives"));
+        assert_eq!(binding.signal_key, "lives");
+    }
+
+    #[test]
+    fn test_with_format() {
+        let binding = SignalBinding::new("score").with_format("Score: {}");
+        assert_eq!(binding.format.as_deref(), Some("Score: {}"));
+    }
+
+    #[test]
+    fn test_with_source_entity() {
+        let entity = Entity::from_bits(42);
+        let binding = SignalBinding::new("hp").with_source_entity(entity);
+        assert!(matches!(binding.source, SignalSource::Entity(e) if e == entity));
+    }
+
+    #[test]
+    fn test_builder_chaining() {
+        let entity = Entity::from_bits(1);
+        let binding = SignalBinding::new("health")
+            .with_format("HP: {}")
+            .with_source_entity(entity);
+        assert_eq!(binding.signal_key, "health");
+        assert_eq!(binding.format.as_deref(), Some("HP: {}"));
+        assert!(matches!(binding.source, SignalSource::Entity(_)));
+    }
+}

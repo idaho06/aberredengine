@@ -101,3 +101,71 @@ impl StuckTo {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_entity() -> Entity {
+        Entity::from_bits(42)
+    }
+
+    #[test]
+    fn test_new_follows_both_axes() {
+        let st = StuckTo::new(dummy_entity());
+        assert!(st.follow_x);
+        assert!(st.follow_y);
+        assert_eq!(st.offset.x, 0.0);
+        assert_eq!(st.offset.y, 0.0);
+        assert!(st.stored_velocity.is_none());
+    }
+
+    #[test]
+    fn test_follow_x_only() {
+        let st = StuckTo::follow_x_only(dummy_entity());
+        assert!(st.follow_x);
+        assert!(!st.follow_y);
+    }
+
+    #[test]
+    fn test_follow_y_only() {
+        let st = StuckTo::follow_y_only(dummy_entity());
+        assert!(!st.follow_x);
+        assert!(st.follow_y);
+    }
+
+    #[test]
+    fn test_with_offset() {
+        let st = StuckTo::new(dummy_entity()).with_offset(Vector2 { x: 5.0, y: -10.0 });
+        assert_eq!(st.offset.x, 5.0);
+        assert_eq!(st.offset.y, -10.0);
+    }
+
+    #[test]
+    fn test_with_stored_velocity() {
+        let st = StuckTo::new(dummy_entity())
+            .with_stored_velocity(Vector2 { x: 100.0, y: -200.0 });
+        let vel = st.stored_velocity.unwrap();
+        assert_eq!(vel.x, 100.0);
+        assert_eq!(vel.y, -200.0);
+    }
+
+    #[test]
+    fn test_builder_chaining() {
+        let st = StuckTo::follow_x_only(dummy_entity())
+            .with_offset(Vector2 { x: 1.0, y: 2.0 })
+            .with_stored_velocity(Vector2 { x: 3.0, y: 4.0 });
+        assert!(st.follow_x);
+        assert!(!st.follow_y);
+        assert_eq!(st.offset.x, 1.0);
+        assert_eq!(st.offset.y, 2.0);
+        assert!(st.stored_velocity.is_some());
+    }
+
+    #[test]
+    fn test_target_entity_stored() {
+        let entity = Entity::from_bits(99);
+        let st = StuckTo::new(entity);
+        assert_eq!(st.target, entity);
+    }
+}

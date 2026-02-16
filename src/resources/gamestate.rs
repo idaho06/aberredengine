@@ -100,3 +100,107 @@ impl NextGameState {
         self.next = NextGameStates::Unchanged;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- GameState ---
+
+    #[test]
+    fn test_gamestate_new_is_none() {
+        let state = GameState::new();
+        assert_eq!(*state.get(), GameStates::None);
+    }
+
+    #[test]
+    fn test_gamestate_default_is_none() {
+        let state = GameState::default();
+        assert_eq!(*state.get(), GameStates::None);
+    }
+
+    #[test]
+    fn test_gamestate_set_and_get() {
+        let mut state = GameState::new();
+        state.set(GameStates::Playing);
+        assert_eq!(*state.get(), GameStates::Playing);
+    }
+
+    #[test]
+    fn test_gamestate_set_setup() {
+        let mut state = GameState::new();
+        state.set(GameStates::Setup);
+        assert_eq!(*state.get(), GameStates::Setup);
+    }
+
+    #[test]
+    fn test_gamestate_set_quitting() {
+        let mut state = GameState::new();
+        state.set(GameStates::Quitting);
+        assert_eq!(*state.get(), GameStates::Quitting);
+    }
+
+    #[test]
+    fn test_gamestate_overwrite() {
+        let mut state = GameState::new();
+        state.set(GameStates::Playing);
+        state.set(GameStates::Quitting);
+        assert_eq!(*state.get(), GameStates::Quitting);
+    }
+
+    // --- NextGameState ---
+
+    #[test]
+    fn test_next_gamestate_new_is_unchanged() {
+        let next = NextGameState::new();
+        assert_eq!(*next.get(), NextGameStates::Unchanged);
+    }
+
+    #[test]
+    fn test_next_gamestate_default_is_unchanged() {
+        let next = NextGameState::default();
+        assert_eq!(*next.get(), NextGameStates::Unchanged);
+    }
+
+    #[test]
+    fn test_next_gamestate_set_pending() {
+        let mut next = NextGameState::new();
+        next.set(GameStates::Playing);
+        assert_eq!(
+            *next.get(),
+            NextGameStates::Pending(GameStates::Playing)
+        );
+    }
+
+    #[test]
+    fn test_next_gamestate_reset() {
+        let mut next = NextGameState::new();
+        next.set(GameStates::Playing);
+        next.reset();
+        assert_eq!(*next.get(), NextGameStates::Unchanged);
+    }
+
+    #[test]
+    fn test_next_gamestate_overwrite_pending() {
+        let mut next = NextGameState::new();
+        next.set(GameStates::Setup);
+        next.set(GameStates::Playing);
+        assert_eq!(
+            *next.get(),
+            NextGameStates::Pending(GameStates::Playing)
+        );
+    }
+
+    // --- GameStates enum ---
+
+    #[test]
+    fn test_gamestates_default_is_none() {
+        assert_eq!(GameStates::default(), GameStates::None);
+    }
+
+    #[test]
+    fn test_gamestates_equality() {
+        assert_eq!(GameStates::Playing, GameStates::Playing);
+        assert_ne!(GameStates::Playing, GameStates::Setup);
+    }
+}

@@ -121,3 +121,128 @@ impl InputSnapshot {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::input::BoolState;
+    use raylib::prelude::KeyboardKey;
+
+    fn default_input() -> InputState {
+        InputState::default()
+    }
+
+    fn bool_state_pressed(key: KeyboardKey) -> BoolState {
+        BoolState {
+            active: true,
+            just_pressed: true,
+            just_released: false,
+            key_binding: key,
+        }
+    }
+
+    #[test]
+    fn test_from_default_input_all_unpressed() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert!(!snap.digital.up.pressed);
+        assert!(!snap.digital.down.pressed);
+        assert!(!snap.digital.left.pressed);
+        assert!(!snap.digital.right.pressed);
+        assert!(!snap.digital.action_1.pressed);
+        assert!(!snap.digital.action_2.pressed);
+        assert!(!snap.digital.back.pressed);
+        assert!(!snap.digital.special.pressed);
+    }
+
+    #[test]
+    fn test_wasd_maps_to_directional() {
+        let mut input = default_input();
+        input.maindirection_up.active = true;
+        input.maindirection_up.just_pressed = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.up.pressed);
+        assert!(snap.digital.up.just_pressed);
+        assert!(!snap.digital.down.pressed);
+    }
+
+    #[test]
+    fn test_arrows_maps_to_directional() {
+        let mut input = default_input();
+        input.secondarydirection_left.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.left.pressed);
+        assert!(!snap.digital.right.pressed);
+    }
+
+    #[test]
+    fn test_combined_wasd_and_arrows() {
+        let mut input = default_input();
+        // Neither WASD nor arrow pressed
+        input.maindirection_up.active = false;
+        input.secondarydirection_up.active = false;
+        input.maindirection_up.just_pressed = false;
+        input.secondarydirection_up.just_pressed = true; // arrow just pressed
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(!snap.digital.up.pressed);
+        assert!(snap.digital.up.just_pressed); // OR of both
+    }
+
+    #[test]
+    fn test_wasd_or_arrows_pressed_means_combined_pressed() {
+        let mut input = default_input();
+        input.maindirection_right.active = true;
+        input.secondarydirection_right.active = false;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.right.pressed);
+    }
+
+    #[test]
+    fn test_action_buttons_map_directly() {
+        let mut input = default_input();
+        input.action_1 = bool_state_pressed(KeyboardKey::KEY_SPACE);
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.action_1.pressed);
+        assert!(snap.digital.action_1.just_pressed);
+        assert!(!snap.digital.action_1.just_released);
+    }
+
+    #[test]
+    fn test_back_maps_from_action_back() {
+        let mut input = default_input();
+        input.action_back.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.back.pressed);
+    }
+
+    #[test]
+    fn test_special_maps_from_action_special() {
+        let mut input = default_input();
+        input.action_special.active = true;
+        input.action_special.just_released = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.special.pressed);
+        assert!(snap.digital.special.just_released);
+    }
+
+    #[test]
+    fn test_digital_button_state_from_bool_state() {
+        let bs = BoolState {
+            active: true,
+            just_pressed: false,
+            just_released: true,
+            key_binding: KeyboardKey::KEY_SPACE,
+        };
+        let dbs = DigitalButtonState::from_bool_state(&bs);
+        assert!(dbs.pressed);
+        assert!(!dbs.just_pressed);
+        assert!(dbs.just_released);
+    }
+
+    #[test]
+    fn test_digital_button_state_default() {
+        let dbs = DigitalButtonState::default();
+        assert!(!dbs.pressed);
+        assert!(!dbs.just_pressed);
+        assert!(!dbs.just_released);
+    }
+}

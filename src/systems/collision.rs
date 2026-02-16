@@ -310,6 +310,32 @@ fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::collision::BoxSide;
+
+    #[test]
+    fn test_box_side_to_str_left() {
+        assert_eq!(box_side_to_str(&BoxSide::Left), "left");
+    }
+
+    #[test]
+    fn test_box_side_to_str_right() {
+        assert_eq!(box_side_to_str(&BoxSide::Right), "right");
+    }
+
+    #[test]
+    fn test_box_side_to_str_top() {
+        assert_eq!(box_side_to_str(&BoxSide::Top), "top");
+    }
+
+    #[test]
+    fn test_box_side_to_str_bottom() {
+        assert_eq!(box_side_to_str(&BoxSide::Bottom), "bottom");
+    }
+}
+
 /// Populate an entity's signal tables (creates fresh tables for variable-length data).
 fn populate_entity_signals(
     lua: &mlua::Lua,

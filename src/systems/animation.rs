@@ -158,6 +158,394 @@ fn evaluate_condition(signals: &Signals, condition: &Condition) -> bool {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_signals() -> Signals {
+        Signals::default()
+    }
+
+    fn signals_with_scalar(key: &str, value: f32) -> Signals {
+        let mut s = Signals::default();
+        s.set_scalar(key, value);
+        s
+    }
+
+    fn signals_with_integer(key: &str, value: i32) -> Signals {
+        let mut s = Signals::default();
+        s.set_integer(key, value);
+        s
+    }
+
+    fn signals_with_flag(key: &str) -> Signals {
+        let mut s = Signals::default();
+        s.set_flag(key);
+        s
+    }
+
+    // --- ScalarCmp ---
+
+    #[test]
+    fn test_scalar_cmp_lt_true() {
+        let signals = signals_with_scalar("speed", 5.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Lt,
+            value: 10.0,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_lt_false() {
+        let signals = signals_with_scalar("speed", 15.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Lt,
+            value: 10.0,
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_le() {
+        let signals = signals_with_scalar("speed", 10.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Le,
+            value: 10.0,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_gt() {
+        let signals = signals_with_scalar("speed", 15.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Gt,
+            value: 10.0,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_ge() {
+        let signals = signals_with_scalar("speed", 10.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Ge,
+            value: 10.0,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_eq() {
+        let signals = signals_with_scalar("speed", 10.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Eq,
+            value: 10.0,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_ne() {
+        let signals = signals_with_scalar("speed", 10.0);
+        let cond = Condition::ScalarCmp {
+            key: "speed".to_string(),
+            op: CmpOp::Ne,
+            value: 5.0,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_cmp_missing_key() {
+        let signals = empty_signals();
+        let cond = Condition::ScalarCmp {
+            key: "missing".to_string(),
+            op: CmpOp::Eq,
+            value: 0.0,
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    // --- ScalarRange ---
+
+    #[test]
+    fn test_scalar_range_inclusive_inside() {
+        let signals = signals_with_scalar("hp", 50.0);
+        let cond = Condition::ScalarRange {
+            key: "hp".to_string(),
+            min: 0.0,
+            max: 100.0,
+            inclusive: true,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_range_inclusive_at_boundary() {
+        let signals = signals_with_scalar("hp", 0.0);
+        let cond = Condition::ScalarRange {
+            key: "hp".to_string(),
+            min: 0.0,
+            max: 100.0,
+            inclusive: true,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_range_exclusive_at_boundary() {
+        let signals = signals_with_scalar("hp", 0.0);
+        let cond = Condition::ScalarRange {
+            key: "hp".to_string(),
+            min: 0.0,
+            max: 100.0,
+            inclusive: false,
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_scalar_range_missing_key() {
+        let signals = empty_signals();
+        let cond = Condition::ScalarRange {
+            key: "missing".to_string(),
+            min: 0.0,
+            max: 100.0,
+            inclusive: true,
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    // --- IntegerCmp ---
+
+    #[test]
+    fn test_integer_cmp_eq() {
+        let signals = signals_with_integer("level", 5);
+        let cond = Condition::IntegerCmp {
+            key: "level".to_string(),
+            op: CmpOp::Eq,
+            value: 5,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_integer_cmp_ne() {
+        let signals = signals_with_integer("level", 5);
+        let cond = Condition::IntegerCmp {
+            key: "level".to_string(),
+            op: CmpOp::Ne,
+            value: 3,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_integer_cmp_lt() {
+        let signals = signals_with_integer("level", 3);
+        let cond = Condition::IntegerCmp {
+            key: "level".to_string(),
+            op: CmpOp::Lt,
+            value: 5,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_integer_cmp_missing_key() {
+        let signals = empty_signals();
+        let cond = Condition::IntegerCmp {
+            key: "missing".to_string(),
+            op: CmpOp::Eq,
+            value: 0,
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    // --- IntegerRange ---
+
+    #[test]
+    fn test_integer_range_inclusive_inside() {
+        let signals = signals_with_integer("score", 50);
+        let cond = Condition::IntegerRange {
+            key: "score".to_string(),
+            min: 0,
+            max: 100,
+            inclusive: true,
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_integer_range_exclusive_at_boundary() {
+        let signals = signals_with_integer("score", 100);
+        let cond = Condition::IntegerRange {
+            key: "score".to_string(),
+            min: 0,
+            max: 100,
+            inclusive: false,
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    // --- Flags ---
+
+    #[test]
+    fn test_has_flag_true() {
+        let signals = signals_with_flag("moving");
+        let cond = Condition::HasFlag {
+            key: "moving".to_string(),
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_has_flag_false() {
+        let signals = empty_signals();
+        let cond = Condition::HasFlag {
+            key: "moving".to_string(),
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_lacks_flag_true() {
+        let signals = empty_signals();
+        let cond = Condition::LacksFlag {
+            key: "moving".to_string(),
+        };
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_lacks_flag_false() {
+        let signals = signals_with_flag("moving");
+        let cond = Condition::LacksFlag {
+            key: "moving".to_string(),
+        };
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    // --- Combinators ---
+
+    #[test]
+    fn test_all_true() {
+        let mut signals = Signals::default();
+        signals.set_flag("a");
+        signals.set_flag("b");
+        let cond = Condition::All(vec![
+            Condition::HasFlag {
+                key: "a".to_string(),
+            },
+            Condition::HasFlag {
+                key: "b".to_string(),
+            },
+        ]);
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_all_one_false() {
+        let signals = signals_with_flag("a");
+        let cond = Condition::All(vec![
+            Condition::HasFlag {
+                key: "a".to_string(),
+            },
+            Condition::HasFlag {
+                key: "b".to_string(),
+            },
+        ]);
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_all_empty() {
+        let signals = empty_signals();
+        let cond = Condition::All(vec![]);
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_any_one_true() {
+        let signals = signals_with_flag("a");
+        let cond = Condition::Any(vec![
+            Condition::HasFlag {
+                key: "a".to_string(),
+            },
+            Condition::HasFlag {
+                key: "b".to_string(),
+            },
+        ]);
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_any_none_true() {
+        let signals = empty_signals();
+        let cond = Condition::Any(vec![
+            Condition::HasFlag {
+                key: "a".to_string(),
+            },
+            Condition::HasFlag {
+                key: "b".to_string(),
+            },
+        ]);
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_any_empty() {
+        let signals = empty_signals();
+        let cond = Condition::Any(vec![]);
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_not_inverts_true() {
+        let signals = signals_with_flag("a");
+        let cond = Condition::Not(Box::new(Condition::HasFlag {
+            key: "a".to_string(),
+        }));
+        assert!(!evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_not_inverts_false() {
+        let signals = empty_signals();
+        let cond = Condition::Not(Box::new(Condition::HasFlag {
+            key: "a".to_string(),
+        }));
+        assert!(evaluate_condition(&signals, &cond));
+    }
+
+    #[test]
+    fn test_nested_combinators() {
+        let mut signals = Signals::default();
+        signals.set_flag("moving");
+        signals.set_scalar("speed", 5.0);
+        // All(HasFlag("moving"), Not(ScalarCmp(speed >= 10)))
+        let cond = Condition::All(vec![
+            Condition::HasFlag {
+                key: "moving".to_string(),
+            },
+            Condition::Not(Box::new(Condition::ScalarCmp {
+                key: "speed".to_string(),
+                op: CmpOp::Ge,
+                value: 10.0,
+            })),
+        ]);
+        assert!(evaluate_condition(&signals, &cond));
+    }
+}
+
 /// Select the active animation track according to controller rules.
 ///
 /// The first matching rule wins. If no rules match, the controller's default

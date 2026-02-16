@@ -41,3 +41,89 @@ impl EntityShader {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_from_str() {
+        let shader = EntityShader::new("glow");
+        assert_eq!(&*shader.shader_key, "glow");
+        assert!(shader.uniforms.is_empty());
+    }
+
+    #[test]
+    fn test_new_from_arc_str() {
+        let key: Arc<str> = Arc::from("bloom");
+        let shader = EntityShader::new(key);
+        assert_eq!(&*shader.shader_key, "bloom");
+    }
+
+    #[test]
+    fn test_uniform_insert_float() {
+        let mut shader = EntityShader::new("test");
+        shader
+            .uniforms
+            .insert(Arc::from("uIntensity"), UniformValue::Float(0.5));
+        assert_eq!(shader.uniforms.len(), 1);
+        assert!(matches!(
+            shader.uniforms.get(&Arc::from("uIntensity") as &Arc<str>),
+            Some(UniformValue::Float(v)) if (*v - 0.5).abs() < f32::EPSILON
+        ));
+    }
+
+    #[test]
+    fn test_uniform_insert_vec2() {
+        let mut shader = EntityShader::new("test");
+        shader
+            .uniforms
+            .insert(Arc::from("uOffset"), UniformValue::Vec2 { x: 1.0, y: 2.0 });
+        assert!(matches!(
+            shader.uniforms.get(&Arc::from("uOffset") as &Arc<str>),
+            Some(UniformValue::Vec2 { x, y }) if (*x - 1.0).abs() < f32::EPSILON && (*y - 2.0).abs() < f32::EPSILON
+        ));
+    }
+
+    #[test]
+    fn test_uniform_insert_vec4() {
+        let mut shader = EntityShader::new("test");
+        shader.uniforms.insert(
+            Arc::from("uColor"),
+            UniformValue::Vec4 {
+                x: 1.0,
+                y: 0.5,
+                z: 0.0,
+                w: 1.0,
+            },
+        );
+        assert_eq!(shader.uniforms.len(), 1);
+    }
+
+    #[test]
+    fn test_uniform_insert_int() {
+        let mut shader = EntityShader::new("test");
+        shader
+            .uniforms
+            .insert(Arc::from("uMode"), UniformValue::Int(3));
+        assert!(matches!(
+            shader.uniforms.get(&Arc::from("uMode") as &Arc<str>),
+            Some(UniformValue::Int(3))
+        ));
+    }
+
+    #[test]
+    fn test_multiple_uniforms() {
+        let mut shader = EntityShader::new("complex");
+        shader
+            .uniforms
+            .insert(Arc::from("a"), UniformValue::Float(1.0));
+        shader
+            .uniforms
+            .insert(Arc::from("b"), UniformValue::Int(2));
+        shader
+            .uniforms
+            .insert(Arc::from("c"), UniformValue::Vec2 { x: 0.0, y: 0.0 });
+        assert_eq!(shader.uniforms.len(), 3);
+    }
+}

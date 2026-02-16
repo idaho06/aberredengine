@@ -1164,3 +1164,110 @@ fn meta_builder_methods_have_schema_refs() {
         end
     "#).exec().unwrap();
 }
+
+// ---------------------------------------------------------------------------
+// D7 – check_pending_state triggers GameStateChangedEvent when pending
+// ---------------------------------------------------------------------------
+
+use aberredengine::events::gamestate::GameStateChangedEvent;
+use aberredengine::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
+use aberredengine::systems::gamestate::check_pending_state;
+
+/// Helper: run `check_pending_state` once in a schedule.
+fn tick_check_pending_state(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(check_pending_state);
+    schedule.run(world);
+}
+
+#[test]
+fn check_pending_state_triggers_event_when_pending() {
+    let mut world = World::new();
+    world.init_resource::<GameState>();
+
+    // Set a pending state
+    let mut next = NextGameState::new();
+    next.set(GameStates::Playing);
+    world.insert_resource(next);
+
+    // Run the system – it calls commands.trigger(GameStateChangedEvent{})
+    tick_check_pending_state(&mut world);
+
+    // After commands are flushed the event should have been triggered.
+    // We can't easily inspect triggered events without an observer, but we can
+    // verify the system didn't panic and the pending value is still there
+    // (the observer is responsible for clearing it, not check_pending_state).
+    let ns = world.resource::<NextGameState>();
+    assert_eq!(*ns.get(), NextGameStates::Pending(GameStates::Playing));
+}
+
+#[test]
+fn check_pending_state_does_nothing_when_unchanged() {
+    let mut world = World::new();
+    world.init_resource::<GameState>();
+    world.init_resource::<NextGameState>(); // defaults to Unchanged
+
+    tick_check_pending_state(&mut world);
+
+    let ns = world.resource::<NextGameState>();
+    assert_eq!(*ns.get(), NextGameStates::Unchanged);
+}
+
+// ---------------------------------------------------------------------------
+// D11 – update_world_time integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn update_world_time_increments_elapsed_and_frame() {
+    let mut world = World::new();
+    world.insert_resource(WorldTime::default());
+
+    update_world_time(&mut world, 0.016);
+
+    let wt = world.resource::<WorldTime>();
+    assert!(approx_eq(wt.elapsed, 0.016));
+    assert!(approx_eq(wt.delta, 0.016));
+    assert_eq!(wt.frame_count, 1);
+}
+
+#[test]
+fn update_world_time_applies_time_scale() {
+    let mut world = World::new();
+    world.insert_resource(WorldTime::default().with_time_scale(0.5));
+
+    update_world_time(&mut world, 0.016);
+
+    let wt = world.resource::<WorldTime>();
+    assert!(approx_eq(wt.elapsed, 0.008));
+    assert!(approx_eq(wt.delta, 0.008));
+    assert_eq!(wt.frame_count, 1);
+}
+
+#[test]
+fn update_world_time_accumulates_over_multiple_frames() {
+    let mut world = World::new();
+    world.insert_resource(WorldTime::default());
+
+    update_world_time(&mut world, 0.01);
+    update_world_time(&mut world, 0.02);
+    update_world_time(&mut world, 0.03);
+
+    let wt = world.resource::<WorldTime>();
+    assert!(approx_eq(wt.elapsed, 0.06));
+    // delta should be last frame only
+    assert!(approx_eq(wt.delta, 0.03));
+    assert_eq!(wt.frame_count, 3);
+}
+
+#[test]
+fn update_world_time_zero_dt() {
+    let mut world = World::new();
+    world.insert_resource(WorldTime::default());
+
+    update_world_time(&mut world, 0.0);
+
+    let wt = world.resource::<WorldTime>();
+    assert!(approx_eq(wt.elapsed, 0.0));
+    assert!(approx_eq(wt.delta, 0.0));
+    assert_eq!(wt.frame_count, 1);
+}

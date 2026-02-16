@@ -185,3 +185,137 @@ impl GameConfig {
         (self.window_width, self.window_height)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_new_defaults() {
+        let config = GameConfig::new();
+        assert_eq!(config.render_width, 640);
+        assert_eq!(config.render_height, 360);
+        assert_eq!(config.window_width, 1280);
+        assert_eq!(config.window_height, 720);
+        assert_eq!(config.target_fps, 120);
+        assert!(config.vsync);
+        assert!(!config.fullscreen);
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let config = GameConfig::default();
+        assert_eq!(config.render_width, 640);
+        assert_eq!(config.target_fps, 120);
+    }
+
+    #[test]
+    fn test_with_path() {
+        let config = GameConfig::with_path("/tmp/custom.ini");
+        assert_eq!(config.config_path, PathBuf::from("/tmp/custom.ini"));
+        // Other fields should be defaults
+        assert_eq!(config.render_width, 640);
+    }
+
+    #[test]
+    fn test_set_render_size() {
+        let mut config = GameConfig::new();
+        config.set_render_size(320, 240);
+        assert_eq!(config.render_width, 320);
+        assert_eq!(config.render_height, 240);
+    }
+
+    #[test]
+    fn test_set_window_size() {
+        let mut config = GameConfig::new();
+        config.set_window_size(1920, 1080);
+        assert_eq!(config.window_width, 1920);
+        assert_eq!(config.window_height, 1080);
+    }
+
+    #[test]
+    fn test_window_size_getter() {
+        let mut config = GameConfig::new();
+        config.set_window_size(800, 600);
+        assert_eq!(config.window_size(), (800, 600));
+    }
+
+    #[test]
+    fn test_load_from_file() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_load.ini");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "[render]\nwidth = 800\nheight = 450\n[window]\nwidth = 1600\nheight = 900\ntarget_fps = 60\nvsync = false\nfullscreen = true"
+        )
+        .unwrap();
+
+        let mut config = GameConfig::with_path(&path);
+        config.load_from_file().unwrap();
+
+        assert_eq!(config.render_width, 800);
+        assert_eq!(config.render_height, 450);
+        assert_eq!(config.window_width, 1600);
+        assert_eq!(config.window_height, 900);
+        assert_eq!(config.target_fps, 60);
+        assert!(!config.vsync);
+        assert!(config.fullscreen);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_from_file_missing_values_keep_defaults() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_partial.ini");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "[render]\nwidth = 320").unwrap();
+
+        let mut config = GameConfig::with_path(&path);
+        config.load_from_file().unwrap();
+
+        assert_eq!(config.render_width, 320);
+        assert_eq!(config.render_height, 360); // default
+        assert_eq!(config.window_width, 1280); // default
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_from_file_nonexistent() {
+        let config_result = GameConfig::with_path("/tmp/nonexistent_aberred.ini").load_from_file();
+        assert!(config_result.is_err());
+    }
+
+    #[test]
+    fn test_save_and_reload_roundtrip() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_roundtrip.ini");
+
+        let mut config = GameConfig::with_path(&path);
+        config.set_render_size(400, 300);
+        config.set_window_size(800, 600);
+        config.target_fps = 30;
+        config.vsync = false;
+        config.fullscreen = true;
+        config.save_to_file().unwrap();
+
+        let mut loaded = GameConfig::with_path(&path);
+        loaded.load_from_file().unwrap();
+
+        assert_eq!(loaded.render_width, 400);
+        assert_eq!(loaded.render_height, 300);
+        assert_eq!(loaded.window_width, 800);
+        assert_eq!(loaded.window_height, 600);
+        assert_eq!(loaded.target_fps, 30);
+        assert!(!loaded.vsync);
+        assert!(loaded.fullscreen);
+
+        std::fs::remove_file(&path).ok();
+    }
+}
