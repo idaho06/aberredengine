@@ -13,8 +13,6 @@ LIB_ENTRY: src/lib.rs (reusable library crate)
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
-CLI: --create-lua-stubs [PATH] (generate LSP stubs, default: assets/scripts/engine.lua)
-CLI: --create-luarc [PATH] (generate .luarc.json for Lua Language Server, default: assets/scripts/.luarc.json)
 
 ## STATUS (2026-02-15)
 
