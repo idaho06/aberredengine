@@ -15,6 +15,27 @@ use std::sync::Arc;
 
 use log::{error, info, warn};
 
+/// Cached game configuration snapshot for Lua to read.
+pub(super) struct GameConfigSnapshot {
+    pub fullscreen: bool,
+    pub vsync: bool,
+    pub target_fps: u32,
+    pub render_width: u32,
+    pub render_height: u32,
+}
+
+impl Default for GameConfigSnapshot {
+    fn default() -> Self {
+        Self {
+            fullscreen: false,
+            vsync: false,
+            target_fps: 60,
+            render_width: 640,
+            render_height: 360,
+        }
+    }
+}
+
 /// Shared state accessible from Lua function closures.
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
 pub(super) struct LuaAppData {
@@ -46,6 +67,10 @@ pub(super) struct LuaAppData {
     signal_snapshot: RefCell<Arc<SignalSnapshot>>,
     /// Cached tracked group names (read-only snapshot for Lua)
     tracked_groups: RefCell<FxHashSet<String>>,
+    /// Game config command queue
+    gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
+    /// Cached game configuration snapshot (read-only for Lua)
+    gameconfig_snapshot: RefCell<GameConfigSnapshot>,
 }
 
 /// Registry keys for pooled collision context tables.
@@ -458,6 +483,8 @@ impl LuaRuntime {
             collision_clone_commands: RefCell::new(Vec::new()),
             signal_snapshot: RefCell::new(Arc::new(SignalSnapshot::default())),
             tracked_groups: RefCell::new(FxHashSet::default()),
+            gameconfig_commands: RefCell::new(Vec::new()),
+            gameconfig_snapshot: RefCell::new(GameConfigSnapshot::default()),
         });
 
         // Create collision context pool for table reuse
@@ -484,6 +511,7 @@ impl LuaRuntime {
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
         runtime.register_render_api()?;
+        runtime.register_gameconfig_api()?;
         runtime.register_builder_meta()?;
         runtime.register_types_meta()?;
         runtime.register_enums_meta()?;
@@ -1747,6 +1775,178 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Registers game configuration read/write functions in the `engine` table.
+    fn register_gameconfig_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+
+        // ===== WRITE commands =====
+
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_fullscreen",
+            gameconfig_commands,
+            |enabled| bool,
+            GameConfigCmd::SetFullscreen { enabled },
+            desc = "Set fullscreen mode",
+            cat = "render",
+            params = [("enabled", "boolean")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_vsync",
+            gameconfig_commands,
+            |enabled| bool,
+            GameConfigCmd::SetVsync { enabled },
+            desc = "Set vertical sync",
+            cat = "render",
+            params = [("enabled", "boolean")]
+        );
+
+        // set_target_fps: manual registration because nil maps to 60
+        engine.set(
+            "set_target_fps",
+            self.lua.create_function(|lua, fps: Option<u32>| {
+                let fps = fps.unwrap_or(60);
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .gameconfig_commands
+                    .borrow_mut()
+                    .push(GameConfigCmd::SetTargetFps { fps });
+                Ok(())
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "set_target_fps",
+            "Set target FPS (nil resets to 60)",
+            "render",
+            &[("fps", "integer?")],
+            None,
+        )?;
+
+        // ===== READ functions (from cached snapshot) =====
+
+        engine.set(
+            "get_fullscreen",
+            self.lua.create_function(|lua, ()| {
+                let value = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| data.gameconfig_snapshot.borrow().fullscreen)
+                    .unwrap_or(false);
+                Ok(value)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_fullscreen",
+            "Get current fullscreen state",
+            "render",
+            &[],
+            Some("boolean"),
+        )?;
+
+        engine.set(
+            "get_vsync",
+            self.lua.create_function(|lua, ()| {
+                let value = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| data.gameconfig_snapshot.borrow().vsync)
+                    .unwrap_or(false);
+                Ok(value)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_vsync",
+            "Get current vsync state",
+            "render",
+            &[],
+            Some("boolean"),
+        )?;
+
+        engine.set(
+            "get_target_fps",
+            self.lua.create_function(|lua, ()| {
+                let value = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| data.gameconfig_snapshot.borrow().target_fps)
+                    .unwrap_or(60);
+                Ok(value)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_target_fps",
+            "Get current target FPS",
+            "render",
+            &[],
+            Some("integer"),
+        )?;
+
+        // set_render_size: manual registration for validation (min 320x200, max 7680x4320)
+        engine.set(
+            "set_render_size",
+            self.lua
+                .create_function(|lua, (width, height): (u32, u32)| {
+                    let width = width.clamp(320, 7680);
+                    let height = height.clamp(200, 4320);
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .gameconfig_commands
+                        .borrow_mut()
+                        .push(GameConfigCmd::SetRenderSize { width, height });
+                    Ok(())
+                })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "set_render_size",
+            "Set internal render resolution (min 320x200, max 7680x4320)",
+            "render",
+            &[("width", "integer"), ("height", "integer")],
+            None,
+        )?;
+
+        engine.set(
+            "get_render_size",
+            self.lua.create_function(|lua, ()| {
+                let (w, h) = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| {
+                        let snap = data.gameconfig_snapshot.borrow();
+                        (snap.render_width, snap.render_height)
+                    })
+                    .unwrap_or((640, 360));
+                let table = lua.create_table()?;
+                table.set("width", w)?;
+                table.set("height", h)?;
+                Ok(table)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_render_size",
+            "Get current internal render resolution",
+            "render",
+            &[],
+            Some("table"),
+        )?;
+
+        Ok(())
+    }
+
     /// Drains all queued asset commands.
     ///
     /// Call this from a Rust system after Lua has queued commands via
@@ -1840,6 +2040,14 @@ impl LuaRuntime {
         self.lua
             .app_data_ref::<LuaAppData>()
             .map(|data| data.render_commands.borrow_mut().drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Drains all queued game config commands.
+    pub fn drain_gameconfig_commands(&self) -> Vec<GameConfigCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| data.gameconfig_commands.borrow_mut().drain(..).collect())
             .unwrap_or_default()
     }
 
@@ -1941,6 +2149,7 @@ impl LuaRuntime {
             data.camera_commands.borrow_mut().clear();
             data.tilemap_commands.borrow_mut().clear();
             data.render_commands.borrow_mut().clear();
+            data.gameconfig_commands.borrow_mut().clear();
             // Note: Asset and animation commands are only used during setup,
             // so we don't clear them here.
         }
@@ -1989,6 +2198,20 @@ impl LuaRuntime {
     pub fn update_tracked_groups_cache(&self, groups: &FxHashSet<String>) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             *data.tracked_groups.borrow_mut() = groups.clone();
+        }
+    }
+
+    /// Updates the cached game configuration snapshot that Lua can read.
+    ///
+    /// Call this before invoking Lua callbacks so they have fresh data.
+    pub fn update_gameconfig_cache(&self, config: &crate::resources::gameconfig::GameConfig) {
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            let mut snapshot = data.gameconfig_snapshot.borrow_mut();
+            snapshot.fullscreen = config.fullscreen;
+            snapshot.vsync = config.vsync;
+            snapshot.target_fps = config.target_fps;
+            snapshot.render_width = config.render_width;
+            snapshot.render_height = config.render_height;
         }
     }
 

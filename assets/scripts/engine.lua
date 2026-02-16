@@ -1023,6 +1023,22 @@ function engine.register_animation(id, tex_key, pos_x, pos_y, displacement, fram
 
 -- ==================== Rendering & Shaders ====================
 
+---Get current fullscreen state
+---@return boolean
+function engine.get_fullscreen() end
+
+---Get current internal render resolution
+---@return table
+function engine.get_render_size() end
+
+---Get current target FPS
+---@return integer
+function engine.get_target_fps() end
+
+---Get current vsync state
+---@return boolean
+function engine.get_vsync() end
+
 ---Load a shader (at least one of vs_path/fs_path required)
 ---@param id string
 ---@param vs_path string|nil
@@ -1063,6 +1079,23 @@ function engine.post_process_set_vec4(name, x, y, z, w) end
 ---Set active post-processing shader chain (nil to clear)
 ---@param shader_ids string[]|nil
 function engine.post_process_shader(shader_ids) end
+
+---Set fullscreen mode
+---@param enabled boolean
+function engine.set_fullscreen(enabled) end
+
+---Set internal render resolution (min 320x200, max 7680x4320)
+---@param width integer
+---@param height integer
+function engine.set_render_size(width, height) end
+
+---Set target FPS (nil resets to 60)
+---@param fps integer|nil
+function engine.set_target_fps(fps) end
+
+---Set vertical sync
+---@param enabled boolean
+function engine.set_vsync(enabled) end
 
 -- ==================== Entity Builder ====================
 

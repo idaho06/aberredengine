@@ -40,10 +40,10 @@ use rustc_hash::FxHashMap;
 //use std::collections::HashMap; // always prefer FxHashMap for performance
 
 // Import component/resource types from modules
-use crate::components::animation::Animation;
+// use crate::components::animation::Animation;
 // use crate::components::animation::{AnimationController, CmpOp, Condition};
 // use crate::components::boxcollider::BoxCollider;
-use crate::components::entityshader::EntityShader;
+// use crate::components::entityshader::EntityShader;
 // use crate::components::collision::{
 //     BoxSide, CollisionCallback, CollisionContext, CollisionRule, get_colliding_sides,
 // };
@@ -57,15 +57,15 @@ use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 // use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::persistent::Persistent;
-use crate::components::rigidbody::RigidBody;
+// use crate::components::rigidbody::RigidBody;
 // use crate::components::rotation::Rotation;
 // use crate::components::scale::Scale;
 // use crate::components::screenposition::ScreenPosition;
 // use crate::components::signalbinding::SignalBinding;
-use crate::components::signals::Signals;
+// use crate::components::signals::Signals;
 // use crate::components::sprite;
 use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
+// use crate::components::stuckto::StuckTo;
 // use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
@@ -73,6 +73,7 @@ use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
+use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
@@ -87,8 +88,8 @@ use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_clone_command, process_entity_commands, process_group_command,
-    process_phase_command, process_render_command, process_signal_command, process_spawn_command,
-    process_tilemap_command,
+    process_gameconfig_command, process_phase_command, process_render_command,
+    process_signal_command, process_spawn_command, process_tilemap_command,
 };
 use log::{info, error};
 //use rand::Rng;
@@ -599,15 +600,11 @@ pub fn update(
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     mut post_process: ResMut<PostProcessShader>,
+    mut config: ResMut<GameConfig>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    stuckto_query: Query<&StuckTo>,
-    mut signals_query: Query<&mut Signals>,
-    mut animation_query: Query<&mut Animation>,
+    mut entity_cmd_queries: EntityCmdQueries,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
-    mut rigid_bodies_query: Query<&mut RigidBody>,
-    mut positions_query: Query<&mut MapPosition>,
-    mut shader_query: Query<&mut EntityShader>,
 ) {
     let delta_sec = time.delta;
 
@@ -632,6 +629,7 @@ pub fn update(
 
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
+    lua_runtime.update_gameconfig_cache(&config);
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
@@ -661,12 +659,12 @@ pub fn update(
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &stuckto_query,
-        &mut signals_query,
-        &mut animation_query,
-        &mut rigid_bodies_query,
-        &mut positions_query,
-        &mut shader_query,
+        &entity_cmd_queries.stuckto,
+        &mut entity_cmd_queries.signals,
+        &mut entity_cmd_queries.animation,
+        &mut entity_cmd_queries.rigid_bodies,
+        &mut entity_cmd_queries.positions,
+        &mut entity_cmd_queries.shaders,
         &systems_store,
     );
 
@@ -699,6 +697,11 @@ pub fn update(
     // Process render commands from Lua (post-process shader control)
     for cmd in lua_runtime.drain_render_commands() {
         process_render_command(cmd, &mut post_process);
+    }
+
+    // Process game config commands from Lua (fullscreen, vsync, target FPS)
+    for cmd in lua_runtime.drain_gameconfig_commands() {
+        process_gameconfig_command(cmd, &mut config);
     }
 
     // Check for quit flag (set by Lua)
@@ -830,6 +833,7 @@ pub fn switch_scene(
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
     mut worldsignals: ResMut<WorldSignals>,
     mut post_process: ResMut<PostProcessShader>,
+    mut config: ResMut<GameConfig>,
     systems_store: Res<SystemsStore>,
     tilemaps_store: Res<TilemapStore>,
     tex_store: Res<TextureStore>,
@@ -938,6 +942,14 @@ pub fn switch_scene(
     for cmd in lua_runtime.drain_render_commands() {
         process_render_command(cmd, &mut post_process);
     }
+
+    // Process game config commands from Lua (fullscreen, vsync, target FPS)
+    for cmd in lua_runtime.drain_gameconfig_commands() {
+        process_gameconfig_command(cmd, &mut config);
+    }
+
+    // Update game config cache for Lua to read current values
+    lua_runtime.update_gameconfig_cache(&config);
 
     // for reference, here is the old hardcoded scene setup logic, now replaced by Lua scripts
     /*     match scene.as_str() {

@@ -59,7 +59,8 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
     AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd,
-    GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd, SpawnCmd, TilemapCmd, UniformValue,
+    GameConfigCmd, GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd, SpawnCmd, TilemapCmd,
+    UniformValue,
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
@@ -421,6 +422,31 @@ pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShad
         }
         RenderCmd::ClearPostProcessUniforms => {
             post_process.clear_uniforms();
+        }
+    }
+}
+
+/// Process a single game config command from Lua.
+///
+/// Mutates the [`GameConfig`] resource so that Bevy change detection triggers
+/// the `apply_gameconfig_changes` system.
+pub fn process_gameconfig_command(
+    cmd: GameConfigCmd,
+    config: &mut crate::resources::gameconfig::GameConfig,
+) {
+    match cmd {
+        GameConfigCmd::SetFullscreen { enabled } => {
+            config.fullscreen = enabled;
+        }
+        GameConfigCmd::SetVsync { enabled } => {
+            config.vsync = enabled;
+        }
+        GameConfigCmd::SetTargetFps { fps } => {
+            config.target_fps = fps;
+        }
+        GameConfigCmd::SetRenderSize { width, height } => {
+            config.render_width = width;
+            config.render_height = height;
         }
     }
 }

@@ -30,6 +30,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Post-Process Shaders](#post-process-shaders)
 - [Per-Entity Shaders](#per-entity-shaders)
 - [Tint Component](#tint-component)
+- [Game Configuration](#game-configuration)
 - [Complete Example: Player Paddle](#complete-example-player-paddle)
 - [Tips and Best Practices](#tips-and-best-practices)
 - [Lua Helper Libraries](#lua-helper-libraries)
@@ -150,8 +151,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, Render | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, Render | Per-frame logic - camera effects, post-process control, but avoid spawning (see warning below) |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, Render, GameConfig | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps |
+| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, Render, GameConfig | Per-frame logic - camera effects, post-process control, game config changes, but avoid spawning (see warning below) |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
@@ -162,8 +163,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render |
-| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig |
+| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Phase → Camera |
 
@@ -3844,6 +3845,114 @@ function fade_out(ctx)
         engine.entity_signal_set_integer(ctx.id, "alpha", alpha)
         engine.entity_set_tint(ctx.id, 255, 255, 255, alpha)
         engine.entity_insert_lua_timer(ctx.id, 0.05, "fade_out")
+    end
+end
+```
+
+---
+
+## Game Configuration
+
+Runtime game configuration functions for toggling fullscreen, vsync, target FPS, and internal render resolution from Lua. Changes are applied by the engine's `apply_gameconfig_changes` system via Bevy change detection.
+
+### Writing Configuration
+
+#### `engine.set_fullscreen(enabled)`
+
+Toggle fullscreen mode.
+
+```lua
+engine.set_fullscreen(true)   -- Enter fullscreen
+engine.set_fullscreen(false)  -- Return to windowed
+```
+
+#### `engine.set_vsync(enabled)`
+
+Toggle vertical sync.
+
+```lua
+engine.set_vsync(true)   -- Enable vsync
+engine.set_vsync(false)  -- Disable vsync
+```
+
+#### `engine.set_target_fps(fps)`
+
+Set target frames per second. Pass `nil` to reset to the default (60 FPS).
+
+```lua
+engine.set_target_fps(120)  -- Target 120 FPS
+engine.set_target_fps(30)   -- Target 30 FPS
+engine.set_target_fps(nil)  -- Reset to 60 FPS (default)
+```
+
+#### `engine.set_render_size(width, height)`
+
+Set the internal render resolution. The render target is recreated at the new size and the screen size resource is updated accordingly. Values are clamped to a minimum of 320x200 and a maximum of 7680x4320.
+
+**Parameters:**
+
+- `width` (integer): Internal render width in pixels
+- `height` (integer): Internal render height in pixels
+
+```lua
+engine.set_render_size(320, 180)    -- Low-res pixel art style
+engine.set_render_size(1920, 1080)  -- Full HD internal resolution
+engine.set_render_size(640, 360)    -- Default resolution
+```
+
+### Reading Configuration
+
+#### `engine.get_fullscreen() -> boolean`
+
+Get current fullscreen state.
+
+```lua
+if engine.get_fullscreen() then
+    engine.log_info("Currently in fullscreen mode")
+end
+```
+
+#### `engine.get_vsync() -> boolean`
+
+Get current vsync state.
+
+```lua
+local vsync_on = engine.get_vsync()
+```
+
+#### `engine.get_target_fps() -> integer`
+
+Get current target FPS.
+
+```lua
+local fps = engine.get_target_fps()
+engine.log_info("Target FPS: " .. fps)
+```
+
+#### `engine.get_render_size() -> table`
+
+Get current internal render resolution. Returns a table with `width` and `height` fields.
+
+```lua
+local size = engine.get_render_size()
+engine.log_info("Render: " .. size.width .. "x" .. size.height)
+```
+
+### Example: Options Menu Toggle
+
+```lua
+function on_main_menu_select(ctx)
+    if ctx.item_id == "toggle_fullscreen" then
+        engine.set_fullscreen(not engine.get_fullscreen())
+    elseif ctx.item_id == "toggle_vsync" then
+        engine.set_vsync(not engine.get_vsync())
+    elseif ctx.item_id == "toggle_resolution" then
+        local size = engine.get_render_size()
+        if size.width == 640 then
+            engine.set_render_size(1280, 720)
+        else
+            engine.set_render_size(640, 360)
+        end
     end
 end
 ```

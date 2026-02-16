@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-15 (synced with codebase)
+# Last updated: 2026-02-16 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -14,7 +14,7 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-02-15)
+## STATUS (2026-02-16)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg, explosion01.ogg); music/tilemap/brick assets are not loaded.
@@ -26,6 +26,7 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 - Lua utility libraries: lib/math.lua (lerp, inv_lerp, remap, lerp2), lib/utils.lua (dump_value for debugging).
 - EntityShader component - per-entity shader support for custom rendering effects on individual sprites/text.
 - Tint component - color modulation for sprites (replaces Color::WHITE) and text (multiplies with text color).
+- Runtime game configuration API (engine.set_fullscreen/set_vsync/set_target_fps/set_render_size + getters) - Lua can toggle fullscreen, vsync, target FPS, and internal render resolution; uses GameConfigCmd queue + GameConfigSnapshot cache.
 - Multi-pass post-processing shader chain support.
 - Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs).
 - Lua stubs generator (stub_generator.rs) - reads engine.__meta at runtime and emits deterministic engine.lua with EmmyLua type annotations for LSP support. CLI: `--create-lua-stubs [PATH]`.
@@ -331,6 +332,7 @@ TilemapCmd { SpawnTiles { id } }
 AssetCmd { LoadTexture { id, path }, LoadFont { id, path, size }, LoadMusic { id, path }, LoadSound { id, path }, LoadTilemap { id, path }, LoadShader { id, vs_path, fs_path } }
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
 RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
+GameConfigCmd { SetFullscreen { enabled }, SetVsync { enabled }, SetTargetFps { fps }, SetRenderSize { width, height } }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ## LUA API STRUCTURE (runtime.rs — macro-based registration)
@@ -574,6 +576,16 @@ engine.post_process_clear_uniforms()
 -- Standard uniforms (set automatically): uTime, uDeltaTime, uResolution, uFrame, uWindowResolution, uLetterbox
 -- Missing shaders in chain: warning logged, pass skipped, remaining shaders still apply
 
+-- Game Configuration (on_switch_scene, on_update callbacks)
+engine.set_fullscreen(enabled)             -- toggle fullscreen mode (bool)
+engine.set_vsync(enabled)                  -- toggle vertical sync (bool)
+engine.set_target_fps(fps|nil)             -- set target FPS (nil resets to 60)
+engine.set_render_size(width, height)      -- set internal render resolution (min 320x200, max 7680x4320)
+engine.get_fullscreen() -> bool            -- read current fullscreen state
+engine.get_vsync() -> bool                 -- read current vsync state
+engine.get_target_fps() -> integer         -- read current target FPS
+engine.get_render_size() -> {width, height} -- read current internal render resolution
+
 -- Entity Builder (engine.spawn())
 :with_group(name)
 :with_position(x, y)
@@ -793,6 +805,7 @@ movement_system moves entities
 - Collision-specific commands (engine.collision_*) also include spawning, audio, signals, camera
 - Both regular and collision entity commands use the same EntityCmd enum internally
 - Collision commands drain immediately after each collision callback (separate queue)
+- GameConfigCmd commands mutate GameConfig resource; Bevy change detection in apply_gameconfig_changes handles the rest (vsync, fullscreen, fps, render size). Read functions use GameConfigSnapshot cached in LuaAppData.
 - runtime.rs uses `register_cmd!` macro for all push-to-queue registrations; ~17 functions with non-push logic (reads, builders, validation) remain manual
 
 ## IMPORTANT FILES TO READ FIRST

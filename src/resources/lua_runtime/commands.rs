@@ -337,3 +337,16 @@ pub struct CloneCmd {
     /// Component overrides (builder values win over template)
     pub overrides: SpawnCmd,
 }
+
+/// Commands for runtime game configuration changes from Lua.
+#[derive(Debug, Clone)]
+pub enum GameConfigCmd {
+    /// Toggle fullscreen mode
+    SetFullscreen { enabled: bool },
+    /// Toggle vertical sync
+    SetVsync { enabled: bool },
+    /// Set target frames per second
+    SetTargetFps { fps: u32 },
+    /// Set internal render resolution
+    SetRenderSize { width: u32, height: u32 },
+}
