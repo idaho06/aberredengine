@@ -41,9 +41,9 @@ use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::resources::worldsignals::WorldSignals;
  */
-/// Context passed into collision callbacks to access world state.
-///
-/// Extend this struct as new queries/resources are needed by callbacks.
+// Context passed into collision callbacks to access world state.
+//
+// Extend this struct as new queries/resources are needed by callbacks.
 /* pub struct CollisionContext<'a, 'w, 's> {
     pub commands: &'a mut Commands<'w, 's>,
     pub groups: &'a Query<'w, 's, &'static Group>,
@@ -55,18 +55,18 @@ use crate::resources::worldsignals::WorldSignals;
     pub audio_cmds: &'a mut MessageWriter<'w, AudioCmd>,
 }
  */
-/// Callback signature for collision components using a grouped context.
-/// The callback receives the two entities involved in the collision
-/// and a mutable reference to the collision context.
-/// Callbacks are created in the game code when defining collision rules.
+// Callback signature for collision components using a grouped context.
+// The callback receives the two entities involved in the collision
+// and a mutable reference to the collision context.
+// Callbacks are created in the game code when defining collision rules.
 /* pub type CollisionCallback =
    for<'a, 'w, 's> fn(a: Entity, b: Entity, ctx: &mut CollisionContext<'a, 'w, 's>);
 */
-/// Defines how collisions between two entity groups should be handled.
-///
-/// When a collision is detected between entities with groups matching
-/// `group_a` and `group_b`, the `callback` function is invoked with
-/// the entities and a [`CollisionContext`].
+// Defines how collisions between two entity groups should be handled.
+//
+// When a collision is detected between entities with groups matching
+// `group_a` and `group_b`, the `callback` function is invoked with
+// the entities and a [`CollisionContext`].
 /* #[derive(Component)]
 pub struct CollisionRule {
     pub group_a: String,
@@ -127,9 +127,7 @@ pub type BoxSides = SmallVec<[BoxSide; 4]>;
 /// Uses `SmallVec<[BoxSide; 4]>` to avoid heap allocations since each
 /// rectangle can have at most 4 colliding sides.
 pub fn get_colliding_sides(rect_a: &Rectangle, rect_b: &Rectangle) -> Option<(BoxSides, BoxSides)> {
-    let Some(overlap_rect) = rect_a.get_collision_rec(rect_b) else {
-        return None;
-    };
+    let overlap_rect = rect_a.get_collision_rec(rect_b)?;
     let mut sides_a = SmallVec::new();
     let mut sides_b = SmallVec::new();
 

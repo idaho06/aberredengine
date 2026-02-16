@@ -111,7 +111,7 @@ impl WorldSignals {
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
         self.scalars.get(key).copied()
     }
-    /// Read-only view of all scalar signals.
+    // Read-only view of all scalar signals.
     // pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
     //     &self.scalars
     // }
@@ -246,22 +246,22 @@ impl WorldSignals {
         result
     }
 
-    /// Read-only view of all scalar signals (for caching).
+    // Read-only view of all scalar signals (for caching).
     // pub fn scalars(&self) -> &FxHashMap<String, f32> {
     //     &self.scalars
     // }
 
-    /// Read-only view of all integer signals (for caching).
+    // Read-only view of all integer signals (for caching).
     // pub fn integers(&self) -> &FxHashMap<String, i32> {
     //     &self.integers
     // }
 
-    /// Read-only view of all string signals (for caching).
+    // Read-only view of all string signals (for caching).
     // pub fn strings(&self) -> &FxHashMap<String, String> {
     //     &self.strings
     // }
 
-    /// Read-only view of all flags (for caching).
+    // Read-only view of all flags (for caching).
     // pub fn flags(&self) -> &FxHashSet<String> {
     //     &self.flags
     // }

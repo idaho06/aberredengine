@@ -56,9 +56,9 @@ pub struct TrackedGroups {
 }
 
 impl TrackedGroups {
-    /// Builder method to add a group name to track.
-    ///
-    /// Returns `self` for method chaining.
+    // Builder method to add a group name to track.
+    //
+    // Returns `self` for method chaining.
     // pub fn with(mut self, group_name: impl Into<String>) -> Self {
     //     self.add_group(group_name);
     //     self

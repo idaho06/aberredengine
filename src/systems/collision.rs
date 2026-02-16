@@ -234,8 +234,8 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 rect_b.map(|r| (r.x, r.y, r.width, r.height)),
                 &sides_a,
                 &sides_b,
-                signals_a.as_deref(),
-                signals_b.as_deref(),
+                signals_a,
+                signals_b,
                 group_a.as_deref(),
                 group_b.as_deref(),
             ) {

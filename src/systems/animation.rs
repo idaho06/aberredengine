@@ -60,10 +60,8 @@ pub fn animation(
                         // TODO: Trigger animation end event
                         break;
                     }
-                } else {
-                    if let Some(signals) = maybe_signals.as_mut() {
-                        signals.clear_flag("animation_ended");
-                    }
+                } else if let Some(signals) = maybe_signals.as_mut() {
+                    signals.clear_flag("animation_ended");
                 }
             }
 

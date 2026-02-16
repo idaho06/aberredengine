@@ -125,13 +125,13 @@ pub fn render_system(
             // Draw in world coordinates using Camera2D.
             let mut d2 = d.begin_mode2D(camera.0);
 
-            let tl = d2.get_screen_to_world2D(Vector2 { x: 0.0, y: 0.0 }, &camera.0);
+            let tl = d2.get_screen_to_world2D(Vector2 { x: 0.0, y: 0.0 }, camera.0);
             let br = d2.get_screen_to_world2D(
                 Vector2 {
                     x: screensize.w as f32,
                     y: screensize.h as f32,
                 },
-                &camera.0,
+                camera.0,
             );
             let view_min = Vector2 {
                 x: tl.x.min(br.x),
@@ -518,7 +518,7 @@ pub fn render_system(
             d.draw_text(
                 &cam_text,
                 10,
-                (screensize.h - 30) as i32,
+                screensize.h - 30,
                 10,
                 Color::GREENYELLOW,
             );
@@ -530,7 +530,7 @@ pub fn render_system(
                 screensize.w as u32,
                 screensize.h as u32,
             );
-            let mouse_world = d.get_screen_to_world2D(game_mouse_pos, &camera.0);
+            let mouse_world = d.get_screen_to_world2D(game_mouse_pos, camera.0);
 
             let mouse_text = format!(
                 "Mouse game: ({:.1}, {:.1}) World: ({:.1}, {:.1})",
@@ -561,7 +561,7 @@ pub fn render_system(
     };
 
     // Clone shader chain to avoid borrowing issues
-    let shader_chain: Vec<_> = post_process.keys.iter().cloned().collect();
+    let shader_chain: Vec<_> = post_process.keys.to_vec();
 
     if shader_chain.is_empty() {
         // No post-processing - draw directly to window

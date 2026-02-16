@@ -82,7 +82,7 @@ pub struct AccelerationControlled {
 }
 
 impl AccelerationControlled {
-    /// Create an AccelerationControlled component with specified acceleration values.
+    // Create an AccelerationControlled component with specified acceleration values.
     /* pub fn new(up: Vector2, down: Vector2, left: Vector2, right: Vector2) -> Self {
         Self {
             up_acceleration: up,

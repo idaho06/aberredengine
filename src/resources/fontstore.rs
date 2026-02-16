@@ -20,6 +20,12 @@ pub struct FontStore {
     fonts: FxHashMap<String, Font>,
 }
 
+impl Default for FontStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FontStore {
     /// Create an empty font store.
     pub fn new() -> Self {
@@ -47,5 +53,11 @@ impl FontStore {
     /// Get the number of loaded fonts.
     pub fn len(&self) -> usize {
         self.fonts.len()
+    }
+
+    /// Returns `true` if no fonts are loaded.
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.fonts.is_empty()
     }
 }

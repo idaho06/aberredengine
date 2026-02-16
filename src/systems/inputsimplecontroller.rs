@@ -38,8 +38,8 @@ pub fn input_simple_controller(
         if (input_state.maindirection_up.active || input_state.maindirection_down.active)
             && (input_state.maindirection_left.active || input_state.maindirection_right.active)
         {
-            rigidbody.velocity.x *= 0.7071; // 1/sqrt(2)
-            rigidbody.velocity.y *= 0.7071; // 1/sqrt(2)
+            rigidbody.velocity.x *= std::f32::consts::FRAC_1_SQRT_2;
+            rigidbody.velocity.y *= std::f32::consts::FRAC_1_SQRT_2;
         }
     }
 }

@@ -188,7 +188,7 @@ fn build_phase_context(
         rect,
         sprite.as_ref(),
         animation.as_ref(),
-        signals_ref.as_deref(),
+        signals_ref,
         lua_phase_snapshot.as_ref(),
         lua_timer.as_ref(),
         previous_phase,
@@ -334,97 +334,10 @@ pub fn lua_phase_system(
         // Handle initial enter callback: (ctx, input) with previous_phase = nil
         if lua_phase.needs_enter_callback {
             lua_phase.needs_enter_callback = false;
-            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
-                if let Some(ref fn_name) = callbacks.on_enter {
-                    // Build context with no previous_phase
-                    match build_phase_context(
-                        &lua_runtime,
-                        entity,
-                        &lua_phase,
-                        None,
-                        &ctx_queries,
-                        &positions_query,
-                        &rigid_bodies_query,
-                        &animation_query,
-                        &signals_query,
-                    ) {
-                        Ok(ctx) => {
-                            if let Some(next) = call_phase_enter(
-                                &lua_runtime,
-                                fn_name,
-                                &ctx,
-                                &input_table,
-                                &lua_phase.current,
-                            ) {
-                                callback_transitions.push((entity_id, next));
-                            }
-                        }
-                        Err(e) => error!("Error building context: {}", e),
-                    }
-                }
-            }
-        }
-
-        // Handle pending transition
-        if let Some(next_phase) = lua_phase.next.take() {
-            let old_phase = std::mem::replace(&mut lua_phase.current, next_phase.clone());
-            lua_phase.previous = Some(old_phase.clone());
-            lua_phase.time_in_phase = 0.0;
-
-            // Call exit callback for old phase: (ctx)
-            if let Some(callbacks) = lua_phase.get_callbacks(&old_phase) {
-                if let Some(ref fn_name) = callbacks.on_exit {
-                    match build_phase_context(
-                        &lua_runtime,
-                        entity,
-                        &lua_phase,
-                        None,
-                        &ctx_queries,
-                        &positions_query,
-                        &rigid_bodies_query,
-                        &animation_query,
-                        &signals_query,
-                    ) {
-                        Ok(ctx) => call_phase_exit(&lua_runtime, fn_name, &ctx),
-                        Err(e) => error!("Error building context: {}", e),
-                    }
-                }
-            }
-
-            // Call enter callback for new phase: (ctx, input) with previous_phase set
-            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current) {
-                if let Some(ref fn_name) = callbacks.on_enter {
-                    match build_phase_context(
-                        &lua_runtime,
-                        entity,
-                        &lua_phase,
-                        Some(&old_phase),
-                        &ctx_queries,
-                        &positions_query,
-                        &rigid_bodies_query,
-                        &animation_query,
-                        &signals_query,
-                    ) {
-                        Ok(ctx) => {
-                            if let Some(next) = call_phase_enter(
-                                &lua_runtime,
-                                fn_name,
-                                &ctx,
-                                &input_table,
-                                &lua_phase.current,
-                            ) {
-                                callback_transitions.push((entity_id, next));
-                            }
-                        }
-                        Err(e) => error!("Error building context: {}", e),
-                    }
-                }
-            }
-        }
-
-        // Call update callback: (ctx, input, dt)
-        if let Some(callbacks) = lua_phase.current_callbacks() {
-            if let Some(ref fn_name) = callbacks.on_update {
+            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current)
+                && let Some(ref fn_name) = callbacks.on_enter
+            {
+                // Build context with no previous_phase
                 match build_phase_context(
                     &lua_runtime,
                     entity,
@@ -437,12 +350,11 @@ pub fn lua_phase_system(
                     &signals_query,
                 ) {
                     Ok(ctx) => {
-                        if let Some(next) = call_phase_update(
+                        if let Some(next) = call_phase_enter(
                             &lua_runtime,
                             fn_name,
                             &ctx,
                             &input_table,
-                            delta,
                             &lua_phase.current,
                         ) {
                             callback_transitions.push((entity_id, next));
@@ -450,6 +362,94 @@ pub fn lua_phase_system(
                     }
                     Err(e) => error!("Error building context: {}", e),
                 }
+            }
+        }
+
+        // Handle pending transition
+        if let Some(next_phase) = lua_phase.next.take() {
+            let old_phase = std::mem::replace(&mut lua_phase.current, next_phase.clone());
+            lua_phase.previous = Some(old_phase.clone());
+            lua_phase.time_in_phase = 0.0;
+
+            // Call exit callback for old phase: (ctx)
+            if let Some(callbacks) = lua_phase.get_callbacks(&old_phase)
+                && let Some(ref fn_name) = callbacks.on_exit
+            {
+                match build_phase_context(
+                    &lua_runtime,
+                    entity,
+                    &lua_phase,
+                    None,
+                    &ctx_queries,
+                    &positions_query,
+                    &rigid_bodies_query,
+                    &animation_query,
+                    &signals_query,
+                ) {
+                    Ok(ctx) => call_phase_exit(&lua_runtime, fn_name, &ctx),
+                    Err(e) => error!("Error building context: {}", e),
+                }
+            }
+
+            // Call enter callback for new phase: (ctx, input) with previous_phase set
+            if let Some(callbacks) = lua_phase.get_callbacks(&lua_phase.current)
+                && let Some(ref fn_name) = callbacks.on_enter
+            {
+                match build_phase_context(
+                    &lua_runtime,
+                    entity,
+                    &lua_phase,
+                    Some(&old_phase),
+                    &ctx_queries,
+                    &positions_query,
+                    &rigid_bodies_query,
+                    &animation_query,
+                    &signals_query,
+                ) {
+                    Ok(ctx) => {
+                        if let Some(next) = call_phase_enter(
+                            &lua_runtime,
+                            fn_name,
+                            &ctx,
+                            &input_table,
+                            &lua_phase.current,
+                        ) {
+                            callback_transitions.push((entity_id, next));
+                        }
+                    }
+                    Err(e) => error!("Error building context: {}", e),
+                }
+            }
+        }
+
+        // Call update callback: (ctx, input, dt)
+        if let Some(callbacks) = lua_phase.current_callbacks()
+            && let Some(ref fn_name) = callbacks.on_update
+        {
+            match build_phase_context(
+                &lua_runtime,
+                entity,
+                &lua_phase,
+                None,
+                &ctx_queries,
+                &positions_query,
+                &rigid_bodies_query,
+                &animation_query,
+                &signals_query,
+            ) {
+                Ok(ctx) => {
+                    if let Some(next) = call_phase_update(
+                        &lua_runtime,
+                        fn_name,
+                        &ctx,
+                        &input_table,
+                        delta,
+                        &lua_phase.current,
+                    ) {
+                        callback_transitions.push((entity_id, next));
+                    }
+                }
+                Err(e) => error!("Error building context: {}", e),
             }
         }
 

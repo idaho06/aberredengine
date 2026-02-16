@@ -43,7 +43,7 @@
 use bevy_ecs::prelude::Component;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone, Component, Default)]
 /// Bag-of-signals component used by systems to exchange simple values.
 ///
 /// This component is intended to be attached to an entity and updated by
@@ -58,17 +58,6 @@ pub struct Signals {
     pub flags: FxHashSet<String>,
     /// String signals addressed by string keys.
     pub strings: FxHashMap<String, String>,
-}
-
-impl Default for Signals {
-    fn default() -> Self {
-        Self {
-            scalars: FxHashMap::default(),
-            integers: FxHashMap::default(),
-            flags: FxHashSet::default(),
-            strings: FxHashMap::default(),
-        }
-    }
 }
 
 impl Signals {

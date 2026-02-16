@@ -52,8 +52,8 @@ pub fn input_acceleration_controller(
         if (input_state.maindirection_up.active || input_state.maindirection_down.active)
             && (input_state.maindirection_left.active || input_state.maindirection_right.active)
         {
-            acceleration.x *= 0.7071; // 1/sqrt(2)
-            acceleration.y *= 0.7071; // 1/sqrt(2)
+            acceleration.x *= std::f32::consts::FRAC_1_SQRT_2;
+            acceleration.y *= std::f32::consts::FRAC_1_SQRT_2;
         }
 
         // Update the "input" force on the rigidbody

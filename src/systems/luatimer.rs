@@ -215,7 +215,7 @@ fn build_timer_context(
         rect,
         sprite.as_ref(),
         animation.as_ref(),
-        signals_ref.as_deref(),
+        signals_ref,
         lua_phase_snapshot.as_ref(),
         lua_timer.as_ref(),
         None, // previous_phase is only for phase enter callbacks

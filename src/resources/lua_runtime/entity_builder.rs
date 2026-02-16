@@ -941,10 +941,8 @@ impl LuaUserData for LuaEntityBuilder {
             // Parse templates (required)
             if let Ok(templates_table) = table.get::<LuaTable>("templates") {
                 let mut keys = Vec::new();
-                for value in templates_table.sequence_values::<String>() {
-                    if let Ok(key) = value {
-                        keys.push(key);
-                    }
+                for key in templates_table.sequence_values::<String>().flatten() {
+                    keys.push(key);
                 }
                 data.template_keys = keys;
             }
@@ -1074,13 +1072,13 @@ impl LuaUserData for LuaEntityBuilder {
 
             let mut uniforms = Vec::new();
 
-            if let Some(table_val) = iter.next() {
-                if let Some(table) = table_val.as_table() {
-                    for pair in table.pairs::<String, LuaValue>() {
-                        let (name, val) = pair?;
-                        let uniform = parse_uniform_value(val)?;
-                        uniforms.push((name, uniform));
-                    }
+            if let Some(table_val) = iter.next()
+                && let Some(table) = table_val.as_table()
+            {
+                for pair in table.pairs::<String, LuaValue>() {
+                    let (name, val) = pair?;
+                    let uniform = parse_uniform_value(val)?;
+                    uniforms.push((name, uniform));
                 }
             }
 
@@ -1115,14 +1113,14 @@ impl LuaUserData for LuaEntityBuilder {
                         .push(this.cmd.clone());
                 }
                 (BuilderMode::Clone, BuilderContext::Regular) => {
-                    let source_key = this.source_key.clone().unwrap_or_else(|| String::new());
+                    let source_key = this.source_key.clone().unwrap_or_default();
                     app_data.clone_commands.borrow_mut().push(CloneCmd {
                         source_key,
                         overrides: this.cmd.clone(),
                     });
                 }
                 (BuilderMode::Clone, BuilderContext::Collision) => {
-                    let source_key = this.source_key.clone().unwrap_or_else(|| String::new());
+                    let source_key = this.source_key.clone().unwrap_or_default();
                     app_data
                         .collision_clone_commands
                         .borrow_mut()

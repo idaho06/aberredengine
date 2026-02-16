@@ -87,11 +87,11 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
-    process_camera_command, process_clone_command, process_entity_commands, process_group_command,
-    process_gameconfig_command, process_phase_command, process_render_command,
-    process_signal_command, process_spawn_command, process_tilemap_command,
+    process_camera_command, process_clone_command, process_entity_commands,
+    process_gameconfig_command, process_group_command, process_phase_command,
+    process_render_command, process_signal_command, process_spawn_command, process_tilemap_command,
 };
-use log::{info, error};
+use log::{error, info};
 //use rand::Rng;
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
@@ -117,7 +117,7 @@ pub fn load_texture_from_text(
 fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
     let mut font = rl
         .load_font_ex(th, path, size, None)
-        .expect(&format!("Failed to load font '{}'", path));
+        .unwrap_or_else(|_| panic!("Failed to load font '{}'", path));
     unsafe {
         ffi::GenTextureMipmaps(&mut font.texture);
         ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
@@ -127,7 +127,7 @@ fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, 
 
 /// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
 fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Texture2D, Tilemap) {
-    let dirname = path.split('/').last().expect("Not a valid dir path.");
+    let dirname = path.split('/').next_back().expect("Not a valid dir path.");
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
 
@@ -236,10 +236,10 @@ pub fn setup(
     commands.insert_resource(Camera2DRes(camera));
 
     // Call Lua on_setup function to queue asset loading commands
-    if lua_runtime.has_function("on_setup") {
-        if let Err(e) = lua_runtime.call_function::<_, ()>("on_setup", ()) {
-            error!("Error calling on_setup: {}", e);
-        }
+    if lua_runtime.has_function("on_setup")
+        && let Err(e) = lua_runtime.call_function::<_, ()>("on_setup", ())
+    {
+        error!("Error calling on_setup: {}", e);
     }
 
     // Initialize stores
@@ -335,10 +335,9 @@ pub fn enter_play(
 
     // Finally, run the switch_scene system to spawn initial scene entities
     commands.run_system(
-        systems_store
+        *systems_store
             .get("switch_scene")
-            .expect("switch_scene system not found")
-            .clone(),
+            .expect("switch_scene system not found"),
     );
 
     // this is old code to spawn test entities, commented out for now for reference
@@ -643,11 +642,10 @@ pub fn update(
 
     // Call scene-specific update callback with (input, dt)
     let callback_name = format!("on_update_{}", scene);
-    if lua_runtime.has_function(&callback_name) {
-        if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, (input_table, delta_sec))
-        {
-            error!("Error calling {}: {}", callback_name, e);
-        }
+    if lua_runtime.has_function(&callback_name)
+        && let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, (input_table, delta_sec))
+    {
+        error!("Error calling {}: {}", callback_name, e);
     }
 
     // Process signal commands queued by Lua
@@ -715,10 +713,9 @@ pub fn update(
     if world_signals.has_flag("switch_scene") {
         info!("Scene switch requested in world signals.");
         world_signals.clear_flag("switch_scene");
-        let switch_scene_system = systems_store
+        let switch_scene_system = *systems_store
             .get("switch_scene")
-            .expect("switch_scene system not found")
-            .clone();
+            .expect("switch_scene system not found");
         commands.run_system(switch_scene_system);
     }
 }
@@ -827,7 +824,6 @@ fn convert_animation_condition(
  */
 /// Processes a SpawnCmd from Lua and spawns the corresponding entity.
 /// Returns the spawned entity ID and optional registration key.
-
 pub fn switch_scene(
     mut commands: Commands,
     mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
@@ -877,10 +873,10 @@ pub fn switch_scene(
         .unwrap_or_else(|| "menu".to_string());
 
     // Call Lua on_switch_scene function if it exists
-    if lua_runtime.has_function("on_switch_scene") {
-        if let Err(e) = lua_runtime.call_function::<_, ()>("on_switch_scene", scene.clone()) {
-            error!("Error calling on_switch_scene: {}", e);
-        }
+    if lua_runtime.has_function("on_switch_scene")
+        && let Err(e) = lua_runtime.call_function::<_, ()>("on_switch_scene", scene.clone())
+    {
+        error!("Error calling on_switch_scene: {}", e);
     }
 
     // Process signal commands from Lua (initialize world signals for the new scene)

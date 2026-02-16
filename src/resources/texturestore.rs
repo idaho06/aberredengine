@@ -14,6 +14,12 @@ pub struct TextureStore {
     pub map: FxHashMap<String, Texture2D>,
 }
 
+impl Default for TextureStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextureStore {
     pub fn new() -> Self {
         TextureStore {

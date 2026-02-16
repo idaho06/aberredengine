@@ -13,7 +13,7 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::systemsstore::SystemsStore;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
-use log::{info, debug, warn};
+use log::{debug, info, warn};
 
 /// Event used to indicate that a pending game state transition should be
 /// applied.
@@ -56,14 +56,18 @@ pub fn observe_gamestate_change_event(
         match next_state_value {
             Pending(new_state) => {
                 let old_state = game_state.get().clone();
-                info!("Transitioning from {:?} to {:?}", game_state.get(), new_state);
+                info!(
+                    "Transitioning from {:?} to {:?}",
+                    game_state.get(),
+                    new_state
+                );
                 game_state.set(new_state.clone());
                 next_game_state.reset();
                 debug!("Calling on_state_exit()");
                 on_state_exit(&old_state, &mut commands, &systems_store);
                 debug!("Calling on_state_enter()");
                 let systems_store = systems_store.as_ref();
-                on_state_enter(&new_state, &mut commands, &systems_store);
+                on_state_enter(&new_state, &mut commands, systems_store);
             }
             Unchanged => {
                 debug!("No state change pending.");
@@ -86,20 +90,20 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
             let setup_system_id = systems_store
                 .get("setup")
                 .expect("Setup system not found in SystemsStore");
-            commands.run_system(setup_system_id.clone());
+            commands.run_system(*setup_system_id);
         }
         GameStates::Playing => {
             let enter_play_system_id = systems_store
                 .get("enter_play")
                 .expect("EnterPlay system not found in SystemsStore");
-            commands.run_system(enter_play_system_id.clone());
+            commands.run_system(*enter_play_system_id);
         }
         // GameStates::Paused => eprintln!("Entered Paused state"),
         GameStates::Quitting => {
             let quit_game_system_id = systems_store
                 .get("quit_game")
                 .expect("QuitGame system not found in SystemsStore");
-            commands.run_system(quit_game_system_id.clone());
+            commands.run_system(*quit_game_system_id);
         }
     }
 }

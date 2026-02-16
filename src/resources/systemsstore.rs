@@ -17,6 +17,12 @@ pub struct SystemsStore {
     pub entity_map: FxHashMap<String, SystemId<In<Entity>>>,
 }
 
+impl Default for SystemsStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemsStore {
     /// Create an empty store.
     pub fn new() -> Self {

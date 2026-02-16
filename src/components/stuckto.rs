@@ -68,7 +68,6 @@ impl StuckTo {
     }
 
     /// Create a StuckTo that only follows the X axis.
-
     pub fn follow_x_only(target: Entity) -> Self {
         Self {
             target,

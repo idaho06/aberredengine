@@ -35,7 +35,7 @@ pub fn dynamictext_size_system(
         let measured = unsafe {
             ffi::MeasureTextEx(
                 **font,
-                text_c_string.as_ptr() as *const i8,
+                text_c_string.as_ptr(),
                 text.font_size,
                 1.0,
             )

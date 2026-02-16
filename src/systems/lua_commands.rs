@@ -529,13 +529,13 @@ pub fn process_entity_commands(
         match cmd {
             EntityCmd::ReleaseStuckTo { entity_id } => {
                 let entity = Entity::from_bits(entity_id);
-                if let Ok(stuckto) = stuckto_query.get(entity) {
-                    if let Some(velocity) = stuckto.stored_velocity {
-                        // Create a new RigidBody with the stored velocity
-                        let mut rb = RigidBody::new();
-                        rb.velocity = velocity;
-                        commands.entity(entity).insert(rb);
-                    }
+                if let Ok(stuckto) = stuckto_query.get(entity)
+                    && let Some(velocity) = stuckto.stored_velocity
+                {
+                    // Create a new RigidBody with the stored velocity
+                    let mut rb = RigidBody::new();
+                    rb.velocity = velocity;
+                    commands.entity(entity).insert(rb);
                 }
                 commands.entity(entity).remove::<StuckTo>();
             }

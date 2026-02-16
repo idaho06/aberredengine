@@ -36,6 +36,12 @@ pub struct GameState {
     current: GameStates,
 }
 
+impl Default for GameState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GameState {
     /// Create a new state initialized to [`GameStates::None`].
     pub fn new() -> Self {
@@ -60,6 +66,12 @@ impl GameState {
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NextGameState {
     next: NextGameStates,
+}
+
+impl Default for NextGameState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NextGameState {

@@ -98,7 +98,7 @@ pub fn menu_spawn_system(
                 );
             } else {
                 // Static text sprite
-                let font_handle = font_store.get(&font_string).expect(&format!(
+                let font_handle = font_store.get(&font_string).unwrap_or_else(|| panic!(
                     "menu_spawn_system: Font {} not found in FontStore",
                     font_string
                 ));
@@ -154,7 +154,7 @@ pub fn menu_spawn_system(
             // Non-visible items don't get position component, so render system skips them
 
             let text_entity = ecmd.id();
-            ecmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
+            ecmd.insert(Group::new(format!("menu_{}", entity)));
             menu_item.entity = Some(text_entity);
             debug!(
                 "menu_spawn_system: Menu item id={} assigned entity {:?} (visible={})",
@@ -171,7 +171,7 @@ pub fn menu_spawn_system(
                 font_size,
                 normal_color,
             ));
-            top_cmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
+            top_cmd.insert(Group::new(format!("menu_{}", entity)));
             // For world-space, add ZIndex always (needed when indicator becomes visible)
             if !use_screen_space {
                 top_cmd.insert(ZIndex(23.0));
@@ -200,7 +200,7 @@ pub fn menu_spawn_system(
                 font_size,
                 normal_color,
             ));
-            bottom_cmd.insert(Group::new(&format!("menu_{}", entity.to_string())));
+            bottom_cmd.insert(Group::new(format!("menu_{}", entity)));
             // For world-space, add ZIndex always (needed when indicator becomes visible)
             if !use_screen_space {
                 bottom_cmd.insert(ZIndex(23.0));
@@ -426,19 +426,17 @@ pub fn menu_controller_observer(
         // Update cursor position and colors if applicable
         if changed_selection {
             // Update colors for old and new selected items (only for DynamicText)
-            if let Some(old_item) = menu.items.get(old_selected_index) {
-                if let Some(entity) = old_item.entity {
-                    if let Ok(mut text) = dynamic_text_query.get_mut(entity) {
-                        text.color = menu.normal_color;
-                    }
-                }
+            if let Some(old_item) = menu.items.get(old_selected_index)
+                && let Some(entity) = old_item.entity
+                && let Ok(mut text) = dynamic_text_query.get_mut(entity)
+            {
+                text.color = menu.normal_color;
             }
-            if let Some(new_item) = menu.items.get(menu.selected_index) {
-                if let Some(entity) = new_item.entity {
-                    if let Ok(mut text) = dynamic_text_query.get_mut(entity) {
-                        text.color = menu.selected_color;
-                    }
-                }
+            if let Some(new_item) = menu.items.get(menu.selected_index)
+                && let Some(entity) = new_item.entity
+                && let Ok(mut text) = dynamic_text_query.get_mut(entity)
+            {
+                text.color = menu.selected_color;
             }
 
             if let Some(cursor_entity) = menu.cursor_entity {
@@ -521,13 +519,11 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
             } else {
                 commands.entity(top_entity).insert(MapPosition { pos });
             }
-        } else {
-            if menu.use_screen_space {
+        } else if menu.use_screen_space {
                 commands.entity(top_entity).remove::<ScreenPosition>();
             } else {
                 commands.entity(top_entity).remove::<MapPosition>();
             }
-        }
     }
 
     if let Some(bottom_entity) = menu.bottom_indicator_entity {
@@ -543,13 +539,11 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
             } else {
                 commands.entity(bottom_entity).insert(MapPosition { pos });
             }
-        } else {
-            if menu.use_screen_space {
+        } else if menu.use_screen_space {
                 commands.entity(bottom_entity).remove::<ScreenPosition>();
             } else {
                 commands.entity(bottom_entity).remove::<MapPosition>();
             }
-        }
     }
 }
 
@@ -633,10 +627,9 @@ pub fn menu_selection_observer(
             );
             world_signals.set_string("scene", scene_name.clone());
             commands.run_system(
-                systems_store
+                *systems_store
                     .get("switch_scene")
-                    .expect("switch_scene system not found")
-                    .clone(),
+                    .expect("switch_scene system not found"),
             );
         }
         MenuAction::ShowSubMenu(submenu_name) => {
