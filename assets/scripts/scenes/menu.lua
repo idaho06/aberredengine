@@ -31,6 +31,18 @@ function M.spawn()
         :with_zindex(-5)
         :register_as("star_particle01")
         :build()
+    engine.spawn()
+        :with_sprite("stars01_sheet", 32, 32, 16, 16)
+        :with_sprite_offset(32, 0)
+        :with_zindex(-5)
+        :register_as("star_particle02")
+        :build()
+    engine.spawn()
+        :with_sprite("stars01_sheet", 32, 32, 16, 16)
+        :with_sprite_offset(0, 32)
+        :with_zindex(-5)
+        :register_as("star_particle03")
+        :build()
 
     -- Spawn the title
     engine.spawn()
@@ -85,7 +97,7 @@ function M.spawn()
     engine.spawn()
         :with_position(660, 360 / 2)
         :with_particle_emitter({
-            templates = { "star_particle01" },
+            templates = { "star_particle01", "star_particle02", "star_particle03" },
             shape = { type = "rect", width = 10, height = 360 },
             particles_per_emission = 1,
             emissions_per_second = 3,
