@@ -21,6 +21,7 @@
 use bevy_ecs::prelude::*;
 use configparser::ini::Ini;
 use log::info;
+use raylib::prelude::Color;
 use std::path::PathBuf;
 
 /// Default safe values for startup
@@ -31,6 +32,7 @@ const DEFAULT_WINDOW_HEIGHT: u32 = 720;
 const DEFAULT_TARGET_FPS: u32 = 120;
 const DEFAULT_VSYNC: bool = true;
 const DEFAULT_FULLSCREEN: bool = false;
+const DEFAULT_BACKGROUND_COLOR: Color = Color::new(80, 80, 80, 255);
 const DEFAULT_CONFIG_PATH: &str = "./config.ini";
 
 /// Game configuration resource.
@@ -56,6 +58,8 @@ pub struct GameConfig {
     pub vsync: bool,
     /// Start in fullscreen mode.
     pub fullscreen: bool,
+    /// Background clear color for the render target.
+    pub background_color: Color,
     /// Path to the configuration file.
     pub config_path: PathBuf,
 }
@@ -77,6 +81,7 @@ impl GameConfig {
             target_fps: DEFAULT_TARGET_FPS,
             vsync: DEFAULT_VSYNC,
             fullscreen: DEFAULT_FULLSCREEN,
+            background_color: DEFAULT_BACKGROUND_COLOR,
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
         }
     }
@@ -106,6 +111,18 @@ impl GameConfig {
         }
         if let Some(height) = config.getuint("render", "height").ok().flatten() {
             self.render_height = height as u32;
+        }
+        if let Some(bg) = config.get("render", "background_color") {
+            let parts: Vec<&str> = bg.split(',').collect();
+            if parts.len() == 3 {
+                if let (Ok(r), Ok(g), Ok(b)) = (
+                    parts[0].trim().parse::<u8>(),
+                    parts[1].trim().parse::<u8>(),
+                    parts[2].trim().parse::<u8>(),
+                ) {
+                    self.background_color = Color::new(r, g, b, 255);
+                }
+            }
         }
 
         // [window] section
@@ -149,6 +166,14 @@ impl GameConfig {
         // [render] section
         config.set("render", "width", Some(self.render_width.to_string()));
         config.set("render", "height", Some(self.render_height.to_string()));
+        config.set(
+            "render",
+            "background_color",
+            Some(format!(
+                "{},{},{}",
+                self.background_color.r, self.background_color.g, self.background_color.b
+            )),
+        );
 
         // [window] section
         config.set("window", "width", Some(self.window_width.to_string()));
@@ -315,6 +340,45 @@ mod tests {
         assert_eq!(loaded.target_fps, 30);
         assert!(!loaded.vsync);
         assert!(loaded.fullscreen);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_background_color_save_and_reload_roundtrip() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_bg_roundtrip.ini");
+
+        let mut config = GameConfig::with_path(&path);
+        config.background_color = Color::new(10, 200, 55, 255);
+        config.save_to_file().unwrap();
+
+        let mut loaded = GameConfig::with_path(&path);
+        loaded.load_from_file().unwrap();
+
+        assert_eq!(loaded.background_color.r, 10);
+        assert_eq!(loaded.background_color.g, 200);
+        assert_eq!(loaded.background_color.b, 55);
+        assert_eq!(loaded.background_color.a, 255);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_background_color_missing_keeps_default() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_bg_missing.ini");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "[render]\nwidth = 320").unwrap();
+
+        let mut config = GameConfig::with_path(&path);
+        config.load_from_file().unwrap();
+
+        assert_eq!(config.background_color.r, 80);
+        assert_eq!(config.background_color.g, 80);
+        assert_eq!(config.background_color.b, 80);
 
         std::fs::remove_file(&path).ok();
     }

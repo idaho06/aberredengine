@@ -25,6 +25,7 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
+use crate::resources::gameconfig::GameConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::lua_runtime::UniformValue;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -210,6 +211,7 @@ pub struct RenderResources<'w> {
     pub textures: Res<'w, TextureStore>,
     pub world_time: Res<'w, WorldTime>,
     pub post_process: Res<'w, PostProcessShader>,
+    pub config: Res<'w, GameConfig>,
     pub maybe_debug: Option<Res<'w, DebugMode>>,
 }
 
@@ -284,7 +286,7 @@ pub fn render_system(
     // ========== PHASE 1: Render game content to the render target ==========
     {
         let mut d = rl.begin_texture_mode(&th, &mut render_target.texture);
-        d.clear_background(Color::DARKGRAY);
+        d.clear_background(res.config.background_color);
 
         {
             // Draw in world coordinates using Camera2D.

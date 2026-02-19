@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use raylib::prelude::{Camera2D, Vector2};
+use raylib::prelude::{Camera2D, Color, Vector2};
 
 use crate::components::animation::{Animation, Condition};
 use crate::components::boxcollider::BoxCollider;
@@ -52,6 +52,7 @@ use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
 use crate::components::zindex::ZIndex;
+
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationResource;
 use crate::resources::camera2d::Camera2DRes;
@@ -69,7 +70,6 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use log::{error, info, warn};
-use raylib::prelude::Color;
 
 /// Bundled queries for entity command processing.
 ///
@@ -447,6 +447,9 @@ pub fn process_gameconfig_command(
         GameConfigCmd::SetRenderSize { width, height } => {
             config.render_width = width;
             config.render_height = height;
+        }
+        GameConfigCmd::SetBackgroundColor { r, g, b } => {
+            config.background_color = Color::new(r, g, b, 255);
         }
     }
 }

@@ -351,6 +351,14 @@ This section is meant to stay in sync with the actual implementation.
 - `spawn_tiles`
 - `register_animation`
 
+#### Game Config
+
+- `set_fullscreen`, `get_fullscreen`
+- `set_vsync`, `get_vsync`
+- `set_target_fps`, `get_target_fps`
+- `set_render_size`, `get_render_size`
+- `set_background_color`, `get_background_color`
+
 #### Post-Process Shaders
 
 - `post_process_shader`
