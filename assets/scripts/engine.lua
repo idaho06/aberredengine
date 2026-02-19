@@ -1030,6 +1030,10 @@ function engine.register_animation(id, tex_key, pos_x, pos_y, displacement, fram
 
 -- ==================== Rendering & Shaders ====================
 
+---Get current background clear color
+---@return table
+function engine.get_background_color() end
+
 ---Get current fullscreen state
 ---@return boolean
 function engine.get_fullscreen() end
@@ -1086,6 +1090,12 @@ function engine.post_process_set_vec4(name, x, y, z, w) end
 ---Set active post-processing shader chain (nil to clear)
 ---@param shader_ids string[]|nil
 function engine.post_process_shader(shader_ids) end
+
+---Set background clear color (RGB 0-255)
+---@param r integer
+---@param g integer
+---@param b integer
+function engine.set_background_color(r, g, b) end
 
 ---Set fullscreen mode
 ---@param enabled boolean

@@ -349,4 +349,6 @@ pub enum GameConfigCmd {
     SetTargetFps { fps: u32 },
     /// Set internal render resolution
     SetRenderSize { width: u32, height: u32 },
+    /// Set background clear color
+    SetBackgroundColor { r: u8, g: u8, b: u8 },
 }

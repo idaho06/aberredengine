@@ -26,7 +26,7 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 - Lua utility libraries: lib/math.lua (lerp, inv_lerp, remap, lerp2), lib/utils.lua (dump_value for debugging).
 - EntityShader component - per-entity shader support for custom rendering effects on individual sprites/text.
 - Tint component - color modulation for sprites (replaces Color::WHITE) and text (multiplies with text color).
-- Runtime game configuration API (engine.set_fullscreen/set_vsync/set_target_fps/set_render_size + getters) - Lua can toggle fullscreen, vsync, target FPS, and internal render resolution; uses GameConfigCmd queue + GameConfigSnapshot cache.
+- Runtime game configuration API (engine.set_fullscreen/set_vsync/set_target_fps/set_render_size/set_background_color + getters) - Lua can toggle fullscreen, vsync, target FPS, internal render resolution, and background clear color; uses GameConfigCmd queue + GameConfigSnapshot cache.
 - Multi-pass post-processing shader chain support.
 - Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs).
 - Lua stubs generator (stub_generator.rs) - reads engine.__meta at runtime and emits deterministic engine.lua with EmmyLua type annotations for LSP support. CLI: `--create-lua-stubs [PATH]`.
@@ -95,14 +95,14 @@ src/
 │   ├── particleemitter.rs     # Particle emission system (clones templates)
 │   ├── ttl.rs                 # TTL countdown and entity despawn
 │   ├── audio.rs               # Audio thread bridge
-│   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps)
+│   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps, background_color)
 │   └── gamestate.rs           # State transition check
 ├── resources/
 │   ├── mod.rs                 # Re-exports
 │   ├── worldtime.rs           # Delta time, time scale
 │   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
 │   ├── fullscreen.rs          # FullScreen marker resource
-│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen)
+│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen, background_color)
 │   ├── texturestore.rs        # FxHashMap<String, Texture2D>
 │   ├── fontstore.rs           # FxHashMap<String, Font> (non-send)
 │   ├── animationstore.rs      # Animation definitions
@@ -332,7 +332,7 @@ TilemapCmd { SpawnTiles { id } }
 AssetCmd { LoadTexture { id, path }, LoadFont { id, path, size }, LoadMusic { id, path }, LoadSound { id, path }, LoadTilemap { id, path }, LoadShader { id, vs_path, fs_path } }
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
 RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
-GameConfigCmd { SetFullscreen { enabled }, SetVsync { enabled }, SetTargetFps { fps }, SetRenderSize { width, height } }
+GameConfigCmd { SetFullscreen { enabled }, SetVsync { enabled }, SetTargetFps { fps }, SetRenderSize { width, height }, SetBackgroundColor { r, g, b } }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ## LUA API STRUCTURE (runtime.rs — macro-based registration)
@@ -585,10 +585,12 @@ engine.set_fullscreen(enabled)             -- toggle fullscreen mode (bool)
 engine.set_vsync(enabled)                  -- toggle vertical sync (bool)
 engine.set_target_fps(fps|nil)             -- set target FPS (nil resets to 60)
 engine.set_render_size(width, height)      -- set internal render resolution (min 320x200, max 7680x4320)
+engine.set_background_color(r, g, b)      -- set background clear color (RGB 0-255)
 engine.get_fullscreen() -> bool            -- read current fullscreen state
 engine.get_vsync() -> bool                 -- read current vsync state
 engine.get_target_fps() -> integer         -- read current target FPS
 engine.get_render_size() -> {width, height} -- read current internal render resolution
+engine.get_background_color() -> {r, g, b} -- read current background clear color
 
 -- Entity Builder (engine.spawn())
 :with_group(name)
@@ -809,7 +811,7 @@ movement_system moves entities
 - Collision-specific commands (engine.collision_*) also include spawning, audio, signals, camera
 - Both regular and collision entity commands use the same EntityCmd enum internally
 - Collision commands drain immediately after each collision callback (separate queue)
-- GameConfigCmd commands mutate GameConfig resource; Bevy change detection in apply_gameconfig_changes handles the rest (vsync, fullscreen, fps, render size). Read functions use GameConfigSnapshot cached in LuaAppData.
+- GameConfigCmd commands mutate GameConfig resource; Bevy change detection in apply_gameconfig_changes handles the rest (vsync, fullscreen, fps, render size). Background color is read directly in the render system. Read functions use GameConfigSnapshot cached in LuaAppData.
 - runtime.rs uses `register_cmd!` macro for all push-to-queue registrations; ~17 functions with non-push logic (reads, builders, validation) remain manual
 
 ## IMPORTANT FILES TO READ FIRST

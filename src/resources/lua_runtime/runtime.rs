@@ -22,6 +22,9 @@ pub(super) struct GameConfigSnapshot {
     pub target_fps: u32,
     pub render_width: u32,
     pub render_height: u32,
+    pub background_r: u8,
+    pub background_g: u8,
+    pub background_b: u8,
 }
 
 impl Default for GameConfigSnapshot {
@@ -32,6 +35,9 @@ impl Default for GameConfigSnapshot {
             target_fps: 60,
             render_width: 640,
             render_height: 360,
+            background_r: 80,
+            background_g: 80,
+            background_b: 80,
         }
     }
 }
@@ -1997,6 +2003,56 @@ impl LuaRuntime {
             Some("table"),
         )?;
 
+        // set_background_color: manual registration for r,g,b clamping
+        engine.set(
+            "set_background_color",
+            self.lua
+                .create_function(|lua, (r, g, b): (u8, u8, u8)| {
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .gameconfig_commands
+                        .borrow_mut()
+                        .push(GameConfigCmd::SetBackgroundColor { r, g, b });
+                    Ok(())
+                })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "set_background_color",
+            "Set background clear color (RGB 0-255)",
+            "render",
+            &[("r", "integer"), ("g", "integer"), ("b", "integer")],
+            None,
+        )?;
+
+        engine.set(
+            "get_background_color",
+            self.lua.create_function(|lua, ()| {
+                let (r, g, b) = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| {
+                        let snap = data.gameconfig_snapshot.borrow();
+                        (snap.background_r, snap.background_g, snap.background_b)
+                    })
+                    .unwrap_or((80, 80, 80));
+                let table = lua.create_table()?;
+                table.set("r", r)?;
+                table.set("g", g)?;
+                table.set("b", b)?;
+                Ok(table)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_background_color",
+            "Get current background clear color",
+            "render",
+            &[],
+            Some("table"),
+        )?;
+
         Ok(())
     }
 
@@ -2265,6 +2321,9 @@ impl LuaRuntime {
             snapshot.target_fps = config.target_fps;
             snapshot.render_width = config.render_width;
             snapshot.render_height = config.render_height;
+            snapshot.background_r = config.background_color.r;
+            snapshot.background_g = config.background_color.g;
+            snapshot.background_b = config.background_color.b;
         }
     }
 

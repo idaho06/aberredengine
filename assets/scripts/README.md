@@ -3957,6 +3957,25 @@ local size = engine.get_render_size()
 engine.log_info("Render: " .. size.width .. "x" .. size.height)
 ```
 
+#### `engine.set_background_color(r, g, b)`
+
+Set the background clear color for the render target. Each component is an integer 0-255.
+
+```lua
+engine.set_background_color(0, 0, 128)    -- Dark blue background
+engine.set_background_color(80, 80, 80)   -- Default (dark gray)
+engine.set_background_color(0, 0, 0)      -- Pure black
+```
+
+#### `engine.get_background_color() -> table`
+
+Get the current background clear color. Returns a table with `r`, `g`, and `b` fields (0-255).
+
+```lua
+local bg = engine.get_background_color()
+engine.log_info("Background: " .. bg.r .. "," .. bg.g .. "," .. bg.b)
+```
+
 ### Example: Options Menu Toggle
 
 ```lua
