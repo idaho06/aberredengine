@@ -1271,3 +1271,77 @@ fn update_world_time_zero_dt() {
     assert!(approx_eq(wt.delta, 0.0));
     assert_eq!(wt.frame_count, 1);
 }
+
+// =============================================================================
+// Context Builder Snapshot String Tests
+// =============================================================================
+
+#[test]
+fn context_builder_passes_snapshot_strings_to_lua() {
+    use std::sync::Arc;
+    use aberredengine::resources::lua_runtime::{
+        AnimationSnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, SpriteSnapshot,
+        build_entity_context_pooled,
+    };
+
+    let runtime = LuaRuntime::new().expect("LuaRuntime init");
+    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let lua = runtime.lua();
+
+    // Source strings — simulate what the components hold
+    let tex_key: Arc<str> = Arc::from("spaceship");
+    let anim_key = String::from("propulsion");
+    let phase = String::from("idle");
+    let timer_cb = String::from("on_fire");
+
+    // Borrow instead of clone (the new API)
+    let sprite_snap = SpriteSnapshot { tex_key: tex_key.as_ref(), flip_h: false, flip_v: false };
+    let anim_snap   = AnimationSnapshot { key: anim_key.as_str(), frame_index: 1, elapsed: 0.1 };
+    let phase_snap  = LuaPhaseSnapshot { current: phase.as_str(), time_in_phase: 2.5 };
+    let timer_snap  = LuaTimerSnapshot { duration: 3.0, elapsed: 1.0, callback: timer_cb.as_str() };
+
+    let ctx = build_entity_context_pooled(
+        lua, &tables, 99_u64,
+        None, None, None, None, None, None, None,
+        Some(&sprite_snap),
+        Some(&anim_snap),
+        None,
+        Some(&phase_snap),
+        Some(&timer_snap),
+        None,
+    ).expect("build_entity_context_pooled");
+
+    lua.load(r#"
+        local ctx = ...
+        assert(ctx.sprite ~= nil,       "sprite is nil")
+        assert(ctx.animation ~= nil,    "animation is nil")
+        assert(ctx.timer ~= nil,        "timer is nil")
+        assert(ctx.sprite.tex_key    == "spaceship",   "wrong tex_key: "         .. tostring(ctx.sprite.tex_key))
+        assert(ctx.animation.key     == "propulsion",  "wrong animation.key: "   .. tostring(ctx.animation.key))
+        assert(ctx.phase             == "idle",         "wrong phase: "           .. tostring(ctx.phase))
+        assert(ctx.timer.callback    == "on_fire",     "wrong timer.callback: "  .. tostring(ctx.timer.callback))
+    "#).call::<()>(ctx).expect("Lua context string assertions");
+}
+
+#[test]
+fn context_builder_nil_when_no_snapshots() {
+    use aberredengine::resources::lua_runtime::build_entity_context_pooled;
+
+    let runtime = LuaRuntime::new().expect("LuaRuntime init");
+    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let lua = runtime.lua();
+
+    let ctx = build_entity_context_pooled(
+        lua, &tables, 1_u64,
+        None, None, None, None, None, None, None,
+        None, None, None, None, None, None,
+    ).expect("build_entity_context_pooled");
+
+    lua.load(r#"
+        local ctx = ...
+        assert(ctx.sprite    == nil, "sprite should be nil")
+        assert(ctx.animation == nil, "animation should be nil")
+        assert(ctx.phase     == nil, "phase should be nil")
+        assert(ctx.timer     == nil, "timer should be nil")
+    "#).call::<()>(ctx).expect("Lua nil assertions");
+}

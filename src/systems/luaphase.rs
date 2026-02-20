@@ -147,13 +147,13 @@ fn build_phase_context(
         .get(entity)
         .ok()
         .map(|s| SpriteSnapshot {
-            tex_key: s.tex_key.to_string(),
+            tex_key: s.tex_key.as_ref(),
             flip_h: s.flip_h,
             flip_v: s.flip_v,
         });
 
     let animation = animation_query.get(entity).ok().map(|a| AnimationSnapshot {
-        key: a.animation_key.clone(),
+        key: a.animation_key.as_str(),
         frame_index: a.frame_index,
         elapsed: a.elapsed_time,
     });
@@ -161,7 +161,7 @@ fn build_phase_context(
     let signals_ref = signals_query.get(entity).ok();
 
     let lua_phase_snapshot = Some(LuaPhaseSnapshot {
-        current: lua_phase.current.clone(),
+        current: lua_phase.current.as_str(),
         time_in_phase: lua_phase.time_in_phase,
     });
 
@@ -172,7 +172,7 @@ fn build_phase_context(
         .map(|t| LuaTimerSnapshot {
             duration: t.duration,
             elapsed: t.elapsed,
-            callback: t.callback.clone(),
+            callback: t.callback.as_str(),
         });
 
     build_entity_context_pooled(

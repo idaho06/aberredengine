@@ -44,34 +44,34 @@ pub struct RigidBodySnapshot {
 }
 
 /// Snapshot of Sprite data for context building.
-#[derive(Debug, Clone)]
-pub struct SpriteSnapshot {
-    pub tex_key: String,
+#[derive(Debug)]
+pub struct SpriteSnapshot<'a> {
+    pub tex_key: &'a str,
     pub flip_h: bool,
     pub flip_v: bool,
 }
 
 /// Snapshot of Animation data for context building.
-#[derive(Debug, Clone)]
-pub struct AnimationSnapshot {
-    pub key: String,
+#[derive(Debug)]
+pub struct AnimationSnapshot<'a> {
+    pub key: &'a str,
     pub frame_index: usize,
     pub elapsed: f32,
 }
 
 /// Snapshot of LuaPhase data for context building.
-#[derive(Debug, Clone)]
-pub struct LuaPhaseSnapshot {
-    pub current: String,
+#[derive(Debug)]
+pub struct LuaPhaseSnapshot<'a> {
+    pub current: &'a str,
     pub time_in_phase: f32,
 }
 
 /// Snapshot of LuaTimer data for context building.
-#[derive(Debug, Clone)]
-pub struct LuaTimerSnapshot {
+#[derive(Debug)]
+pub struct LuaTimerSnapshot<'a> {
     pub duration: f32,
     pub elapsed: f32,
-    pub callback: String,
+    pub callback: &'a str,
 }
 
 /// Build a Lua table representing entity context for phase/timer callbacks.
@@ -313,11 +313,11 @@ pub fn build_entity_context_pooled<'a>(
     rotation: Option<f32>,
     scale: Option<(f32, f32)>,
     rect: Option<(f32, f32, f32, f32)>,
-    sprite: Option<&'a SpriteSnapshot>,
-    animation: Option<&'a AnimationSnapshot>,
+    sprite: Option<&'a SpriteSnapshot<'a>>,
+    animation: Option<&'a AnimationSnapshot<'a>>,
     signals: Option<&'a Signals>,
-    lua_phase: Option<&'a LuaPhaseSnapshot>,
-    lua_timer: Option<&'a LuaTimerSnapshot>,
+    lua_phase: Option<&'a LuaPhaseSnapshot<'a>>,
+    lua_timer: Option<&'a LuaTimerSnapshot<'a>>,
     previous_phase: Option<&'a str>,
 ) -> LuaResult<LuaTable> {
     // Core identity (id is always present)
@@ -390,7 +390,7 @@ pub fn build_entity_context_pooled<'a>(
 
     // Sprite
     if let Some(spr) = sprite {
-        tables.sprite.set("tex_key", spr.tex_key.as_str())?;
+        tables.sprite.set("tex_key", spr.tex_key)?;
         tables.sprite.set("flip_h", spr.flip_h)?;
         tables.sprite.set("flip_v", spr.flip_v)?;
         tables.ctx.set("sprite", tables.sprite.clone())?;
@@ -400,7 +400,7 @@ pub fn build_entity_context_pooled<'a>(
 
     // Animation
     if let Some(anim) = animation {
-        tables.animation.set("key", anim.key.as_str())?;
+        tables.animation.set("key", anim.key)?;
         tables.animation.set("frame_index", anim.frame_index)?;
         tables.animation.set("elapsed", anim.elapsed)?;
         tables.ctx.set("animation", tables.animation.clone())?;
@@ -418,7 +418,7 @@ pub fn build_entity_context_pooled<'a>(
 
     // Phase info from LuaPhase
     if let Some(phase) = lua_phase {
-        tables.ctx.set("phase", phase.current.as_str())?;
+        tables.ctx.set("phase", phase.current)?;
         tables.ctx.set("time_in_phase", phase.time_in_phase)?;
     } else {
         tables.ctx.set("phase", LuaValue::Nil)?;
@@ -436,7 +436,7 @@ pub fn build_entity_context_pooled<'a>(
     if let Some(timer) = lua_timer {
         tables.timer.set("duration", timer.duration)?;
         tables.timer.set("elapsed", timer.elapsed)?;
-        tables.timer.set("callback", timer.callback.as_str())?;
+        tables.timer.set("callback", timer.callback)?;
         tables.ctx.set("timer", tables.timer.clone())?;
     } else {
         tables.ctx.set("timer", LuaValue::Nil)?;
