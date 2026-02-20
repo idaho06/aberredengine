@@ -12,7 +12,7 @@ Built with:
 - **mlua** (0.11, LuaJIT) — game logic scripting
 - **fastrand** — RNG for particle systems
 
-## Current status (2026-01-19)
+## Current status (2026-02-19)
 
 Playable loop: menu → level01 asteroids prototype with ship (idle/propulsion phases), drifting asteroids, tiled space background, and laser firing.
 
