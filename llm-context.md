@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-16 (synced with codebase)
+# Last updated: 2026-02-20 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -14,7 +14,7 @@ LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-02-16)
+## STATUS (2026-02-20)
 
 - Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
 - Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg, explosion01.ogg); music/tilemap/brick assets are not loaded.
@@ -39,7 +39,7 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 src/
 ├── main.rs                    # App entry, ECS world setup, main loop, system schedule, CLI (clap)
 ├── lib.rs                     # Library crate entry (components, events, game, resources, systems, stub_generator, luarc_generator)
-├── game.rs                    # GameState logic, scene switching, Lua callbacks
+├── game.rs                    # GameState logic, scene switching, Lua callbacks + ScriptingContext/GameSceneState/EntityProcessing SystemParams
 ├── stub_generator.rs          # Lua EmmyLua stub generator (reads __meta, emits engine.lua)
 ├── luarc_generator.rs         # .luarc.json generator (Lua Language Server config from __meta)
 ├── components/
@@ -72,17 +72,17 @@ src/
 │   ├── zindex.rs              # Render order
 │   └── inputcontrolled.rs     # InputControlled, AccelerationControlled, MouseControlled
 ├── systems/
-│   ├── mod.rs                 # Re-exports all systems
+│   ├── mod.rs                 # Re-exports all systems + RaylibAccess SystemParam
 │   ├── movement.rs            # Physics: accel→vel→pos, friction, max_speed
 │   ├── collision.rs           # AABB detection, Lua callback dispatch
-│   ├── render.rs              # Raylib drawing, camera, debug overlays, letterboxing
+│   ├── render.rs              # Raylib drawing, camera, debug overlays, letterboxing + RenderResources/RenderQueries SystemParams
 │   ├── input.rs               # Poll keyboard state, emit InputEvent for all actions
 │   ├── inputsimplecontroller.rs    # Input→velocity
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController)
 │   ├── luaphase.rs            # Lua phase callbacks
-│   ├── lua_commands.rs        # Process EntityCmd/CollisionEntityCmd/SpawnCmd
+│   ├── lua_commands.rs        # Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
 │   ├── luatimer.rs            # Lua timer processing
 │   ├── time.rs                # WorldTime update
 │   ├── signalbinding.rs       # Update bound text
@@ -254,6 +254,16 @@ ShaderStore { shaders: FxHashMap<String, ShaderEntry> } - NON_SEND (stores Shade
 ShaderEntry { shader: Shader, locations: FxHashMap<String, i32> }
 PostProcessShader { key: Option<Arc<str>>, uniforms: FxHashMap<Arc<str>, UniformValue> }
 
+## SYSTEMPARAM BUNDLES (reduce system parameter count)
+
+RaylibAccess<'w> { rl: NonSendMut<RaylibHandle>, th: NonSend<RaylibThread> } -- systems/mod.rs
+ScriptingContext<'w> { lua_runtime: NonSend<LuaRuntime>, audio_cmd_writer: MessageWriter<AudioCmd> } -- game.rs
+GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, systems_store: Res<SystemsStore> } -- game.rs
+EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entity, &mut LuaPhase)> } -- game.rs
+EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, shaders } -- systems/lua_commands.rs
+RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
+RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites } -- systems/render.rs
+
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
 EntityCmd {
@@ -329,10 +339,10 @@ GroupCmd { TrackGroup { name }, UntrackGroup { name }, ClearTrackedGroups }
 PhaseCmd { TransitionTo { entity_id, phase } }
 CameraCmd { SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom } }
 TilemapCmd { SpawnTiles { id } }
-AssetCmd { LoadTexture { id, path }, LoadFont { id, path, size }, LoadMusic { id, path }, LoadSound { id, path }, LoadTilemap { id, path }, LoadShader { id, vs_path, fs_path } }
+AssetCmd { Texture { id, path }, Font { id, path, size }, Music { id, path }, Sound { id, path }, Tilemap { id, path }, Shader { id, vs_path, fs_path } }
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
 RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
-GameConfigCmd { SetFullscreen { enabled }, SetVsync { enabled }, SetTargetFps { fps }, SetRenderSize { width, height }, SetBackgroundColor { r, g, b } }
+GameConfigCmd { Fullscreen { enabled }, Vsync { enabled }, TargetFps { fps }, RenderSize { width, height }, BackgroundColor { r, g, b } }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
 ## LUA API STRUCTURE (runtime.rs — macro-based registration)

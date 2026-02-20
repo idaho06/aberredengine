@@ -91,8 +91,32 @@ use crate::systems::lua_commands::{
     process_gameconfig_command, process_group_command, process_phase_command,
     process_render_command, process_signal_command, process_spawn_command, process_tilemap_command,
 };
+use bevy_ecs::system::SystemParam;
 use log::{error, info};
 //use rand::Rng;
+
+/// Bundled Lua runtime + audio command writer for scripting systems.
+#[derive(SystemParam)]
+pub struct ScriptingContext<'w> {
+    pub lua_runtime: NonSend<'w, LuaRuntime>,
+    pub audio_cmd_writer: MessageWriter<'w, AudioCmd>,
+}
+
+/// Bundled game scene state resources.
+#[derive(SystemParam)]
+pub struct GameSceneState<'w> {
+    pub world_signals: ResMut<'w, WorldSignals>,
+    pub post_process: ResMut<'w, PostProcessShader>,
+    pub config: ResMut<'w, GameConfig>,
+    pub systems_store: Res<'w, SystemsStore>,
+}
+
+/// Bundled entity processing queries.
+#[derive(SystemParam)]
+pub struct EntityProcessing<'w, 's> {
+    pub cmd_queries: EntityCmdQueries<'w, 's>,
+    pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
+}
 
 /// Helper function to create a Texture2D from a text string, font, size, and color
 pub fn load_texture_from_text(
@@ -209,14 +233,13 @@ fn spawn_tiles(
 pub fn setup(
     mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
-    mut rl: NonSendMut<raylib::RaylibHandle>,
-    th: NonSend<raylib::RaylibThread>,
+    mut raylib: crate::systems::RaylibAccess,
     mut fonts: NonSendMut<FontStore>,
     mut shaders: NonSendMut<ShaderStore>,
-    mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    lua_runtime: NonSend<LuaRuntime>,
+    mut scripting: ScriptingContext,
 ) {
     // This function sets up the game world, loading resources
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
 
     // Default camera. Needed to start the engine before entering play state
     // The camera will be overridden later in the scene setup
@@ -235,6 +258,8 @@ pub fn setup(
     };
     commands.insert_resource(Camera2DRes(camera));
 
+    let lua_runtime = &scripting.lua_runtime;
+
     // Call Lua on_setup function to queue asset loading commands
     if lua_runtime.has_function("on_setup")
         && let Err(e) = lua_runtime.call_function::<_, ()>("on_setup", ())
@@ -249,14 +274,14 @@ pub fn setup(
     // Process asset commands queued by Lua
     for cmd in lua_runtime.drain_asset_commands() {
         process_asset_command(
-            &mut rl,
-            &th,
+            rl,
+            th,
             cmd,
             &mut tex_store,
             &mut tilemaps_store,
             &mut fonts,
             &mut shaders,
-            &mut audio_cmd_writer,
+            &mut scripting.audio_cmd_writer,
             load_font_with_mipmaps,
             load_tilemap,
         );
@@ -595,19 +620,16 @@ pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
     mut commands: Commands,
-    systems_store: Res<SystemsStore>,
-    mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
-    mut post_process: ResMut<PostProcessShader>,
-    mut config: ResMut<GameConfig>,
-    lua_runtime: NonSend<LuaRuntime>,
-    mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    mut entity_cmd_queries: EntityCmdQueries,
-    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
+    mut scripting: ScriptingContext,
+    mut scene_state: GameSceneState,
+    mut entities: EntityProcessing,
 ) {
+    let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
 
-    let scene = world_signals
+    let scene = scene_state
+        .world_signals
         .get_string("scene")
         .cloned()
         .unwrap_or("menu".to_string());
@@ -627,8 +649,8 @@ pub fn update(
     */
 
     // Update signal cache for Lua to read current values
-    lua_runtime.update_signal_cache(world_signals.snapshot());
-    lua_runtime.update_gameconfig_cache(&config);
+    lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
+    lua_runtime.update_gameconfig_cache(&scene_state.config);
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
@@ -650,41 +672,41 @@ pub fn update(
 
     // Process signal commands queued by Lua
     for cmd in lua_runtime.drain_signal_commands() {
-        process_signal_command(&mut world_signals, cmd);
+        process_signal_command(&mut scene_state.world_signals, cmd);
     }
 
     // Process entity commands from Lua
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &entity_cmd_queries.stuckto,
-        &mut entity_cmd_queries.signals,
-        &mut entity_cmd_queries.animation,
-        &mut entity_cmd_queries.rigid_bodies,
-        &mut entity_cmd_queries.positions,
-        &mut entity_cmd_queries.shaders,
-        &systems_store,
+        &entities.cmd_queries.stuckto,
+        &mut entities.cmd_queries.signals,
+        &mut entities.cmd_queries.animation,
+        &mut entities.cmd_queries.rigid_bodies,
+        &mut entities.cmd_queries.positions,
+        &mut entities.cmd_queries.shaders,
+        &scene_state.systems_store,
     );
 
     // Process spawn commands from Lua
     // WARNING: Spawning entities in on_update (60 FPS) can cause performance issues
     for cmd in lua_runtime.drain_spawn_commands() {
-        process_spawn_command(&mut commands, cmd, &mut world_signals);
+        process_spawn_command(&mut commands, cmd, &mut scene_state.world_signals);
     }
 
     // Process clone commands from Lua
     for cmd in lua_runtime.drain_clone_commands() {
-        process_clone_command(&mut commands, cmd, &mut world_signals);
+        process_clone_command(&mut commands, cmd, &mut scene_state.world_signals);
     }
 
     // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
-        process_phase_command(&mut luaphase_query, cmd);
+        process_phase_command(&mut entities.luaphase, cmd);
     }
 
     // Process audio commands from Lua
     for cmd in lua_runtime.drain_audio_commands() {
-        process_audio_command(&mut audio_cmd_writer, cmd);
+        process_audio_command(&mut scripting.audio_cmd_writer, cmd);
     }
 
     // Process camera commands from Lua
@@ -694,26 +716,27 @@ pub fn update(
 
     // Process render commands from Lua (post-process shader control)
     for cmd in lua_runtime.drain_render_commands() {
-        process_render_command(cmd, &mut post_process);
+        process_render_command(cmd, &mut scene_state.post_process);
     }
 
     // Process game config commands from Lua (fullscreen, vsync, target FPS)
     for cmd in lua_runtime.drain_gameconfig_commands() {
-        process_gameconfig_command(cmd, &mut config);
+        process_gameconfig_command(cmd, &mut scene_state.config);
     }
 
     // Check for quit flag (set by Lua)
-    if world_signals.has_flag("quit_game") {
-        world_signals.clear_flag("quit_game");
+    if scene_state.world_signals.has_flag("quit_game") {
+        scene_state.world_signals.clear_flag("quit_game");
         next_game_state.set(GameStates::Quitting);
         return;
     }
 
     // Check for scene switch flag (set by Lua)
-    if world_signals.has_flag("switch_scene") {
+    if scene_state.world_signals.has_flag("switch_scene") {
         info!("Scene switch requested in world signals.");
-        world_signals.clear_flag("switch_scene");
-        let switch_scene_system = *systems_store
+        scene_state.world_signals.clear_flag("switch_scene");
+        let switch_scene_system = *scene_state
+            .systems_store
             .get("switch_scene")
             .expect("switch_scene system not found");
         commands.run_system(switch_scene_system);
@@ -822,25 +845,20 @@ fn convert_animation_condition(
     }
 }
  */
-/// Processes a SpawnCmd from Lua and spawns the corresponding entity.
-/// Returns the spawned entity ID and optional registration key.
+/// Processes scene switching: despawns old entities, calls Lua callbacks,
+/// and processes all queued commands for the new scene.
+#[allow(clippy::too_many_arguments)]
 pub fn switch_scene(
     mut commands: Commands,
-    mut audio_cmd_writer: bevy_ecs::prelude::MessageWriter<AudioCmd>,
-    mut worldsignals: ResMut<WorldSignals>,
-    mut post_process: ResMut<PostProcessShader>,
-    mut config: ResMut<GameConfig>,
-    systems_store: Res<SystemsStore>,
+    mut scripting: ScriptingContext,
+    mut scene_state: GameSceneState,
     tilemaps_store: Res<TilemapStore>,
     tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
-    //mut rl: NonSendMut<raylib::RaylibHandle>,
-    //th: NonSend<raylib::RaylibThread>,
-    lua_runtime: NonSend<LuaRuntime>,
-    mut entity_cmd_queries: EntityCmdQueries,
-    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
+    mut entities: EntityProcessing,
 ) {
+    let lua_runtime = &scripting.lua_runtime;
     info!("switch_scene: System called!");
 
     // Clear all command queues FIRST to discard any stale commands from the previous scene
@@ -848,10 +866,10 @@ pub fn switch_scene(
     // entity commands are applied after their target entities have been despawned.
     lua_runtime.clear_all_commands();
 
-    audio_cmd_writer.write(AudioCmd::StopAllMusic);
+    scripting.audio_cmd_writer.write(AudioCmd::StopAllMusic);
     // Race condition for cleaning entities and spawning new ones?
     /* commands.run_system(
-        systems_store
+        scene_state.systems_store
             .get("clean_all_entities")
             .expect("clean_all_entities system not found")
             .clone(),
@@ -865,9 +883,10 @@ pub fn switch_scene(
     // NOTE: tilemaps_store is NOT cleared - tilemaps are assets loaded during setup
 
     tracked_groups.clear();
-    worldsignals.clear_group_counts();
+    scene_state.world_signals.clear_group_counts();
 
-    let scene = worldsignals
+    let scene = scene_state
+        .world_signals
         .get_string("scene")
         .cloned()
         .unwrap_or_else(|| "menu".to_string());
@@ -881,39 +900,39 @@ pub fn switch_scene(
 
     // Process signal commands from Lua (initialize world signals for the new scene)
     for cmd in lua_runtime.drain_signal_commands() {
-        process_signal_command(&mut worldsignals, cmd);
+        process_signal_command(&mut scene_state.world_signals, cmd);
     }
     // Process entity commands from Lua
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &entity_cmd_queries.stuckto,
-        &mut entity_cmd_queries.signals,
-        &mut entity_cmd_queries.animation,
-        &mut entity_cmd_queries.rigid_bodies,
-        &mut entity_cmd_queries.positions,
-        &mut entity_cmd_queries.shaders,
-        &systems_store,
+        &entities.cmd_queries.stuckto,
+        &mut entities.cmd_queries.signals,
+        &mut entities.cmd_queries.animation,
+        &mut entities.cmd_queries.rigid_bodies,
+        &mut entities.cmd_queries.positions,
+        &mut entities.cmd_queries.shaders,
+        &scene_state.systems_store,
     );
 
     // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
-        process_phase_command(&mut luaphase_query, cmd);
+        process_phase_command(&mut entities.luaphase, cmd);
     }
 
     // Process audio commands from Lua
     for cmd in lua_runtime.drain_audio_commands() {
-        process_audio_command(&mut audio_cmd_writer, cmd);
+        process_audio_command(&mut scripting.audio_cmd_writer, cmd);
     }
 
     // Process spawn commands from Lua
     for cmd in lua_runtime.drain_spawn_commands() {
-        process_spawn_command(&mut commands, cmd, &mut worldsignals);
+        process_spawn_command(&mut commands, cmd, &mut scene_state.world_signals);
     }
 
     // Process clone commands from Lua
     for cmd in lua_runtime.drain_clone_commands() {
-        process_clone_command(&mut commands, cmd, &mut worldsignals);
+        process_clone_command(&mut commands, cmd, &mut scene_state.world_signals);
     }
 
     // Process group commands from Lua
@@ -936,16 +955,16 @@ pub fn switch_scene(
 
     // Process render commands from Lua (post-process shader control)
     for cmd in lua_runtime.drain_render_commands() {
-        process_render_command(cmd, &mut post_process);
+        process_render_command(cmd, &mut scene_state.post_process);
     }
 
     // Process game config commands from Lua (fullscreen, vsync, target FPS)
     for cmd in lua_runtime.drain_gameconfig_commands() {
-        process_gameconfig_command(cmd, &mut config);
+        process_gameconfig_command(cmd, &mut scene_state.config);
     }
 
     // Update game config cache for Lua to read current values
-    lua_runtime.update_gameconfig_cache(&config);
+    lua_runtime.update_gameconfig_cache(&scene_state.config);
 
     // for reference, here is the old hardcoded scene setup logic, now replaced by Lua scripts
     /*     match scene.as_str() {

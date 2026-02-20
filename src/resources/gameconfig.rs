@@ -114,14 +114,14 @@ impl GameConfig {
         }
         if let Some(bg) = config.get("render", "background_color") {
             let parts: Vec<&str> = bg.split(',').collect();
-            if parts.len() == 3 {
-                if let (Ok(r), Ok(g), Ok(b)) = (
+            if parts.len() == 3
+                && let (Ok(r), Ok(g), Ok(b)) = (
                     parts[0].trim().parse::<u8>(),
                     parts[1].trim().parse::<u8>(),
                     parts[2].trim().parse::<u8>(),
-                ) {
-                    self.background_color = Color::new(r, g, b, 255);
-                }
+                )
+            {
+                self.background_color = Color::new(r, g, b, 255);
             }
         }
 

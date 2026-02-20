@@ -37,6 +37,46 @@ use crate::resources::windowsize::WindowSize;
 use crate::resources::worldtime::WorldTime;
 use log::{warn, error};
 
+type MapSpriteQueryData = (
+    Entity,
+    &'static Sprite,
+    &'static MapPosition,
+    &'static ZIndex,
+    Option<&'static Scale>,
+    Option<&'static Rotation>,
+    Option<&'static EntityShader>,
+    Option<&'static Tint>,
+);
+
+type MapTextQueryData = (
+    Entity,
+    &'static DynamicText,
+    &'static MapPosition,
+    &'static ZIndex,
+    Option<&'static EntityShader>,
+    Option<&'static Tint>,
+);
+
+type SpriteBufferItem = (
+    Entity,
+    Sprite,
+    MapPosition,
+    ZIndex,
+    Option<Scale>,
+    Option<Rotation>,
+    Option<EntityShader>,
+    Option<Tint>,
+);
+
+type TextBufferItem = (
+    Entity,
+    DynamicText,
+    MapPosition,
+    ZIndex,
+    Option<EntityShader>,
+    Option<Tint>,
+);
+
 /// Computed geometry for a sprite draw call via Raylib's `draw_texture_pro`.
 ///
 /// In Raylib, `draw_texture_pro(tex, src, dest, origin, rotation, tint)` places
@@ -213,6 +253,19 @@ pub struct RenderResources<'w> {
     pub post_process: Res<'w, PostProcessShader>,
     pub config: Res<'w, GameConfig>,
     pub maybe_debug: Option<Res<'w, DebugMode>>,
+    pub fonts: NonSend<'w, FontStore>,
+}
+
+/// Bundled queries for the render system.
+#[derive(SystemParam)]
+pub struct RenderQueries<'w, 's> {
+    pub map_sprites: Query<'w, 's, MapSpriteQueryData>,
+    pub colliders: Query<'w, 's, (&'static BoxCollider, &'static MapPosition)>,
+    pub positions: Query<'w, 's, (&'static MapPosition, Option<&'static Signals>)>,
+    pub map_texts: Query<'w, 's, MapTextQueryData>,
+    pub rigidbodies: Query<'w, 's, &'static RigidBody>,
+    pub screen_texts: Query<'w, 's, (&'static DynamicText, &'static ScreenPosition, Option<&'static Tint>)>,
+    pub screen_sprites: Query<'w, 's, (&'static Sprite, &'static ScreenPosition, Option<&'static Tint>)>,
 }
 
 /// Main render pass.
@@ -224,58 +277,23 @@ pub struct RenderResources<'w> {
 /// - When `DebugMode` is present, draws additional information (entity counts,
 ///   camera parameters, and optional collider boxes/signals).
 pub fn render_system(
-    mut rl: NonSendMut<raylib::RaylibHandle>,
-    th: NonSend<raylib::RaylibThread>,
+    mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut shader_store: NonSendMut<ShaderStore>,
     res: RenderResources,
-    query_map_sprites: Query<(
-        Entity,
-        &Sprite,
-        &MapPosition,
-        &ZIndex,
-        Option<&Scale>,
-        Option<&Rotation>,
-        Option<&EntityShader>,
-        Option<&Tint>,
-    )>,
-    query_colliders: Query<(&BoxCollider, &MapPosition)>,
-    query_positions: Query<(&MapPosition, Option<&Signals>)>,
-    query_map_dynamic_texts: Query<(
-        Entity,
-        &DynamicText,
-        &MapPosition,
-        &ZIndex,
-        Option<&EntityShader>,
-        Option<&Tint>,
-    )>,
-    query_rigidbodies: Query<&RigidBody>,
-    query_screen_dynamic_texts: Query<(&DynamicText, &ScreenPosition, Option<&Tint>)>,
-    query_screen_sprites: Query<(&Sprite, &ScreenPosition, Option<&Tint>)>,
-    fonts: NonSend<FontStore>,
-    mut sprite_buffer: Local<
-        Vec<(
-            Entity,
-            Sprite,
-            MapPosition,
-            ZIndex,
-            Option<Scale>,
-            Option<Rotation>,
-            Option<EntityShader>,
-            Option<Tint>,
-        )>,
-    >,
-    mut text_buffer: Local<
-        Vec<(
-            Entity,
-            DynamicText,
-            MapPosition,
-            ZIndex,
-            Option<EntityShader>,
-            Option<Tint>,
-        )>,
-    >,
+    queries: RenderQueries,
+    mut sprite_buffer: Local<Vec<SpriteBufferItem>>,
+    mut text_buffer: Local<Vec<TextBufferItem>>,
 ) {
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
+    let query_map_sprites = &queries.map_sprites;
+    let query_colliders = &queries.colliders;
+    let query_positions = &queries.positions;
+    let query_map_dynamic_texts = &queries.map_texts;
+    let query_rigidbodies = &queries.rigidbodies;
+    let query_screen_dynamic_texts = &queries.screen_texts;
+    let query_screen_sprites = &queries.screen_sprites;
+    let fonts = &res.fonts;
     // Unpack bundled resources for easier access
     let camera = &res.camera;
     let screensize = &res.screensize;
@@ -285,7 +303,7 @@ pub fn render_system(
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
-        let mut d = rl.begin_texture_mode(&th, &mut render_target.texture);
+        let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
         d.clear_background(res.config.background_color);
 
         {
@@ -380,7 +398,7 @@ pub fn render_system(
                                     maybe_rot.as_ref(),
                                     maybe_scale.as_ref(),
                                     sprite,
-                                    &query_rigidbodies,
+                                    query_rigidbodies,
                                 );
 
                                 // Set user-defined uniforms
@@ -704,7 +722,7 @@ pub fn render_system(
 
     if shader_chain.is_empty() {
         // No post-processing - draw directly to window
-        let mut d = rl.begin_drawing(&th);
+        let mut d = rl.begin_drawing(th);
         d.clear_background(Color::BLACK);
         d.draw_texture_pro(
             &render_target.texture,
@@ -744,7 +762,7 @@ pub fn render_system(
             warn!("Post-process shader '{}' not found, rendering without shader", shader_key);
         }
 
-        let mut d = rl.begin_drawing(&th);
+        let mut d = rl.begin_drawing(th);
         d.clear_background(Color::BLACK);
 
         if use_shader {
@@ -771,10 +789,10 @@ pub fn render_system(
         }
     } else {
         // Multi-pass: ensure ping-pong buffers exist
-        if let Err(e) = render_target.ensure_ping_pong_buffers(&mut rl, &th) {
+        if let Err(e) = render_target.ensure_ping_pong_buffers(rl, th) {
             error!("Failed to create ping-pong buffers: {}", e);
             // Fallback: draw without shader
-            let mut d = rl.begin_drawing(&th);
+            let mut d = rl.begin_drawing(th);
             d.clear_background(Color::BLACK);
             d.draw_texture_pro(
                 &render_target.texture,
@@ -856,7 +874,7 @@ pub fn render_system(
 
             if is_last_pass {
                 // Draw to window
-                let mut d = rl.begin_drawing(&th);
+                let mut d = rl.begin_drawing(th);
                 d.clear_background(Color::BLACK);
 
                 if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
@@ -878,7 +896,7 @@ pub fn render_system(
 
                 if write_to_ping {
                     let dest_tex = render_target.ping.as_mut().unwrap();
-                    let mut d = rl.begin_texture_mode(&th, dest_tex);
+                    let mut d = rl.begin_texture_mode(th, dest_tex);
                     d.clear_background(Color::BLACK);
 
                     if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
@@ -895,7 +913,7 @@ pub fn render_system(
                     source_buffer = SourceBuffer::Ping;
                 } else {
                     let dest_tex = render_target.pong.as_mut().unwrap();
-                    let mut d = rl.begin_texture_mode(&th, dest_tex);
+                    let mut d = rl.begin_texture_mode(th, dest_tex);
                     d.clear_background(Color::BLACK);
 
                     if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
@@ -918,7 +936,7 @@ pub fn render_system(
 
         // If no valid passes ran, draw without shader
         if valid_passes == 0 {
-            let mut d = rl.begin_drawing(&th);
+            let mut d = rl.begin_drawing(th);
             d.clear_background(Color::BLACK);
             d.draw_texture_pro(
                 &render_target.texture,
@@ -1095,6 +1113,7 @@ fn set_uniform_value(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 /// Set entity-specific uniforms on a shader for per-entity rendering.
 ///
 /// Entity-specific uniforms:

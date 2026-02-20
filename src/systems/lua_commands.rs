@@ -302,6 +302,7 @@ pub fn process_phase_command(luaphase_query: &mut Query<(Entity, &mut LuaPhase)>
 /// # Note
 ///
 /// This function is designed for use during setup/initialization, not runtime gameplay.
+#[allow(clippy::too_many_arguments)]
 pub fn process_asset_command<F1, F2>(
     rl: &mut raylib::RaylibHandle,
     th: &raylib::RaylibThread,
@@ -327,7 +328,7 @@ pub fn process_asset_command<F1, F2>(
     ) -> (raylib::prelude::Texture2D, Tilemap),
 {
     match cmd {
-        AssetCmd::LoadTexture { id, path } => match rl.load_texture(th, &path) {
+        AssetCmd::Texture { id, path } => match rl.load_texture(th, &path) {
             Ok(tex) => {
                 info!("Loaded texture '{}' from '{}'", id, path);
                 tex_store.insert(&id, tex);
@@ -336,20 +337,20 @@ pub fn process_asset_command<F1, F2>(
                 error!("Failed to load texture '{}': {}", path, e);
             }
         },
-        AssetCmd::LoadFont { id, path, size } => {
+        AssetCmd::Font { id, path, size } => {
             let font = load_font_fn(rl, th, &path, size);
             info!("Loaded font '{}' from '{}'", id, path);
             fonts.add(&id, font);
         }
-        AssetCmd::LoadMusic { id, path } => {
+        AssetCmd::Music { id, path } => {
             info!("Queuing music '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
         }
-        AssetCmd::LoadSound { id, path } => {
+        AssetCmd::Sound { id, path } => {
             info!("Queuing sound '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
         }
-        AssetCmd::LoadTilemap { id, path } => {
+        AssetCmd::Tilemap { id, path } => {
             let (tilemap_tex, tilemap) = load_tilemap_fn(rl, th, &path);
             let tiles_width = tilemap_tex.width;
             info!(
@@ -359,7 +360,7 @@ pub fn process_asset_command<F1, F2>(
             tex_store.insert(&id, tilemap_tex);
             tilemaps_store.insert(&id, tilemap);
         }
-        AssetCmd::LoadShader {
+        AssetCmd::Shader {
             id,
             vs_path,
             fs_path,
@@ -435,20 +436,20 @@ pub fn process_gameconfig_command(
     config: &mut crate::resources::gameconfig::GameConfig,
 ) {
     match cmd {
-        GameConfigCmd::SetFullscreen { enabled } => {
+        GameConfigCmd::Fullscreen { enabled } => {
             config.fullscreen = enabled;
         }
-        GameConfigCmd::SetVsync { enabled } => {
+        GameConfigCmd::Vsync { enabled } => {
             config.vsync = enabled;
         }
-        GameConfigCmd::SetTargetFps { fps } => {
+        GameConfigCmd::TargetFps { fps } => {
             config.target_fps = fps;
         }
-        GameConfigCmd::SetRenderSize { width, height } => {
+        GameConfigCmd::RenderSize { width, height } => {
             config.render_width = width;
             config.render_height = height;
         }
-        GameConfigCmd::SetBackgroundColor { r, g, b } => {
+        GameConfigCmd::BackgroundColor { r, g, b } => {
             config.background_color = Color::new(r, g, b, 255);
         }
     }
@@ -517,6 +518,7 @@ pub fn process_animation_command(
 /// - `positions_query` - Query for modifying MapPosition components
 /// - `shader_query` - Query for modifying EntityShader components
 /// - `systems_store` - SystemsStore for calling registered systems
+#[allow(clippy::too_many_arguments)]
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,

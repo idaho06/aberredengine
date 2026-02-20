@@ -24,6 +24,16 @@
 //! - [`time`] – update simulation time and delta
 //! - [`tween`] – animate position, rotation, and scale over time
 
+use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemParam;
+
+/// Bundled Raylib handle + thread to reduce system parameter count.
+#[derive(SystemParam)]
+pub struct RaylibAccess<'w> {
+    pub rl: NonSendMut<'w, raylib::RaylibHandle>,
+    pub th: NonSend<'w, raylib::RaylibThread>,
+}
+
 pub mod animation;
 pub mod audio;
 pub mod collision;
