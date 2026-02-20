@@ -25,8 +25,8 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
-use crate::resources::gameconfig::GameConfig;
 use crate::resources::fontstore::FontStore;
+use crate::resources::gameconfig::GameConfig;
 use crate::resources::lua_runtime::UniformValue;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
@@ -35,7 +35,7 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldtime::WorldTime;
-use log::{warn, error};
+use log::{error, warn};
 
 type MapSpriteQueryData = (
     Entity,
@@ -172,17 +172,51 @@ pub(crate) fn compute_view_bounds(
 ) -> (Vector2, Vector2) {
     let corners = [
         screen_to_world(Vector2 { x: 0.0, y: 0.0 }, camera),
-        screen_to_world(Vector2 { x: screen_w, y: 0.0 }, camera),
-        screen_to_world(Vector2 { x: 0.0, y: screen_h }, camera),
-        screen_to_world(Vector2 { x: screen_w, y: screen_h }, camera),
+        screen_to_world(
+            Vector2 {
+                x: screen_w,
+                y: 0.0,
+            },
+            camera,
+        ),
+        screen_to_world(
+            Vector2 {
+                x: 0.0,
+                y: screen_h,
+            },
+            camera,
+        ),
+        screen_to_world(
+            Vector2 {
+                x: screen_w,
+                y: screen_h,
+            },
+            camera,
+        ),
     ];
     let view_min = Vector2 {
-        x: corners[0].x.min(corners[1].x).min(corners[2].x).min(corners[3].x),
-        y: corners[0].y.min(corners[1].y).min(corners[2].y).min(corners[3].y),
+        x: corners[0]
+            .x
+            .min(corners[1].x)
+            .min(corners[2].x)
+            .min(corners[3].x),
+        y: corners[0]
+            .y
+            .min(corners[1].y)
+            .min(corners[2].y)
+            .min(corners[3].y),
     };
     let view_max = Vector2 {
-        x: corners[0].x.max(corners[1].x).max(corners[2].x).max(corners[3].x),
-        y: corners[0].y.max(corners[1].y).max(corners[2].y).max(corners[3].y),
+        x: corners[0]
+            .x
+            .max(corners[1].x)
+            .max(corners[2].x)
+            .max(corners[3].x),
+        y: corners[0]
+            .y
+            .max(corners[1].y)
+            .max(corners[2].y)
+            .max(corners[3].y),
     };
     (view_min, view_max)
 }
@@ -210,10 +244,10 @@ pub(crate) fn compute_sprite_cull_bounds(
     if is_rotated {
         // Bounding circle: radius = max distance from anchor to any corner of the scaled rect
         let corners = [
-            (scaled_ox, scaled_oy),                         // top-left to anchor
-            (scaled_w - scaled_ox, scaled_oy),              // top-right to anchor
-            (scaled_ox, scaled_h - scaled_oy),              // bottom-left to anchor
-            (scaled_w - scaled_ox, scaled_h - scaled_oy),   // bottom-right to anchor
+            (scaled_ox, scaled_oy),                       // top-left to anchor
+            (scaled_w - scaled_ox, scaled_oy),            // top-right to anchor
+            (scaled_ox, scaled_h - scaled_oy),            // bottom-left to anchor
+            (scaled_w - scaled_ox, scaled_h - scaled_oy), // bottom-right to anchor
         ];
         let radius = corners
             .iter()
@@ -264,8 +298,24 @@ pub struct RenderQueries<'w, 's> {
     pub positions: Query<'w, 's, (&'static MapPosition, Option<&'static Signals>)>,
     pub map_texts: Query<'w, 's, MapTextQueryData>,
     pub rigidbodies: Query<'w, 's, &'static RigidBody>,
-    pub screen_texts: Query<'w, 's, (&'static DynamicText, &'static ScreenPosition, Option<&'static Tint>)>,
-    pub screen_sprites: Query<'w, 's, (&'static Sprite, &'static ScreenPosition, Option<&'static Tint>)>,
+    pub screen_texts: Query<
+        'w,
+        's,
+        (
+            &'static DynamicText,
+            &'static ScreenPosition,
+            Option<&'static Tint>,
+        ),
+    >,
+    pub screen_sprites: Query<
+        'w,
+        's,
+        (
+            &'static Sprite,
+            &'static ScreenPosition,
+            Option<&'static Tint>,
+        ),
+    >,
 }
 
 /// Main render pass.
@@ -320,12 +370,7 @@ pub fn render_system(
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
                 |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint)| {
-                    let (min, max) = compute_sprite_cull_bounds(
-                        p,
-                        s,
-                        maybe_scale,
-                        maybe_rot,
-                    );
+                    let (min, max) = compute_sprite_cull_bounds(p, s, maybe_scale, maybe_rot);
 
                     let overlap = !(max.x < view_min.x
                         || min.x > view_max.x
@@ -424,7 +469,10 @@ pub fn render_system(
                                     tint_color,
                                 );
                             } else {
-                                warn!("Entity shader '{}' is invalid, rendering without shader", entity_shader.shader_key);
+                                warn!(
+                                    "Entity shader '{}' is invalid, rendering without shader",
+                                    entity_shader.shader_key
+                                );
                                 let tint_color =
                                     maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 d2.draw_texture_pro(
@@ -437,7 +485,10 @@ pub fn render_system(
                                 );
                             }
                         } else {
-                            warn!("Entity shader '{}' not found, rendering without shader", entity_shader.shader_key);
+                            warn!(
+                                "Entity shader '{}' not found, rendering without shader",
+                                entity_shader.shader_key
+                            );
                             let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                             d2.draw_texture_pro(
                                 tex,
@@ -672,13 +723,7 @@ pub fn render_system(
                 "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
                 cam.target.x, cam.target.y, cam.zoom
             );
-            d.draw_text(
-                &cam_text,
-                10,
-                screensize.h - 30,
-                10,
-                Color::GREENYELLOW,
-            );
+            d.draw_text(&cam_text, 10, screensize.h - 30, 10, Color::GREENYELLOW);
 
             // Transform mouse from window space to game space for accurate display
             let window_mouse_pos = d.get_mouse_position();
@@ -756,10 +801,16 @@ pub fn render_system(
                     set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
                 }
             } else {
-                warn!("Post-process shader '{}' is invalid, rendering without shader", shader_key);
+                warn!(
+                    "Post-process shader '{}' is invalid, rendering without shader",
+                    shader_key
+                );
             }
         } else {
-            warn!("Post-process shader '{}' not found, rendering without shader", shader_key);
+            warn!(
+                "Post-process shader '{}' not found, rendering without shader",
+                shader_key
+            );
         }
 
         let mut d = rl.begin_drawing(th);
@@ -814,6 +865,7 @@ pub fn render_system(
         }
         let mut source_buffer = SourceBuffer::Main;
         let mut valid_passes = 0;
+        let mut final_blit_done = false;
 
         // Source rect with Y-flip for all textures
         let pass_src = Rectangle {
@@ -847,6 +899,11 @@ pub fn render_system(
                 continue;
             }
 
+            // Choose the correct destination rect for uniforms:
+            // intermediate passes render to full game-resolution buffers,
+            // only the final pass renders to the letterboxed window rect.
+            let uniform_dest = if is_last_pass { &dest } else { &full_dest };
+
             // Set uniforms
             if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
                 set_standard_uniforms(
@@ -855,7 +912,7 @@ pub fn render_system(
                     world_time,
                     screensize,
                     window_size,
-                    &dest,
+                    uniform_dest,
                 );
                 for (name, value) in post_process.uniforms.iter() {
                     set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
@@ -888,6 +945,7 @@ pub fn render_system(
                         Color::WHITE,
                     );
                 }
+                final_blit_done = true;
             } else {
                 // Draw to intermediate buffer
                 // Choose destination buffer (opposite of source for ping-pong)
@@ -934,13 +992,31 @@ pub fn render_system(
             valid_passes += 1;
         }
 
-        // If no valid passes ran, draw without shader
-        if valid_passes == 0 {
+        // Ensure a frame is always presented to the window.
+        // This handles two cases:
+        // 1. No valid passes ran at all → blit the original scene unshaded
+        // 2. Some passes ran but the last shader was invalid → blit the
+        //    latest intermediate result (in source_buffer) unshaded
+        if !final_blit_done {
+            // SAFETY: source_tex points to a buffer independent of the write target (window)
+            let source_tex: &RenderTexture2D = unsafe {
+                match source_buffer {
+                    SourceBuffer::Main => &*main_tex_ptr,
+                    SourceBuffer::Ping => &*ping_tex_ptr,
+                    SourceBuffer::Pong => &*pong_tex_ptr,
+                }
+            };
+            if valid_passes > 0 {
+                warn!(
+                    "Last shader in post-process chain was invalid; \
+                     blitting last valid intermediate result without shader"
+                );
+            }
             let mut d = rl.begin_drawing(th);
             d.clear_background(Color::BLACK);
             d.draw_texture_pro(
-                &render_target.texture,
-                src,
+                source_tex,
+                pass_src,
                 dest,
                 Vector2 { x: 0.0, y: 0.0 },
                 0.0,
@@ -1465,10 +1541,23 @@ mod tests {
         }
     }
 
-    fn make_camera(target_x: f32, target_y: f32, offset_x: f32, offset_y: f32, rotation: f32, zoom: f32) -> Camera2D {
+    fn make_camera(
+        target_x: f32,
+        target_y: f32,
+        offset_x: f32,
+        offset_y: f32,
+        rotation: f32,
+        zoom: f32,
+    ) -> Camera2D {
         Camera2D {
-            target: Vector2 { x: target_x, y: target_y },
-            offset: Vector2 { x: offset_x, y: offset_y },
+            target: Vector2 {
+                x: target_x,
+                y: target_y,
+            },
+            offset: Vector2 {
+                x: offset_x,
+                y: offset_y,
+            },
             rotation,
             zoom,
         }
@@ -1559,10 +1648,10 @@ mod tests {
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, None);
 
         // min = pos - origin, max = min + size
-        assert!(approx_eq(min.x, 84.0));   // 100 - 16
-        assert!(approx_eq(min.y, 176.0));  // 200 - 24
-        assert!(approx_eq(max.x, 116.0));  // 84 + 32
-        assert!(approx_eq(max.y, 224.0));  // 176 + 48
+        assert!(approx_eq(min.x, 84.0)); // 100 - 16
+        assert!(approx_eq(min.y, 176.0)); // 200 - 24
+        assert!(approx_eq(max.x, 116.0)); // 84 + 32
+        assert!(approx_eq(max.y, 224.0)); // 176 + 48
     }
 
     #[test]
@@ -1573,10 +1662,10 @@ mod tests {
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, Some(&scale), None);
 
         // scaled: w=64, h=96, ox=32, oy=48
-        assert!(approx_eq(min.x, 68.0));   // 100 - 32
-        assert!(approx_eq(min.y, 152.0));  // 200 - 48
-        assert!(approx_eq(max.x, 132.0));  // 68 + 64
-        assert!(approx_eq(max.y, 248.0));  // 152 + 96
+        assert!(approx_eq(min.x, 68.0)); // 100 - 32
+        assert!(approx_eq(min.y, 152.0)); // 200 - 48
+        assert!(approx_eq(max.x, 132.0)); // 68 + 64
+        assert!(approx_eq(max.y, 248.0)); // 152 + 96
     }
 
     #[test]
@@ -1621,10 +1710,8 @@ mod tests {
 
         // The bounding circle radius = sqrt(32^2 + 32^2) ≈ 45.25
         // So min.x ≈ 410 - 45.25 = 364.75, which is < view_max.x = 400
-        let overlap = !(max.x < view_min.x
-            || min.x > view_max.x
-            || max.y < view_min.y
-            || min.y > view_max.y);
+        let overlap =
+            !(max.x < view_min.x || min.x > view_max.x || max.y < view_min.y || min.y > view_max.y);
         assert!(
             overlap,
             "Rotated sprite near edge should not be culled. Sprite bounds: ({}, {}) - ({}, {}), View: ({}, {}) - ({}, {})",
