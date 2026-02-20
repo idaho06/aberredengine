@@ -1,9 +1,11 @@
-![Aberred Engine](aberred.ico)
 # Aberred Engine
+
+![Aberred Engine](aberred.ico)
 
 A compact 2D game engine with full Lua scripting support. Currently demonstrated as "DRIFTERS", an Asteroids-style arcade game.
 
 Built with:
+
 - **Rust** (2024 edition) — core engine
 - **bevy_ecs** (0.18) — Entity-Component-System architecture
 - **raylib** (5.5.1) — windowing, input, 2D rendering
@@ -15,6 +17,7 @@ Built with:
 Playable loop: menu → level01 asteroids prototype with ship (idle/propulsion phases), drifting asteroids, tiled space background, and laser firing.
 
 **Core subsystems:**
+
 - Rendering (sprites, z-ordering, rotation, scale, camera, dynamic text)
 - Physics (velocity, friction, max speed, named acceleration forces)
 - Collision (AABB with group-based Lua callbacks)
@@ -29,13 +32,15 @@ Playable loop: menu → level01 asteroids prototype with ship (idle/propulsion p
 - TTL (time-to-live auto-despawn)
 
 **ECS architecture:**
+
 - 28 components, 23 systems, 15+ resources
 - Debug mode (F11): collision boxes, entity signals, diagnostics
 
 **TODO:**
-- Shader support
-- Automated tests and CI
-- Cross-platform packaging
+
+- ~~Shader support~~
+- _Automated tests and CI_ Work in progress
+- _Cross-platform packaging_ Linux and Windows
 
 ## Lua Scripting
 
@@ -59,7 +64,7 @@ See `assets/scripts/README.md` for the full API reference (78k+ lines).
 
 ## Repository layout
 
-```
+```plaintext
 src/
 ├── main.rs, game.rs          # Entry point, main loop, scene callbacks
 ├── components/               # 28 ECS components
@@ -77,6 +82,7 @@ config.ini                    # Runtime configuration
 ## Build and run
 
 Prerequisites:
+
 - Rust stable (rustup recommended). The project uses standard crates and raylib bindings; on most Linux systems the `raylib-sys` crate will build the native dependency automatically.
 
 Quick start:
@@ -104,16 +110,15 @@ On Debian/Ubuntu-based systems, raylib (and the native `raylib-sys` bindings) ma
 ```fish
 sudo apt update
 sudo apt install -y \
-	build-essential pkg-config cmake \
-	libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev \
-	libgl1-mesa-dev libegl1-mesa-dev libgbm-dev \
-	libwayland-dev libwayland-egl1-mesa \
-	libxkbcommon-dev \
-	libasound2-dev libpulse-dev \
-	libfreetype6-dev libjpeg-dev libpng-dev
+ build-essential pkg-config cmake \
+ libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev \
+ libgl1-mesa-dev libegl1-mesa-dev libgbm-dev \
+ libwayland-dev libwayland-egl1-mesa \
+ libxkbcommon-dev \
+ libasound2-dev libpulse-dev \
+ libfreetype6-dev libjpeg-dev libpng-dev
 ```
 
 ## Notes
 
-- VSync is enabled by default in the renderer to avoid busy-waiting the CPU.
 - The project is intentionally small and experimental. Expect breaking changes while APIs stabilize.
