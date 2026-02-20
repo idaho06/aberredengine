@@ -17,17 +17,17 @@ pub enum UniformValue {
 #[derive(Debug, Clone)]
 pub enum AssetCmd {
     /// Load a texture from a file path
-    LoadTexture { id: String, path: String },
+    Texture { id: String, path: String },
     /// Load a font from a file path with a specific size
-    LoadFont { id: String, path: String, size: i32 },
+    Font { id: String, path: String, size: i32 },
     /// Load a music track from a file path
-    LoadMusic { id: String, path: String },
+    Music { id: String, path: String },
     /// Load a sound effect from a file path
-    LoadSound { id: String, path: String },
+    Sound { id: String, path: String },
     /// Load a tilemap from a directory path
-    LoadTilemap { id: String, path: String },
+    Tilemap { id: String, path: String },
     /// Load a shader from vertex and/or fragment shader files
-    LoadShader {
+    Shader {
         id: String,
         vs_path: Option<String>,
         fs_path: Option<String>,
@@ -342,13 +342,13 @@ pub struct CloneCmd {
 #[derive(Debug, Clone)]
 pub enum GameConfigCmd {
     /// Toggle fullscreen mode
-    SetFullscreen { enabled: bool },
+    Fullscreen { enabled: bool },
     /// Toggle vertical sync
-    SetVsync { enabled: bool },
+    Vsync { enabled: bool },
     /// Set target frames per second
-    SetTargetFps { fps: u32 },
+    TargetFps { fps: u32 },
     /// Set internal render resolution
-    SetRenderSize { width: u32, height: u32 },
+    RenderSize { width: u32, height: u32 },
     /// Set background clear color
-    SetBackgroundColor { r: u8, g: u8, b: u8 },
+    BackgroundColor { r: u8, g: u8, b: u8 },
 }

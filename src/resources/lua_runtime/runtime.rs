@@ -15,6 +15,16 @@ use std::sync::Arc;
 
 use log::{error, info, warn};
 
+/// (param_name, lua_type)
+type BuilderMethodParam = (&'static str, &'static str);
+/// (method_name, description, params)
+type BuilderMethodDef = (&'static str, &'static str, &'static [BuilderMethodParam]);
+
+/// (field_name, lua_type, is_optional, description)
+type TypeFieldDef = (&'static str, &'static str, bool, Option<&'static str>);
+/// (type_name, description, fields)
+type LuaTypeDef = (&'static str, &'static str, &'static [TypeFieldDef]);
+
 /// Cached game configuration snapshot for Lua to read.
 pub(super) struct GameConfigSnapshot {
     pub fullscreen: bool,
@@ -777,7 +787,7 @@ impl LuaRuntime {
             "load_texture",
             asset_commands,
             |(id, path)| (String, String),
-            AssetCmd::LoadTexture { id, path },
+            AssetCmd::Texture { id, path },
             desc = "Load a texture from file",
             cat = "asset",
             params = [("id", "string"), ("path", "string")]
@@ -789,7 +799,7 @@ impl LuaRuntime {
             "load_font",
             asset_commands,
             |(id, path, size)| (String, String, i32),
-            AssetCmd::LoadFont { id, path, size },
+            AssetCmd::Font { id, path, size },
             desc = "Load a font from file",
             cat = "asset",
             params = [("id", "string"), ("path", "string"), ("size", "integer")]
@@ -801,7 +811,7 @@ impl LuaRuntime {
             "load_music",
             asset_commands,
             |(id, path)| (String, String),
-            AssetCmd::LoadMusic { id, path },
+            AssetCmd::Music { id, path },
             desc = "Load music from file",
             cat = "asset",
             params = [("id", "string"), ("path", "string")]
@@ -813,7 +823,7 @@ impl LuaRuntime {
             "load_sound",
             asset_commands,
             |(id, path)| (String, String),
-            AssetCmd::LoadSound { id, path },
+            AssetCmd::Sound { id, path },
             desc = "Load a sound effect from file",
             cat = "asset",
             params = [("id", "string"), ("path", "string")]
@@ -825,7 +835,7 @@ impl LuaRuntime {
             "load_tilemap",
             asset_commands,
             |(id, path)| (String, String),
-            AssetCmd::LoadTilemap { id, path },
+            AssetCmd::Tilemap { id, path },
             desc = "Load a tilemap from file",
             cat = "asset",
             params = [("id", "string"), ("path", "string")]
@@ -1674,7 +1684,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .asset_commands
                         .borrow_mut()
-                        .push(AssetCmd::LoadShader {
+                        .push(AssetCmd::Shader {
                             id,
                             vs_path,
                             fs_path,
@@ -1849,7 +1859,7 @@ impl LuaRuntime {
             "set_fullscreen",
             gameconfig_commands,
             |enabled| bool,
-            GameConfigCmd::SetFullscreen { enabled },
+            GameConfigCmd::Fullscreen { enabled },
             desc = "Set fullscreen mode",
             cat = "render",
             params = [("enabled", "boolean")]
@@ -1861,7 +1871,7 @@ impl LuaRuntime {
             "set_vsync",
             gameconfig_commands,
             |enabled| bool,
-            GameConfigCmd::SetVsync { enabled },
+            GameConfigCmd::Vsync { enabled },
             desc = "Set vertical sync",
             cat = "render",
             params = [("enabled", "boolean")]
@@ -1876,7 +1886,7 @@ impl LuaRuntime {
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                     .gameconfig_commands
                     .borrow_mut()
-                    .push(GameConfigCmd::SetTargetFps { fps });
+                    .push(GameConfigCmd::TargetFps { fps });
                 Ok(())
             })?,
         )?;
@@ -1963,7 +1973,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .gameconfig_commands
                         .borrow_mut()
-                        .push(GameConfigCmd::SetRenderSize { width, height });
+                        .push(GameConfigCmd::RenderSize { width, height });
                     Ok(())
                 })?,
         )?;
@@ -2012,7 +2022,7 @@ impl LuaRuntime {
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .gameconfig_commands
                         .borrow_mut()
-                        .push(GameConfigCmd::SetBackgroundColor { r, g, b });
+                        .push(GameConfigCmd::BackgroundColor { r, g, b });
                     Ok(())
                 })?,
         )?;
@@ -2445,7 +2455,7 @@ impl LuaRuntime {
         let meta_classes: LuaTable = meta.get("classes")?;
 
         // Builder method definitions: (name, description, params as &[(&str, &str)])
-        let builder_methods: &[(&str, &str, &[(&str, &str)])] = &[
+        let builder_methods: &[BuilderMethodDef] = &[
             ("with_group", "Set entity group", &[("name", "string")]),
             (
                 "with_position",
@@ -2885,7 +2895,7 @@ impl LuaRuntime {
         let meta_types: LuaTable = meta.get("types")?;
 
         // Type definitions: (name, description, fields as &[(name, type, optional, description?)])
-        let type_defs: &[(&str, &str, &[(&str, &str, bool, Option<&str>)])] = &[
+        let type_defs: &[LuaTypeDef] = &[
             (
                 "Vector2",
                 "2D vector / point",

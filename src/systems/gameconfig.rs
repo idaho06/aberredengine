@@ -31,14 +31,14 @@ use raylib::ffi;
 /// - `ScreenSize` (mutable) - updated to match render resolution
 pub fn apply_gameconfig_changes(
     maybe_config: Option<Res<GameConfig>>,
-    mut rl: NonSendMut<raylib::RaylibHandle>,
-    th: NonSend<raylib::RaylibThread>,
+    mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut screen_size: ResMut<ScreenSize>,
     mut _window_size: ResMut<WindowSize>,
     fullscreen: Option<Res<FullScreen>>,
     mut commands: Commands,
 ) {
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
     let Some(config) = maybe_config else {
         return;
     };
@@ -66,7 +66,7 @@ pub fn apply_gameconfig_changes(
                 config.render_height
             );
             if let Err(e) =
-                render_target.recreate(&mut rl, &th, config.render_width, config.render_height)
+                render_target.recreate(rl, th, config.render_width, config.render_height)
             {
                 error!("Failed to resize render target: {}", e);
             } else {
