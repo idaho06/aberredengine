@@ -114,12 +114,13 @@ function M.spawn()
         :build()
 
     -- Black background fill
-    engine.spawn()
+    --[[ engine.spawn()
         :with_sprite("black", 64, 64, 0, 0)
         :with_position(0, 0)
         :with_zindex(-10)
         :with_scale(10, 10)
-        :build()
+        :build() ]]
+    engine.set_background_color(0, 2, 4)
 
     -- Stars particle emitter
     engine.spawn()
