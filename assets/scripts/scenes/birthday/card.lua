@@ -28,6 +28,9 @@ M._callbacks = {
 function M.spawn()
     engine.log_info("Birthday card — implementation pending")
 
+    -- Set render resolution for Birthday Card
+    engine.set_render_size(618, 864)
+
     engine.set_camera(0, 0, 320, 180, 0, 1)
     engine.post_process_shader(nil)
 

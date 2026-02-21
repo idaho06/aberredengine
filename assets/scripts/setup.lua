@@ -70,40 +70,39 @@ local function load_asteroids()
 end
 
 --- Load assets for the Arkanoid example
---- TODO: Copy assets from ../arkanoid and uncomment
 local function load_arkanoid()
-    engine.log_info("Loading Arkanoid assets (stubs)...")
+    engine.log_info("Loading Arkanoid assets...")
 
     -- Textures
-    -- engine.load_texture("arkanoid-title", "./assets/textures/arkanoid/title.png")
-    -- engine.load_texture("arkanoid-background", "./assets/textures/arkanoid/background01.png")
-    -- engine.load_texture("arkanoid-vaus", "./assets/textures/arkanoid/vaus.png")
-    -- engine.load_texture("arkanoid-ball", "./assets/textures/arkanoid/ball_12.png")
-    -- engine.load_texture("arkanoid-brick_red", "./assets/textures/arkanoid/brick_red.png")
-    -- engine.load_texture("arkanoid-brick_green", "./assets/textures/arkanoid/brick_green.png")
-    -- engine.load_texture("arkanoid-brick_blue", "./assets/textures/arkanoid/brick_blue.png")
-    -- engine.load_texture("arkanoid-brick_yellow", "./assets/textures/arkanoid/brick_yellow.png")
-    -- engine.load_texture("arkanoid-brick_purple", "./assets/textures/arkanoid/brick_purple.png")
-    -- engine.load_texture("arkanoid-brick_silver", "./assets/textures/arkanoid/brick_silver.png")
-    -- engine.load_texture("arkanoid-vaus_sheet", "./assets/textures/arkanoid/vaus_sheet.png")
+    engine.load_texture("arkanoid-title", "./assets/textures/arkanoid/title.png")
+    engine.load_texture("arkanoid-background", "./assets/textures/arkanoid/background01.png")
+    engine.load_texture("arkanoid-vaus", "./assets/textures/arkanoid/vaus.png")
+    engine.load_texture("arkanoid-ball", "./assets/textures/arkanoid/ball_12.png")
+    engine.load_texture("arkanoid-brick_red", "./assets/textures/arkanoid/brick_red.png")
+    engine.load_texture("arkanoid-brick_green", "./assets/textures/arkanoid/brick_green.png")
+    engine.load_texture("arkanoid-brick_blue", "./assets/textures/arkanoid/brick_blue.png")
+    engine.load_texture("arkanoid-brick_yellow", "./assets/textures/arkanoid/brick_yellow.png")
+    engine.load_texture("arkanoid-brick_purple", "./assets/textures/arkanoid/brick_purple.png")
+    engine.load_texture("arkanoid-brick_silver", "./assets/textures/arkanoid/brick_silver.png")
+    engine.load_texture("arkanoid-vaus_sheet", "./assets/textures/arkanoid/vaus_sheet.png")
 
     -- Music
-    -- engine.load_music("arkanoid-boss_fight", "./assets/audio/arkanoid/boss_fight.xm")
-    -- engine.load_music("arkanoid-journey_begins", "./assets/audio/arkanoid/journey_begins.xm")
-    -- engine.load_music("arkanoid-player_ready", "./assets/audio/arkanoid/player_ready.xm")
-    -- engine.load_music("arkanoid-success", "./assets/audio/arkanoid/success.xm")
-    -- engine.load_music("arkanoid-menu", "./assets/audio/arkanoid/woffy_-_arkanoid_cover.xm")
+    engine.load_music("arkanoid-boss_fight", "./assets/audio/arkanoid/boss_fight.xm")
+    engine.load_music("arkanoid-journey_begins", "./assets/audio/arkanoid/journey_begins.xm")
+    engine.load_music("arkanoid-player_ready", "./assets/audio/arkanoid/player_ready.xm")
+    engine.load_music("arkanoid-success", "./assets/audio/arkanoid/success.xm")
+    engine.load_music("arkanoid-menu_music", "./assets/audio/arkanoid/woffy_-_arkanoid_cover.xm")
 
     -- Sound effects
-    -- engine.load_sound("arkanoid-ding", "./assets/audio/arkanoid/ding.wav")
-    -- engine.load_sound("arkanoid-ping", "./assets/audio/arkanoid/ping.wav")
+    engine.load_sound("arkanoid-ding", "./assets/audio/arkanoid/ding.wav")
+    engine.load_sound("arkanoid-ping", "./assets/audio/arkanoid/ping.wav")
 
     -- Tilemaps
-    -- engine.load_tilemap("arkanoid-level01", "./assets/tilemaps/arkanoid/level01")
+    engine.load_tilemap("arkanoid-level01", "./assets/tilemaps/arkanoid/level01")
 
     -- Animations
-    -- engine.register_animation("arkanoid-vaus_glowing", "arkanoid-vaus_sheet", 0, 0, 96, 16, 15, true)
-    -- engine.register_animation("arkanoid-vaus_hit", "arkanoid-vaus_sheet", 0, 24, 96, 6, 15, false)
+    engine.register_animation("arkanoid-vaus_glowing", "arkanoid-vaus_sheet", 0, 0, 96, 16, 15, true)
+    engine.register_animation("arkanoid-vaus_hit", "arkanoid-vaus_sheet", 0, 24, 96, 6, 15, false)
 end
 
 --- Load assets for the Birthday Card example

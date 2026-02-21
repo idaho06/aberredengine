@@ -46,6 +46,9 @@ M._callbacks = {
 function M.spawn()
     engine.log_info("Spawning showcase menu scene...")
 
+    -- Set render resolution for menu
+    engine.set_render_size(640, 360)
+
     -- Camera at origin, top-left
     engine.set_camera(0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 

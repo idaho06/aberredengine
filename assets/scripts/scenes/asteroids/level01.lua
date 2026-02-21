@@ -579,6 +579,9 @@ end
 function M.spawn()
     engine.log_info("Spawning Asteroids level01 scene entities...")
 
+    -- Set render resolution for Asteroids
+    engine.set_render_size(640, 360)
+
     engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
 
     spawn_ship()
