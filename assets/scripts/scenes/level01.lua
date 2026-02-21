@@ -220,7 +220,7 @@ function asteroid_phase_exploding_enter(ctx, input)
             :build()
     end
 
-    engine.play_sound("explosion01")
+    engine.play_sound("asteroids-explosion01")
 
     -- Despawn asteroid entity
     engine.entity_despawn(ctx.id)
@@ -279,8 +279,8 @@ local function fire_laser(ctx)
         :with_ttl(1.5)
         :build()
     -- Play blaster sound
-    -- engine.play_sound("blaster")
-    engine.play_sound_pitched("blaster", 1.0 + (math.random() - 0.5) * 0.2) -- Slight random pitch variation
+    -- engine.play_sound("asteroids-blaster")
+    engine.play_sound_pitched("asteroids-blaster", 1.0 + (math.random() - 0.5) * 0.2) -- Slight random pitch variation
 end
 
 --- @param ctx EntityContext Entity context table
@@ -288,7 +288,7 @@ end
 function ship_phase_idle_enter(ctx, input)
     engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
     -- set animation to idle
-    engine.entity_set_animation(ctx.id, "ship_idle")
+    engine.entity_set_animation(ctx.id, "asteroids-ship_idle")
     engine.entity_set_force_enabled(ctx.id, "propulsion", false)
 end
 
@@ -320,7 +320,7 @@ end
 function ship_phase_propulsion_enter(ctx, input)
     engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
     -- set animation to propulsion
-    engine.entity_set_animation(ctx.id, "ship_propulsion")
+    engine.entity_set_animation(ctx.id, "asteroids-ship_propulsion")
     engine.entity_set_force_enabled(ctx.id, "propulsion", true)
 end
 
@@ -619,8 +619,8 @@ local function spawn_ship()
         :with_group("ship")
         :with_position(0, 0)
         :with_zindex(2)
-        :with_sprite("ship_sheet", 64, 64, 32, 32)
-        :with_animation("ship_idle")
+        :with_sprite("asteroids-ship_sheet", 64, 64, 32, 32)
+        :with_animation("asteroids-ship_idle")
         :with_collider(64, 64, 32, 32) -- Same size collider
         :with_rotation(0.0)
         :with_velocity(0, 0)
@@ -653,7 +653,7 @@ end
 
 --- Spawn the background
 local function spawn_background()
-    -- We have 4 textures: space01, space02, space03, space04
+    -- We have 4 textures: "asteroids-space01", "asteroids-space02", "asteroids-space03", "asteroids-space04"
     -- The textures are 512x512. We are going to create a 8x8 grid of them
     -- Each tile will have a random texture from the 4 options
     -- Each tile will have a random rotation (0, 90, 180, 270 degrees)
@@ -664,7 +664,7 @@ local function spawn_background()
         for col = 0, grid_size - 1 do
             -- Randomly select a texture
             local texture_index = math.random(1, 4)
-            local texture_name = "space0" .. tostring(texture_index)
+            local texture_name = "asteroids-space0" .. tostring(texture_index)
             -- Randomly select a rotation
             local rotation_options = { 0, 90, 180, 270 }
             local rotation_index = math.random(1, #rotation_options)
@@ -701,24 +701,24 @@ end
 local function spawn_template_explosions()
     -- Spawn a template entity for the explosion animation
     engine.spawn()
-        :with_sprite("explosion01_sheet", 64, 64, 32, 32)
-        :with_animation("explosion01")
+        :with_sprite("asteroids-explosion01_sheet", 64, 64, 32, 32)
+        :with_animation("asteroids-explosion01")
         :with_zindex(10)
         :with_signals()
         :register_as("explosion01_animation") -- Store entity ID for cloning
         :build()
 
     engine.spawn()
-        :with_sprite("explosion02_sheet", 32, 32, 16, 16)
-        :with_animation("explosion02")
+        :with_sprite("asteroids-explosion02_sheet", 32, 32, 16, 16)
+        :with_animation("asteroids-explosion02")
         :with_zindex(10)
         :with_signals()
         :register_as("explosion02_animation") -- Store entity ID for cloning
         :build()
 
     engine.spawn()
-        :with_sprite("explosion03_sheet", 16, 16, 8, 8)
-        :with_animation("explosion03")
+        :with_sprite("asteroids-explosion03_sheet", 16, 16, 8, 8)
+        :with_animation("asteroids-explosion03")
         :with_zindex(10)
         :with_signals()
         :register_as("explosion03_animation") -- Store entity ID for cloning
