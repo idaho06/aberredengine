@@ -29,6 +29,7 @@ local function load_common()
     engine.load_shader("outline", nil, "./assets/shaders/outline.fs")
     engine.load_shader("crt", nil, "./assets/shaders/crt2.fs")
     engine.load_shader("blink", nil, "./assets/shaders/blink.fs")
+    engine.load_shader("fade", nil, "./assets/shaders/fade.fs")
 end
 
 --- Load assets for the Asteroids example
@@ -106,30 +107,39 @@ local function load_arkanoid()
 end
 
 --- Load assets for the Birthday Card example
---- TODO: Copy assets from ../raquelhb15 and uncomment
 local function load_birthday()
-    engine.log_info("Loading Birthday Card assets (stubs)...")
+    engine.log_info("Loading Birthday Card assets...")
 
     -- Fonts
-    -- engine.load_font("birthday-love", "./assets/fonts/birthday/love_font.ttf", 128)
+    engine.load_font("birthday-love", "./assets/fonts/birthday/Endless_Love.ttf", 120)
 
     -- Textures
-    -- engine.load_texture("birthday-spin_hearts-sheet", "./assets/textures/birthday/spin_hearts.png")
-    -- engine.load_texture("birthday-beat_hearts-sheet", "./assets/textures/birthday/beat_hearts.png")
-    -- engine.load_texture("birthday-big_heart-sheet", "./assets/textures/birthday/big_heart.png")
-    -- engine.load_texture("birthday-white", "./assets/textures/birthday/white.png")
-    -- engine.load_texture("birthday-raquel_back", "./assets/textures/birthday/raquel_back.png")
-    -- engine.load_texture("birthday-gems-sheet", "./assets/textures/birthday/gems.png")
+    engine.load_texture("birthday-spin_hearts-sheet", "./assets/textures/birthday/Hearts.png")
+    engine.load_texture("birthday-beat_hearts-sheet", "./assets/textures/birthday/HeartsBeat.png")
+    engine.load_texture("birthday-big_heart-sheet", "./assets/textures/birthday/bigheart-sheet.png")
+    engine.load_texture("birthday-white", "./assets/textures/birthday/white.png")
+    engine.load_texture("birthday-raquel_back", "./assets/textures/birthday/espaldas_small.png")
+    engine.load_texture("birthday-gems-sheet", "./assets/textures/birthday/gemstones-sheet.png")
 
     -- Music
-    -- engine.load_music("birthday-birthday", "./assets/audio/birthday/birthday.ogg")
-    -- engine.load_music("birthday-harry", "./assets/audio/birthday/harry.ogg")
-
-    -- Shaders
-    -- engine.load_shader("birthday-fade", nil, "./assets/shaders/birthday/fade.fs")
+    engine.load_music("birthday-birthday_music", "./assets/audio/birthday/birthday.ogg")
+    engine.load_music("birthday-harry", "./assets/audio/birthday/adore_you_karaoke_harry_styles.ogg")
 
     -- Animations
-    -- (heart_spin01-07, heart_beat01-06, heart_beat_big — to be registered when porting)
+    engine.register_animation("birthday-heart_beat_big", "birthday-big_heart-sheet", 0, 0, 400, 10, 15, true)
+    engine.register_animation("birthday-heart_spin01", "birthday-spin_hearts-sheet", 0, 0, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_spin02", "birthday-spin_hearts-sheet", 0, 16, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_spin03", "birthday-spin_hearts-sheet", 0, 32, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_spin04", "birthday-spin_hearts-sheet", 0, 48, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_spin05", "birthday-spin_hearts-sheet", 0, 64, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_spin06", "birthday-spin_hearts-sheet", 0, 80, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_spin07", "birthday-spin_hearts-sheet", 0, 96, 16, 6, 15, true)
+    engine.register_animation("birthday-heart_beat01", "birthday-beat_hearts-sheet", 0, 0, 16, 4, 12, true)
+    engine.register_animation("birthday-heart_beat02", "birthday-beat_hearts-sheet", 0, 16, 16, 4, 12, true)
+    engine.register_animation("birthday-heart_beat03", "birthday-beat_hearts-sheet", 0, 32, 16, 4, 12, true)
+    engine.register_animation("birthday-heart_beat04", "birthday-beat_hearts-sheet", 0, 48, 16, 4, 12, true)
+    engine.register_animation("birthday-heart_beat05", "birthday-beat_hearts-sheet", 0, 64, 16, 4, 12, true)
+    engine.register_animation("birthday-heart_beat06", "birthday-beat_hearts-sheet", 0, 80, 16, 4, 12, true)
 end
 
 --- Called during the Setup game state to load all assets.
