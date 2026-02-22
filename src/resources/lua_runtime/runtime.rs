@@ -459,6 +459,15 @@ macro_rules! define_entity_cmds {
             ("entity_shader_clear_uniforms", |entity_id| u64, EntityCmd::ShaderClearUniforms { entity_id },
                 desc = "Clear all uniforms on entity shader",
                 params = [("entity_id", "integer")]),
+            ("entity_set_parent",
+                |(entity_id, parent_id)| (u64, u64),
+                EntityCmd::SetParent { entity_id, parent_id },
+                desc = "Set the parent of an entity for transform hierarchy",
+                params = [("entity_id", "integer"), ("parent_id", "integer")]),
+            ("entity_remove_parent", |entity_id| u64,
+                EntityCmd::RemoveParent { entity_id },
+                desc = "Remove entity from its parent, snapping to current world position",
+                params = [("entity_id", "integer")]),
         ]);
     };
 }

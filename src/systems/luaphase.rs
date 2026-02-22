@@ -39,6 +39,7 @@ use mlua::prelude::*;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
@@ -81,6 +82,7 @@ pub struct ContextQueries<'w, 's> {
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub sprites: Query<'w, 's, &'static Sprite>,
     pub lua_timers: Query<'w, 's, &'static LuaTimer>,
+    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
 }
 
 /// Build entity context for phase callbacks using pooled tables.
@@ -500,6 +502,7 @@ pub fn lua_phase_system(
         &mut rigid_bodies_query,
         &mut positions_query,
         &mut shader_query,
+        &ctx_queries.global_transforms,
         &systems_store,
     );
 

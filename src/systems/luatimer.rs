@@ -36,6 +36,7 @@ use mlua::prelude::*;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
@@ -251,6 +252,7 @@ pub fn lua_timer_observer(
     mut rigid_bodies_query: Query<&mut RigidBody>,
     mut positions_query: Query<&mut MapPosition>,
     mut shader_query: Query<&mut EntityShader>,
+    global_transforms_query: Query<&GlobalTransform2D>,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
     // Resources
     mut world_signals: ResMut<WorldSignals>,
@@ -332,6 +334,7 @@ pub fn lua_timer_observer(
         &mut rigid_bodies_query,
         &mut positions_query,
         &mut shader_query,
+        &global_transforms_query,
         &systems_store,
     );
 

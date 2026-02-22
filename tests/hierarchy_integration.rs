@@ -8,13 +8,18 @@
 //! cargo test --test hierarchy_integration
 //! ```
 
-use bevy_ecs::hierarchy::ChildOf;
+use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemState;
 
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
+use aberredengine::resources::lua_runtime::EntityCmd;
+use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::systems::lua_commands::EntityCmdQueries;
+use aberredengine::systems::lua_commands::process_entity_commands;
 use aberredengine::systems::propagate_transforms::propagate_transforms;
 
 const EPSILON: f32 = 1e-4;
@@ -440,5 +445,202 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
         approx_eq(child_gt.position.x, 110.0),
         "Child world X after second tick: expected 110, got {}",
         child_gt.position.x
+    );
+}
+
+// =============================================================================
+// PHASE 2: EntityCmd SetParent/RemoveParent + Lua API
+// =============================================================================
+
+/// Helper to run process_entity_commands using SystemState.
+fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
+    world.insert_resource(SystemsStore::new());
+
+    let mut state = SystemState::<(Commands, EntityCmdQueries, Res<SystemsStore>)>::new(world);
+    let (mut commands, mut queries, systems_store) = state.get_mut(world);
+
+    process_entity_commands(
+        &mut commands,
+        cmds,
+        &queries.stuckto,
+        &mut queries.signals,
+        &mut queries.animation,
+        &mut queries.rigid_bodies,
+        &mut queries.positions,
+        &mut queries.shaders,
+        &queries.global_transforms,
+        &systems_store,
+    );
+
+    state.apply(world);
+}
+
+#[test]
+fn entity_cmd_set_parent_inserts_childof() {
+    let mut world = World::new();
+
+    let parent = world.spawn((MapPosition::new(100.0, 100.0),)).id();
+    let child = world.spawn((MapPosition::new(0.0, 0.0),)).id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::SetParent {
+            entity_id: child.to_bits(),
+            parent_id: parent.to_bits(),
+        }],
+    );
+
+    // Child should have ChildOf pointing to parent
+    assert!(
+        world.get::<ChildOf>(child).is_some(),
+        "Child should have ChildOf after SetParent"
+    );
+
+    // Child should have GlobalTransform2D
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_some(),
+        "Child should have GlobalTransform2D after SetParent"
+    );
+
+    // Parent should also have GlobalTransform2D (auto-inserted)
+    assert!(
+        world.get::<GlobalTransform2D>(parent).is_some(),
+        "Parent should have GlobalTransform2D after SetParent"
+    );
+}
+
+#[test]
+fn entity_cmd_remove_parent_snaps_to_world_position() {
+    let mut world = World::new();
+
+    let parent = world
+        .spawn((
+            MapPosition::new(100.0, 100.0),
+            Rotation { degrees: 90.0 },
+            Scale::new(2.0, 2.0),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+
+    let child = world
+        .spawn((
+            MapPosition::new(40.0, 0.0),
+            ChildOf(parent),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+
+    world.flush();
+
+    // Run propagation to compute child's world transform
+    tick_propagate(&mut world);
+
+    // Verify child has a computed GlobalTransform2D
+    let gt = world.get::<GlobalTransform2D>(child).unwrap();
+    // Offset (40, 0) scaled by (2, 2) => (80, 0), rotated 90deg => (0, 80)
+    // World pos = (100 + 0, 100 + 80) = (100, 180)
+    assert!(
+        approx_eq(gt.position.x, 100.0),
+        "Before RemoveParent, child world X: expected 100, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 180.0),
+        "Before RemoveParent, child world Y: expected 180, got {}",
+        gt.position.y
+    );
+
+    // Now remove the parent
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::RemoveParent {
+            entity_id: child.to_bits(),
+        }],
+    );
+
+    // Child should no longer have ChildOf
+    assert!(
+        world.get::<ChildOf>(child).is_none(),
+        "Child should not have ChildOf after RemoveParent"
+    );
+
+    // Child should no longer have GlobalTransform2D
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_none(),
+        "Child should not have GlobalTransform2D after RemoveParent"
+    );
+
+    // MapPosition should be snapped to the world position
+    let pos = world.get::<MapPosition>(child).unwrap();
+    assert!(
+        approx_eq(pos.pos.x, 100.0),
+        "After RemoveParent, child pos X: expected 100, got {}",
+        pos.pos.x
+    );
+    assert!(
+        approx_eq(pos.pos.y, 180.0),
+        "After RemoveParent, child pos Y: expected 180, got {}",
+        pos.pos.y
+    );
+
+    // Rotation should be snapped to world rotation
+    let rot = world.get::<Rotation>(child).unwrap();
+    assert!(
+        approx_eq(rot.degrees, 90.0),
+        "After RemoveParent, child rotation: expected 90, got {}",
+        rot.degrees
+    );
+
+    // Scale should be snapped to world scale
+    let scale = world.get::<Scale>(child).unwrap();
+    assert!(
+        approx_eq(scale.scale.x, 2.0),
+        "After RemoveParent, child scale X: expected 2, got {}",
+        scale.scale.x
+    );
+}
+
+#[test]
+fn entity_cmd_set_parent_multiple_children() {
+    let mut world = World::new();
+
+    let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
+    let child1 = world.spawn((MapPosition::new(10.0, 0.0),)).id();
+    let child2 = world.spawn((MapPosition::new(20.0, 0.0),)).id();
+    let child3 = world.spawn((MapPosition::new(30.0, 0.0),)).id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![
+            EntityCmd::SetParent {
+                entity_id: child1.to_bits(),
+                parent_id: parent.to_bits(),
+            },
+            EntityCmd::SetParent {
+                entity_id: child2.to_bits(),
+                parent_id: parent.to_bits(),
+            },
+            EntityCmd::SetParent {
+                entity_id: child3.to_bits(),
+                parent_id: parent.to_bits(),
+            },
+        ],
+    );
+
+    // All children should have ChildOf
+    assert!(world.get::<ChildOf>(child1).is_some());
+    assert!(world.get::<ChildOf>(child2).is_some());
+    assert!(world.get::<ChildOf>(child3).is_some());
+
+    // Parent should have Children with 3 entries (auto-populated by Bevy)
+    let children = world.get::<Children>(parent);
+    assert!(
+        children.is_some(),
+        "Parent should have Children component"
+    );
+    assert_eq!(
+        children.unwrap().len(),
+        3,
+        "Parent should have 3 children"
     );
 }

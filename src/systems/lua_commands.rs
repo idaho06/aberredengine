@@ -31,8 +31,11 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::prelude::{Camera2D, Color, Vector2};
 
+use bevy_ecs::hierarchy::ChildOf;
+
 use crate::components::animation::{Animation, Condition};
 use crate::components::boxcollider::BoxCollider;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
@@ -83,6 +86,7 @@ pub struct EntityCmdQueries<'w, 's> {
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
+    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
 }
 
 /// Process a single audio command from Lua and write to the audio command channel.
@@ -528,6 +532,7 @@ pub fn process_entity_commands(
     rigid_bodies_query: &mut Query<&mut RigidBody>,
     positions_query: &mut Query<&mut MapPosition>,
     shader_query: &mut Query<&mut EntityShader>,
+    global_transforms_query: &Query<&GlobalTransform2D>,
     systems_store: &SystemsStore,
 ) {
     for cmd in entity_commands {
@@ -941,6 +946,35 @@ pub fn process_entity_commands(
             EntityCmd::RemoveTint { entity_id } => {
                 let entity = Entity::from_bits(entity_id);
                 commands.entity(entity).remove::<Tint>();
+            }
+            EntityCmd::SetParent {
+                entity_id,
+                parent_id,
+            } => {
+                let child = Entity::from_bits(entity_id);
+                let parent = Entity::from_bits(parent_id);
+                commands
+                    .entity(child)
+                    .insert((ChildOf(parent), GlobalTransform2D::default()));
+                // Ensure parent also has GlobalTransform2D
+                if global_transforms_query.get(parent).is_err() {
+                    commands.entity(parent).insert(GlobalTransform2D::default());
+                }
+            }
+            EntityCmd::RemoveParent { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                // Snap to world transform before detaching
+                if let Ok(gt) = global_transforms_query.get(entity) {
+                    if let Ok(mut pos) = positions_query.get_mut(entity) {
+                        pos.pos = gt.position;
+                    }
+                    commands
+                        .entity(entity)
+                        .insert(Rotation { degrees: gt.rotation_degrees });
+                    commands.entity(entity).insert(Scale::new(gt.scale.x, gt.scale.y));
+                }
+                commands.entity(entity).remove::<ChildOf>();
+                commands.entity(entity).remove::<GlobalTransform2D>();
             }
         }
     }

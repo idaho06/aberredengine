@@ -271,6 +271,10 @@ pub enum EntityCmd {
         b: u8,
         a: u8,
     },
+    /// Set parent entity for transform hierarchy
+    SetParent { entity_id: u64, parent_id: u64 },
+    /// Remove entity from parent, snapping to current world position
+    RemoveParent { entity_id: u64 },
     /// Remove entity tint
     RemoveTint { entity_id: u64 },
 }

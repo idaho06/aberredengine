@@ -52,6 +52,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::collision::get_colliding_sides;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
@@ -117,6 +118,7 @@ pub struct CollisionObserverParams<'w, 's> {
     pub animation_query: Query<'w, 's, &'static mut Animation>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub shader_query: Query<'w, 's, &'static mut EntityShader>,
+    pub global_transforms_query: Query<'w, 's, &'static GlobalTransform2D>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
@@ -253,6 +255,7 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
                 &mut params.rigid_bodies,
                 &mut params.positions,
                 &mut params.shader_query,
+                &params.global_transforms_query,
                 &params.systems_store,
             );
 
