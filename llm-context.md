@@ -219,6 +219,7 @@ EmitterShape { Point | Rect { width, height } }
 TtlSpec { None | Fixed(f32) | Range { min, max } }
 EntityShader { shader_key: Arc<str>, uniforms: FxHashMap<Arc<str>, UniformValue> }
 Tint { color: Color } -- for sprites: replaces Color::WHITE; for text: multiplies with text.color
+GlobalTransform2D { position: Vector2, rotation_degrees: f32, scale: Vector2 } -- world-space transform for hierarchy children
 
 ## RESOURCE QUICK-REF
 
@@ -308,6 +309,8 @@ EntityCmd {
     ShaderClearUniforms { entity_id }
     SetTint { entity_id, r, g, b, a }
     RemoveTint { entity_id }
+    SetParent { entity_id, parent_id }
+    RemoveParent { entity_id }
 }
 
 SpawnCmd (spawn_data.rs) {
@@ -316,7 +319,7 @@ SpawnCmd (spawn_data.rs) {
     signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
     register_as, lua_collision_rule, animation, animation_controller, particle_emitter,
-    shader, tint
+    shader, tint, parent
 }
 
 ParticleEmitterData (spawn_data.rs) {
@@ -688,6 +691,10 @@ ctx.phase          -- string current phase name or nil (LuaPhase)
 ctx.time_in_phase  -- f32 or nil
 ctx.previous_phase -- string or nil (only in on_enter callbacks)
 ctx.timer          -- { duration, elapsed, callback } or nil (LuaTimer)
+ctx.world_pos      -- { x, y } or nil (GlobalTransform2D world position, only for hierarchy entities)
+ctx.world_rotation -- f32 degrees or nil (GlobalTransform2D world rotation)
+ctx.world_scale    -- { x, y } or nil (GlobalTransform2D world scale)
+ctx.parent_id      -- u64 parent entity ID or nil (ChildOf relationship)
 
 IMPORTANT: The entity context table is POOLED and REUSED between callbacks for performance.
 Do NOT store references to ctx or its subtables for later use - values will be overwritten.
@@ -718,7 +725,8 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 
 - apply_gameconfig_changes (run_if state_is_playing)
 - particle_emitter_system.before(movement)
-- stuck_to_entity_system.after(collision_detector)
+- propagate_transforms.after(movement).after(tween_*).before(collision_detector)
+- stuck_to_entity_system.after(collision_detector) -- skips entities with ChildOf
 - collision_detector.after(mouse_controller).after(movement)
 - lua_phase_system.after(collision_detector)
 - animation_controller.after(lua_phase_system)
@@ -742,17 +750,18 @@ Approximate execution order:
 11. tween_mapposition_system, tween_rotation_system, tween_scale_system
 12. particle_emitter_system (before movement - particles move on spawn frame)
 13. movement
-14. ttl_system (after movement - despawns expired entities)
-15. collision_detector
-16. stuck_to_entity_system (after collision)
-17. lua_phase_system (after collision)
-18. animation_controller (after lua_phase)
-19. animation (after animation_controller)
-20. update_lua_timers
-21. update_world_signals_binding_system
-22. dynamictext_size_system
-23. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
-24. render_system (after collision_detector)
+14. propagate_transforms (after movement/tweens, before collision - computes GlobalTransform2D)
+15. ttl_system (after movement - despawns expired entities)
+16. collision_detector
+17. stuck_to_entity_system (after collision, skips entities with ChildOf)
+18. lua_phase_system (after collision)
+19. animation_controller (after lua_phase)
+20. animation (after animation_controller)
+21. update_lua_timers
+22. update_world_signals_binding_system
+23. dynamictext_size_system
+24. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
+25. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
 
 ## KEY PATTERNS
 

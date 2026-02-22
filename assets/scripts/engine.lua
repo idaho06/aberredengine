@@ -66,6 +66,10 @@ engine = {}
 ---@field time_in_phase number|nil
 ---@field previous_phase string|nil Only in on_enter
 ---@field timer TimerInfo|nil
+---@field world_pos Vector2|nil World position from hierarchy
+---@field world_rotation number|nil World rotation from hierarchy
+---@field world_scale Vector2|nil World scale from hierarchy
+---@field parent_id integer|nil Parent entity ID if in hierarchy
 
 ---Entity data in a collision context
 ---@class CollisionEntity
@@ -494,6 +498,10 @@ function engine.collision_entity_remove_force(entity_id, name) end
 ---@param entity_id integer
 function engine.collision_entity_remove_lua_timer(entity_id) end
 
+---Remove entity from its parent, snapping to current world position
+---@param entity_id integer
+function engine.collision_entity_remove_parent(entity_id) end
+
 ---Remove per-entity shader
 ---@param entity_id integer
 function engine.collision_entity_remove_shader(entity_id) end
@@ -545,6 +553,11 @@ function engine.collision_entity_set_friction(entity_id, friction) end
 ---@param entity_id integer
 ---@param max_speed number|nil
 function engine.collision_entity_set_max_speed(entity_id, max_speed) end
+
+---Set the parent of an entity for transform hierarchy
+---@param entity_id integer
+---@param parent_id integer
+function engine.collision_entity_set_parent(entity_id, parent_id) end
 
 ---Set entity world position
 ---@param entity_id integer
@@ -745,6 +758,10 @@ function engine.entity_remove_force(entity_id, name) end
 ---@param entity_id integer
 function engine.entity_remove_lua_timer(entity_id) end
 
+---Remove entity from its parent, snapping to current world position
+---@param entity_id integer
+function engine.entity_remove_parent(entity_id) end
+
 ---Remove per-entity shader
 ---@param entity_id integer
 function engine.entity_remove_shader(entity_id) end
@@ -796,6 +813,11 @@ function engine.entity_set_friction(entity_id, friction) end
 ---@param entity_id integer
 ---@param max_speed number|nil
 function engine.entity_set_max_speed(entity_id, max_speed) end
+
+---Set the parent of an entity for transform hierarchy
+---@param entity_id integer
+---@param parent_id integer
+function engine.entity_set_parent(entity_id, parent_id) end
 
 ---Set entity world position
 ---@param entity_id integer
@@ -1268,6 +1290,11 @@ function EntityBuilder:with_menu_visible_count(count) end
 ---@return EntityBuilder
 function EntityBuilder:with_mouse_controlled(follow_x, follow_y) end
 
+---Set parent entity for transform hierarchy
+---@param parent_id integer
+---@return EntityBuilder
+function EntityBuilder:with_parent(parent_id) end
+
 ---Add particle emitter
 ---@param table ParticleEmitterConfig
 ---@return EntityBuilder
@@ -1668,6 +1695,11 @@ function CollisionEntityBuilder:with_menu_visible_count(count) end
 ---@param follow_y boolean
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_mouse_controlled(follow_x, follow_y) end
+
+---Set parent entity for transform hierarchy
+---@param parent_id integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_parent(parent_id) end
 
 ---Add particle emitter
 ---@param table ParticleEmitterConfig

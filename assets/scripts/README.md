@@ -18,6 +18,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Animation Components](#animation-components)
   - [Phase Component](#phase-component)
   - [Attachment Components](#attachment-components)
+  - [Parent-Child Hierarchy](#parent-child-hierarchy)
   - [Tween Components](#tween-components)
   - [Particle Emitter Component](#particle-emitter-component)
 - [World Signals](#world-signals)
@@ -313,6 +314,8 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_set_speed()` instead of `engine.entity_set_speed()`
 - `engine.collision_entity_set_tint()` instead of `engine.entity_set_tint()`
 - `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
+- `engine.collision_entity_set_parent()` instead of `engine.entity_set_parent()`
+- `engine.collision_entity_remove_parent()` instead of `engine.entity_remove_parent()`
 
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 
@@ -1312,7 +1315,14 @@ ctx = {
         duration = 5.0,
         elapsed = 2.3,
         callback = "on_timer_tick"
-    }
+    },
+
+    -- Hierarchy info (from GlobalTransform2D / ChildOf)
+    -- Only present when entity is part of a parent-child hierarchy
+    world_pos = { x = 300, y = 400 },    -- Computed world position
+    world_rotation = 45.0,               -- Computed world rotation (degrees)
+    world_scale = { x = 2.0, y = 2.0 },  -- Computed world scale
+    parent_id = 87654321,                -- Parent entity ID (u64)
 }
 ```
 
@@ -1459,6 +1469,135 @@ engine.spawn()
 -- Later, release the ball
 engine.release_stuckto(ball_id)  -- Restores velocity
 ```
+
+---
+
+### Parent-Child Hierarchy
+
+The parent-child hierarchy system allows entities to inherit position, rotation, and scale transforms from a parent entity. A child's `MapPosition`, `Rotation`, and `Scale` become **local space** (relative to its parent), while the engine computes world-space values automatically for rendering and collision.
+
+#### `:with_parent(parent_id)`
+
+Set the parent entity for transform hierarchy at spawn time. The parent entity must be registered with `:register_as(key)` so you can retrieve its ID.
+
+**Parameters:**
+
+- `parent_id` - Parent entity ID (from `engine.get_entity()`)
+
+```lua
+-- Spawn the parent (e.g., a spaceship)
+engine.spawn()
+    :with_group("ship")
+    :with_position(400, 300)
+    :with_sprite("ship", 64, 64, 32, 32)
+    :with_rotation(0)
+    :with_scale(1, 1)
+    :register_as("ship")
+    :build()
+
+-- Spawn a child (e.g., a thruster) attached to the ship
+local ship_id = engine.get_entity("ship")
+engine.spawn()
+    :with_group("thruster")
+    :with_position(0, 40)               -- Local offset: 40px below ship center
+    :with_sprite("thruster", 16, 16, 8, 8)
+    :with_parent(ship_id)               -- Attach to ship
+    :build()
+```
+
+When the ship moves and rotates, the thruster follows automatically. The thruster's `pos` in callbacks is still its local offset `(0, 40)`, but the computed world position is available via `ctx.world_pos`.
+
+#### Runtime Hierarchy Commands
+
+You can also attach/detach entities at runtime:
+
+```lua
+-- Attach an entity to a parent
+engine.entity_set_parent(child_id, parent_id)
+
+-- Detach: snaps MapPosition/Rotation/Scale to current world values
+engine.entity_remove_parent(child_id)
+```
+
+See [Entity Commands](#entity-commands) for full details.
+
+#### How Transform Inheritance Works
+
+Child transforms are computed each frame by the `propagate_transforms` system:
+
+```
+child_world_pos   = parent_pos + rotate(child_local_pos * parent_scale, parent_rotation)
+child_world_rot   = parent_rotation + child_local_rotation
+child_world_scale = parent_scale * child_local_scale
+```
+
+- Hierarchies can be **arbitrarily deep** (parent > child > grandchild > ...)
+- **Rendering** uses world-space transforms automatically
+- **Collision** detection uses world-space positions
+- **Particle emitters** on child entities emit from the world position
+- **Despawning a parent** automatically despawns all descendants (cascade)
+
+#### Accessing World Transform in Callbacks
+
+Phase and timer callbacks provide world transform data in the context object for entities in a hierarchy:
+
+```lua
+function turret_update(ctx, input, dt)
+    -- Local transform (relative to parent)
+    local local_x = ctx.pos.x       -- local offset
+    local local_rot = ctx.rotation   -- local rotation
+
+    -- World transform (computed from hierarchy)
+    if ctx.world_pos then
+        local world_x = ctx.world_pos.x
+        local world_y = ctx.world_pos.y
+        local world_rot = ctx.world_rotation
+        local parent = ctx.parent_id
+    end
+end
+```
+
+#### Complete Example: Orbiting Satellite
+
+```lua
+function M.spawn()
+    engine.set_render_size(640, 360)
+    engine.set_camera(0, 0, 320, 180, 0, 1)
+
+    -- Planet (parent)
+    engine.spawn()
+        :with_group("planet")
+        :with_position(320, 180)
+        :with_sprite("planet", 64, 64, 32, 32)
+        :with_scale(1, 1)
+        :with_tween_rotation(0, 360, 8.0)
+        :with_tween_rotation_loop("loop")
+        :register_as("planet")
+        :build()
+
+    -- Satellite (child) — orbits the planet automatically
+    local planet_id = engine.get_entity("planet")
+    engine.spawn()
+        :with_group("satellite")
+        :with_position(80, 0)        -- 80px to the right of planet center
+        :with_sprite("satellite", 16, 16, 8, 8)
+        :with_zindex(10)
+        :with_parent(planet_id)
+        :build()
+
+    -- Moon orbiting the satellite (grandchild)
+    -- Note: must use register_as + get_entity for the satellite
+    -- since with_parent needs the entity ID
+end
+```
+
+As the planet rotates via its tween, the satellite orbits at 80px radius. No manual position updates needed.
+
+#### Known Limitations
+
+1. **MouseControlled on children:** The mouse sets world coordinates into `MapPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
+2. **StuckTo with hierarchy:** `StuckTo` is automatically skipped for entities with a parent. Don't combine both systems on the same entity.
+3. **One-frame delay:** On the frame an entity is spawned with `:with_parent()` or receives `entity_set_parent()`, it renders at its local position. World-space rendering starts the next frame.
 
 ---
 
@@ -2000,11 +2139,45 @@ engine.entity_set_position(player_id, 400, 300)
 
 ### `engine.entity_despawn(entity_id)`
 
-Remove an entity from the world.
+Remove an entity from the world. If the entity has children in a parent-child hierarchy, all descendants are automatically despawned too (cascade despawn).
 
 ```lua
 engine.entity_despawn(enemy_id)
 ```
+
+### `engine.entity_set_parent(entity_id, parent_id)`
+
+Attach an entity to a parent for transform hierarchy. The child's `MapPosition`, `Rotation`, and `Scale` become local (relative to parent). World-space transforms are computed automatically.
+
+**Parameters:**
+
+- `entity_id` - The child entity ID
+- `parent_id` - The parent entity ID
+
+```lua
+-- Pick up an item and attach it to the player
+local item_id = engine.get_entity("item")
+local player_id = engine.get_entity("player")
+engine.entity_set_parent(item_id, player_id)
+```
+
+### `engine.entity_remove_parent(entity_id)`
+
+Detach an entity from its parent. The entity's `MapPosition`, `Rotation`, and `Scale` are snapped to their current world-space values so the entity stays in place visually.
+
+**Parameters:**
+
+- `entity_id` - The child entity to detach
+
+```lua
+-- Drop the item: it keeps its current world position
+engine.entity_remove_parent(item_id)
+```
+
+Available collision variants:
+
+- `engine.collision_entity_set_parent(entity_id, parent_id)`
+- `engine.collision_entity_remove_parent(entity_id)`
 
 ### `engine.entity_menu_despawn(entity_id)`
 

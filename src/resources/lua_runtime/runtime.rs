@@ -2840,6 +2840,11 @@ impl LuaRuntime {
                 &[("shader_key", "string"), ("uniforms", "table?")],
             ),
             (
+                "with_parent",
+                "Set parent entity for transform hierarchy",
+                &[("parent_id", "integer")],
+            ),
+            (
                 "register_as",
                 "Register entity in WorldSignals for later retrieval",
                 &[("key", "string")],
@@ -2988,6 +2993,10 @@ impl LuaRuntime {
                     ("time_in_phase", "number", true, None),
                     ("previous_phase", "string", true, Some("Only in on_enter")),
                     ("timer", "TimerInfo", true, None),
+                    ("world_pos", "Vector2", true, Some("World position from hierarchy")),
+                    ("world_rotation", "number", true, Some("World rotation from hierarchy")),
+                    ("world_scale", "Vector2", true, Some("World scale from hierarchy")),
+                    ("parent_id", "integer", true, Some("Parent entity ID if in hierarchy")),
                 ],
             ),
             (
