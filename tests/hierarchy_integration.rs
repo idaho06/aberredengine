@@ -901,3 +901,126 @@ fn render_query_works_without_global_transform() {
     }
     assert!(found, "Entity should still be matched by the query");
 }
+
+// =============================================================================
+// PHASE 6: Collision system integration
+// =============================================================================
+
+use aberredengine::components::boxcollider::BoxCollider;
+use aberredengine::events::collision::CollisionEvent;
+use aberredengine::systems::collision::collision_detector;
+
+/// Resource to collect collision events via observer.
+#[derive(Resource, Default)]
+struct CollisionLog {
+    pairs: Vec<(Entity, Entity)>,
+}
+
+fn setup_collision_world(world: &mut World) {
+    world.insert_resource(CollisionLog::default());
+    world.add_observer(
+        |trigger: On<CollisionEvent>, mut log: ResMut<CollisionLog>| {
+            log.pairs.push((trigger.event().a, trigger.event().b));
+        },
+    );
+}
+
+fn tick_collision(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(collision_detector);
+    schedule.run(world);
+}
+
+#[test]
+fn collision_uses_world_position_for_child_entities() {
+    let mut world = World::new();
+    setup_collision_world(&mut world);
+
+    // Parent at (200, 200)
+    let parent = world
+        .spawn((
+            MapPosition::new(200.0, 200.0),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+
+    // Child with local position (0, 0), but parent is at (200, 200)
+    // After propagation, child world position = (200, 200)
+    let child = world
+        .spawn((
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(20.0, 20.0),
+            ChildOf(parent),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+
+    world.flush();
+
+    // Run propagation so child gets world position (200, 200)
+    tick_propagate(&mut world);
+
+    // Independent entity at (205, 205) — overlaps with child's world position
+    let other = world
+        .spawn((
+            MapPosition::new(205.0, 205.0),
+            BoxCollider::new(20.0, 20.0),
+        ))
+        .id();
+
+    // Run collision detection
+    tick_collision(&mut world);
+
+    let log = world.resource::<CollisionLog>();
+    assert!(
+        !log.pairs.is_empty(),
+        "Collision should be detected between child (world pos 200,200) and other (205,205)"
+    );
+    // Verify the collision involves the right entities
+    let has_pair = log.pairs.iter().any(|&(a, b)| {
+        (a == child && b == other) || (a == other && b == child)
+    });
+    assert!(has_pair, "Collision should be between child and other entity");
+}
+
+#[test]
+fn collision_no_false_positive_from_local_position() {
+    let mut world = World::new();
+    setup_collision_world(&mut world);
+
+    // Parent at (500, 500)
+    let parent = world
+        .spawn((
+            MapPosition::new(500.0, 500.0),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+
+    // Child with local position (5, 5) — world position = (505, 505)
+    world.spawn((
+        MapPosition::new(5.0, 5.0),
+        BoxCollider::new(10.0, 10.0),
+        ChildOf(parent),
+        GlobalTransform2D::default(),
+    ));
+
+    world.flush();
+
+    // Run propagation so child gets world position (505, 505)
+    tick_propagate(&mut world);
+
+    // Independent entity at (10, 10) — near child's LOCAL position but far from WORLD position
+    world.spawn((
+        MapPosition::new(10.0, 10.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+
+    // Run collision detection
+    tick_collision(&mut world);
+
+    let log = world.resource::<CollisionLog>();
+    assert!(
+        log.pairs.is_empty(),
+        "No collision should be detected — child world pos (505,505) is far from other (10,10)"
+    );
+}

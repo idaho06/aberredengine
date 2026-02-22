@@ -80,19 +80,22 @@ use log::error;
 /// checks overlap, and triggers an event for each collision. Observers can
 /// react to despawn, apply damage, or play sounds.
 pub fn collision_detector(
-    mut query: Query<(Entity, &MapPosition, &BoxCollider)>,
+    mut query: Query<(Entity, &MapPosition, &BoxCollider, Option<&GlobalTransform2D>)>,
     mut commands: Commands,
 ) {
     let mut combos = query.iter_combinations_mut();
     while let Some(
         [
-            (entity_a, position_a, collider_a),
-            (entity_b, position_b, collider_b),
+            (entity_a, position_a, collider_a, maybe_gt_a),
+            (entity_b, position_b, collider_b, maybe_gt_b),
         ],
     ) = combos.fetch_next()
     {
-        let rect_a = collider_a.as_rectangle(position_a.pos);
-        let rect_b = collider_b.as_rectangle(position_b.pos);
+        // Use world position from GlobalTransform2D when available, fall back to local
+        let world_pos_a = maybe_gt_a.map_or(position_a.pos, |gt| gt.position);
+        let world_pos_b = maybe_gt_b.map_or(position_b.pos, |gt| gt.position);
+        let rect_a = collider_a.as_rectangle(world_pos_a);
+        let rect_b = collider_b.as_rectangle(world_pos_b);
         if rect_a.check_collision_recs(&rect_b) {
             commands.trigger(CollisionEvent {
                 a: entity_a,
@@ -168,8 +171,15 @@ pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObse
     for lua_rule in params.lua_rules.iter() {
         if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
             // Gather entity data for Lua callback
-            let pos_a = params.positions.get(ent_a).ok().map(|p| (p.pos.x, p.pos.y));
-            let pos_b = params.positions.get(ent_b).ok().map(|p| (p.pos.x, p.pos.y));
+            // Use world position from GlobalTransform2D when available
+            let pos_a = params.positions.get(ent_a).ok().map(|p| {
+                params.global_transforms_query.get(ent_a).ok()
+                    .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
+            });
+            let pos_b = params.positions.get(ent_b).ok().map(|p| {
+                params.global_transforms_query.get(ent_b).ok()
+                    .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
+            });
             let (vel_a, speed_sq_a) = params
                 .rigid_bodies
                 .get(ent_a)
