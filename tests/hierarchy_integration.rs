@@ -16,12 +16,14 @@ use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
+use aberredengine::components::stuckto::StuckTo;
 use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::systems::lua_commands::EntityCmdQueries;
 use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
 use aberredengine::systems::propagate_transforms::propagate_transforms;
+use aberredengine::systems::stuckto::stuck_to_entity_system;
 
 const EPSILON: f32 = 1e-4;
 
@@ -714,5 +716,87 @@ fn spawn_cmd_with_parent_applies_childof() {
         approx_eq(gt.position.y, 50.0),
         "Child world Y: expected 50, got {}",
         gt.position.y
+    );
+}
+
+// =============================================================================
+// PHASE 4: StuckTo filter — skip entities with ChildOf
+// =============================================================================
+
+fn tick_stuckto(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(stuck_to_entity_system);
+    schedule.run(world);
+}
+
+#[test]
+fn stuckto_skips_entities_with_childof() {
+    let mut world = World::new();
+
+    // Target entity
+    let target = world
+        .spawn((MapPosition::new(200.0, 200.0),))
+        .id();
+
+    // Follower that has both StuckTo AND ChildOf — should be skipped by StuckTo system
+    let parent = world
+        .spawn((MapPosition::new(0.0, 0.0),))
+        .id();
+
+    let follower = world
+        .spawn((
+            MapPosition::new(10.0, 10.0),
+            StuckTo::new(target),
+            ChildOf(parent),
+        ))
+        .id();
+
+    world.flush();
+    tick_stuckto(&mut world);
+
+    // Position should NOT have been updated to target's position
+    let pos = world.get::<MapPosition>(follower).unwrap();
+    assert!(
+        approx_eq(pos.pos.x, 10.0),
+        "Follower with ChildOf should not be moved by StuckTo, got x={}",
+        pos.pos.x
+    );
+    assert!(
+        approx_eq(pos.pos.y, 10.0),
+        "Follower with ChildOf should not be moved by StuckTo, got y={}",
+        pos.pos.y
+    );
+}
+
+#[test]
+fn stuckto_still_works_without_childof() {
+    let mut world = World::new();
+
+    // Target entity
+    let target = world
+        .spawn((MapPosition::new(200.0, 200.0),))
+        .id();
+
+    // Follower with StuckTo only (no ChildOf) — should follow target normally
+    let follower = world
+        .spawn((
+            MapPosition::new(10.0, 10.0),
+            StuckTo::new(target),
+        ))
+        .id();
+
+    tick_stuckto(&mut world);
+
+    // Position should have been updated to target's position (follow_x and follow_y default to true)
+    let pos = world.get::<MapPosition>(follower).unwrap();
+    assert!(
+        approx_eq(pos.pos.x, 200.0),
+        "Follower without ChildOf should follow target, got x={}",
+        pos.pos.x
+    );
+    assert!(
+        approx_eq(pos.pos.y, 200.0),
+        "Follower without ChildOf should follow target, got y={}",
+        pos.pos.y
     );
 }
