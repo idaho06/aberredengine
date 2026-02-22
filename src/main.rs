@@ -87,6 +87,7 @@ use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_sy
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::particleemitter::particle_emitter_system;
+use crate::systems::propagate_transforms::propagate_transforms;
 use crate::systems::render::render_system;
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
@@ -323,6 +324,14 @@ fn main() {
     update.add_systems(particle_emitter_system.before(movement)); // Before movement so particles move on spawn frame
     update.add_systems(movement);
     update.add_systems(ttl_system.after(movement));
+    update.add_systems(
+        propagate_transforms
+            .after(movement)
+            .after(tween_mapposition_system)
+            .after(tween_rotation_system)
+            .after(tween_scale_system)
+            .before(collision_detector),
+    );
     update.add_systems(collision_detector.after(mouse_controller).after(movement));
     // Run lua_phase_system AFTER collision detection so phase transitions from collision callbacks
     // are processed in the same frame (before animation_controller evaluates signals)

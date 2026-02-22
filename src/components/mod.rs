@@ -32,6 +32,7 @@
 
 pub mod animation;
 pub mod boxcollider;
+pub mod globaltransform2d;
 pub mod collision;
 pub mod dynamictext;
 pub mod entityshader;
