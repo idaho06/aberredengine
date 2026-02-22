@@ -17,6 +17,8 @@ local function on_showcase_menu_select(ctx)
         engine.change_scene("arkanoid_level01")
     elseif ctx.item_id == "birthday" then
         engine.change_scene("birthday_intro")
+    elseif ctx.item_id == "kraken" then
+        engine.change_scene("kraken_intro")
     elseif ctx.item_id == "exit" then
         engine.quit()
     end
@@ -99,6 +101,7 @@ function M.spawn()
                 { id = "asteroids", label = "Asteroids" },
                 { id = "arkanoid",  label = "Arkanoid" },
                 { id = "birthday",  label = "Birthday Card" },
+                { id = "kraken",    label = "Kraken" },
                 { id = "exit",      label = "Exit" },
             },
             16 + 8,

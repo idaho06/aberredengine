@@ -67,11 +67,12 @@ Remap = math_helpers.remap
 --
 -- To add a new example, add one entry here and create the scene module.
 local scene_registry = {
-    menu               = "scenes.menu",
-    asteroids_level01  = "scenes.asteroids.level01",
-    arkanoid_level01   = "scenes.arkanoid.level01",
-    birthday_intro     = "scenes.birthday.intro",
-    birthday_card      = "scenes.birthday.card",
+    menu              = "scenes.menu",
+    asteroids_level01 = "scenes.asteroids.level01",
+    arkanoid_level01  = "scenes.arkanoid.level01",
+    birthday_intro    = "scenes.birthday.intro",
+    birthday_card     = "scenes.birthday.card",
+    kraken_intro      = "scenes.kraken.intro",
 }
 
 -- Loaded scene modules (cached to avoid re-requiring)

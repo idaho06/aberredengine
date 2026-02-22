@@ -142,6 +142,15 @@ local function load_birthday()
     engine.register_animation("birthday-heart_beat06", "birthday-beat_hearts-sheet", 0, 80, 16, 4, 12, true)
 end
 
+--- Load assets for the Kraken example
+local function load_kraken()
+    engine.log_info("Loading Kraken assets...")
+
+    -- Textures
+    engine.load_texture("kraken-mouth", "./assets/textures/kraken/mouth.png")
+    engine.load_texture("kraken-tentacle", "./assets/textures/kraken/tentacle.png")
+end
+
 --- Called during the Setup game state to load all assets.
 --- Assets are queued here and processed by the Rust engine.
 function M.load_assets()
@@ -151,6 +160,7 @@ function M.load_assets()
     load_asteroids()
     load_arkanoid()
     load_birthday()
+    load_kraken()
 
     engine.log_info("All assets queued for loading!")
 end
