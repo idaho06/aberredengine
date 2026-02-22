@@ -147,6 +147,8 @@ struct EntityCtxPool {
     animation: LuaRegistryKey,
     timer: LuaRegistryKey,
     signals: LuaRegistryKey,
+    world_pos: LuaRegistryKey,
+    world_scale: LuaRegistryKey,
 }
 
 /// Borrowed references to pooled entity context tables.
@@ -162,6 +164,8 @@ pub struct EntityCtxTables {
     pub animation: LuaTable,
     pub timer: LuaTable,
     pub signals: LuaTable,
+    pub world_pos: LuaTable,
+    pub world_scale: LuaTable,
 }
 
 /// Resource holding the Lua interpreter state.
@@ -648,6 +652,8 @@ impl LuaRuntime {
         let animation = lua.create_table()?;
         let timer = lua.create_table()?;
         let signals = lua.create_table()?;
+        let world_pos = lua.create_table()?;
+        let world_scale = lua.create_table()?;
 
         // Store in registry to prevent GC
         Ok(EntityCtxPool {
@@ -661,6 +667,8 @@ impl LuaRuntime {
             animation: lua.create_registry_value(animation)?,
             timer: lua.create_registry_value(timer)?,
             signals: lua.create_registry_value(signals)?,
+            world_pos: lua.create_registry_value(world_pos)?,
+            world_scale: lua.create_registry_value(world_scale)?,
         })
     }
 
@@ -687,6 +695,8 @@ impl LuaRuntime {
             animation: self.lua.registry_value(&pool.animation)?,
             timer: self.lua.registry_value(&pool.timer)?,
             signals: self.lua.registry_value(&pool.signals)?,
+            world_pos: self.lua.registry_value(&pool.world_pos)?,
+            world_scale: self.lua.registry_value(&pool.world_scale)?,
         })
     }
 

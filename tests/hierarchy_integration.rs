@@ -1024,3 +1024,113 @@ fn collision_no_false_positive_from_local_position() {
         "No collision should be detected — child world pos (505,505) is far from other (10,10)"
     );
 }
+
+// =============================================================================
+// PHASE 7: Entity context + Particle emitter
+// =============================================================================
+
+use aberredengine::resources::lua_runtime::{
+    LuaRuntime, build_entity_context_pooled,
+};
+
+#[test]
+fn entity_context_includes_world_transform_fields() {
+    let runtime = LuaRuntime::new().expect("LuaRuntime init");
+    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let lua = runtime.lua();
+
+    let ctx = build_entity_context_pooled(
+        lua, &tables, 42_u64,
+        None,                       // group
+        Some((10.0, 20.0)),         // map_pos (local)
+        None,                       // screen_pos
+        None,                       // rigid_body
+        Some(45.0),                 // rotation (local)
+        Some((1.0, 1.0)),           // scale (local)
+        None, None, None, None, None, None, None,
+        Some((110.0, 120.0)),       // world_pos
+        Some(90.0),                 // world_rotation
+        Some((2.0, 3.0)),           // world_scale
+        Some(99),                   // parent_id
+    ).expect("build_entity_context_pooled");
+
+    lua.load(r#"
+        local ctx = ...
+        assert(ctx.world_pos ~= nil,        "world_pos should not be nil")
+        assert(ctx.world_pos.x == 110.0,    "world_pos.x: " .. tostring(ctx.world_pos.x))
+        assert(ctx.world_pos.y == 120.0,    "world_pos.y: " .. tostring(ctx.world_pos.y))
+        assert(ctx.world_rotation == 90.0,  "world_rotation: " .. tostring(ctx.world_rotation))
+        assert(ctx.world_scale ~= nil,      "world_scale should not be nil")
+        assert(ctx.world_scale.x == 2.0,    "world_scale.x: " .. tostring(ctx.world_scale.x))
+        assert(ctx.world_scale.y == 3.0,    "world_scale.y: " .. tostring(ctx.world_scale.y))
+        assert(ctx.parent_id == 99,         "parent_id: " .. tostring(ctx.parent_id))
+    "#).call::<()>(ctx).expect("Lua world transform assertions");
+}
+
+#[test]
+fn entity_context_nil_world_fields_without_hierarchy() {
+    let runtime = LuaRuntime::new().expect("LuaRuntime init");
+    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let lua = runtime.lua();
+
+    let ctx = build_entity_context_pooled(
+        lua, &tables, 1_u64,
+        None, None, None, None, None, None, None,
+        None, None, None, None, None, None,
+        None, None, None, None,  // no world transform, no parent
+    ).expect("build_entity_context_pooled");
+
+    lua.load(r#"
+        local ctx = ...
+        assert(ctx.world_pos      == nil, "world_pos should be nil")
+        assert(ctx.world_rotation == nil, "world_rotation should be nil")
+        assert(ctx.world_scale    == nil, "world_scale should be nil")
+        assert(ctx.parent_id      == nil, "parent_id should be nil")
+    "#).call::<()>(ctx).expect("Lua nil world transform assertions");
+}
+
+#[test]
+fn cascade_despawn_removes_children() {
+    let mut world = World::new();
+
+    let parent = world
+        .spawn((MapPosition::new(0.0, 0.0),))
+        .id();
+
+    let child = world
+        .spawn((
+            MapPosition::new(10.0, 0.0),
+            ChildOf(parent),
+        ))
+        .id();
+
+    let grandchild = world
+        .spawn((
+            MapPosition::new(20.0, 0.0),
+            ChildOf(child),
+        ))
+        .id();
+
+    world.flush();
+
+    // All three should exist
+    assert!(world.get_entity(parent).is_ok());
+    assert!(world.get_entity(child).is_ok());
+    assert!(world.get_entity(grandchild).is_ok());
+
+    // Despawn parent — Bevy cascade despawn should remove child and grandchild
+    world.despawn(parent);
+
+    assert!(
+        world.get_entity(parent).is_err(),
+        "Parent should be despawned"
+    );
+    assert!(
+        world.get_entity(child).is_err(),
+        "Child should be cascade-despawned"
+    );
+    assert!(
+        world.get_entity(grandchild).is_err(),
+        "Grandchild should be cascade-despawned"
+    );
+}

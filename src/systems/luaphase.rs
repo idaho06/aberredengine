@@ -33,6 +33,7 @@
 //! Context tables are pooled and reused across callbacks to reduce Lua GC pressure.
 //! See [`EntityCtxPool`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
 
+use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::{Local, SystemParam};
 use mlua::prelude::*;
@@ -83,6 +84,7 @@ pub struct ContextQueries<'w, 's> {
     pub sprites: Query<'w, 's, &'static Sprite>,
     pub lua_timers: Query<'w, 's, &'static LuaTimer>,
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
+    pub child_of: Query<'w, 's, &'static ChildOf>,
 }
 
 /// Build entity context for phase callbacks using pooled tables.
@@ -177,6 +179,15 @@ fn build_phase_context(
             callback: t.callback.as_str(),
         });
 
+    // World transform from GlobalTransform2D (hierarchy)
+    let gt = ctx_queries.global_transforms.get(entity).ok();
+    let world_pos = gt.map(|g| (g.position.x, g.position.y));
+    let world_rotation = gt.map(|g| g.rotation_degrees);
+    let world_scale = gt.map(|g| (g.scale.x, g.scale.y));
+
+    // Parent entity ID from ChildOf
+    let parent_id = ctx_queries.child_of.get(entity).ok().map(|c| c.0.to_bits());
+
     build_entity_context_pooled(
         lua,
         &tables,
@@ -194,6 +205,10 @@ fn build_phase_context(
         lua_phase_snapshot.as_ref(),
         lua_timer.as_ref(),
         previous_phase,
+        world_pos,
+        world_rotation,
+        world_scale,
+        parent_id,
     )
 }
 
