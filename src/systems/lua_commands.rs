@@ -1445,6 +1445,14 @@ fn apply_components(
         entity_commands.insert(Tint::new(r, g, b, a));
     }
 
+    // Parent (ChildOf + GlobalTransform2D)
+    if let Some(parent_id) = cmd.parent {
+        entity_commands.insert((
+            ChildOf(Entity::from_bits(parent_id)),
+            GlobalTransform2D::default(),
+        ));
+    }
+
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         world_signals.set_entity(&key, entity);

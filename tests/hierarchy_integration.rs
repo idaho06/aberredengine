@@ -16,10 +16,11 @@ use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
-use aberredengine::resources::lua_runtime::EntityCmd;
+use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
 use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::systems::lua_commands::EntityCmdQueries;
-use aberredengine::systems::lua_commands::process_entity_commands;
+use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
 use aberredengine::systems::propagate_transforms::propagate_transforms;
 
 const EPSILON: f32 = 1e-4;
@@ -642,5 +643,76 @@ fn entity_cmd_set_parent_multiple_children() {
         children.unwrap().len(),
         3,
         "Parent should have 3 children"
+    );
+}
+
+// =============================================================================
+// PHASE 3: Builder with_parent (SpawnCmd.parent field)
+// =============================================================================
+
+#[test]
+fn spawn_cmd_with_parent_applies_childof() {
+    let mut world = World::new();
+    world.insert_resource(WorldSignals::default());
+
+    // Spawn parent entity first
+    let parent = world
+        .spawn((MapPosition::new(100.0, 50.0),))
+        .id();
+
+    // Build a SpawnCmd with parent set
+    let cmd = SpawnCmd {
+        position: Some((10.0, 0.0)),
+        parent: Some(parent.to_bits()),
+        ..SpawnCmd::default()
+    };
+
+    // Process the spawn command via SystemState
+    let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
+    let (mut commands, mut world_signals) = state.get_mut(&mut world);
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    state.apply(&mut world);
+
+    // Find the spawned child (entity that has ChildOf)
+    let mut child_entity = None;
+    let mut query = world.query::<(Entity, &ChildOf)>();
+    for (entity, child_of) in query.iter(&world) {
+        if child_of.0 == parent {
+            child_entity = Some(entity);
+        }
+    }
+
+    let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
+
+    // Child should have GlobalTransform2D
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_some(),
+        "Spawned child should have GlobalTransform2D"
+    );
+
+    // Child should have MapPosition at the local offset
+    let pos = world.get::<MapPosition>(child).unwrap();
+    assert!(
+        approx_eq(pos.pos.x, 10.0),
+        "Child local pos X: expected 10, got {}",
+        pos.pos.x
+    );
+
+    // Run propagation and verify world transform
+    tick_propagate(&mut world);
+
+    // After a second tick (first tick inserts GT on parent via commands, second computes)
+    tick_propagate(&mut world);
+
+    let gt = world.get::<GlobalTransform2D>(child).unwrap();
+    assert!(
+        approx_eq(gt.position.x, 110.0),
+        "Child world X: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y: expected 50, got {}",
+        gt.position.y
     );
 }
