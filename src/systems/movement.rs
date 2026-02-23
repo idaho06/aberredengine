@@ -65,17 +65,18 @@ pub fn movement(
             rigidbody.velocity *= damping;
 
             // Zero out very small velocities to prevent drift
-            const VELOCITY_EPSILON: f32 = 0.01;
-            if rigidbody.velocity.length() < VELOCITY_EPSILON {
+            const VELOCITY_EPSILON_SQ: f32 = 0.01 * 0.01;
+            if rigidbody.velocity.length_sqr() < VELOCITY_EPSILON_SQ {
                 rigidbody.velocity = Vector2 { x: 0.0, y: 0.0 };
             }
         }
 
         // Step 5: Clamp velocity to max_speed if configured
         if let Some(max_speed) = rigidbody.max_speed {
-            let speed = rigidbody.velocity.length();
-            if speed > max_speed {
-                rigidbody.velocity = rigidbody.velocity.normalized() * max_speed;
+            let speed_sq = rigidbody.velocity.length_sqr();
+            if speed_sq > max_speed * max_speed {
+                let speed = speed_sq.sqrt(); // single sqrt, only when clamping
+                rigidbody.velocity = rigidbody.velocity / speed * max_speed;
             }
         }
 

@@ -562,15 +562,14 @@ pub fn animation_controller(
                 break;
             }
         }
-        let target_key = match selected {
-            Some(s) => s.to_string(),
-            None => controller.fallback_key.clone(),
-        };
-        if animation.animation_key != target_key {
-            animation.animation_key = target_key.clone();
+        let target_key: &str = selected.unwrap_or(controller.fallback_key.as_str());
+        if animation.animation_key.as_str() != target_key {
+            // Transition: allocate once here, not every frame
+            let owned = target_key.to_string();
+            animation.animation_key = owned.clone();
             animation.frame_index = 0;
             animation.elapsed_time = 0.0;
-            controller.current_key = target_key;
+            controller.current_key = owned;
         }
     }
 }
