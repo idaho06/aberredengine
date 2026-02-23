@@ -3,10 +3,23 @@
 //! This module provides the system that synchronizes [`DynamicText`](crate::components::dynamictext::DynamicText)
 //! components with signal values based on their [`SignalBinding`](crate::components::signalbinding::SignalBinding).
 
-// Helper enum for returning either owned String or borrowed &str
-enum Either<L, R> {
-    Left(L),
-    Right(R),
+use arrayvec::ArrayString;
+use std::fmt::Write as _;
+
+/// Stack-allocated string for signal-to-text conversion.
+/// Uses a 32-byte ArrayString for numeric types (i32 / f32), borrowed &str for others.
+enum SignalStr<'a> {
+    Stack(ArrayString<32>),
+    Borrowed(&'a str),
+}
+
+impl<'a> SignalStr<'a> {
+    fn as_str(&self) -> &str {
+        match self {
+            SignalStr::Stack(s) => s.as_str(),
+            SignalStr::Borrowed(s) => s,
+        }
+    }
 }
 
 use crate::components::dynamictext::DynamicText;
@@ -49,18 +62,14 @@ pub fn update_world_signals_binding_system(
         };
 
         if let Some(value) = value_opt {
-            let new_text = match &signal_binding.format {
-                Some(format_str) => match value {
-                    Either::Left(ref s) => format_str.replace("{}", s),
-                    Either::Right(s) => format_str.replace("{}", s),
-                },
-                None => match value {
-                    Either::Left(ref s) => s.clone(),
-                    Either::Right(s) => s.to_string(),
-                },
+            let new_text: std::borrow::Cow<str> = match &signal_binding.format {
+                Some(fmt) => std::borrow::Cow::Owned(fmt.replace("{}", value.as_str())),
+                None => std::borrow::Cow::Borrowed(value.as_str()),
             };
             // Bypass automatic change detection; manually mark as changed only if content differs
-            let changed = dynamic_text.bypass_change_detection().set_text(new_text);
+            let changed = dynamic_text
+                .bypass_change_detection()
+                .set_text(new_text.as_ref());
             if changed {
                 dynamic_text.set_changed();
             }
@@ -75,18 +84,22 @@ pub fn update_world_signals_binding_system(
 fn get_world_signal_as_str<'a>(
     world_signals: &'a WorldSignals,
     signal_key: &str,
-) -> Option<Either<String, &'a str>> {
-    if let Some(signal_value) = world_signals.get_integer(signal_key) {
-        return Some(Either::Left(signal_value.to_string()));
+) -> Option<SignalStr<'a>> {
+    if let Some(v) = world_signals.get_integer(signal_key) {
+        let mut buf = ArrayString::<32>::new();
+        let _ = write!(buf, "{}", v);
+        return Some(SignalStr::Stack(buf));
     }
-    if let Some(signal_value) = world_signals.get_scalar(signal_key) {
-        return Some(Either::Left(signal_value.to_string()));
+    if let Some(v) = world_signals.get_scalar(signal_key) {
+        let mut buf = ArrayString::<32>::new();
+        let _ = write!(buf, "{}", v);
+        return Some(SignalStr::Stack(buf));
     }
-    if let Some(signal_value) = world_signals.get_string(signal_key) {
-        return Some(Either::Right(signal_value.as_str()));
+    if let Some(s) = world_signals.get_string(signal_key) {
+        return Some(SignalStr::Borrowed(s.as_str()));
     }
     if world_signals.has_flag(signal_key) {
-        return Some(Either::Right("true"));
+        return Some(SignalStr::Borrowed("true"));
     }
     None
 }
@@ -95,21 +108,22 @@ fn get_world_signal_as_str<'a>(
 ///
 /// Tries each signal type in order: integer, scalar, string, flag.
 /// Returns `None` if the signal key is not found.
-fn get_entity_signal_as_str<'a>(
-    signals: &'a Signals,
-    signal_key: &str,
-) -> Option<Either<String, &'a str>> {
-    if let Some(signal_value) = signals.get_integer(signal_key) {
-        return Some(Either::Left(signal_value.to_string()));
+fn get_entity_signal_as_str<'a>(signals: &'a Signals, signal_key: &str) -> Option<SignalStr<'a>> {
+    if let Some(v) = signals.get_integer(signal_key) {
+        let mut buf = ArrayString::<32>::new();
+        let _ = write!(buf, "{}", v);
+        return Some(SignalStr::Stack(buf));
     }
-    if let Some(signal_value) = signals.get_scalar(signal_key) {
-        return Some(Either::Left(signal_value.to_string()));
+    if let Some(v) = signals.get_scalar(signal_key) {
+        let mut buf = ArrayString::<32>::new();
+        let _ = write!(buf, "{}", v);
+        return Some(SignalStr::Stack(buf));
     }
-    if let Some(signal_value) = signals.get_string(signal_key) {
-        return Some(Either::Right(signal_value.as_str()));
+    if let Some(s) = signals.get_string(signal_key) {
+        return Some(SignalStr::Borrowed(s.as_str()));
     }
     if signals.has_flag(signal_key) {
-        return Some(Either::Right("true"));
+        return Some(SignalStr::Borrowed("true"));
     }
     None
 }
