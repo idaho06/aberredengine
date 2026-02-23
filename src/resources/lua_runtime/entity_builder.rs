@@ -1096,6 +1096,14 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_parent(parent_id) - Set parent entity for transform hierarchy
+        // parent_id is obtained from engine.get_entity()
+        // Inserts ChildOf + GlobalTransform2D on the spawned entity
+        methods.add_method_mut("with_parent", |_, this, parent_id: u64| {
+            this.cmd.parent = Some(parent_id);
+            Ok(this.clone())
+        });
+
         // :build() - Queue the entity for spawning or cloning
         methods.add_method("build", |lua, this, ()| {
             let app_data = lua

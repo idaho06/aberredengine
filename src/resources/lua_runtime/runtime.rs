@@ -147,6 +147,8 @@ struct EntityCtxPool {
     animation: LuaRegistryKey,
     timer: LuaRegistryKey,
     signals: LuaRegistryKey,
+    world_pos: LuaRegistryKey,
+    world_scale: LuaRegistryKey,
 }
 
 /// Borrowed references to pooled entity context tables.
@@ -162,6 +164,8 @@ pub struct EntityCtxTables {
     pub animation: LuaTable,
     pub timer: LuaTable,
     pub signals: LuaTable,
+    pub world_pos: LuaTable,
+    pub world_scale: LuaTable,
 }
 
 /// Resource holding the Lua interpreter state.
@@ -459,6 +463,15 @@ macro_rules! define_entity_cmds {
             ("entity_shader_clear_uniforms", |entity_id| u64, EntityCmd::ShaderClearUniforms { entity_id },
                 desc = "Clear all uniforms on entity shader",
                 params = [("entity_id", "integer")]),
+            ("entity_set_parent",
+                |(entity_id, parent_id)| (u64, u64),
+                EntityCmd::SetParent { entity_id, parent_id },
+                desc = "Set the parent of an entity for transform hierarchy",
+                params = [("entity_id", "integer"), ("parent_id", "integer")]),
+            ("entity_remove_parent", |entity_id| u64,
+                EntityCmd::RemoveParent { entity_id },
+                desc = "Remove entity from its parent, snapping to current world position",
+                params = [("entity_id", "integer")]),
         ]);
     };
 }
@@ -639,6 +652,8 @@ impl LuaRuntime {
         let animation = lua.create_table()?;
         let timer = lua.create_table()?;
         let signals = lua.create_table()?;
+        let world_pos = lua.create_table()?;
+        let world_scale = lua.create_table()?;
 
         // Store in registry to prevent GC
         Ok(EntityCtxPool {
@@ -652,6 +667,8 @@ impl LuaRuntime {
             animation: lua.create_registry_value(animation)?,
             timer: lua.create_registry_value(timer)?,
             signals: lua.create_registry_value(signals)?,
+            world_pos: lua.create_registry_value(world_pos)?,
+            world_scale: lua.create_registry_value(world_scale)?,
         })
     }
 
@@ -678,6 +695,8 @@ impl LuaRuntime {
             animation: self.lua.registry_value(&pool.animation)?,
             timer: self.lua.registry_value(&pool.timer)?,
             signals: self.lua.registry_value(&pool.signals)?,
+            world_pos: self.lua.registry_value(&pool.world_pos)?,
+            world_scale: self.lua.registry_value(&pool.world_scale)?,
         })
     }
 
@@ -2821,6 +2840,11 @@ impl LuaRuntime {
                 &[("shader_key", "string"), ("uniforms", "table?")],
             ),
             (
+                "with_parent",
+                "Set parent entity for transform hierarchy",
+                &[("parent_id", "integer")],
+            ),
+            (
                 "register_as",
                 "Register entity in WorldSignals for later retrieval",
                 &[("key", "string")],
@@ -2969,6 +2993,10 @@ impl LuaRuntime {
                     ("time_in_phase", "number", true, None),
                     ("previous_phase", "string", true, Some("Only in on_enter")),
                     ("timer", "TimerInfo", true, None),
+                    ("world_pos", "Vector2", true, Some("World position from hierarchy")),
+                    ("world_rotation", "number", true, Some("World rotation from hierarchy")),
+                    ("world_scale", "Vector2", true, Some("World scale from hierarchy")),
+                    ("parent_id", "integer", true, Some("Parent entity ID if in hierarchy")),
                 ],
             ),
             (

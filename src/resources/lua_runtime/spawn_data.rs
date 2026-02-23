@@ -387,4 +387,6 @@ pub struct SpawnCmd {
     pub shader: Option<EntityShaderData>,
     /// Color tint (r, g, b, a) for rendering modulation
     pub tint: Option<(u8, u8, u8, u8)>,
+    /// Parent entity ID (from entity.to_bits()) — inserts ChildOf + GlobalTransform2D on spawn
+    pub parent: Option<u64>,
 }

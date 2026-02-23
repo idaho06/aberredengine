@@ -2,36 +2,28 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-20 (synced with codebase)
+# Last updated: 2026-02-23 (synced with codebase)
 
 ## QUICK REFERENCE
 
-STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3 + fastrand 2.3 + clap (CLI)
-GAME_TYPE: Asteroids-style arcade clone (2D)
+STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3 + fastrand 2.3 + clap (CLI) + serde/serde_json + log/env_logger + arrayvec + smallvec + rustc-hash
+GAME_TYPE: Multi-game 2D showcase engine with Lua scripting
 ENTRY: src/main.rs
 LIB_ENTRY: src/lib.rs (reusable library crate)
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-02-20)
+## STATUS (2026-02-23)
 
-- Playable loop: menu ("DRIFTERS") -> level01 asteroids prototype (ship with idle/propulsion Lua phases, random drifting asteroids of 3 sizes, tiled space background, ship fires lasers, asteroids explode on hit with multi-explosion effects); legacy Arkanoid/paddle/brick/ball logic is currently commented out.
-- Assets loaded: fonts (arcade, future), textures (cursor, ship_sheet, space01-04, asteroids-big01-03, asteroids-medium01-03, asteroids-small01-03, asteroids-laser, explosion01-03_sheet, black, stars01_sheet), sounds (option.wav, blaster.ogg, scanner.ogg, explosion01.ogg); music/tilemap/brick assets are not loaded.
-- Lua on_enter_play seeds signals (score, high_score, lives, level) and sets scene="menu"; scene switches via WorldSignals flag "switch_scene".
-- ParticleEmitter component and system - emits particles by cloning template entities with configurable shape, arc, speed, TTL. Uses fastrand for RNG. Animation reset to frame 0 on clones.
-- TTL (Time-to-Live) component and system - automatic entity despawn after duration, respects time scale.
-- Entity cloning API (engine.clone/collision_clone) - clone registered entities with component overrides.
-- Menu callback system - Lua callbacks for interactive menu selection with full context (menu_id, item_id, item_index).
-- Lua utility libraries: lib/math.lua (lerp, inv_lerp, remap, lerp2), lib/utils.lua (dump_value for debugging).
-- EntityShader component - per-entity shader support for custom rendering effects on individual sprites/text.
-- Tint component - color modulation for sprites (replaces Color::WHITE) and text (multiplies with text color).
-- Runtime game configuration API (engine.set_fullscreen/set_vsync/set_target_fps/set_render_size/set_background_color + getters) - Lua can toggle fullscreen, vsync, target FPS, internal render resolution, and background clear color; uses GameConfigCmd queue + GameConfigSnapshot cache.
-- Multi-pass post-processing shader chain support.
-- Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs).
-- Lua stubs generator (stub_generator.rs) - reads engine.__meta at runtime and emits deterministic engine.lua with EmmyLua type annotations for LSP support. CLI: `--create-lua-stubs [PATH]`.
-- Luarc generator (luarc_generator.rs) - generates .luarc.json for Lua Language Server configuration (globals, workspace library, runtime version) from engine metadata. CLI: `--create-luarc [PATH]`.
-- Library crate (lib.rs) - exposes components, events, game, resources, systems, stub_generator, luarc_generator for integration tests and reuse.
+- Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
+- Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro.
+- Callback injection: each scene module exports `_callbacks` table with local functions; main.lua injects/removes them from `_G` on scene switch to prevent naming conflicts between scenes.
+- Assets loaded per scene group in setup.lua: common (fonts, cursor, shaders), asteroids (ship, space tiles, asteroids, explosions, laser, sounds), arkanoid (bricks, vaus, ball, background, title, music, tilemaps), birthday (hearts, gems, photo, fonts, music), kraken (mouth, tentacle).
+- Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs), blink, fade.
+- Parent-child entity hierarchy: ChildOf relationship + GlobalTransform2D component for recursive transform propagation (position, rotation, scale). propagate_transforms system runs after movement/tweens, before collision.
+- Menu scrolling: visible_count + scroll_offset with "..." indicator entities for overflow.
+- ParticleEmitter, TTL, Entity cloning, EntityShader, Tint, Multi-pass post-processing, Runtime game configuration API, Lua stubs generator, Luarc generator, Library crate - all functional.
 
 ## FILE TREE (ESSENTIAL)
 
@@ -61,11 +53,12 @@ src/
 │   ├── luatimer.rs            # Lua callback timer
 │   ├── stuckto.rs             # Attach entity to another
 │   ├── tint.rs                # Color tint for rendering (sprites/text)
-│   ├── menu.rs                # Interactive menu
+│   ├── menu.rs                # Interactive menu (with scroll support)
 │   ├── gridlayout.rs          # JSON grid spawning
 │   ├── group.rs               # Entity grouping tag
 │   ├── persistent.rs          # Survive scene transitions
 │   ├── particleemitter.rs     # Particle emitter (templates, shape, arc, speed, TTL)
+│   ├── globaltransform2d.rs   # World-space transform for hierarchy children (ChildOf)
 │   ├── rotation.rs            # Rotation in degrees
 │   ├── ttl.rs                 # Time-to-live for automatic entity despawn
 │   ├── scale.rs               # 2D scale
@@ -88,7 +81,8 @@ src/
 │   ├── signalbinding.rs       # Update bound text
 │   ├── dynamictext_size.rs    # Cache DynamicText bounding box sizes
 │   ├── tween.rs               # Tween animation systems (position/rotation/scale)
-│   ├── stuckto.rs             # StuckTo entity following
+│   ├── stuckto.rs             # StuckTo entity following (skips entities with ChildOf)
+│   ├── propagate_transforms.rs # Recursive GlobalTransform2D computation from ChildOf hierarchy
 │   ├── gridlayout.rs          # Grid entity spawning
 │   ├── group.rs               # Group counting
 │   ├── menu.rs                # Menu spawn/input
@@ -118,7 +112,7 @@ src/
 │   ├── systemsstore.rs        # Named system lookup
 │   ├── audio.rs               # AudioBridge channels
 │   ├── shaderstore.rs         # ShaderStore (loaded shaders with cached uniform locations)
-│   ├── postprocessshader.rs   # PostProcessShader resource (active shader + user uniforms)
+│   ├── postprocessshader.rs   # PostProcessShader resource (active shader chain + user uniforms)
 │   └── lua_runtime/
 │       ├── mod.rs             # Public exports
 │       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!), __meta table
@@ -137,33 +131,42 @@ src/
     ├── switchdebug.rs         # DebugToggle (F11)
     ├── switchfullscreen.rs    # FullScreen toggle event + observer (F10)
     └── audio.rs               # AudioCmd, AudioMessage
+tests/
+├── bevy_ecs_integration.rs    # ECS integration tests
+├── engine_tick_integration.rs # Engine tick + meta drift protection tests
+├── stub_generator_integration.rs # Stub generator tests
+└── hierarchy_integration.rs   # Parent-child hierarchy tests
 assets/
 ├── scripts/
-│   ├── main.lua               # Entry: on_setup, on_enter_play, on_switch_scene, on_update_*
-│   ├── setup.lua              # Asset loading helpers (require in on_setup)
-│   ├── engine.lua             # Auto-generated LSP stubs (EmmyLua annotations, ~1.8k lines, via --create-lua-stubs)
+│   ├── main.lua               # Entry: scene registry, callback injection, on_setup, on_enter_play, on_switch_scene
+│   ├── setup.lua              # Asset loading (common + per-scene-group sections)
+│   ├── engine.lua             # Auto-generated LSP stubs (EmmyLua annotations, via --create-lua-stubs)
 │   ├── .luarc.json            # Auto-generated Lua Language Server config (via --create-luarc)
-│   ├── README.md              # Lua API documentation (78k+ lines)
+│   ├── README.md              # Lua API documentation
 │   ├── lib/
 │   │   ├── math.lua           # Math helpers (lerp, inv_lerp, remap, lerp2)
 │   │   └── utils.lua          # Debug utilities (dump_value)
 │   └── scenes/
-│       ├── menu.lua           # Menu scene
-│       └── level01.lua        # First level of the current game
-├── textures/                  # Game art set
-│   └── *.png                  # Mostly png files, but can be any image format supported by raylib
-├── shaders/                   # OpenGL 3.3 Shader files
-│   ├── *.fs                   # Fragment shaders (invert, wave, bloom, outline, crt, crt2)
-│   └── *.vs                   # Vertex shaders
-├── audio/                     # audio files
-│   ├── *.xm                   # xm, wav, ogg, and any other sound format supported by raylib
-│   └── *.wav
-└── fonts/
-    └── *.ttf
+│       ├── menu.lua           # Shared menu scene
+│       ├── asteroids/
+│       │   └── level01.lua    # Asteroids game
+│       ├── arkanoid/
+│       │   └── level01.lua    # Arkanoid game
+│       ├── birthday/
+│       │   ├── intro.lua      # Birthday card intro
+│       │   └── card.lua       # Birthday card scene
+│       └── kraken/
+│           └── intro.lua      # Kraken scene (parent-child demo)
+├── textures/                  # Organized by game: asteroids/, arkanoid/, birthday/, kraken/ + shared (cursor.png, black.png)
+├── shaders/                   # OpenGL 3.3 fragment shaders: invert.fs, wave.fs, bloom.fs, outline.fs, crt.fs, crt2.fs, blink.fs, fade.fs
+├── audio/                     # Organized by game: asteroids/, arkanoid/, birthday/ + shared (option.wav)
+├── fonts/                     # Arcade_Cabinet.ttf, Formal_Future.ttf, birthday/Endless_Love.ttf
+├── tilemaps/arkanoid/         # Tilemap data (level01.txt + level01.png)
+└── levels/arkanoid/           # Level JSON data (level01.json)
 
 config.ini                     # Game configuration (INI format)
 docs/
-└── lua-interface-architecture.md 
+└── lua-interface-architecture.md
 ```
 
 ## CONFIG.INI FORMAT
@@ -172,10 +175,11 @@ docs/
 [render]
 width = 640                    ; Internal render width
 height = 360                   ; Internal render height
+background_color = 0,2,4       ; Background clear color (R,G,B 0-255)
 
 [window]
-width = 1280                   ; Window width in pixels
-height = 720                   ; Window height in pixels
+width = 1280                   ; Window width in pixels (currently ignored - TODO)
+height = 720                   ; Window height in pixels (currently ignored - TODO)
 target_fps = 120               ; Target frames per second
 vsync = true                   ; Enable vertical sync
 fullscreen = false             ; Start in fullscreen mode
@@ -204,7 +208,7 @@ TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, lo
 LuaTimer { duration: f32, elapsed: f32, callback: String }
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
-Menu { items: Vec<MenuItem>, selected: usize, actions: FxHashMap<String, MenuAction>, on_select_callback: Option<String>, ... }
+Menu { items: Vec<MenuItem>, selected_index: usize, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, visible_count: Option<usize>, scroll_offset: usize, top_indicator_entity, bottom_indicator_entity }
 GridLayout { path: String, group: String, z_index: f32 }
 Group { name: String }
 Persistent (marker)
@@ -219,10 +223,11 @@ EmitterShape { Point | Rect { width, height } }
 TtlSpec { None | Fixed(f32) | Range { min, max } }
 EntityShader { shader_key: Arc<str>, uniforms: FxHashMap<Arc<str>, UniformValue> }
 Tint { color: Color } -- for sprites: replaces Color::WHITE; for text: multiplies with text.color
+GlobalTransform2D { position: Vector2, rotation_degrees: f32, scale: Vector2 } -- world-space transform computed by propagate_transforms from ChildOf hierarchy
 
 ## RESOURCE QUICK-REF
 
-GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, config_path }
+GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, config_path }
 WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
 InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }
 BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
@@ -237,8 +242,8 @@ AnimationStore { animations: FxHashMap<String, AnimationResource> }
 TilemapStore(FxHashMap<String, TilemapData>)
 GameState { None, Setup, Playing, Quitting }
 NextGameState(Option<GameState>)
-WorldSignals { scalars, integers, strings, flags, entities, group_counts }
-SignalSnapshot { scalars, integers, strings, flags, entities, group_counts } - read-only cache for Lua
+WorldSignals { scalars, integers, strings, flags, entities } -- group_counts are derived in SignalSnapshot from "group_count:" prefixed integers
+SignalSnapshot { scalars, integers, strings, flags, entities, group_counts } - read-only Arc cache for Lua
 TrackedGroups(FxHashSet<String>)
 Camera2D { target, offset, rotation, zoom }
 ScreenSize { w: i32, h: i32 } - game's internal render resolution
@@ -248,11 +253,11 @@ RenderFilter { Nearest, Bilinear }
 DebugMode (marker)
 FullScreen (marker) - presence indicates fullscreen mode
 SystemsStore { map: FxHashMap<String, SystemId>, entity_map: FxHashMap<String, SystemId<In<Entity>>> }
-LuaRuntime { lua: Lua, ... } - NON_SEND
+LuaRuntime { lua: Lua, collision_ctx_pool, entity_ctx_pool } - NON_SEND
 AudioBridge { sender, receiver }
 ShaderStore { shaders: FxHashMap<String, ShaderEntry> } - NON_SEND (stores Shader + cached uniform locations)
 ShaderEntry { shader: Shader, locations: FxHashMap<String, i32> }
-PostProcessShader { key: Option<Arc<str>>, uniforms: FxHashMap<Arc<str>, UniformValue> }
+PostProcessShader { keys: Vec<Arc<str>>, uniforms: FxHashMap<Arc<str>, UniformValue> }
 
 ## SYSTEMPARAM BUNDLES (reduce system parameter count)
 
@@ -308,6 +313,8 @@ EntityCmd {
     ShaderClearUniforms { entity_id }
     SetTint { entity_id, r, g, b, a }
     RemoveTint { entity_id }
+    SetParent { entity_id, parent_id }
+    RemoveParent { entity_id }
 }
 
 SpawnCmd (spawn_data.rs) {
@@ -316,7 +323,7 @@ SpawnCmd (spawn_data.rs) {
     signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
     register_as, lua_collision_rule, animation, animation_controller, particle_emitter,
-    shader, tint
+    shader, tint, parent
 }
 
 ParticleEmitterData (spawn_data.rs) {
@@ -345,7 +352,7 @@ RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUni
 GameConfigCmd { Fullscreen { enabled }, Vsync { enabled }, TargetFps { fps }, RenderSize { width, height }, BackgroundColor { r, g, b } }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
 
-## LUA API STRUCTURE (runtime.rs — macro-based registration)
+## LUA API STRUCTURE (runtime.rs -- macro-based registration)
 
 ### Metadata Introspection (engine.__meta)
 
@@ -386,7 +393,7 @@ engine.__meta.callbacks[callback_name] = {
 ```
 
 Classes: `EntityBuilder`, `CollisionEntityBuilder` (same methods, different context).
-Metadata is co-located with registration code — `register_cmd!` macro includes metadata inline,
+Metadata is co-located with registration code -- `register_cmd!` macro includes metadata inline,
 manual registrations use `push_fn_meta()` helper.
 
 Types (register_types_meta): Vector2, Rect, SpriteInfo, AnimationInfo, TimerInfo, SignalSet,
@@ -401,8 +408,8 @@ Callbacks (register_callbacks_meta): on_setup, on_enter_play, on_switch_scene,
 on_update_<scene>, phase_on_enter, phase_on_update, phase_on_exit, timer_callback,
 collision_callback, menu_callback.
 
-Schema refs on builder params: with_phase→PhaseDefinition, with_particle_emitter→ParticleEmitterConfig,
-with_animation_rule→AnimationRuleCondition, with_menu→MenuItem[].
+Schema refs on builder params: with_phase->PhaseDefinition, with_particle_emitter->ParticleEmitterConfig,
+with_animation_rule->AnimationRuleCondition, with_menu->MenuItem[].
 
 Drift protection tests in tests/engine_tick_integration.rs verify all meta tables stay in sync.
 
@@ -450,7 +457,7 @@ engine.change_scene(scene_name)     -- convenience: sets scene string + switch_s
 engine.quit()                       -- convenience: sets quit_game flag to exit the engine
 
 -- Entity Commands (all contexts - phase/timer/collision/update callbacks)
--- All entity commands must work in all Lua callback contexts
+-- All entity commands work in all Lua callback contexts
 engine.entity_set_velocity(id, vx, vy)
 engine.entity_set_rotation(id, deg)
 engine.entity_set_scale(id, sx, sy)
@@ -492,6 +499,8 @@ engine.entity_shader_clear_uniform(id, name)
 engine.entity_shader_clear_uniforms(id)
 engine.entity_set_tint(id, r, g, b, a)  -- r,g,b,a are 0-255
 engine.entity_remove_tint(id)
+engine.entity_set_parent(id, parent_id)  -- set parent for transform hierarchy (inserts ChildOf + GlobalTransform2D)
+engine.entity_remove_parent(id)          -- remove from parent, snap to current world position
 
 -- Entity Cloning (all contexts)
 engine.clone(source_key) -> EntityBuilder  -- Clone entity by WorldSignals key, apply overrides
@@ -514,46 +523,8 @@ engine.collision_phase_transition(id, phase)
 engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 
 -- Collision Entity Commands (full parity with engine.entity_* commands)
-engine.collision_entity_set_position(id, x, y)
-engine.collision_entity_set_velocity(id, vx, vy)
-engine.collision_entity_despawn(id)
-engine.collision_entity_signal_set_integer(id, key, value)
-engine.collision_entity_signal_set_flag(id, flag)
-engine.collision_entity_signal_clear_flag(id, flag)
-engine.collision_entity_signal_set_scalar(id, key, value)
-engine.collision_entity_signal_set_string(id, key, value)
-engine.collision_entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)
-engine.collision_release_stuckto(id)
-engine.collision_entity_insert_lua_timer(id, duration, callback)
-engine.collision_entity_remove_lua_timer(id)
-engine.collision_entity_insert_ttl(id, seconds)
-engine.collision_entity_restart_animation(id)
-engine.collision_entity_set_animation(id, animation_key)
-engine.collision_entity_insert_tween_position(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
-engine.collision_entity_insert_tween_rotation(id, from, to, duration, easing, loop_mode, backwards)
-engine.collision_entity_insert_tween_scale(id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)
-engine.collision_entity_remove_tween_position/rotation/scale(id)
-engine.collision_entity_set_rotation(id, degrees)
-engine.collision_entity_set_scale(id, sx, sy)
-engine.collision_entity_add_force(id, name, x, y, enabled)
-engine.collision_entity_remove_force(id, name)
-engine.collision_entity_set_force_enabled(id, name, enabled)
-engine.collision_entity_set_force_value(id, name, x, y)
-engine.collision_entity_set_friction(id, friction)
-engine.collision_entity_set_max_speed(id, max_speed|nil)
-engine.collision_entity_freeze(id)
-engine.collision_entity_unfreeze(id)
-engine.collision_entity_set_speed(id, speed)
-engine.collision_entity_set_shader(id, key)
-engine.collision_entity_remove_shader(id)
-engine.collision_entity_shader_set_float(id, name, value)
-engine.collision_entity_shader_set_int(id, name, value)
-engine.collision_entity_shader_set_vec2(id, name, x, y)
-engine.collision_entity_shader_set_vec4(id, name, x, y, z, w)
-engine.collision_entity_shader_clear_uniform(id, name)
-engine.collision_entity_shader_clear_uniforms(id)
-engine.collision_entity_set_tint(id, r, g, b, a)  -- r,g,b,a are 0-255
-engine.collision_entity_remove_tint(id)
+-- All engine.entity_* commands have collision_entity_* equivalents via define_entity_cmds! macro
+-- e.g. engine.collision_entity_set_position, collision_entity_set_parent, collision_entity_remove_parent, etc.
 
 -- Phase Control
 engine.phase_transition(id, phase)
@@ -632,6 +603,7 @@ engine.get_background_color() -> {r, g, b} -- read current background clear colo
 :with_menu_cursor(key)
 :with_menu_callback(callback_name)
 :with_menu_selection_sound(sound_key)
+:with_menu_visible_count(count)  -- max visible items, enables scrolling with "..." indicators
 :with_menu_action_set_scene/show_submenu/quit(item_id, ...)
 :with_animation(key)
 :with_animation_controller(fallback_key)
@@ -659,6 +631,7 @@ engine.get_background_color() -> {r, g, b} -- read current background clear colo
 :with_particle_emitter(table)  -- { templates, shape, offset, particles_per_emission, emissions_per_second, emissions_remaining, arc, speed, ttl }
 :with_shader(shader_key, uniforms_table?)  -- { name = value, ... } where value is float, int, {x,y}, or {x,y,z,w}
 :with_tint(r, g, b, a)  -- color modulation (0-255); sprites: replaces WHITE; text: multiplies with text color
+:with_parent(parent_id)  -- set parent entity for transform hierarchy (inserts ChildOf + GlobalTransform2D)
 :register_as(key)
 :build()
 
@@ -688,6 +661,10 @@ ctx.phase          -- string current phase name or nil (LuaPhase)
 ctx.time_in_phase  -- f32 or nil
 ctx.previous_phase -- string or nil (only in on_enter callbacks)
 ctx.timer          -- { duration, elapsed, callback } or nil (LuaTimer)
+ctx.world_pos      -- { x, y } or nil (GlobalTransform2D world position, only for hierarchy entities)
+ctx.world_rotation -- f32 degrees or nil (GlobalTransform2D world rotation)
+ctx.world_scale    -- { x, y } or nil (GlobalTransform2D world scale)
+ctx.parent_id      -- u64 parent entity ID or nil (ChildOf relationship)
 
 IMPORTANT: The entity context table is POOLED and REUSED between callbacks for performance.
 Do NOT store references to ctx or its subtables for later use - values will be overwritten.
@@ -718,13 +695,15 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 
 - apply_gameconfig_changes (run_if state_is_playing)
 - particle_emitter_system.before(movement)
-- stuck_to_entity_system.after(collision_detector)
+- propagate_transforms.after(movement).after(tween_*).before(collision_detector)
+- stuck_to_entity_system.after(collision_detector) -- skips entities with ChildOf
 - collision_detector.after(mouse_controller).after(movement)
 - lua_phase_system.after(collision_detector)
 - animation_controller.after(lua_phase_system)
 - animation.after(animation_controller)
 - ttl_system.after(movement)
 - dynamictext_size_system.after(update_world_signals_binding_system)
+- game::update.after(check_pending_state).after(lua_phase_system)
 - render_system.after(collision_detector)
 
 Approximate execution order:
@@ -735,24 +714,25 @@ Approximate execution order:
 4. update_input_state
 5. check_pending_state
 6. update_group_counts_system
-7. audio systems chain (update_bevy_audio_cmds → forward_audio_cmds → poll_audio_messages → update_bevy_audio_messages)
+7. audio systems chain (update_bevy_audio_cmds -> forward_audio_cmds -> poll_audio_messages -> update_bevy_audio_messages)
 8. input_simple_controller
 9. input_acceleration_controller
 10. mouse_controller
 11. tween_mapposition_system, tween_rotation_system, tween_scale_system
 12. particle_emitter_system (before movement - particles move on spawn frame)
 13. movement
-14. ttl_system (after movement - despawns expired entities)
-15. collision_detector
-16. stuck_to_entity_system (after collision)
-17. lua_phase_system (after collision)
-18. animation_controller (after lua_phase)
-19. animation (after animation_controller)
-20. update_lua_timers
-21. update_world_signals_binding_system
-22. dynamictext_size_system
-23. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state)
-24. render_system (after collision_detector)
+14. propagate_transforms (after movement/tweens, before collision - computes GlobalTransform2D)
+15. ttl_system (after movement - despawns expired entities)
+16. collision_detector
+17. stuck_to_entity_system (after collision, skips entities with ChildOf)
+18. lua_phase_system (after collision)
+19. animation_controller (after lua_phase)
+20. animation (after animation_controller)
+21. update_lua_timers
+22. update_world_signals_binding_system
+23. dynamictext_size_system
+24. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state + lua_phase_system)
+25. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
 
 ## KEY PATTERNS
 
@@ -781,7 +761,7 @@ For systems that need to be called with a specific entity (like menu_despawn):
 3. Export from components/mod.rs
 4. Add to SpawnComponentData if spawnable (spawn_data.rs)
 5. Add builder method in entity_builder.rs + entry in register_builder_meta() in runtime.rs
-6. Process in apply_components (lua_commands.rs) — shared by both spawn and clone
+6. Process in apply_components (lua_commands.rs) -- shared by both spawn and clone
 7. If builder accepts complex table arg, add type in register_types_meta() and schema ref in register_builder_meta()
 
 ### Adding a new System
@@ -797,6 +777,14 @@ For systems that need to be called with a specific entity (like menu_despawn):
 2. Derive Resource (or use non-send pattern)
 3. Export from resources/mod.rs
 4. Insert into world in main.rs
+
+### Adding a new Scene
+
+1. Create scene module in assets/scripts/scenes/<name>/<scene>.lua
+2. Module returns table with `spawn()` function and `_callbacks` table
+3. All engine-callable functions (phase/collision/timer/update callbacks) must be in `_callbacks`
+4. Add entry to `scene_registry` in main.lua: `scene_name = "scenes.<name>.<scene>"`
+5. Load scene assets in a new section in setup.lua
 
 ### Lua-Rust Command Flow
 
@@ -824,6 +812,16 @@ movement_system moves entities
 - GameConfigCmd commands mutate GameConfig resource; Bevy change detection in apply_gameconfig_changes handles the rest (vsync, fullscreen, fps, render size). Background color is read directly in the render system. Read functions use GameConfigSnapshot cached in LuaAppData.
 - runtime.rs uses `register_cmd!` macro for all push-to-queue registrations; ~17 functions with non-push logic (reads, builders, validation) remain manual
 
+### Parent-Child Hierarchy
+
+- Uses Bevy's built-in ChildOf relationship + custom GlobalTransform2D component
+- :with_parent(parent_id) on spawn or engine.entity_set_parent(id, parent_id) at runtime
+- propagate_transforms system recursively computes world-space position/rotation/scale
+- RemoveParent snaps entity to current world position before detaching
+- StuckTo system skips entities with ChildOf (hierarchy takes precedence)
+- Render system uses GlobalTransform2D when present for world-space drawing
+- Entity context exposes world_pos, world_rotation, world_scale, parent_id to Lua callbacks
+
 ## IMPORTANT FILES TO READ FIRST
 
 For features touching:
@@ -838,6 +836,9 @@ For features touching:
 - Text: dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
 - Input: inputcontrolled.rs (InputControlled, AccelerationControlled, MouseControlled), input.rs (InputState), input_snapshot.rs
 - Particles: particleemitter.rs (component + system), spawn_data.rs (ParticleEmitterData)
+- Hierarchy: globaltransform2d.rs (component), propagate_transforms.rs (system), lua_commands.rs (SetParent/RemoveParent processing)
+- Menus: menu.rs (component + system), entity_builder.rs (with_menu_* methods)
+- Scene management: main.lua (scene registry + callback injection), game.rs (switch_scene)
 
 ## RAYLIB NOTES
 
@@ -857,6 +858,7 @@ For features touching:
 - Commands for deferred entity operations
 - world.get_resource::<T>(), world.get_resource_mut::<T>()
 - world.entity(entity).get::<T>()
+- ChildOf(Entity) for parent-child relationships; Children component auto-managed by Bevy
 
 ## MLUA NOTES
 
@@ -870,7 +872,7 @@ For features touching:
 
 ## COMMON GOTCHAS
 
-1. Non-send resources (FontStore, LuaRuntime, RenderTarget) need NonSend/NonSendMut
+1. Non-send resources (FontStore, LuaRuntime, RenderTarget, ShaderStore) need NonSend/NonSendMut
 2. All entity commands (engine.entity_*) work in all contexts (no collision-only restrictions)
 3. Collision-specific commands (engine.collision_*) use separate queues that drain immediately
 4. Use engine.collision_spawn() in collision callbacks for proper timing (not engine.spawn())
@@ -906,3 +908,7 @@ For features touching:
 34. Tint component: for sprites replaces Color::WHITE (color multiply); for text multiplies with DynamicText.color; RGBA values 0-255
 35. Input system emits InputEvent for ALL actions (directions, action_1/2, back, special) with pressed/released - systems can observe these instead of polling InputState
 36. The "crt" shader is loaded from crt2.fs (not crt.fs) in setup.lua
+37. Scene callbacks must be declared in module's _callbacks table to be injected into _G on scene switch - prevents cross-scene naming conflicts
+38. ChildOf entities skip StuckTo system (hierarchy takes precedence over stuck-to following)
+39. WorldSignals.group_counts is NOT a field - group counts are derived in SignalSnapshot from integers with "group_count:" prefix
+40. Registered systems (SystemsStore) are entities that need Persistent component to survive scene transitions

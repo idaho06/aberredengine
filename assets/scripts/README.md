@@ -18,6 +18,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Animation Components](#animation-components)
   - [Phase Component](#phase-component)
   - [Attachment Components](#attachment-components)
+  - [Parent-Child Hierarchy](#parent-child-hierarchy)
   - [Tween Components](#tween-components)
   - [Particle Emitter Component](#particle-emitter-component)
 - [World Signals](#world-signals)
@@ -47,16 +48,22 @@ Aberred Engine provides a comprehensive Lua API through the global `engine` tabl
 
 ```
 assets/scripts/
-├── main.lua           # Entry point - loaded first by Rust
-├── setup.lua          # Asset loading configuration
+├── main.lua           # Entry point - scene registry, callback injection
+├── setup.lua          # Asset loading for all examples
 ├── engine.lua         # Auto-generated LSP stubs (do not edit manually)
 ├── .luarc.json        # Lua Language Server configuration for LuaJIT
 ├── lib/
 │   ├── math.lua       # Math helpers (lerp, inv_lerp, remap, lerp2)
 │   └── utils.lua      # Debug utilities (dump_value)
 └── scenes/
-    ├── menu.lua       # Menu scene spawning logic
-    └── level01.lua    # Level 01 gameplay logic
+    ├── menu.lua              # Showcase selector menu
+    ├── asteroids/
+    │   └── level01.lua       # Asteroids example
+    ├── arkanoid/
+    │   └── level01.lua       # Arkanoid example
+    └── birthday/
+        ├── intro.lua         # Birthday Card intro scene
+        └── card.lua          # Birthday Card main scene
 ```
 
 **LSP Support:** The `engine.lua` file provides EmmyLua type annotations for IDE autocompletion. It is auto-generated from the engine's runtime metadata. To regenerate after code changes:
@@ -73,69 +80,159 @@ cargo run -- --create-lua-stubs path/to/output.lua
 
 ### 1. `main.lua` - Entry Point
 
-The engine loads `main.lua` first. This file must define specific callback functions:
+The engine loads `main.lua` first. It defines the engine callbacks and manages the
+**callback injection system** for scene switching. Key components:
+
+- **`scene_registry`** — maps scene names to their `require` paths
+- **`clear_callbacks()`** — removes the previous scene's functions from `_G`
+- **`inject_callbacks()`** — writes a scene's `_callbacks` table into `_G`
+- **`on_switch_scene()`** — orchestrates clear → inject → spawn
 
 ```lua
 -- Called during Setup game state to load all assets
 function on_setup()
-    engine.log_info("Loading assets...")
-    -- Queue asset loading here
+    setup.load_assets()
 end
 
 -- Called when entering Playing game state
 function on_enter_play()
-    engine.log_info("Game started!")
-    return "Hello from Lua!"  -- Optional return value
+    engine.set_string("scene", "menu")
+    return "Hello from Lua!"
 end
 
--- Called when switching scenes
+-- Called when switching scenes (manages callback lifecycle)
 function on_switch_scene(scene_name)
-    local scene = require("scenes." .. scene_name)
-    if scene and scene.spawn then
-        scene.spawn()
+    clear_callbacks()                  -- 1. Remove previous scene's globals
+    local scene = get_scene(scene_name)
+    if scene then
+        inject_callbacks(scene)        -- 2. Inject new scene's _callbacks into _G
+        if scene.spawn then
+            scene.spawn()              -- 3. Spawn scene entities
+        end
     end
 end
 ```
 
 **Note**: The `on_update(dt)` callback in `main.lua` is not called by the engine. Use per-scene update callbacks instead (see below).
 
-### 2. Scene Scripts
+### 2. Scene Scripts and the Callback Injection System
 
-Scene scripts in `scenes/` directory are loaded on-demand. Each scene module should export:
+Scene scripts live in `scenes/` subdirectories, organized by example. Each scene module
+exports a `spawn()` function and a `_callbacks` table.
 
-- A `spawn()` function - called when the scene is loaded
-- An `on_update_<scenename>(dt)` function - called every frame when that scene is active
+#### Why `_callbacks` Exists
+
+The engine resolves Lua callbacks **by global name** at runtime. For example, when a
+collision rule references `"on_ball_hit"`, the engine calls `_G["on_ball_hit"](ctx)`.
+If two scene files both define a global function with the same name, the last one loaded
+wins — causing bugs.
+
+To prevent naming conflicts between examples, each scene module stores its callbacks as
+**local** functions and lists them in `M._callbacks`. When switching scenes, `main.lua`:
+
+1. Removes the previous scene's callbacks from `_G`
+2. Injects the new scene's callbacks into `_G`
+3. Calls `scene.spawn()` to set up entities
+
+#### Scene Module Template
 
 ```lua
--- scenes/level01.lua
+-- scenes/example/level01.lua
 local M = {}
 
--- Called when switching to this scene
-function M.spawn()
-    engine.log_info("Spawning level 01...")
-    -- Spawn entities here
-end
+-- ─── Callbacks (local — invisible to other modules) ──────────────────────
 
--- Called every frame while this scene is active (runs at 60 FPS)
-function on_update_level01(input, dt)
-    -- input: input state table, dt: delta time in seconds
-
-    -- Handle input for this scene
+-- Scene update: engine calls on_update_<scene_name> automatically
+local function on_update_example_level01(input, dt)
     if input.digital.back.just_pressed then
         engine.change_scene("menu")
     end
+end
 
-    -- Most game logic goes in phase callbacks, not here
+-- Collision callback
+local function on_ball_brick(ctx)
+    engine.collision_entity_despawn(ctx.b.id)
+end
 
-    -- PERFORMANCE WARNING: You can use entity, spawn, phase, and audio commands
-    -- in on_update callbacks, but avoid spawning entities here when possible.
-    -- This callback runs every frame (60 FPS), so spawning entities here can
-    -- cause significant performance issues. Prefer spawning in on_switch_scene,
-    -- phase callbacks, or collision callbacks instead.
+-- Phase callback
+local function scene_playing_update(ctx, input, dt)
+    -- Game logic here
+end
+
+-- ─── Callback registry ──────────────────────────────────────────────────
+-- Every function the engine calls by name MUST appear here.
+-- The KEY must exactly match the string passed to the engine
+-- (e.g. in :with_phase(), :with_lua_collision_rule(), :with_lua_timer()).
+
+M._callbacks = {
+    on_update_example_level01 = on_update_example_level01,
+    on_ball_brick             = on_ball_brick,
+    scene_playing_update      = scene_playing_update,
+}
+
+-- ─── Spawn ──────────────────────────────────────────────────────────────
+
+function M.spawn()
+    engine.log_info("Spawning example level01...")
+
+    -- Set render resolution (each example can use its own)
+    engine.set_render_size(640, 360)
+
+    -- Set up camera, spawn entities, etc.
+    engine.set_camera(0, 0, 320, 180, 0, 1)
+
+    -- Register collision rules (string must match _callbacks key)
+    engine.spawn()
+        :with_lua_collision_rule("ball", "brick", "on_ball_brick")
+        :build()
 end
 
 return M
 ```
+
+#### Rules for Scene Authors
+
+1. **Every engine callback must be in `M._callbacks`.** This includes:
+   - Scene update (`on_update_<scene_name>`)
+   - Collision callbacks (names in `:with_lua_collision_rule()`)
+   - Phase callbacks (names in `:with_phase()` — `on_enter`, `on_update`, `on_exit`)
+   - Timer callbacks (names in `:with_lua_timer()`)
+   - Menu callbacks (names in `:with_menu_callback()`)
+
+2. **The KEY must exactly match the string passed to the engine.**
+   If you register `:with_lua_collision_rule("ball", "brick", "on_ball_brick")`,
+   then `M._callbacks` must have a key `"on_ball_brick"`.
+
+3. **Define all callbacks as LOCAL functions** — never use plain `function name()`.
+   The injection system handles making them global when needed.
+
+4. **Module-level local variables are fine.** Counters, state tables, etc. stay
+   private to the module and persist across frames.
+
+#### Adding a New Example
+
+1. Create a directory under `scenes/` (e.g., `scenes/myexample/`)
+2. Create scene files following the template above
+3. Add one entry to the `scene_registry` table in `main.lua`:
+   ```lua
+   myexample_level01 = "scenes.myexample.level01",
+   ```
+4. Add a menu item in `scenes/menu.lua`
+5. Add asset loading in `setup.lua`
+
+#### Asset Key Convention
+
+Each example prefixes its asset keys to avoid conflicts:
+- Asteroids: `asteroids-ship_sheet`, `asteroids-explosion01`, etc.
+- Arkanoid: `arkanoid-ball`, `arkanoid-brick_red`, etc.
+- Birthday: `birthday-love`, `birthday-spin_hearts-sheet`, etc.
+
+Shared assets (fonts, cursor, shaders) are loaded without prefix in `load_common()`.
+
+#### Performance Warning
+
+`on_update_<scene>` runs every frame. Avoid spawning entities here — prefer
+`M.spawn()`, phase callbacks, or collision callbacks instead.
 
 **Global Flags**:
 
@@ -217,6 +314,8 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_set_speed()` instead of `engine.entity_set_speed()`
 - `engine.collision_entity_set_tint()` instead of `engine.entity_set_tint()`
 - `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
+- `engine.collision_entity_set_parent()` instead of `engine.entity_set_parent()`
+- `engine.collision_entity_remove_parent()` instead of `engine.entity_remove_parent()`
 
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 
@@ -1216,7 +1315,14 @@ ctx = {
         duration = 5.0,
         elapsed = 2.3,
         callback = "on_timer_tick"
-    }
+    },
+
+    -- Hierarchy info (from GlobalTransform2D / ChildOf)
+    -- Only present when entity is part of a parent-child hierarchy
+    world_pos = { x = 300, y = 400 },    -- Computed world position
+    world_rotation = 45.0,               -- Computed world rotation (degrees)
+    world_scale = { x = 2.0, y = 2.0 },  -- Computed world scale
+    parent_id = 87654321,                -- Parent entity ID (u64)
 }
 ```
 
@@ -1363,6 +1469,135 @@ engine.spawn()
 -- Later, release the ball
 engine.release_stuckto(ball_id)  -- Restores velocity
 ```
+
+---
+
+### Parent-Child Hierarchy
+
+The parent-child hierarchy system allows entities to inherit position, rotation, and scale transforms from a parent entity. A child's `MapPosition`, `Rotation`, and `Scale` become **local space** (relative to its parent), while the engine computes world-space values automatically for rendering and collision.
+
+#### `:with_parent(parent_id)`
+
+Set the parent entity for transform hierarchy at spawn time. The parent entity must be registered with `:register_as(key)` so you can retrieve its ID.
+
+**Parameters:**
+
+- `parent_id` - Parent entity ID (from `engine.get_entity()`)
+
+```lua
+-- Spawn the parent (e.g., a spaceship)
+engine.spawn()
+    :with_group("ship")
+    :with_position(400, 300)
+    :with_sprite("ship", 64, 64, 32, 32)
+    :with_rotation(0)
+    :with_scale(1, 1)
+    :register_as("ship")
+    :build()
+
+-- Spawn a child (e.g., a thruster) attached to the ship
+local ship_id = engine.get_entity("ship")
+engine.spawn()
+    :with_group("thruster")
+    :with_position(0, 40)               -- Local offset: 40px below ship center
+    :with_sprite("thruster", 16, 16, 8, 8)
+    :with_parent(ship_id)               -- Attach to ship
+    :build()
+```
+
+When the ship moves and rotates, the thruster follows automatically. The thruster's `pos` in callbacks is still its local offset `(0, 40)`, but the computed world position is available via `ctx.world_pos`.
+
+#### Runtime Hierarchy Commands
+
+You can also attach/detach entities at runtime:
+
+```lua
+-- Attach an entity to a parent
+engine.entity_set_parent(child_id, parent_id)
+
+-- Detach: snaps MapPosition/Rotation/Scale to current world values
+engine.entity_remove_parent(child_id)
+```
+
+See [Entity Commands](#entity-commands) for full details.
+
+#### How Transform Inheritance Works
+
+Child transforms are computed each frame by the `propagate_transforms` system:
+
+```
+child_world_pos   = parent_pos + rotate(child_local_pos * parent_scale, parent_rotation)
+child_world_rot   = parent_rotation + child_local_rotation
+child_world_scale = parent_scale * child_local_scale
+```
+
+- Hierarchies can be **arbitrarily deep** (parent > child > grandchild > ...)
+- **Rendering** uses world-space transforms automatically
+- **Collision** detection uses world-space positions
+- **Particle emitters** on child entities emit from the world position
+- **Despawning a parent** automatically despawns all descendants (cascade)
+
+#### Accessing World Transform in Callbacks
+
+Phase and timer callbacks provide world transform data in the context object for entities in a hierarchy:
+
+```lua
+function turret_update(ctx, input, dt)
+    -- Local transform (relative to parent)
+    local local_x = ctx.pos.x       -- local offset
+    local local_rot = ctx.rotation   -- local rotation
+
+    -- World transform (computed from hierarchy)
+    if ctx.world_pos then
+        local world_x = ctx.world_pos.x
+        local world_y = ctx.world_pos.y
+        local world_rot = ctx.world_rotation
+        local parent = ctx.parent_id
+    end
+end
+```
+
+#### Complete Example: Orbiting Satellite
+
+```lua
+function M.spawn()
+    engine.set_render_size(640, 360)
+    engine.set_camera(0, 0, 320, 180, 0, 1)
+
+    -- Planet (parent)
+    engine.spawn()
+        :with_group("planet")
+        :with_position(320, 180)
+        :with_sprite("planet", 64, 64, 32, 32)
+        :with_scale(1, 1)
+        :with_tween_rotation(0, 360, 8.0)
+        :with_tween_rotation_loop("loop")
+        :register_as("planet")
+        :build()
+
+    -- Satellite (child) — orbits the planet automatically
+    local planet_id = engine.get_entity("planet")
+    engine.spawn()
+        :with_group("satellite")
+        :with_position(80, 0)        -- 80px to the right of planet center
+        :with_sprite("satellite", 16, 16, 8, 8)
+        :with_zindex(10)
+        :with_parent(planet_id)
+        :build()
+
+    -- Moon orbiting the satellite (grandchild)
+    -- Note: must use register_as + get_entity for the satellite
+    -- since with_parent needs the entity ID
+end
+```
+
+As the planet rotates via its tween, the satellite orbits at 80px radius. No manual position updates needed.
+
+#### Known Limitations
+
+1. **MouseControlled on children:** The mouse sets world coordinates into `MapPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
+2. **StuckTo with hierarchy:** `StuckTo` is automatically skipped for entities with a parent. Don't combine both systems on the same entity.
+3. **One-frame delay:** On the frame an entity is spawned with `:with_parent()` or receives `entity_set_parent()`, it renders at its local position. World-space rendering starts the next frame.
 
 ---
 
@@ -1904,11 +2139,45 @@ engine.entity_set_position(player_id, 400, 300)
 
 ### `engine.entity_despawn(entity_id)`
 
-Remove an entity from the world.
+Remove an entity from the world. If the entity has children in a parent-child hierarchy, all descendants are automatically despawned too (cascade despawn).
 
 ```lua
 engine.entity_despawn(enemy_id)
 ```
+
+### `engine.entity_set_parent(entity_id, parent_id)`
+
+Attach an entity to a parent for transform hierarchy. The child's `MapPosition`, `Rotation`, and `Scale` become local (relative to parent). World-space transforms are computed automatically.
+
+**Parameters:**
+
+- `entity_id` - The child entity ID
+- `parent_id` - The parent entity ID
+
+```lua
+-- Pick up an item and attach it to the player
+local item_id = engine.get_entity("item")
+local player_id = engine.get_entity("player")
+engine.entity_set_parent(item_id, player_id)
+```
+
+### `engine.entity_remove_parent(entity_id)`
+
+Detach an entity from its parent. The entity's `MapPosition`, `Rotation`, and `Scale` are snapped to their current world-space values so the entity stays in place visually.
+
+**Parameters:**
+
+- `entity_id` - The child entity to detach
+
+```lua
+-- Drop the item: it keeps its current world position
+engine.entity_remove_parent(item_id)
+```
+
+Available collision variants:
+
+- `engine.collision_entity_set_parent(entity_id, parent_id)`
+- `engine.collision_entity_remove_parent(entity_id)`
 
 ### `engine.entity_menu_despawn(entity_id)`
 

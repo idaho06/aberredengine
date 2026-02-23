@@ -1309,6 +1309,7 @@ fn context_builder_passes_snapshot_strings_to_lua() {
         Some(&phase_snap),
         Some(&timer_snap),
         None,
+        None, None, None, None,
     ).expect("build_entity_context_pooled");
 
     lua.load(r#"
@@ -1335,6 +1336,7 @@ fn context_builder_nil_when_no_snapshots() {
         lua, &tables, 1_u64,
         None, None, None, None, None, None, None,
         None, None, None, None, None, None,
+        None, None, None, None,
     ).expect("build_entity_context_pooled");
 
     lua.load(r#"

@@ -24,6 +24,7 @@ use fastrand::Rng;
 use raylib::prelude::Vector2;
 
 // use crate::components::animation::Animation;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rigidbody::RigidBody;
@@ -40,7 +41,7 @@ use crate::resources::worldtime::WorldTime;
 ///
 /// Should run **before** `movement` so particles move on their spawn frame.
 pub fn particle_emitter_system(
-    mut emitter_query: Query<(&MapPosition, &mut ParticleEmitter)>,
+    mut emitter_query: Query<(&MapPosition, &mut ParticleEmitter, Option<&GlobalTransform2D>)>,
     rigidbody_query: Query<&RigidBody>,
     // mut animation_query: Query<&mut Animation>,
     time: Res<WorldTime>,
@@ -52,7 +53,7 @@ pub fn particle_emitter_system(
         return;
     }
 
-    for (owner_pos, mut emitter) in emitter_query.iter_mut() {
+    for (owner_pos, mut emitter, maybe_gt) in emitter_query.iter_mut() {
         // Skip if no templates, no emissions remaining, or rate is zero/negative
         if emitter.templates.is_empty()
             || emitter.emissions_remaining == 0
@@ -64,11 +65,14 @@ pub fn particle_emitter_system(
         let period = 1.0 / emitter.emissions_per_second;
         emitter.time_since_emit += dt;
 
+        // Use world position from GlobalTransform2D when available
+        let emit_pos = maybe_gt.map_or(*owner_pos, |gt| MapPosition { pos: gt.position });
+
         // Catch-up loop: emit multiple times if dt is large
         while emitter.time_since_emit >= period && emitter.emissions_remaining > 0 {
             emit_particles(
                 &mut commands,
-                owner_pos,
+                &emit_pos,
                 &emitter,
                 &rigidbody_query,
                 // &mut animation_query,

@@ -14,6 +14,7 @@
 //! - [`StuckTo`](crate::components::stuckto::StuckTo) – the attachment component
 //! - [`Timer`](crate::components::timer::Timer) – can auto-remove `StuckTo` after a delay
 
+use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
 use crate::components::mapposition::MapPosition;
@@ -26,7 +27,7 @@ use crate::components::stuckto::StuckTo;
 /// - Updates this entity's position based on `follow_x` and `follow_y` flags
 /// - Applies the offset
 pub fn stuck_to_entity_system(
-    mut followers: Query<(&StuckTo, &mut MapPosition)>,
+    mut followers: Query<(&StuckTo, &mut MapPosition), Without<ChildOf>>,
     targets: Query<&MapPosition, Without<StuckTo>>,
 ) {
     for (stuck_to, mut follower_pos) in followers.iter_mut() {

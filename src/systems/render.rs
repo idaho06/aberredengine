@@ -13,6 +13,7 @@ use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::entityshader::EntityShader;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -46,6 +47,7 @@ type MapSpriteQueryData = (
     Option<&'static Rotation>,
     Option<&'static EntityShader>,
     Option<&'static Tint>,
+    Option<&'static GlobalTransform2D>,
 );
 
 type MapTextQueryData = (
@@ -55,6 +57,7 @@ type MapTextQueryData = (
     &'static ZIndex,
     Option<&'static EntityShader>,
     Option<&'static Tint>,
+    Option<&'static GlobalTransform2D>,
 );
 
 type SpriteBufferItem = (
@@ -66,6 +69,7 @@ type SpriteBufferItem = (
     Option<Rotation>,
     Option<EntityShader>,
     Option<Tint>,
+    Option<GlobalTransform2D>,
 );
 
 type TextBufferItem = (
@@ -75,6 +79,7 @@ type TextBufferItem = (
     ZIndex,
     Option<EntityShader>,
     Option<Tint>,
+    Option<GlobalTransform2D>,
 );
 
 /// Computed geometry for a sprite draw call via Raylib's `draw_texture_pro`.
@@ -294,8 +299,8 @@ pub struct RenderResources<'w> {
 #[derive(SystemParam)]
 pub struct RenderQueries<'w, 's> {
     pub map_sprites: Query<'w, 's, MapSpriteQueryData>,
-    pub colliders: Query<'w, 's, (&'static BoxCollider, &'static MapPosition)>,
-    pub positions: Query<'w, 's, (&'static MapPosition, Option<&'static Signals>)>,
+    pub colliders: Query<'w, 's, (&'static BoxCollider, &'static MapPosition, Option<&'static GlobalTransform2D>)>,
+    pub positions: Query<'w, 's, (&'static MapPosition, Option<&'static Signals>, Option<&'static GlobalTransform2D>)>,
     pub map_texts: Query<'w, 's, MapTextQueryData>,
     pub rigidbodies: Query<'w, 's, &'static RigidBody>,
     pub screen_texts: Query<
@@ -369,8 +374,26 @@ pub fn render_system(
 
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
-                |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint)| {
-                    let (min, max) = compute_sprite_cull_bounds(p, s, maybe_scale, maybe_rot);
+                |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt)| {
+                    // Use world transform for culling when available
+                    let cull_pos;
+                    let cull_scale;
+                    let cull_rot;
+                    if let Some(gt) = maybe_gt {
+                        cull_pos = MapPosition { pos: gt.position };
+                        cull_scale = Some(Scale { scale: gt.scale });
+                        cull_rot = Some(Rotation { degrees: gt.rotation_degrees });
+                    } else {
+                        cull_pos = *p;
+                        cull_scale = maybe_scale.copied();
+                        cull_rot = maybe_rot.copied();
+                    }
+                    let (min, max) = compute_sprite_cull_bounds(
+                        &cull_pos,
+                        s,
+                        cull_scale.as_ref(),
+                        cull_rot.as_ref(),
+                    );
 
                     let overlap = !(max.x < view_min.x
                         || min.x > view_max.x
@@ -385,6 +408,7 @@ pub fn render_system(
                         maybe_rot.copied(),
                         maybe_shader.cloned(),
                         maybe_tint.copied(),
+                        maybe_gt.copied(),
                     ))
                 },
             ));
@@ -393,7 +417,7 @@ pub fn render_system(
             sprite_buffer.sort_unstable_by(|a, b| {
                 a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint) in
+            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt) in
                 sprite_buffer.iter()
             {
                 if let Some(tex) = textures.get(&sprite.tex_key) {
@@ -410,11 +434,23 @@ pub fn render_system(
                         src.height = -src.height;
                     }
 
+                    // Resolve world transform: use GlobalTransform2D when present
+                    let (render_pos, render_scale, render_rot);
+                    if let Some(gt) = maybe_gt {
+                        render_pos = MapPosition { pos: gt.position };
+                        render_scale = Some(Scale { scale: gt.scale });
+                        render_rot = Some(Rotation { degrees: gt.rotation_degrees });
+                    } else {
+                        render_pos = *pos;
+                        render_scale = *maybe_scale;
+                        render_rot = *maybe_rot;
+                    }
+
                     let geom = compute_sprite_geometry(
-                        pos,
+                        &render_pos,
                         sprite,
-                        maybe_scale.as_ref(),
-                        maybe_rot.as_ref(),
+                        render_scale.as_ref(),
+                        render_rot.as_ref(),
                     );
                     let dest = geom.dest;
                     let origin_scaled = geom.origin;
@@ -508,12 +544,14 @@ pub fn render_system(
 
             text_buffer.clear();
             text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
-                |(entity, t, p, z, maybe_shader, maybe_tint)| {
+                |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
                     let text_size = t.size();
 
+                    // Use world position for culling when available
+                    let cull_pos = maybe_gt.map_or(p.pos, |gt| gt.position);
                     let min = Vector2 {
-                        x: p.pos.x,
-                        y: p.pos.y,
+                        x: cull_pos.x,
+                        y: cull_pos.y,
                     };
                     let max = Vector2 {
                         x: min.x + text_size.x,
@@ -531,6 +569,7 @@ pub fn render_system(
                         *z,
                         maybe_shader.cloned(),
                         maybe_tint.copied(),
+                        maybe_gt.copied(),
                     ))
                 },
             ));
@@ -538,16 +577,17 @@ pub fn render_system(
             text_buffer.sort_unstable_by(|a, b| {
                 a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (_entity, text, pos, _z, _maybe_shader, maybe_tint) in text_buffer.iter() {
+            for (_entity, text, pos, _z, _maybe_shader, maybe_tint, maybe_gt) in text_buffer.iter() {
                 if let Some(font) = fonts.get(&text.font) {
+                    let render_pos = maybe_gt.map_or(pos.pos, |gt| gt.position);
                     let final_color = maybe_tint
                         .map(|t| t.multiply(text.color))
                         .unwrap_or(text.color);
-                    d2.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
+                    d2.draw_text_ex(font, &text.text, render_pos, text.font_size, 1.0, final_color);
                     if maybe_debug.is_some() {
                         d2.draw_rectangle_lines(
-                            pos.pos.x as i32,
-                            pos.pos.y as i32,
+                            render_pos.x as i32,
+                            render_pos.y as i32,
                             text.size().x as i32,
                             text.size().y as i32,
                             Color::ORANGE,
@@ -557,23 +597,25 @@ pub fn render_system(
             }
 
             if maybe_debug.is_some() {
-                for (collider, position) in query_colliders.iter() {
-                    let (x, y, w, h) = collider.get_aabb(position.pos);
+                for (collider, position, maybe_gt) in query_colliders.iter() {
+                    let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
+                    let (x, y, w, h) = collider.get_aabb(world_pos);
                     d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
                 }
-                for (position, maybe_signals) in query_positions.iter() {
+                for (position, maybe_signals, maybe_gt) in query_positions.iter() {
+                    let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
                     d2.draw_line(
-                        position.pos.x as i32 - 5,
-                        position.pos.y as i32,
-                        position.pos.x as i32 + 5,
-                        position.pos.y as i32,
+                        world_pos.x as i32 - 5,
+                        world_pos.y as i32,
+                        world_pos.x as i32 + 5,
+                        world_pos.y as i32,
                         Color::GREEN,
                     );
                     d2.draw_line(
-                        position.pos.x as i32,
-                        position.pos.y as i32 - 5,
-                        position.pos.x as i32,
-                        position.pos.y as i32 + 5,
+                        world_pos.x as i32,
+                        world_pos.y as i32 - 5,
+                        world_pos.x as i32,
+                        world_pos.y as i32 + 5,
                         Color::GREEN,
                     );
                     if let Some(signals) = maybe_signals {
@@ -584,8 +626,8 @@ pub fn render_system(
                             let text = format!("Flag: {}", flag);
                             d2.draw_text(
                                 &text,
-                                position.pos.x as i32 + 10,
-                                position.pos.y as i32 + y_offset,
+                                world_pos.x as i32 + 10,
+                                world_pos.y as i32 + y_offset,
                                 font_size,
                                 font_color,
                             );
@@ -595,8 +637,8 @@ pub fn render_system(
                             let text = format!("Scalar: {} = {:.2}", key, value);
                             d2.draw_text(
                                 &text,
-                                position.pos.x as i32 + 10,
-                                position.pos.y as i32 + y_offset,
+                                world_pos.x as i32 + 10,
+                                world_pos.y as i32 + y_offset,
                                 font_size,
                                 font_color,
                             );
@@ -606,8 +648,8 @@ pub fn render_system(
                             let text = format!("Integer: {} = {}", key, value);
                             d2.draw_text(
                                 &text,
-                                position.pos.x as i32 + 10,
-                                position.pos.y as i32 + y_offset,
+                                world_pos.x as i32 + 10,
+                                world_pos.y as i32 + y_offset,
                                 font_size,
                                 font_color,
                             );

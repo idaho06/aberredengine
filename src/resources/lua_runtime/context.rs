@@ -319,6 +319,10 @@ pub fn build_entity_context_pooled<'a>(
     lua_phase: Option<&'a LuaPhaseSnapshot<'a>>,
     lua_timer: Option<&'a LuaTimerSnapshot<'a>>,
     previous_phase: Option<&'a str>,
+    world_pos: Option<(f32, f32)>,
+    world_rotation: Option<f32>,
+    world_scale: Option<(f32, f32)>,
+    parent_id: Option<u64>,
 ) -> LuaResult<LuaTable> {
     // Core identity (id is always present)
     tables.ctx.set("id", entity_id)?;
@@ -440,6 +444,35 @@ pub fn build_entity_context_pooled<'a>(
         tables.ctx.set("timer", tables.timer.clone())?;
     } else {
         tables.ctx.set("timer", LuaValue::Nil)?;
+    }
+
+    // World transform from GlobalTransform2D (hierarchy)
+    if let Some((x, y)) = world_pos {
+        tables.world_pos.set("x", x)?;
+        tables.world_pos.set("y", y)?;
+        tables.ctx.set("world_pos", tables.world_pos.clone())?;
+    } else {
+        tables.ctx.set("world_pos", LuaValue::Nil)?;
+    }
+
+    if let Some(degrees) = world_rotation {
+        tables.ctx.set("world_rotation", degrees)?;
+    } else {
+        tables.ctx.set("world_rotation", LuaValue::Nil)?;
+    }
+
+    if let Some((sx, sy)) = world_scale {
+        tables.world_scale.set("x", sx)?;
+        tables.world_scale.set("y", sy)?;
+        tables.ctx.set("world_scale", tables.world_scale.clone())?;
+    } else {
+        tables.ctx.set("world_scale", LuaValue::Nil)?;
+    }
+
+    if let Some(pid) = parent_id {
+        tables.ctx.set("parent_id", pid)?;
+    } else {
+        tables.ctx.set("parent_id", LuaValue::Nil)?;
     }
 
     Ok(tables.ctx.clone())

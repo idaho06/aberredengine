@@ -52,6 +52,7 @@ pub mod menu;
 pub mod mousecontroller;
 pub mod movement;
 pub mod particleemitter;
+pub mod propagate_transforms;
 pub mod render;
 pub mod signalbinding;
 pub mod stuckto;

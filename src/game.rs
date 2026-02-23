@@ -685,6 +685,7 @@ pub fn update(
         &mut entities.cmd_queries.rigid_bodies,
         &mut entities.cmd_queries.positions,
         &mut entities.cmd_queries.shaders,
+        &entities.cmd_queries.global_transforms,
         &scene_state.systems_store,
     );
 
@@ -912,6 +913,7 @@ pub fn switch_scene(
         &mut entities.cmd_queries.rigid_bodies,
         &mut entities.cmd_queries.positions,
         &mut entities.cmd_queries.shaders,
+        &entities.cmd_queries.global_transforms,
         &scene_state.systems_store,
     );
 
