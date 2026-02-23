@@ -18,6 +18,31 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 
+type RootsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static MapPosition,
+        Option<&'static Rotation>,
+        Option<&'static Scale>,
+        &'static Children,
+    ),
+    Without<ChildOf>,
+>;
+
+type ChildrenQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static MapPosition,
+        Option<&'static Rotation>,
+        Option<&'static Scale>,
+        Option<&'static Children>,
+    ),
+    With<ChildOf>,
+>;
+
 /// Rotate a 2D vector by `angle_degrees`.
 fn rotate(v: Vector2, angle_degrees: f32) -> Vector2 {
     let rad = angle_degrees * std::f32::consts::PI / 180.0;
@@ -38,25 +63,8 @@ fn rotate(v: Vector2, angle_degrees: f32) -> Vector2 {
 /// Entities missing the component get it inserted via deferred [`Commands`]
 /// (visible next frame).
 pub fn propagate_transforms(
-    roots: Query<
-        (
-            Entity,
-            &MapPosition,
-            Option<&Rotation>,
-            Option<&Scale>,
-            &Children,
-        ),
-        Without<ChildOf>,
-    >,
-    children_query: Query<
-        (
-            &MapPosition,
-            Option<&Rotation>,
-            Option<&Scale>,
-            Option<&Children>,
-        ),
-        With<ChildOf>,
-    >,
+    roots: RootsQuery,
+    children_query: ChildrenQuery,
     mut globals: Query<&mut GlobalTransform2D>,
     mut commands: Commands,
 ) {
@@ -88,15 +96,7 @@ pub fn propagate_transforms(
 fn propagate_children(
     parent_gt: &GlobalTransform2D,
     children: &Children,
-    children_query: &Query<
-        (
-            &MapPosition,
-            Option<&Rotation>,
-            Option<&Scale>,
-            Option<&Children>,
-        ),
-        With<ChildOf>,
-    >,
+    children_query: &ChildrenQuery,
     globals: &mut Query<&mut GlobalTransform2D>,
     commands: &mut Commands,
 ) {

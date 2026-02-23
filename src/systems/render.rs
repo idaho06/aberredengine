@@ -442,7 +442,7 @@ pub fn render_system(
                         render_rot = Some(Rotation { degrees: gt.rotation_degrees });
                     } else {
                         render_pos = *pos;
-                        render_scale = maybe_scale.clone();
+                        render_scale = *maybe_scale;
                         render_rot = *maybe_rot;
                     }
 
