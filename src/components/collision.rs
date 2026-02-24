@@ -25,7 +25,8 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::collision`] – collision detection and observer systems
+//! - [`crate::systems::collision_detector`] – collision detection system
+//! - [`crate::systems::lua_collision`] – Lua collision observer
 //! - [`crate::events::collision::CollisionEvent`] – event emitted on collisions
 //! - [`super::group::Group`] – group tag used for rule matching
 

@@ -6,7 +6,8 @@
 //! Submodules overview
 //! - [`animation`] – advance sprite animations and select tracks via rules
 //! - [`audio`] – bridge with the audio thread (poll/update message queues)
-//! - [`collision`] – broad/simple overlap checks and event emission
+//! - [`collision_detector`] – broad/simple overlap checks and event emission
+//! - [`lua_collision`] – Lua-based collision observer and callback dispatch
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::worldsignals::WorldSignals)
@@ -36,7 +37,7 @@ pub struct RaylibAccess<'w> {
 
 pub mod animation;
 pub mod audio;
-pub mod collision;
+pub mod collision_detector;
 pub mod dynamictext_size;
 pub mod gameconfig;
 pub mod gamestate;
@@ -46,6 +47,7 @@ pub mod input;
 pub mod inputaccelerationcontroller;
 pub mod inputsimplecontroller;
 pub mod lua_commands;
+pub mod lua_collision;
 pub mod luaphase;
 pub mod luatimer;
 pub mod menu;

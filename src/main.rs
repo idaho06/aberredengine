@@ -38,7 +38,7 @@
 
 mod components;
 mod events;
-mod game;
+mod lua_plugin;
 mod resources;
 mod luarc_generator;
 mod stub_generator;
@@ -70,8 +70,8 @@ use crate::systems::animation::animation_controller;
 use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
-use crate::systems::collision::collision_detector;
-use crate::systems::collision::collision_observer;
+use crate::systems::collision_detector::collision_detector;
+use crate::systems::lua_collision::lua_collision_observer;
 use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gameconfig::apply_gameconfig_changes;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
@@ -237,31 +237,31 @@ fn main() {
     // We must mark them as Persistent so they survive scene transitions.
     let mut systems_store = SystemsStore::new();
 
-    let setup_system_id = world.register_system(game::setup);
+    let setup_system_id = world.register_system(lua_plugin::setup);
     world
         .entity_mut(setup_system_id.entity())
         .insert(Persistent);
     systems_store.insert("setup", setup_system_id);
 
-    let enter_play_system_id = world.register_system(game::enter_play);
+    let enter_play_system_id = world.register_system(lua_plugin::enter_play);
     world
         .entity_mut(enter_play_system_id.entity())
         .insert(Persistent);
     systems_store.insert("enter_play", enter_play_system_id);
 
-    let quit_game_system_id = world.register_system(game::quit_game);
+    let quit_game_system_id = world.register_system(lua_plugin::quit_game);
     world
         .entity_mut(quit_game_system_id.entity())
         .insert(Persistent);
     systems_store.insert("quit_game", quit_game_system_id);
 
-    let clean_all_entities_system_id = world.register_system(game::clean_all_entities);
+    let clean_all_entities_system_id = world.register_system(lua_plugin::clean_all_entities);
     world
         .entity_mut(clean_all_entities_system_id.entity())
         .insert(Persistent);
     systems_store.insert("clean_all_entities", clean_all_entities_system_id);
 
-    let switch_scene_system_id = world.register_system(game::switch_scene);
+    let switch_scene_system_id = world.register_system(lua_plugin::switch_scene);
     world
         .entity_mut(switch_scene_system_id.entity())
         .insert(Persistent);
@@ -284,7 +284,7 @@ fn main() {
     }
     world.trigger(GameStateChangedEvent {}); // Call inmediatly to enter Setup state
 
-    world.spawn((Observer::new(collision_observer), Persistent));
+    world.spawn((Observer::new(lua_collision_observer), Persistent));
     world.spawn((Observer::new(switch_debug_observer), Persistent));
     world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
     world.spawn((Observer::new(menu_controller_observer), Persistent));
@@ -342,7 +342,7 @@ fn main() {
     update.add_systems(update_world_signals_binding_system);
     update.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
     update.add_systems(
-        (game::update)
+        (lua_plugin::update)
             .run_if(state_is_playing)
             .after(check_pending_state)
             .after(lua_phase_system),

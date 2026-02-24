@@ -908,7 +908,7 @@ fn render_query_works_without_global_transform() {
 
 use aberredengine::components::boxcollider::BoxCollider;
 use aberredengine::events::collision::CollisionEvent;
-use aberredengine::systems::collision::collision_detector;
+use aberredengine::systems::collision_detector::collision_detector;
 
 /// Resource to collect collision events via observer.
 #[derive(Resource, Default)]

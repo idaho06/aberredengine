@@ -5,7 +5,7 @@
 
 pub mod components;
 pub mod events;
-pub mod game;
+pub mod lua_plugin;
 pub mod resources;
 pub mod luarc_generator;
 pub mod stub_generator;

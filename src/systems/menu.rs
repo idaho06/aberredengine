@@ -28,7 +28,7 @@ use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
-use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
+use crate::{components::dynamictext::DynamicText, lua_plugin::load_texture_from_text};
 use bevy_ecs::prelude::*;
 use log::{info, debug, error, warn};
 use raylib::prelude::Vector2;

@@ -17,7 +17,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::collision`] – collision detection systems
+//! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::components::collision::CollisionRule`] – defines collision handlers
 //! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
 

@@ -1,17 +1,17 @@
-//! Collision detection and handling systems.
+//! Lua collision observer and callback dispatch.
 //!
-//! This module provides two main systems:
+//! This module provides the Lua-specific collision handling:
 //!
-//! - [`collision_detector`] – pairwise AABB overlap checks, emits [`CollisionEvent`](crate::events::collision::CollisionEvent)
-//! - [`collision_observer`] – receives collision events and dispatches to [`CollisionRule`](crate::components::collision::CollisionRule) or [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule) callbacks
+//! - [`lua_collision_observer`] – receives [`CollisionEvent`](crate::events::collision::CollisionEvent)s
+//!   and dispatches to [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule) callbacks
 //!
 //! # Collision Flow
 //!
-//! 1. `collision_detector` iterates all entity pairs with [`BoxCollider`](crate::components::boxcollider::BoxCollider) + [`MapPosition`](crate::components::mapposition::MapPosition)
-//! 2. For each overlap, triggers a `CollisionEvent`
-//! 3. `collision_observer` looks up matching collision rules by [`Group`](crate::components::group::Group) names
-//! 4. For Rust rules: invokes the callback with a [`CollisionContext`](crate::components::collision::CollisionContext)
-//! 5. For Lua rules: calls [`call_lua_collision_callback`] with pooled context tables
+//! 1. [`collision_detector`](crate::systems::collision_detector::collision_detector) detects overlaps
+//!    and emits `CollisionEvent`s
+//! 2. `lua_collision_observer` looks up matching Lua collision rules by
+//!    [`Group`](crate::components::group::Group) names
+//! 3. For each match, calls [`call_lua_collision_callback`] with pooled context tables
 //!
 //! # Lua Collision Callbacks
 //!
@@ -29,20 +29,9 @@
 //! reduce GC pressure. See [`CollisionCtxPool`](crate::resources::lua_runtime::CollisionCtxTables)
 //! in runtime.rs for implementation details.
 //!
-//! # Defining Collision Rules
-//!
-//! Collision rules are defined in game code and spawned as entities:
-//!
-//! ```ignore
-//! commands.spawn((
-//!     CollisionRule::new("ball", "brick", ball_brick_callback as CollisionCallback),
-//!     Group::new("collision_rules"),
-//! ));
-//! ```
-//!
 //! # Related
 //!
-//! - [`crate::components::collision::CollisionRule`] – defines Rust collision handlers
+//! - [`crate::systems::collision_detector`] – pure Rust collision detection
 //! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
 //! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
@@ -72,43 +61,10 @@ use crate::systems::lua_commands::{
     process_phase_command, process_signal_command, process_spawn_command,
 };
 use log::error;
-// use crate::resources::worldtime::WorldTime; // Collisions are independent of time
 
-/// Broad-phase pairwise overlap test with event emission.
-///
-/// Uses ECS `iter_combinations_mut()` to efficiently iterate unique pairs,
-/// checks overlap, and triggers an event for each collision. Observers can
-/// react to despawn, apply damage, or play sounds.
-pub fn collision_detector(
-    mut query: Query<(Entity, &MapPosition, &BoxCollider, Option<&GlobalTransform2D>)>,
-    mut commands: Commands,
-) {
-    let mut combos = query.iter_combinations_mut();
-    while let Some(
-        [
-            (entity_a, position_a, collider_a, maybe_gt_a),
-            (entity_b, position_b, collider_b, maybe_gt_b),
-        ],
-    ) = combos.fetch_next()
-    {
-        // Use world position from GlobalTransform2D when available, fall back to local
-        let world_pos_a = maybe_gt_a.map_or(position_a.pos, |gt| gt.position);
-        let world_pos_b = maybe_gt_b.map_or(position_b.pos, |gt| gt.position);
-        let rect_a = collider_a.as_rectangle(world_pos_a);
-        let rect_b = collider_b.as_rectangle(world_pos_b);
-        if rect_a.check_collision_recs(&rect_b) {
-            commands.trigger(CollisionEvent {
-                a: entity_a,
-                b: entity_b,
-            });
-        }
-    }
-}
-
-/// Global observer when a CollisionEvent is triggered.
-///
+/// System parameters for the Lua collision observer.
 #[derive(SystemParam)]
-pub struct CollisionObserverParams<'w, 's> {
+pub struct LuaCollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
     // pub rules: Query<'w, 's, &'static CollisionRule>,
@@ -128,7 +84,7 @@ pub struct CollisionObserverParams<'w, 's> {
     pub systems_store: Res<'w, SystemsStore>,
 }
 
-pub fn collision_observer(trigger: On<CollisionEvent>, mut params: CollisionObserverParams) {
+pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollisionObserverParams) {
     let a = trigger.event().a;
     let b = trigger.event().b;
 

@@ -30,7 +30,8 @@ use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::animation::animation_controller;
-use aberredengine::systems::collision::{collision_detector, collision_observer};
+use aberredengine::systems::collision_detector::collision_detector;
+use aberredengine::systems::lua_collision::lua_collision_observer;
 use aberredengine::systems::group::update_group_counts_system;
 use aberredengine::systems::luatimer::update_lua_timers;
 use aberredengine::systems::movement::movement;
@@ -235,7 +236,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
     });
 
     // Register the actual collision_observer that processes Lua callbacks
-    world.add_observer(collision_observer);
+    world.add_observer(lua_collision_observer);
 
     world.flush();
 

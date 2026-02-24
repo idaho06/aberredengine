@@ -22,7 +22,8 @@
 //! # Related
 //!
 //! - [`crate::components::collision::CollisionRule`] – Rust-based collision rules
-//! - [`crate::systems::collision`] – collision detection and observer systems
+//! - [`crate::systems::collision_detector`] – collision detection system
+//! - [`crate::systems::lua_collision`] – Lua collision observer
 
 use bevy_ecs::prelude::*;
 
