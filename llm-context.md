@@ -30,6 +30,7 @@ FEATURE FLAGS:
 - ParticleEmitter, TTL, Entity cloning, EntityShader, Tint, Multi-pass post-processing, Runtime game configuration API, Lua stubs generator, Luarc generator, Library crate - all functional.
 - `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
 - Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut TimerCtx, &InputState)`. `TimerCtx` is a SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, etc.), and resources (world_signals, audio, world_time).
+- Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut PhaseCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut PhaseCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut PhaseCtx)`. Transitions via callback return value or external `phase.next` mutation. `PhaseCtx` mirrors `TimerCtx` exactly. `phase_system` runs after collision_detector, always compiled (no feature flag).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -51,6 +52,7 @@ src/
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
 │   ├── luaphase.rs            # [feature=lua] Lua-based phase state machine
+│   ├── phase.rs               # Rust fn-pointer phase state machine (mirrors LuaPhase)
 │   ├── signals.rs             # Per-entity signals (scalars/ints/flags/strings)
 │   ├── dynamictext.rs         # Text rendering component with cached size
 │   ├── entityshader.rs        # Per-entity shader for custom rendering effects
@@ -86,6 +88,7 @@ src/
 │   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
 │   ├── luatimer.rs            # [feature=lua] Lua timer processing
 │   ├── timer.rs               # Rust timer processing (update_timers, timer_observer, TimerCtx SystemParam)
+│   ├── phase.rs               # Rust phase state machine (phase_system, PhaseCtx SystemParam)
 │   ├── time.rs                # WorldTime update
 │   ├── signalbinding.rs       # Update bound text
 │   ├── dynamictext_size.rs    # Cache DynamicText bounding box sizes
@@ -213,6 +216,7 @@ Animation { animation_key: String, frame_index: usize, elapsed: f32 }
 AnimationController { fallback_key: String, rules: Vec<AnimationRule> }
 Signals { scalars: FxHashMap, integers: FxHashMap, flags: FxHashSet, strings: FxHashMap }
 LuaPhase { definition: LuaPhaseDefinition, current_phase: String, time_in_phase: f32, pending_transition: Option<String> }
+Phase { current: String, previous: Option<String>, next: Option<String>, time_in_phase: f32, needs_enter_callback: bool, phases: FxHashMap<String, PhaseCallbackFns> } -- Rust fn-pointer phase; PhaseCallbackFns { on_enter: Option<PhaseEnterFn>, on_update: Option<PhaseUpdateFn>, on_exit: Option<PhaseExitFn> }
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
@@ -282,6 +286,7 @@ EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions,
 RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
 RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites } -- systems/render.rs
 TimerCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/timer.rs
+PhaseCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/phase.rs
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
@@ -723,7 +728,8 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 - stuck_to_entity_system.after(collision_detector) -- skips entities with ChildOf
 - collision_detector.after(mouse_controller).after(movement)
 - lua_phase_system.after(collision_detector)               -- [feature=lua]
-- animation_controller.after(lua_phase_system)             -- [feature=lua]; after(collision_detector) when lua disabled
+- phase_system.after(collision_detector)                   -- always compiled (Rust fn-pointer phases)
+- animation_controller.after(lua_phase_system).after(phase_system) -- [feature=lua]; after(phase_system) when lua disabled
 - animation.after(animation_controller)
 - ttl_system.after(movement)
 - dynamictext_size_system.after(update_world_signals_binding_system)
@@ -749,15 +755,16 @@ Approximate execution order:
 15. ttl_system (after movement - despawns expired entities)
 16. collision_detector
 17. stuck_to_entity_system (after collision, skips entities with ChildOf)
-18. lua_phase_system (after collision) [feature=lua]
-19. animation_controller (after lua_phase when lua enabled; after collision_detector when lua disabled)
-20. animation (after animation_controller)
-21. update_lua_timers [feature=lua]
-22. update_timers (Rust fn-pointer timers)
-23. update_world_signals_binding_system
-24. dynamictext_size_system
-25. run_<scene>_update (lua_plugin::update, run_if state_is_playing, after check_pending_state + lua_phase_system) [feature=lua]
-26. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
+18. phase_system (after collision) -- always compiled
+19. lua_phase_system (after collision) [feature=lua]
+20. animation_controller (after phase_system + lua_phase_system when lua enabled; after phase_system when lua disabled)
+21. animation (after animation_controller)
+22. update_lua_timers [feature=lua]
+23. update_timers (Rust fn-pointer timers)
+24. update_world_signals_binding_system
+25. dynamictext_size_system
+26. run_<scene>_update (lua_plugin::update, run_if state_is_playing, after check_pending_state + lua_phase_system) [feature=lua]
+27. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
 
 ## KEY PATTERNS
 
@@ -858,7 +865,7 @@ For features touching:
 - Collision: collision_detector.rs + lua_collision.rs (systems), boxcollider.rs, luacollision.rs (components)
 - Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs, entityshader.rs
 - Animation: animation.rs (component + controller), animationstore.rs
-- State machines: luaphase.rs (component + system)
+- State machines: luaphase.rs (component + system) [feature=lua], phase.rs (component + system, Rust fn-pointer equivalent)
 - Signals: signals.rs, worldsignals.rs
 - Text: dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
 - Input: inputcontrolled.rs (InputControlled, AccelerationControlled, MouseControlled), input.rs (InputState), input_snapshot.rs

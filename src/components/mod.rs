@@ -17,6 +17,7 @@
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
 //! - [`luaphase`] – *(feature = "lua")* Lua-based state machine with enter/update/exit callbacks
+//! - [`phase`] – Rust-based state machine with enter/update/exit function-pointer callbacks
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
@@ -48,6 +49,7 @@ pub mod luatimer;
 pub mod mapposition;
 pub mod menu;
 pub mod persistent;
+pub mod phase;
 pub mod rigidbody;
 pub mod rotation;
 pub mod scale;

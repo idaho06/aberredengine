@@ -1566,3 +1566,351 @@ fn context_builder_nil_when_no_snapshots() {
         assert(ctx.timer     == nil, "timer should be nil")
     "#).call::<()>(ctx).expect("Lua nil assertions");
 }
+
+// =============================================================================
+// Rust Phase System Tests
+// =============================================================================
+
+use aberredengine::components::phase::{Phase, PhaseCallbackFns, PhaseEnterFn, PhaseUpdateFn, PhaseExitFn};
+use aberredengine::systems::phase::{phase_system, PhaseCtx};
+
+fn tick_phases(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(phase_system);
+    schedule.run(world);
+}
+
+fn make_phase_world(delta: f32) -> World {
+    let mut world = make_world(delta);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+    world
+}
+
+fn simple_two_phase_map() -> rustc_hash::FxHashMap<String, PhaseCallbackFns> {
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: None,
+        on_update: None,
+        on_exit: None,
+    });
+    phases.insert("moving".into(), PhaseCallbackFns {
+        on_enter: None,
+        on_update: None,
+        on_exit: None,
+    });
+    phases
+}
+
+#[test]
+fn phase_calls_on_enter_on_first_frame() {
+    let mut world = make_phase_world(0.016);
+
+    fn enter_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("entered");
+        }
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: Some(enter_fn),
+        on_update: None,
+        on_exit: None,
+    });
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(signals.has_flag("entered"));
+}
+
+#[test]
+fn phase_on_enter_not_called_twice() {
+    let mut world = make_phase_world(0.016);
+
+    fn enter_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            let count = signals.get_scalar("enter_count").unwrap_or(0.0);
+            signals.set_scalar("enter_count", count + 1.0);
+        }
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: Some(enter_fn),
+        on_update: None,
+        on_exit: None,
+    });
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    tick_phases(&mut world);
+    tick_phases(&mut world);
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(approx_eq(signals.get_scalar("enter_count").unwrap(), 1.0));
+}
+
+#[test]
+fn phase_calls_on_update_every_frame() {
+    let mut world = make_phase_world(0.016);
+
+    fn update_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, _dt: f32) -> Option<String> {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            let count = signals.get_scalar("update_count").unwrap_or(0.0);
+            signals.set_scalar("update_count", count + 1.0);
+        }
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: None,
+        on_update: Some(update_fn),
+        on_exit: None,
+    });
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    tick_phases(&mut world);
+    tick_phases(&mut world);
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(approx_eq(signals.get_scalar("update_count").unwrap(), 3.0));
+}
+
+#[test]
+fn phase_transition_via_update_return() {
+    let mut world = make_phase_world(0.016);
+
+    fn update_fn(_entity: Entity, _ctx: &mut PhaseCtx, _input: &InputState, _dt: f32) -> Option<String> {
+        Some("moving".into())
+    }
+
+    let mut phases = simple_two_phase_map();
+    phases.get_mut("idle").unwrap().on_update = Some(update_fn);
+
+    let entity = world.spawn((Phase::new("idle", phases),)).id();
+
+    // First tick: on_update returns "moving", which gets stored in phase.next
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    // After first tick, the transition is pending (stored in next)
+    assert_eq!(phase.next.as_deref(), Some("moving"));
+
+    // Second tick: the pending transition is processed
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "moving");
+    assert_eq!(phase.previous.as_deref(), Some("idle"));
+}
+
+#[test]
+fn phase_transition_via_external_next() {
+    let mut world = make_phase_world(0.016);
+
+    let entity = world.spawn((Phase::new("idle", simple_two_phase_map()),)).id();
+
+    // Externally request a transition
+    world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
+
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "moving");
+    assert_eq!(phase.previous.as_deref(), Some("idle"));
+}
+
+#[test]
+fn phase_on_exit_called_on_transition() {
+    let mut world = make_phase_world(0.016);
+
+    fn exit_fn(entity: Entity, ctx: &mut PhaseCtx) {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("exited_idle");
+        }
+    }
+
+    let mut phases = simple_two_phase_map();
+    phases.get_mut("idle").unwrap().on_exit = Some(exit_fn);
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    // Request transition
+    world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
+
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(signals.has_flag("exited_idle"));
+}
+
+#[test]
+fn phase_on_enter_called_on_transition() {
+    let mut world = make_phase_world(0.016);
+
+    fn enter_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("entered_moving");
+        }
+        None
+    }
+
+    let mut phases = simple_two_phase_map();
+    phases.get_mut("moving").unwrap().on_enter = Some(enter_fn);
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    // Request transition
+    world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
+
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(signals.has_flag("entered_moving"));
+}
+
+#[test]
+fn phase_time_in_phase_resets_on_transition() {
+    let mut world = make_phase_world(0.5);
+
+    let entity = world.spawn((Phase::new("idle", simple_two_phase_map()),)).id();
+
+    // Run a couple frames to accumulate time
+    tick_phases(&mut world);
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert!(approx_eq(phase.time_in_phase, 1.0));
+
+    // Request transition
+    world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
+
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    // time_in_phase was reset to 0 at transition, then incremented by delta (0.5)
+    assert!(approx_eq(phase.time_in_phase, 0.5));
+}
+
+#[test]
+fn phase_update_receives_delta_time() {
+    let mut world = make_phase_world(0.25);
+
+    fn update_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, dt: f32) -> Option<String> {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_scalar("received_dt", dt);
+        }
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: None,
+        on_update: Some(update_fn),
+        on_exit: None,
+    });
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(approx_eq(signals.get_scalar("received_dt").unwrap(), 0.25));
+}
+
+#[test]
+fn phase_callback_can_set_world_signal() {
+    let mut world = make_phase_world(0.016);
+
+    fn enter_fn(_entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+        ctx.world_signals.set_flag("game_started");
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: Some(enter_fn),
+        on_update: None,
+        on_exit: None,
+    });
+
+    world.spawn((Phase::new("idle", phases),));
+
+    tick_phases(&mut world);
+
+    let world_signals = world.resource::<WorldSignals>();
+    assert!(world_signals.has_flag("game_started"));
+}
+
+#[test]
+fn phase_callback_can_write_audio() {
+    let mut world = make_phase_world(0.016);
+
+    fn enter_fn(_entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+        ctx.audio.write(AudioCmd::PlayFx { id: "phase_start".into() });
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: Some(enter_fn),
+        on_update: None,
+        on_exit: None,
+    });
+
+    world.spawn((Phase::new("idle", phases),));
+
+    tick_phases(&mut world);
+
+    // Flip message buffers so they become readable
+    world.resource_mut::<Messages<AudioCmd>>().update();
+
+    let mut state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
+    let mut reader = state.get_mut(&mut world);
+    let cmds: Vec<_> = reader.read().collect();
+    assert_eq!(cmds.len(), 1);
+    assert!(matches!(cmds[0], AudioCmd::PlayFx { id } if id == "phase_start"));
+}
+
+#[test]
+fn phase_callback_receives_input_state() {
+    let mut world = make_phase_world(0.016);
+
+    let mut input = InputState::default();
+    input.action_1.active = true;
+    input.action_1.just_pressed = true;
+    world.insert_resource(input);
+
+    fn update_fn(entity: Entity, ctx: &mut PhaseCtx, input: &InputState, _dt: f32) -> Option<String> {
+        if input.action_1.active {
+            if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+                signals.set_flag("input_received");
+            }
+        }
+        None
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbackFns {
+        on_enter: None,
+        on_update: Some(update_fn),
+        on_exit: None,
+    });
+
+    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+
+    tick_phases(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(signals.has_flag("input_received"));
+}

@@ -100,6 +100,7 @@ use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_world_time;
 use crate::systems::timer::{timer_observer, update_timers};
+use crate::systems::phase::phase_system;
 use crate::systems::ttl::ttl_system;
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
@@ -355,14 +356,15 @@ fn main() {
             .before(collision_detector),
     );
     update.add_systems(collision_detector.after(mouse_controller).after(movement));
-    // Run lua_phase_system AFTER collision detection so phase transitions from collision callbacks
+    // Run phase systems AFTER collision detection so phase transitions from collision callbacks
     // are processed in the same frame (before animation_controller evaluates signals)
+    update.add_systems(phase_system.after(collision_detector));
     #[cfg(feature = "lua")]
     update.add_systems(lua_phase_system.after(collision_detector));
     #[cfg(feature = "lua")]
-    update.add_systems(animation_controller.after(lua_phase_system));
+    update.add_systems(animation_controller.after(lua_phase_system).after(phase_system));
     #[cfg(not(feature = "lua"))]
-    update.add_systems(animation_controller.after(collision_detector));
+    update.add_systems(animation_controller.after(phase_system));
     update.add_systems(animation.after(animation_controller));
     #[cfg(feature = "lua")]
     update.add_systems(update_lua_timers);
