@@ -8,7 +8,7 @@ use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use crate::resources::lua_runtime::UniformValue;
+use crate::resources::uniformvalue::UniformValue;
 
 /// Reserved uniform names that are set automatically by the render system.
 /// Attempting to set these from Lua will log a warning.

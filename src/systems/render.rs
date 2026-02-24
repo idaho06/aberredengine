@@ -28,7 +28,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::lua_runtime::UniformValue;
+use crate::resources::uniformvalue::UniformValue;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;

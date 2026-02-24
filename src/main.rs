@@ -38,9 +38,12 @@
 
 mod components;
 mod events;
+#[cfg(feature = "lua")]
 mod lua_plugin;
 mod resources;
+#[cfg(feature = "lua")]
 mod luarc_generator;
+#[cfg(feature = "lua")]
 mod stub_generator;
 mod systems;
 
@@ -55,6 +58,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+#[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
@@ -71,6 +75,7 @@ use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
 use crate::systems::collision_detector::collision_detector;
+#[cfg(feature = "lua")]
 use crate::systems::lua_collision::lua_collision_observer;
 use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gameconfig::apply_gameconfig_changes;
@@ -80,7 +85,9 @@ use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+#[cfg(feature = "lua")]
 use crate::systems::luaphase::lua_phase_system;
+#[cfg(feature = "lua")]
 use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
@@ -99,6 +106,7 @@ use crate::systems::tween::tween_scale_system;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use clap::Parser;
+#[cfg(feature = "lua")]
 use std::path::PathBuf;
 //use raylib::collision;
 //use raylib::prelude::*;
@@ -110,11 +118,13 @@ use std::path::PathBuf;
 struct Cli {
     /// Generate Lua LSP stubs from engine metadata and exit.
     /// Optionally provide a path (default: assets/scripts/engine.lua).
+    #[cfg(feature = "lua")]
     #[arg(long, value_name = "PATH")]
     create_lua_stubs: Option<Option<PathBuf>>,
 
     /// Generate .luarc.json for Lua Language Server and exit.
     /// Optionally provide a path (default: assets/scripts/.luarc.json).
+    #[cfg(feature = "lua")]
     #[arg(long, value_name = "PATH")]
     create_luarc: Option<Option<PathBuf>>,
 }
@@ -122,10 +132,11 @@ struct Cli {
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let cli = Cli::parse();
+    let _cli = Cli::parse();
 
     // Early-exit: generate Lua stubs and quit (no window/audio needed)
-    if let Some(maybe_path) = cli.create_lua_stubs {
+    #[cfg(feature = "lua")]
+    if let Some(maybe_path) = _cli.create_lua_stubs {
         let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/engine.lua"));
         let runtime =
             LuaRuntime::new().expect("Failed to create Lua runtime for stub generation");
@@ -146,7 +157,8 @@ fn main() {
     }
 
     // Early-exit: generate .luarc.json and quit (no window/audio needed)
-    if let Some(maybe_path) = cli.create_luarc {
+    #[cfg(feature = "lua")]
+    if let Some(maybe_path) = _cli.create_luarc {
         let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/.luarc.json"));
         let runtime =
             LuaRuntime::new().expect("Failed to create Lua runtime for .luarc.json generation");
@@ -222,11 +234,14 @@ fn main() {
     world.insert_resource(PostProcessShader::new());
 
     // Initialize Lua runtime and load main script
-    let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
-    if let Err(e) = lua_runtime.run_script("./assets/scripts/main.lua") {
-        log::error!("Failed to load main.lua: {}", e);
+    #[cfg(feature = "lua")]
+    {
+        let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
+        if let Err(e) = lua_runtime.run_script("./assets/scripts/main.lua") {
+            log::error!("Failed to load main.lua: {}", e);
+        }
+        world.insert_non_send_resource(lua_runtime);
     }
-    world.insert_non_send_resource(lua_runtime);
 
     world.insert_non_send_resource(rl);
     world.insert_non_send_resource(thread);
@@ -237,35 +252,38 @@ fn main() {
     // We must mark them as Persistent so they survive scene transitions.
     let mut systems_store = SystemsStore::new();
 
-    let setup_system_id = world.register_system(lua_plugin::setup);
-    world
-        .entity_mut(setup_system_id.entity())
-        .insert(Persistent);
-    systems_store.insert("setup", setup_system_id);
+    #[cfg(feature = "lua")]
+    {
+        let setup_system_id = world.register_system(lua_plugin::setup);
+        world
+            .entity_mut(setup_system_id.entity())
+            .insert(Persistent);
+        systems_store.insert("setup", setup_system_id);
 
-    let enter_play_system_id = world.register_system(lua_plugin::enter_play);
-    world
-        .entity_mut(enter_play_system_id.entity())
-        .insert(Persistent);
-    systems_store.insert("enter_play", enter_play_system_id);
+        let enter_play_system_id = world.register_system(lua_plugin::enter_play);
+        world
+            .entity_mut(enter_play_system_id.entity())
+            .insert(Persistent);
+        systems_store.insert("enter_play", enter_play_system_id);
 
-    let quit_game_system_id = world.register_system(lua_plugin::quit_game);
-    world
-        .entity_mut(quit_game_system_id.entity())
-        .insert(Persistent);
-    systems_store.insert("quit_game", quit_game_system_id);
+        let quit_game_system_id = world.register_system(lua_plugin::quit_game);
+        world
+            .entity_mut(quit_game_system_id.entity())
+            .insert(Persistent);
+        systems_store.insert("quit_game", quit_game_system_id);
 
-    let clean_all_entities_system_id = world.register_system(lua_plugin::clean_all_entities);
-    world
-        .entity_mut(clean_all_entities_system_id.entity())
-        .insert(Persistent);
-    systems_store.insert("clean_all_entities", clean_all_entities_system_id);
+        let clean_all_entities_system_id = world.register_system(lua_plugin::clean_all_entities);
+        world
+            .entity_mut(clean_all_entities_system_id.entity())
+            .insert(Persistent);
+        systems_store.insert("clean_all_entities", clean_all_entities_system_id);
 
-    let switch_scene_system_id = world.register_system(lua_plugin::switch_scene);
-    world
-        .entity_mut(switch_scene_system_id.entity())
-        .insert(Persistent);
-    systems_store.insert("switch_scene", switch_scene_system_id);
+        let switch_scene_system_id = world.register_system(lua_plugin::switch_scene);
+        world
+            .entity_mut(switch_scene_system_id.entity())
+            .insert(Persistent);
+        systems_store.insert("switch_scene", switch_scene_system_id);
+    }
 
     let menu_despawn_system_id = world.register_system(menu_despawn);
     world
@@ -284,11 +302,13 @@ fn main() {
     }
     world.trigger(GameStateChangedEvent {}); // Call inmediatly to enter Setup state
 
+    #[cfg(feature = "lua")]
     world.spawn((Observer::new(lua_collision_observer), Persistent));
     world.spawn((Observer::new(switch_debug_observer), Persistent));
     world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
     world.spawn((Observer::new(menu_controller_observer), Persistent));
     world.spawn((Observer::new(menu_selection_observer), Persistent));
+    #[cfg(feature = "lua")]
     world.spawn((Observer::new(lua_timer_observer), Persistent));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
@@ -335,12 +355,18 @@ fn main() {
     update.add_systems(collision_detector.after(mouse_controller).after(movement));
     // Run lua_phase_system AFTER collision detection so phase transitions from collision callbacks
     // are processed in the same frame (before animation_controller evaluates signals)
+    #[cfg(feature = "lua")]
     update.add_systems(lua_phase_system.after(collision_detector));
+    #[cfg(feature = "lua")]
     update.add_systems(animation_controller.after(lua_phase_system));
+    #[cfg(not(feature = "lua"))]
+    update.add_systems(animation_controller.after(collision_detector));
     update.add_systems(animation.after(animation_controller));
+    #[cfg(feature = "lua")]
     update.add_systems(update_lua_timers);
     update.add_systems(update_world_signals_binding_system);
     update.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
+    #[cfg(feature = "lua")]
     update.add_systems(
         (lua_plugin::update)
             .run_if(state_is_playing)

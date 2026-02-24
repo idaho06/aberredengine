@@ -3,14 +3,8 @@
 //! These enums represent commands that Lua scripts can queue for execution
 //! by Rust systems. Commands are processed after Lua callbacks return.
 
-/// Value types for shader uniforms.
-#[derive(Debug, Clone)]
-pub enum UniformValue {
-    Float(f32),
-    Int(i32),
-    Vec2 { x: f32, y: f32 },
-    Vec4 { x: f32, y: f32, z: f32, w: f32 },
-}
+// Re-export UniformValue from its canonical location for internal convenience.
+pub use crate::resources::uniformvalue::UniformValue;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.

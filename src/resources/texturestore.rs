@@ -5,7 +5,10 @@
 //! render systems.
 use bevy_ecs::prelude::Resource;
 use raylib::prelude::Texture2D;
+use raylib::prelude::{Color, Font, Image, RaylibHandle, RaylibThread};
+use raylib::ffi;
 use rustc_hash::FxHashMap;
+use std::ffi::CString;
 // use std::collections::HashMap;
 
 #[derive(Resource)]
@@ -38,4 +41,23 @@ impl TextureStore {
     pub fn remove(&mut self, key: impl AsRef<str>) -> Option<Texture2D> {
         self.map.remove(key.as_ref())
     }
+}
+
+/// Render text into a new [`Texture2D`] using the given font.
+pub fn load_texture_from_text(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    font: &Font,
+    text: &str,
+    font_size: f32,
+    spacing: f32,
+    color: Color,
+) -> Option<Texture2D> {
+    let c_text = CString::new(text).ok()?;
+    let image = unsafe {
+        let raw = ffi::ImageTextEx(**font, c_text.as_ptr(), font_size, spacing, color.into());
+        Image::from_raw(raw)
+    };
+    let texture = rl.load_texture_from_image(thread, &image).ok()?;
+    Some(texture)
 }

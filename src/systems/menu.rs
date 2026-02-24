@@ -24,11 +24,13 @@ use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::GameStates::Quitting;
 use crate::resources::gamestate::NextGameState;
+#[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::texturestore::load_texture_from_text;
 use crate::resources::worldsignals::WorldSignals;
-use crate::{components::dynamictext::DynamicText, lua_plugin::load_texture_from_text};
+use crate::components::dynamictext::DynamicText;
 use bevy_ecs::prelude::*;
 use log::{info, debug, error, warn};
 use raylib::prelude::Vector2;
@@ -549,15 +551,16 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
 /// Executes the action associated with a selected menu item.
 ///
-/// If the menu has an `on_select_callback`, invokes the Lua callback with a
-/// context table containing `menu_id`, `item_id`, and `item_index`. When a
-/// callback is set, `MenuActions` are ignored (callback takes full control).
+/// If the menu has an `on_select_callback` (requires `lua` feature), invokes the
+/// Lua callback with a context table containing `menu_id`, `item_id`, and `item_index`.
+/// When a callback is set, `MenuActions` are ignored (callback takes full control).
 ///
 /// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
 /// - [`MenuAction::ShowSubMenu`] – displays a sub-menu (TODO)
 /// - [`MenuAction::Noop`] – does nothing
+#[cfg(feature = "lua")]
 pub fn menu_selection_observer(
     trigger: On<MenuSelectionEvent>,
     mut commands: Commands,
@@ -606,11 +609,62 @@ pub fn menu_selection_observer(
         return; // Callback handles everything, skip MenuActions
     }
 
-    // Fallback to existing MenuActions logic
+    dispatch_menu_action(
+        menu_actions_opt,
+        event,
+        &mut commands,
+        &mut world_signals,
+        &mut next_game_state,
+        &systems_store,
+    );
+}
+
+/// Executes the action associated with a selected menu item (no Lua support).
+#[cfg(not(feature = "lua"))]
+pub fn menu_selection_observer(
+    trigger: On<MenuSelectionEvent>,
+    mut commands: Commands,
+    menus: Query<(&Menu, Option<&MenuActions>)>,
+    mut world_signals: ResMut<WorldSignals>,
+    mut next_game_state: ResMut<NextGameState>,
+    systems_store: Res<SystemsStore>,
+) {
+    let event = trigger.event();
+    debug!(
+        "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
+        event.menu, event.item_id
+    );
+
+    let Ok((_menu, menu_actions_opt)) = menus.get(event.menu) else {
+        warn!(
+            "menu_selection_observer: Menu entity {:?} not found",
+            event.menu
+        );
+        return;
+    };
+
+    dispatch_menu_action(
+        menu_actions_opt,
+        event,
+        &mut commands,
+        &mut world_signals,
+        &mut next_game_state,
+        &systems_store,
+    );
+}
+
+fn dispatch_menu_action(
+    menu_actions_opt: Option<&MenuActions>,
+    event: &MenuSelectionEvent,
+    commands: &mut Commands,
+    world_signals: &mut ResMut<WorldSignals>,
+    next_game_state: &mut ResMut<NextGameState>,
+    systems_store: &Res<SystemsStore>,
+) {
     let Some(menu_actions) = menu_actions_opt else {
         warn!(
-            "menu_selection_observer: No MenuActions found for menu entity {:?}, item_id {:?}",
-            event.menu, event.item_id
+            "menu_selection_observer: No MenuActions found for item_id {:?}",
+            event.item_id
         );
         return;
     };

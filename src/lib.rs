@@ -5,8 +5,11 @@
 
 pub mod components;
 pub mod events;
+#[cfg(feature = "lua")]
 pub mod lua_plugin;
 pub mod resources;
+#[cfg(feature = "lua")]
 pub mod luarc_generator;
+#[cfg(feature = "lua")]
 pub mod stub_generator;
 pub mod systems;

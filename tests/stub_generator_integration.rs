@@ -1,3 +1,5 @@
+#![cfg(feature = "lua")]
+
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::stub_generator;
 

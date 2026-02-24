@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
+#[cfg(feature = "lua")]
 use bevy_ecs::system::SystemState;
 use raylib::math::Vector2;
 
@@ -20,10 +21,15 @@ use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
 use aberredengine::components::stuckto::StuckTo;
+#[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
+#[cfg(feature = "lua")]
 use aberredengine::resources::systemsstore::SystemsStore;
+#[cfg(feature = "lua")]
 use aberredengine::resources::worldsignals::WorldSignals;
+#[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::EntityCmdQueries;
+#[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
 use aberredengine::systems::propagate_transforms::propagate_transforms;
 use aberredengine::systems::stuckto::stuck_to_entity_system;
@@ -459,6 +465,7 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
 // =============================================================================
 
 /// Helper to run process_entity_commands using SystemState.
+#[cfg(feature = "lua")]
 fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(SystemsStore::new());
 
@@ -481,6 +488,7 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     state.apply(world);
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_parent_inserts_childof() {
     let mut world = World::new();
@@ -515,6 +523,7 @@ fn entity_cmd_set_parent_inserts_childof() {
     );
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_remove_parent_snaps_to_world_position() {
     let mut world = World::new();
@@ -606,6 +615,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     );
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_parent_multiple_children() {
     let mut world = World::new();
@@ -655,6 +665,7 @@ fn entity_cmd_set_parent_multiple_children() {
 // PHASE 3: Builder with_parent (SpawnCmd.parent field)
 // =============================================================================
 
+#[cfg(feature = "lua")]
 #[test]
 fn spawn_cmd_with_parent_applies_childof() {
     let mut world = World::new();
@@ -1029,10 +1040,12 @@ fn collision_no_false_positive_from_local_position() {
 // PHASE 7: Entity context + Particle emitter
 // =============================================================================
 
+#[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{
     LuaRuntime, build_entity_context_pooled,
 };
 
+#[cfg(feature = "lua")]
 #[test]
 fn entity_context_includes_world_transform_fields() {
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
@@ -1067,6 +1080,7 @@ fn entity_context_includes_world_transform_fields() {
     "#).call::<()>(ctx).expect("Lua world transform assertions");
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn entity_context_nil_world_fields_without_hierarchy() {
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
@@ -1139,6 +1153,7 @@ fn cascade_despawn_removes_children() {
 // PHASE 8: Metadata, stubs, and documentation
 // =============================================================================
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_entity_cmds_include_parent_commands() {
     let rt = LuaRuntime::new().unwrap();
@@ -1155,6 +1170,7 @@ fn meta_entity_cmds_include_parent_commands() {
     "#).exec().expect("Lua meta parent commands assertions");
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_builder_includes_with_parent() {
     let rt = LuaRuntime::new().unwrap();
@@ -1176,6 +1192,7 @@ fn meta_builder_includes_with_parent() {
     "#).exec().expect("Lua meta builder with_parent assertions");
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_entity_context_includes_world_fields() {
     let rt = LuaRuntime::new().unwrap();

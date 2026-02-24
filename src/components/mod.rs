@@ -16,7 +16,7 @@
 //! - [`mapposition`] – world-space position (pivot) for an entity
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
-//! - [`luaphase`] – Lua-based state machine with enter/update/exit callbacks
+//! - [`luaphase`] – *(feature = "lua")* Lua-based state machine with enter/update/exit callbacks
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
@@ -26,7 +26,7 @@
 //! - [`sprite`] – 2D sprite rendering component
 //! - [`stuckto`] – attaches an entity's position to another entity
 //! - [`tint`] – color tint for rendering sprites and text
-//! - [`luatimer`] – Lua callback timer for delayed actions
+//! - [`luatimer`] – *(feature = "lua")* Lua callback timer for delayed actions
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`zindex`] – rendering order hint for 2D drawing
 
@@ -39,8 +39,11 @@ pub mod entityshader;
 pub mod gridlayout;
 pub mod group;
 pub mod inputcontrolled;
+#[cfg(feature = "lua")]
 pub mod luacollision;
+#[cfg(feature = "lua")]
 pub mod luaphase;
+#[cfg(feature = "lua")]
 pub mod luatimer;
 pub mod mapposition;
 pub mod menu;

@@ -11,7 +11,7 @@
 //! - [`gamestate`] – state transition notifications for the high-level game flow
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
-//! - [`luatimer`] – Lua timer callback events
+//! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off
 //! - [`switchfullscreen`] – toggle fullscreen mode on/off
 //!
@@ -21,6 +21,7 @@ pub mod audio;
 pub mod collision;
 pub mod gamestate;
 pub mod input;
+#[cfg(feature = "lua")]
 pub mod luatimer;
 pub mod menu;
 pub mod switchdebug;

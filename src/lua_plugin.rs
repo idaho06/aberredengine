@@ -29,7 +29,6 @@
 //! [`CollisionRule`](crate::components::collision::CollisionRule) components define how
 //! entities interact: ball-wall bounce, ball-player reflection, ball-brick destruction.
 
-use std::ffi::CString;
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
@@ -116,25 +115,6 @@ pub struct GameSceneState<'w> {
 pub struct EntityProcessing<'w, 's> {
     pub cmd_queries: EntityCmdQueries<'w, 's>,
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
-}
-
-/// Helper function to create a Texture2D from a text string, font, size, and color
-pub fn load_texture_from_text(
-    rl: &mut RaylibHandle,
-    thread: &RaylibThread,
-    font: &Font,
-    text: &str,
-    font_size: f32,
-    spacing: f32,
-    color: Color,
-) -> Option<Texture2D> {
-    let c_text = CString::new(text).ok()?;
-    let image = unsafe {
-        let raw = ffi::ImageTextEx(**font, c_text.as_ptr(), font_size, spacing, color.into());
-        Image::from_raw(raw)
-    };
-    let texture = rl.load_texture_from_image(thread, &image).ok()?;
-    Some(texture)
 }
 
 /// Load a font with mipmaps and anisotropic filtering

@@ -8,7 +8,9 @@ use raylib::prelude::Vector2;
 use aberredengine::components::animation::{Animation, AnimationController, Condition};
 use aberredengine::components::boxcollider::BoxCollider;
 use aberredengine::components::group::Group;
+#[cfg(feature = "lua")]
 use aberredengine::components::luacollision::LuaCollisionRule;
+#[cfg(feature = "lua")]
 use aberredengine::components::luatimer::LuaTimer;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rigidbody::RigidBody;
@@ -22,8 +24,10 @@ use aberredengine::components::tween::{
 };
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::collision::CollisionEvent;
+#[cfg(feature = "lua")]
 use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::resources::group::TrackedGroups;
+#[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
@@ -31,8 +35,10 @@ use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::animation::animation_controller;
 use aberredengine::systems::collision_detector::collision_detector;
+#[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
 use aberredengine::systems::group::update_group_counts_system;
+#[cfg(feature = "lua")]
 use aberredengine::systems::luatimer::update_lua_timers;
 use aberredengine::systems::movement::movement;
 use aberredengine::systems::stuckto::stuck_to_entity_system;
@@ -183,6 +189,7 @@ fn ttl_does_not_despawn_before_zero() {
     assert!(ttl.remaining > 0.0);
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn collision_pipeline_triggers_lua_side_effects() {
     let mut world = make_world(0.0);
@@ -723,12 +730,14 @@ fn tween_position_with_quad_in_easing() {
 // Lua Timer System Tests
 // =============================================================================
 
+#[cfg(feature = "lua")]
 fn tick_lua_timers(world: &mut World) {
     let mut schedule = Schedule::default();
     schedule.add_systems(update_lua_timers);
     schedule.run(world);
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn lua_timer_accumulates_time() {
     let mut world = make_world(0.3);
@@ -741,6 +750,7 @@ fn lua_timer_accumulates_time() {
     assert!(approx_eq(timer.elapsed, 0.3));
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn lua_timer_fires_event_when_expired() {
     let mut world = make_world(1.0);
@@ -765,6 +775,7 @@ fn lua_timer_fires_event_when_expired() {
     assert_eq!(*fired_entity.lock().unwrap(), Some(entity));
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn lua_timer_resets_after_firing() {
     let mut world = make_world(0.6);
@@ -782,6 +793,7 @@ fn lua_timer_resets_after_firing() {
     assert!(approx_eq(timer.elapsed, 0.1));
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn lua_timer_does_not_fire_before_duration() {
     let mut world = make_world(0.3);
@@ -850,6 +862,7 @@ fn time_scale_doubles_effective_movement() {
     assert!(approx_eq(pos.pos.x, 10.0)); // vel * delta = 10 * 1.0
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_table_has_functions_and_classes() {
     let rt = LuaRuntime::new().unwrap();
@@ -885,6 +898,7 @@ fn meta_table_has_functions_and_classes() {
 // Meta Schema Drift Protection Tests
 // =============================================================================
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_types_table_is_populated() {
     let rt = LuaRuntime::new().unwrap();
@@ -930,6 +944,7 @@ fn meta_types_table_is_populated() {
     "#).exec().unwrap();
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_enums_table_is_populated() {
     let rt = LuaRuntime::new().unwrap();
@@ -980,6 +995,7 @@ fn meta_enums_table_is_populated() {
     "#).exec().unwrap();
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_callbacks_table_is_populated() {
     let rt = LuaRuntime::new().unwrap();
@@ -1018,6 +1034,7 @@ fn meta_callbacks_table_is_populated() {
     "#).exec().unwrap();
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_functions_complete() {
     let rt = LuaRuntime::new().unwrap();
@@ -1122,6 +1139,7 @@ fn meta_functions_complete() {
     "#).exec().unwrap();
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn meta_builder_methods_have_schema_refs() {
     let rt = LuaRuntime::new().unwrap();
@@ -1277,6 +1295,7 @@ fn update_world_time_zero_dt() {
 // Context Builder Snapshot String Tests
 // =============================================================================
 
+#[cfg(feature = "lua")]
 #[test]
 fn context_builder_passes_snapshot_strings_to_lua() {
     use std::sync::Arc;
@@ -1325,6 +1344,7 @@ fn context_builder_passes_snapshot_strings_to_lua() {
     "#).call::<()>(ctx).expect("Lua context string assertions");
 }
 
+#[cfg(feature = "lua")]
 #[test]
 fn context_builder_nil_when_no_snapshots() {
     use aberredengine::resources::lua_runtime::build_entity_context_pooled;
