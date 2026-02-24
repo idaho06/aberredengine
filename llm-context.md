@@ -29,6 +29,7 @@ FEATURE FLAGS:
 - Menu scrolling: visible_count + scroll_offset with "..." indicator entities for overflow.
 - ParticleEmitter, TTL, Entity cloning, EntityShader, Tint, Multi-pass post-processing, Runtime game configuration API, Lua stubs generator, Luarc generator, Library crate - all functional.
 - `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
+- Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut TimerCtx, &InputState)`. `TimerCtx` is a SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, etc.), and resources (world_signals, audio, world_time).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -56,6 +57,7 @@ src/
 │   ├── signalbinding.rs       # Bind text to world signals
 │   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
 │   ├── luatimer.rs            # [feature=lua] Lua callback timer
+│   ├── timer.rs               # Rust fn-pointer timer (mirrors LuaTimer)
 │   ├── stuckto.rs             # Attach entity to another
 │   ├── tint.rs                # Color tint for rendering (sprites/text)
 │   ├── menu.rs                # Interactive menu (with scroll support)
@@ -83,6 +85,7 @@ src/
 │   ├── luaphase.rs            # [feature=lua] Lua phase callbacks
 │   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
 │   ├── luatimer.rs            # [feature=lua] Lua timer processing
+│   ├── timer.rs               # Rust timer processing (update_timers, timer_observer, TimerCtx SystemParam)
 │   ├── time.rs                # WorldTime update
 │   ├── signalbinding.rs       # Update bound text
 │   ├── dynamictext_size.rs    # Cache DynamicText bounding box sizes
@@ -135,12 +138,13 @@ src/
     ├── input.rs               # InputEvent + InputAction enum (all directions, actions, special)
     ├── menu.rs                # MenuSelection
     ├── luatimer.rs            # [feature=lua] LuaTimerEvent
+    ├── timer.rs               # TimerEvent (Rust fn-pointer timer)
     ├── switchdebug.rs         # DebugToggle (F11)
     ├── switchfullscreen.rs    # FullScreen toggle event + observer (F10)
     └── audio.rs               # AudioCmd, AudioMessage
 tests/
 ├── bevy_ecs_integration.rs    # ECS integration tests (pure Rust)
-├── engine_tick_integration.rs # Engine tick + meta drift protection tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
+├── engine_tick_integration.rs # Engine tick + meta drift protection tests (mixed; Lua tests gated by #[cfg(feature = "lua")]; includes Rust Timer integration tests)
 ├── stub_generator_integration.rs # Stub generator tests (#![cfg(feature = "lua")])
 └── hierarchy_integration.rs   # Parent-child hierarchy tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
 assets/
@@ -213,6 +217,7 @@ DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
 LuaTimer { duration: f32, elapsed: f32, callback: String }
+Timer { duration: f32, elapsed: f32, callback: TimerCallback } -- Rust fn-pointer timer; TimerCallback = fn(Entity, &mut TimerCtx, &InputState)
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
 Menu { items: Vec<MenuItem>, selected_index: usize, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, visible_count: Option<usize>, scroll_offset: usize, top_indicator_entity, bottom_indicator_entity }
@@ -276,6 +281,7 @@ EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entit
 EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, shaders } -- systems/lua_commands.rs [feature=lua]
 RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
 RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites } -- systems/render.rs
+TimerCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/timer.rs
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
@@ -700,6 +706,15 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 
 ## SYSTEM EXECUTION ORDER (main.rs schedule)
 
+Registered observers (spawned as persistent entities in main.rs):
+- lua_collision_observer (on CollisionEvent) [feature=lua]
+- switch_debug_observer (on SwitchDebugEvent)
+- switch_fullscreen_observer (on SwitchFullScreenEvent)
+- menu_controller_observer (on InputEvent)
+- menu_selection_observer (on MenuSelectionEvent)
+- lua_timer_observer (on LuaTimerEvent) [feature=lua]
+- timer_observer (on TimerEvent)
+
 Systems with explicit ordering constraints (`.after()` / `.before()`):
 
 - apply_gameconfig_changes (run_if state_is_playing)
@@ -738,10 +753,11 @@ Approximate execution order:
 19. animation_controller (after lua_phase when lua enabled; after collision_detector when lua disabled)
 20. animation (after animation_controller)
 21. update_lua_timers [feature=lua]
-22. update_world_signals_binding_system
-23. dynamictext_size_system
-24. run_<scene>_update (lua_plugin::update, run_if state_is_playing, after check_pending_state + lua_phase_system) [feature=lua]
-25. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
+22. update_timers (Rust fn-pointer timers)
+23. update_world_signals_binding_system
+24. dynamictext_size_system
+25. run_<scene>_update (lua_plugin::update, run_if state_is_playing, after check_pending_state + lua_phase_system) [feature=lua]
+26. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
 
 ## KEY PATTERNS
 

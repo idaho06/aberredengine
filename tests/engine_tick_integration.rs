@@ -3,6 +3,7 @@
 #![allow(dead_code, unused_imports)]
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemState;
 use raylib::prelude::Vector2;
 
 use aberredengine::components::animation::{Animation, AnimationController, Condition};
@@ -18,6 +19,7 @@ use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
 use aberredengine::components::signals::Signals;
 use aberredengine::components::stuckto::StuckTo;
+use aberredengine::components::timer::Timer;
 use aberredengine::components::ttl::Ttl;
 use aberredengine::components::tween::{
     Easing, LoopMode, TweenPosition, TweenRotation, TweenScale,
@@ -26,7 +28,9 @@ use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
 use aberredengine::events::luatimer::LuaTimerEvent;
+use aberredengine::events::timer::TimerEvent;
 use aberredengine::resources::group::TrackedGroups;
+use aberredengine::resources::input::InputState;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::screensize::ScreenSize;
@@ -43,6 +47,7 @@ use aberredengine::systems::luatimer::update_lua_timers;
 use aberredengine::systems::movement::movement;
 use aberredengine::systems::stuckto::stuck_to_entity_system;
 use aberredengine::systems::time::update_world_time;
+use aberredengine::systems::timer::{update_timers, timer_observer, TimerCtx};
 use aberredengine::systems::ttl::ttl_system;
 use aberredengine::systems::tween::{
     tween_mapposition_system, tween_rotation_system, tween_scale_system,
@@ -811,6 +816,199 @@ fn lua_timer_does_not_fire_before_duration() {
     tick_lua_timers(&mut world);
 
     assert!(!*fired.lock().unwrap());
+}
+
+// =============================================================================
+// Rust Timer System Tests
+// =============================================================================
+
+fn tick_timers(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(update_timers);
+    schedule.run(world);
+}
+
+#[test]
+fn rust_timer_accumulates_time() {
+    let mut world = make_world(0.3);
+
+    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    let entity = world.spawn((Timer::new(1.0, noop),)).id();
+
+    tick_timers(&mut world);
+
+    let timer = world.get::<Timer>(entity).unwrap();
+    assert!(approx_eq(timer.elapsed, 0.3));
+}
+
+#[test]
+fn rust_timer_fires_event_when_expired() {
+    let mut world = make_world(1.0);
+
+    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    let entity = world.spawn((Timer::new(0.5, noop),)).id();
+
+    let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let fired_entity = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let fired_clone = fired.clone();
+    let entity_clone = fired_entity.clone();
+
+    world.add_observer(move |trigger: On<TimerEvent>| {
+        *fired_clone.lock().unwrap() = true;
+        *entity_clone.lock().unwrap() = Some(trigger.event().entity);
+    });
+    world.flush();
+
+    tick_timers(&mut world);
+
+    assert!(*fired.lock().unwrap());
+    assert_eq!(*fired_entity.lock().unwrap(), Some(entity));
+}
+
+#[test]
+fn rust_timer_resets_after_firing() {
+    let mut world = make_world(0.6);
+
+    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    let entity = world.spawn((Timer::new(0.5, noop),)).id();
+
+    world.add_observer(|_trigger: On<TimerEvent>| {});
+    world.flush();
+
+    tick_timers(&mut world);
+
+    let timer = world.get::<Timer>(entity).unwrap();
+    // Timer should have reset: 0.6 - 0.5 = 0.1
+    assert!(approx_eq(timer.elapsed, 0.1));
+}
+
+#[test]
+fn rust_timer_does_not_fire_before_duration() {
+    let mut world = make_world(0.3);
+
+    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    world.spawn((Timer::new(1.0, noop),));
+
+    let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let fired_clone = fired.clone();
+
+    world.add_observer(move |_trigger: On<TimerEvent>| {
+        *fired_clone.lock().unwrap() = true;
+    });
+    world.flush();
+
+    tick_timers(&mut world);
+
+    assert!(!*fired.lock().unwrap());
+}
+
+#[test]
+fn rust_timer_observer_calls_callback() {
+    let mut world = make_world(1.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    fn set_flag(entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("timer_fired");
+        }
+    }
+
+    let entity = world
+        .spawn((Timer::new(0.5, set_flag), Signals::default()))
+        .id();
+
+    // Register the real timer_observer so the callback gets invoked
+    world.add_observer(timer_observer);
+    world.flush();
+
+    tick_timers(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(signals.has_flag("timer_fired"));
+}
+
+#[test]
+fn rust_timer_observer_can_write_audio() {
+    let mut world = make_world(1.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    fn play_sound(_entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+        ctx.audio.write(AudioCmd::PlayFx {
+            id: "explosion".into(),
+        });
+    }
+
+    world.spawn((Timer::new(0.5, play_sound),));
+
+    world.add_observer(timer_observer);
+    world.flush();
+
+    tick_timers(&mut world);
+
+    // Flip message buffers so they become readable
+    world.resource_mut::<Messages<AudioCmd>>().update();
+
+    // Read messages via SystemState<MessageReader>
+    let mut state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
+    let mut reader = state.get_mut(&mut world);
+    let cmds: Vec<_> = reader.read().collect();
+    assert_eq!(cmds.len(), 1);
+    assert!(matches!(cmds[0], AudioCmd::PlayFx { id } if id == "explosion"));
+}
+
+#[test]
+fn rust_timer_observer_can_set_world_signal() {
+    let mut world = make_world(1.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    fn set_signal(_entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+        ctx.world_signals.set_flag("game_over");
+    }
+
+    world.spawn((Timer::new(0.5, set_signal),));
+
+    world.add_observer(timer_observer);
+    world.flush();
+
+    tick_timers(&mut world);
+
+    let world_signals = world.resource::<WorldSignals>();
+    assert!(world_signals.has_flag("game_over"));
+}
+
+#[test]
+fn rust_timer_observer_receives_input_state() {
+    let mut world = make_world(1.0);
+    world.insert_resource(WorldSignals::default());
+
+    let mut input = InputState::default();
+    input.action_1.active = true;
+    input.action_1.just_pressed = true;
+    world.insert_resource(input);
+
+    fn check_input(entity: Entity, ctx: &mut TimerCtx, input: &InputState) {
+        // Verify input is passed through — set a signal if action_1 is pressed
+        if input.action_1.active {
+            if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+                signals.set_flag("input_received");
+            }
+        }
+    }
+
+    let entity = world
+        .spawn((Timer::new(0.5, check_input), Signals::default()))
+        .id();
+
+    world.add_observer(timer_observer);
+    world.flush();
+
+    tick_timers(&mut world);
+
+    let signals = world.get::<Signals>(entity).unwrap();
+    assert!(signals.has_flag("input_received"));
 }
 
 // =============================================================================

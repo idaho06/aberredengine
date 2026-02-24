@@ -99,6 +99,7 @@ use crate::systems::render::render_system;
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_world_time;
+use crate::systems::timer::{timer_observer, update_timers};
 use crate::systems::ttl::ttl_system;
 use crate::systems::tween::tween_mapposition_system;
 use crate::systems::tween::tween_rotation_system;
@@ -310,6 +311,7 @@ fn main() {
     world.spawn((Observer::new(menu_selection_observer), Persistent));
     #[cfg(feature = "lua")]
     world.spawn((Observer::new(lua_timer_observer), Persistent));
+    world.spawn((Observer::new(timer_observer), Persistent));
     // Ensure the observer is registered before we run any systems that may trigger events.
     world.flush();
 
@@ -364,6 +366,7 @@ fn main() {
     update.add_systems(animation.after(animation_controller));
     #[cfg(feature = "lua")]
     update.add_systems(update_lua_timers);
+    update.add_systems(update_timers);
     update.add_systems(update_world_signals_binding_system);
     update.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
     #[cfg(feature = "lua")]
