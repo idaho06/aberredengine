@@ -6,7 +6,7 @@
 
 ## QUICK REFERENCE
 
-STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT, optional) + configparser 3 + fastrand 2.3 + clap (CLI) + serde/serde_json + log/env_logger + arrayvec + smallvec + rustc-hash
+STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT, optional) + configparser 3 + fastrand 2.3 + clap (CLI) + serde/serde_json + log/env_logger + arrayvec + smallvec + rustc-hash + crossbeam-channel
 GAME_TYPE: Multi-game 2D showcase engine with optional Lua scripting
 ENTRY: src/main.rs
 LIB_ENTRY: src/lib.rs (reusable library crate)
@@ -18,7 +18,7 @@ FEATURE FLAGS:
   lua = ["dep:mlua"]   -- Lua scripting support (LuaJIT via mlua). In default features.
   default = ["lua"]    -- lua enabled by default; downstream Rust-only games opt out with default-features = false
 
-## STATUS (2026-02-24)
+## STATUS (2026-02-25)
 
 - Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
 - Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro.
@@ -157,7 +157,9 @@ tests/
 ├── bevy_ecs_integration.rs    # ECS integration tests (pure Rust)
 ├── engine_tick_integration.rs # Engine tick + meta drift protection tests (mixed; Lua tests gated by #[cfg(feature = "lua")]; includes Rust Timer integration tests)
 ├── stub_generator_integration.rs # Stub generator tests (#![cfg(feature = "lua")])
-└── hierarchy_integration.rs   # Parent-child hierarchy tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
+├── hierarchy_integration.rs   # Parent-child hierarchy tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
+├── menu_callback_integration.rs  # Rust menu callback integration tests (pure Rust)
+└── scene_manager_integration.rs  # SceneManager integration tests (pure Rust)
 assets/
 ├── scripts/
 │   ├── main.lua               # Entry: scene registry, callback injection, on_setup, on_enter_play, on_switch_scene
@@ -300,6 +302,7 @@ TimerCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shade
 PhaseCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/phase.rs
 CollisionCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/rust_collision.rs
 SceneCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, texture_store } -- systems/scene_dispatch.rs
+MenuCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/menu.rs
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
