@@ -34,7 +34,7 @@ FEATURE FLAGS:
 - `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping (world, window, resources, system schedule, main loop) into a configurable builder. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")` sugar. Rust multi-scene games use `.add_scene(name, descriptor)` + `.initial_scene(name)` for SceneManager-based dispatch (auto-wires switch_scene, enter_play, and per-frame update). `main.rs` is now a thin CLI + builder call (~100 lines). `quit_game` and `clean_all_entities` are engine-level systems in `systems/gamestate.rs`, always registered. `GameConfig` has `window_title` field (from `config.ini [window] title`), overridable via `.title()`.
 - Rust `CollisionRule` component: fn-pointer collision callback mirroring LuaCollisionRule. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx)`. `CollisionCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Entities ordered to match rule's `group_a`/`group_b`. Pre-computed collision sides passed as args. Always compiled (no feature flag).
 - Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut MenuCtx)` (menu entity, item_id, item_index, ECS context). `MenuCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. Defined in `systems/menu.rs`, imported by `components/menu.rs`.
-- `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Callback signatures: `fn(&mut SceneCtx)`, `fn(&mut SceneCtx, f32)`, `fn(&mut SceneCtx)`. `SceneCtx` mirrors `TimerCtx`/`PhaseCtx` + `TextureStore`. `SceneManager` resource maps scene names → descriptors. Engine-owned systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene). Builder: `.add_scene(name, descriptor)` + `.initial_scene(name)`. Conflicts: panics if combined with `.on_switch_scene()` or `.on_enter_play()`. Always compiled (no feature flag).
+- `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Callback signatures: `fn(&mut SceneCtx)`, `fn(&mut SceneCtx, f32, &InputState)`, `fn(&mut SceneCtx)`. `SceneCtx` mirrors `TimerCtx`/`PhaseCtx` + `TextureStore`. `SceneManager` resource maps scene names → descriptors. Engine-owned systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene). Builder: `.add_scene(name, descriptor)` + `.initial_scene(name)`. Conflicts: panics if combined with `.on_switch_scene()` or `.on_enter_play()`. Always compiled (no feature flag).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -558,7 +558,7 @@ engine.collision_clear_string(key)
 engine.collision_phase_transition(id, phase)
 engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 
--- Collision Entity Commands (full parity with engine.entity_* commands)
+-- Collision Entity Commands (full parity with engine.entity_*commands)
 -- All engine.entity_* commands have collision_entity_* equivalents via define_entity_cmds! macro
 -- e.g. engine.collision_entity_set_position, collision_entity_set_parent, collision_entity_remove_parent, etc.
 
@@ -728,6 +728,7 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 ## SYSTEM EXECUTION ORDER (engine_app.rs schedule)
 
 Registered observers (spawned as persistent entities in engine_app.rs):
+
 - lua_collision_observer (on CollisionEvent) [feature=lua, with_lua() only]
 - rust_collision_observer (on CollisionEvent) -- always compiled (Rust fn-pointer collision rules)
 - switch_debug_observer (on SwitchDebugEvent)
@@ -853,7 +854,7 @@ movement_system moves entities
    -> callback has direct ECS access (no command queues needed)
 -> lua_collision_observer (systems/lua_collision.rs) receives the event, matches LuaCollisionRule by group names [feature=lua]
    -> calls Lua callback via call_lua_collision_callback (pooled context tables)
-   -> Lua callback uses engine.entity_* commands (work in all contexts)
+   -> Lua callback uses engine.entity_*commands (work in all contexts)
    -> Collision-specific commands (engine.collision_*) use separate queues
    -> Collision commands drain immediately after callback
 
@@ -964,7 +965,7 @@ For features touching:
 34. Tint component: for sprites replaces Color::WHITE (color multiply); for text multiplies with DynamicText.color; RGBA values 0-255
 35. Input system emits InputEvent for ALL actions (directions, action_1/2, back, special) with pressed/released - systems can observe these instead of polling InputState
 36. The "crt" shader is loaded from crt2.fs (not crt.fs) in setup.lua
-37. Scene callbacks must be declared in module's _callbacks table to be injected into _G on scene switch - prevents cross-scene naming conflicts
+37. Scene callbacks must be declared in module's _callbacks table to be injected into_G on scene switch - prevents cross-scene naming conflicts
 38. ChildOf entities skip StuckTo system (hierarchy takes precedence over stuck-to following)
 39. WorldSignals.group_counts is NOT a field - group counts are derived in SignalSnapshot from integers with "group_count:" prefix
 40. Registered systems (SystemsStore) are entities that need Persistent component to survive scene transitions

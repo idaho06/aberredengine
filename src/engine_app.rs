@@ -69,7 +69,9 @@ use crate::systems::audio::{
 use crate::systems::collision_detector::collision_detector;
 use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gameconfig::apply_gameconfig_changes;
-use crate::systems::gamestate::{check_pending_state, clean_all_entities, quit_game, state_is_playing};
+use crate::systems::gamestate::{
+    check_pending_state, clean_all_entities, quit_game, state_is_playing,
+};
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
@@ -85,8 +87,7 @@ use crate::systems::propagate_transforms::propagate_transforms;
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
-    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
-    scene_update_system,
+    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
 };
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
@@ -201,11 +202,7 @@ impl EngineBuilder {
     /// `.run_if(state_is_playing).after(check_pending_state)`.
     pub fn on_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(
-                system
-                    .run_if(state_is_playing)
-                    .after(check_pending_state),
-            );
+            schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
         }));
         self
     }
@@ -497,7 +494,11 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         if self.lua_script.is_some() {
             update.add_systems(lua_phase_system.after(collision_detector));
-            update.add_systems(animation_controller.after(lua_phase_system).after(phase_system));
+            update.add_systems(
+                animation_controller
+                    .after(lua_phase_system)
+                    .after(phase_system),
+            );
             update.add_systems(update_lua_timers);
         }
 
@@ -583,9 +584,7 @@ fn register_persistent_system<M>(
     system: impl IntoSystem<(), (), M> + 'static,
 ) {
     let system_id = world.register_system(system);
-    world
-        .entity_mut(system_id.entity())
-        .insert(Persistent);
+    world.entity_mut(system_id.entity()).insert(Persistent);
     store.insert(name, system_id);
 }
 
@@ -717,7 +716,7 @@ mod tests {
     use crate::systems::scene_dispatch::{SceneCtx, SceneDescriptor};
 
     fn dummy_scene_enter(_ctx: &mut SceneCtx) {}
-    fn dummy_scene_update(_ctx: &mut SceneCtx, _dt: f32) {}
+    fn dummy_scene_update(_ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {}
 
     fn make_descriptor() -> SceneDescriptor {
         SceneDescriptor {

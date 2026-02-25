@@ -5,6 +5,7 @@
 //! `EngineBuilder` fire as expected.
 
 use aberredengine::resources::group::TrackedGroups;
+use aberredengine::resources::input::InputState;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
@@ -33,6 +34,7 @@ fn setup_world() -> World {
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_resource(Messages::<AudioCmd>::default());
+    world.insert_resource(InputState::default());
     world
 }
 
@@ -67,7 +69,7 @@ fn menu_enter(ctx: &mut SceneCtx) {
     ctx.world_signals.set_flag("menu_entered");
 }
 
-fn menu_update(_ctx: &mut SceneCtx, dt: f32) {
+fn menu_update(_ctx: &mut SceneCtx, dt: f32, _input: &InputState) {
     UPDATE_LOG.with(|v| v.borrow_mut().push(("menu".to_string(), dt)));
 }
 
@@ -83,7 +85,7 @@ fn level1_enter(ctx: &mut SceneCtx) {
     ctx.world_signals.set_flag("level1_entered");
 }
 
-fn level1_update(_ctx: &mut SceneCtx, dt: f32) {
+fn level1_update(_ctx: &mut SceneCtx, dt: f32, _input: &InputState) {
     UPDATE_LOG.with(|v| v.borrow_mut().push(("level1".to_string(), dt)));
 }
 

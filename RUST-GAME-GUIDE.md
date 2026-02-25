@@ -131,7 +131,7 @@ use aberredengine::systems::scene_dispatch::SceneCtx;
 fn enter(ctx: &mut SceneCtx) { /* spawn entities, set signals */ }
 
 // Called every frame while the scene is active
-fn update(ctx: &mut SceneCtx, dt: f32) { /* per-frame logic */ }
+fn update(ctx: &mut SceneCtx, dt: f32, input: &InputState) { /* per-frame logic */ }
 
 // Called once when leaving the scene (before entities are despawned)
 fn exit(ctx: &mut SceneCtx) { /* cleanup */ }
@@ -140,7 +140,7 @@ fn exit(ctx: &mut SceneCtx) { /* cleanup */ }
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
 
 ```rust
-fn update(ctx: &mut SceneCtx, _dt: f32) {
+fn update(ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {
     if some_condition() {
         ctx.world_signals.set_string("scene", "level01".to_string());
         ctx.world_signals.set_flag("switch_scene");
@@ -606,7 +606,7 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 **2. Flag-based from scene callbacks:** Set the target scene name and the `"switch_scene"` flag on `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition:
 
 ```rust
-fn update(ctx: &mut SceneCtx, _dt: f32) {
+fn update(ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {
     if player_reached_exit(ctx) {
         ctx.world_signals.set_string("scene", "level02".to_string());
         ctx.world_signals.set_flag("switch_scene");
@@ -658,8 +658,9 @@ Key behaviors:
 The `scene_update_system` (`src/systems/scene_dispatch.rs:220-236`) runs every frame while a scene is active. It looks up the active scene in `SceneManager`, and if it has an `on_update` callback, calls it:
 
 ```rust
-fn update(ctx: &mut SceneCtx, dt: f32) {
+fn update(ctx: &mut SceneCtx, dt: f32, input: &InputState) {
     // dt = world_time.delta (unscaled frame time in seconds)
+    // input = current keyboard state (just_pressed, active, just_released)
     // Use ctx to read/write ECS state every frame
 }
 ```
@@ -971,6 +972,7 @@ ctx.commands.spawn((
 ```
 
 **Callback priority:** When an item is selected, the engine checks in order:
+
 1. **Lua callback** (`on_select_callback`) — only with `lua` feature
 2. **Rust callback** (`on_rust_callback`)
 3. **MenuActions** (declarative)
@@ -1174,6 +1176,7 @@ The engine detects changes and applies them — render size changes recreate the
 ### Build requirements
 
 **All platforms:**
+
 - Rust stable (edition 2024)
 - CMake 3.10+ (for raylib compilation)
 - C/C++ compiler (gcc/clang on Linux, MSVC on Windows)
@@ -1189,6 +1192,7 @@ sudo apt install build-essential pkg-config cmake \
 ```
 
 **Windows:**
+
 - Visual Studio with CMake + Windows SDK
 - LLVM for Windows (in PATH)
 

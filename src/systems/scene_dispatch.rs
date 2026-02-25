@@ -43,6 +43,7 @@ use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::resources::group::TrackedGroups;
+use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
@@ -56,8 +57,8 @@ use crate::resources::worldtime::WorldTime;
 /// Called when entering a scene (spawn entities, initialize state).
 pub type SceneEnterFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>);
 
-/// Called every frame while the scene is active. `f32` is delta time.
-pub type SceneUpdateFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>, f32);
+/// Called every frame while the scene is active. `f32` is delta time, `&InputState` is current input.
+pub type SceneUpdateFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>, f32, &InputState);
 
 /// Called when leaving a scene (cleanup before despawn).
 pub type SceneExitFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>);
@@ -107,6 +108,12 @@ pub struct SceneDescriptor {
 /// fn my_enter(ctx: &mut SceneCtx) {
 ///     ctx.world_signals.set_string("score", "0".to_string());
 ///     ctx.audio.write(AudioCmd::PlayMusic { id: "bgm".into(), looping: true });
+/// }
+///
+/// fn my_update(ctx: &mut SceneCtx, _dt: f32, input: &InputState) {
+///     if input.action_1.just_pressed {
+///         ctx.world_signals.set_flag("jump");
+///     }
 /// }
 /// ```
 #[derive(SystemParam)]
@@ -227,13 +234,14 @@ pub fn scene_update_system(
     mut ctx: SceneCtx,
     scene_manager: Res<SceneManager>,
     world_time: Res<WorldTime>,
+    input: Res<InputState>,
 ) {
     let dt = world_time.delta;
     if let Some(ref active_name) = scene_manager.active_scene
         && let Some(descriptor) = scene_manager.get(active_name)
         && let Some(on_update) = descriptor.on_update
     {
-        on_update(&mut ctx, dt);
+        on_update(&mut ctx, dt, &input);
     }
 }
 
@@ -309,7 +317,7 @@ mod tests {
     #[test]
     fn scene_descriptor_with_all_callbacks() {
         fn enter(_ctx: &mut SceneCtx) {}
-        fn update(_ctx: &mut SceneCtx, _dt: f32) {}
+        fn update(_ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {}
         fn exit(_ctx: &mut SceneCtx) {}
         let desc = SceneDescriptor {
             on_enter: enter,
@@ -330,6 +338,9 @@ mod tests {
         };
         let cloned = desc.clone();
         // fn pointers are Copy — both point to the same function
-        assert_eq!(desc.on_enter as *const () as usize, cloned.on_enter as *const () as usize);
+        assert_eq!(
+            desc.on_enter as *const () as usize,
+            cloned.on_enter as *const () as usize
+        );
     }
 }
