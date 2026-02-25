@@ -11,12 +11,20 @@
 
 use std::sync::Arc;
 
+use crate::components::animation::Animation;
+use crate::components::boxcollider::BoxCollider;
+use crate::components::entityshader::EntityShader;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
+use crate::components::rigidbody::RigidBody;
+use crate::components::rotation::Rotation;
+use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::components::stuckto::StuckTo;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
@@ -30,10 +38,80 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::texturestore::load_texture_from_text;
 use crate::resources::worldsignals::WorldSignals;
+use crate::resources::worldtime::WorldTime;
 use crate::components::dynamictext::DynamicText;
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemParam;
 use log::{info, debug, error, warn};
 use raylib::prelude::Vector2;
+
+/// Bundled ECS access passed to Rust menu selection callbacks.
+///
+/// Mirrors [`TimerCtx`](crate::systems::timer::TimerCtx) and
+/// [`PhaseCtx`](crate::systems::phase::PhaseCtx), providing full query and
+/// resource access so that Rust menu callbacks can read/write any entity's
+/// components and interact with engine resources.
+///
+/// # Usage in callbacks
+///
+/// ```ignore
+/// fn my_menu_callback(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut MenuCtx) {
+///     // Set a global signal based on the selection
+///     ctx.world_signals.set_string("selected_item", item_id.to_string());
+///     // Play a confirmation sound
+///     ctx.audio.write(AudioCmd::PlayFx { id: "confirm".into() });
+/// }
+/// ```
+#[derive(SystemParam)]
+pub struct MenuCtx<'w, 's> {
+    /// ECS command buffer for spawning, despawning, inserting/removing components.
+    pub commands: Commands<'w, 's>,
+    // Mutable queries (most commonly needed in callbacks)
+    /// Mutable access to entity positions (world-space).
+    pub positions: Query<'w, 's, &'static mut MapPosition>,
+    /// Mutable access to rigid bodies (velocity, friction, forces).
+    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
+    /// Mutable access to per-entity signals.
+    pub signals: Query<'w, 's, &'static mut Signals>,
+    /// Mutable access to animation state.
+    pub animations: Query<'w, 's, &'static mut Animation>,
+    /// Mutable access to per-entity shaders.
+    pub shaders: Query<'w, 's, &'static mut EntityShader>,
+    // Read-only queries
+    /// Read-only access to entity groups.
+    pub groups: Query<'w, 's, &'static Group>,
+    /// Read-only access to screen-space positions.
+    pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
+    /// Read-only access to box colliders.
+    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
+    /// Read-only access to world-space transforms (from parent-child hierarchy).
+    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
+    /// Read-only access to StuckTo relationships.
+    pub stuckto: Query<'w, 's, &'static StuckTo>,
+    /// Read-only access to rotation.
+    pub rotations: Query<'w, 's, &'static Rotation>,
+    /// Read-only access to scale.
+    pub scales: Query<'w, 's, &'static Scale>,
+    /// Read-only access to sprites.
+    pub sprites: Query<'w, 's, &'static Sprite>,
+    // Resources
+    /// Mutable access to global world signals.
+    pub world_signals: ResMut<'w, WorldSignals>,
+    /// Writer for audio commands (play sounds/music).
+    pub audio: MessageWriter<'w, AudioCmd>,
+    /// Read-only access to world time (delta, elapsed, time_scale).
+    pub world_time: Res<'w, WorldTime>,
+}
+
+/// Type alias for a Rust menu selection callback.
+///
+/// # Arguments
+///
+/// - `menu_entity` — the entity holding the [`Menu`] component
+/// - `item_id`     — the ID string of the selected item
+/// - `item_index`  — 0-based index of the selected item in `menu.items`
+/// - `ctx`         — full ECS access (commands, queries, resources)
+pub type MenuRustCallback = fn(Entity, &str, usize, &mut MenuCtx);
 
 /// Spawns entities for newly added [`Menu`] components.
 ///
@@ -551,9 +629,13 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
 /// Executes the action associated with a selected menu item.
 ///
+/// Priority chain: Lua callback → Rust callback → [`MenuActions`].
+///
 /// If the menu has an `on_select_callback` (requires `lua` feature), invokes the
 /// Lua callback with a context table containing `menu_id`, `item_id`, and `item_index`.
-/// When a callback is set, `MenuActions` are ignored (callback takes full control).
+///
+/// If the menu has an `on_rust_callback`, invokes it with the menu entity, item ID,
+/// item index, and full ECS access via [`MenuCtx`].
 ///
 /// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch
@@ -563,11 +645,10 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 #[cfg(feature = "lua")]
 pub fn menu_selection_observer(
     trigger: On<MenuSelectionEvent>,
-    mut commands: Commands,
     menus: Query<(&Menu, Option<&MenuActions>)>,
-    mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
+    mut ctx: MenuCtx,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     let event = trigger.event();
@@ -584,50 +665,61 @@ pub fn menu_selection_observer(
         return;
     };
 
-    // If menu has a Lua callback, invoke it
+    // Priority 1: Lua callback
     if let Some(ref callback_name) = menu.on_select_callback {
         if lua_runtime.has_function(callback_name) {
             // Build context table
-            let ctx = lua_runtime.lua().create_table().unwrap();
-            ctx.set("menu_id", event.menu.to_bits()).unwrap();
-            ctx.set("item_id", event.item_id.clone()).unwrap();
+            let lua_ctx = lua_runtime.lua().create_table().unwrap();
+            lua_ctx.set("menu_id", event.menu.to_bits()).unwrap();
+            lua_ctx.set("item_id", event.item_id.clone()).unwrap();
 
-            // Find item index
             let item_index = menu
                 .items
                 .iter()
                 .position(|item| item.id == event.item_id)
                 .unwrap_or(0);
-            ctx.set("item_index", item_index).unwrap();
+            lua_ctx.set("item_index", item_index).unwrap();
 
-            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, ctx) {
+            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
                 error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
             }
         } else {
             warn!(target: "lua", "menu callback '{}' not found", callback_name);
         }
-        return; // Callback handles everything, skip MenuActions
+        return;
     }
 
+    // Priority 2: Rust callback
+    if let Some(cb) = menu.on_rust_callback {
+        let item_index = menu
+            .items
+            .iter()
+            .position(|item| item.id == event.item_id)
+            .unwrap_or(0);
+        cb(event.menu, &event.item_id, item_index, &mut ctx);
+        return;
+    }
+
+    // Priority 3: MenuActions
     dispatch_menu_action(
         menu_actions_opt,
         event,
-        &mut commands,
-        &mut world_signals,
+        &mut ctx,
         &mut next_game_state,
         &systems_store,
     );
 }
 
 /// Executes the action associated with a selected menu item (no Lua support).
+///
+/// Priority chain: Rust callback → [`MenuActions`].
 #[cfg(not(feature = "lua"))]
 pub fn menu_selection_observer(
     trigger: On<MenuSelectionEvent>,
-    mut commands: Commands,
     menus: Query<(&Menu, Option<&MenuActions>)>,
-    mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
+    mut ctx: MenuCtx,
 ) {
     let event = trigger.event();
     debug!(
@@ -635,7 +727,7 @@ pub fn menu_selection_observer(
         event.menu, event.item_id
     );
 
-    let Ok((_menu, menu_actions_opt)) = menus.get(event.menu) else {
+    let Ok((menu, menu_actions_opt)) = menus.get(event.menu) else {
         warn!(
             "menu_selection_observer: Menu entity {:?} not found",
             event.menu
@@ -643,11 +735,22 @@ pub fn menu_selection_observer(
         return;
     };
 
+    // Priority 1: Rust callback
+    if let Some(cb) = menu.on_rust_callback {
+        let item_index = menu
+            .items
+            .iter()
+            .position(|item| item.id == event.item_id)
+            .unwrap_or(0);
+        cb(event.menu, &event.item_id, item_index, &mut ctx);
+        return;
+    }
+
+    // Priority 2: MenuActions
     dispatch_menu_action(
         menu_actions_opt,
         event,
-        &mut commands,
-        &mut world_signals,
+        &mut ctx,
         &mut next_game_state,
         &systems_store,
     );
@@ -656,8 +759,7 @@ pub fn menu_selection_observer(
 fn dispatch_menu_action(
     menu_actions_opt: Option<&MenuActions>,
     event: &MenuSelectionEvent,
-    commands: &mut Commands,
-    world_signals: &mut ResMut<WorldSignals>,
+    ctx: &mut MenuCtx,
     next_game_state: &mut ResMut<NextGameState>,
     systems_store: &Res<SystemsStore>,
 ) {
@@ -679,15 +781,15 @@ fn dispatch_menu_action(
                 "menu_selection_observer: SetScene action found, scene_name={}",
                 scene_name
             );
-            world_signals.set_string("scene", scene_name.clone());
-            commands.run_system(
+            ctx.world_signals.set_string("scene", scene_name.clone());
+            ctx.commands.run_system(
                 *systems_store
                     .get("switch_scene")
                     .expect("switch_scene system not found"),
             );
         }
         MenuAction::ShowSubMenu(submenu_name) => {
-            world_signals.set_string("show_submenu", submenu_name.clone());
+            ctx.world_signals.set_string("show_submenu", submenu_name.clone());
             // TODO: trigger submenu display system
         }
         MenuAction::QuitGame => {

@@ -33,6 +33,7 @@ FEATURE FLAGS:
 - Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut PhaseCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut PhaseCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut PhaseCtx)`. Transitions via callback return value or external `phase.next` mutation. `PhaseCtx` mirrors `TimerCtx` exactly. `phase_system` runs after collision_detector, always compiled (no feature flag).
 - `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping (world, window, resources, system schedule, main loop) into a configurable builder. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")` sugar. `main.rs` is now a thin CLI + builder call (~100 lines). `quit_game` and `clean_all_entities` are engine-level systems in `systems/gamestate.rs`, always registered. `GameConfig` has `window_title` field (from `config.ini [window] title`), overridable via `.title()`.
 - Rust `CollisionRule` component: fn-pointer collision callback mirroring LuaCollisionRule. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx)`. `CollisionCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Entities ordered to match rule's `group_a`/`group_b`. Pre-computed collision sides passed as args. Always compiled (no feature flag).
+- Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut MenuCtx)` (menu entity, item_id, item_index, ECS context). `MenuCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. Defined in `systems/menu.rs`, imported by `components/menu.rs`.
 
 ## FILE TREE (ESSENTIAL)
 
@@ -101,7 +102,7 @@ src/
 │   ├── propagate_transforms.rs # Recursive GlobalTransform2D computation from ChildOf hierarchy
 │   ├── gridlayout.rs          # Grid entity spawning
 │   ├── group.rs               # Group counting
-│   ├── menu.rs                # Menu spawn/input (menu_selection_observer has dual #[cfg] implementations: with/without LuaRuntime param; shared dispatch_menu_action() helper)
+│   ├── menu.rs                # Menu spawn/input (menu_selection_observer has dual #[cfg] implementations: with/without LuaRuntime param; shared dispatch_menu_action() helper; MenuCtx SystemParam; MenuRustCallback type alias)
 │   ├── particleemitter.rs     # Particle emission system (clones templates)
 │   ├── ttl.rs                 # TTL countdown and entity despawn
 │   ├── audio.rs               # Audio thread bridge
@@ -230,7 +231,7 @@ LuaTimer { duration: f32, elapsed: f32, callback: String }
 Timer { duration: f32, elapsed: f32, callback: TimerCallback } -- Rust fn-pointer timer; TimerCallback = fn(Entity, &mut TimerCtx, &InputState)
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
-Menu { items: Vec<MenuItem>, selected_index: usize, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, visible_count: Option<usize>, scroll_offset: usize, top_indicator_entity, bottom_indicator_entity }
+Menu { items: Vec<MenuItem>, selected_index: usize, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, on_rust_callback: Option<MenuRustCallback>, visible_count: Option<usize>, scroll_offset: usize, top_indicator_entity, bottom_indicator_entity }
 GridLayout { path: String, group: String, z_index: f32 }
 Group { name: String }
 Persistent (marker)
