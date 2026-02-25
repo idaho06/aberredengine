@@ -7,6 +7,7 @@
 //! - [`SceneCtx`] — bundled ECS access passed to scene callbacks
 //! - [`scene_switch_system`] — engine-owned scene transition: despawn → on_exit → on_enter
 //! - [`scene_update_system`] — per-frame dispatch to the active scene's `on_update`
+//! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
 //!
 //! # Callback Signatures
@@ -233,6 +234,26 @@ pub fn scene_update_system(
         && let Some(on_update) = descriptor.on_update
     {
         on_update(&mut ctx, dt);
+    }
+}
+
+/// Polls the `"switch_scene"` flag in [`WorldSignals`] and runs the
+/// scene switch system when set.
+///
+/// Added to the update schedule automatically when using
+/// [`EngineBuilder::add_scene()`](crate::engine_app::EngineBuilder::add_scene).
+pub fn scene_switch_poll(
+    mut commands: Commands,
+    mut world_signals: ResMut<WorldSignals>,
+    systems_store: Res<SystemsStore>,
+) {
+    if world_signals.has_flag("switch_scene") {
+        world_signals.clear_flag("switch_scene");
+        commands.run_system(
+            *systems_store
+                .get("switch_scene")
+                .expect("switch_scene system not found"),
+        );
     }
 }
 

@@ -85,7 +85,8 @@ use crate::systems::propagate_transforms::propagate_transforms;
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
-    SceneDescriptor, scene_enter_play, scene_switch_system, scene_update_system,
+    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
+    scene_update_system,
 };
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
@@ -518,12 +519,17 @@ impl EngineBuilder {
             update_hook(&mut update);
         }
 
-        // SceneManager per-frame update
+        // SceneManager per-frame update + flag polling
         if use_scene_manager {
             update.add_systems(
                 scene_update_system
                     .run_if(state_is_playing)
                     .after(check_pending_state),
+            );
+            update.add_systems(
+                scene_switch_poll
+                    .run_if(state_is_playing)
+                    .after(scene_update_system),
             );
         }
 

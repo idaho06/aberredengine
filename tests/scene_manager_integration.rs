@@ -11,7 +11,8 @@ use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::scene_dispatch::{
-    SceneCtx, SceneDescriptor, scene_enter_play, scene_switch_system, scene_update_system,
+    SceneCtx, SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
+    scene_update_system,
 };
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
@@ -476,4 +477,97 @@ fn active_scene_tracked_through_multiple_switches() {
     EXIT_LOG.with(|v| {
         assert_eq!(*v.borrow(), vec!["menu"]);
     });
+}
+
+// ---------------------------------------------------------------------------
+// Test 9: scene_switch_poll triggers transition when flag is set
+// ---------------------------------------------------------------------------
+
+#[test]
+fn scene_switch_poll_triggers_transition() {
+    clear_logs();
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.initial_scene = Some("menu".to_string());
+    sm.insert(
+        "menu",
+        SceneDescriptor {
+            on_enter: menu_enter,
+            on_update: Some(menu_update),
+            on_exit: Some(menu_exit),
+        },
+    );
+    sm.insert(
+        "level1",
+        SceneDescriptor {
+            on_enter: level1_enter,
+            on_update: Some(level1_update),
+            on_exit: None,
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    // Enter initial scene
+    world.run_system_once(scene_enter_play).unwrap();
+    world.flush();
+    clear_logs();
+
+    // Simulate what a scene callback would do: set scene + flag
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_string("scene", "level1".to_string());
+        ws.set_flag("switch_scene");
+    }
+
+    // Run scene_switch_poll (what the schedule would do)
+    world.run_system_once(scene_switch_poll).unwrap();
+    world.flush();
+
+    // Flag should be cleared
+    assert!(!world.resource::<WorldSignals>().has_flag("switch_scene"));
+
+    // Scene transition should have been queued and executed
+    assert_eq!(
+        world.resource::<SceneManager>().active_scene.as_deref(),
+        Some("level1")
+    );
+    EXIT_LOG.with(|v| assert_eq!(*v.borrow(), vec!["menu"]));
+    ENTER_LOG.with(|v| assert_eq!(*v.borrow(), vec!["level1"]));
+}
+
+// ---------------------------------------------------------------------------
+// Test 10: scene_switch_poll is a no-op when flag is absent
+// ---------------------------------------------------------------------------
+
+#[test]
+fn scene_switch_poll_noop_without_flag() {
+    clear_logs();
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.initial_scene = Some("menu".to_string());
+    sm.active_scene = Some("menu".to_string());
+    sm.insert(
+        "menu",
+        SceneDescriptor {
+            on_enter: menu_enter,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    // No flag set — should not panic or trigger anything
+    world.run_system_once(scene_switch_poll).unwrap();
+    world.flush();
+
+    // Nothing should have changed
+    assert_eq!(
+        world.resource::<SceneManager>().active_scene.as_deref(),
+        Some("menu")
+    );
+    ENTER_LOG.with(|v| assert!(v.borrow().is_empty()));
 }
