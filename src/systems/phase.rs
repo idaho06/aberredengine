@@ -160,10 +160,10 @@ pub fn phase_system(
                     .and_then(|cbs| cbs.on_enter)
             };
 
-            if let Some(enter_fn) = on_enter_fn {
-                if let Some(next) = enter_fn(entity, &mut ctx, &input) {
-                    callback_transitions.push((entity, next));
-                }
+            if let Some(enter_fn) = on_enter_fn
+                && let Some(next) = enter_fn(entity, &mut ctx, &input)
+            {
+                callback_transitions.push((entity, next));
             }
         }
 
@@ -210,10 +210,10 @@ pub fn phase_system(
             };
 
             // Call on_enter for new phase
-            if let Some(enter_fn) = enter_fn {
-                if let Some(next) = enter_fn(entity, &mut ctx, &input) {
-                    callback_transitions.push((entity, next));
-                }
+            if let Some(enter_fn) = enter_fn
+                && let Some(next) = enter_fn(entity, &mut ctx, &input)
+            {
+                callback_transitions.push((entity, next));
             }
         }
 
@@ -225,10 +225,10 @@ pub fn phase_system(
             phase.current_callbacks().and_then(|cbs| cbs.on_update)
         };
 
-        if let Some(update_fn) = update_fn {
-            if let Some(next) = update_fn(entity, &mut ctx, &input, delta) {
-                callback_transitions.push((entity, next));
-            }
+        if let Some(update_fn) = update_fn
+            && let Some(next) = update_fn(entity, &mut ctx, &input, delta)
+        {
+            callback_transitions.push((entity, next));
         }
 
         // --- Increment time ---

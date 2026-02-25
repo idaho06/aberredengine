@@ -77,7 +77,7 @@ pub type PhaseUpdateFn =
 pub type PhaseExitFn = for<'w, 's> fn(Entity, &mut PhaseCtx<'w, 's>);
 
 /// Rust function-pointer callbacks for a single phase.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct PhaseCallbackFns {
     /// Function to call when entering this phase.
     pub on_enter: Option<PhaseEnterFn>,
@@ -85,16 +85,6 @@ pub struct PhaseCallbackFns {
     pub on_update: Option<PhaseUpdateFn>,
     /// Function to call when exiting this phase.
     pub on_exit: Option<PhaseExitFn>,
-}
-
-impl Default for PhaseCallbackFns {
-    fn default() -> Self {
-        Self {
-            on_enter: None,
-            on_update: None,
-            on_exit: None,
-        }
-    }
 }
 
 impl std::fmt::Debug for PhaseCallbackFns {
