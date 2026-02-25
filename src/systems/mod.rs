@@ -21,6 +21,7 @@
 //! - [`luaphase`] – *(feature = "lua")* process Lua phase state machine transitions and callbacks
 //! - [`phase`] – process Rust phase state machine transitions and callbacks
 //! - [`rust_collision`] – Rust-native collision observer and callback dispatch
+//! - [`scene_dispatch`] – scene switch and update systems for `SceneManager`-based games
 //! - [`render`] – draw world and debug overlays using Raylib
 //! - [`signalbinding`] – update DynamicText components based on signal values
 //! - [`stuckto`] – keep entities attached to other entities
@@ -62,6 +63,7 @@ pub mod movement;
 pub mod particleemitter;
 pub mod phase;
 pub mod rust_collision;
+pub mod scene_dispatch;
 pub mod propagate_transforms;
 pub mod render;
 pub mod signalbinding;

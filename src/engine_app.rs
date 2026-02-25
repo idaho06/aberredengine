@@ -54,6 +54,7 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
+use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
@@ -83,6 +84,9 @@ use crate::systems::phase::phase_system;
 use crate::systems::propagate_transforms::propagate_transforms;
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
+use crate::systems::scene_dispatch::{
+    SceneDescriptor, scene_enter_play, scene_switch_system, scene_update_system,
+};
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_world_time;
@@ -133,6 +137,8 @@ pub struct EngineBuilder {
     enter_play_hook: Option<HookRegistrar>,
     update_hook: Option<UpdateRegistrar>,
     switch_scene_hook: Option<HookRegistrar>,
+    scenes: Vec<(String, SceneDescriptor)>,
+    initial_scene: Option<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
 }
@@ -149,6 +155,8 @@ impl EngineBuilder {
             enter_play_hook: None,
             update_hook: None,
             switch_scene_hook: None,
+            scenes: Vec::new(),
+            initial_scene: None,
             #[cfg(feature = "lua")]
             lua_script: None,
         }
@@ -214,6 +222,30 @@ impl EngineBuilder {
         self
     }
 
+    /// Register a named scene for [`SceneManager`]-based games.
+    ///
+    /// Scenes are stored and later inserted into a [`SceneManager`] resource
+    /// at `.run()` time. Use with [`.initial_scene()`](Self::initial_scene) to
+    /// specify which scene starts first.
+    ///
+    /// # Panics (at `.run()`)
+    ///
+    /// - If `.add_scene()` is combined with `.on_switch_scene()` or `.on_enter_play()`
+    /// - If `.add_scene()` is used without `.initial_scene()`
+    pub fn add_scene(mut self, name: impl Into<String>, descriptor: SceneDescriptor) -> Self {
+        self.scenes.push((name.into(), descriptor));
+        self
+    }
+
+    /// Set the initial scene for [`SceneManager`]-based games.
+    ///
+    /// This scene's `on_enter` callback will be the first called when the
+    /// game transitions to the `Playing` state.
+    pub fn initial_scene(mut self, name: impl Into<String>) -> Self {
+        self.initial_scene = Some(name.into());
+        self
+    }
+
     /// Configure the builder for a Lua game.
     ///
     /// Sets up all four hooks to use `lua_plugin` functions and initialises the
@@ -250,6 +282,32 @@ impl EngineBuilder {
     /// This consumes the builder and does not return until the game exits.
     pub fn run(self) {
         log::info!("Hello, world! This is the Aberred Engine!");
+
+        let use_scene_manager = !self.scenes.is_empty();
+
+        // --------------- Conflict validation ---------------
+        if use_scene_manager {
+            if self.switch_scene_hook.is_some() {
+                panic!(
+                    "EngineBuilder conflict: .add_scene() and .on_switch_scene() cannot be used \
+                     together. Use .add_scene() for SceneManager-based games, or \
+                     .on_switch_scene() for full manual control — not both."
+                );
+            }
+            if self.enter_play_hook.is_some() {
+                panic!(
+                    "EngineBuilder conflict: .add_scene() and .on_enter_play() cannot be used \
+                     together. SceneManager owns the enter_play hook. Use .on_setup() for \
+                     asset loading instead."
+                );
+            }
+            if self.initial_scene.is_none() {
+                panic!(
+                    "EngineBuilder: .add_scene() requires .initial_scene(\"name\") to specify \
+                     which scene to enter first."
+                );
+            }
+        }
 
         // --------------- Config ---------------
         let mut config = GameConfig::with_path(&self.config_path);
@@ -330,6 +388,29 @@ impl EngineBuilder {
         }
         if let Some(hook) = self.switch_scene_hook {
             hook(&mut world, &mut systems_store);
+        }
+
+        // --------------- SceneManager wiring (if .add_scene() was used) ------
+        if use_scene_manager {
+            let mut scene_manager = SceneManager::new();
+            scene_manager.initial_scene = self.initial_scene;
+            for (name, descriptor) in self.scenes {
+                scene_manager.insert(name, descriptor);
+            }
+            world.insert_resource(scene_manager);
+
+            register_persistent_system(
+                &mut world,
+                &mut systems_store,
+                "switch_scene",
+                scene_switch_system,
+            );
+            register_persistent_system(
+                &mut world,
+                &mut systems_store,
+                "enter_play",
+                scene_enter_play,
+            );
         }
 
         // Engine-level systems (always registered)
@@ -437,6 +518,15 @@ impl EngineBuilder {
             update_hook(&mut update);
         }
 
+        // SceneManager per-frame update
+        if use_scene_manager {
+            update.add_systems(
+                scene_update_system
+                    .run_if(state_is_playing)
+                    .after(check_pending_state),
+            );
+        }
+
         update.add_systems(render_system.after(collision_detector));
 
         update
@@ -506,6 +596,8 @@ mod tests {
         assert!(builder.enter_play_hook.is_none());
         assert!(builder.update_hook.is_none());
         assert!(builder.switch_scene_hook.is_none());
+        assert!(builder.scenes.is_empty());
+        assert!(builder.initial_scene.is_none());
     }
 
     #[test]
@@ -612,5 +704,66 @@ mod tests {
         let builder = EngineBuilder::default();
         assert_eq!(builder.config_path, PathBuf::from("config.ini"));
         assert!(builder.title_override.is_none());
+    }
+
+    // --- SceneManager builder tests ---
+
+    use crate::systems::scene_dispatch::{SceneCtx, SceneDescriptor};
+
+    fn dummy_scene_enter(_ctx: &mut SceneCtx) {}
+    fn dummy_scene_update(_ctx: &mut SceneCtx, _dt: f32) {}
+
+    fn make_descriptor() -> SceneDescriptor {
+        SceneDescriptor {
+            on_enter: dummy_scene_enter,
+            on_update: Some(dummy_scene_update),
+            on_exit: None,
+        }
+    }
+
+    #[test]
+    fn test_add_scene_stores_scenes() {
+        let builder = EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .add_scene("level1", make_descriptor());
+        assert_eq!(builder.scenes.len(), 2);
+        assert_eq!(builder.scenes[0].0, "menu");
+        assert_eq!(builder.scenes[1].0, "level1");
+    }
+
+    #[test]
+    fn test_initial_scene_stored() {
+        let builder = EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu");
+        assert_eq!(builder.initial_scene, Some("menu".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "EngineBuilder conflict: .add_scene() and .on_switch_scene()")]
+    fn test_add_scene_conflicts_with_on_switch_scene() {
+        EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu")
+            .on_switch_scene(dummy_switch_scene)
+            .run();
+    }
+
+    #[test]
+    #[should_panic(expected = "EngineBuilder conflict: .add_scene() and .on_enter_play()")]
+    fn test_add_scene_conflicts_with_on_enter_play() {
+        EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu")
+            .on_enter_play(dummy_enter_play)
+            .run();
+    }
+
+    #[test]
+    #[should_panic(expected = ".add_scene() requires .initial_scene")]
+    fn test_add_scene_requires_initial_scene() {
+        EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .run();
     }
 }

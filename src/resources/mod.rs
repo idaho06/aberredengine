@@ -17,6 +17,7 @@
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
+//! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturestore`] – loaded textures keyed by string IDs
 //! - [`tilemapstore`] – loaded tile maps and layers
@@ -40,6 +41,7 @@ pub mod postprocessshader;
 pub mod rendertarget;
 pub mod screensize;
 pub mod shaderstore;
+pub mod scenemanager;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod tilemapstore;
