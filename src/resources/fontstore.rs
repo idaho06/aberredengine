@@ -45,7 +45,6 @@ impl FontStore {
     }
 
     /// Remove all loaded fonts.
-    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.fonts.clear();
     }
@@ -56,7 +55,6 @@ impl FontStore {
     }
 
     /// Returns `true` if no fonts are loaded.
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.fonts.is_empty()
     }

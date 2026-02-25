@@ -36,76 +36,71 @@
 // Do not create console on Windows
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
-mod components;
-mod events;
+use aberredengine::components::persistent::Persistent;
+use aberredengine::events::gamestate::GameStateChangedEvent;
+use aberredengine::events::gamestate::observe_gamestate_change_event;
+use aberredengine::events::switchdebug::switch_debug_observer;
+use aberredengine::events::switchfullscreen::switch_fullscreen_observer;
+use aberredengine::resources::audio::{setup_audio, shutdown_audio};
+use aberredengine::resources::fontstore::FontStore;
+use aberredengine::resources::gameconfig::GameConfig;
+use aberredengine::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberredengine::resources::group::TrackedGroups;
+use aberredengine::resources::input::InputState;
 #[cfg(feature = "lua")]
-mod lua_plugin;
-mod resources;
-#[cfg(feature = "lua")]
-mod luarc_generator;
-#[cfg(feature = "lua")]
-mod stub_generator;
-mod systems;
-
-use crate::components::persistent::Persistent;
-use crate::events::gamestate::GameStateChangedEvent;
-use crate::events::gamestate::observe_gamestate_change_event;
-use crate::events::switchdebug::switch_debug_observer;
-use crate::events::switchfullscreen::switch_fullscreen_observer;
-use crate::resources::audio::{setup_audio, shutdown_audio};
-use crate::resources::fontstore::FontStore;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::gamestate::{GameState, GameStates, NextGameState};
-use crate::resources::group::TrackedGroups;
-use crate::resources::input::InputState;
-#[cfg(feature = "lua")]
-use crate::resources::lua_runtime::LuaRuntime;
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::shaderstore::ShaderStore;
-// use crate::resources::rendertarget::RenderFilter;
-use crate::resources::rendertarget::RenderTarget;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::windowsize::WindowSize;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
-use crate::systems::animation::animation;
-use crate::systems::animation::animation_controller;
-use crate::systems::audio::{
+use aberredengine::resources::lua_runtime::LuaRuntime;
+use aberredengine::resources::postprocessshader::PostProcessShader;
+use aberredengine::resources::shaderstore::ShaderStore;
+// use aberredengine::resources::rendertarget::RenderFilter;
+use aberredengine::resources::rendertarget::RenderTarget;
+use aberredengine::resources::screensize::ScreenSize;
+use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::resources::windowsize::WindowSize;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::resources::worldtime::WorldTime;
+use aberredengine::systems::animation::animation;
+use aberredengine::systems::animation::animation_controller;
+use aberredengine::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
-use crate::systems::collision_detector::collision_detector;
+use aberredengine::systems::collision_detector::collision_detector;
 #[cfg(feature = "lua")]
-use crate::systems::lua_collision::lua_collision_observer;
-use crate::systems::rust_collision::rust_collision_observer;
-use crate::systems::dynamictext_size::dynamictext_size_system;
-use crate::systems::gameconfig::apply_gameconfig_changes;
-use crate::systems::gamestate::{check_pending_state, state_is_playing};
-use crate::systems::gridlayout::gridlayout_spawn_system;
-use crate::systems::group::update_group_counts_system;
-use crate::systems::input::update_input_state;
-use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
-use crate::systems::inputsimplecontroller::input_simple_controller;
+use aberredengine::systems::lua_collision::lua_collision_observer;
+use aberredengine::systems::rust_collision::rust_collision_observer;
+use aberredengine::systems::dynamictext_size::dynamictext_size_system;
+use aberredengine::systems::gameconfig::apply_gameconfig_changes;
+use aberredengine::systems::gamestate::{check_pending_state, state_is_playing};
+use aberredengine::systems::gridlayout::gridlayout_spawn_system;
+use aberredengine::systems::group::update_group_counts_system;
+use aberredengine::systems::input::update_input_state;
+use aberredengine::systems::inputaccelerationcontroller::input_acceleration_controller;
+use aberredengine::systems::inputsimplecontroller::input_simple_controller;
 #[cfg(feature = "lua")]
-use crate::systems::luaphase::lua_phase_system;
+use aberredengine::lua_plugin;
 #[cfg(feature = "lua")]
-use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
-use crate::systems::menu::menu_selection_observer;
-use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
-use crate::systems::mousecontroller::mouse_controller;
-use crate::systems::movement::movement;
-use crate::systems::particleemitter::particle_emitter_system;
-use crate::systems::propagate_transforms::propagate_transforms;
-use crate::systems::render::render_system;
-use crate::systems::signalbinding::update_world_signals_binding_system;
-use crate::systems::stuckto::stuck_to_entity_system;
-use crate::systems::time::update_world_time;
-use crate::systems::timer::{timer_observer, update_timers};
-use crate::systems::phase::phase_system;
-use crate::systems::ttl::ttl_system;
-use crate::systems::tween::tween_mapposition_system;
-use crate::systems::tween::tween_rotation_system;
-use crate::systems::tween::tween_scale_system;
+use aberredengine::luarc_generator;
+#[cfg(feature = "lua")]
+use aberredengine::stub_generator;
+#[cfg(feature = "lua")]
+use aberredengine::systems::luaphase::lua_phase_system;
+#[cfg(feature = "lua")]
+use aberredengine::systems::luatimer::{lua_timer_observer, update_lua_timers};
+use aberredengine::systems::menu::menu_selection_observer;
+use aberredengine::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
+use aberredengine::systems::mousecontroller::mouse_controller;
+use aberredengine::systems::movement::movement;
+use aberredengine::systems::particleemitter::particle_emitter_system;
+use aberredengine::systems::propagate_transforms::propagate_transforms;
+use aberredengine::systems::render::render_system;
+use aberredengine::systems::signalbinding::update_world_signals_binding_system;
+use aberredengine::systems::stuckto::stuck_to_entity_system;
+use aberredengine::systems::time::update_world_time;
+use aberredengine::systems::timer::{timer_observer, update_timers};
+use aberredengine::systems::phase::phase_system;
+use aberredengine::systems::ttl::ttl_system;
+use aberredengine::systems::tween::tween_mapposition_system;
+use aberredengine::systems::tween::tween_rotation_system;
+use aberredengine::systems::tween::tween_scale_system;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use clap::Parser;

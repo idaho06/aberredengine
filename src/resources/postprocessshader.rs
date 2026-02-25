@@ -51,7 +51,6 @@ impl PostProcessShader {
     }
 
     /// Returns true if post-processing is enabled (at least one shader in chain).
-    #[allow(dead_code)]
     pub fn is_enabled(&self) -> bool {
         !self.keys.is_empty()
     }

@@ -68,7 +68,6 @@ pub struct AnalogInputs {
 #[derive(Debug, Clone, Default)]
 pub struct InputSnapshot {
     pub digital: DigitalInputs,
-    #[allow(dead_code)] // Reserved for future use
     pub analog: AnalogInputs,
 }
 

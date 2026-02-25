@@ -43,7 +43,6 @@ impl ShaderStore {
     }
 
     /// Gets an immutable reference to a shader entry by ID.
-    #[allow(dead_code)]
     pub fn get(&self, id: &str) -> Option<&ShaderEntry> {
         self.shaders.get(id)
     }
@@ -54,7 +53,6 @@ impl ShaderStore {
     }
 
     /// Checks if a shader with the given ID exists.
-    #[allow(dead_code)]
     pub fn contains(&self, id: &str) -> bool {
         self.shaders.contains_key(id)
     }
