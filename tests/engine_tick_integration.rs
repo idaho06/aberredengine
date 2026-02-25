@@ -8,6 +8,7 @@ use raylib::prelude::Vector2;
 
 use aberredengine::components::animation::{Animation, AnimationController, Condition};
 use aberredengine::components::boxcollider::BoxCollider;
+use aberredengine::components::collision::{BoxSides, CollisionRule};
 use aberredengine::components::group::Group;
 #[cfg(feature = "lua")]
 use aberredengine::components::luacollision::LuaCollisionRule;
@@ -41,6 +42,7 @@ use aberredengine::systems::animation::animation_controller;
 use aberredengine::systems::collision_detector::collision_detector;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
+use aberredengine::systems::rust_collision::{rust_collision_observer, CollisionCtx};
 use aberredengine::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luatimer::update_lua_timers;
@@ -1913,4 +1915,200 @@ fn phase_callback_receives_input_state() {
 
     let signals = world.get::<Signals>(entity).unwrap();
     assert!(signals.has_flag("input_received"));
+}
+
+// =============================================================================
+// Rust CollisionRule System Tests
+// =============================================================================
+
+#[test]
+fn collision_rule_callback_fires_on_matching_groups() {
+    let mut world = make_world(0.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    fn on_collision(
+        ent_a: Entity,
+        _ent_b: Entity,
+        _sides_a: &BoxSides,
+        _sides_b: &BoxSides,
+        ctx: &mut CollisionCtx,
+    ) {
+        if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+            signals.set_flag("collided");
+        }
+    }
+
+    let a = world
+        .spawn((
+            Group::new("ball"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    world.spawn((
+        Group::new("brick"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+
+    world.add_observer(rust_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let signals = world.get::<Signals>(a).unwrap();
+    assert!(signals.has_flag("collided"));
+}
+
+#[test]
+fn collision_rule_callback_not_fired_on_non_matching_groups() {
+    let mut world = make_world(0.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    fn on_collision(
+        ent_a: Entity,
+        _ent_b: Entity,
+        _sides_a: &BoxSides,
+        _sides_b: &BoxSides,
+        ctx: &mut CollisionCtx,
+    ) {
+        if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+            signals.set_flag("should_not_fire");
+        }
+    }
+
+    let a = world
+        .spawn((
+            Group::new("player"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    world.spawn((
+        Group::new("enemy"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+    // Rule is for "ball" vs "brick", not "player" vs "enemy"
+    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+
+    world.add_observer(rust_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let signals = world.get::<Signals>(a).unwrap();
+    assert!(!signals.has_flag("should_not_fire"));
+}
+
+#[test]
+fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
+    let mut world = make_world(0.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    // Callback expects entity_a to be "ball" (group_a of the rule).
+    // It sets a flag on entity_a to prove ordering is correct.
+    fn on_collision(
+        ent_a: Entity,
+        _ent_b: Entity,
+        _sides_a: &BoxSides,
+        _sides_b: &BoxSides,
+        ctx: &mut CollisionCtx,
+    ) {
+        // ent_a should be ball (group_a of rule)
+        if let Ok(group) = ctx.groups.get(ent_a) {
+            if group.name() == "ball" {
+                if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+                    signals.set_flag("ball_is_first");
+                }
+            }
+        }
+    }
+
+    // Spawn "brick" first so it gets a lower Entity id.
+    // The collision detector will report (brick, ball) but the rule
+    // defines group_a="ball", so the observer must reorder them.
+    let brick = world
+        .spawn((
+            Group::new("brick"),
+            MapPosition::new(5.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    let ball = world
+        .spawn((
+            Group::new("ball"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+
+    world.add_observer(rust_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let ball_signals = world.get::<Signals>(ball).unwrap();
+    assert!(ball_signals.has_flag("ball_is_first"));
+    // brick should NOT have the flag
+    let brick_signals = world.get::<Signals>(brick).unwrap();
+    assert!(!brick_signals.has_flag("ball_is_first"));
+}
+
+#[test]
+fn collision_rule_sides_passed_to_callback() {
+    let mut world = make_world(0.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    // rect_a is at (0,0) 10x10, rect_b is at (8,0) 10x10
+    // → rect_a's right side collides, rect_b's left side collides
+    fn on_collision(
+        ent_a: Entity,
+        _ent_b: Entity,
+        sides_a: &BoxSides,
+        sides_b: &BoxSides,
+        ctx: &mut CollisionCtx,
+    ) {
+        use aberredengine::components::collision::BoxSide;
+        let has_right_a = sides_a.iter().any(|s| matches!(s, BoxSide::Right));
+        let has_left_b = sides_b.iter().any(|s| matches!(s, BoxSide::Left));
+        if has_right_a && has_left_b {
+            if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+                signals.set_flag("sides_correct");
+            }
+        }
+    }
+
+    let a = world
+        .spawn((
+            Group::new("ball"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    world.spawn((
+        Group::new("brick"),
+        MapPosition::new(8.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+
+    world.add_observer(rust_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let signals = world.get::<Signals>(a).unwrap();
+    assert!(signals.has_flag("sides_correct"));
 }

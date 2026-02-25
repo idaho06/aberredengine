@@ -67,7 +67,6 @@ use log::error;
 pub struct LuaCollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
-    // pub rules: Query<'w, 's, &'static CollisionRule>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
@@ -85,6 +84,10 @@ pub struct LuaCollisionObserverParams<'w, 's> {
 }
 
 pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollisionObserverParams) {
+    if params.lua_rules.is_empty() {
+        return;
+    }
+
     let a = trigger.event().a;
     let b = trigger.event().b;
 
@@ -100,30 +103,7 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
         return;
     };
 
-    // First, check Rust-based collision rules
-    /*     for rule in params.rules.iter() {
-           if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
-               //eprintln!(
-               //    "Collision rule matched for groups '{}' and '{}'",
-               //    ga, gb
-               //);
-               let callback = rule.callback;
-               let mut ctx = CollisionContext {
-                   commands: &mut params.commands,
-                   groups: &params.groups,
-                   positions: &mut params.positions,
-                   rigid_bodies: &mut params.rigid_bodies,
-                   box_colliders: &params.box_colliders,
-                   signals: &mut params.signals,
-                   world_signals: &mut params.world_signals,
-                   audio_cmds: &mut params.audio_cmds,
-               };
-               callback(ent_a, ent_b, &mut ctx);
-               return;
-           }
-       }
-    */
-    // Then, check Lua-based collision rules
+    // Check Lua-based collision rules
     for lua_rule in params.lua_rules.iter() {
         if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
             // Gather entity data for Lua callback

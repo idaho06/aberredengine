@@ -77,6 +77,7 @@ use crate::systems::audio::{
 use crate::systems::collision_detector::collision_detector;
 #[cfg(feature = "lua")]
 use crate::systems::lua_collision::lua_collision_observer;
+use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gameconfig::apply_gameconfig_changes;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
@@ -306,6 +307,7 @@ fn main() {
 
     #[cfg(feature = "lua")]
     world.spawn((Observer::new(lua_collision_observer), Persistent));
+    world.spawn((Observer::new(rust_collision_observer), Persistent));
     world.spawn((Observer::new(switch_debug_observer), Persistent));
     world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
     world.spawn((Observer::new(menu_controller_observer), Persistent));

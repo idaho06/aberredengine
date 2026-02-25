@@ -31,6 +31,7 @@ FEATURE FLAGS:
 - `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
 - Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut TimerCtx, &InputState)`. `TimerCtx` is a SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, etc.), and resources (world_signals, audio, world_time).
 - Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut PhaseCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut PhaseCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut PhaseCtx)`. Transitions via callback return value or external `phase.next` mutation. `PhaseCtx` mirrors `TimerCtx` exactly. `phase_system` runs after collision_detector, always compiled (no feature flag).
+- Rust `CollisionRule` component: fn-pointer collision callback mirroring LuaCollisionRule. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx)`. `CollisionCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Entities ordered to match rule's `group_a`/`group_b`. Pre-computed collision sides passed as args. Always compiled (no feature flag).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -47,7 +48,7 @@ src/
 │   ├── screenposition.rs      # ScreenPosition (UI/screen-space position)
 │   ├── rigidbody.rs           # Velocity, friction, max_speed, named accel forces, frozen
 │   ├── boxcollider.rs         # BoxCollider (AABB collision shape)
-│   ├── collision.rs           # CollisionRule, collision observer context
+│   ├── collision.rs           # CollisionRule + CollisionCallback (Rust fn-pointer), BoxSide, get_colliding_sides
 │   ├── luacollision.rs        # [feature=lua] LuaCollisionRule for Lua callbacks
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
@@ -78,6 +79,7 @@ src/
 │   ├── movement.rs            # Physics: accel→vel→pos, friction, max_speed
 │   ├── collision_detector.rs  # AABB detection (pure Rust, shared by Lua and Rust game paths)
 │   ├── lua_collision.rs       # [feature=lua] Lua collision observer + callback dispatch (LuaCollisionObserverParams, lua_collision_observer)
+│   ├── rust_collision.rs      # Rust collision observer + CollisionCtx SystemParam (rust_collision_observer, always compiled)
 │   ├── render.rs              # Raylib drawing, camera, debug overlays, letterboxing + RenderResources/RenderQueries SystemParams
 │   ├── input.rs               # Poll keyboard state, emit InputEvent for all actions
 │   ├── inputsimplecontroller.rs    # Input→velocity
@@ -211,6 +213,8 @@ ScreenPosition { pos: Vector2 }
 RigidBody { velocity: Vector2, friction: Option<f32>, max_speed: Option<f32>, forces: FxHashMap<String, AccelerationForce>, frozen: bool }
 AccelerationForce { value: Vector2, enabled: bool }
 BoxCollider { offset: Vector2, origin: Vector2, size: Vector2 }
+LuaCollisionRule { group_a: String, group_b: String, callback: String } -- [feature=lua] Lua collision callback name
+CollisionRule { group_a: String, group_b: String, callback: CollisionCallback } -- Rust fn-pointer collision; CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx)
 Sprite { tex_key: String, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
 Animation { animation_key: String, frame_index: usize, elapsed: f32 }
 AnimationController { fallback_key: String, rules: Vec<AnimationRule> }
@@ -287,6 +291,7 @@ RenderResources<'w> { camera, screensize, window_size, textures, world_time, pos
 RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites } -- systems/render.rs
 TimerCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/timer.rs
 PhaseCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/phase.rs
+CollisionCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time } -- systems/rust_collision.rs
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
@@ -713,6 +718,7 @@ Do NOT store references to ctx or its subtables for later use - values will be o
 
 Registered observers (spawned as persistent entities in main.rs):
 - lua_collision_observer (on CollisionEvent) [feature=lua]
+- rust_collision_observer (on CollisionEvent) -- always compiled (Rust fn-pointer collision rules)
 - switch_debug_observer (on SwitchDebugEvent)
 - switch_fullscreen_observer (on SwitchFullScreenEvent)
 - menu_controller_observer (on InputEvent)
@@ -829,11 +835,15 @@ Lua calls engine.* -> LuaAppData.commands.borrow_mut().push(Cmd)
 movement_system moves entities
 -> collision_detector (systems/collision_detector.rs) detects AABB overlaps
 -> triggers CollisionEvent for each overlap
--> lua_collision_observer (systems/lua_collision.rs) receives the event, matches LuaCollisionRule by group names
--> calls Lua callback via call_lua_collision_callback (pooled context tables)
--> Lua callback uses engine.entity_* commands (work in all contexts)
--> Collision-specific commands (engine.collision_*) use separate queues
--> Collision commands drain immediately after callback
+-> rust_collision_observer (systems/rust_collision.rs) receives the event, matches CollisionRule by group names
+   -> computes collision sides via get_colliding_sides
+   -> calls Rust callback with (ent_a, ent_b, &sides_a, &sides_b, &mut CollisionCtx)
+   -> callback has direct ECS access (no command queues needed)
+-> lua_collision_observer (systems/lua_collision.rs) receives the event, matches LuaCollisionRule by group names [feature=lua]
+   -> calls Lua callback via call_lua_collision_callback (pooled context tables)
+   -> Lua callback uses engine.entity_* commands (work in all contexts)
+   -> Collision-specific commands (engine.collision_*) use separate queues
+   -> Collision commands drain immediately after callback
 
 ### Entity Commands Architecture
 
@@ -862,7 +872,7 @@ For features touching:
 
 - Physics: rigidbody.rs, movement.rs
 - Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs  [all feature=lua]
-- Collision: collision_detector.rs + lua_collision.rs (systems), boxcollider.rs, luacollision.rs (components)
+- Collision: collision_detector.rs + rust_collision.rs + lua_collision.rs (systems), collision.rs + boxcollider.rs + luacollision.rs (components)
 - Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs, entityshader.rs
 - Animation: animation.rs (component + controller), animationstore.rs
 - State machines: luaphase.rs (component + system) [feature=lua], phase.rs (component + system, Rust fn-pointer equivalent)
