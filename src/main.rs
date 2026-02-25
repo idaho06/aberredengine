@@ -93,7 +93,16 @@ fn main() {
             .run();
     }
 
-    // Pure-Rust path: no hooks registered yet (placeholder for downstream games)
+    // Pure-Rust path — replace with your own scene setup.
+    // See RUST-GAME-GUIDE.md (Section 3) for the full API, e.g.:
+    //
+    //   EngineBuilder::new()
+    //       .config("assets/config.ini")
+    //       .on_setup(my_setup)
+    //       .add_scene("menu", menu_descriptor())
+    //       .add_scene("level01", level01_descriptor())
+    //       .initial_scene("menu")
+    //       .run();
     #[cfg(not(feature = "lua"))]
     {
         EngineBuilder::new().run();
