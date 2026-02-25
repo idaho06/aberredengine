@@ -4,6 +4,7 @@
 //! for use in integration tests and as a reusable library.
 
 pub mod components;
+pub mod engine_app;
 pub mod events;
 #[cfg(feature = "lua")]
 pub mod lua_plugin;

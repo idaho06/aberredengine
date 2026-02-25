@@ -16,6 +16,7 @@
 //! fullscreen = false
 //! vsync = true
 //! target_fps = 120
+//! title = Aberred Engine
 //! ```
 
 use bevy_ecs::prelude::*;
@@ -34,6 +35,7 @@ const DEFAULT_VSYNC: bool = true;
 const DEFAULT_FULLSCREEN: bool = false;
 const DEFAULT_BACKGROUND_COLOR: Color = Color::new(80, 80, 80, 255);
 const DEFAULT_CONFIG_PATH: &str = "./config.ini";
+const DEFAULT_WINDOW_TITLE: &str = "Aberred Engine";
 
 /// Game configuration resource.
 ///
@@ -60,6 +62,8 @@ pub struct GameConfig {
     pub fullscreen: bool,
     /// Background clear color for the render target.
     pub background_color: Color,
+    /// Window title.
+    pub window_title: String,
     /// Path to the configuration file.
     pub config_path: PathBuf,
 }
@@ -82,6 +86,7 @@ impl GameConfig {
             vsync: DEFAULT_VSYNC,
             fullscreen: DEFAULT_FULLSCREEN,
             background_color: DEFAULT_BACKGROUND_COLOR,
+            window_title: DEFAULT_WINDOW_TITLE.to_string(),
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
         }
     }
@@ -140,16 +145,20 @@ impl GameConfig {
         if let Some(fullscreen) = config.getbool("window", "fullscreen").ok().flatten() {
             self.fullscreen = fullscreen;
         }
+        if let Some(title) = config.get("window", "title") {
+            self.window_title = title;
+        }
 
         info!(
-            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}",
+            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}",
             self.render_width,
             self.render_height,
             self.window_width,
             self.window_height,
             self.target_fps,
             self.vsync,
-            self.fullscreen
+            self.fullscreen,
+            self.window_title
         );
 
         Ok(())
@@ -179,6 +188,7 @@ impl GameConfig {
         config.set("window", "target_fps", Some(self.target_fps.to_string()));
         config.set("window", "vsync", Some(self.vsync.to_string()));
         config.set("window", "fullscreen", Some(self.fullscreen.to_string()));
+        config.set("window", "title", Some(self.window_title.clone()));
 
         config
             .write(&self.config_path)
@@ -375,6 +385,59 @@ mod tests {
         assert_eq!(config.background_color.r, 80);
         assert_eq!(config.background_color.g, 80);
         assert_eq!(config.background_color.b, 80);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_new_defaults_window_title() {
+        let config = GameConfig::new();
+        assert_eq!(config.window_title, "Aberred Engine");
+    }
+
+    #[test]
+    fn test_load_window_title_from_file() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_title.ini");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "[window]\ntitle = My Cool Game").unwrap();
+
+        let mut config = GameConfig::with_path(&path);
+        config.load_from_file().unwrap();
+        assert_eq!(config.window_title, "My Cool Game");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_window_title_missing_keeps_default() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_title_missing.ini");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "[window]\nwidth = 800").unwrap();
+
+        let mut config = GameConfig::with_path(&path);
+        config.load_from_file().unwrap();
+        assert_eq!(config.window_title, "Aberred Engine");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_window_title_save_and_reload_roundtrip() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_title_roundtrip.ini");
+
+        let mut config = GameConfig::with_path(&path);
+        config.window_title = "Test Title".to_string();
+        config.save_to_file().unwrap();
+
+        let mut loaded = GameConfig::with_path(&path);
+        loaded.load_from_file().unwrap();
+        assert_eq!(loaded.window_title, "Test Title");
 
         std::fs::remove_file(&path).ok();
     }

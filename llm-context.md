@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-24 (synced with codebase)
+# Last updated: 2026-02-25 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -31,14 +31,16 @@ FEATURE FLAGS:
 - `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
 - Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut TimerCtx, &InputState)`. `TimerCtx` is a SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, etc.), and resources (world_signals, audio, world_time).
 - Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut PhaseCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut PhaseCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut PhaseCtx)`. Transitions via callback return value or external `phase.next` mutation. `PhaseCtx` mirrors `TimerCtx` exactly. `phase_system` runs after collision_detector, always compiled (no feature flag).
+- `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping (world, window, resources, system schedule, main loop) into a configurable builder. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")` sugar. `main.rs` is now a thin CLI + builder call (~100 lines). `quit_game` and `clean_all_entities` are engine-level systems in `systems/gamestate.rs`, always registered. `GameConfig` has `window_title` field (from `config.ini [window] title`), overridable via `.title()`.
 - Rust `CollisionRule` component: fn-pointer collision callback mirroring LuaCollisionRule. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx)`. `CollisionCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Entities ordered to match rule's `group_a`/`group_b`. Pre-computed collision sides passed as args. Always compiled (no feature flag).
 
 ## FILE TREE (ESSENTIAL)
 
 ```
 src/
-├── main.rs                    # App entry, ECS world setup, main loop, system schedule, CLI (clap)
-├── lib.rs                     # Library crate entry (components, events, lua_plugin, resources, systems, stub_generator, luarc_generator)
+├── main.rs                    # App entry, CLI (clap), delegates to EngineBuilder
+├── lib.rs                     # Library crate entry (components, engine_app, events, lua_plugin, resources, systems, stub_generator, luarc_generator)
+├── engine_app.rs              # EngineBuilder: builder pattern for engine bootstrapping (world, window, resources, schedule, main loop)
 ├── lua_plugin.rs              # [feature=lua] Lua plugin: GameState logic, scene switching, Lua callbacks + ScriptingContext/GameSceneState/EntityProcessing SystemParams
 ├── stub_generator.rs          # [feature=lua] Lua EmmyLua stub generator (reads __meta, emits engine.lua)
 ├── luarc_generator.rs         # [feature=lua] .luarc.json generator (Lua Language Server config from __meta)
@@ -104,13 +106,13 @@ src/
 │   ├── ttl.rs                 # TTL countdown and entity despawn
 │   ├── audio.rs               # Audio thread bridge
 │   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps, background_color)
-│   └── gamestate.rs           # State transition check
+│   └── gamestate.rs           # State transition check + quit_game + clean_all_entities
 ├── resources/
 │   ├── mod.rs                 # Re-exports
 │   ├── worldtime.rs           # Delta time, time scale
 │   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
 │   ├── fullscreen.rs          # FullScreen marker resource
-│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen, background_color)
+│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen, background_color, window_title)
 │   ├── texturestore.rs        # FxHashMap<String, Texture2D> + load_texture_from_text() utility
 │   ├── fontstore.rs           # FxHashMap<String, Font> (non-send)
 │   ├── animationstore.rs      # Animation definitions
@@ -201,7 +203,7 @@ vsync = true                   ; Enable vertical sync
 fullscreen = false             ; Start in fullscreen mode
 ```
 
-GameConfig::load_from_file() is invoked in main.rs before world setup; `apply_gameconfig_changes`
+GameConfig::load_from_file() is invoked in engine_app.rs before world setup; `apply_gameconfig_changes`
 (run_if state_is_playing) reacts to `is_added()`/`is_changed()` to resize the render target and
 ScreenSize, sync fullscreen via SwitchFullScreenEvent, and apply vsync/target_fps (window resizing
 code is currently commented out).
@@ -247,7 +249,7 @@ GlobalTransform2D { position: Vector2, rotation_degrees: f32, scale: Vector2 } -
 
 ## RESOURCE QUICK-REF
 
-GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, config_path }
+GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, window_title: String, config_path }
 WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
 InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }
 BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
@@ -714,16 +716,16 @@ IMPORTANT: The collision context table is POOLED and REUSED between collisions f
 Do NOT store references to ctx or its subtables for later use - values will be overwritten.
 (Implementation: CollisionCtxPool/CollisionCtxTables in runtime.rs)
 
-## SYSTEM EXECUTION ORDER (main.rs schedule)
+## SYSTEM EXECUTION ORDER (engine_app.rs schedule)
 
-Registered observers (spawned as persistent entities in main.rs):
-- lua_collision_observer (on CollisionEvent) [feature=lua]
+Registered observers (spawned as persistent entities in engine_app.rs):
+- lua_collision_observer (on CollisionEvent) [feature=lua, with_lua() only]
 - rust_collision_observer (on CollisionEvent) -- always compiled (Rust fn-pointer collision rules)
 - switch_debug_observer (on SwitchDebugEvent)
 - switch_fullscreen_observer (on SwitchFullScreenEvent)
 - menu_controller_observer (on InputEvent)
 - menu_selection_observer (on MenuSelectionEvent)
-- lua_timer_observer (on LuaTimerEvent) [feature=lua]
+- lua_timer_observer (on LuaTimerEvent) [feature=lua, with_lua() only]
 - timer_observer (on TimerEvent)
 
 Systems with explicit ordering constraints (`.after()` / `.before()`):
@@ -739,7 +741,8 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 - animation.after(animation_controller)
 - ttl_system.after(movement)
 - dynamictext_size_system.after(update_world_signals_binding_system)
-- lua_plugin::update.after(check_pending_state).after(lua_phase_system)   -- [feature=lua]
+- lua_plugin::update.after(check_pending_state).after(lua_phase_system)   -- [with_lua() only]
+- game_update_hook.run_if(state_is_playing).after(check_pending_state)   -- Rust game update hook via on_update()
 - render_system.after(collision_detector)
 
 Approximate execution order:
@@ -769,7 +772,7 @@ Approximate execution order:
 23. update_timers (Rust fn-pointer timers)
 24. update_world_signals_binding_system
 25. dynamictext_size_system
-26. run_<scene>_update (lua_plugin::update, run_if state_is_playing, after check_pending_state + lua_phase_system) [feature=lua]
+26. game_update_hook (run_if state_is_playing, after check_pending_state; also after lua_phase_system when with_lua())
 27. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
 
 ## KEY PATTERNS
@@ -807,14 +810,14 @@ For systems that need to be called with a specific entity (like menu_despawn):
 1. Create file in src/systems/
 2. Define system function with queries
 3. Export from systems/mod.rs
-4. Add to schedule in main.rs (correct position)
+4. Add to schedule in engine_app.rs (correct position)
 
 ### Adding a new Resource
 
 1. Create file in src/resources/
 2. Derive Resource (or use non-send pattern)
 3. Export from resources/mod.rs
-4. Insert into world in main.rs
+4. Insert into world in engine_app.rs
 
 ### Adding a new Scene
 
