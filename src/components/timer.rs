@@ -11,13 +11,13 @@
 //!    - Accumulates delta time into `elapsed`
 //!    - When `elapsed >= duration`, emits `TimerEvent` and resets
 //! 3. The `timer_observer` receives the event:
-//!    - Calls the Rust callback with `(entity, &mut TimerCtx, &InputState)`
-//!    - The callback has full ECS access through `TimerCtx`
+//!    - Calls the Rust callback with `(entity, &mut GameCtx, &InputState)`
+//!    - The callback has full ECS access through [`GameCtx`](crate::systems::GameCtx)
 //!
 //! # Callback Signature
 //!
 //! ```ignore
-//! fn my_timer_callback(entity: Entity, ctx: &mut TimerCtx, input: &InputState) {
+//! fn my_timer_callback(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
 //!     // Full access to ECS queries and resources via ctx
 //!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
 //!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
@@ -42,13 +42,13 @@
 use bevy_ecs::prelude::{Component, Entity};
 
 use crate::resources::input::InputState;
-use crate::systems::timer::TimerCtx;
+use crate::systems::GameCtx;
 
 /// Callback type for Rust timers.
 ///
-/// Receives the entity that owns the timer, a mutable reference to `TimerCtx`
+/// Receives the entity that owns the timer, a mutable reference to [`GameCtx`](crate::systems::GameCtx)
 /// providing full ECS query/resource access, and the current input state.
-pub type TimerCallback = for<'w, 's> fn(Entity, &mut TimerCtx<'w, 's>, &InputState);
+pub type TimerCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState);
 
 /// Repeating countdown timer with a Rust function-pointer callback.
 ///
@@ -96,7 +96,7 @@ impl Timer {
 mod tests {
     use super::*;
 
-    fn dummy_callback(_entity: Entity, _ctx: &mut TimerCtx, _input: &InputState) {}
+    fn dummy_callback(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) {}
 
     #[test]
     fn test_new_sets_duration_and_zero_elapsed() {

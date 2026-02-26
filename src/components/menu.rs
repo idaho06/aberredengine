@@ -13,7 +13,7 @@ use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::{Color, Vector2};
 use rustc_hash::FxHashMap;
 
-use crate::systems::menu::MenuCtx;
+use crate::systems::GameCtx;
 
 /// Type alias for a Rust menu selection callback.
 ///
@@ -28,9 +28,9 @@ use crate::systems::menu::MenuCtx;
 ///
 /// # Related
 ///
-/// - [`crate::systems::menu::MenuCtx`] – bundled ECS access passed to the callback
+/// - [`crate::systems::GameCtx`] – bundled ECS access passed to the callback
 /// - [`crate::systems::menu::menu_selection_observer`] – dispatches to this callback
-pub type MenuRustCallback = for<'w, 's> fn(Entity, &str, usize, &mut MenuCtx<'w, 's>);
+pub type MenuRustCallback = for<'w, 's> fn(Entity, &str, usize, &mut GameCtx<'w, 's>);
 
 /// A single item within a [`Menu`].
 ///
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_menu_with_on_rust_callback() {
-        fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::menu::MenuCtx<'_, '_>) {}
+        fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::GameCtx<'_, '_>) {}
         let menu = Menu::new(
             &sample_labels(),
             Vector2::zero(),

@@ -4,18 +4,19 @@
 //! pattern — an optional higher-level alternative to the raw `.on_switch_scene()` hook.
 //!
 //! - [`SceneDescriptor`] — per-scene callbacks (`on_enter`, `on_update`, `on_exit`)
-//! - [`SceneCtx`] — bundled ECS access passed to scene callbacks
 //! - [`scene_switch_system`] — engine-owned scene transition: despawn → on_exit → on_enter
 //! - [`scene_update_system`] — per-frame dispatch to the active scene's `on_update`
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
 //!
+//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
+//!
 //! # Callback Signatures
 //!
 //! ```ignore
-//! fn my_enter(ctx: &mut SceneCtx) { /* spawn scene entities */ }
-//! fn my_update(ctx: &mut SceneCtx, dt: f32) { /* per-frame logic */ }
-//! fn my_exit(ctx: &mut SceneCtx) { /* cleanup before leaving */ }
+//! fn my_enter(ctx: &mut GameCtx) { /* spawn scene entities */ }
+//! fn my_update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic */ }
+//! fn my_exit(ctx: &mut GameCtx) { /* cleanup before leaving */ }
 //! ```
 //!
 //! # Related
@@ -24,44 +25,30 @@
 //! - [`crate::engine_app::EngineBuilder::add_scene`] — builder method for registration
 
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::SystemParam;
 use log::{error, info};
 
-use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::signals::Signals;
-use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
-use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::GameCtx;
 
 // ---------------------------------------------------------------------------
 // Callback type aliases
 // ---------------------------------------------------------------------------
 
 /// Called when entering a scene (spawn entities, initialize state).
-pub type SceneEnterFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>);
+pub type SceneEnterFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
 /// Called every frame while the scene is active. `f32` is delta time, `&InputState` is current input.
-pub type SceneUpdateFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>, f32, &InputState);
+pub type SceneUpdateFn = for<'w, 's> fn(&mut GameCtx<'w, 's>, f32, &InputState);
 
 /// Called when leaving a scene (cleanup before despawn).
-pub type SceneExitFn = for<'w, 's> fn(&mut SceneCtx<'w, 's>);
+pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
 // ---------------------------------------------------------------------------
 // SceneDescriptor
@@ -91,75 +78,6 @@ pub struct SceneDescriptor {
 }
 
 // ---------------------------------------------------------------------------
-// SceneCtx — SystemParam
-// ---------------------------------------------------------------------------
-
-/// Bundled ECS access passed to scene callbacks.
-///
-/// Mirrors [`TimerCtx`](crate::systems::timer::TimerCtx),
-/// [`PhaseCtx`](crate::systems::phase::PhaseCtx), and
-/// [`MenuCtx`](crate::systems::menu::MenuCtx), providing full query and
-/// resource access so that scene callbacks can spawn/despawn entities and
-/// interact with engine resources.
-///
-/// # Usage in callbacks
-///
-/// ```ignore
-/// fn my_enter(ctx: &mut SceneCtx) {
-///     ctx.world_signals.set_string("score", "0".to_string());
-///     ctx.audio.write(AudioCmd::PlayMusic { id: "bgm".into(), looping: true });
-/// }
-///
-/// fn my_update(ctx: &mut SceneCtx, _dt: f32, input: &InputState) {
-///     if input.action_1.just_pressed {
-///         ctx.world_signals.set_flag("jump");
-///     }
-/// }
-/// ```
-#[derive(SystemParam)]
-pub struct SceneCtx<'w, 's> {
-    /// ECS command buffer for spawning, despawning, inserting/removing components.
-    pub commands: Commands<'w, 's>,
-    // Mutable queries
-    /// Mutable access to entity positions (world-space).
-    pub positions: Query<'w, 's, &'static mut MapPosition>,
-    /// Mutable access to rigid bodies (velocity, friction, forces).
-    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
-    /// Mutable access to per-entity signals.
-    pub signals: Query<'w, 's, &'static mut Signals>,
-    /// Mutable access to animation state.
-    pub animations: Query<'w, 's, &'static mut Animation>,
-    /// Mutable access to per-entity shaders.
-    pub shaders: Query<'w, 's, &'static mut EntityShader>,
-    // Read-only queries
-    /// Read-only access to entity groups.
-    pub groups: Query<'w, 's, &'static Group>,
-    /// Read-only access to screen-space positions.
-    pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
-    /// Read-only access to box colliders.
-    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    /// Read-only access to world-space transforms (from parent-child hierarchy).
-    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
-    /// Read-only access to StuckTo relationships.
-    pub stuckto: Query<'w, 's, &'static StuckTo>,
-    /// Read-only access to rotation.
-    pub rotations: Query<'w, 's, &'static Rotation>,
-    /// Read-only access to scale.
-    pub scales: Query<'w, 's, &'static Scale>,
-    /// Read-only access to sprites.
-    pub sprites: Query<'w, 's, &'static Sprite>,
-    // Resources
-    /// Mutable access to global world signals.
-    pub world_signals: ResMut<'w, WorldSignals>,
-    /// Writer for audio commands (play sounds/music).
-    pub audio: MessageWriter<'w, AudioCmd>,
-    /// Read-only access to world time (delta, elapsed, time_scale).
-    pub world_time: Res<'w, WorldTime>,
-    /// Read-only access to loaded textures.
-    pub texture_store: Res<'w, TextureStore>,
-}
-
-// ---------------------------------------------------------------------------
 // scene_switch_system — engine-owned scene transition
 // ---------------------------------------------------------------------------
 
@@ -177,7 +95,7 @@ pub struct SceneCtx<'w, 's> {
 /// 6. Update `SceneManager.active_scene`
 /// 7. Call `on_enter` on the new scene
 pub fn scene_switch_system(
-    mut ctx: SceneCtx,
+    mut ctx: GameCtx,
     entities_to_clean: Query<Entity, Without<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut scene_manager: ResMut<SceneManager>,
@@ -231,7 +149,7 @@ pub fn scene_switch_system(
 /// Looks up the active scene in [`SceneManager`], and if it has an `on_update`
 /// callback, calls it with `(ctx, dt)`.
 pub fn scene_update_system(
-    mut ctx: SceneCtx,
+    mut ctx: GameCtx,
     scene_manager: Res<SceneManager>,
     world_time: Res<WorldTime>,
     input: Res<InputState>,
@@ -301,10 +219,11 @@ pub fn scene_enter_play(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::systems::GameCtx;
 
     #[test]
     fn scene_descriptor_default_optionals() {
-        fn dummy_enter(_ctx: &mut SceneCtx) {}
+        fn dummy_enter(_ctx: &mut GameCtx) {}
         let desc = SceneDescriptor {
             on_enter: dummy_enter,
             on_update: None,
@@ -316,9 +235,9 @@ mod tests {
 
     #[test]
     fn scene_descriptor_with_all_callbacks() {
-        fn enter(_ctx: &mut SceneCtx) {}
-        fn update(_ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {}
-        fn exit(_ctx: &mut SceneCtx) {}
+        fn enter(_ctx: &mut GameCtx) {}
+        fn update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
+        fn exit(_ctx: &mut GameCtx) {}
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: Some(update),
@@ -330,7 +249,7 @@ mod tests {
 
     #[test]
     fn scene_descriptor_clone() {
-        fn enter(_ctx: &mut SceneCtx) {}
+        fn enter(_ctx: &mut GameCtx) {}
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,

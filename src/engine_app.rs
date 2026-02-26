@@ -713,10 +713,11 @@ mod tests {
 
     // --- SceneManager builder tests ---
 
-    use crate::systems::scene_dispatch::{SceneCtx, SceneDescriptor};
+    use crate::systems::scene_dispatch::SceneDescriptor;
+    use crate::systems::GameCtx;
 
-    fn dummy_scene_enter(_ctx: &mut SceneCtx) {}
-    fn dummy_scene_update(_ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {}
+    fn dummy_scene_enter(_ctx: &mut GameCtx) {}
+    fn dummy_scene_update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
 
     fn make_descriptor() -> SceneDescriptor {
         SceneDescriptor {

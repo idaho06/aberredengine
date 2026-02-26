@@ -41,21 +41,21 @@ use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;
 use smallvec::SmallVec;
 
-use crate::systems::rust_collision::CollisionCtx;
+use crate::systems::GameCtx;
 
 /// Callback type for Rust collision rules.
 ///
 /// Receives the two matched entities (ordered to match `group_a` and `group_b`),
 /// the colliding sides for each entity, and a mutable reference to
-/// [`CollisionCtx`] providing full ECS query/resource access.
+/// [`GameCtx`](crate::systems::GameCtx) providing full ECS query/resource access.
 pub type CollisionCallback =
-    for<'w, 's> fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx<'w, 's>);
+    for<'w, 's> fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx<'w, 's>);
 
 /// Defines how collisions between two entity groups should be handled.
 ///
 /// When a collision is detected between entities with groups matching
 /// `group_a` and `group_b`, the `callback` function is invoked with
-/// the entities, collision sides, and a [`CollisionCtx`].
+/// the entities, collision sides, and a [`GameCtx`](crate::systems::GameCtx).
 #[derive(Component)]
 pub struct CollisionRule {
     /// First group name to match.
@@ -399,7 +399,7 @@ mod tests {
         _b: Entity,
         _sides_a: &BoxSides,
         _sides_b: &BoxSides,
-        _ctx: &mut CollisionCtx,
+        _ctx: &mut GameCtx,
     ) {
     }
 

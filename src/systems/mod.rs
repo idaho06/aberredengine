@@ -31,6 +31,8 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
+pub use game_ctx::GameCtx;
+
 /// Bundled Raylib handle + thread to reduce system parameter count.
 #[derive(SystemParam)]
 pub struct RaylibAccess<'w> {
@@ -42,6 +44,7 @@ pub mod animation;
 pub mod audio;
 pub mod collision_detector;
 pub mod dynamictext_size;
+pub mod game_ctx;
 pub mod gameconfig;
 pub mod gamestate;
 pub mod gridlayout;

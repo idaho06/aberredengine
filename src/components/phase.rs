@@ -16,16 +16,16 @@
 //! # Callback Signatures
 //!
 //! ```ignore
-//! fn my_enter(entity: Entity, ctx: &mut PhaseCtx, input: &InputState) -> Option<String> {
+//! fn my_enter(entity: Entity, ctx: &mut GameCtx, input: &InputState) -> Option<String> {
 //!     // Return Some("next_phase") to transition, or None to stay
 //!     None
 //! }
 //!
-//! fn my_update(entity: Entity, ctx: &mut PhaseCtx, input: &InputState, dt: f32) -> Option<String> {
+//! fn my_update(entity: Entity, ctx: &mut GameCtx, input: &InputState, dt: f32) -> Option<String> {
 //!     if dt > 3.0 { Some("timeout".into()) } else { None }
 //! }
 //!
-//! fn my_exit(entity: Entity, ctx: &mut PhaseCtx) {
+//! fn my_exit(entity: Entity, ctx: &mut GameCtx) {
 //!     // Cleanup when leaving this phase
 //! }
 //! ```
@@ -53,28 +53,28 @@
 //! # Related
 //!
 //! - [`crate::systems::phase::phase_system`] – system that processes phase transitions and callbacks
-//! - [`crate::systems::phase::PhaseCtx`] – bundled ECS access passed to phase callbacks
+//! - [`crate::systems::GameCtx`] – bundled ECS access passed to phase callbacks
 //! - [`crate::components::luaphase::LuaPhase`] – Lua equivalent
 
 use bevy_ecs::prelude::{Component, Entity};
 use rustc_hash::FxHashMap;
 
 use crate::resources::input::InputState;
-use crate::systems::phase::PhaseCtx;
+use crate::systems::GameCtx;
 
 /// Callback for entering a phase. Returns `Some(phase_name)` to immediately
 /// transition, or `None` to stay in the current phase.
 pub type PhaseEnterFn =
-    for<'w, 's> fn(Entity, &mut PhaseCtx<'w, 's>, &InputState) -> Option<String>;
+    for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState) -> Option<String>;
 
 /// Callback for each frame while in a phase. Receives delta time as the last
 /// argument. Returns `Some(phase_name)` to transition, or `None` to stay.
 pub type PhaseUpdateFn =
-    for<'w, 's> fn(Entity, &mut PhaseCtx<'w, 's>, &InputState, f32) -> Option<String>;
+    for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState, f32) -> Option<String>;
 
 /// Callback for exiting a phase. No return value — the transition is already
 /// committed.
-pub type PhaseExitFn = for<'w, 's> fn(Entity, &mut PhaseCtx<'w, 's>);
+pub type PhaseExitFn = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
 
 /// Rust function-pointer callbacks for a single phase.
 #[derive(Clone, Copy, Default)]
@@ -162,13 +162,13 @@ impl std::fmt::Debug for Phase {
 mod tests {
     use super::*;
 
-    fn dummy_enter(_: Entity, _: &mut PhaseCtx, _: &InputState) -> Option<String> {
+    fn dummy_enter(_: Entity, _: &mut GameCtx, _: &InputState) -> Option<String> {
         None
     }
-    fn dummy_update(_: Entity, _: &mut PhaseCtx, _: &InputState, _: f32) -> Option<String> {
+    fn dummy_update(_: Entity, _: &mut GameCtx, _: &InputState, _: f32) -> Option<String> {
         None
     }
-    fn dummy_exit(_: Entity, _: &mut PhaseCtx) {}
+    fn dummy_exit(_: Entity, _: &mut GameCtx) {}
 
     fn make_phases() -> FxHashMap<String, PhaseCallbackFns> {
         let mut phases = FxHashMap::default();

@@ -6,25 +6,17 @@
 //! - [`menu_controller_observer`] – handles input to navigate and select items
 //! - [`menu_selection_observer`] – performs actions when items are selected
 //!
-//! Menus can render in world-space or screen-space depending on the
-//! `use_screen_space` flag.
+//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
 
 use std::sync::Arc;
 
-use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
 use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
@@ -37,74 +29,12 @@ use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::texturestore::load_texture_from_text;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
-use crate::components::dynamictext::DynamicText;
+use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::SystemParam;
 use log::{info, debug, warn};
 #[cfg(feature = "lua")]
 use log::error;
 use raylib::prelude::Vector2;
-
-/// Bundled ECS access passed to Rust menu selection callbacks.
-///
-/// Mirrors [`TimerCtx`](crate::systems::timer::TimerCtx) and
-/// [`PhaseCtx`](crate::systems::phase::PhaseCtx), providing full query and
-/// resource access so that Rust menu callbacks can read/write any entity's
-/// components and interact with engine resources.
-///
-/// # Usage in callbacks
-///
-/// ```ignore
-/// fn my_menu_callback(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut MenuCtx) {
-///     // Set a global signal based on the selection
-///     ctx.world_signals.set_string("selected_item", item_id.to_string());
-///     // Play a confirmation sound
-///     ctx.audio.write(AudioCmd::PlayFx { id: "confirm".into() });
-/// }
-/// ```
-#[derive(SystemParam)]
-pub struct MenuCtx<'w, 's> {
-    /// ECS command buffer for spawning, despawning, inserting/removing components.
-    pub commands: Commands<'w, 's>,
-    // Mutable queries (most commonly needed in callbacks)
-    /// Mutable access to entity positions (world-space).
-    pub positions: Query<'w, 's, &'static mut MapPosition>,
-    /// Mutable access to rigid bodies (velocity, friction, forces).
-    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
-    /// Mutable access to per-entity signals.
-    pub signals: Query<'w, 's, &'static mut Signals>,
-    /// Mutable access to animation state.
-    pub animations: Query<'w, 's, &'static mut Animation>,
-    /// Mutable access to per-entity shaders.
-    pub shaders: Query<'w, 's, &'static mut EntityShader>,
-    // Read-only queries
-    /// Read-only access to entity groups.
-    pub groups: Query<'w, 's, &'static Group>,
-    /// Read-only access to screen-space positions.
-    pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
-    /// Read-only access to box colliders.
-    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    /// Read-only access to world-space transforms (from parent-child hierarchy).
-    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
-    /// Read-only access to StuckTo relationships.
-    pub stuckto: Query<'w, 's, &'static StuckTo>,
-    /// Read-only access to rotation.
-    pub rotations: Query<'w, 's, &'static Rotation>,
-    /// Read-only access to scale.
-    pub scales: Query<'w, 's, &'static Scale>,
-    /// Read-only access to sprites.
-    pub sprites: Query<'w, 's, &'static Sprite>,
-    // Resources
-    /// Mutable access to global world signals.
-    pub world_signals: ResMut<'w, WorldSignals>,
-    /// Writer for audio commands (play sounds/music).
-    pub audio: MessageWriter<'w, AudioCmd>,
-    /// Read-only access to world time (delta, elapsed, time_scale).
-    pub world_time: Res<'w, WorldTime>,
-}
-
 
 
 /// Spawns entities for newly added [`Menu`] components.
@@ -629,7 +559,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 /// Lua callback with a context table containing `menu_id`, `item_id`, and `item_index`.
 ///
 /// If the menu has an `on_rust_callback`, invokes it with the menu entity, item ID,
-/// item index, and full ECS access via [`MenuCtx`].
+/// item index, and full ECS access via [`GameCtx`](crate::systems::GameCtx).
 ///
 /// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch
@@ -642,7 +572,7 @@ pub fn menu_selection_observer(
     menus: Query<(&Menu, Option<&MenuActions>)>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
-    mut ctx: MenuCtx,
+    mut ctx: GameCtx,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     let event = trigger.event();
@@ -713,7 +643,7 @@ pub fn menu_selection_observer(
     menus: Query<(&Menu, Option<&MenuActions>)>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
-    mut ctx: MenuCtx,
+    mut ctx: GameCtx,
 ) {
     let event = trigger.event();
     debug!(
@@ -753,7 +683,7 @@ pub fn menu_selection_observer(
 fn dispatch_menu_action(
     menu_actions_opt: Option<&MenuActions>,
     event: &MenuSelectionEvent,
-    ctx: &mut MenuCtx,
+    ctx: &mut GameCtx,
     next_game_state: &mut ResMut<NextGameState>,
     systems_store: &Res<SystemsStore>,
 ) {

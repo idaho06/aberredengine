@@ -12,9 +12,10 @@ use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::scene_dispatch::{
-    SceneCtx, SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
+    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
     scene_update_system,
 };
+use aberredengine::systems::GameCtx;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 
@@ -22,7 +23,7 @@ use aberredengine::components::persistent::Persistent;
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
 
-/// Set up a minimal world with all resources needed by `SceneCtx`,
+/// Set up a minimal world with all resources needed by `GameCtx`,
 /// `scene_switch_system`, and `scene_update_system`.
 fn setup_world() -> World {
     let mut world = World::new();
@@ -64,34 +65,34 @@ fn clear_logs() {
 
 // -- Menu scene callbacks --
 
-fn menu_enter(ctx: &mut SceneCtx) {
+fn menu_enter(ctx: &mut GameCtx) {
     ENTER_LOG.with(|v| v.borrow_mut().push("menu".to_string()));
     ctx.world_signals.set_flag("menu_entered");
 }
 
-fn menu_update(_ctx: &mut SceneCtx, dt: f32, _input: &InputState) {
+fn menu_update(_ctx: &mut GameCtx, dt: f32, _input: &InputState) {
     UPDATE_LOG.with(|v| v.borrow_mut().push(("menu".to_string(), dt)));
 }
 
-fn menu_exit(ctx: &mut SceneCtx) {
+fn menu_exit(ctx: &mut GameCtx) {
     EXIT_LOG.with(|v| v.borrow_mut().push("menu".to_string()));
     ctx.world_signals.set_flag("menu_exited");
 }
 
 // -- Level1 scene callbacks --
 
-fn level1_enter(ctx: &mut SceneCtx) {
+fn level1_enter(ctx: &mut GameCtx) {
     ENTER_LOG.with(|v| v.borrow_mut().push("level1".to_string()));
     ctx.world_signals.set_flag("level1_entered");
 }
 
-fn level1_update(_ctx: &mut SceneCtx, dt: f32, _input: &InputState) {
+fn level1_update(_ctx: &mut GameCtx, dt: f32, _input: &InputState) {
     UPDATE_LOG.with(|v| v.borrow_mut().push(("level1".to_string(), dt)));
 }
 
 // -- Minimal scene (no update, no exit) --
 
-fn minimal_enter(_ctx: &mut SceneCtx) {
+fn minimal_enter(_ctx: &mut GameCtx) {
     ENTER_LOG.with(|v| v.borrow_mut().push("minimal".to_string()));
 }
 

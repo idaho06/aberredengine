@@ -10,13 +10,15 @@ use aberredengine::resources::gamestate::{GameState, NextGameState};
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::menu::{MenuCtx, menu_selection_observer};
+use aberredengine::systems::menu::menu_selection_observer;
+use aberredengine::systems::GameCtx;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 
-/// Set up a minimal world with all resources needed by `MenuCtx` and
+/// Set up a minimal world with all resources needed by `GameCtx` and
 /// `menu_selection_observer`.
 fn setup_world() -> World {
     let mut world = World::new();
@@ -26,6 +28,7 @@ fn setup_world() -> World {
     world.insert_resource(NextGameState::new());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(Messages::<AudioCmd>::default());
+    world.insert_resource(TextureStore::default());
     #[cfg(feature = "lua")]
     world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world
@@ -55,7 +58,7 @@ thread_local! {
     static CALLBACK_ARGS: std::cell::RefCell<Option<(u64, String, usize)>> = const { std::cell::RefCell::new(None) };
 }
 
-fn test_callback(_entity: Entity, item_id: &str, item_index: usize, ctx: &mut MenuCtx) {
+fn test_callback(_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
     // Record that we were called with the right args
     CALLBACK_ARGS.with(|args| {
         *args.borrow_mut() = Some((0, item_id.to_string(), item_index));
@@ -151,7 +154,7 @@ thread_local! {
     static PRIORITY_CALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-fn priority_callback(_entity: Entity, _item_id: &str, _index: usize, ctx: &mut MenuCtx) {
+fn priority_callback(_entity: Entity, _item_id: &str, _index: usize, ctx: &mut GameCtx) {
     PRIORITY_CALLED.with(|c| c.set(true));
     ctx.world_signals.set_flag("rust_callback_ran");
 }
@@ -237,7 +240,7 @@ thread_local! {
     static INDEX_CAPTURE: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-fn index_callback(_entity: Entity, _item_id: &str, item_index: usize, _ctx: &mut MenuCtx) {
+fn index_callback(_entity: Entity, _item_id: &str, item_index: usize, _ctx: &mut GameCtx) {
     INDEX_CAPTURE.with(|v| v.borrow_mut().push(item_index));
 }
 
@@ -292,7 +295,7 @@ thread_local! {
     static UNKNOWN_INDEX: std::cell::Cell<usize> = const { std::cell::Cell::new(999) };
 }
 
-fn unknown_callback(_entity: Entity, _item_id: &str, item_index: usize, _ctx: &mut MenuCtx) {
+fn unknown_callback(_entity: Entity, _item_id: &str, item_index: usize, _ctx: &mut GameCtx) {
     UNKNOWN_INDEX.with(|c| c.set(item_index));
 }
 
@@ -341,7 +344,7 @@ fn lua_priority_callback(
     _entity: Entity,
     _item_id: &str,
     _index: usize,
-    _ctx: &mut MenuCtx,
+    _ctx: &mut GameCtx,
 ) {
     RUST_CB_CALLED.with(|c| c.set(true));
 }

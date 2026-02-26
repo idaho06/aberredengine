@@ -2,14 +2,15 @@
 //!
 //! When a [`Timer`](crate::components::timer::Timer) component reaches its
 //! duration, a [`TimerEvent`] is triggered. The observer system calls the
-//! Rust callback with the entity and a `TimerCtx` providing full ECS access.
+//! Rust callback with the entity and a [`GameCtx`](crate::systems::GameCtx)
+//! providing full ECS access.
 //!
 //! # Event Flow
 //!
 //! 1. `update_timers` system detects timer expiration
 //! 2. Emits `TimerEvent` with entity and callback function pointer
 //! 3. `timer_observer` receives the event
-//! 4. Calls the Rust callback with `(entity, &mut TimerCtx, &InputState)`
+//! 4. Calls the Rust callback with `(entity, &mut GameCtx, &InputState)`
 //!
 //! # Related
 //!
@@ -26,7 +27,7 @@ use crate::components::timer::TimerCallback;
 ///
 /// The `entity` field identifies the entity with the timer, and `callback`
 /// contains the Rust function pointer to invoke. The function will be called
-/// with `(entity, &mut TimerCtx, &InputState)`.
+/// with `(entity, &mut GameCtx, &InputState)`.
 #[derive(Event, Clone, Copy)]
 pub struct TimerEvent {
     /// The entity whose timer expired.

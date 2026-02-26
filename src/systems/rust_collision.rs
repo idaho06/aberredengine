@@ -2,9 +2,10 @@
 //!
 //! This module provides the Rust-native collision handling:
 //!
-//! - [`CollisionCtx`] – bundled ECS access passed to collision callbacks
 //! - [`rust_collision_observer`] – receives [`CollisionEvent`](crate::events::collision::CollisionEvent)s
 //!   and dispatches to [`CollisionRule`](crate::components::collision::CollisionRule) callbacks
+//!
+//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
 //!
 //! # Collision Flow
 //!
@@ -22,7 +23,7 @@
 //!     b: Entity,
 //!     sides_a: &BoxSides,
 //!     sides_b: &BoxSides,
-//!     ctx: &mut CollisionCtx,
+//!     ctx: &mut GameCtx,
 //! ) {
 //!     // Full ECS access via ctx
 //! }
@@ -37,94 +38,10 @@
 //! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
 
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::SystemParam;
 
-use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
 use crate::components::collision::{get_colliding_sides, CollisionRule};
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::signals::Signals;
-use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
-use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
-
-/// Bundled ECS access passed to Rust collision callbacks.
-///
-/// Mirrors [`TimerCtx`](crate::systems::timer::TimerCtx) and
-/// [`PhaseCtx`](crate::systems::phase::PhaseCtx) field-for-field,
-/// providing full query and resource access so that collision callbacks
-/// can read/write any entity's components and interact with engine resources.
-///
-/// # Usage in callbacks
-///
-/// ```ignore
-/// fn on_ball_brick(
-///     ball: Entity,
-///     brick: Entity,
-///     sides_a: &BoxSides,
-///     sides_b: &BoxSides,
-///     ctx: &mut CollisionCtx,
-/// ) {
-///     // Reflect the ball
-///     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(ball) {
-///         rb.velocity.y = -rb.velocity.y;
-///     }
-///     // Despawn the brick
-///     ctx.commands.entity(brick).despawn();
-///     // Play a sound
-///     ctx.audio.write(AudioCmd::PlayFx { id: "hit".into() });
-/// }
-/// ```
-#[derive(SystemParam)]
-pub struct CollisionCtx<'w, 's> {
-    /// ECS command buffer for spawning, despawning, inserting/removing components.
-    pub commands: Commands<'w, 's>,
-    // Mutable queries (most commonly needed in callbacks)
-    /// Mutable access to entity positions (world-space).
-    pub positions: Query<'w, 's, &'static mut MapPosition>,
-    /// Mutable access to rigid bodies (velocity, friction, forces).
-    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
-    /// Mutable access to per-entity signals.
-    pub signals: Query<'w, 's, &'static mut Signals>,
-    /// Mutable access to animation state.
-    pub animations: Query<'w, 's, &'static mut Animation>,
-    /// Mutable access to per-entity shaders.
-    pub shaders: Query<'w, 's, &'static mut EntityShader>,
-    // Read-only queries
-    /// Read-only access to entity groups.
-    pub groups: Query<'w, 's, &'static Group>,
-    /// Read-only access to screen-space positions.
-    pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
-    /// Read-only access to box colliders.
-    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    /// Read-only access to world-space transforms (from parent-child hierarchy).
-    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
-    /// Read-only access to StuckTo relationships.
-    pub stuckto: Query<'w, 's, &'static StuckTo>,
-    /// Read-only access to rotation.
-    pub rotations: Query<'w, 's, &'static Rotation>,
-    /// Read-only access to scale.
-    pub scales: Query<'w, 's, &'static Scale>,
-    /// Read-only access to sprites.
-    pub sprites: Query<'w, 's, &'static Sprite>,
-    // Resources
-    /// Mutable access to global world signals.
-    pub world_signals: ResMut<'w, WorldSignals>,
-    /// Writer for audio commands (play sounds/music).
-    pub audio: MessageWriter<'w, AudioCmd>,
-    /// Read-only access to world time (delta, elapsed, time_scale).
-    pub world_time: Res<'w, WorldTime>,
-}
+use crate::systems::GameCtx;
 
 /// Observer that handles Rust collision rules.
 ///
@@ -137,7 +54,7 @@ pub struct CollisionCtx<'w, 's> {
 pub fn rust_collision_observer(
     trigger: On<CollisionEvent>,
     rules: Query<&CollisionRule>,
-    mut ctx: CollisionCtx,
+    mut ctx: GameCtx,
 ) {
     if rules.is_empty() {
         return;

@@ -80,9 +80,10 @@ impl Default for SceneManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systems::scene_dispatch::{SceneCtx, SceneDescriptor};
+    use crate::systems::scene_dispatch::SceneDescriptor;
+    use crate::systems::GameCtx;
 
-    fn dummy_enter(_ctx: &mut SceneCtx) {}
+    fn dummy_enter(_ctx: &mut GameCtx) {}
 
     fn make_descriptor() -> SceneDescriptor {
         SceneDescriptor {
@@ -122,7 +123,7 @@ mod tests {
 
     #[test]
     fn insert_overwrites() {
-        fn other_enter(_ctx: &mut SceneCtx) {}
+        fn other_enter(_ctx: &mut GameCtx) {}
         let mut sm = SceneManager::new();
         sm.insert("menu", make_descriptor());
         sm.insert(

@@ -32,6 +32,7 @@ use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::events::timer::TimerEvent;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
+use aberredengine::resources::texturestore::TextureStore;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::screensize::ScreenSize;
@@ -42,14 +43,14 @@ use aberredengine::systems::animation::animation_controller;
 use aberredengine::systems::collision_detector::collision_detector;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
-use aberredengine::systems::rust_collision::{rust_collision_observer, CollisionCtx};
+use aberredengine::systems::rust_collision::rust_collision_observer;
 use aberredengine::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luatimer::update_lua_timers;
 use aberredengine::systems::movement::movement;
 use aberredengine::systems::stuckto::stuck_to_entity_system;
 use aberredengine::systems::time::update_world_time;
-use aberredengine::systems::timer::{update_timers, timer_observer, TimerCtx};
+use aberredengine::systems::timer::{update_timers, timer_observer};
 use aberredengine::systems::ttl::ttl_system;
 use aberredengine::systems::tween::{
     tween_mapposition_system, tween_rotation_system, tween_scale_system,
@@ -71,6 +72,7 @@ fn make_world(delta: f32) -> World {
     });
     world.insert_resource(ScreenSize { w: 800, h: 600 });
     world.init_resource::<Messages<AudioCmd>>();
+    world.init_resource::<TextureStore>();
     world
 }
 
@@ -834,7 +836,7 @@ fn tick_timers(world: &mut World) {
 fn rust_timer_accumulates_time() {
     let mut world = make_world(0.3);
 
-    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
     let entity = world.spawn((Timer::new(1.0, noop),)).id();
 
     tick_timers(&mut world);
@@ -847,7 +849,7 @@ fn rust_timer_accumulates_time() {
 fn rust_timer_fires_event_when_expired() {
     let mut world = make_world(1.0);
 
-    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
     let entity = world.spawn((Timer::new(0.5, noop),)).id();
 
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -871,7 +873,7 @@ fn rust_timer_fires_event_when_expired() {
 fn rust_timer_resets_after_firing() {
     let mut world = make_world(0.6);
 
-    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
     let entity = world.spawn((Timer::new(0.5, noop),)).id();
 
     world.add_observer(|_trigger: On<TimerEvent>| {});
@@ -888,7 +890,7 @@ fn rust_timer_resets_after_firing() {
 fn rust_timer_does_not_fire_before_duration() {
     let mut world = make_world(0.3);
 
-    fn noop(_: Entity, _: &mut TimerCtx, _: &InputState) {}
+    fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
     world.spawn((Timer::new(1.0, noop),));
 
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -910,7 +912,7 @@ fn rust_timer_observer_calls_callback() {
     world.insert_resource(WorldSignals::default());
     world.insert_resource(InputState::default());
 
-    fn set_flag(entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+    fn set_flag(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             signals.set_flag("timer_fired");
         }
@@ -936,7 +938,7 @@ fn rust_timer_observer_can_write_audio() {
     world.insert_resource(WorldSignals::default());
     world.insert_resource(InputState::default());
 
-    fn play_sound(_entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+    fn play_sound(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
         ctx.audio.write(AudioCmd::PlayFx {
             id: "explosion".into(),
         });
@@ -966,7 +968,7 @@ fn rust_timer_observer_can_set_world_signal() {
     world.insert_resource(WorldSignals::default());
     world.insert_resource(InputState::default());
 
-    fn set_signal(_entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+    fn set_signal(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
         ctx.world_signals.set_flag("game_over");
     }
 
@@ -991,7 +993,7 @@ fn rust_timer_observer_receives_input_state() {
     input.action_1.just_pressed = true;
     world.insert_resource(input);
 
-    fn check_input(entity: Entity, ctx: &mut TimerCtx, input: &InputState) {
+    fn check_input(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
         // Verify input is passed through — set a signal if action_1 is pressed
         if input.action_1.active {
             if let Ok(mut signals) = ctx.signals.get_mut(entity) {
@@ -1574,7 +1576,8 @@ fn context_builder_nil_when_no_snapshots() {
 // =============================================================================
 
 use aberredengine::components::phase::{Phase, PhaseCallbackFns, PhaseEnterFn, PhaseUpdateFn, PhaseExitFn};
-use aberredengine::systems::phase::{phase_system, PhaseCtx};
+use aberredengine::systems::phase::phase_system;
+use aberredengine::systems::GameCtx;
 
 fn tick_phases(world: &mut World) {
     let mut schedule = Schedule::default();
@@ -1608,7 +1611,7 @@ fn simple_two_phase_map() -> rustc_hash::FxHashMap<String, PhaseCallbackFns> {
 fn phase_calls_on_enter_on_first_frame() {
     let mut world = make_phase_world(0.016);
 
-    fn enter_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+    fn enter_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             signals.set_flag("entered");
         }
@@ -1634,7 +1637,7 @@ fn phase_calls_on_enter_on_first_frame() {
 fn phase_on_enter_not_called_twice() {
     let mut world = make_phase_world(0.016);
 
-    fn enter_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+    fn enter_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             let count = signals.get_scalar("enter_count").unwrap_or(0.0);
             signals.set_scalar("enter_count", count + 1.0);
@@ -1663,7 +1666,7 @@ fn phase_on_enter_not_called_twice() {
 fn phase_calls_on_update_every_frame() {
     let mut world = make_phase_world(0.016);
 
-    fn update_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, _dt: f32) -> Option<String> {
+    fn update_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             let count = signals.get_scalar("update_count").unwrap_or(0.0);
             signals.set_scalar("update_count", count + 1.0);
@@ -1692,7 +1695,7 @@ fn phase_calls_on_update_every_frame() {
 fn phase_transition_via_update_return() {
     let mut world = make_phase_world(0.016);
 
-    fn update_fn(_entity: Entity, _ctx: &mut PhaseCtx, _input: &InputState, _dt: f32) -> Option<String> {
+    fn update_fn(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
         Some("moving".into())
     }
 
@@ -1736,7 +1739,7 @@ fn phase_transition_via_external_next() {
 fn phase_on_exit_called_on_transition() {
     let mut world = make_phase_world(0.016);
 
-    fn exit_fn(entity: Entity, ctx: &mut PhaseCtx) {
+    fn exit_fn(entity: Entity, ctx: &mut GameCtx) {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             signals.set_flag("exited_idle");
         }
@@ -1760,7 +1763,7 @@ fn phase_on_exit_called_on_transition() {
 fn phase_on_enter_called_on_transition() {
     let mut world = make_phase_world(0.016);
 
-    fn enter_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+    fn enter_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             signals.set_flag("entered_moving");
         }
@@ -1808,7 +1811,7 @@ fn phase_time_in_phase_resets_on_transition() {
 fn phase_update_receives_delta_time() {
     let mut world = make_phase_world(0.25);
 
-    fn update_fn(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, dt: f32) -> Option<String> {
+    fn update_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState, dt: f32) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             signals.set_scalar("received_dt", dt);
         }
@@ -1834,7 +1837,7 @@ fn phase_update_receives_delta_time() {
 fn phase_callback_can_set_world_signal() {
     let mut world = make_phase_world(0.016);
 
-    fn enter_fn(_entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+    fn enter_fn(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
         ctx.world_signals.set_flag("game_started");
         None
     }
@@ -1858,7 +1861,7 @@ fn phase_callback_can_set_world_signal() {
 fn phase_callback_can_write_audio() {
     let mut world = make_phase_world(0.016);
 
-    fn enter_fn(_entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+    fn enter_fn(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
         ctx.audio.write(AudioCmd::PlayFx { id: "phase_start".into() });
         None
     }
@@ -1893,7 +1896,7 @@ fn phase_callback_receives_input_state() {
     input.action_1.just_pressed = true;
     world.insert_resource(input);
 
-    fn update_fn(entity: Entity, ctx: &mut PhaseCtx, input: &InputState, _dt: f32) -> Option<String> {
+    fn update_fn(entity: Entity, ctx: &mut GameCtx, input: &InputState, _dt: f32) -> Option<String> {
         if input.action_1.active {
             if let Ok(mut signals) = ctx.signals.get_mut(entity) {
                 signals.set_flag("input_received");
@@ -1932,7 +1935,7 @@ fn collision_rule_callback_fires_on_matching_groups() {
         _ent_b: Entity,
         _sides_a: &BoxSides,
         _sides_b: &BoxSides,
-        ctx: &mut CollisionCtx,
+        ctx: &mut GameCtx,
     ) {
         if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
             signals.set_flag("collided");
@@ -1974,7 +1977,7 @@ fn collision_rule_callback_not_fired_on_non_matching_groups() {
         _ent_b: Entity,
         _sides_a: &BoxSides,
         _sides_b: &BoxSides,
-        ctx: &mut CollisionCtx,
+        ctx: &mut GameCtx,
     ) {
         if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
             signals.set_flag("should_not_fire");
@@ -2019,7 +2022,7 @@ fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
         _ent_b: Entity,
         _sides_a: &BoxSides,
         _sides_b: &BoxSides,
-        ctx: &mut CollisionCtx,
+        ctx: &mut GameCtx,
     ) {
         // ent_a should be ball (group_a of rule)
         if let Ok(group) = ctx.groups.get(ent_a) {
@@ -2077,7 +2080,7 @@ fn collision_rule_sides_passed_to_callback() {
         _ent_b: Entity,
         sides_a: &BoxSides,
         sides_b: &BoxSides,
-        ctx: &mut CollisionCtx,
+        ctx: &mut GameCtx,
     ) {
         use aberredengine::components::collision::BoxSide;
         let has_right_a = sides_a.iter().any(|s| matches!(s, BoxSide::Right));
