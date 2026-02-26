@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::hierarchy::{ChildOf, Children};
+use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
 use bevy_ecs::system::SystemState;

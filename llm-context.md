@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-25 (synced with codebase)
+# Last updated: 2026-02-26 (synced with codebase)
 
 ## QUICK REFERENCE
 
@@ -33,7 +33,7 @@ FEATURE FLAGS:
 - Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut PhaseCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut PhaseCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut PhaseCtx)`. Transitions via callback return value or external `phase.next` mutation. `PhaseCtx` mirrors `TimerCtx` exactly. `phase_system` runs after collision_detector, always compiled (no feature flag).
 - `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping (world, window, resources, system schedule, main loop) into a configurable builder. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")` sugar. Rust multi-scene games use `.add_scene(name, descriptor)` + `.initial_scene(name)` for SceneManager-based dispatch (auto-wires switch_scene, enter_play, and per-frame update). `main.rs` is now a thin CLI + builder call (~100 lines). `quit_game` and `clean_all_entities` are engine-level systems in `systems/gamestate.rs`, always registered. `GameConfig` has `window_title` field (from `config.ini [window] title`), overridable via `.title()`.
 - Rust `CollisionRule` component: fn-pointer collision callback mirroring LuaCollisionRule. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx)`. `CollisionCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Entities ordered to match rule's `group_a`/`group_b`. Pre-computed collision sides passed as args. Always compiled (no feature flag).
-- Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut MenuCtx)` (menu entity, item_id, item_index, ECS context). `MenuCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. Defined in `systems/menu.rs`, imported by `components/menu.rs`.
+- Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut MenuCtx)` (menu entity, item_id, item_index, ECS context). `MenuCtx` is a SystemParam mirroring `TimerCtx`/`PhaseCtx` exactly. Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. `MenuRustCallback` type alias defined in `components/menu.rs` (consistent with `TimerCallback`, `CollisionCallback`, `PhaseEnterFn`); `MenuCtx` SystemParam defined in `systems/menu.rs`.
 - `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Callback signatures: `fn(&mut SceneCtx)`, `fn(&mut SceneCtx, f32, &InputState)`, `fn(&mut SceneCtx)`. `SceneCtx` mirrors `TimerCtx`/`PhaseCtx` + `TextureStore`. `SceneManager` resource maps scene names → descriptors. Engine-owned systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene). Builder: `.add_scene(name, descriptor)` + `.initial_scene(name)`. Conflicts: panics if combined with `.on_switch_scene()` or `.on_enter_play()`. Always compiled (no feature flag).
 
 ## FILE TREE (ESSENTIAL)
@@ -67,7 +67,7 @@ src/
 │   ├── timer.rs               # Rust fn-pointer timer (mirrors LuaTimer)
 │   ├── stuckto.rs             # Attach entity to another
 │   ├── tint.rs                # Color tint for rendering (sprites/text)
-│   ├── menu.rs                # Interactive menu (with scroll support)
+│   ├── menu.rs                # Interactive menu (with scroll support); MenuRustCallback type alias
 │   ├── gridlayout.rs          # JSON grid spawning
 │   ├── group.rs               # Entity grouping tag
 │   ├── persistent.rs          # Survive scene transitions
@@ -104,7 +104,7 @@ src/
 │   ├── propagate_transforms.rs # Recursive GlobalTransform2D computation from ChildOf hierarchy
 │   ├── gridlayout.rs          # Grid entity spawning
 │   ├── group.rs               # Group counting
-│   ├── menu.rs                # Menu spawn/input (menu_selection_observer has dual #[cfg] implementations: with/without LuaRuntime param; shared dispatch_menu_action() helper; MenuCtx SystemParam; MenuRustCallback type alias)
+│   ├── menu.rs                # Menu spawn/input (menu_selection_observer has dual #[cfg] implementations: with/without LuaRuntime param; shared dispatch_menu_action() helper; MenuCtx SystemParam)
 │   ├── particleemitter.rs     # Particle emission system (clones templates)
 │   ├── ttl.rs                 # TTL countdown and entity despawn
 │   ├── audio.rs               # Audio thread bridge

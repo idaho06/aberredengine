@@ -5,6 +5,7 @@
 //! - [`MenuItem`] – describes a single menu entry (label, position, etc.)
 //! - [`MenuActions`] – maps menu item IDs to actions like scene switching
 //! - [`MenuAction`] – the action to perform when a menu item is selected
+//! - [`MenuRustCallback`] – Rust fn-pointer type for menu selection callbacks
 //!
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
 
@@ -12,7 +13,24 @@ use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::{Color, Vector2};
 use rustc_hash::FxHashMap;
 
-use crate::systems::menu::MenuRustCallback;
+use crate::systems::menu::MenuCtx;
+
+/// Type alias for a Rust menu selection callback.
+///
+/// Stored on the [`Menu`] component and called when any item is selected.
+///
+/// # Arguments
+///
+/// - `menu_entity` — the entity holding the [`Menu`] component
+/// - `item_id`     — the ID string of the selected item
+/// - `item_index`  — 0-based index of the selected item in `menu.items`
+/// - `ctx`         — full ECS access (commands, queries, resources)
+///
+/// # Related
+///
+/// - [`crate::systems::menu::MenuCtx`] – bundled ECS access passed to the callback
+/// - [`crate::systems::menu::menu_selection_observer`] – dispatches to this callback
+pub type MenuRustCallback = for<'w, 's> fn(Entity, &str, usize, &mut MenuCtx<'w, 's>);
 
 /// A single item within a [`Menu`].
 ///
@@ -343,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_menu_with_on_rust_callback() {
-        fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::menu::MenuCtx) {}
+        fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::menu::MenuCtx<'_, '_>) {}
         let menu = Menu::new(
             &sample_labels(),
             Vector2::zero(),

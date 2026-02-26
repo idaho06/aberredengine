@@ -3,7 +3,7 @@
 //! Validates that menu selection correctly follows the priority chain:
 //! Lua callback → Rust callback → `MenuActions`.
 
-use aberredengine::components::menu::{Menu, MenuAction, MenuActions};
+use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::menu::MenuSelectionEvent;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
@@ -12,7 +12,7 @@ use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::menu::{MenuCtx, MenuRustCallback, menu_selection_observer};
+use aberredengine::systems::menu::{MenuCtx, menu_selection_observer};
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 

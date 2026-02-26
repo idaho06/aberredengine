@@ -42,7 +42,9 @@ use crate::resources::worldtime::WorldTime;
 use crate::components::dynamictext::DynamicText;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use log::{info, debug, error, warn};
+use log::{info, debug, warn};
+#[cfg(feature = "lua")]
+use log::error;
 use raylib::prelude::Vector2;
 
 /// Bundled ECS access passed to Rust menu selection callbacks.
@@ -103,15 +105,7 @@ pub struct MenuCtx<'w, 's> {
     pub world_time: Res<'w, WorldTime>,
 }
 
-/// Type alias for a Rust menu selection callback.
-///
-/// # Arguments
-///
-/// - `menu_entity` — the entity holding the [`Menu`] component
-/// - `item_id`     — the ID string of the selected item
-/// - `item_index`  — 0-based index of the selected item in `menu.items`
-/// - `ctx`         — full ECS access (commands, queries, resources)
-pub type MenuRustCallback = fn(Entity, &str, usize, &mut MenuCtx);
+
 
 /// Spawns entities for newly added [`Menu`] components.
 ///
