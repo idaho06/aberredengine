@@ -377,8 +377,6 @@ pub fn render_system(
     let query_positions = &queries.positions;
     let query_map_dynamic_texts = &queries.map_texts;
     let query_rigidbodies = &queries.rigidbodies;
-    let query_screen_dynamic_texts = &queries.screen_texts;
-    let query_screen_sprites = &queries.screen_sprites;
     let fonts = &res.fonts;
     // Unpack bundled resources for easier access
     let camera = &res.camera;
@@ -678,113 +676,13 @@ pub fn render_system(
         } // End Camera2D mode
 
         // Draw in screen coordinates (UI layer) - still on the render target
-        for (sprite, pos, maybe_tint) in query_screen_sprites.iter() {
-            if let Some(tex) = textures.get(&sprite.tex_key) {
-                let mut src = Rectangle {
-                    x: sprite.offset.x,
-                    y: sprite.offset.y,
-                    width: sprite.width,
-                    height: sprite.height,
-                };
-                if sprite.flip_h {
-                    src.width = -src.width;
-                }
-                if sprite.flip_v {
-                    src.height = -src.height;
-                }
+        let debug = maybe_debug.is_some();
+        draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug);
+        draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug);
 
-                let dest = Rectangle {
-                    x: pos.pos.x,
-                    y: pos.pos.y,
-                    width: sprite.width,
-                    height: sprite.height,
-                };
-
-                let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
-                d.draw_texture_pro(
-                    tex,
-                    src,
-                    dest,
-                    Vector2 {
-                        x: sprite.origin.x,
-                        y: sprite.origin.y,
-                    },
-                    0.0,
-                    tint_color,
-                );
-            }
-            if maybe_debug.is_some() {
-                d.draw_rectangle_lines(
-                    pos.pos.x as i32 - sprite.origin.x as i32,
-                    pos.pos.y as i32 - sprite.origin.y as i32,
-                    sprite.width as i32,
-                    sprite.height as i32,
-                    Color::PURPLE,
-                );
-                d.draw_line(
-                    pos.pos.x as i32 - 6,
-                    pos.pos.y as i32 - 6,
-                    pos.pos.x as i32 + 6,
-                    pos.pos.y as i32 + 6,
-                    Color::PURPLE,
-                );
-                d.draw_line(
-                    pos.pos.x as i32 + 6,
-                    pos.pos.y as i32 - 6,
-                    pos.pos.x as i32 - 6,
-                    pos.pos.y as i32 + 6,
-                    Color::PURPLE,
-                );
-            }
-        }
-
-        for (text, pos, maybe_tint) in query_screen_dynamic_texts.iter() {
-            if let Some(font) = fonts.get(&text.font) {
-                let final_color = maybe_tint
-                    .map(|t| t.multiply(text.color))
-                    .unwrap_or(text.color);
-                d.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
-                if maybe_debug.is_some() {
-                    d.draw_rectangle_lines(
-                        pos.pos.x as i32,
-                        pos.pos.y as i32,
-                        text.size().x as i32,
-                        text.size().y as i32,
-                        Color::ORANGE,
-                    );
-                }
-            }
-        }
-
-        if maybe_debug.is_some() {
-            let debug_text = "DEBUG MODE (press F11 to toggle)";
-
+        if debug {
+            // Compute values that require RaylibHandle (via Deref) before passing to draw fn
             let fps = d.get_fps();
-            let text = format!("{} | FPS: {}", debug_text, fps);
-            d.draw_text(&text, 10, 10, 10, Color::GREENYELLOW);
-
-            let entity_count = query_map_sprites.iter().count()
-                + query_colliders.iter().count()
-                + query_positions.iter().count();
-            let text = format!("Map Sprites+colliders+positions: {}", entity_count);
-            d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
-
-            let textures_count = textures.map.len();
-            let text = format!("Loaded Textures: {}", textures_count);
-            d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW);
-
-            let fonts_count = fonts.len();
-            let text = format!("Loaded Fonts: {}", fonts_count);
-            d.draw_text(&text, 10, 70, 10, Color::GREENYELLOW);
-
-            let cam = &camera.0;
-            let cam_text = format!(
-                "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
-                cam.target.x, cam.target.y, cam.zoom
-            );
-            d.draw_text(&cam_text, 10, screensize.h - 30, 10, Color::GREENYELLOW);
-
-            // Transform mouse from window space to game space for accurate display
             let window_mouse_pos = d.get_mouse_position();
             let game_mouse_pos = window_size.window_to_game_pos(
                 window_mouse_pos,
@@ -793,12 +691,19 @@ pub fn render_system(
             );
             let mouse_world = d.get_screen_to_world2D(game_mouse_pos, camera.0);
 
-            let mouse_text = format!(
-                "Mouse game: ({:.1}, {:.1}) World: ({:.1}, {:.1})",
-                game_mouse_pos.x, game_mouse_pos.y, mouse_world.x, mouse_world.y
+            draw_debug_hud(
+                &mut d,
+                screensize,
+                camera,
+                textures,
+                fonts,
+                fps,
+                query_map_sprites.iter().count(),
+                query_colliders.iter().count(),
+                query_positions.iter().count(),
+                game_mouse_pos,
+                mouse_world,
             );
-
-            d.draw_text(&mouse_text, 10, 90, 10, Color::GREENYELLOW);
         }
     } // End texture mode - render target is complete
 
@@ -813,6 +718,146 @@ pub fn render_system(
         &res.screensize,
         &res.window_size,
     );
+}
+
+/// Draw screen-space sprites (UI layer).
+fn draw_screen_sprites(
+    d: &mut impl RaylibDraw,
+    query: &Query<(&Sprite, &ScreenPosition, Option<&Tint>)>,
+    textures: &TextureStore,
+    debug: bool,
+) {
+    for (sprite, pos, maybe_tint) in query.iter() {
+        if let Some(tex) = textures.get(&sprite.tex_key) {
+            let mut src = Rectangle {
+                x: sprite.offset.x,
+                y: sprite.offset.y,
+                width: sprite.width,
+                height: sprite.height,
+            };
+            if sprite.flip_h {
+                src.width = -src.width;
+            }
+            if sprite.flip_v {
+                src.height = -src.height;
+            }
+
+            let dest = Rectangle {
+                x: pos.pos.x,
+                y: pos.pos.y,
+                width: sprite.width,
+                height: sprite.height,
+            };
+
+            let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+            d.draw_texture_pro(
+                tex,
+                src,
+                dest,
+                Vector2 {
+                    x: sprite.origin.x,
+                    y: sprite.origin.y,
+                },
+                0.0,
+                tint_color,
+            );
+        }
+        if debug {
+            d.draw_rectangle_lines(
+                pos.pos.x as i32 - sprite.origin.x as i32,
+                pos.pos.y as i32 - sprite.origin.y as i32,
+                sprite.width as i32,
+                sprite.height as i32,
+                Color::PURPLE,
+            );
+            d.draw_line(
+                pos.pos.x as i32 - 6,
+                pos.pos.y as i32 - 6,
+                pos.pos.x as i32 + 6,
+                pos.pos.y as i32 + 6,
+                Color::PURPLE,
+            );
+            d.draw_line(
+                pos.pos.x as i32 + 6,
+                pos.pos.y as i32 - 6,
+                pos.pos.x as i32 - 6,
+                pos.pos.y as i32 + 6,
+                Color::PURPLE,
+            );
+        }
+    }
+}
+
+/// Draw screen-space dynamic texts (UI layer).
+fn draw_screen_texts(
+    d: &mut impl RaylibDraw,
+    query: &Query<(&DynamicText, &ScreenPosition, Option<&Tint>)>,
+    fonts: &FontStore,
+    debug: bool,
+) {
+    for (text, pos, maybe_tint) in query.iter() {
+        if let Some(font) = fonts.get(&text.font) {
+            let final_color = maybe_tint
+                .map(|t| t.multiply(text.color))
+                .unwrap_or(text.color);
+            d.draw_text_ex(font, &text.text, pos.pos, text.font_size, 1.0, final_color);
+            if debug {
+                d.draw_rectangle_lines(
+                    pos.pos.x as i32,
+                    pos.pos.y as i32,
+                    text.size().x as i32,
+                    text.size().y as i32,
+                    Color::ORANGE,
+                );
+            }
+        }
+    }
+}
+
+/// Draw the debug HUD overlay (FPS, entity counts, camera info, mouse position).
+#[allow(clippy::too_many_arguments)]
+fn draw_debug_hud(
+    d: &mut impl RaylibDraw,
+    screensize: &ScreenSize,
+    camera: &Camera2DRes,
+    textures: &TextureStore,
+    fonts: &FontStore,
+    fps: u32,
+    sprite_count: usize,
+    collider_count: usize,
+    position_count: usize,
+    game_mouse_pos: Vector2,
+    mouse_world: Vector2,
+) {
+    let debug_text = "DEBUG MODE (press F11 to toggle)";
+
+    let text = format!("{} | FPS: {}", debug_text, fps);
+    d.draw_text(&text, 10, 10, 10, Color::GREENYELLOW);
+
+    let entity_count = sprite_count + collider_count + position_count;
+    let text = format!("Map Sprites+colliders+positions: {}", entity_count);
+    d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
+
+    let textures_count = textures.map.len();
+    let text = format!("Loaded Textures: {}", textures_count);
+    d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW);
+
+    let fonts_count = fonts.len();
+    let text = format!("Loaded Fonts: {}", fonts_count);
+    d.draw_text(&text, 10, 70, 10, Color::GREENYELLOW);
+
+    let cam = &camera.0;
+    let cam_text = format!(
+        "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
+        cam.target.x, cam.target.y, cam.zoom
+    );
+    d.draw_text(&cam_text, 10, screensize.h - 30, 10, Color::GREENYELLOW);
+
+    let mouse_text = format!(
+        "Mouse game: ({:.1}, {:.1}) World: ({:.1}, {:.1})",
+        game_mouse_pos.x, game_mouse_pos.y, mouse_world.x, mouse_world.y
+    );
+    d.draw_text(&mouse_text, 10, 90, 10, Color::GREENYELLOW);
 }
 
 /// Apply post-processing shader passes and blit the final image to the window.
