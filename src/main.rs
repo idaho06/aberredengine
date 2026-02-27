@@ -10,6 +10,8 @@
 use aberredengine::engine_app::EngineBuilder;
 use clap::Parser;
 #[cfg(feature = "lua")]
+use log::{error, info};
+#[cfg(feature = "lua")]
 use std::path::PathBuf;
 
 /// Aberred Engine 2D
@@ -47,13 +49,13 @@ fn main() {
         match stub_generator::generate_stubs(&runtime) {
             Ok(content) => {
                 if let Err(e) = stub_generator::write_stubs(&path, &content) {
-                    eprintln!("Error: {e}");
+                    error!("Error: {e}");
                     std::process::exit(1);
                 }
-                println!("Lua stubs written to {}", path.display());
+                info!("Lua stubs written to {}", path.display());
             }
             Err(e) => {
-                eprintln!("Error generating stubs: {e}");
+                error!("Error generating stubs: {e}");
                 std::process::exit(1);
             }
         }
@@ -72,13 +74,13 @@ fn main() {
         match luarc_generator::generate_luarc(&runtime, "engine.lua") {
             Ok(content) => {
                 if let Err(e) = luarc_generator::write_luarc(&path, &content) {
-                    eprintln!("Error: {e}");
+                    error!("Error: {e}");
                     std::process::exit(1);
                 }
-                println!(".luarc.json written to {}", path.display());
+                info!(".luarc.json written to {}", path.display());
             }
             Err(e) => {
-                eprintln!("Error generating .luarc.json: {e}");
+                error!("Error generating .luarc.json: {e}");
                 std::process::exit(1);
             }
         }
