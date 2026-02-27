@@ -281,6 +281,28 @@ pub(crate) fn compute_sprite_cull_bounds(
     }
 }
 
+/// Resolve the effective world-space transform for an entity, preferring
+/// `GlobalTransform2D` (hierarchy) over the entity's own local components.
+#[inline]
+fn resolve_world_transform(
+    pos: MapPosition,
+    maybe_scale: Option<Scale>,
+    maybe_rot: Option<Rotation>,
+    maybe_gt: Option<GlobalTransform2D>,
+) -> (MapPosition, Option<Scale>, Option<Rotation>) {
+    if let Some(gt) = maybe_gt {
+        (
+            MapPosition { pos: gt.position },
+            Some(Scale { scale: gt.scale }),
+            Some(Rotation {
+                degrees: gt.rotation_degrees,
+            }),
+        )
+    } else {
+        (pos, maybe_scale, maybe_rot)
+    }
+}
+
 /// Bundled render resources to reduce system parameter count.
 #[derive(SystemParam)]
 pub struct RenderResources<'w> {
@@ -321,6 +343,15 @@ pub struct RenderQueries<'w, 's> {
             Option<&'static Tint>,
         ),
     >,
+}
+
+/// Tracks which render buffer is the current source during multi-pass
+/// post-processing (ping-pong pattern).
+#[derive(Clone, Copy)]
+enum SourceBuffer {
+    Main,
+    Ping,
+    Pong,
 }
 
 /// Main render pass.
@@ -376,18 +407,12 @@ pub fn render_system(
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
                 |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt)| {
                     // Use world transform for culling when available
-                    let cull_pos;
-                    let cull_scale;
-                    let cull_rot;
-                    if let Some(gt) = maybe_gt {
-                        cull_pos = MapPosition { pos: gt.position };
-                        cull_scale = Some(Scale { scale: gt.scale });
-                        cull_rot = Some(Rotation { degrees: gt.rotation_degrees });
-                    } else {
-                        cull_pos = *p;
-                        cull_scale = maybe_scale.copied();
-                        cull_rot = maybe_rot.copied();
-                    }
+                    let (cull_pos, cull_scale, cull_rot) = resolve_world_transform(
+                        *p,
+                        maybe_scale.copied(),
+                        maybe_rot.copied(),
+                        maybe_gt.copied(),
+                    );
                     let (min, max) = compute_sprite_cull_bounds(
                         &cull_pos,
                         s,
@@ -435,16 +460,8 @@ pub fn render_system(
                     }
 
                     // Resolve world transform: use GlobalTransform2D when present
-                    let (render_pos, render_scale, render_rot);
-                    if let Some(gt) = maybe_gt {
-                        render_pos = MapPosition { pos: gt.position };
-                        render_scale = Some(Scale { scale: gt.scale });
-                        render_rot = Some(Rotation { degrees: gt.rotation_degrees });
-                    } else {
-                        render_pos = *pos;
-                        render_scale = *maybe_scale;
-                        render_rot = *maybe_rot;
-                    }
+                    let (render_pos, render_scale, render_rot) =
+                        resolve_world_transform(*pos, *maybe_scale, *maybe_rot, *maybe_gt);
 
                     let geom = compute_sprite_geometry(
                         &render_pos,
@@ -786,10 +803,34 @@ pub fn render_system(
     } // End texture mode - render target is complete
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
-    // Unpack additional resources
-    let world_time = &res.world_time;
-    let post_process = &res.post_process;
+    apply_postprocess_passes(
+        rl,
+        th,
+        &mut render_target,
+        &mut shader_store,
+        &res.post_process,
+        &res.world_time,
+        &res.screensize,
+        &res.window_size,
+    );
+}
 
+/// Apply post-processing shader passes and blit the final image to the window.
+///
+/// Handles three cases: no shaders (direct blit), single shader, and multi-pass
+/// ping-pong. Always guarantees a frame is presented even if shaders are missing
+/// or invalid.
+#[allow(clippy::too_many_arguments)]
+fn apply_postprocess_passes(
+    rl: &mut RaylibHandle,
+    th: &RaylibThread,
+    render_target: &mut RenderTarget,
+    shader_store: &mut ShaderStore,
+    post_process: &PostProcessShader,
+    world_time: &WorldTime,
+    screensize: &ScreenSize,
+    window_size: &WindowSize,
+) {
     // Source rectangle (the entire render target, Y-flipped for OpenGL)
     let src = render_target.source_rect();
 
@@ -898,13 +939,6 @@ pub fn render_system(
             return;
         }
 
-        // Source buffer tracking: 0=main, 1=ping, 2=pong
-        #[derive(Clone, Copy)]
-        enum SourceBuffer {
-            Main,
-            Ping,
-            Pong,
-        }
         let mut source_buffer = SourceBuffer::Main;
         let mut valid_passes = 0;
         let mut final_blit_done = false;
