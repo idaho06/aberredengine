@@ -142,7 +142,6 @@ impl RigidBody {
     }
 
     /// Check if a force exists and is enabled.
-    #[allow(dead_code)]
     pub fn is_force_enabled(&self, name: &str) -> bool {
         self.forces.get(name).map(|f| f.enabled).unwrap_or(false)
     }
@@ -159,7 +158,6 @@ impl RigidBody {
     }
 
     /// Get the value of a force by name.
-    #[allow(dead_code)]
     pub fn get_force(&self, name: &str) -> Option<&AccelerationForce> {
         self.forces.get(name)
     }
@@ -176,19 +174,16 @@ impl RigidBody {
     }
 
     /// Set the velocity of the RigidBody.
-    #[allow(dead_code)]
     pub fn set_velocity(&mut self, velocity: Vector2) {
         self.velocity = velocity;
     }
 
     /// Get the current velocity.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn velocity(&self) -> Vector2 {
         self.velocity
     }
 
     /// Translate the RigidBody velocity by a delta vector.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn translate(&mut self, dx: f32, dy: f32) {
         self.velocity.x += dx;
         self.velocity.y += dy;

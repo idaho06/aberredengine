@@ -2,19 +2,23 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-23 (synced with codebase)
+# Last updated: 2026-02-27 (GameCtx refactor complete)
 
 ## QUICK REFERENCE
 
-STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT) + configparser 3 + fastrand 2.3 + clap (CLI) + serde/serde_json + log/env_logger + arrayvec + smallvec + rustc-hash
-GAME_TYPE: Multi-game 2D showcase engine with Lua scripting
+STACK: Rust (edition 2024) + Bevy ECS 0.18 + Raylib 5.5.1 + MLua 0.11 (LuaJIT, optional) + configparser 3 + fastrand 2.3 + clap (CLI) + serde/serde_json + log/env_logger + arrayvec + smallvec + rustc-hash + crossbeam-channel
+GAME_TYPE: Multi-game 2D showcase engine with optional Lua scripting
 ENTRY: src/main.rs
 LIB_ENTRY: src/lib.rs (reusable library crate)
 LUA_ENTRY: assets/scripts/main.lua
 CONFIG: config.ini (INI format, loaded at startup)
 WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 
-## STATUS (2026-02-23)
+FEATURE FLAGS:
+  lua = ["dep:mlua"]   -- Lua scripting support (LuaJIT via mlua). In default features.
+  default = ["lua"]    -- lua enabled by default; downstream Rust-only games opt out with default-features = false
+
+## STATUS (2026-02-25)
 
 - Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
 - Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro.
@@ -24,36 +28,47 @@ WINDOW: Configurable via config.ini (default 1280x720 @ 120fps)
 - Parent-child entity hierarchy: ChildOf relationship + GlobalTransform2D component for recursive transform propagation (position, rotation, scale). propagate_transforms system runs after movement/tweens, before collision.
 - Menu scrolling: visible_count + scroll_offset with "..." indicator entities for overflow.
 - ParticleEmitter, TTL, Entity cloning, EntityShader, Tint, Multi-pass post-processing, Runtime game configuration API, Lua stubs generator, Luarc generator, Library crate - all functional.
+- `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
+- Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut GameCtx, &InputState)`. `GameCtx` is a unified SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites), and resources (world_signals, audio, world_time, texture_store).
+- Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled (no feature flag).
+- `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping (world, window, resources, system schedule, main loop) into a configurable builder. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")` sugar. Rust multi-scene games use `.add_scene(name, descriptor)` + `.initial_scene(name)` for SceneManager-based dispatch (auto-wires switch_scene, enter_play, and per-frame update). `main.rs` is now a thin CLI + builder call (~100 lines). `quit_game` and `clean_all_entities` are engine-level systems in `systems/gamestate.rs`, always registered. `GameConfig` has `window_title` field (from `config.ini [window] title`), overridable via `.title()`.
+- Rust `CollisionRule` component: fn-pointer collision callback mirroring LuaCollisionRule. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)`. Entities ordered to match rule's `group_a`/`group_b`. Pre-computed collision sides passed as args. Always compiled (no feature flag).
+- Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut GameCtx)` (menu entity, item_id, item_index, ECS context). Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. `MenuRustCallback` type alias defined in `components/menu.rs` (consistent with `TimerCallback`, `CollisionCallback`, `PhaseEnterFn`).
+- `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Callback signatures: `fn(&mut GameCtx)`, `fn(&mut GameCtx, f32, &InputState)`, `fn(&mut GameCtx)`. `SceneManager` resource maps scene names → descriptors. Engine-owned systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene). Builder: `.add_scene(name, descriptor)` + `.initial_scene(name)`. Conflicts: panics if combined with `.on_switch_scene()` or `.on_enter_play()`. Always compiled (no feature flag).
+- `GameCtx` unification: `TimerCtx`, `PhaseCtx`, `CollisionCtx`, `MenuCtx`, and `SceneCtx` have been unified into a single `GameCtx` SystemParam (`src/systems/game_ctx.rs`). All five had identical fields; `GameCtx` contains all 18: Commands + 6 mutable queries + 8 read-only queries + world_signals + audio + world_time + texture_store. Re-exported from `systems::GameCtx`.
 
 ## FILE TREE (ESSENTIAL)
 
 ```
 src/
-├── main.rs                    # App entry, ECS world setup, main loop, system schedule, CLI (clap)
-├── lib.rs                     # Library crate entry (components, events, game, resources, systems, stub_generator, luarc_generator)
-├── game.rs                    # GameState logic, scene switching, Lua callbacks + ScriptingContext/GameSceneState/EntityProcessing SystemParams
-├── stub_generator.rs          # Lua EmmyLua stub generator (reads __meta, emits engine.lua)
-├── luarc_generator.rs         # .luarc.json generator (Lua Language Server config from __meta)
+├── main.rs                    # App entry, CLI (clap), delegates to EngineBuilder
+├── lib.rs                     # Library crate entry (components, engine_app, events, lua_plugin, resources, systems, stub_generator, luarc_generator)
+├── engine_app.rs              # EngineBuilder: builder pattern for engine bootstrapping (world, window, resources, schedule, main loop)
+├── lua_plugin.rs              # [feature=lua] Lua plugin: GameState logic, scene switching, Lua callbacks + ScriptingContext/GameSceneState/EntityProcessing SystemParams
+├── stub_generator.rs          # [feature=lua] Lua EmmyLua stub generator (reads __meta, emits engine.lua)
+├── luarc_generator.rs         # [feature=lua] .luarc.json generator (Lua Language Server config from __meta)
 ├── components/
 │   ├── mod.rs                 # Re-exports all components
 │   ├── mapposition.rs         # MapPosition (world-space position)
 │   ├── screenposition.rs      # ScreenPosition (UI/screen-space position)
 │   ├── rigidbody.rs           # Velocity, friction, max_speed, named accel forces, frozen
 │   ├── boxcollider.rs         # BoxCollider (AABB collision shape)
-│   ├── collision.rs           # CollisionRule, collision observer context
-│   ├── luacollision.rs        # LuaCollisionRule for Lua callbacks
+│   ├── collision.rs           # CollisionRule + CollisionCallback (Rust fn-pointer), BoxSide, get_colliding_sides
+│   ├── luacollision.rs        # [feature=lua] LuaCollisionRule for Lua callbacks
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
-│   ├── luaphase.rs            # Lua-based phase state machine
+│   ├── luaphase.rs            # [feature=lua] Lua-based phase state machine
+│   ├── phase.rs               # Rust fn-pointer phase state machine (mirrors LuaPhase)
 │   ├── signals.rs             # Per-entity signals (scalars/ints/flags/strings)
 │   ├── dynamictext.rs         # Text rendering component with cached size
 │   ├── entityshader.rs        # Per-entity shader for custom rendering effects
 │   ├── signalbinding.rs       # Bind text to world signals
 │   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
-│   ├── luatimer.rs            # Lua callback timer
+│   ├── luatimer.rs            # [feature=lua] Lua callback timer
+│   ├── timer.rs               # Rust fn-pointer timer (mirrors LuaTimer)
 │   ├── stuckto.rs             # Attach entity to another
 │   ├── tint.rs                # Color tint for rendering (sprites/text)
-│   ├── menu.rs                # Interactive menu (with scroll support)
+│   ├── menu.rs                # Interactive menu (with scroll support); MenuRustCallback type alias
 │   ├── gridlayout.rs          # JSON grid spawning
 │   ├── group.rs               # Entity grouping tag
 │   ├── persistent.rs          # Survive scene transitions
@@ -65,18 +80,24 @@ src/
 │   ├── zindex.rs              # Render order
 │   └── inputcontrolled.rs     # InputControlled, AccelerationControlled, MouseControlled
 ├── systems/
-│   ├── mod.rs                 # Re-exports all systems + RaylibAccess SystemParam
+│   ├── mod.rs                 # Re-exports all systems + RaylibAccess SystemParam + GameCtx
+│   ├── game_ctx.rs            # GameCtx SystemParam (unified ECS access for all Rust callbacks)
 │   ├── movement.rs            # Physics: accel→vel→pos, friction, max_speed
-│   ├── collision.rs           # AABB detection, Lua callback dispatch
+│   ├── collision_detector.rs  # AABB detection (pure Rust, shared by Lua and Rust game paths)
+│   ├── lua_collision.rs       # [feature=lua] Lua collision observer + callback dispatch (LuaCollisionObserverParams, lua_collision_observer)
+│   ├── rust_collision.rs      # Rust collision observer (rust_collision_observer, always compiled)
+│   ├── scene_dispatch.rs     # SceneManager scene dispatch: SceneDescriptor, scene_switch_system, scene_update_system, scene_enter_play
 │   ├── render.rs              # Raylib drawing, camera, debug overlays, letterboxing + RenderResources/RenderQueries SystemParams
 │   ├── input.rs               # Poll keyboard state, emit InputEvent for all actions
 │   ├── inputsimplecontroller.rs    # Input→velocity
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController)
-│   ├── luaphase.rs            # Lua phase callbacks
-│   ├── lua_commands.rs        # Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
-│   ├── luatimer.rs            # Lua timer processing
+│   ├── luaphase.rs            # [feature=lua] Lua phase callbacks
+│   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
+│   ├── luatimer.rs            # [feature=lua] Lua timer processing
+│   ├── timer.rs               # Rust timer processing (update_timers, timer_observer)
+│   ├── phase.rs               # Rust phase state machine (phase_system)
 │   ├── time.rs                # WorldTime update
 │   ├── signalbinding.rs       # Update bound text
 │   ├── dynamictext_size.rs    # Cache DynamicText bounding box sizes
@@ -85,19 +106,19 @@ src/
 │   ├── propagate_transforms.rs # Recursive GlobalTransform2D computation from ChildOf hierarchy
 │   ├── gridlayout.rs          # Grid entity spawning
 │   ├── group.rs               # Group counting
-│   ├── menu.rs                # Menu spawn/input
+│   ├── menu.rs                # Menu spawn/input (menu_selection_observer has dual #[cfg] implementations: with/without LuaRuntime param; shared dispatch_menu_action() helper)
 │   ├── particleemitter.rs     # Particle emission system (clones templates)
 │   ├── ttl.rs                 # TTL countdown and entity despawn
 │   ├── audio.rs               # Audio thread bridge
 │   ├── gameconfig.rs          # Apply GameConfig changes (render size, window, vsync, fps, background_color)
-│   └── gamestate.rs           # State transition check
+│   └── gamestate.rs           # State transition check + quit_game + clean_all_entities
 ├── resources/
 │   ├── mod.rs                 # Re-exports
 │   ├── worldtime.rs           # Delta time, time scale
 │   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
 │   ├── fullscreen.rs          # FullScreen marker resource
-│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen, background_color)
-│   ├── texturestore.rs        # FxHashMap<String, Texture2D>
+│   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen, background_color, window_title)
+│   ├── texturestore.rs        # FxHashMap<String, Texture2D> + load_texture_from_text() utility
 │   ├── fontstore.rs           # FxHashMap<String, Font> (non-send)
 │   ├── animationstore.rs      # Animation definitions
 │   ├── tilemapstore.rs        # Tilemap layouts
@@ -110,10 +131,12 @@ src/
 │   ├── rendertarget.rs        # RenderTarget for fixed-resolution rendering
 │   ├── debugmode.rs           # Debug render toggle
 │   ├── systemsstore.rs        # Named system lookup
+│   ├── scenemanager.rs        # SceneManager: named scene registry for Rust games (SceneDescriptor, active_scene, initial_scene)
 │   ├── audio.rs               # AudioBridge channels
 │   ├── shaderstore.rs         # ShaderStore (loaded shaders with cached uniform locations)
 │   ├── postprocessshader.rs   # PostProcessShader resource (active shader chain + user uniforms)
-│   └── lua_runtime/
+│   ├── uniformvalue.rs        # UniformValue enum (Float/Vec2/Vec3/Vec4/Int/Bool) used by shaders
+│   └── lua_runtime/           # [feature=lua]
 │       ├── mod.rs             # Public exports
 │       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!), __meta table
 │       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, etc.
@@ -127,15 +150,18 @@ src/
     ├── gamestate.rs           # GameStateTransition
     ├── input.rs               # InputEvent + InputAction enum (all directions, actions, special)
     ├── menu.rs                # MenuSelection
-    ├── luatimer.rs            # LuaTimerEvent
+    ├── luatimer.rs            # [feature=lua] LuaTimerEvent
+    ├── timer.rs               # TimerEvent (Rust fn-pointer timer)
     ├── switchdebug.rs         # DebugToggle (F11)
     ├── switchfullscreen.rs    # FullScreen toggle event + observer (F10)
     └── audio.rs               # AudioCmd, AudioMessage
 tests/
-├── bevy_ecs_integration.rs    # ECS integration tests
-├── engine_tick_integration.rs # Engine tick + meta drift protection tests
-├── stub_generator_integration.rs # Stub generator tests
-└── hierarchy_integration.rs   # Parent-child hierarchy tests
+├── bevy_ecs_integration.rs    # ECS integration tests (pure Rust)
+├── engine_tick_integration.rs # Engine tick + meta drift protection tests (mixed; Lua tests gated by #[cfg(feature = "lua")]; includes Rust Timer integration tests)
+├── stub_generator_integration.rs # Stub generator tests (#![cfg(feature = "lua")])
+├── hierarchy_integration.rs   # Parent-child hierarchy tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
+├── menu_callback_integration.rs  # Rust menu callback integration tests (pure Rust)
+└── scene_manager_integration.rs  # SceneManager integration tests (pure Rust)
 assets/
 ├── scripts/
 │   ├── main.lua               # Entry: scene registry, callback injection, on_setup, on_enter_play, on_switch_scene
@@ -185,7 +211,7 @@ vsync = true                   ; Enable vertical sync
 fullscreen = false             ; Start in fullscreen mode
 ```
 
-GameConfig::load_from_file() is invoked in main.rs before world setup; `apply_gameconfig_changes`
+GameConfig::load_from_file() is invoked in engine_app.rs before world setup; `apply_gameconfig_changes`
 (run_if state_is_playing) reacts to `is_added()`/`is_changed()` to resize the render target and
 ScreenSize, sync fullscreen via SwitchFullScreenEvent, and apply vsync/target_fps (window resizing
 code is currently commented out).
@@ -197,18 +223,22 @@ ScreenPosition { pos: Vector2 }
 RigidBody { velocity: Vector2, friction: Option<f32>, max_speed: Option<f32>, forces: FxHashMap<String, AccelerationForce>, frozen: bool }
 AccelerationForce { value: Vector2, enabled: bool }
 BoxCollider { offset: Vector2, origin: Vector2, size: Vector2 }
+LuaCollisionRule { group_a: String, group_b: String, callback: String } -- [feature=lua] Lua collision callback name
+CollisionRule { group_a: String, group_b: String, callback: CollisionCallback } -- Rust fn-pointer collision; CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)
 Sprite { tex_key: String, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
 Animation { animation_key: String, frame_index: usize, elapsed: f32 }
 AnimationController { fallback_key: String, rules: Vec<AnimationRule> }
 Signals { scalars: FxHashMap, integers: FxHashMap, flags: FxHashSet, strings: FxHashMap }
 LuaPhase { definition: LuaPhaseDefinition, current_phase: String, time_in_phase: f32, pending_transition: Option<String> }
+Phase { current: String, previous: Option<String>, next: Option<String>, time_in_phase: f32, needs_enter_callback: bool, phases: FxHashMap<String, PhaseCallbackFns> } -- Rust fn-pointer phase; PhaseCallbackFns { on_enter: Option<PhaseEnterFn>, on_update: Option<PhaseUpdateFn>, on_exit: Option<PhaseExitFn> }
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
 LuaTimer { duration: f32, elapsed: f32, callback: String }
+Timer { duration: f32, elapsed: f32, callback: TimerCallback } -- Rust fn-pointer timer; TimerCallback = fn(Entity, &mut GameCtx, &InputState)
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
-Menu { items: Vec<MenuItem>, selected_index: usize, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, visible_count: Option<usize>, scroll_offset: usize, top_indicator_entity, bottom_indicator_entity }
+Menu { items: Vec<MenuItem>, selected_index: usize, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, on_rust_callback: Option<MenuRustCallback>, visible_count: Option<usize>, scroll_offset: usize, top_indicator_entity, bottom_indicator_entity }
 GridLayout { path: String, group: String, z_index: f32 }
 Group { name: String }
 Persistent (marker)
@@ -227,7 +257,7 @@ GlobalTransform2D { position: Vector2, rotation_degrees: f32, scale: Vector2 } -
 
 ## RESOURCE QUICK-REF
 
-GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, config_path }
+GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, window_title: String, config_path }
 WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
 InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }
 BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
@@ -253,21 +283,24 @@ RenderFilter { Nearest, Bilinear }
 DebugMode (marker)
 FullScreen (marker) - presence indicates fullscreen mode
 SystemsStore { map: FxHashMap<String, SystemId>, entity_map: FxHashMap<String, SystemId<In<Entity>>> }
-LuaRuntime { lua: Lua, collision_ctx_pool, entity_ctx_pool } - NON_SEND
+SceneManager { scenes: FxHashMap<String, SceneDescriptor>, active_scene: Option<String>, initial_scene: Option<String> } -- resources/scenemanager.rs (inserted by EngineBuilder when .add_scene() used)
+LuaRuntime { lua: Lua, collision_ctx_pool, entity_ctx_pool } - NON_SEND - [feature=lua]
 AudioBridge { sender, receiver }
 ShaderStore { shaders: FxHashMap<String, ShaderEntry> } - NON_SEND (stores Shader + cached uniform locations)
 ShaderEntry { shader: Shader, locations: FxHashMap<String, i32> }
 PostProcessShader { keys: Vec<Arc<str>>, uniforms: FxHashMap<Arc<str>, UniformValue> }
+UniformValue { Float(f32), Vec2([f32;2]), Vec3([f32;3]), Vec4([f32;4]), Int(i32), Bool(bool) } - in resources/uniformvalue.rs (not Lua-specific)
 
 ## SYSTEMPARAM BUNDLES (reduce system parameter count)
 
 RaylibAccess<'w> { rl: NonSendMut<RaylibHandle>, th: NonSend<RaylibThread> } -- systems/mod.rs
-ScriptingContext<'w> { lua_runtime: NonSend<LuaRuntime>, audio_cmd_writer: MessageWriter<AudioCmd> } -- game.rs
-GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, systems_store: Res<SystemsStore> } -- game.rs
-EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entity, &mut LuaPhase)> } -- game.rs
-EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, shaders } -- systems/lua_commands.rs
+ScriptingContext<'w> { lua_runtime: NonSend<LuaRuntime>, audio_cmd_writer: MessageWriter<AudioCmd> } -- lua_plugin.rs [feature=lua]
+GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, systems_store: Res<SystemsStore> } -- lua_plugin.rs [feature=lua]
+EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entity, &mut LuaPhase)> } -- lua_plugin.rs [feature=lua]
+EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, shaders } -- systems/lua_commands.rs [feature=lua]
 RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
 RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites } -- systems/render.rs
+GameCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, texture_store } -- systems/game_ctx.rs (unified SystemParam for all Rust callbacks: timer, phase, collision, menu, scene)
 
 ## COMMAND ENUMS (lua_runtime/commands.rs + spawn_data.rs)
 
@@ -334,6 +367,7 @@ ParticleEmitterData (spawn_data.rs) {
 ParticleEmitterShapeData { Point | Rect { width, height } }
 ParticleTtlData { None | Fixed(f32) | Range { min, max } }
 EntityShaderData { key: String, uniforms: Vec<(String, UniformValue)> }
+-- UniformValue is defined in resources/uniformvalue.rs (not Lua-specific); re-exported from lua_runtime/commands.rs
 
 CloneCmd (commands.rs) {
     source_key: String,     -- WorldSignals key to look up source entity
@@ -350,7 +384,7 @@ AssetCmd { Texture { id, path }, Font { id, path, size }, Music { id, path }, So
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
 RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
 GameConfigCmd { Fullscreen { enabled }, Vsync { enabled }, TargetFps { fps }, RenderSize { width, height }, BackgroundColor { r, g, b } }
-UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }
+UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }  -- canonical location: resources/uniformvalue.rs
 
 ## LUA API STRUCTURE (runtime.rs -- macro-based registration)
 
@@ -522,7 +556,7 @@ engine.collision_clear_string(key)
 engine.collision_phase_transition(id, phase)
 engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
 
--- Collision Entity Commands (full parity with engine.entity_* commands)
+-- Collision Entity Commands (full parity with engine.entity_*commands)
 -- All engine.entity_* commands have collision_entity_* equivalents via define_entity_cmds! macro
 -- e.g. engine.collision_entity_set_position, collision_entity_set_parent, collision_entity_remove_parent, etc.
 
@@ -689,7 +723,18 @@ IMPORTANT: The collision context table is POOLED and REUSED between collisions f
 Do NOT store references to ctx or its subtables for later use - values will be overwritten.
 (Implementation: CollisionCtxPool/CollisionCtxTables in runtime.rs)
 
-## SYSTEM EXECUTION ORDER (main.rs schedule)
+## SYSTEM EXECUTION ORDER (engine_app.rs schedule)
+
+Registered observers (spawned as persistent entities in engine_app.rs):
+
+- lua_collision_observer (on CollisionEvent) [feature=lua, with_lua() only]
+- rust_collision_observer (on CollisionEvent) -- always compiled (Rust fn-pointer collision rules)
+- switch_debug_observer (on SwitchDebugEvent)
+- switch_fullscreen_observer (on SwitchFullScreenEvent)
+- menu_controller_observer (on InputEvent)
+- menu_selection_observer (on MenuSelectionEvent)
+- lua_timer_observer (on LuaTimerEvent) [feature=lua, with_lua() only]
+- timer_observer (on TimerEvent)
 
 Systems with explicit ordering constraints (`.after()` / `.before()`):
 
@@ -698,12 +743,14 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 - propagate_transforms.after(movement).after(tween_*).before(collision_detector)
 - stuck_to_entity_system.after(collision_detector) -- skips entities with ChildOf
 - collision_detector.after(mouse_controller).after(movement)
-- lua_phase_system.after(collision_detector)
-- animation_controller.after(lua_phase_system)
+- lua_phase_system.after(collision_detector)               -- [feature=lua]
+- phase_system.after(collision_detector)                   -- always compiled (Rust fn-pointer phases)
+- animation_controller.after(lua_phase_system).after(phase_system) -- [feature=lua]; after(phase_system) when lua disabled
 - animation.after(animation_controller)
 - ttl_system.after(movement)
 - dynamictext_size_system.after(update_world_signals_binding_system)
-- game::update.after(check_pending_state).after(lua_phase_system)
+- lua_plugin::update.after(check_pending_state).after(lua_phase_system)   -- [with_lua() only]
+- game_update_hook.run_if(state_is_playing).after(check_pending_state)   -- Rust game update hook via on_update()
 - render_system.after(collision_detector)
 
 Approximate execution order:
@@ -725,14 +772,16 @@ Approximate execution order:
 15. ttl_system (after movement - despawns expired entities)
 16. collision_detector
 17. stuck_to_entity_system (after collision, skips entities with ChildOf)
-18. lua_phase_system (after collision)
-19. animation_controller (after lua_phase)
-20. animation (after animation_controller)
-21. update_lua_timers
-22. update_world_signals_binding_system
-23. dynamictext_size_system
-24. run_<scene>_update (game::update, run_if state_is_playing, after check_pending_state + lua_phase_system)
-25. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
+18. phase_system (after collision) -- always compiled
+19. lua_phase_system (after collision) [feature=lua]
+20. animation_controller (after phase_system + lua_phase_system when lua enabled; after phase_system when lua disabled)
+21. animation (after animation_controller)
+22. update_lua_timers [feature=lua]
+23. update_timers (Rust fn-pointer timers)
+24. update_world_signals_binding_system
+25. dynamictext_size_system
+26. game_update_hook (run_if state_is_playing, after check_pending_state; also after lua_phase_system when with_lua())
+27. render_system (after collision_detector) -- uses GlobalTransform2D for world-space rendering
 
 ## KEY PATTERNS
 
@@ -769,14 +818,14 @@ For systems that need to be called with a specific entity (like menu_despawn):
 1. Create file in src/systems/
 2. Define system function with queries
 3. Export from systems/mod.rs
-4. Add to schedule in main.rs (correct position)
+4. Add to schedule in engine_app.rs (correct position)
 
 ### Adding a new Resource
 
 1. Create file in src/resources/
 2. Derive Resource (or use non-send pattern)
 3. Export from resources/mod.rs
-4. Insert into world in main.rs
+4. Insert into world in engine_app.rs
 
 ### Adding a new Scene
 
@@ -789,17 +838,23 @@ For systems that need to be called with a specific entity (like menu_despawn):
 ### Lua-Rust Command Flow
 
 Lua calls engine.* -> LuaAppData.commands.borrow_mut().push(Cmd)
--> Lua returns -> game.rs processes queued commands
+-> Lua returns -> lua_plugin.rs processes queued commands
 -> Commands modify ECS world
 
 ### Collision Flow
 
 movement_system moves entities
--> collision_system detects AABB overlaps
--> dispatches CollisionEvent or calls Lua callback
--> Lua callback uses engine.entity_*commands (work in all contexts)
--> Collision-specific commands (engine.collision_*) use separate queues
--> Collision commands drain immediately after callback
+-> collision_detector (systems/collision_detector.rs) detects AABB overlaps
+-> triggers CollisionEvent for each overlap
+-> rust_collision_observer (systems/rust_collision.rs) receives the event, matches CollisionRule by group names
+   -> computes collision sides via get_colliding_sides
+   -> calls Rust callback with (ent_a, ent_b, &sides_a, &sides_b, &mut CollisionCtx)
+   -> callback has direct ECS access (no command queues needed)
+-> lua_collision_observer (systems/lua_collision.rs) receives the event, matches LuaCollisionRule by group names [feature=lua]
+   -> calls Lua callback via call_lua_collision_callback (pooled context tables)
+   -> Lua callback uses engine.entity_*commands (work in all contexts)
+   -> Collision-specific commands (engine.collision_*) use separate queues
+   -> Collision commands drain immediately after callback
 
 ### Entity Commands Architecture
 
@@ -827,18 +882,18 @@ movement_system moves entities
 For features touching:
 
 - Physics: rigidbody.rs, movement.rs
-- Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs
-- Collision: collision.rs (systems), boxcollider.rs, luacollision.rs (components)
+- Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs  [all feature=lua]
+- Collision: collision_detector.rs + rust_collision.rs + lua_collision.rs (systems), collision.rs + boxcollider.rs + luacollision.rs (components)
 - Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs, entityshader.rs
 - Animation: animation.rs (component + controller), animationstore.rs
-- State machines: luaphase.rs (component + system)
+- State machines: luaphase.rs (component + system) [feature=lua], phase.rs (component + system, Rust fn-pointer equivalent)
 - Signals: signals.rs, worldsignals.rs
 - Text: dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
 - Input: inputcontrolled.rs (InputControlled, AccelerationControlled, MouseControlled), input.rs (InputState), input_snapshot.rs
 - Particles: particleemitter.rs (component + system), spawn_data.rs (ParticleEmitterData)
 - Hierarchy: globaltransform2d.rs (component), propagate_transforms.rs (system), lua_commands.rs (SetParent/RemoveParent processing)
 - Menus: menu.rs (component + system), entity_builder.rs (with_menu_* methods)
-- Scene management: main.lua (scene registry + callback injection), game.rs (switch_scene)
+- Scene management: main.lua (scene registry + callback injection), lua_plugin.rs (switch_scene)
 
 ## RAYLIB NOTES
 
@@ -872,7 +927,7 @@ For features touching:
 
 ## COMMON GOTCHAS
 
-1. Non-send resources (FontStore, LuaRuntime, RenderTarget, ShaderStore) need NonSend/NonSendMut
+1. Non-send resources (FontStore, LuaRuntime, RenderTarget, ShaderStore) need NonSend/NonSendMut (LuaRuntime only exists with feature=lua)
 2. All entity commands (engine.entity_*) work in all contexts (no collision-only restrictions)
 3. Collision-specific commands (engine.collision_*) use separate queues that drain immediately
 4. Use engine.collision_spawn() in collision callbacks for proper timing (not engine.spawn())
@@ -908,7 +963,8 @@ For features touching:
 34. Tint component: for sprites replaces Color::WHITE (color multiply); for text multiplies with DynamicText.color; RGBA values 0-255
 35. Input system emits InputEvent for ALL actions (directions, action_1/2, back, special) with pressed/released - systems can observe these instead of polling InputState
 36. The "crt" shader is loaded from crt2.fs (not crt.fs) in setup.lua
-37. Scene callbacks must be declared in module's _callbacks table to be injected into _G on scene switch - prevents cross-scene naming conflicts
+37. Scene callbacks must be declared in module's _callbacks table to be injected into_G on scene switch - prevents cross-scene naming conflicts
 38. ChildOf entities skip StuckTo system (hierarchy takes precedence over stuck-to following)
 39. WorldSignals.group_counts is NOT a field - group counts are derived in SignalSnapshot from integers with "group_count:" prefix
 40. Registered systems (SystemsStore) are entities that need Persistent component to survive scene transitions
+41. `lua` feature flag gates all Lua-specific code: add `#[cfg(feature = "lua")]` to any new code that depends on mlua/LuaRuntime. `default = ["lua"]` so builds without it require `--no-default-features`. Bevy system params cannot be conditionally compiled inline — use two separate function definitions under `#[cfg]`/`#[cfg(not)]` with a shared helper instead.

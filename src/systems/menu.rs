@@ -6,11 +6,11 @@
 //! - [`menu_controller_observer`] – handles input to navigate and select items
 //! - [`menu_selection_observer`] – performs actions when items are selected
 //!
-//! Menus can render in world-space or screen-space depending on the
-//! `use_screen_space` flag.
+//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
 
 use std::sync::Arc;
 
+use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
@@ -24,14 +24,18 @@ use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::GameStates::Quitting;
 use crate::resources::gamestate::NextGameState;
+#[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::worldsignals::WorldSignals;
-use crate::{components::dynamictext::DynamicText, game::load_texture_from_text};
+use crate::resources::texturestore::load_texture_from_text;
+use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
-use log::{info, debug, error, warn};
+use log::{info, debug, warn};
+#[cfg(feature = "lua")]
+use log::error;
 use raylib::prelude::Vector2;
+
 
 /// Spawns entities for newly added [`Menu`] components.
 ///
@@ -549,22 +553,26 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
 /// Executes the action associated with a selected menu item.
 ///
-/// If the menu has an `on_select_callback`, invokes the Lua callback with a
-/// context table containing `menu_id`, `item_id`, and `item_index`. When a
-/// callback is set, `MenuActions` are ignored (callback takes full control).
+/// Priority chain: Lua callback → Rust callback → [`MenuActions`].
+///
+/// If the menu has an `on_select_callback` (requires `lua` feature), invokes the
+/// Lua callback with a context table containing `menu_id`, `item_id`, and `item_index`.
+///
+/// If the menu has an `on_rust_callback`, invokes it with the menu entity, item ID,
+/// item index, and full ECS access via [`GameCtx`](crate::systems::GameCtx).
 ///
 /// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
 /// - [`MenuAction::ShowSubMenu`] – displays a sub-menu (TODO)
 /// - [`MenuAction::Noop`] – does nothing
+#[cfg(feature = "lua")]
 pub fn menu_selection_observer(
     trigger: On<MenuSelectionEvent>,
-    mut commands: Commands,
     menus: Query<(&Menu, Option<&MenuActions>)>,
-    mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
+    mut ctx: GameCtx,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     let event = trigger.event();
@@ -581,36 +589,108 @@ pub fn menu_selection_observer(
         return;
     };
 
-    // If menu has a Lua callback, invoke it
+    // Priority 1: Lua callback
     if let Some(ref callback_name) = menu.on_select_callback {
         if lua_runtime.has_function(callback_name) {
             // Build context table
-            let ctx = lua_runtime.lua().create_table().unwrap();
-            ctx.set("menu_id", event.menu.to_bits()).unwrap();
-            ctx.set("item_id", event.item_id.clone()).unwrap();
+            let lua_ctx = lua_runtime.lua().create_table().unwrap();
+            lua_ctx.set("menu_id", event.menu.to_bits()).unwrap();
+            lua_ctx.set("item_id", event.item_id.clone()).unwrap();
 
-            // Find item index
             let item_index = menu
                 .items
                 .iter()
                 .position(|item| item.id == event.item_id)
                 .unwrap_or(0);
-            ctx.set("item_index", item_index).unwrap();
+            lua_ctx.set("item_index", item_index).unwrap();
 
-            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, ctx) {
+            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
                 error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
             }
         } else {
             warn!(target: "lua", "menu callback '{}' not found", callback_name);
         }
-        return; // Callback handles everything, skip MenuActions
+        return;
     }
 
-    // Fallback to existing MenuActions logic
+    // Priority 2: Rust callback
+    if let Some(cb) = menu.on_rust_callback {
+        let item_index = menu
+            .items
+            .iter()
+            .position(|item| item.id == event.item_id)
+            .unwrap_or(0);
+        cb(event.menu, &event.item_id, item_index, &mut ctx);
+        return;
+    }
+
+    // Priority 3: MenuActions
+    dispatch_menu_action(
+        menu_actions_opt,
+        event,
+        &mut ctx,
+        &mut next_game_state,
+        &systems_store,
+    );
+}
+
+/// Executes the action associated with a selected menu item (no Lua support).
+///
+/// Priority chain: Rust callback → [`MenuActions`].
+#[cfg(not(feature = "lua"))]
+pub fn menu_selection_observer(
+    trigger: On<MenuSelectionEvent>,
+    menus: Query<(&Menu, Option<&MenuActions>)>,
+    mut next_game_state: ResMut<NextGameState>,
+    systems_store: Res<SystemsStore>,
+    mut ctx: GameCtx,
+) {
+    let event = trigger.event();
+    debug!(
+        "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
+        event.menu, event.item_id
+    );
+
+    let Ok((menu, menu_actions_opt)) = menus.get(event.menu) else {
+        warn!(
+            "menu_selection_observer: Menu entity {:?} not found",
+            event.menu
+        );
+        return;
+    };
+
+    // Priority 1: Rust callback
+    if let Some(cb) = menu.on_rust_callback {
+        let item_index = menu
+            .items
+            .iter()
+            .position(|item| item.id == event.item_id)
+            .unwrap_or(0);
+        cb(event.menu, &event.item_id, item_index, &mut ctx);
+        return;
+    }
+
+    // Priority 2: MenuActions
+    dispatch_menu_action(
+        menu_actions_opt,
+        event,
+        &mut ctx,
+        &mut next_game_state,
+        &systems_store,
+    );
+}
+
+fn dispatch_menu_action(
+    menu_actions_opt: Option<&MenuActions>,
+    event: &MenuSelectionEvent,
+    ctx: &mut GameCtx,
+    next_game_state: &mut ResMut<NextGameState>,
+    systems_store: &Res<SystemsStore>,
+) {
     let Some(menu_actions) = menu_actions_opt else {
         warn!(
-            "menu_selection_observer: No MenuActions found for menu entity {:?}, item_id {:?}",
-            event.menu, event.item_id
+            "menu_selection_observer: No MenuActions found for item_id {:?}",
+            event.item_id
         );
         return;
     };
@@ -625,15 +705,15 @@ pub fn menu_selection_observer(
                 "menu_selection_observer: SetScene action found, scene_name={}",
                 scene_name
             );
-            world_signals.set_string("scene", scene_name.clone());
-            commands.run_system(
+            ctx.world_signals.set_string("scene", scene_name.clone());
+            ctx.commands.run_system(
                 *systems_store
                     .get("switch_scene")
                     .expect("switch_scene system not found"),
             );
         }
         MenuAction::ShowSubMenu(submenu_name) => {
-            world_signals.set_string("show_submenu", submenu_name.clone());
+            ctx.world_signals.set_string("show_submenu", submenu_name.clone());
             // TODO: trigger submenu display system
         }
         MenuAction::QuitGame => {

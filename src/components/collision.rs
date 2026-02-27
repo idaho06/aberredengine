@@ -1,82 +1,72 @@
-//! Collision rule component and callback context.
+//! Collision rule component and callback type.
 //!
 //! This module provides the [`CollisionRule`] component which defines how
-//! collisions between entity groups should be handled, and [`CollisionContext`]
-//! which provides access to world state within collision callbacks.
+//! collisions between entity groups should be handled, and the
+//! [`CollisionCallback`] type alias for the Rust callback signature.
 //!
 //! # Group-Based Collision
 //!
 //! Collision rules match entities by their [`Group`](super::group::Group)
-//! component. When two entities collide, the system looks up rules that match
+//! component. When two entities collide, the observer looks up rules that match
 //! both groups and invokes the corresponding callback.
 //!
 //! # Example
 //!
 //! ```ignore
-//! fn ball_brick_callback(ball: Entity, brick: Entity, ctx: &mut CollisionContext) {
+//! fn ball_brick_callback(
+//!     ball: Entity,
+//!     brick: Entity,
+//!     sides_a: &BoxSides,
+//!     sides_b: &BoxSides,
+//!     ctx: &mut CollisionCtx,
+//! ) {
 //!     // Reflect ball, damage brick, play sound, etc.
 //! }
 //!
 //! commands.spawn((
-//!     CollisionRule::new("ball", "brick", ball_brick_callback as CollisionCallback),
+//!     CollisionRule::new("ball", "brick", ball_brick_callback),
 //!     Group::new("collision_rules"),
 //! ));
 //! ```
 //!
 //! # Related
 //!
-//! - [`crate::systems::collision`] – collision detection and observer systems
+//! - [`crate::systems::collision_detector`] – collision detection system
+//! - [`crate::systems::rust_collision`] – Rust collision observer
+//! - [`crate::systems::lua_collision`] – Lua collision observer
 //! - [`crate::events::collision::CollisionEvent`] – event emitted on collisions
 //! - [`super::group::Group`] – group tag used for rule matching
 
-// use bevy_ecs::prelude::*;
+use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;
 use smallvec::SmallVec;
 
-/* use crate::components::boxcollider::BoxCollider;
-use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
-use crate::components::signals::Signals;
-use crate::events::audio::AudioCmd;
-use crate::resources::worldsignals::WorldSignals;
- */
-// Context passed into collision callbacks to access world state.
-//
-// Extend this struct as new queries/resources are needed by callbacks.
-/* pub struct CollisionContext<'a, 'w, 's> {
-    pub commands: &'a mut Commands<'w, 's>,
-    pub groups: &'a Query<'w, 's, &'static Group>,
-    pub positions: &'a mut Query<'w, 's, &'static mut MapPosition>,
-    pub rigid_bodies: &'a mut Query<'w, 's, &'static mut RigidBody>,
-    pub box_colliders: &'a Query<'w, 's, &'static BoxCollider>,
-    pub signals: &'a mut Query<'w, 's, &'static mut Signals>,
-    pub world_signals: &'a mut ResMut<'w, WorldSignals>,
-    pub audio_cmds: &'a mut MessageWriter<'w, AudioCmd>,
-}
- */
-// Callback signature for collision components using a grouped context.
-// The callback receives the two entities involved in the collision
-// and a mutable reference to the collision context.
-// Callbacks are created in the game code when defining collision rules.
-/* pub type CollisionCallback =
-   for<'a, 'w, 's> fn(a: Entity, b: Entity, ctx: &mut CollisionContext<'a, 'w, 's>);
-*/
-// Defines how collisions between two entity groups should be handled.
-//
-// When a collision is detected between entities with groups matching
-// `group_a` and `group_b`, the `callback` function is invoked with
-// the entities and a [`CollisionContext`].
-/* #[derive(Component)]
+use crate::systems::GameCtx;
+
+/// Callback type for Rust collision rules.
+///
+/// Receives the two matched entities (ordered to match `group_a` and `group_b`),
+/// the colliding sides for each entity, and a mutable reference to
+/// [`GameCtx`](crate::systems::GameCtx) providing full ECS query/resource access.
+pub type CollisionCallback =
+    for<'w, 's> fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx<'w, 's>);
+
+/// Defines how collisions between two entity groups should be handled.
+///
+/// When a collision is detected between entities with groups matching
+/// `group_a` and `group_b`, the `callback` function is invoked with
+/// the entities, collision sides, and a [`GameCtx`](crate::systems::GameCtx).
+#[derive(Component)]
 pub struct CollisionRule {
+    /// First group name to match.
     pub group_a: String,
+    /// Second group name to match.
     pub group_b: String,
+    /// Rust function to call on collision.
     pub callback: CollisionCallback,
 }
- */// TODO: Instead of using a fixed function signature for the callback,
-// use a closure that can capture additional context if needed.
 
-/* impl CollisionRule {
+impl CollisionRule {
     /// Create a new collision rule for two groups with a callback.
     pub fn new(
         group_a: impl Into<String>,
@@ -110,7 +100,6 @@ pub struct CollisionRule {
         }
     }
 }
- */
 pub enum BoxSide {
     Left,
     Right,
@@ -401,5 +390,45 @@ mod tests {
             assert!(sides_a.iter().any(|s| matches!(s, BoxSide::Bottom)));
             assert!(sides_b.iter().any(|s| matches!(s, BoxSide::Top)));
         }
+    }
+
+    // CollisionRule::match_and_order tests
+
+    fn dummy_collision_callback(
+        _a: Entity,
+        _b: Entity,
+        _sides_a: &BoxSides,
+        _sides_b: &BoxSides,
+        _ctx: &mut GameCtx,
+    ) {
+    }
+
+    #[test]
+    fn test_match_and_order_direct() {
+        let rule = CollisionRule::new("ball", "brick", dummy_collision_callback);
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        let result = rule.match_and_order(ent_a, ent_b, "ball", "brick");
+        assert_eq!(result, Some((ent_a, ent_b)));
+    }
+
+    #[test]
+    fn test_match_and_order_reversed() {
+        let rule = CollisionRule::new("ball", "brick", dummy_collision_callback);
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        // Groups come in swapped relative to the rule
+        let result = rule.match_and_order(ent_a, ent_b, "brick", "ball");
+        // Entities should be reordered so ball maps to group_a
+        assert_eq!(result, Some((ent_b, ent_a)));
+    }
+
+    #[test]
+    fn test_match_and_order_no_match() {
+        let rule = CollisionRule::new("ball", "brick", dummy_collision_callback);
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        let result = rule.match_and_order(ent_a, ent_b, "player", "enemy");
+        assert_eq!(result, None);
     }
 }

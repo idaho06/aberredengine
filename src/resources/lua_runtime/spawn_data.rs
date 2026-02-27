@@ -3,7 +3,7 @@
 //! These structs hold component data that Lua scripts specify when spawning entities.
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
-use crate::resources::lua_runtime::UniformValue;
+use crate::resources::uniformvalue::UniformValue;
 
 /// Sprite component data for spawning.
 #[derive(Debug, Clone, Default)]

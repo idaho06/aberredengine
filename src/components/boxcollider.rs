@@ -17,7 +17,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::collision`] – collision detection systems
+//! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::components::collision::CollisionRule`] – defines collision handlers
 //! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
 
@@ -44,7 +44,6 @@ pub struct BoxCollider {
 
 impl BoxCollider {
     /// Create a BoxCollider with given size
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(width: f32, height: f32) -> Self {
         Self {
             size: Vector2::new(width, height),
@@ -54,14 +53,12 @@ impl BoxCollider {
     }
 
     /// Modify BoxCollider with given size and offset
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_offset(mut self, offset: Vector2) -> Self {
         self.offset = offset;
         self
     }
 
     /// Modify BoxCollider with an explicit origin.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_origin(mut self, origin: Vector2) -> Self {
         self.origin = origin;
         self
@@ -84,7 +81,6 @@ impl BoxCollider {
     }
 
     /// AABB vs AABB overlap test against another BoxCollider at a different entity position.
-    #[allow(dead_code)]
     pub fn overlaps(&self, position: Vector2, other: &Self, other_position: Vector2) -> bool {
         let (min_a, max_a) = self.aabb(position);
         let (min_b, max_b) = other.aabb(other_position);
@@ -92,14 +88,12 @@ impl BoxCollider {
     }
 
     /// Point containment in world space.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn contains_point(&self, position: Vector2, point: Vector2) -> bool {
         let (min, max) = self.aabb(position);
         point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
     }
 
     /// Get the collider as a Raylib Rectangle given the entity position.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn as_rectangle(&self, position: Vector2) -> Rectangle {
         let (x, y, w, h) = self.get_aabb(position);
         Rectangle::new(x, y, w, h)

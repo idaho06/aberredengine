@@ -21,7 +21,6 @@ use raylib::math::Vector2;
 ///
 /// The input `t` is clamped to [0.0, 1.0] and transformed according to the
 /// easing curve.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn ease(e: Easing, t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     match e {
@@ -52,7 +51,6 @@ pub(crate) fn ease(e: Easing, t: f32) -> f32 {
 }
 
 /// Linearly interpolate between two 2D vectors.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn lerp_v2(a: Vector2, b: Vector2, t: f32) -> Vector2 {
     Vector2 {
         x: a.x + (b.x - a.x) * t,
@@ -61,13 +59,11 @@ pub(crate) fn lerp_v2(a: Vector2, b: Vector2, t: f32) -> Vector2 {
 }
 
 /// Linearly interpolate between two floats.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
 /// Advance tween time and handle looping/completion.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn advance(
     time: &mut f32,
     duration: f32,

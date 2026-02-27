@@ -17,6 +17,7 @@
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
+//! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturestore`] – loaded textures keyed by string IDs
 //! - [`tilemapstore`] – loaded tile maps and layers
@@ -34,14 +35,17 @@ pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
 pub mod input;
+#[cfg(feature = "lua")]
 pub mod lua_runtime;
 pub mod postprocessshader;
 pub mod rendertarget;
 pub mod screensize;
 pub mod shaderstore;
+pub mod scenemanager;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod tilemapstore;
+pub mod uniformvalue;
 pub mod windowsize;
 pub mod worldsignals;
 pub mod worldtime;

@@ -108,7 +108,6 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 /// Internal: run state-specific "exit" systems for the given state.
 fn on_state_exit(state: &GameStates, _commands: &mut Commands, _systems_store: &SystemsStore) {
     match state {

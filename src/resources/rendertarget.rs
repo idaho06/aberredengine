@@ -16,7 +16,6 @@ pub enum RenderFilter {
     Nearest,
     /// Bilinear filtering - smooth scaling with interpolation.
     /// Best for high-resolution or vector-style graphics.
-    #[allow(dead_code)]
     Bilinear,
 }
 
@@ -115,7 +114,6 @@ impl RenderTarget {
     /// Set the texture filtering mode.
     ///
     /// Changes take effect immediately.
-    #[allow(dead_code)]
     pub fn set_filter(&mut self, filter: RenderFilter) {
         self.filter = filter;
         self.apply_filter();
@@ -133,7 +131,6 @@ impl RenderTarget {
     }
 
     /// Get the aspect ratio of the game resolution.
-    #[allow(dead_code)]
     pub fn aspect_ratio(&self) -> f32 {
         self.game_width as f32 / self.game_height as f32
     }

@@ -5,12 +5,32 @@
 //! - [`MenuItem`] – describes a single menu entry (label, position, etc.)
 //! - [`MenuActions`] – maps menu item IDs to actions like scene switching
 //! - [`MenuAction`] – the action to perform when a menu item is selected
+//! - [`MenuRustCallback`] – Rust fn-pointer type for menu selection callbacks
 //!
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
 
 use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::{Color, Vector2};
 use rustc_hash::FxHashMap;
+
+use crate::systems::GameCtx;
+
+/// Type alias for a Rust menu selection callback.
+///
+/// Stored on the [`Menu`] component and called when any item is selected.
+///
+/// # Arguments
+///
+/// - `menu_entity` — the entity holding the [`Menu`] component
+/// - `item_id`     — the ID string of the selected item
+/// - `item_index`  — 0-based index of the selected item in `menu.items`
+/// - `ctx`         — full ECS access (commands, queries, resources)
+///
+/// # Related
+///
+/// - [`crate::systems::GameCtx`] – bundled ECS access passed to the callback
+/// - [`crate::systems::menu::menu_selection_observer`] – dispatches to this callback
+pub type MenuRustCallback = for<'w, 's> fn(Entity, &str, usize, &mut GameCtx<'w, 's>);
 
 /// A single item within a [`Menu`].
 ///
@@ -58,6 +78,9 @@ pub struct Menu {
     pub use_screen_space: bool,
     /// Optional Lua callback invoked when any item is selected.
     pub on_select_callback: Option<String>,
+    /// Optional Rust fn-pointer callback invoked when any item is selected.
+    /// Priority: Lua callback → Rust callback → [`MenuActions`].
+    pub on_rust_callback: Option<MenuRustCallback>,
     /// Maximum number of visible items (None = show all).
     pub visible_count: Option<usize>,
     /// Index of first visible item when scrolling.
@@ -101,6 +124,7 @@ impl Menu {
             origin,
             use_screen_space,
             on_select_callback: None,
+            on_rust_callback: None,
             visible_count: None,
             scroll_offset: 0,
             top_indicator_entity: None,
@@ -128,6 +152,10 @@ impl Menu {
     }
     pub fn with_on_select_callback(mut self, callback: impl Into<String>) -> Self {
         self.on_select_callback = Some(callback.into());
+        self
+    }
+    pub fn with_on_rust_callback(mut self, callback: MenuRustCallback) -> Self {
+        self.on_rust_callback = Some(callback);
         self
     }
     pub fn with_visible_count(mut self, count: usize) -> Self {
@@ -230,6 +258,7 @@ mod tests {
         assert!(menu.cursor_entity.is_none());
         assert!(menu.selection_change_sound.is_none());
         assert!(menu.on_select_callback.is_none());
+        assert!(menu.on_rust_callback.is_none());
         assert!(menu.visible_count.is_none());
         assert_eq!(menu.scroll_offset, 0);
     }
@@ -328,5 +357,33 @@ mod tests {
     fn test_menu_actions_get_missing_returns_noop() {
         let actions = MenuActions::new();
         assert!(matches!(actions.get("missing"), MenuAction::Noop));
+    }
+
+    #[test]
+    fn test_menu_with_on_rust_callback() {
+        fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::GameCtx<'_, '_>) {}
+        let menu = Menu::new(
+            &sample_labels(),
+            Vector2::zero(),
+            "arcade",
+            16.0,
+            20.0,
+            true,
+        )
+        .with_on_rust_callback(dummy_cb);
+        assert!(menu.on_rust_callback.is_some());
+    }
+
+    #[test]
+    fn test_menu_rust_callback_none_by_default() {
+        let menu = Menu::new(
+            &sample_labels(),
+            Vector2::zero(),
+            "arcade",
+            16.0,
+            20.0,
+            true,
+        );
+        assert!(menu.on_rust_callback.is_none());
     }
 }

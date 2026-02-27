@@ -129,7 +129,6 @@ impl WorldSignals {
     ///
     /// Uses a stack buffer to avoid heap allocation. Group names must not
     /// exceed 51 characters (64 - 13 for "group_count:" prefix).
-    #[allow(dead_code)] // Kept for Rust-side convenience; Lua uses the cached snapshot
     pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
         use std::fmt::Write;
         let mut buf = arrayvec::ArrayString::<64>::new();

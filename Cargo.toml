@@ -10,7 +10,7 @@ rustc-hash = "2.1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crossbeam-channel = "0.5"
-mlua = { version = "0.11", features = ["vendored", "luajit", "serialize"] }
+mlua = { version = "0.11", features = ["vendored", "luajit", "serialize"], optional = true }
 arrayvec = "0.7"
 smallvec = "1.15"
 configparser = "3"
@@ -35,4 +35,11 @@ codegen-units = 1
 panic = "abort"
 strip = "debuginfo"
 
+# Optimized build for this computer:
 # RUSTFLAGS="-C target-cpu=native" cargo build --release
+# Build without Lua support:
+# cargo build --no-default-features
+
+[features]
+default = ["lua"]
+lua = ["dep:mlua"]

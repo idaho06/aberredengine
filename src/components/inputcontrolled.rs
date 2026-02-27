@@ -96,7 +96,6 @@ impl AccelerationControlled {
     ///
     /// # Arguments
     /// * `accel` - Acceleration magnitude in world units per second squared
-    #[allow(dead_code)]
     pub fn symmetric(accel: f32) -> Self {
         Self {
             up_acceleration: Vector2 { x: 0.0, y: -accel },

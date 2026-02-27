@@ -8,7 +8,7 @@ use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use crate::resources::lua_runtime::UniformValue;
+use crate::resources::uniformvalue::UniformValue;
 
 /// Reserved uniform names that are set automatically by the render system.
 /// Attempting to set these from Lua will log a warning.
@@ -51,7 +51,6 @@ impl PostProcessShader {
     }
 
     /// Returns true if post-processing is enabled (at least one shader in chain).
-    #[allow(dead_code)]
     pub fn is_enabled(&self) -> bool {
         !self.keys.is_empty()
     }

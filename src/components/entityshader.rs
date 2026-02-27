@@ -8,7 +8,7 @@ use bevy_ecs::prelude::Component;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use crate::resources::lua_runtime::UniformValue;
+use crate::resources::uniformvalue::UniformValue;
 
 /// Component that attaches a shader to an individual entity.
 ///

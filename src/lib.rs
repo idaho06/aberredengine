@@ -4,9 +4,13 @@
 //! for use in integration tests and as a reusable library.
 
 pub mod components;
+pub mod engine_app;
 pub mod events;
-pub mod game;
+#[cfg(feature = "lua")]
+pub mod lua_plugin;
 pub mod resources;
+#[cfg(feature = "lua")]
 pub mod luarc_generator;
+#[cfg(feature = "lua")]
 pub mod stub_generator;
 pub mod systems;
