@@ -271,6 +271,10 @@ pub enum EntityCmd {
     RemoveParent { entity_id: u64 },
     /// Remove entity tint
     RemoveTint { entity_id: u64 },
+    /// Set CameraTarget component on an entity
+    SetCameraTarget { entity_id: u64, priority: u8 },
+    /// Remove CameraTarget component from an entity
+    RemoveCameraTarget { entity_id: u64 },
 }
 
 /// Commands for tracked groups from Lua.
@@ -304,6 +308,31 @@ pub enum CameraCmd {
         rotation: f32,
         zoom: f32,
     },
+}
+
+/// Commands for camera follow configuration from Lua.
+#[derive(Debug, Clone)]
+pub enum CameraFollowCmd {
+    /// Enable or disable the camera follow system
+    Enable { enabled: bool },
+    /// Set follow mode ("instant", "lerp", "smooth_damp")
+    SetMode { mode: String },
+    /// Set deadzone mode with half-width and half-height
+    SetDeadzone { half_w: f32, half_h: f32 },
+    /// Set easing curve ("linear", "ease_out", "ease_in", "ease_in_out")
+    SetEasing { easing: String },
+    /// Set lerp speed
+    SetSpeed { speed: f32 },
+    /// Set spring stiffness and damping
+    SetSpring { stiffness: f32, damping: f32 },
+    /// Set camera offset from target
+    SetOffset { x: f32, y: f32 },
+    /// Set camera bounds (x, y, width, height)
+    SetBounds { x: f32, y: f32, w: f32, h: f32 },
+    /// Clear camera bounds
+    ClearBounds,
+    /// Reset spring velocity to zero
+    ResetVelocity,
 }
 
 /// Commands for registering animations from Lua.

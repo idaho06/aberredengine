@@ -71,6 +71,7 @@ use crate::events::audio::AudioCmd;
 // use crate::resources::animationstore::AnimationResource;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
@@ -86,9 +87,10 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
-    process_camera_command, process_clone_command, process_entity_commands,
-    process_gameconfig_command, process_group_command, process_phase_command,
-    process_render_command, process_signal_command, process_spawn_command, process_tilemap_command,
+    process_camera_command, process_camera_follow_command, process_clone_command,
+    process_entity_commands, process_gameconfig_command, process_group_command,
+    process_phase_command, process_render_command, process_signal_command, process_spawn_command,
+    process_tilemap_command,
 };
 use bevy_ecs::system::SystemParam;
 use log::{error, info};
@@ -107,6 +109,7 @@ pub struct GameSceneState<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
     pub post_process: ResMut<'w, PostProcessShader>,
     pub config: ResMut<'w, GameConfig>,
+    pub camera_follow: ResMut<'w, CameraFollowConfig>,
     pub systems_store: Res<'w, SystemsStore>,
 }
 
@@ -694,6 +697,11 @@ pub fn update(
         process_gameconfig_command(cmd, &mut scene_state.config);
     }
 
+    // Process camera follow commands from Lua
+    for cmd in lua_runtime.drain_camera_follow_commands() {
+        process_camera_follow_command(cmd, &mut scene_state.camera_follow);
+    }
+
     // Check for quit flag (set by Lua)
     if scene_state.world_signals.has_flag("quit_game") {
         scene_state.world_signals.clear_flag("quit_game");
@@ -927,6 +935,11 @@ pub fn switch_scene(
     // Process game config commands from Lua (fullscreen, vsync, target FPS)
     for cmd in lua_runtime.drain_gameconfig_commands() {
         process_gameconfig_command(cmd, &mut scene_state.config);
+    }
+
+    // Process camera follow commands from Lua
+    for cmd in lua_runtime.drain_camera_follow_commands() {
+        process_camera_follow_command(cmd, &mut scene_state.camera_follow);
     }
 
     // Update game config cache for Lua to read current values

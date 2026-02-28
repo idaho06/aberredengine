@@ -389,4 +389,6 @@ pub struct SpawnCmd {
     pub tint: Option<(u8, u8, u8, u8)>,
     /// Parent entity ID (from entity.to_bits()) — inserts ChildOf + GlobalTransform2D on spawn
     pub parent: Option<u64>,
+    /// CameraTarget priority (marks entity as candidate for camera following)
+    pub camera_target: Option<u8>,
 }

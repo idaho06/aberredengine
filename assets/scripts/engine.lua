@@ -489,6 +489,10 @@ function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, t
 ---@param entity_id integer
 function engine.collision_entity_menu_despawn(entity_id) end
 
+---Remove CameraTarget component from an entity
+---@param entity_id integer
+function engine.collision_entity_remove_camera_target(entity_id) end
+
 ---Remove a named force from an entity
 ---@param entity_id integer
 ---@param name string
@@ -530,6 +534,11 @@ function engine.collision_entity_restart_animation(entity_id) end
 ---@param entity_id integer
 ---@param animation_key string
 function engine.collision_entity_set_animation(entity_id, animation_key) end
+
+---Set CameraTarget component on an entity (higher priority wins)
+---@param entity_id integer
+---@param priority integer
+function engine.collision_entity_set_camera_target(entity_id, priority) end
 
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
@@ -749,6 +758,10 @@ function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y,
 ---@param entity_id integer
 function engine.entity_menu_despawn(entity_id) end
 
+---Remove CameraTarget component from an entity
+---@param entity_id integer
+function engine.entity_remove_camera_target(entity_id) end
+
 ---Remove a named force from an entity
 ---@param entity_id integer
 ---@param name string
@@ -790,6 +803,11 @@ function engine.entity_restart_animation(entity_id) end
 ---@param entity_id integer
 ---@param animation_key string
 function engine.entity_set_animation(entity_id, animation_key) end
+
+---Set CameraTarget component on an entity (higher priority wins)
+---@param entity_id integer
+---@param priority integer
+function engine.entity_set_camera_target(entity_id, priority) end
 
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
@@ -958,6 +976,50 @@ function engine.untrack_group(name) end
 function engine.spawn_tiles(id) end
 
 -- ==================== Camera ====================
+
+---Clear camera follow bounds
+function engine.camera_follow_clear_bounds() end
+
+---Enable or disable the camera follow system
+---@param enabled boolean
+function engine.camera_follow_enable(enabled) end
+
+---Reset camera follow spring velocity to zero
+function engine.camera_follow_reset_velocity() end
+
+---Set camera follow world-space bounds (x, y, width, height)
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+function engine.camera_follow_set_bounds(x, y, w, h) end
+
+---Set camera follow mode to deadzone with given half-dimensions
+---@param half_w number
+---@param half_h number
+function engine.camera_follow_set_deadzone(half_w, half_h) end
+
+---Set camera follow easing curve ("linear", "ease_out", "ease_in", "ease_in_out")
+---@param easing string
+function engine.camera_follow_set_easing(easing) end
+
+---Set camera follow mode ("instant", "lerp", "smooth_damp")
+---@param mode string
+function engine.camera_follow_set_mode(mode) end
+
+---Set camera follow offset from target position
+---@param x number
+---@param y number
+function engine.camera_follow_set_offset(x, y) end
+
+---Set camera follow lerp speed
+---@param speed number
+function engine.camera_follow_set_speed(speed) end
+
+---Set camera follow spring stiffness and damping
+---@param stiffness number
+---@param damping number
+function engine.camera_follow_set_spring(stiffness, damping) end
 
 ---Set the 2D camera target, offset, rotation and zoom
 ---@param target_x number
@@ -1165,6 +1227,11 @@ function EntityBuilder:with_animation_controller(fallback_key) end
 ---@param set_key string
 ---@return EntityBuilder
 function EntityBuilder:with_animation_rule(condition_table, set_key) end
+
+---Mark entity as camera follow target (higher priority wins)
+---@param priority integer|nil
+---@return EntityBuilder
+function EntityBuilder:with_camera_target(priority) end
 
 ---Set box collider
 ---@param width number
@@ -1571,6 +1638,11 @@ function CollisionEntityBuilder:with_animation_controller(fallback_key) end
 ---@param set_key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_animation_rule(condition_table, set_key) end
+
+---Mark entity as camera follow target (higher priority wins)
+---@param priority integer|nil
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_camera_target(priority) end
 
 ---Set box collider
 ---@param width number
