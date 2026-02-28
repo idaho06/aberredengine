@@ -47,6 +47,7 @@ use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
+use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
@@ -63,6 +64,7 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
+use crate::systems::camera_follow::camera_follow_system;
 use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
@@ -360,6 +362,7 @@ impl EngineBuilder {
         world.insert_non_send_resource(FontStore::new());
         world.insert_non_send_resource(ShaderStore::new());
         world.insert_resource(PostProcessShader::new());
+        world.insert_resource(CameraFollowConfig::default());
 
         // --------------- Lua runtime (optional) ---------------
         #[cfg(feature = "lua")]
@@ -487,6 +490,11 @@ impl EngineBuilder {
                 .after(tween_rotation_system)
                 .after(tween_scale_system)
                 .before(collision_detector),
+        );
+        update.add_systems(
+            camera_follow_system
+                .after(propagate_transforms)
+                .before(render_system),
         );
         update.add_systems(collision_detector.after(mouse_controller).after(movement));
         update.add_systems(phase_system.after(collision_detector));
