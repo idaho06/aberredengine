@@ -19,6 +19,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Phase Component](#phase-component)
   - [Attachment Components](#attachment-components)
   - [Parent-Child Hierarchy](#parent-child-hierarchy)
+  - [Camera Target Component](#camera-target-component)
   - [Tween Components](#tween-components)
   - [Particle Emitter Component](#particle-emitter-component)
 - [World Signals](#world-signals)
@@ -26,6 +27,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Phase Control](#phase-control)
 - [Collision Handling](#collision-handling)
 - [Camera Control](#camera-control)
+  - [Camera Follow System](#camera-follow-system)
 - [Group Tracking](#group-tracking)
 - [Tilemap Rendering](#tilemap-rendering)
 - [Post-Process Shaders](#post-process-shaders)
@@ -247,8 +249,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, Render, GameConfig | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, Render, GameConfig | Per-frame logic - camera effects, post-process control, game config changes, but avoid spawning (see warning below) |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, CameraFollow, Render, GameConfig | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps |
+| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, CameraFollow, Render, GameConfig | Per-frame logic - camera effects, post-process control, game config changes, but avoid spawning (see warning below) |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
@@ -259,8 +261,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig |
-| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig → CameraFollow |
+| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig → CameraFollow |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Phase → Camera |
 
@@ -316,6 +318,8 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
 - `engine.collision_entity_set_parent()` instead of `engine.entity_set_parent()`
 - `engine.collision_entity_remove_parent()` instead of `engine.entity_remove_parent()`
+- `engine.collision_entity_set_camera_target()` instead of `engine.entity_set_camera_target()`
+- `engine.collision_entity_remove_camera_target()` instead of `engine.entity_remove_camera_target()`
 
 **What happens if you use the wrong function?** Commands won't be lost, but timing will be delayed:
 
@@ -1601,6 +1605,38 @@ As the planet rotates via its tween, the satellite orbits at 80px radius. No man
 
 ---
 
+### Camera Target Component
+
+#### `:with_camera_target(priority?)`
+
+Mark an entity as a candidate for the camera follow system. The camera-follow system automatically tracks the entity with the highest `priority` value. Ties are broken by entity ID.
+
+**Parameters:**
+
+- `priority` (integer, optional) - Selection priority. Higher values win. Defaults to `0`.
+
+```lua
+-- Default priority (0)
+engine.spawn()
+    :with_group("player")
+    :with_position(100, 100)
+    :with_sprite("ship", 64, 64, 32, 32)
+    :with_camera_target()
+    :build()
+
+-- Explicit priority (higher priority takes precedence)
+engine.spawn()
+    :with_group("boss")
+    :with_position(500, 500)
+    :with_sprite("boss", 128, 128, 64, 64)
+    :with_camera_target(5)
+    :build()
+```
+
+**Note:** Adding `:with_camera_target()` alone does nothing unless the camera follow system is enabled via `engine.camera_follow_enable(true)`. See [Camera Follow System](#camera-follow-system) for configuration.
+
+---
+
 ### Tween Components
 
 Tween components provide automated interpolation animations.
@@ -2178,6 +2214,43 @@ Available collision variants:
 
 - `engine.collision_entity_set_parent(entity_id, parent_id)`
 - `engine.collision_entity_remove_parent(entity_id)`
+
+### `engine.entity_set_camera_target(entity_id, priority)`
+
+Add or update a `CameraTarget` component on an entity at runtime. The camera follow system will track the entity with the highest priority.
+
+**Parameters:**
+
+- `entity_id` - The entity to mark as camera target
+- `priority` - Selection priority (integer, 0-255). Higher values win.
+
+```lua
+-- Make the player the camera target
+local player_id = engine.get_entity("player")
+engine.entity_set_camera_target(player_id, 0)
+
+-- Switch camera to a boss entity with higher priority
+local boss_id = engine.get_entity("boss")
+engine.entity_set_camera_target(boss_id, 10)
+```
+
+### `engine.entity_remove_camera_target(entity_id)`
+
+Remove the `CameraTarget` component from an entity. The camera follow system will stop tracking this entity and switch to the next highest-priority target (if any).
+
+**Parameters:**
+
+- `entity_id` - The entity to remove camera targeting from
+
+```lua
+-- Stop tracking the boss, camera returns to the player
+engine.entity_remove_camera_target(boss_id)
+```
+
+Available collision variants:
+
+- `engine.collision_entity_set_camera_target(entity_id, priority)`
+- `engine.collision_entity_remove_camera_target(entity_id)`
 
 ### `engine.entity_menu_despawn(entity_id)`
 
@@ -3550,17 +3623,277 @@ end
 
 ### `engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)`
 
-Configure 2D camera.
+Manually configure the 2D camera. This sets the camera directly and is useful for static cameras, initial camera setup, or when you don't need automatic following.
 
 **Parameters:**
 
 - `target_x`, `target_y` - World position to center on
-- `offset_x`, `offset_y` - Screen-space offset
+- `offset_x`, `offset_y` - Screen-space offset (typically half the render resolution to center the target)
 - `rotation` - Camera rotation in degrees
 - `zoom` - Zoom level (1.0 = normal)
 
 ```lua
-engine.set_camera(336, 384, 336, 384, 0.0, 1.0)
+-- Center camera at world origin with 640x360 render size
+engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
+```
+
+**Note:** When the camera follow system is enabled, it overrides the camera target position each frame. You can still use `set_camera` to configure the initial camera offset and zoom before enabling camera follow.
+
+### Camera Follow System
+
+The camera follow system automatically tracks entities marked with `:with_camera_target()`. It selects the target with the highest priority value, smoothly moves the camera toward it using the configured follow mode, and optionally clamps the camera within world-space bounds.
+
+**Setup pattern:**
+
+```lua
+-- 1. Set initial camera (offset centers the viewport)
+engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
+
+-- 2. Enable and configure camera follow
+engine.camera_follow_enable(true)
+engine.camera_follow_set_mode("lerp")
+engine.camera_follow_set_easing("ease_out")
+engine.camera_follow_set_speed(5.0)
+
+-- 3. Spawn an entity with camera target
+engine.spawn()
+    :with_group("player")
+    :with_position(100, 100)
+    :with_sprite("ship", 64, 64, 32, 32)
+    :with_camera_target()
+    :build()
+```
+
+#### `engine.camera_follow_enable(enabled)`
+
+Enable or disable the camera follow system. When disabled, the camera stays at its current position.
+
+**Parameters:**
+
+- `enabled` (boolean) - `true` to activate, `false` to deactivate
+
+```lua
+engine.camera_follow_enable(true)   -- Start following
+engine.camera_follow_enable(false)  -- Stop following (camera freezes in place)
+```
+
+#### `engine.camera_follow_set_mode(mode)`
+
+Set the follow mode, which controls how the camera approaches the target.
+
+**Parameters:**
+
+- `mode` (string) - One of:
+  - `"instant"` - Snap to target every frame with no smoothing
+  - `"lerp"` - Smoothed approach using the configured easing curve and lerp speed
+  - `"smooth_damp"` - Spring-damper simulation with natural motion and optional overshoot
+
+```lua
+engine.camera_follow_set_mode("instant")     -- No smoothing
+engine.camera_follow_set_mode("lerp")        -- Smooth with easing (most common)
+engine.camera_follow_set_mode("smooth_damp") -- Springy, natural feel
+```
+
+#### `engine.camera_follow_set_deadzone(half_w, half_h)`
+
+Set the follow mode to **deadzone**. The camera holds still while the target stays inside a rectangle centered on the camera. Once the target exits the deadzone, the camera catches up using linear lerp at the configured speed.
+
+**Parameters:**
+
+- `half_w` (number) - Half-width of the deadzone rectangle in world units
+- `half_h` (number) - Half-height of the deadzone rectangle in world units
+
+```lua
+-- Camera won't move until the target is more than 50px away from center
+engine.camera_follow_set_deadzone(50.0, 50.0)
+
+-- Wide horizontal deadzone, tight vertical (for platformers)
+engine.camera_follow_set_deadzone(80.0, 20.0)
+```
+
+**Note:** Calling this function sets the mode to deadzone — you don't need to call `camera_follow_set_mode()` separately.
+
+#### `engine.camera_follow_set_easing(easing)`
+
+Set the easing curve used by the `"lerp"` follow mode.
+
+**Parameters:**
+
+- `easing` (string) - One of:
+  - `"linear"` - Constant-speed interpolation
+  - `"ease_out"` - Fast start, slow finish (most common for cameras, default)
+  - `"ease_in"` - Slow start, fast finish
+  - `"ease_in_out"` - Smooth both ends
+
+```lua
+engine.camera_follow_set_easing("ease_out")    -- Natural camera feel (default)
+engine.camera_follow_set_easing("linear")      -- Constant speed
+engine.camera_follow_set_easing("ease_in_out") -- Smooth start and stop
+```
+
+#### `engine.camera_follow_set_speed(speed)`
+
+Set the lerp speed for `"lerp"` and `"deadzone"` modes. Higher values make the camera catch up faster.
+
+**Parameters:**
+
+- `speed` (number) - Speed factor. Typical values: `2.0` (slow) to `10.0` (snappy)
+
+```lua
+engine.camera_follow_set_speed(4.0)   -- Moderate tracking
+engine.camera_follow_set_speed(10.0)  -- Very responsive
+engine.camera_follow_set_speed(1.0)   -- Lazy, cinematic feel
+```
+
+#### `engine.camera_follow_set_spring(stiffness, damping)`
+
+Set the spring parameters for `"smooth_damp"` mode. Higher stiffness makes the camera stiffer; higher damping reduces bounce/overshoot.
+
+**Parameters:**
+
+- `stiffness` (number) - Spring stiffness. Higher = stiffer, faster response
+- `damping` (number) - Damping factor. Higher = less bounce
+
+```lua
+engine.camera_follow_set_spring(10.0, 5.0)  -- Balanced spring
+engine.camera_follow_set_spring(20.0, 8.0)  -- Stiff, minimal overshoot
+engine.camera_follow_set_spring(5.0, 2.0)   -- Loose, bouncy camera
+```
+
+#### `engine.camera_follow_set_offset(x, y)`
+
+Set a fixed offset from the target position in world units. This is added to the target's position before applying smoothing. Useful for look-ahead effects or centering the camera above/below the target.
+
+**Parameters:**
+
+- `x` (number) - Horizontal offset in world units
+- `y` (number) - Vertical offset in world units
+
+```lua
+-- Camera looks 50px above the player (e.g., platformer)
+engine.camera_follow_set_offset(0.0, -50.0)
+
+-- Dynamic look-ahead based on ship rotation (call every frame)
+local radians = math.rad(ship_rotation)
+engine.camera_follow_set_offset(
+    math.sin(radians) * 80.0,
+    -math.cos(radians) * 80.0
+)
+```
+
+#### `engine.camera_follow_set_bounds(x, y, w, h)`
+
+Set world-space bounds for the camera. The camera position is clamped so the viewport stays inside these bounds. Useful for preventing the camera from showing areas outside the game world.
+
+**Parameters:**
+
+- `x` (number) - Left edge of the bounding rectangle
+- `y` (number) - Top edge of the bounding rectangle
+- `w` (number) - Width of the bounding rectangle
+- `h` (number) - Height of the bounding rectangle
+
+```lua
+-- Keep camera within a 2000x2000 world starting at origin
+engine.camera_follow_set_bounds(0, 0, 2000, 2000)
+
+-- Keep camera within a map that starts at negative coordinates
+engine.camera_follow_set_bounds(-500, -500, 3000, 3000)
+```
+
+#### `engine.camera_follow_clear_bounds()`
+
+Remove camera bounds, allowing the camera to follow the target anywhere.
+
+```lua
+engine.camera_follow_clear_bounds()
+```
+
+#### `engine.camera_follow_reset_velocity()`
+
+Reset the internal spring velocity to zero. Useful when switching targets or modes to prevent the camera from overshooting due to accumulated momentum.
+
+```lua
+-- Switch to a new target and reset spring state
+engine.entity_remove_camera_target(old_target_id)
+engine.entity_set_camera_target(new_target_id, 0)
+engine.camera_follow_reset_velocity()
+```
+
+#### Complete Example: Asteroids with Look-Ahead Camera
+
+```lua
+function M.spawn()
+    engine.set_render_size(640, 360)
+
+    -- Initial camera setup
+    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
+
+    -- Enable camera follow with smooth lerp
+    engine.camera_follow_enable(true)
+    engine.camera_follow_set_mode("lerp")
+    engine.camera_follow_set_easing("ease_out")
+    engine.camera_follow_set_speed(4.0)
+
+    -- Spawn ship as camera target
+    engine.spawn()
+        :with_group("ship")
+        :with_position(0, 0)
+        :with_sprite("ship", 64, 64, 32, 32)
+        :with_camera_target()
+        :register_as("ship")
+        :build()
+end
+
+-- Every frame: update camera offset to look ahead of the ship
+local LOOK_AHEAD = 80.0
+
+local function update_camera_look_ahead(ship_rotation)
+    local radians = math.rad(ship_rotation)
+    engine.camera_follow_set_offset(
+        math.sin(radians) * LOOK_AHEAD,
+        -math.cos(radians) * LOOK_AHEAD
+    )
+end
+```
+
+#### Complete Example: Boss Focus Camera
+
+```lua
+-- During normal gameplay, camera follows the player
+engine.spawn()
+    :with_group("player")
+    :with_position(100, 100)
+    :with_sprite("hero", 32, 32, 16, 16)
+    :with_camera_target(0)  -- Priority 0
+    :register_as("player")
+    :build()
+
+-- When boss spawns, camera switches to boss (higher priority)
+local function spawn_boss()
+    engine.spawn()
+        :with_group("boss")
+        :with_position(500, 300)
+        :with_sprite("boss", 128, 128, 64, 64)
+        :with_camera_target(10)  -- Priority 10 > player's 0
+        :register_as("boss")
+        :build()
+
+    -- Switch to smooth_damp for dramatic effect
+    engine.camera_follow_set_mode("smooth_damp")
+    engine.camera_follow_set_spring(8.0, 4.0)
+    engine.camera_follow_set_offset(0.0, 0.0)
+end
+
+-- When boss is defeated, camera returns to player automatically
+local function on_boss_defeated()
+    local boss_id = engine.get_entity("boss")
+    engine.entity_despawn(boss_id)  -- CameraTarget removed with entity
+
+    -- Switch back to lerp for normal gameplay
+    engine.camera_follow_set_mode("lerp")
+    engine.camera_follow_set_speed(5.0)
+    engine.camera_follow_reset_velocity()
+end
 ```
 
 ---

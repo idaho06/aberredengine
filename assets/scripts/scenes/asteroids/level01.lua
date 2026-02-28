@@ -226,6 +226,8 @@ end
 -- Current ship rotation (degrees)
 local SHIP_ROTATION = 0.0
 
+local LOOK_AHEAD = 80.0 -- pixels ahead of the ship to offset the camera
+
 --- Helper function to rotate the ship based on input
 --- @param ctx EntityContext Entity context table
 --- @param input InputSnapshot Input state table
@@ -249,6 +251,13 @@ local function rotate_ship(ctx, input, dt)
     end
 
     engine.entity_set_rotation(ctx.id, SHIP_ROTATION)
+
+    -- Point camera ahead of the ship's facing direction
+    local look_radians = math.rad(SHIP_ROTATION)
+    engine.camera_follow_set_offset(
+        math.sin(look_radians) * LOOK_AHEAD,
+        -math.cos(look_radians) * LOOK_AHEAD
+    )
 end
 
 local function fire_laser(ctx)
@@ -281,7 +290,6 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function ship_phase_idle_update(ctx, input, dt)
-    engine.set_camera(ctx.pos.x, ctx.pos.y, 640 / 2, 360 / 2, 0.0, 1.0)
     rotate_ship(ctx, input, dt)
 
     if input.digital.up.just_pressed then
@@ -305,7 +313,6 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function ship_phase_propulsion_update(ctx, input, dt)
-    engine.set_camera(ctx.pos.x, ctx.pos.y, 640 / 2, 360 / 2, 0.0, 1.0)
     rotate_ship(ctx, input, dt)
 
     if input.digital.action_1.just_pressed then
@@ -439,6 +446,7 @@ local function spawn_ship()
         :with_velocity(0, 0)
         :with_friction(0.0)
         :with_accel("propulsion", 0.0, -300.0, false)
+        :with_camera_target()
         :with_signals()
         :with_phase({
             initial = "idle",
@@ -582,7 +590,12 @@ function M.spawn()
     -- Set render resolution for Asteroids
     engine.set_render_size(640, 360)
 
+    -- Configure camera to follow the ship with look-ahead
     engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)
+    engine.camera_follow_enable(true)
+    engine.camera_follow_set_mode("lerp")
+    engine.camera_follow_set_easing("ease_out")
+    engine.camera_follow_set_speed(4.0)
 
     spawn_ship()
     spawn_background()
