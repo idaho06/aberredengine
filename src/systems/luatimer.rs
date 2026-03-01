@@ -46,10 +46,8 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
-use crate::components::entityshader::EntityShader;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::resources::input::InputState;
@@ -57,12 +55,13 @@ use crate::resources::lua_runtime::{
     build_entity_context_pooled, AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
     LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
 };
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
-    process_phase_command, process_signal_command, process_spawn_command,
+    process_phase_command, process_signal_command, process_spawn_command, EntityCmdQueries,
 };
 use log::{error, warn};
 
@@ -104,7 +103,6 @@ pub struct TimerContextQueries<'w, 's> {
     pub rotations: Query<'w, 's, &'static Rotation>,
     pub scales: Query<'w, 's, &'static Scale>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    pub sprites: Query<'w, 's, &'static Sprite>,
     pub lua_timers: Query<'w, 's, &'static LuaTimer>,
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
     pub child_of: Query<'w, 's, &'static ChildOf>,
@@ -125,6 +123,7 @@ fn build_timer_context(
     positions_query: &Query<&mut MapPosition>,
     rigid_bodies_query: &Query<&mut RigidBody>,
     animation_query: &Query<&mut Animation>,
+    sprite_query: &Query<&mut Sprite>,
     signals_query: &Query<&mut Signals>,
     luaphase_query: &Query<(Entity, &mut LuaPhase)>,
 ) -> LuaResult<LuaTable> {
@@ -171,7 +170,7 @@ fn build_timer_context(
         })
     });
 
-    let sprite = ctx_queries.sprites.get(entity).ok().map(|s| SpriteSnapshot {
+    let sprite = sprite_query.get(entity).ok().map(|s| SpriteSnapshot {
         tex_key: s.tex_key.as_ref(),
         flip_h: s.flip_h,
         flip_v: s.flip_v,
@@ -261,20 +260,15 @@ pub fn lua_timer_observer(
     input: Res<InputState>,
     // Bundled read-only queries for context building
     ctx_queries: TimerContextQueries,
-    // Mutable queries for command processing
-    stuckto_query: Query<&StuckTo>,
-    mut signals_query: Query<&mut Signals>,
-    mut animation_query: Query<&mut Animation>,
-    mut rigid_bodies_query: Query<&mut RigidBody>,
-    mut positions_query: Query<&mut MapPosition>,
-    mut shader_query: Query<&mut EntityShader>,
-    global_transforms_query: Query<&GlobalTransform2D>,
+    // Bundled mutable queries for command processing
+    mut cmd_queries: EntityCmdQueries,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
     // Resources
     mut world_signals: ResMut<WorldSignals>,
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     systems_store: Res<SystemsStore>,
+    animation_store: Res<AnimationStore>,
 ) {
     let event = trigger.event();
     let entity = event.entity;
@@ -295,7 +289,8 @@ pub fn lua_timer_observer(
     // Build entity context
     let ctx_table = match build_timer_context(
         &lua_runtime, entity, &ctx_queries,
-        &positions_query, &rigid_bodies_query, &animation_query, &signals_query, &luaphase_query,
+        &cmd_queries.positions, &cmd_queries.rigid_bodies, &cmd_queries.animation,
+        &cmd_queries.sprites, &cmd_queries.signals, &luaphase_query,
     ) {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -344,14 +339,16 @@ pub fn lua_timer_observer(
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &stuckto_query,
-        &mut signals_query,
-        &mut animation_query,
-        &mut rigid_bodies_query,
-        &mut positions_query,
-        &mut shader_query,
-        &global_transforms_query,
+        &cmd_queries.stuckto,
+        &mut cmd_queries.signals,
+        &mut cmd_queries.animation,
+        &mut cmd_queries.sprites,
+        &mut cmd_queries.rigid_bodies,
+        &mut cmd_queries.positions,
+        &mut cmd_queries.shaders,
+        &cmd_queries.global_transforms,
         &systems_store,
+        &animation_store,
     );
 
     // Process camera commands from Lua

@@ -527,7 +527,7 @@ engine.load_shader("crt", nil, "./assets/shaders/crt.fs")
 engine.load_shader("custom", "./assets/shaders/custom.vs", "./assets/shaders/custom.fs")
 ```
 
-### `engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)`
+### `engine.register_animation(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped)`
 
 Register a frame-based sprite animation.
 
@@ -536,17 +536,25 @@ Register a frame-based sprite animation.
 - `id` - Unique animation identifier
 - `tex_key` - Texture to use as sprite sheet
 - `pos_x`, `pos_y` - Starting pixel position in sprite sheet
-- `displacement` - Pixel offset between frames (horizontal)
+- `horizontal_displacement` - Pixel width of each frame (frames are packed with no gaps)
+- `vertical_displacement` - Pixel height to advance when wrapping to the next row. Set to `0` for single-row sprite sheets (no wrapping)
 - `frame_count` - Number of frames in animation
 - `fps` - Playback speed in frames per second
 - `looped` - Whether animation loops (true/false)
 
-```lua
--- 16-frame looping animation at 15fps
-engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
+**Row-wrapping behavior** (when `vertical_displacement > 0`):
 
--- 6-frame non-looping animation at 15fps
-engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false)
+When the next frame's x offset would exceed the texture width, the animation wraps to the next row. The first row starts at `pos_x`; subsequent rows start at x = 0. This allows a single animation definition to span multiple rows of a sprite sheet.
+
+```lua
+-- Single-row animation (no wrapping): vertical_displacement = 0
+engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 0, 16, 15, true)
+
+-- Single-row, non-looping
+engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 0, 6, 15, false)
+
+-- Multi-row animation: 56x56 frames wrapping across rows of a sprite sheet
+engine.register_animation("char_run", "char_sheet", 0, 0, 56, 56, 12, 10, true)
 ```
 
 ---

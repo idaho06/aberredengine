@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-02-27 (GameCtx refactor complete)
+# Last updated: 2026-03-01 (Animation row-wrapping: horizontal_displacement + vertical_displacement)
 
 ## QUICK REFERENCE
 
@@ -18,7 +18,7 @@ FEATURE FLAGS:
   lua = ["dep:mlua"]   -- Lua scripting support (LuaJIT via mlua). In default features.
   default = ["lua"]    -- lua enabled by default; downstream Rust-only games opt out with default-features = false
 
-## STATUS (2026-02-25)
+## STATUS (2026-03-01)
 
 - Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
 - Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro.
@@ -28,6 +28,7 @@ FEATURE FLAGS:
 - Parent-child entity hierarchy: ChildOf relationship + GlobalTransform2D component for recursive transform propagation (position, rotation, scale). propagate_transforms system runs after movement/tweens, before collision.
 - Menu scrolling: visible_count + scroll_offset with "..." indicator entities for overflow.
 - ParticleEmitter, TTL, Entity cloning, EntityShader, Tint, Multi-pass post-processing, Runtime game configuration API, Lua stubs generator, Luarc generator, Library crate - all functional.
+- Animation row-wrapping: `AnimationResource` uses `horizontal_displacement` + `vertical_displacement` (renamed from `displacement`). When `vertical_displacement > 0`, the animation system looks up the texture width from `TextureStore` and wraps frames to subsequent rows when `x + frame_width > texture_width`. First (possibly partial) row starts at `position.x`; subsequent rows start at x=0. Frame offset logic extracted into `compute_frame_offset()` pure function in `systems/animation.rs`.
 - `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
 - Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut GameCtx, &InputState)`. `GameCtx` is a unified SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites), and resources (world_signals, audio, world_time, texture_store).
 - Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled (no feature flag).
@@ -92,7 +93,7 @@ src/
 │   ├── inputsimplecontroller.rs    # Input→velocity
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
-│   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController)
+│   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController) + compute_frame_offset (row-wrapping)
 │   ├── luaphase.rs            # [feature=lua] Lua phase callbacks
 │   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
 │   ├── luatimer.rs            # [feature=lua] Lua timer processing
@@ -381,7 +382,7 @@ PhaseCmd { TransitionTo { entity_id, phase } }
 CameraCmd { SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom } }
 TilemapCmd { SpawnTiles { id } }
 AssetCmd { Texture { id, path }, Font { id, path, size }, Music { id, path }, Sound { id, path }, Tilemap { id, path }, Shader { id, vs_path, fs_path } }
-AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped } }
+AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped } }
 RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
 GameConfigCmd { Fullscreen { enabled }, Vsync { enabled }, TargetFps { fps }, RenderSize { width, height }, BackgroundColor { r, g, b } }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }  -- canonical location: resources/uniformvalue.rs
@@ -457,7 +458,7 @@ engine.load_music(id, path)
 engine.load_sound(id, path)
 engine.load_tilemap(id, path)
 engine.load_shader(id, vs_path|nil, fs_path|nil)  -- at least one path required
-engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)
+engine.register_animation(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped)
 
 -- Audio
 engine.play_music(id, looped)

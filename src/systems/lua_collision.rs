@@ -41,18 +41,20 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
-use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::collision::get_colliding_sides;
 use crate::components::entityshader::EntityShader;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
+use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -74,6 +76,7 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub signals: Query<'w, 's, &'static mut Signals>,
     pub stuckto_query: Query<'w, 's, &'static StuckTo>,
     pub animation_query: Query<'w, 's, &'static mut Animation>,
+    pub sprite_query: Query<'w, 's, &'static mut Sprite>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub shader_query: Query<'w, 's, &'static mut EntityShader>,
     pub global_transforms_query: Query<'w, 's, &'static GlobalTransform2D>,
@@ -81,6 +84,7 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub systems_store: Res<'w, SystemsStore>,
+    pub animation_store: Res<'w, AnimationStore>,
 }
 
 pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollisionObserverParams) {
@@ -109,11 +113,17 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
             // Gather entity data for Lua callback
             // Use world position from GlobalTransform2D when available
             let pos_a = params.positions.get(ent_a).ok().map(|p| {
-                params.global_transforms_query.get(ent_a).ok()
+                params
+                    .global_transforms_query
+                    .get(ent_a)
+                    .ok()
                     .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
             });
             let pos_b = params.positions.get(ent_b).ok().map(|p| {
-                params.global_transforms_query.get(ent_b).ok()
+                params
+                    .global_transforms_query
+                    .get(ent_b)
+                    .ok()
                     .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
             });
             let (vel_a, speed_sq_a) = params
@@ -198,11 +208,13 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 &params.stuckto_query,
                 &mut params.signals,
                 &mut params.animation_query,
+                &mut params.sprite_query,
                 &mut params.rigid_bodies,
                 &mut params.positions,
                 &mut params.shader_query,
                 &params.global_transforms_query,
                 &params.systems_store,
+                &params.animation_store,
             );
 
             // Process collision signal commands

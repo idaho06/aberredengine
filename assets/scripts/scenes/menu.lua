@@ -19,6 +19,8 @@ local function on_showcase_menu_select(ctx)
         engine.change_scene("birthday_intro")
     elseif ctx.item_id == "kraken" then
         engine.change_scene("kraken_intro")
+    elseif ctx.item_id == "sidescroller" then
+        engine.change_scene("sidescroller_level01")
     elseif ctx.item_id == "exit" then
         engine.quit()
     end
@@ -98,11 +100,12 @@ function M.spawn()
         :with_group("main_menu")
         :with_menu(
             {
-                { id = "asteroids", label = "Asteroids" },
-                { id = "arkanoid",  label = "Arkanoid" },
-                { id = "birthday",  label = "Birthday Card" },
-                { id = "kraken",    label = "Kraken" },
-                { id = "exit",      label = "Exit" },
+                { id = "asteroids",    label = "Asteroids" },
+                { id = "arkanoid",     label = "Arkanoid" },
+                { id = "birthday",     label = "Birthday Card" },
+                { id = "kraken",       label = "Kraken" },
+                { id = "sidescroller", label = "Ember Paths" },
+                { id = "exit",         label = "Exit" },
             },
             16 + 8,
             100,

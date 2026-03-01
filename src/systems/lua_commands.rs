@@ -36,9 +36,9 @@ use bevy_ecs::hierarchy::ChildOf;
 use crate::components::animation::{Animation, Condition};
 use crate::components::boxcollider::BoxCollider;
 use crate::components::cameratarget::CameraTarget;
-use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luatimer::LuaTimer;
@@ -58,8 +58,9 @@ use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, T
 use crate::components::zindex::ZIndex;
 
 use crate::events::audio::AudioCmd;
-use crate::resources::animationstore::AnimationResource;
+use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
@@ -67,7 +68,6 @@ use crate::resources::lua_runtime::{
     CloneCmd, EntityCmd, GameConfigCmd, GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd,
     SpawnCmd, TilemapCmd, UniformValue,
 };
-use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
@@ -87,6 +87,7 @@ pub struct EntityCmdQueries<'w, 's> {
     pub animation: Query<'w, 's, &'static mut Animation>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
+    pub sprites: Query<'w, 's, &'static mut Sprite>,
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
 }
@@ -474,7 +475,10 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
             "lerp" => config.mode = FollowMode::Lerp,
             "smooth_damp" => config.mode = FollowMode::SmoothDamp,
             other => {
-                warn!("Unknown camera follow mode '{}'; expected \"instant\", \"lerp\", or \"smooth_damp\"", other);
+                warn!(
+                    "Unknown camera follow mode '{}'; expected \"instant\", \"lerp\", or \"smooth_damp\"",
+                    other
+                );
             }
         },
         CameraFollowCmd::SetDeadzone { half_w, half_h } => {
@@ -486,16 +490,16 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
             "ease_in" => config.easing = EasingCurve::EaseIn,
             "ease_in_out" => config.easing = EasingCurve::EaseInOut,
             other => {
-                warn!("Unknown camera follow easing '{}'; expected \"linear\", \"ease_out\", \"ease_in\", or \"ease_in_out\"", other);
+                warn!(
+                    "Unknown camera follow easing '{}'; expected \"linear\", \"ease_out\", \"ease_in\", or \"ease_in_out\"",
+                    other
+                );
             }
         },
         CameraFollowCmd::SetSpeed { speed } => {
             config.lerp_speed = speed;
         }
-        CameraFollowCmd::SetSpring {
-            stiffness,
-            damping,
-        } => {
+        CameraFollowCmd::SetSpring { stiffness, damping } => {
             config.spring_stiffness = stiffness;
             config.spring_damping = damping;
         }
@@ -538,7 +542,8 @@ pub fn process_animation_command(
             tex_key,
             pos_x,
             pos_y,
-            displacement,
+            horizontal_displacement,
+            vertical_displacement,
             frame_count,
             fps,
             looped,
@@ -548,7 +553,8 @@ pub fn process_animation_command(
                 AnimationResource {
                     tex_key: Arc::from(tex_key),
                     position: Vector2 { x: pos_x, y: pos_y },
-                    displacement,
+                    horizontal_displacement,
+                    vertical_displacement,
                     frame_count,
                     fps,
                     looped,
@@ -589,11 +595,13 @@ pub fn process_entity_commands(
     stuckto_query: &Query<&StuckTo>,
     signals_query: &mut Query<&mut Signals>,
     animation_query: &mut Query<&mut Animation>,
+    sprite_query: &mut Query<&mut Sprite>,
     rigid_bodies_query: &mut Query<&mut RigidBody>,
     positions_query: &mut Query<&mut MapPosition>,
     shader_query: &mut Query<&mut EntityShader>,
     global_transforms_query: &Query<&GlobalTransform2D>,
     systems_store: &SystemsStore,
+    anim_store: &AnimationStore,
 ) {
     for cmd in entity_commands {
         match cmd {
@@ -667,9 +675,15 @@ pub fn process_entity_commands(
             } => {
                 let entity = Entity::from_bits(entity_id);
                 if let Ok(mut animation) = animation_query.get_mut(entity) {
-                    animation.animation_key = animation_key;
+                    animation.animation_key = animation_key.clone();
                     animation.frame_index = 0;
                     animation.elapsed_time = 0.0;
+                }
+                // Also update the sprite's texture to match the new animation
+                if let Some(anim_res) = anim_store.animations.get(&animation_key)
+                    && let Ok(mut sprite) = sprite_query.get_mut(entity)
+                {
+                    sprite.tex_key = anim_res.tex_key.clone();
                 }
             }
             EntityCmd::InsertLuaTimer {
@@ -1028,10 +1042,12 @@ pub fn process_entity_commands(
                     if let Ok(mut pos) = positions_query.get_mut(entity) {
                         pos.pos = gt.position;
                     }
+                    commands.entity(entity).insert(Rotation {
+                        degrees: gt.rotation_degrees,
+                    });
                     commands
                         .entity(entity)
-                        .insert(Rotation { degrees: gt.rotation_degrees });
-                    commands.entity(entity).insert(Scale::new(gt.scale.x, gt.scale.y));
+                        .insert(Scale::new(gt.scale.x, gt.scale.y));
                 }
                 commands.entity(entity).remove::<ChildOf>();
                 commands.entity(entity).remove::<GlobalTransform2D>();

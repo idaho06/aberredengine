@@ -1765,15 +1765,16 @@ impl LuaRuntime {
             meta_fns,
             "register_animation",
             animation_commands,
-            |(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)| (
-                String, String, f32, f32, f32, usize, f32, bool
+            |(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped)| (
+                String, String, f32, f32, f32, f32, usize, f32, bool
             ),
             AnimationCmd::RegisterAnimation {
                 id,
                 tex_key,
                 pos_x,
                 pos_y,
-                displacement,
+                horizontal_displacement,
+                vertical_displacement,
                 frame_count,
                 fps,
                 looped,
@@ -1785,7 +1786,8 @@ impl LuaRuntime {
                 ("tex_key", "string"),
                 ("pos_x", "number"),
                 ("pos_y", "number"),
-                ("displacement", "number"),
+                ("horizontal_displacement", "number"),
+                ("vertical_displacement", "number"),
                 ("frame_count", "integer"),
                 ("fps", "number"),
                 ("looped", "boolean")

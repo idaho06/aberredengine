@@ -1106,11 +1106,12 @@ function engine.collision_spawn() end
 ---@param tex_key string
 ---@param pos_x number
 ---@param pos_y number
----@param displacement number
+---@param horizontal_displacement number
+---@param vertical_displacement number
 ---@param frame_count integer
 ---@param fps number
 ---@param looped boolean
-function engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped) end
+function engine.register_animation(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped) end
 
 -- ==================== Rendering & Shaders ====================
 

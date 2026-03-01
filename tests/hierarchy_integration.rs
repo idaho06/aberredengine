@@ -28,6 +28,8 @@ use aberredengine::resources::systemsstore::SystemsStore;
 #[cfg(feature = "lua")]
 use aberredengine::resources::worldsignals::WorldSignals;
 #[cfg(feature = "lua")]
+use aberredengine::resources::animationstore::AnimationStore;
+#[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::EntityCmdQueries;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
@@ -468,9 +470,10 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
 #[cfg(feature = "lua")]
 fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(SystemsStore::new());
+    world.insert_resource(AnimationStore { animations: Default::default() });
 
-    let mut state = SystemState::<(Commands, EntityCmdQueries, Res<SystemsStore>)>::new(world);
-    let (mut commands, mut queries, systems_store) = state.get_mut(world);
+    let mut state = SystemState::<(Commands, EntityCmdQueries, Res<SystemsStore>, Res<AnimationStore>)>::new(world);
+    let (mut commands, mut queries, systems_store, anim_store) = state.get_mut(world);
 
     process_entity_commands(
         &mut commands,
@@ -478,11 +481,13 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
         &queries.stuckto,
         &mut queries.signals,
         &mut queries.animation,
+        &mut queries.sprites,
         &mut queries.rigid_bodies,
         &mut queries.positions,
         &mut queries.shaders,
         &queries.global_transforms,
         &systems_store,
+        &anim_store,
     );
 
     state.apply(world);

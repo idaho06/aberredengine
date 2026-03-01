@@ -111,6 +111,7 @@ pub struct GameSceneState<'w> {
     pub config: ResMut<'w, GameConfig>,
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
     pub systems_store: Res<'w, SystemsStore>,
+    pub anim_store: Res<'w, AnimationStore>,
 }
 
 /// Bundled entity processing queries.
@@ -654,11 +655,13 @@ pub fn update(
         &entities.cmd_queries.stuckto,
         &mut entities.cmd_queries.signals,
         &mut entities.cmd_queries.animation,
+        &mut entities.cmd_queries.sprites,
         &mut entities.cmd_queries.rigid_bodies,
         &mut entities.cmd_queries.positions,
         &mut entities.cmd_queries.shaders,
         &entities.cmd_queries.global_transforms,
         &scene_state.systems_store,
+        &scene_state.anim_store,
     );
 
     // Process spawn commands from Lua
@@ -882,11 +885,13 @@ pub fn switch_scene(
         &entities.cmd_queries.stuckto,
         &mut entities.cmd_queries.signals,
         &mut entities.cmd_queries.animation,
+        &mut entities.cmd_queries.sprites,
         &mut entities.cmd_queries.rigid_bodies,
         &mut entities.cmd_queries.positions,
         &mut entities.cmd_queries.shaders,
         &entities.cmd_queries.global_transforms,
         &scene_state.systems_store,
+        &scene_state.anim_store,
     );
 
     // Process phase commands from Lua
