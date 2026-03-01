@@ -9,6 +9,7 @@
 //! - [`animationstore`] – definitions for sprite animations reused across entities
 //! - [`audio`] – bridge and channels for the background audio thread
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
+//! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`fontstore`] – loaded fonts keyed by string IDs
 //! - [`fullscreen`] – presence toggles fullscreen mode
@@ -28,6 +29,7 @@
 pub mod animationstore;
 pub mod audio;
 pub mod camera2d;
+pub mod camerafollowconfig;
 pub mod debugmode;
 pub mod fontstore;
 pub mod fullscreen;

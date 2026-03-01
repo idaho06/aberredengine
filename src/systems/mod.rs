@@ -5,6 +5,7 @@
 //!
 //! Submodules overview
 //! - [`animation`] – advance sprite animations and select tracks via rules
+//! - [`camera_follow`] – move the camera to track entities with `CameraTarget`
 //! - [`audio`] – bridge with the audio thread (poll/update message queues)
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
 //! - [`lua_collision`] – *(feature = "lua")* Lua-based collision observer and callback dispatch
@@ -41,6 +42,7 @@ pub struct RaylibAccess<'w> {
 }
 
 pub mod animation;
+pub mod camera_follow;
 pub mod audio;
 pub mod collision_detector;
 pub mod dynamictext_size;

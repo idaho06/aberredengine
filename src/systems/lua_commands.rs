@@ -35,6 +35,7 @@ use bevy_ecs::hierarchy::ChildOf;
 
 use crate::components::animation::{Animation, Condition};
 use crate::components::boxcollider::BoxCollider;
+use crate::components::cameratarget::CameraTarget;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
@@ -62,10 +63,11 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::lua_runtime::{
-    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd,
-    GameConfigCmd, GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd, SpawnCmd, TilemapCmd,
-    UniformValue,
+    AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd,
+    CloneCmd, EntityCmd, GameConfigCmd, GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd,
+    SpawnCmd, TilemapCmd, UniformValue,
 };
+use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
@@ -455,6 +457,64 @@ pub fn process_gameconfig_command(
         }
         GameConfigCmd::BackgroundColor { r, g, b } => {
             config.background_color = Color::new(r, g, b, 255);
+        }
+    }
+}
+
+/// Process a single camera follow command from Lua.
+///
+/// Mutates the [`CameraFollowConfig`] resource directly.
+pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFollowConfig) {
+    match cmd {
+        CameraFollowCmd::Enable { enabled } => {
+            config.enabled = enabled;
+        }
+        CameraFollowCmd::SetMode { mode } => match mode.as_str() {
+            "instant" => config.mode = FollowMode::Instant,
+            "lerp" => config.mode = FollowMode::Lerp,
+            "smooth_damp" => config.mode = FollowMode::SmoothDamp,
+            other => {
+                warn!("Unknown camera follow mode '{}'; expected \"instant\", \"lerp\", or \"smooth_damp\"", other);
+            }
+        },
+        CameraFollowCmd::SetDeadzone { half_w, half_h } => {
+            config.mode = FollowMode::Deadzone { half_w, half_h };
+        }
+        CameraFollowCmd::SetEasing { easing } => match easing.as_str() {
+            "linear" => config.easing = EasingCurve::Linear,
+            "ease_out" => config.easing = EasingCurve::EaseOut,
+            "ease_in" => config.easing = EasingCurve::EaseIn,
+            "ease_in_out" => config.easing = EasingCurve::EaseInOut,
+            other => {
+                warn!("Unknown camera follow easing '{}'; expected \"linear\", \"ease_out\", \"ease_in\", or \"ease_in_out\"", other);
+            }
+        },
+        CameraFollowCmd::SetSpeed { speed } => {
+            config.lerp_speed = speed;
+        }
+        CameraFollowCmd::SetSpring {
+            stiffness,
+            damping,
+        } => {
+            config.spring_stiffness = stiffness;
+            config.spring_damping = damping;
+        }
+        CameraFollowCmd::SetOffset { x, y } => {
+            config.offset = raylib::prelude::Vector2 { x, y };
+        }
+        CameraFollowCmd::SetBounds { x, y, w, h } => {
+            config.bounds = Some(raylib::prelude::Rectangle {
+                x,
+                y,
+                width: w,
+                height: h,
+            });
+        }
+        CameraFollowCmd::ClearBounds => {
+            config.bounds = None;
+        }
+        CameraFollowCmd::ResetVelocity => {
+            config.velocity = raylib::prelude::Vector2 { x: 0.0, y: 0.0 };
         }
     }
 }
@@ -976,6 +1036,17 @@ pub fn process_entity_commands(
                 commands.entity(entity).remove::<ChildOf>();
                 commands.entity(entity).remove::<GlobalTransform2D>();
             }
+            EntityCmd::SetCameraTarget {
+                entity_id,
+                priority,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).insert(CameraTarget { priority });
+            }
+            EntityCmd::RemoveCameraTarget { entity_id } => {
+                let entity = Entity::from_bits(entity_id);
+                commands.entity(entity).remove::<CameraTarget>();
+            }
         }
     }
 }
@@ -1451,6 +1522,11 @@ fn apply_components(
             ChildOf(Entity::from_bits(parent_id)),
             GlobalTransform2D::default(),
         ));
+    }
+
+    // CameraTarget
+    if let Some(priority) = cmd.camera_target {
+        entity_commands.insert(CameraTarget { priority });
     }
 
     // Register entity in WorldSignals if requested

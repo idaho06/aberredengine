@@ -85,6 +85,8 @@ pub(super) struct LuaAppData {
     tracked_groups: RefCell<FxHashSet<String>>,
     /// Game config command queue
     gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
+    /// Camera follow config command queue
+    camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
     /// Cached game configuration snapshot (read-only for Lua)
     gameconfig_snapshot: RefCell<GameConfigSnapshot>,
 }
@@ -472,6 +474,15 @@ macro_rules! define_entity_cmds {
                 EntityCmd::RemoveParent { entity_id },
                 desc = "Remove entity from its parent, snapping to current world position",
                 params = [("entity_id", "integer")]),
+            ("entity_set_camera_target",
+                |(entity_id, priority)| (u64, u8),
+                EntityCmd::SetCameraTarget { entity_id, priority },
+                desc = "Set CameraTarget component on an entity (higher priority wins)",
+                params = [("entity_id", "integer"), ("priority", "integer")]),
+            ("entity_remove_camera_target", |entity_id| u64,
+                EntityCmd::RemoveCameraTarget { entity_id },
+                desc = "Remove CameraTarget component from an entity",
+                params = [("entity_id", "integer")]),
         ]);
     };
 }
@@ -513,6 +524,7 @@ impl LuaRuntime {
             signal_snapshot: RefCell::new(Arc::new(SignalSnapshot::default())),
             tracked_groups: RefCell::new(FxHashSet::default()),
             gameconfig_commands: RefCell::new(Vec::new()),
+            camera_follow_commands: RefCell::new(Vec::new()),
             gameconfig_snapshot: RefCell::new(GameConfigSnapshot::default()),
         });
 
@@ -537,6 +549,7 @@ impl LuaRuntime {
         runtime.register_group_api()?;
         runtime.register_tilemap_api()?;
         runtime.register_camera_api()?;
+        runtime.register_camera_follow_api()?;
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
         runtime.register_render_api()?;
@@ -1431,6 +1444,103 @@ impl LuaRuntime {
         Ok(())
     }
 
+    fn register_camera_follow_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_enable", camera_follow_commands,
+            |enabled| bool,
+            CameraFollowCmd::Enable { enabled },
+            desc = "Enable or disable the camera follow system",
+            cat = "camera",
+            params = [("enabled", "boolean")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_mode", camera_follow_commands,
+            |mode| String,
+            CameraFollowCmd::SetMode { mode },
+            desc = "Set camera follow mode (\"instant\", \"lerp\", \"smooth_damp\")",
+            cat = "camera",
+            params = [("mode", "string")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_deadzone", camera_follow_commands,
+            |(half_w, half_h)| (f32, f32),
+            CameraFollowCmd::SetDeadzone { half_w, half_h },
+            desc = "Set camera follow mode to deadzone with given half-dimensions",
+            cat = "camera",
+            params = [("half_w", "number"), ("half_h", "number")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_easing", camera_follow_commands,
+            |easing| String,
+            CameraFollowCmd::SetEasing { easing },
+            desc = "Set camera follow easing curve (\"linear\", \"ease_out\", \"ease_in\", \"ease_in_out\")",
+            cat = "camera",
+            params = [("easing", "string")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_speed", camera_follow_commands,
+            |speed| f32,
+            CameraFollowCmd::SetSpeed { speed },
+            desc = "Set camera follow lerp speed",
+            cat = "camera",
+            params = [("speed", "number")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_spring", camera_follow_commands,
+            |(stiffness, damping)| (f32, f32),
+            CameraFollowCmd::SetSpring { stiffness, damping },
+            desc = "Set camera follow spring stiffness and damping",
+            cat = "camera",
+            params = [("stiffness", "number"), ("damping", "number")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_offset", camera_follow_commands,
+            |(x, y)| (f32, f32),
+            CameraFollowCmd::SetOffset { x, y },
+            desc = "Set camera follow offset from target position",
+            cat = "camera",
+            params = [("x", "number"), ("y", "number")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_set_bounds", camera_follow_commands,
+            |(x, y, w, h)| (f32, f32, f32, f32),
+            CameraFollowCmd::SetBounds { x, y, w, h },
+            desc = "Set camera follow world-space bounds (x, y, width, height)",
+            cat = "camera",
+            params = [("x", "number"), ("y", "number"), ("w", "number"), ("h", "number")]
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_clear_bounds", camera_follow_commands,
+            |()| (),
+            CameraFollowCmd::ClearBounds,
+            desc = "Clear camera follow bounds",
+            cat = "camera",
+            params = []
+        );
+        register_cmd!(
+            engine, self.lua, meta_fns,
+            "camera_follow_reset_velocity", camera_follow_commands,
+            |()| (),
+            CameraFollowCmd::ResetVelocity,
+            desc = "Reset camera follow spring velocity to zero",
+            cat = "camera",
+            params = []
+        );
+        Ok(())
+    }
+
     fn register_collision_api(&self) -> LuaResult<()> {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
@@ -2189,6 +2299,14 @@ impl LuaRuntime {
             .unwrap_or_default()
     }
 
+    /// Drains all queued camera follow commands.
+    pub fn drain_camera_follow_commands(&self) -> Vec<CameraFollowCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| data.camera_follow_commands.borrow_mut().drain(..).collect())
+            .unwrap_or_default()
+    }
+
     /// Drains all queued collision entity commands.
     /// Call this after processing Lua collision callbacks to apply entity changes.
     pub fn drain_collision_entity_commands(&self) -> Vec<EntityCmd> {
@@ -2288,6 +2406,7 @@ impl LuaRuntime {
             data.tilemap_commands.borrow_mut().clear();
             data.render_commands.borrow_mut().clear();
             data.gameconfig_commands.borrow_mut().clear();
+            data.camera_follow_commands.borrow_mut().clear();
             // Note: Asset and animation commands are only used during setup,
             // so we don't clear them here.
         }
@@ -2843,6 +2962,11 @@ impl LuaRuntime {
                 "with_parent",
                 "Set parent entity for transform hierarchy",
                 &[("parent_id", "integer")],
+            ),
+            (
+                "with_camera_target",
+                "Mark entity as camera follow target (higher priority wins)",
+                &[("priority", "integer?")],
             ),
             (
                 "register_as",

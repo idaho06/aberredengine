@@ -7,6 +7,7 @@
 //! Submodules overview:
 //! - [`animation`] – playback state and a rule-based controller for sprite animations
 //! - [`boxcollider`] – axis-aligned rectangular collider for collision detection
+//! - [`cameratarget`] – marks an entity as a candidate for camera following
 //! - [`collision`] – collision callback rules and context for collision observers
 //! - [`dynamictext`] – text component for rendering variable strings
 //! - [`entityshader`] – per-entity shader for custom rendering effects
@@ -33,6 +34,7 @@
 
 pub mod animation;
 pub mod boxcollider;
+pub mod cameratarget;
 pub mod globaltransform2d;
 pub mod collision;
 pub mod dynamictext;
