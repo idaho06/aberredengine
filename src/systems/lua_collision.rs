@@ -41,7 +41,6 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::get_colliding_sides;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
@@ -58,6 +57,7 @@ use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
+use crate::systems::collision::{compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos};
 use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
     process_phase_command, process_signal_command, process_spawn_command,
@@ -95,37 +95,22 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
     let a = trigger.event().a;
     let b = trigger.event().b;
 
-    //eprintln!("Collision detected: {:?} and {:?}", a, b);
-    let ga = if let Ok(group) = params.groups.get(a) {
-        group.name()
-    } else {
-        return;
-    };
-    let gb = if let Ok(group) = params.groups.get(b) {
-        group.name()
-    } else {
-        return;
+    let (ga, gb) = match resolve_groups(&params.groups, a, b) {
+        Some(names) => names,
+        None => return,
     };
 
     // Check Lua-based collision rules
     for lua_rule in params.lua_rules.iter() {
         if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
-            // Gather entity data for Lua callback
-            // Use world position from GlobalTransform2D when available
-            let pos_a = params.positions.get(ent_a).ok().map(|p| {
-                params
-                    .global_transforms_query
-                    .get(ent_a)
-                    .ok()
-                    .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
-            });
-            let pos_b = params.positions.get(ent_b).ok().map(|p| {
-                params
-                    .global_transforms_query
-                    .get(ent_b)
-                    .ok()
-                    .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
-            });
+            // Resolve world positions via shared helper
+            let pos_a = resolve_world_pos(
+                &params.positions.as_readonly(), &params.global_transforms_query, ent_a,
+            ).map(|v| (v.x, v.y));
+            let pos_b = resolve_world_pos(
+                &params.positions.as_readonly(), &params.global_transforms_query, ent_b,
+            ).map(|v| (v.x, v.y));
+
             let (vel_a, speed_sq_a) = params
                 .rigid_bodies
                 .get(ent_a)
@@ -149,19 +134,14 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 })
                 .unwrap_or((None, 0.0));
 
-            // Get collider rects for side detection
-            let rect_a = params.box_colliders.get(ent_a).ok().and_then(|c| {
-                pos_a.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
-            });
-            let rect_b = params.box_colliders.get(ent_b).ok().and_then(|c| {
-                pos_b.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
-            });
-
-            // Get colliding sides (uses SmallVec to avoid heap allocation)
-            let (sides_a, sides_b) = match (rect_a, rect_b) {
-                (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_default(),
-                _ => Default::default(),
-            };
+            // Get collider rects and sides via shared helpers
+            let rect_a = resolve_collider_rect(
+                &params.positions.as_readonly(), &params.global_transforms_query, &params.box_colliders, ent_a,
+            );
+            let rect_b = resolve_collider_rect(
+                &params.positions.as_readonly(), &params.global_transforms_query, &params.box_colliders, ent_b,
+            );
+            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 
             // Get entity signals (integers and flags)
             let signals_a = params.signals.get(ent_a).ok();

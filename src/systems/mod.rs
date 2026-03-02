@@ -44,6 +44,7 @@ pub struct RaylibAccess<'w> {
 pub mod animation;
 pub mod camera_follow;
 pub mod audio;
+pub mod collision;
 pub mod collision_detector;
 pub mod dynamictext_size;
 pub mod game_ctx;

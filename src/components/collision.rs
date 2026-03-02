@@ -91,15 +91,32 @@ impl CollisionRule {
         group_a: &str,
         group_b: &str,
     ) -> Option<(Entity, Entity)> {
-        if self.group_a == group_a && self.group_b == group_b {
-            Some((ent_a, ent_b))
-        } else if self.group_a == group_b && self.group_b == group_a {
-            Some((ent_b, ent_a))
-        } else {
-            None
-        }
+        match_groups(&self.group_a, &self.group_b, ent_a, ent_b, group_a, group_b)
     }
 }
+
+/// Check if a collision rule's groups match the given group names and return
+/// entities ordered to match `rule_a` and `rule_b`.
+///
+/// This is the core matching logic shared by both [`CollisionRule`] and
+/// [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule).
+pub fn match_groups(
+    rule_a: &str,
+    rule_b: &str,
+    ent_a: Entity,
+    ent_b: Entity,
+    ga: &str,
+    gb: &str,
+) -> Option<(Entity, Entity)> {
+    if rule_a == ga && rule_b == gb {
+        Some((ent_a, ent_b))
+    } else if rule_a == gb && rule_b == ga {
+        Some((ent_b, ent_a))
+    } else {
+        None
+    }
+}
+
 pub enum BoxSide {
     Left,
     Right,
@@ -430,5 +447,59 @@ mod tests {
         let ent_b = Entity::from_bits(2);
         let result = rule.match_and_order(ent_a, ent_b, "player", "enemy");
         assert_eq!(result, None);
+    }
+
+    // match_groups free function tests
+
+    #[test]
+    fn test_match_groups_direct() {
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        assert_eq!(
+            match_groups("ball", "brick", ent_a, ent_b, "ball", "brick"),
+            Some((ent_a, ent_b))
+        );
+    }
+
+    #[test]
+    fn test_match_groups_reversed() {
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        assert_eq!(
+            match_groups("ball", "brick", ent_a, ent_b, "brick", "ball"),
+            Some((ent_b, ent_a))
+        );
+    }
+
+    #[test]
+    fn test_match_groups_no_match() {
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        assert_eq!(
+            match_groups("ball", "brick", ent_a, ent_b, "player", "enemy"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_match_groups_partial_match() {
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        // Only one group matches
+        assert_eq!(
+            match_groups("ball", "brick", ent_a, ent_b, "ball", "enemy"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_match_groups_same_group() {
+        let ent_a = Entity::from_bits(1);
+        let ent_b = Entity::from_bits(2);
+        // Rule and entities have the same group on both sides
+        assert_eq!(
+            match_groups("ball", "ball", ent_a, ent_b, "ball", "ball"),
+            Some((ent_a, ent_b))
+        );
     }
 }

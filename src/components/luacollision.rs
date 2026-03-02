@@ -27,6 +27,8 @@
 
 use bevy_ecs::prelude::*;
 
+use crate::components::collision::match_groups;
+
 /// Collision rule that invokes a Lua callback function.
 ///
 /// When a collision is detected between entities with groups matching
@@ -67,12 +69,7 @@ impl LuaCollisionRule {
         group_a: &str,
         group_b: &str,
     ) -> Option<(Entity, Entity, &str)> {
-        if self.group_a == group_a && self.group_b == group_b {
-            Some((ent_a, ent_b, &self.callback))
-        } else if self.group_a == group_b && self.group_b == group_a {
-            Some((ent_b, ent_a, &self.callback))
-        } else {
-            None
-        }
+        match_groups(&self.group_a, &self.group_b, ent_a, ent_b, group_a, group_b)
+            .map(|(a, b)| (a, b, self.callback.as_str()))
     }
 }
