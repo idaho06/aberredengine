@@ -107,6 +107,12 @@ pub enum EntityCmd {
         entity_id: u64,
         animation_key: String,
     },
+    /// Set sprite flip on horizontal and vertical axes
+    SetSpriteFlip {
+        entity_id: u64,
+        flip_h: bool,
+        flip_v: bool,
+    },
     /// Insert a LuaTimer component
     InsertLuaTimer {
         entity_id: u64,

@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-01 (Animation row-wrapping: horizontal_displacement + vertical_displacement)
+# Last updated: 2026-03-02 (Camera follow system, collision refactor, sidescroller example)
 
 ## QUICK REFERENCE
 
@@ -21,7 +21,7 @@ FEATURE FLAGS:
 ## STATUS (2026-03-01)
 
 - Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
-- Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro.
+- Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro, sidescroller_level01.
 - Callback injection: each scene module exports `_callbacks` table with local functions; main.lua injects/removes them from `_G` on scene switch to prevent naming conflicts between scenes.
 - Assets loaded per scene group in setup.lua: common (fonts, cursor, shaders), asteroids (ship, space tiles, asteroids, explosions, laser, sounds), arkanoid (bricks, vaus, ball, background, title, music, tilemaps), birthday (hearts, gems, photo, fonts, music), kraken (mouth, tentacle).
 - Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs), blink, fade.
@@ -29,6 +29,10 @@ FEATURE FLAGS:
 - Menu scrolling: visible_count + scroll_offset with "..." indicator entities for overflow.
 - ParticleEmitter, TTL, Entity cloning, EntityShader, Tint, Multi-pass post-processing, Runtime game configuration API, Lua stubs generator, Luarc generator, Library crate - all functional.
 - Animation row-wrapping: `AnimationResource` uses `horizontal_displacement` + `vertical_displacement` (renamed from `displacement`). When `vertical_displacement > 0`, the animation system looks up the texture width from `TextureStore` and wraps frames to subsequent rows when `x + frame_width > texture_width`. First (possibly partial) row starts at `position.x`; subsequent rows start at x=0. Frame offset logic extracted into `compute_frame_offset()` pure function in `systems/animation.rs`.
+- `SetAnimation` EntityCmd now also updates `Sprite.tex_key` to match the new animation's texture (fixes sprite not changing when animation key changes).
+- Camera follow system: `CameraTarget { priority: u8 }` component marks entities as follow candidates. `CameraFollowConfig` resource (inserted disabled by default) controls follow behaviour: `FollowMode` (Instant/Lerp/SmoothDamp/Deadzone), `EasingCurve` (Linear/EaseOut/EaseIn/EaseInOut), lerp speed, spring params, offset, optional world-space bounds clamping. `camera_follow_system` runs after `propagate_transforms`, before `render_system`. Lua API: `engine.camera_follow_enable/set_mode/set_deadzone/set_easing/set_speed/set_spring/set_offset/set_bounds/clear_bounds/reset_velocity` + `engine.entity_set_camera_target/entity_remove_camera_target`. Spawn builder: `:with_camera_target(priority?)`.
+- Collision refactor: shared collision helpers extracted to `systems/collision.rs` (`resolve_world_pos`, `resolve_collider_rect`, `compute_sides`, `resolve_groups`). `match_groups` free function extracted to `components/collision.rs` for shared group-matching logic. `CollisionCallback` type now uses `GameCtx` instead of the removed `CollisionCtx` — collision callbacks have full GameCtx access.
+- Sidescroller example added: `scenes/sidescroller/level01.lua` registered as `sidescroller_level01`. Demonstrates sprite sheet animations with row-wrapping (char_red_1.png, char_red_2.png).
 - `lua` Cargo feature flag implemented: all Lua-specific code (mlua, lua_plugin, stub_generator, luarc_generator, LuaRuntime, LuaPhase, LuaTimer, LuaCollisionRule, lua_* systems/events) gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]` so existing builds are unaffected. `cargo build --no-default-features` compiles a pure-Rust engine without any Lua overhead.
 - Rust `Timer` component: repeating countdown timer with fn-pointer callback. Mirrors LuaTimer pattern (event-based: `update_timers` → `TimerEvent` → `timer_observer`). Callback signature: `fn(Entity, &mut GameCtx, &InputState)`. `GameCtx` is a unified SystemParam bundling Commands, mutable queries (positions, rigid_bodies, signals, animations, shaders), read-only queries (groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites), and resources (world_signals, audio, world_time, texture_store).
 - Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled (no feature flag).
@@ -54,7 +58,8 @@ src/
 │   ├── screenposition.rs      # ScreenPosition (UI/screen-space position)
 │   ├── rigidbody.rs           # Velocity, friction, max_speed, named accel forces, frozen
 │   ├── boxcollider.rs         # BoxCollider (AABB collision shape)
-│   ├── collision.rs           # CollisionRule + CollisionCallback (Rust fn-pointer), BoxSide, get_colliding_sides
+│   ├── cameratarget.rs        # CameraTarget { priority: u8 } — marks entity as camera follow candidate
+│   ├── collision.rs           # CollisionRule + CollisionCallback (Rust fn-pointer), BoxSide, get_colliding_sides, match_groups
 │   ├── luacollision.rs        # [feature=lua] LuaCollisionRule for Lua callbacks
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
@@ -81,9 +86,11 @@ src/
 │   ├── zindex.rs              # Render order
 │   └── inputcontrolled.rs     # InputControlled, AccelerationControlled, MouseControlled
 ├── systems/
-│   ├── mod.rs                 # Re-exports all systems + RaylibAccess SystemParam + GameCtx
+│   ├── mod.rs                 # Re-exports all systems + RaylibAccess SystemParam + GameCtx (pub use game_ctx::GameCtx)
 │   ├── game_ctx.rs            # GameCtx SystemParam (unified ECS access for all Rust callbacks)
 │   ├── movement.rs            # Physics: accel→vel→pos, friction, max_speed
+│   ├── camera_follow.rs       # camera_follow_system: tracks CameraTarget entities via CameraFollowConfig
+│   ├── collision.rs           # Shared collision helpers: resolve_world_pos, resolve_collider_rect, compute_sides, resolve_groups
 │   ├── collision_detector.rs  # AABB detection (pure Rust, shared by Lua and Rust game paths)
 │   ├── lua_collision.rs       # [feature=lua] Lua collision observer + callback dispatch (LuaCollisionObserverParams, lua_collision_observer)
 │   ├── rust_collision.rs      # Rust collision observer (rust_collision_observer, always compiled)
@@ -127,6 +134,7 @@ src/
 │   ├── worldsignals.rs        # Global signal storage + SignalSnapshot
 │   ├── group.rs               # TrackedGroups set
 │   ├── camera2d.rs            # Camera2D config
+│   ├── camerafollowconfig.rs  # CameraFollowConfig resource + FollowMode + EasingCurve
 │   ├── screensize.rs          # Game's internal render resolution
 │   ├── windowsize.rs          # Actual window dimensions (for letterboxing)
 │   ├── rendertarget.rs        # RenderTarget for fixed-resolution rendering
@@ -158,6 +166,7 @@ src/
     └── audio.rs               # AudioCmd, AudioMessage
 tests/
 ├── bevy_ecs_integration.rs    # ECS integration tests (pure Rust)
+├── camera_follow_integration.rs # Camera follow system integration tests (pure Rust)
 ├── engine_tick_integration.rs # Engine tick + meta drift protection tests (mixed; Lua tests gated by #[cfg(feature = "lua")]; includes Rust Timer integration tests)
 ├── stub_generator_integration.rs # Stub generator tests (#![cfg(feature = "lua")])
 ├── hierarchy_integration.rs   # Parent-child hierarchy tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
@@ -182,8 +191,10 @@ assets/
 │       ├── birthday/
 │       │   ├── intro.lua      # Birthday card intro
 │       │   └── card.lua       # Birthday card scene
-│       └── kraken/
-│           └── intro.lua      # Kraken scene (parent-child demo)
+│       ├── kraken/
+│       │   └── intro.lua      # Kraken scene (parent-child demo)
+│       └── sidescroller/
+│           └── level01.lua    # Sidescroller demo (sprite sheet animations, camera follow)
 ├── textures/                  # Organized by game: asteroids/, arkanoid/, birthday/, kraken/ + shared (cursor.png, black.png)
 ├── shaders/                   # OpenGL 3.3 fragment shaders: invert.fs, wave.fs, bloom.fs, outline.fs, crt.fs, crt2.fs, blink.fs, fade.fs
 ├── audio/                     # Organized by game: asteroids/, arkanoid/, birthday/ + shared (option.wav)
@@ -224,6 +235,7 @@ ScreenPosition { pos: Vector2 }
 RigidBody { velocity: Vector2, friction: Option<f32>, max_speed: Option<f32>, forces: FxHashMap<String, AccelerationForce>, frozen: bool }
 AccelerationForce { value: Vector2, enabled: bool }
 BoxCollider { offset: Vector2, origin: Vector2, size: Vector2 }
+CameraTarget { priority: u8 } -- marks entity as camera follow candidate; highest priority wins
 LuaCollisionRule { group_a: String, group_b: String, callback: String } -- [feature=lua] Lua collision callback name
 CollisionRule { group_a: String, group_b: String, callback: CollisionCallback } -- Rust fn-pointer collision; CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)
 Sprite { tex_key: String, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
@@ -277,6 +289,9 @@ WorldSignals { scalars, integers, strings, flags, entities } -- group_counts are
 SignalSnapshot { scalars, integers, strings, flags, entities, group_counts } - read-only Arc cache for Lua
 TrackedGroups(FxHashSet<String>)
 Camera2D { target, offset, rotation, zoom }
+CameraFollowConfig { enabled: bool, mode: FollowMode, easing: EasingCurve, lerp_speed: f32, spring_stiffness: f32, spring_damping: f32, offset: Vector2, bounds: Option<Rectangle>, velocity: Vector2 (internal) } -- inserted disabled by default; resources/camerafollowconfig.rs
+FollowMode { Instant, Lerp, SmoothDamp, Deadzone { half_w, half_h } }
+EasingCurve { Linear, EaseOut (default), EaseIn, EaseInOut }
 ScreenSize { w: i32, h: i32 } - game's internal render resolution
 WindowSize { w: i32, h: i32 } - actual window dimensions
 RenderTarget { texture: RenderTexture2D, game_width, game_height, filter: RenderFilter } - NON_SEND
@@ -313,6 +328,7 @@ EntityCmd {
     InsertStuckTo { entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy }
     RestartAnimation { entity_id }
     SetAnimation { entity_id, animation_key }
+    SetSpriteFlip { entity_id, flip_h, flip_v }
     InsertLuaTimer { entity_id, duration, callback }
     RemoveLuaTimer { entity_id }
     InsertTtl { entity_id, seconds }
@@ -349,6 +365,8 @@ EntityCmd {
     RemoveTint { entity_id }
     SetParent { entity_id, parent_id }
     RemoveParent { entity_id }
+    SetCameraTarget { entity_id, priority: u8 }
+    RemoveCameraTarget { entity_id }
 }
 
 SpawnCmd (spawn_data.rs) {
@@ -357,7 +375,7 @@ SpawnCmd (spawn_data.rs) {
     signal_flags, signal_strings, phase_data, has_signals, stuckto, lua_timer, ttl,
     signal_binding, grid_layout, tween_position, tween_rotation, tween_scale, menu,
     register_as, lua_collision_rule, animation, animation_controller, particle_emitter,
-    shader, tint, parent
+    shader, tint, parent, camera_target: Option<u8>
 }
 
 ParticleEmitterData (spawn_data.rs) {
@@ -383,6 +401,7 @@ CameraCmd { SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom
 TilemapCmd { SpawnTiles { id } }
 AssetCmd { Texture { id, path }, Font { id, path, size }, Music { id, path }, Sound { id, path }, Tilemap { id, path }, Shader { id, vs_path, fs_path } }
 AnimationCmd { RegisterAnimation { id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped } }
+CameraFollowCmd { Enable { enabled }, SetMode { mode }, SetDeadzone { half_w, half_h }, SetEasing { easing }, SetSpeed { speed }, SetSpring { stiffness, damping }, SetOffset { x, y }, SetBounds { x, y, w, h }, ClearBounds, ResetVelocity }
 RenderCmd { SetPostProcessShader { ids: Option<Vec<String>> }, SetPostProcessUniform { name, value: UniformValue }, ClearPostProcessUniform { name }, ClearPostProcessUniforms }
 GameConfigCmd { Fullscreen { enabled }, Vsync { enabled }, TargetFps { fps }, RenderSize { width, height }, BackgroundColor { r, g, b } }
 UniformValue { Float(f32), Int(i32), Vec2 { x, y }, Vec4 { x, y, z, w } }  -- canonical location: resources/uniformvalue.rs
@@ -504,6 +523,7 @@ engine.entity_insert_stuckto(id, target_id, follow_x, follow_y, offset_x, offset
 engine.release_stuckto(id)
 engine.entity_set_animation(id, key)
 engine.entity_restart_animation(id)
+engine.entity_set_sprite_flip(id, flip_h, flip_v)
 engine.entity_insert_lua_timer(id, duration, callback)
 engine.entity_remove_lua_timer(id)
 engine.entity_insert_ttl(id, seconds)
@@ -578,6 +598,20 @@ engine.has_tracked_group(name) -> bool
 
 -- Camera
 engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)
+
+-- Camera Follow (activate CameraFollowConfig to track CameraTarget entities)
+engine.camera_follow_enable(enabled)                         -- master switch (bool)
+engine.camera_follow_set_mode(mode)                          -- "instant" | "lerp" | "smooth_damp"
+engine.camera_follow_set_deadzone(half_w, half_h)            -- switches to Deadzone mode
+engine.camera_follow_set_easing(easing)                      -- "linear" | "ease_out" | "ease_in" | "ease_in_out"
+engine.camera_follow_set_speed(speed)                        -- lerp speed (higher = faster)
+engine.camera_follow_set_spring(stiffness, damping)          -- SmoothDamp params
+engine.camera_follow_set_offset(x, y)                        -- fixed offset added to target pos
+engine.camera_follow_set_bounds(x, y, w, h)                  -- world-space bounds clamp
+engine.camera_follow_clear_bounds()                          -- remove bounds constraint
+engine.camera_follow_reset_velocity()                        -- reset spring velocity to zero
+engine.entity_set_camera_target(id, priority)                -- set CameraTarget component (higher priority wins)
+engine.entity_remove_camera_target(id)                       -- remove CameraTarget component
 
 -- Tilemap
 engine.spawn_tiles(id)
@@ -667,6 +701,7 @@ engine.get_background_color() -> {r, g, b} -- read current background clear colo
 :with_shader(shader_key, uniforms_table?)  -- { name = value, ... } where value is float, int, {x,y}, or {x,y,z,w}
 :with_tint(r, g, b, a)  -- color modulation (0-255); sprites: replaces WHITE; text: multiplies with text color
 :with_parent(parent_id)  -- set parent entity for transform hierarchy (inserts ChildOf + GlobalTransform2D)
+:with_camera_target(priority?)  -- mark entity as camera follow target (default priority 0)
 :register_as(key)
 :build()
 
@@ -742,6 +777,7 @@ Systems with explicit ordering constraints (`.after()` / `.before()`):
 - apply_gameconfig_changes (run_if state_is_playing)
 - particle_emitter_system.before(movement)
 - propagate_transforms.after(movement).after(tween_*).before(collision_detector)
+- camera_follow_system.after(propagate_transforms).before(render_system)
 - stuck_to_entity_system.after(collision_detector) -- skips entities with ChildOf
 - collision_detector.after(mouse_controller).after(movement)
 - lua_phase_system.after(collision_detector)               -- [feature=lua]
@@ -770,6 +806,7 @@ Approximate execution order:
 12. particle_emitter_system (before movement - particles move on spawn frame)
 13. movement
 14. propagate_transforms (after movement/tweens, before collision - computes GlobalTransform2D)
+14b. camera_follow_system (after propagate_transforms, before render - updates Camera2D to track CameraTarget)
 15. ttl_system (after movement - despawns expired entities)
 16. collision_detector
 17. stuck_to_entity_system (after collision, skips entities with ChildOf)
@@ -884,7 +921,8 @@ For features touching:
 
 - Physics: rigidbody.rs, movement.rs
 - Lua API: runtime.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs  [all feature=lua]
-- Collision: collision_detector.rs + rust_collision.rs + lua_collision.rs (systems), collision.rs + boxcollider.rs + luacollision.rs (components)
+- Collision: collision_detector.rs + collision.rs (shared helpers) + rust_collision.rs + lua_collision.rs (systems), collision.rs + boxcollider.rs + luacollision.rs (components)
+- Camera follow: cameratarget.rs (component), camerafollowconfig.rs (resource), camera_follow.rs (system)
 - Rendering: render.rs, sprite.rs, rendertarget.rs, windowsize.rs, shaderstore.rs, postprocessshader.rs, entityshader.rs
 - Animation: animation.rs (component + controller), animationstore.rs
 - State machines: luaphase.rs (component + system) [feature=lua], phase.rs (component + system, Rust fn-pointer equivalent)
@@ -969,3 +1007,6 @@ For features touching:
 39. WorldSignals.group_counts is NOT a field - group counts are derived in SignalSnapshot from integers with "group_count:" prefix
 40. Registered systems (SystemsStore) are entities that need Persistent component to survive scene transitions
 41. `lua` feature flag gates all Lua-specific code: add `#[cfg(feature = "lua")]` to any new code that depends on mlua/LuaRuntime. `default = ["lua"]` so builds without it require `--no-default-features`. Bevy system params cannot be conditionally compiled inline — use two separate function definitions under `#[cfg]`/`#[cfg(not)]` with a shared helper instead.
+42. `CameraFollowConfig` is inserted disabled by default; enable it and set `mode`/`lerp_speed` etc. from setup/scene-enter code. `CameraTarget { priority }` on the entity picks the follow target; ties broken by Entity id.
+43. `CollisionCallback` now takes `&mut GameCtx` (not a separate `CollisionCtx` — that type is removed). Rust collision callbacks have full access to all GameCtx queries/resources.
+44. `SetAnimation` EntityCmd (engine.entity_set_animation) now also updates `Sprite.tex_key` to the animation's texture, so sprite and animation stay in sync when switching animations.

@@ -297,6 +297,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_release_stuckto()` instead of `engine.release_stuckto()`
 - `engine.collision_entity_set_animation()` instead of `engine.entity_set_animation()`
 - `engine.collision_entity_restart_animation()` instead of `engine.entity_restart_animation()`
+- `engine.collision_entity_set_sprite_flip()` instead of `engine.entity_set_sprite_flip()`
 - `engine.collision_entity_set_rotation()` instead of `engine.entity_set_rotation()`
 - `engine.collision_entity_set_scale()` instead of `engine.entity_set_scale()`
 - `engine.collision_entity_insert_tween_position()` instead of `engine.entity_insert_tween_position()`
@@ -2565,6 +2566,21 @@ Restart current animation from frame 0.
 engine.entity_restart_animation(player_id)
 ```
 
+### `engine.entity_set_sprite_flip(entity_id, flip_h, flip_v)`
+
+Set sprite flipping on horizontal and vertical axes.
+
+**Parameters:**
+
+- `entity_id` - Entity with Sprite component
+- `flip_h` - Flip horizontally (boolean)
+- `flip_v` - Flip vertically (boolean)
+
+```lua
+engine.entity_set_sprite_flip(player_id, true, false)   -- Flip horizontally
+engine.entity_set_sprite_flip(player_id, false, false)   -- Reset to normal
+```
+
 ### Physics Commands
 
 The following commands manipulate the physics properties of entities with RigidBody components.
@@ -3489,6 +3505,23 @@ Set entity's scale during collision handling.
 function on_player_shrink_zone(ctx)
     local player_id = ctx.a.id
     engine.collision_entity_set_scale(player_id, 0.5, 0.5)
+end
+```
+
+#### `engine.collision_entity_set_sprite_flip(entity_id, flip_h, flip_v)`
+
+Set sprite flipping during collision handling.
+
+**Parameters:**
+
+- `entity_id` - Entity with Sprite component
+- `flip_h` - Flip horizontally (boolean)
+- `flip_v` - Flip vertically (boolean)
+
+```lua
+function on_player_mirror_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_sprite_flip(player_id, true, false)
 end
 ```
 

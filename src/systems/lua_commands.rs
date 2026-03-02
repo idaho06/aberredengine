@@ -686,6 +686,17 @@ pub fn process_entity_commands(
                     sprite.tex_key = anim_res.tex_key.clone();
                 }
             }
+            EntityCmd::SetSpriteFlip {
+                entity_id,
+                flip_h,
+                flip_v,
+            } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut sprite) = sprite_query.get_mut(entity) {
+                    sprite.flip_h = flip_h;
+                    sprite.flip_v = flip_v;
+                }
+            }
             EntityCmd::InsertLuaTimer {
                 entity_id,
                 duration,

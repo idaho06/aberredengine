@@ -4,6 +4,22 @@
 
 local M = {}
 
+-- ─── Helper functions (local) ─────────────────────────────────────────────────
+--- Updates the player's facing direction based on input.
+--- @param id number
+--- @param input InputSnapshot
+local function update_facing_direction(id, input)
+    if input.digital.left.pressed and not input.digital.right.pressed then
+        engine.entity_signal_clear_flag(id, "facing_right")
+        engine.entity_signal_set_flag(id, "facing_left")
+        engine.entity_set_sprite_flip(id, true, false)
+    elseif input.digital.right.pressed and not input.digital.left.pressed then
+        engine.entity_signal_clear_flag(id, "facing_left")
+        engine.entity_signal_set_flag(id, "facing_right")
+        engine.entity_set_sprite_flip(id, false, false)
+    end
+end
+
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
 --- Called each frame when sidescroller level01 scene is active.
@@ -50,8 +66,29 @@ end
 --- @param dt number Delta time in seconds
 local function player_walking_on_update(ctx, input, dt)
     if input.digital.left.pressed or input.digital.right.pressed then
+        update_facing_direction(ctx.id, input)
         -- Transition to running
         return "running"
+    end
+end
+
+--- Called when entering the idle phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+local function player_idle_on_enter(ctx, input)
+    engine.log_info("Player is idle.")
+    engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
+end
+
+--- Called each frame while in the idle phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+--- @param dt number Delta time in seconds
+local function player_idle_on_update(ctx, input, dt)
+    if input.digital.left.pressed or input.digital.right.pressed then
+        update_facing_direction(ctx.id, input)
+        -- Transition to walking
+        return "walking"
     end
 end
 
@@ -65,6 +102,8 @@ M._callbacks = {
     player_running_on_update = player_running_on_update,
     player_walking_on_enter = player_walking_on_enter,
     player_walking_on_update = player_walking_on_update,
+    player_idle_on_enter = player_idle_on_enter,
+    player_idle_on_update = player_idle_on_update,
 }
 
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -95,8 +134,13 @@ function M.spawn()
         :with_signal_flag("on_ground")
         :with_signal_flag("facing_right")
         :with_phase({
-            initial = "walking",
+            initial = "idle",
             phases = {
+                idle = {
+                    on_enter = "player_idle_on_enter",
+                    on_update = "player_idle_on_update"
+                    -- on_exit = "player_idle_on_exit"
+                },
                 running = {
                     on_enter = "player_running_on_enter",
                     on_update = "player_running_on_update"
@@ -109,6 +153,8 @@ function M.spawn()
                 }
             }
         })
+        :with_collider(20, 24, 10, 24)
+        :with_collider_offset(0, 0)
         :register_as("player")
         :build()
 

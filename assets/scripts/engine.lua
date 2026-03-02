@@ -595,6 +595,12 @@ function engine.collision_entity_set_shader(entity_id, key) end
 ---@param speed number
 function engine.collision_entity_set_speed(entity_id, speed) end
 
+---Set sprite flip on horizontal and vertical axes
+---@param entity_id integer
+---@param flip_h boolean
+---@param flip_v boolean
+function engine.collision_entity_set_sprite_flip(entity_id, flip_h, flip_v) end
+
 ---Set entity tint color (RGBA 0-255)
 ---@param entity_id integer
 ---@param r integer
@@ -863,6 +869,12 @@ function engine.entity_set_shader(entity_id, key) end
 ---@param entity_id integer
 ---@param speed number
 function engine.entity_set_speed(entity_id, speed) end
+
+---Set sprite flip on horizontal and vertical axes
+---@param entity_id integer
+---@param flip_h boolean
+---@param flip_v boolean
+function engine.entity_set_sprite_flip(entity_id, flip_h, flip_v) end
 
 ---Set entity tint color (RGBA 0-255)
 ---@param entity_id integer

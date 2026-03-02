@@ -192,6 +192,22 @@ local function load_sidescroller()
         sprite_size * 0, sprite_size * 10, sprite_size, 0, 3, 10, false)
     engine.register_animation("sidescroller-char_red_walk", "sidescroller-char_red_2_sheet",
         sprite_size * 0, sprite_size * 0, sprite_size, sprite_size, 8 + 2, 10, true) -- 8 frames in the first row, then 2 more frames in the second row for the full walk cycle
+    engine.register_animation("sidescroller-char_red_slide_start", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 2, sprite_size, 0, 3, 10, false)
+    engine.register_animation("sidescroller-char_red_slide_loop", "sidescroller-char_red_2_sheet",
+        sprite_size * 3, sprite_size * 2, sprite_size, 0, 3, 10, true)
+    engine.register_animation("sidescroller-char_red_slide_end", "sidescroller-char_red_2_sheet",
+        sprite_size * 6, sprite_size * 2, sprite_size, 0, 2, 10, false)
+    engine.register_animation("sidescroller-char_red_slide", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 2, sprite_size, 0, 8, 10, false)
+    engine.register_animation("sidescroller-char_red_wall_slide", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 3, sprite_size, 0, 3, 10, true)
+    engine.register_animation("sidescroller-char_red_wall", "sidescroller-char_red_2_sheet",
+        sprite_size * 3, sprite_size * 3, sprite_size, 0, 1, 10, false)
+    engine.register_animation("sidescroller-char_red_attack_critical", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 4, sprite_size, 0, 8, 10, false)
+    engine.register_animation("sidescroller-char_red_ladder", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 5, sprite_size, sprite_size, 8 + 2, 10, false)
 end
 
 --- Called during the Setup game state to load all assets.
