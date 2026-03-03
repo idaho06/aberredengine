@@ -11,6 +11,7 @@
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
+//! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
 //! - [`fontstore`] – loaded fonts keyed by string IDs
 //! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
@@ -31,6 +32,7 @@ pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
 pub mod debugmode;
+pub mod debugoverlayconfig;
 pub mod fontstore;
 pub mod fullscreen;
 pub mod gameconfig;

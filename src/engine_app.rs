@@ -48,6 +48,7 @@ use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::camerafollowconfig::CameraFollowConfig;
+use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
@@ -327,6 +328,7 @@ impl EngineBuilder {
             .size(window_width as i32, window_height as i32)
             .resizable()
             .title(&window_title)
+            .imgui_theme(raylib::imgui::ImGuiTheme::Dark)
             .build();
         rl.set_target_fps(config.target_fps);
         rl.set_exit_key(None);
@@ -363,6 +365,7 @@ impl EngineBuilder {
         world.insert_non_send_resource(ShaderStore::new());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());
+        world.insert_resource(DebugOverlayConfig::default());
 
         // --------------- Lua runtime (optional) ---------------
         #[cfg(feature = "lua")]

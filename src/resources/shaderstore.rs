@@ -56,6 +56,29 @@ impl ShaderStore {
     pub fn contains(&self, id: &str) -> bool {
         self.shaders.contains_key(id)
     }
+
+    /// Returns the number of loaded shaders.
+    pub fn len(&self) -> usize {
+        self.shaders.len()
+    }
+
+    /// Returns `true` if no shaders are loaded.
+    pub fn is_empty(&self) -> bool {
+        self.shaders.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_store_is_empty() {
+        let store = ShaderStore::new();
+        assert!(store.is_empty());
+        assert_eq!(store.len(), 0);
+        assert!(!store.contains("any"));
+    }
 }
 
 impl Default for ShaderStore {

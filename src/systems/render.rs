@@ -25,9 +25,13 @@ use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
+use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::input::InputState;
+use crate::resources::scenemanager::SceneManager;
 use crate::resources::uniformvalue::UniformValue;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
@@ -35,8 +39,14 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use log::{error, warn};
+
+// Explicit re-exports from the imgui crate to avoid ambiguous path resolution
+// (raylib also has a `raylib::imgui` module that could shadow the extern crate).
+use ::imgui::{Condition as ImguiCond, TreeNodeFlags as ImguiTreeNodeFlags};
+type ImguiUi = ::imgui::Ui;
 
 type MapSpriteQueryData = (
     Entity,
@@ -345,6 +355,16 @@ pub struct RenderQueries<'w, 's> {
     >,
 }
 
+/// Extra resources needed for the imgui debug panels.
+#[derive(SystemParam)]
+pub struct DebugResources<'w> {
+    pub world_signals: Res<'w, WorldSignals>,
+    pub input_state: Res<'w, InputState>,
+    pub camera_follow: Option<Res<'w, CameraFollowConfig>>,
+    pub scene_manager: Option<Res<'w, SceneManager>>,
+    pub overlay_config: ResMut<'w, DebugOverlayConfig>,
+}
+
 /// Tracks which render buffer is the current source during multi-pass
 /// post-processing (ping-pong pattern).
 #[derive(Clone, Copy)]
@@ -362,12 +382,16 @@ enum SourceBuffer {
 /// - Uses `Camera2D` for world rendering, then overlays UI/debug in screen space.
 /// - When `DebugMode` is present, draws additional information (entity counts,
 ///   camera parameters, and optional collider boxes/signals).
+/// - When `DebugMode` is present, draws additional information (entity counts,
+///   camera parameters, and optional collider boxes/signals).
+#[allow(clippy::too_many_arguments)]
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut shader_store: NonSendMut<ShaderStore>,
     res: RenderResources,
     queries: RenderQueries,
+    mut debug_res: DebugResources,
     mut sprite_buffer: Local<Vec<SpriteBufferItem>>,
     mut text_buffer: Local<Vec<TextBufferItem>>,
 ) {
@@ -599,7 +623,7 @@ pub fn render_system(
                         .map(|t| t.multiply(text.color))
                         .unwrap_or(text.color);
                     d2.draw_text_ex(font, &text.text, render_pos, text.font_size, 1.0, final_color);
-                    if maybe_debug.is_some() {
+                    if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
                         d2.draw_rectangle_lines(
                             render_pos.x as i32,
                             render_pos.y as i32,
@@ -612,63 +636,71 @@ pub fn render_system(
             }
 
             if maybe_debug.is_some() {
-                for (collider, position, maybe_gt) in query_colliders.iter() {
-                    let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
-                    let (x, y, w, h) = collider.get_aabb(world_pos);
-                    d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
+                if debug_res.overlay_config.show_collider_boxes {
+                    for (collider, position, maybe_gt) in query_colliders.iter() {
+                        let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
+                        let (x, y, w, h) = collider.get_aabb(world_pos);
+                        d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
+                    }
                 }
-                for (position, maybe_signals, maybe_gt) in query_positions.iter() {
-                    let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
-                    d2.draw_line(
-                        world_pos.x as i32 - 5,
-                        world_pos.y as i32,
-                        world_pos.x as i32 + 5,
-                        world_pos.y as i32,
-                        Color::GREEN,
-                    );
-                    d2.draw_line(
-                        world_pos.x as i32,
-                        world_pos.y as i32 - 5,
-                        world_pos.x as i32,
-                        world_pos.y as i32 + 5,
-                        Color::GREEN,
-                    );
-                    if let Some(signals) = maybe_signals {
-                        let mut y_offset = 10;
-                        let font_size = 10;
-                        let font_color = Color::YELLOW;
-                        for flag in signals.get_flags() {
-                            let text = format!("Flag: {}", flag);
-                            d2.draw_text(
-                                &text,
-                                world_pos.x as i32 + 10,
-                                world_pos.y as i32 + y_offset,
-                                font_size,
-                                font_color,
+                if debug_res.overlay_config.show_position_crosshairs || debug_res.overlay_config.show_entity_signals {
+                    for (position, maybe_signals, maybe_gt) in query_positions.iter() {
+                        let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
+                        if debug_res.overlay_config.show_position_crosshairs {
+                            d2.draw_line(
+                                world_pos.x as i32 - 5,
+                                world_pos.y as i32,
+                                world_pos.x as i32 + 5,
+                                world_pos.y as i32,
+                                Color::GREEN,
                             );
-                            y_offset += 12;
+                            d2.draw_line(
+                                world_pos.x as i32,
+                                world_pos.y as i32 - 5,
+                                world_pos.x as i32,
+                                world_pos.y as i32 + 5,
+                                Color::GREEN,
+                            );
                         }
-                        for (key, value) in signals.get_scalars() {
-                            let text = format!("Scalar: {} = {:.2}", key, value);
-                            d2.draw_text(
-                                &text,
-                                world_pos.x as i32 + 10,
-                                world_pos.y as i32 + y_offset,
-                                font_size,
-                                font_color,
-                            );
-                            y_offset += 12;
-                        }
-                        for (key, value) in signals.get_integers() {
-                            let text = format!("Integer: {} = {}", key, value);
-                            d2.draw_text(
-                                &text,
-                                world_pos.x as i32 + 10,
-                                world_pos.y as i32 + y_offset,
-                                font_size,
-                                font_color,
-                            );
-                            y_offset += 12;
+                        if debug_res.overlay_config.show_entity_signals
+                            && let Some(signals) = maybe_signals
+                        {
+                                let mut y_offset = 10;
+                                let font_size = 10;
+                                let font_color = Color::YELLOW;
+                                for flag in signals.get_flags() {
+                                    let text = format!("Flag: {}", flag);
+                                    d2.draw_text(
+                                        &text,
+                                        world_pos.x as i32 + 10,
+                                        world_pos.y as i32 + y_offset,
+                                        font_size,
+                                        font_color,
+                                    );
+                                    y_offset += 12;
+                                }
+                                for (key, value) in signals.get_scalars() {
+                                    let text = format!("Scalar: {} = {:.2}", key, value);
+                                    d2.draw_text(
+                                        &text,
+                                        world_pos.x as i32 + 10,
+                                        world_pos.y as i32 + y_offset,
+                                        font_size,
+                                        font_color,
+                                    );
+                                    y_offset += 12;
+                                }
+                                for (key, value) in signals.get_integers() {
+                                    let text = format!("Integer: {} = {}", key, value);
+                                    d2.draw_text(
+                                        &text,
+                                        world_pos.x as i32 + 10,
+                                        world_pos.y as i32 + y_offset,
+                                        font_size,
+                                        font_color,
+                                    );
+                                    y_offset += 12;
+                                }
                         }
                     }
                 }
@@ -677,47 +709,94 @@ pub fn render_system(
 
         // Draw in screen coordinates (UI layer) - still on the render target
         let debug = maybe_debug.is_some();
-        draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug);
-        draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug);
-
-        if debug {
-            // Compute values that require RaylibHandle (via Deref) before passing to draw fn
-            let fps = d.get_fps();
-            let window_mouse_pos = d.get_mouse_position();
-            let game_mouse_pos = window_size.window_to_game_pos(
-                window_mouse_pos,
-                screensize.w as u32,
-                screensize.h as u32,
-            );
-            let mouse_world = d.get_screen_to_world2D(game_mouse_pos, camera.0);
-
-            draw_debug_hud(
-                &mut d,
-                screensize,
-                camera,
-                textures,
-                fonts,
-                fps,
-                query_map_sprites.iter().count(),
-                query_colliders.iter().count(),
-                query_positions.iter().count(),
-                game_mouse_pos,
-                mouse_world,
-            );
-        }
+        let debug_sprites = debug && debug_res.overlay_config.show_sprite_bounds;
+        let debug_texts = debug && debug_res.overlay_config.show_text_bounds;
+        draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug_sprites);
+        draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug_texts);
     } // End texture mode - render target is complete
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
-    apply_postprocess_passes(
-        rl,
-        th,
-        &mut render_target,
-        &mut shader_store,
-        &res.post_process,
-        &res.world_time,
-        &res.screensize,
-        &res.window_size,
-    );
+    let debug_active = maybe_debug.is_some();
+    if debug_active {
+        // Pre-compute values accessible from RaylibHandle before begin_drawing
+        let fps = rl.get_fps();
+        let window_mouse_pos = rl.get_mouse_position();
+        let game_mouse_pos = window_size.window_to_game_pos(
+            window_mouse_pos,
+            screensize.w as u32,
+            screensize.h as u32,
+        );
+        let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
+
+        // ECS entity counts
+        let sprite_count = queries.map_sprites.iter().count();
+        let collider_count = queries.colliders.iter().count();
+        let position_count = queries.positions.iter().count();
+        let rigidbody_count = queries.rigidbodies.iter().count();
+        let screen_sprite_count = queries.screen_sprites.iter().count();
+        let screen_text_count = queries.screen_texts.iter().count();
+        let shader_count = shader_store.len();
+
+        // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
+        let overlay_config = &mut *debug_res.overlay_config;
+        let world_signals = &*debug_res.world_signals;
+        let input_state = &*debug_res.input_state;
+        let camera_follow = debug_res.camera_follow.as_deref();
+        let scene_manager = debug_res.scene_manager.as_deref();
+        let world_time = &*res.world_time;
+        let config = &*res.config;
+
+        let closure = move |d: &RaylibDrawHandle<'_>| {
+            draw_imgui_debug(
+                d,
+                overlay_config,
+                world_signals,
+                input_state,
+                camera,
+                camera_follow,
+                scene_manager,
+                textures,
+                fonts,
+                shader_count,
+                screensize,
+                window_size,
+                world_time,
+                config,
+                fps,
+                sprite_count,
+                collider_count,
+                position_count,
+                rigidbody_count,
+                screen_sprite_count,
+                screen_text_count,
+                game_mouse_pos,
+                mouse_world,
+            );
+        };
+        apply_postprocess_passes(
+            rl,
+            th,
+            &mut render_target,
+            &mut shader_store,
+            &res.post_process,
+            world_time,
+            &res.screensize,
+            &res.window_size,
+            Some(closure),
+        );
+    } else {
+        apply_postprocess_passes(
+            rl,
+            th,
+            &mut render_target,
+            &mut shader_store,
+            &res.post_process,
+            &res.world_time,
+            &res.screensize,
+            &res.window_size,
+            None::<fn(&RaylibDrawHandle<'_>)>,
+        );
+    }
 }
 
 /// Draw screen-space sprites (UI layer).
@@ -814,50 +893,283 @@ fn draw_screen_texts(
     }
 }
 
-/// Draw the debug HUD overlay (FPS, entity counts, camera info, mouse position).
+/// Orchestrates all imgui debug panels drawn at window resolution over the game image.
 #[allow(clippy::too_many_arguments)]
-fn draw_debug_hud(
-    d: &mut impl RaylibDraw,
-    screensize: &ScreenSize,
+fn draw_imgui_debug(
+    d: &RaylibDrawHandle<'_>,
+    overlay_config: &mut DebugOverlayConfig,
+    world_signals: &WorldSignals,
+    input_state: &InputState,
     camera: &Camera2DRes,
+    camera_follow: Option<&CameraFollowConfig>,
+    scene_manager: Option<&SceneManager>,
     textures: &TextureStore,
     fonts: &FontStore,
+    shader_count: usize,
+    screensize: &ScreenSize,
+    window_size: &WindowSize,
+    world_time: &WorldTime,
+    config: &GameConfig,
     fps: u32,
     sprite_count: usize,
     collider_count: usize,
     position_count: usize,
+    rigidbody_count: usize,
+    screen_sprite_count: usize,
+    screen_text_count: usize,
     game_mouse_pos: Vector2,
     mouse_world: Vector2,
 ) {
-    let debug_text = "DEBUG MODE (press F11 to toggle)";
-
-    let text = format!("{} | FPS: {}", debug_text, fps);
-    d.draw_text(&text, 10, 10, 10, Color::GREENYELLOW);
-
-    let entity_count = sprite_count + collider_count + position_count;
-    let text = format!("Map Sprites+colliders+positions: {}", entity_count);
-    d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
-
-    let textures_count = textures.map.len();
-    let text = format!("Loaded Textures: {}", textures_count);
-    d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW);
-
-    let fonts_count = fonts.len();
-    let text = format!("Loaded Fonts: {}", fonts_count);
-    d.draw_text(&text, 10, 70, 10, Color::GREENYELLOW);
-
-    let cam = &camera.0;
-    let cam_text = format!(
-        "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
-        cam.target.x, cam.target.y, cam.zoom
+    use raylib::imgui::RayImGUITrait;
+    let Some(ui) = d.begin_imgui() else { return };
+    draw_performance_panel(&ui, fps, world_time);
+    draw_ecs_panel(
+        &ui,
+        sprite_count,
+        collider_count,
+        position_count,
+        rigidbody_count,
+        screen_sprite_count,
+        screen_text_count,
+        textures.map.len(),
+        fonts.len(),
+        shader_count,
     );
-    d.draw_text(&cam_text, 10, screensize.h - 30, 10, Color::GREENYELLOW);
-
-    let mouse_text = format!(
-        "Mouse game: ({:.1}, {:.1}) World: ({:.1}, {:.1})",
-        game_mouse_pos.x, game_mouse_pos.y, mouse_world.x, mouse_world.y
+    draw_camera_panel(&ui, camera, camera_follow);
+    draw_world_signals_panel(&ui, world_signals);
+    draw_input_panel(&ui, input_state);
+    draw_overlays_panel(&ui, overlay_config);
+    draw_mouse_config_panel(
+        &ui,
+        game_mouse_pos,
+        mouse_world,
+        screensize,
+        window_size,
+        config,
+        scene_manager,
     );
-    d.draw_text(&mouse_text, 10, 90, 10, Color::GREENYELLOW);
+}
+
+fn draw_performance_panel(ui: &ImguiUi, fps: u32, world_time: &WorldTime) {
+    ui.window("Performance")
+        .collapsed(false, ImguiCond::FirstUseEver)
+        .build(|| {
+            ui.text(format!("FPS: {}", fps));
+            ui.text(format!("Frame time: {:.2} ms", world_time.delta * 1000.0));
+            ui.text(format!("Elapsed: {:.2} s", world_time.elapsed));
+            ui.text(format!("Frame: {}", world_time.frame_count));
+            ui.text(format!("Time scale: {:.2}x", world_time.time_scale));
+            ui.separator();
+            ui.text("Press F11 to toggle debug");
+        });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_ecs_panel(
+    ui: &ImguiUi,
+    sprite_count: usize,
+    collider_count: usize,
+    position_count: usize,
+    rigidbody_count: usize,
+    screen_sprite_count: usize,
+    screen_text_count: usize,
+    texture_count: usize,
+    font_count: usize,
+    shader_count: usize,
+) {
+    ui.window("ECS")
+        .collapsed(true, ImguiCond::FirstUseEver)
+        .build(|| {
+            if ui.collapsing_header("Entities", ImguiTreeNodeFlags::empty()) {
+                ui.text(format!("  Map sprites:    {}", sprite_count));
+                ui.text(format!("  Colliders:      {}", collider_count));
+                ui.text(format!("  Positions:      {}", position_count));
+                ui.text(format!("  Rigidbodies:    {}", rigidbody_count));
+                ui.text(format!("  Screen sprites: {}", screen_sprite_count));
+                ui.text(format!("  Screen texts:   {}", screen_text_count));
+            }
+            if ui.collapsing_header("Assets", ImguiTreeNodeFlags::empty()) {
+                ui.text(format!("  Textures: {}", texture_count));
+                ui.text(format!("  Fonts:    {}", font_count));
+                ui.text(format!("  Shaders:  {}", shader_count));
+            }
+        });
+}
+
+fn draw_camera_panel(
+    ui: &ImguiUi,
+    camera: &Camera2DRes,
+    camera_follow: Option<&CameraFollowConfig>,
+) {
+    ui.window("Camera")
+        .collapsed(true, ImguiCond::FirstUseEver)
+        .build(|| {
+            let cam = &camera.0;
+            ui.text(format!("Target:   ({:.1}, {:.1})", cam.target.x, cam.target.y));
+            ui.text(format!("Offset:   ({:.1}, {:.1})", cam.offset.x, cam.offset.y));
+            ui.text(format!("Rotation: {:.2}°", cam.rotation));
+            ui.text(format!("Zoom:     {:.3}", cam.zoom));
+            if let Some(cf) = camera_follow {
+                ui.separator();
+                ui.text(format!("Enabled:    {}", cf.enabled));
+                ui.text(format!("Mode:       {:?}", cf.mode));
+                ui.text(format!("Lerp speed: {:.2}", cf.lerp_speed));
+                ui.text(format!("Spring K:   {:.2}", cf.spring_stiffness));
+                ui.text(format!("Spring D:   {:.2}", cf.spring_damping));
+            }
+        });
+}
+
+fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
+    ui.window("World Signals")
+        .collapsed(true, ImguiCond::FirstUseEver)
+        .build(|| {
+            if ui.collapsing_header(
+                format!("Flags ({})", world_signals.flags.len()),
+                ImguiTreeNodeFlags::empty(),
+            ) {
+                let mut flags: Vec<&str> = world_signals.flags.iter().map(|s| s.as_str()).collect();
+                flags.sort_unstable();
+                for flag in flags {
+                    ui.text(format!("  {}", flag));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Scalars ({})", world_signals.scalars.len()),
+                ImguiTreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, f32)> = world_signals
+                    .scalars
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), *v))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, val) in entries {
+                    ui.text(format!("  {} = {:.4}", key, val));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Integers ({})", world_signals.integers.len()),
+                ImguiTreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, i32)> = world_signals
+                    .integers
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), *v))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, val) in entries {
+                    ui.text(format!("  {} = {}", key, val));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Strings ({})", world_signals.strings.len()),
+                ImguiTreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, &str)> = world_signals
+                    .strings
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, val) in entries {
+                    ui.text(format!("  {} = {:?}", key, val));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Entities ({})", world_signals.entities.len()),
+                ImguiTreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, u64)> = world_signals
+                    .entities
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.to_bits()))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, bits) in entries {
+                    ui.text(format!("  {} = {:x}", key, bits));
+                }
+            }
+        });
+}
+
+fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
+    ui.window("Input")
+        .collapsed(true, ImguiCond::FirstUseEver)
+        .build(|| {
+            let inputs: &[(&str, &crate::resources::input::BoolState)] = &[
+                ("Up (WASD)",        &input_state.maindirection_up),
+                ("Left (WASD)",      &input_state.maindirection_left),
+                ("Down (WASD)",      &input_state.maindirection_down),
+                ("Right (WASD)",     &input_state.maindirection_right),
+                ("Up (Arrow)",       &input_state.secondarydirection_up),
+                ("Down (Arrow)",     &input_state.secondarydirection_down),
+                ("Left (Arrow)",     &input_state.secondarydirection_left),
+                ("Right (Arrow)",    &input_state.secondarydirection_right),
+                ("Back (Esc)",       &input_state.action_back),
+                ("Action 1 (Space)", &input_state.action_1),
+                ("Action 2 (Enter)", &input_state.action_2),
+                ("Debug (F11)",      &input_state.mode_debug),
+                ("Fullscr (F10)",    &input_state.fullscreen_toggle),
+                ("Special (F12)",    &input_state.action_special),
+            ];
+            for (name, state) in inputs {
+                let active = if state.active { "●" } else { "○" };
+                let jp = if state.just_pressed { " ↓" } else { "" };
+                let jr = if state.just_released { " ↑" } else { "" };
+                ui.text(format!("{} {:16} {}{}", active, name, jp, jr));
+            }
+        });
+}
+
+fn draw_overlays_panel(ui: &ImguiUi, overlay_config: &mut DebugOverlayConfig) {
+    ui.window("Overlays")
+        .collapsed(true, ImguiCond::FirstUseEver)
+        .build(|| {
+            ui.checkbox("Collider boxes",       &mut overlay_config.show_collider_boxes);
+            ui.checkbox("Position crosshairs",  &mut overlay_config.show_position_crosshairs);
+            ui.checkbox("Entity signals",       &mut overlay_config.show_entity_signals);
+            ui.checkbox("Text bounds",          &mut overlay_config.show_text_bounds);
+            ui.checkbox("Sprite bounds",        &mut overlay_config.show_sprite_bounds);
+        });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_mouse_config_panel(
+    ui: &ImguiUi,
+    game_mouse_pos: Vector2,
+    mouse_world: Vector2,
+    screensize: &ScreenSize,
+    window_size: &WindowSize,
+    config: &GameConfig,
+    scene_manager: Option<&SceneManager>,
+) {
+    ui.window("Mouse & Config")
+        .collapsed(true, ImguiCond::FirstUseEver)
+        .build(|| {
+            ui.text(format!(
+                "Mouse game:  ({:.1}, {:.1})",
+                game_mouse_pos.x, game_mouse_pos.y
+            ));
+            ui.text(format!(
+                "Mouse world: ({:.1}, {:.1})",
+                mouse_world.x, mouse_world.y
+            ));
+            ui.separator();
+            ui.text(format!("Render size: {}x{}", screensize.w, screensize.h));
+            ui.text(format!("Window size: {}x{}", window_size.w, window_size.h));
+            ui.separator();
+            ui.text(format!("FPS target: {}", config.target_fps));
+            ui.text(format!("VSync: {}", config.vsync));
+            if let Some(sm) = scene_manager {
+                ui.separator();
+                if let Some(ref current) = sm.active_scene {
+                    ui.text(format!("Scene: {}", current));
+                } else {
+                    ui.text("Scene: (none)");
+                }
+            }
+        });
 }
 
 /// Apply post-processing shader passes and blit the final image to the window.
@@ -865,8 +1177,11 @@ fn draw_debug_hud(
 /// Handles three cases: no shaders (direct blit), single shader, and multi-pass
 /// ping-pong. Always guarantees a frame is presented even if shaders are missing
 /// or invalid.
+///
+/// `post_blit` is an optional callback invoked inside `begin_drawing()` after
+/// the final blit, used to draw imgui overlays at window resolution.
 #[allow(clippy::too_many_arguments)]
-fn apply_postprocess_passes(
+fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
     rl: &mut RaylibHandle,
     th: &RaylibThread,
     render_target: &mut RenderTarget,
@@ -875,6 +1190,7 @@ fn apply_postprocess_passes(
     world_time: &WorldTime,
     screensize: &ScreenSize,
     window_size: &WindowSize,
+    mut post_blit: Option<F>,
 ) {
     // Source rectangle (the entire render target, Y-flipped for OpenGL)
     let src = render_target.source_rect();
@@ -905,6 +1221,9 @@ fn apply_postprocess_passes(
             0.0,
             Color::WHITE,
         );
+        if let Some(f) = post_blit.take() {
+            f(&d);
+        }
     } else if shader_chain.len() == 1 {
         // Single shader - draw directly to window (existing behavior)
         let shader_key = &shader_chain[0];
@@ -966,6 +1285,9 @@ fn apply_postprocess_passes(
                 Color::WHITE,
             );
         }
+        if let Some(f) = post_blit.take() {
+            f(&d);
+        }
     } else {
         // Multi-pass: ensure ping-pong buffers exist
         if let Err(e) = render_target.ensure_ping_pong_buffers(rl, th) {
@@ -981,6 +1303,9 @@ fn apply_postprocess_passes(
                 0.0,
                 Color::WHITE,
             );
+            if let Some(f) = post_blit.take() {
+                f(&d);
+            }
             return;
         }
 
@@ -1066,6 +1391,9 @@ fn apply_postprocess_passes(
                         Color::WHITE,
                     );
                 }
+                if let Some(f) = post_blit.take() {
+                    f(&d);
+                }
                 final_blit_done = true;
             } else {
                 // Draw to intermediate buffer
@@ -1143,6 +1471,9 @@ fn apply_postprocess_passes(
                 0.0,
                 Color::WHITE,
             );
+            if let Some(f) = post_blit.take() {
+                f(&d);
+            }
         }
     }
 }
