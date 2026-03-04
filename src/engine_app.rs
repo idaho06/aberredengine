@@ -54,6 +54,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::scenemanager::SceneManager;
@@ -65,10 +66,10 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
-use crate::systems::camera_follow::camera_follow_system;
 use crate::systems::audio::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
+use crate::systems::camera_follow::camera_follow_system;
 use crate::systems::collision_detector::collision_detector;
 use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gameconfig::apply_gameconfig_changes;
@@ -355,6 +356,7 @@ impl EngineBuilder {
         });
         world.insert_resource(config);
         world.insert_resource(InputState::default());
+        world.insert_resource(InputBindings::default());
         world.insert_non_send_resource(render_target);
 
         setup_audio(&mut world);
@@ -724,8 +726,8 @@ mod tests {
 
     // --- SceneManager builder tests ---
 
-    use crate::systems::scene_dispatch::SceneDescriptor;
     use crate::systems::GameCtx;
+    use crate::systems::scene_dispatch::SceneDescriptor;
 
     fn dummy_scene_enter(_ctx: &mut GameCtx) {}
     fn dummy_scene_update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}

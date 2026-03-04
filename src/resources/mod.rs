@@ -39,13 +39,14 @@ pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
 pub mod input;
+pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
 pub mod postprocessshader;
 pub mod rendertarget;
+pub mod scenemanager;
 pub mod screensize;
 pub mod shaderstore;
-pub mod scenemanager;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod tilemapstore;

@@ -46,5 +46,5 @@ pub use context::{
 };
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
-pub use runtime::LuaRuntime;
+pub use runtime::{LuaRuntime, action_from_str};
 pub use spawn_data::*;

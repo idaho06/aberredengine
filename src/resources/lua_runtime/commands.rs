@@ -386,3 +386,16 @@ pub enum GameConfigCmd {
     /// Set background clear color
     BackgroundColor { r: u8, g: u8, b: u8 },
 }
+
+/// Commands for runtime input rebinding from Lua.
+#[derive(Debug, Clone)]
+pub enum InputCmd {
+    /// Rebind a logical action to a single new key (replaces all existing bindings).
+    ///
+    /// String-based to keep Lua decoupled from Rust key types.
+    /// `action` is a canonical action name like `"action_1"`, `"main_up"`, etc.
+    /// `key` is a canonical key name like `"z"`, `"space"`, `"f1"`.
+    Rebind { action: String, key: String },
+    /// Add an extra binding for an action without removing the existing ones.
+    AddBinding { action: String, key: String },
+}

@@ -89,6 +89,10 @@ pub(super) struct LuaAppData {
     camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
     /// Cached game configuration snapshot (read-only for Lua)
     gameconfig_snapshot: RefCell<GameConfigSnapshot>,
+    /// Input rebinding command queue
+    input_commands: RefCell<Vec<InputCmd>>,
+    /// Cached input bindings snapshot (read-only for Lua: action_name → key_name)
+    bindings_snapshot: RefCell<std::collections::HashMap<String, String>>,
 }
 
 /// Registry keys for pooled collision context tables.
@@ -180,6 +184,52 @@ pub struct LuaRuntime {
     collision_ctx_pool: Option<CollisionCtxPool>,
     /// Pooled entity context tables for reuse across phase/timer callbacks.
     entity_ctx_pool: Option<EntityCtxPool>,
+}
+
+/// Converts an [`InputAction`] to its canonical Lua-facing string name.
+///
+/// These strings are what Lua passes to `engine.rebind_action()` and
+/// `engine.get_binding()`.
+fn action_to_str(action: crate::events::input::InputAction) -> &'static str {
+    use crate::events::input::InputAction;
+    match action {
+        InputAction::MainDirectionUp => "main_up",
+        InputAction::MainDirectionDown => "main_down",
+        InputAction::MainDirectionLeft => "main_left",
+        InputAction::MainDirectionRight => "main_right",
+        InputAction::SecondaryDirectionUp => "secondary_up",
+        InputAction::SecondaryDirectionDown => "secondary_down",
+        InputAction::SecondaryDirectionLeft => "secondary_left",
+        InputAction::SecondaryDirectionRight => "secondary_right",
+        InputAction::Back => "back",
+        InputAction::Action1 => "action_1",
+        InputAction::Action2 => "action_2",
+        InputAction::Special => "special",
+        InputAction::ToggleDebug => "toggle_debug",
+        InputAction::ToggleFullscreen => "toggle_fullscreen",
+    }
+}
+
+/// Converts a canonical Lua action name string to an [`InputAction`].
+pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
+    use crate::events::input::InputAction;
+    match s {
+        "main_up" => Some(InputAction::MainDirectionUp),
+        "main_down" => Some(InputAction::MainDirectionDown),
+        "main_left" => Some(InputAction::MainDirectionLeft),
+        "main_right" => Some(InputAction::MainDirectionRight),
+        "secondary_up" => Some(InputAction::SecondaryDirectionUp),
+        "secondary_down" => Some(InputAction::SecondaryDirectionDown),
+        "secondary_left" => Some(InputAction::SecondaryDirectionLeft),
+        "secondary_right" => Some(InputAction::SecondaryDirectionRight),
+        "back" => Some(InputAction::Back),
+        "action_1" => Some(InputAction::Action1),
+        "action_2" => Some(InputAction::Action2),
+        "special" => Some(InputAction::Special),
+        "toggle_debug" => Some(InputAction::ToggleDebug),
+        "toggle_fullscreen" => Some(InputAction::ToggleFullscreen),
+        _ => None,
+    }
 }
 
 /// Pushes function metadata to `engine.__meta.functions[name]`.
@@ -530,6 +580,8 @@ impl LuaRuntime {
             gameconfig_commands: RefCell::new(Vec::new()),
             camera_follow_commands: RefCell::new(Vec::new()),
             gameconfig_snapshot: RefCell::new(GameConfigSnapshot::default()),
+            input_commands: RefCell::new(Vec::new()),
+            bindings_snapshot: RefCell::new(std::collections::HashMap::new()),
         });
 
         // Create collision context pool for table reuse
@@ -558,6 +610,7 @@ impl LuaRuntime {
         runtime.register_animation_api()?;
         runtime.register_render_api()?;
         runtime.register_gameconfig_api()?;
+        runtime.register_input_api()?;
         runtime.register_builder_meta()?;
         runtime.register_types_meta()?;
         runtime.register_enums_meta()?;
@@ -1208,11 +1261,9 @@ impl LuaRuntime {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                data.signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::SetFlag {
-                        key: "quit_game".into(),
-                    });
+                data.signal_commands.borrow_mut().push(SignalCmd::SetFlag {
+                    key: "quit_game".into(),
+                });
                 Ok(())
             })?,
         )?;
@@ -1453,8 +1504,11 @@ impl LuaRuntime {
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_enable", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_enable",
+            camera_follow_commands,
             |enabled| bool,
             CameraFollowCmd::Enable { enabled },
             desc = "Enable or disable the camera follow system",
@@ -1462,8 +1516,11 @@ impl LuaRuntime {
             params = [("enabled", "boolean")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_mode", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_mode",
+            camera_follow_commands,
             |mode| String,
             CameraFollowCmd::SetMode { mode },
             desc = "Set camera follow mode (\"instant\", \"lerp\", \"smooth_damp\")",
@@ -1471,8 +1528,11 @@ impl LuaRuntime {
             params = [("mode", "string")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_deadzone", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_deadzone",
+            camera_follow_commands,
             |(half_w, half_h)| (f32, f32),
             CameraFollowCmd::SetDeadzone { half_w, half_h },
             desc = "Set camera follow mode to deadzone with given half-dimensions",
@@ -1480,8 +1540,11 @@ impl LuaRuntime {
             params = [("half_w", "number"), ("half_h", "number")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_easing", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_easing",
+            camera_follow_commands,
             |easing| String,
             CameraFollowCmd::SetEasing { easing },
             desc = "Set camera follow easing curve (\"linear\", \"ease_out\", \"ease_in\", \"ease_in_out\")",
@@ -1489,8 +1552,11 @@ impl LuaRuntime {
             params = [("easing", "string")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_speed", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_speed",
+            camera_follow_commands,
             |speed| f32,
             CameraFollowCmd::SetSpeed { speed },
             desc = "Set camera follow lerp speed",
@@ -1498,8 +1564,11 @@ impl LuaRuntime {
             params = [("speed", "number")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_spring", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_spring",
+            camera_follow_commands,
             |(stiffness, damping)| (f32, f32),
             CameraFollowCmd::SetSpring { stiffness, damping },
             desc = "Set camera follow spring stiffness and damping",
@@ -1507,8 +1576,11 @@ impl LuaRuntime {
             params = [("stiffness", "number"), ("damping", "number")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_offset", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_offset",
+            camera_follow_commands,
             |(x, y)| (f32, f32),
             CameraFollowCmd::SetOffset { x, y },
             desc = "Set camera follow offset from target position",
@@ -1516,17 +1588,28 @@ impl LuaRuntime {
             params = [("x", "number"), ("y", "number")]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_set_bounds", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_bounds",
+            camera_follow_commands,
             |(x, y, w, h)| (f32, f32, f32, f32),
             CameraFollowCmd::SetBounds { x, y, w, h },
             desc = "Set camera follow world-space bounds (x, y, width, height)",
             cat = "camera",
-            params = [("x", "number"), ("y", "number"), ("w", "number"), ("h", "number")]
+            params = [
+                ("x", "number"),
+                ("y", "number"),
+                ("w", "number"),
+                ("h", "number")
+            ]
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_clear_bounds", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_clear_bounds",
+            camera_follow_commands,
             |()| (),
             CameraFollowCmd::ClearBounds,
             desc = "Clear camera follow bounds",
@@ -1534,8 +1617,11 @@ impl LuaRuntime {
             params = []
         );
         register_cmd!(
-            engine, self.lua, meta_fns,
-            "camera_follow_reset_velocity", camera_follow_commands,
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_reset_velocity",
+            camera_follow_commands,
             |()| (),
             CameraFollowCmd::ResetVelocity,
             desc = "Reset camera follow spring velocity to zero",
@@ -1769,9 +1855,17 @@ impl LuaRuntime {
             meta_fns,
             "register_animation",
             animation_commands,
-            |(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped)| (
-                String, String, f32, f32, f32, f32, usize, f32, bool
-            ),
+            |(
+                id,
+                tex_key,
+                pos_x,
+                pos_y,
+                horizontal_displacement,
+                vertical_displacement,
+                frame_count,
+                fps,
+                looped,
+            )| (String, String, f32, f32, f32, f32, usize, f32, bool),
             AnimationCmd::RegisterAnimation {
                 id,
                 tex_key,
@@ -2151,15 +2245,14 @@ impl LuaRuntime {
         // set_background_color: manual registration for r,g,b clamping
         engine.set(
             "set_background_color",
-            self.lua
-                .create_function(|lua, (r, g, b): (u8, u8, u8)| {
-                    lua.app_data_ref::<LuaAppData>()
-                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                        .gameconfig_commands
-                        .borrow_mut()
-                        .push(GameConfigCmd::BackgroundColor { r, g, b });
-                    Ok(())
-                })?,
+            self.lua.create_function(|lua, (r, g, b): (u8, u8, u8)| {
+                lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                    .gameconfig_commands
+                    .borrow_mut()
+                    .push(GameConfigCmd::BackgroundColor { r, g, b });
+                Ok(())
+            })?,
         )?;
         push_fn_meta(
             &self.lua,
@@ -2313,6 +2406,40 @@ impl LuaRuntime {
             .unwrap_or_default()
     }
 
+    /// Drains all queued input rebinding commands.
+    pub fn drain_input_commands(&self) -> Vec<InputCmd> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .map(|data| data.input_commands.borrow_mut().drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Updates the cached input bindings snapshot that Lua can read via
+    /// `engine.get_binding()`.
+    ///
+    /// Call this before invoking Lua callbacks so scripts see current bindings.
+    /// Only the *first* binding per action is snapshotted (the one `get_binding`
+    /// returns). Action names use the same canonical strings as `rebind_action`.
+    pub fn update_bindings_cache(
+        &self,
+        bindings: &crate::resources::input_bindings::InputBindings,
+    ) {
+        use crate::resources::input_bindings::{InputBinding, key_to_str};
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            let mut snap = data.bindings_snapshot.borrow_mut();
+            snap.clear();
+            for (action, bl) in &bindings.map {
+                if let Some(first) = bl.first() {
+                    let key_str = match first {
+                        InputBinding::Keyboard(k) => key_to_str(*k),
+                    };
+                    let action_str = action_to_str(*action).to_string();
+                    snap.insert(action_str, key_str.to_string());
+                }
+            }
+        }
+    }
+
     /// Drains all queued collision entity commands.
     /// Call this after processing Lua collision callbacks to apply entity changes.
     pub fn drain_collision_entity_commands(&self) -> Vec<EntityCmd> {
@@ -2413,6 +2540,7 @@ impl LuaRuntime {
             data.render_commands.borrow_mut().clear();
             data.gameconfig_commands.borrow_mut().clear();
             data.camera_follow_commands.borrow_mut().clear();
+            data.input_commands.borrow_mut().clear();
             // Note: Asset and animation commands are only used during setup,
             // so we don't clear them here.
         }
@@ -2527,9 +2655,18 @@ impl LuaRuntime {
         digital.set("special", create_button_table(&snapshot.digital.special)?)?;
         // Raw WASD (main directional)
         digital.set("main_up", create_button_table(&snapshot.digital.main_up)?)?;
-        digital.set("main_down", create_button_table(&snapshot.digital.main_down)?)?;
-        digital.set("main_left", create_button_table(&snapshot.digital.main_left)?)?;
-        digital.set("main_right", create_button_table(&snapshot.digital.main_right)?)?;
+        digital.set(
+            "main_down",
+            create_button_table(&snapshot.digital.main_down)?,
+        )?;
+        digital.set(
+            "main_left",
+            create_button_table(&snapshot.digital.main_left)?,
+        )?;
+        digital.set(
+            "main_right",
+            create_button_table(&snapshot.digital.main_right)?,
+        )?;
         // Raw arrow keys (secondary directional)
         digital.set(
             "secondary_up",
@@ -2618,6 +2755,71 @@ impl LuaRuntime {
     /// Use this for advanced operations like registering custom userdata types.
     pub fn lua(&self) -> &Lua {
         &self.lua
+    }
+
+    /// Registers the input rebinding API in the `engine` table.
+    ///
+    /// Provides:
+    /// - `engine.rebind_action(action, key)` — replace all bindings for an
+    ///   action with a single new key.  Changes are applied next frame.
+    /// - `engine.add_binding(action, key)` — add an extra binding without
+    ///   removing the existing ones.
+    /// - `engine.get_binding(action)` — read the first binding from the
+    ///   snapshot (returns `nil` if unbound).
+    fn register_input_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+
+        // rebind_action: replace all bindings for an action
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "rebind_action",
+            input_commands,
+            |(action, key)| (String, String),
+            InputCmd::Rebind { action, key },
+            desc = "Rebind a logical action to a new key (replaces existing binding)",
+            cat = "input",
+            params = [("action", "string"), ("key", "string")]
+        );
+
+        // add_binding: add an extra binding without removing existing ones
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "add_binding",
+            input_commands,
+            |(action, key)| (String, String),
+            InputCmd::AddBinding { action, key },
+            desc = "Add an extra key binding for an action (supports multi-bind)",
+            cat = "input",
+            params = [("action", "string"), ("key", "string")]
+        );
+
+        // get_binding: read-only, uses the snapshot
+        engine.set(
+            "get_binding",
+            self.lua.create_function(|lua, action: String| {
+                let result = lua
+                    .app_data_ref::<LuaAppData>()
+                    .and_then(|data| data.bindings_snapshot.borrow().get(&action).cloned());
+                Ok(result)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_binding",
+            "Get the first key binding for an action as a string (nil if unbound)",
+            "input",
+            &[("action", "string")],
+            Some("string?"),
+        )?;
+
+        Ok(())
     }
 
     /// Registers builder class metadata in `engine.__meta.classes`.
@@ -3151,10 +3353,30 @@ impl LuaRuntime {
                     ("time_in_phase", "number", true, None),
                     ("previous_phase", "string", true, Some("Only in on_enter")),
                     ("timer", "TimerInfo", true, None),
-                    ("world_pos", "Vector2", true, Some("World position from hierarchy")),
-                    ("world_rotation", "number", true, Some("World rotation from hierarchy")),
-                    ("world_scale", "Vector2", true, Some("World scale from hierarchy")),
-                    ("parent_id", "integer", true, Some("Parent entity ID if in hierarchy")),
+                    (
+                        "world_pos",
+                        "Vector2",
+                        true,
+                        Some("World position from hierarchy"),
+                    ),
+                    (
+                        "world_rotation",
+                        "number",
+                        true,
+                        Some("World rotation from hierarchy"),
+                    ),
+                    (
+                        "world_scale",
+                        "Vector2",
+                        true,
+                        Some("World scale from hierarchy"),
+                    ),
+                    (
+                        "parent_id",
+                        "integer",
+                        true,
+                        Some("Parent entity ID if in hierarchy"),
+                    ),
                 ],
             ),
             (

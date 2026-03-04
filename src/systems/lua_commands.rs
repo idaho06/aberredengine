@@ -63,10 +63,11 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
+use crate::resources::input_bindings::{InputBinding, InputBindings, key_from_str};
 use crate::resources::lua_runtime::{
     AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd,
-    CloneCmd, EntityCmd, GameConfigCmd, GroupCmd, MenuActionData, PhaseCmd, RenderCmd, SignalCmd,
-    SpawnCmd, TilemapCmd, UniformValue,
+    CloneCmd, EntityCmd, GameConfigCmd, GroupCmd, InputCmd, MenuActionData, PhaseCmd, RenderCmd,
+    SignalCmd, SpawnCmd, TilemapCmd, UniformValue,
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
@@ -519,6 +520,39 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
         }
         CameraFollowCmd::ResetVelocity => {
             config.velocity = raylib::prelude::Vector2 { x: 0.0, y: 0.0 };
+        }
+    }
+}
+
+/// Process a single input rebinding command from Lua.
+///
+/// Converts string-based action and key names into typed values and
+/// applies the change to `InputBindings`. Unknown action or key names
+/// are logged as warnings and skipped.
+pub fn process_input_command(cmd: InputCmd, bindings: &mut InputBindings) {
+    use crate::resources::lua_runtime::action_from_str;
+    match cmd {
+        InputCmd::Rebind { action, key } => {
+            let Some(a) = action_from_str(&action) else {
+                log::warn!("rebind_action: unknown action '{}'", action);
+                return;
+            };
+            let Some(k) = key_from_str(&key) else {
+                log::warn!("rebind_action: unknown key '{}'", key);
+                return;
+            };
+            bindings.rebind(a, InputBinding::Keyboard(k));
+        }
+        InputCmd::AddBinding { action, key } => {
+            let Some(a) = action_from_str(&action) else {
+                log::warn!("add_binding: unknown action '{}'", action);
+                return;
+            };
+            let Some(k) = key_from_str(&key) else {
+                log::warn!("add_binding: unknown key '{}'", key);
+                return;
+            };
+            bindings.add_binding(a, InputBinding::Keyboard(k));
         }
     }
 }

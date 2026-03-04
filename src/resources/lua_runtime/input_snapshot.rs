@@ -137,12 +137,8 @@ impl InputSnapshot {
                 main_right: DigitalButtonState::from_bool_state(&input.maindirection_right),
                 // Raw arrow keys
                 secondary_up: DigitalButtonState::from_bool_state(&input.secondarydirection_up),
-                secondary_down: DigitalButtonState::from_bool_state(
-                    &input.secondarydirection_down,
-                ),
-                secondary_left: DigitalButtonState::from_bool_state(
-                    &input.secondarydirection_left,
-                ),
+                secondary_down: DigitalButtonState::from_bool_state(&input.secondarydirection_down),
+                secondary_left: DigitalButtonState::from_bool_state(&input.secondarydirection_left),
                 secondary_right: DigitalButtonState::from_bool_state(
                     &input.secondarydirection_right,
                 ),
@@ -165,12 +161,11 @@ mod tests {
         InputState::default()
     }
 
-    fn bool_state_pressed(key: KeyboardKey) -> BoolState {
+    fn bool_state_pressed(_key: KeyboardKey) -> BoolState {
         BoolState {
             active: true,
             just_pressed: true,
             just_released: false,
-            key_binding: key,
         }
     }
 
@@ -263,7 +258,6 @@ mod tests {
             active: true,
             just_pressed: false,
             just_released: true,
-            key_binding: KeyboardKey::KEY_SPACE,
         };
         let dbs = DigitalButtonState::from_bool_state(&bs);
         assert!(dbs.pressed);

@@ -8,6 +8,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Script Execution Flow](#script-execution-flow)
 - [Logging Functions](#logging-functions)
 - [Input System](#input-system)
+  - [Input Rebinding](#input-rebinding)
 - [Asset Loading](#asset-loading)
 - [Audio Playback](#audio-playback)
 - [Entity Spawning](#entity-spawning)
@@ -216,15 +217,18 @@ return M
 1. Create a directory under `scenes/` (e.g., `scenes/myexample/`)
 2. Create scene files following the template above
 3. Add one entry to the `scene_registry` table in `main.lua`:
+
    ```lua
    myexample_level01 = "scenes.myexample.level01",
    ```
+
 4. Add a menu item in `scenes/menu.lua`
 5. Add asset loading in `setup.lua`
 
 #### Asset Key Convention
 
 Each example prefixes its asset keys to avoid conflicts:
+
 - Asteroids: `asteroids-ship_sheet`, `asteroids-explosion01`, etc.
 - Arkanoid: `arkanoid-ball`, `arkanoid-brick_red`, etc.
 - Birthday: `birthday-love`, `birthday-spin_hearts-sheet`, etc.
@@ -249,8 +253,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, CameraFollow, Render, GameConfig | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, CameraFollow, Render, GameConfig | Per-frame logic - camera effects, post-process control, game config changes, but avoid spawning (see warning below) |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, CameraFollow, Render, GameConfig, InputBinding | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, CameraFollow, Render, GameConfig, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning (see warning below) |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
@@ -261,8 +265,8 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig → CameraFollow |
-| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig → CameraFollow |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
+| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Phase → Camera |
 
@@ -502,6 +506,89 @@ end
 | Collision | ✗ | `callback(ctx)` |
 
 **Note:** Phase and timer callbacks now receive an `EntityContext` (`ctx`) object instead of just `entity_id`. The context contains all entity component data. See [Phase Component](#phase-component) for details. Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
+
+### Input Rebinding
+
+The engine supports runtime key rebinding from Lua. This lets players customize controls through in-game settings screens, or lets different scenes use different default layouts.
+
+**Action names** (pass as the `action` argument):
+
+| Action Name | Default Key | Description |
+|---|---|---|
+| `"main_up"` | `w` | Main direction up (WASD) |
+| `"main_down"` | `s` | Main direction down (WASD) |
+| `"main_left"` | `a` | Main direction left (WASD) |
+| `"main_right"` | `d` | Main direction right (WASD) |
+| `"secondary_up"` | `up` | Secondary direction up (arrow keys) |
+| `"secondary_down"` | `down` | Secondary direction down (arrow keys) |
+| `"secondary_left"` | `left` | Secondary direction left (arrow keys) |
+| `"secondary_right"` | `right` | Secondary direction right (arrow keys) |
+| `"back"` | `escape` | Back / cancel |
+| `"action_1"` | `space` | Primary action |
+| `"action_2"` | `enter` | Secondary action |
+| `"special"` | `f12` | Special action |
+| `"toggle_debug"` | `f11` | Toggle debug overlay |
+| `"toggle_fullscreen"` | `f10` | Toggle fullscreen |
+
+**Key names** (pass as the `key` argument):
+
+| Category | Accepted names |
+|---|---|
+| Letters | `a` – `z` |
+| Digits | `0` – `9` |
+| Special | `space`, `enter` (alias: `return`), `escape` (alias: `esc`), `backspace`, `tab` |
+| Arrow keys | `up`, `down`, `left`, `right` |
+| Modifiers | `lshift` (alias: `shift`), `rshift`, `lctrl` (alias: `ctrl`), `rctrl`, `lalt` (alias: `alt`), `ralt` |
+| Function keys | `f1` – `f12` |
+
+> **Aliases:** `engine.get_binding()` always returns the canonical form (e.g. `"enter"`, not `"return"`), but both are accepted as input to `rebind_action`/`add_binding`.
+
+> **Unknown values:** Passing an unknown action or key name logs a warning and is silently ignored — no panic, no state change.
+
+#### `engine.rebind_action(action, key)`
+
+Replace **all** current bindings for `action` with a single new `key`. Use this for a standard one-key-per-action settings screen.
+
+```lua
+-- Rebind jump from Space to Z
+engine.rebind_action("action_1", "z")
+
+-- Switch movement to arrow keys
+engine.rebind_action("main_up",    "up")
+engine.rebind_action("main_down",  "down")
+engine.rebind_action("main_left",  "left")
+engine.rebind_action("main_right", "right")
+```
+
+#### `engine.add_binding(action, key)`
+
+Append `key` to the binding list for `action` **without removing** existing bindings. Useful for supporting multiple control schemes simultaneously.
+
+```lua
+-- Accept both W and Up-Arrow for "move up"
+engine.add_binding("main_up", "up")
+```
+
+#### `engine.get_binding(action) -> string?`
+
+Return the first key name bound to `action` as a lowercase string, or `nil` if the action is unknown or has no bindings. Reads from a snapshot captured at frame start — rebinds issued in `on_update_<scene>` are visible from the **next** frame.
+
+```lua
+local key = engine.get_binding("action_1")
+if key then
+    engine.set_string("prompt_jump", "Press [" .. key .. "] to jump")
+end
+
+-- Build a full controls readout
+local actions = {
+    "main_up", "main_down", "main_left", "main_right",
+    "action_1", "action_2", "back",
+}
+for _, action in ipairs(actions) do
+    local bound = engine.get_binding(action) or "(unbound)"
+    engine.log(action .. " = " .. bound)
+end
+```
 
 ---
 

@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-04 (imgui debug overlay, expanded InputSnapshot, sprite flip entity cmd)
+# Last updated: 2026-03-04 (input rebinding refactor: InputBindings resource, Lua rebind API)
 
 ## QUICK REFERENCE
 
@@ -47,6 +47,7 @@ COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (Entity
 - Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut GameCtx)` (menu entity, item_id, item_index, ECS context). Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. `MenuRustCallback` type alias defined in `components/menu.rs` (consistent with `TimerCallback`, `CollisionCallback`, `PhaseEnterFn`).
 - `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Callback signatures: `fn(&mut GameCtx)`, `fn(&mut GameCtx, f32, &InputState)`, `fn(&mut GameCtx)`. `SceneManager` resource maps scene names → descriptors. Engine-owned systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene). Builder: `.add_scene(name, descriptor)` + `.initial_scene(name)`. Conflicts: panics if combined with `.on_switch_scene()` or `.on_enter_play()`. Always compiled (no feature flag).
 - `GameCtx` unification: `TimerCtx`, `PhaseCtx`, `CollisionCtx`, `MenuCtx`, and `SceneCtx` have been unified into a single `GameCtx` SystemParam (`src/systems/game_ctx.rs`). All five had identical fields; `GameCtx` contains all 18: Commands + 6 mutable queries + 8 read-only queries + world_signals + audio + world_time + texture_store. Re-exported from `systems::GameCtx`.
+- Input rebinding refactor: `InputBindings` resource (`resources/input_bindings.rs`) maps `InputAction` → `Vec<InputBinding>` (currently `InputBinding::Keyboard(KeyboardKey)`, extensible for gamepad/mouse). `BoolState` no longer has `key_binding`; `InputState`/`BoolState` both derive `Default`. `update_input_state` reads `Res<InputBindings>` via `poll_action!` macro + `any_key_down/pressed/released` helpers (~150 lines, down from 331). `InputAction` gained `ToggleDebug` (F11) and `ToggleFullscreen` (F10) variants (14 total). Lua API: `engine.rebind_action(action, key)`, `engine.add_binding(action, key)`, `engine.get_binding(action) -> string?`. Commands: `InputCmd::Rebind/AddBinding` in `commands.rs`, processed via `process_input_command` in `lua_commands.rs`. `lua_plugin.rs` update/switch_scene take `ResMut<InputBindings>`, call `update_bindings_cache` before Lua and drain after. `action_from_str`/`action_to_str` in `runtime.rs` (re-exported from `lua_runtime` mod). `key_from_str`/`key_to_str` in `input_bindings.rs`.
 
 ## FILE TREE (ESSENTIAL)
 
@@ -102,13 +103,13 @@ src/
 │   ├── rust_collision.rs      # Rust collision observer (rust_collision_observer, always compiled)
 │   ├── scene_dispatch.rs      # SceneManager scene dispatch: SceneDescriptor, scene_switch_system, scene_update_system, scene_enter_play
 │   ├── render.rs              # Raylib drawing, camera, debug overlays (imgui), letterboxing + RenderResources/RenderQueries SystemParams
-│   ├── input.rs               # Poll keyboard state, emit InputEvent for all actions
+│   ├── input.rs               # Poll keyboard via InputBindings, poll_action! macro, emit InputEvent
 │   ├── inputsimplecontroller.rs    # Input→velocity
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController) + compute_frame_offset (row-wrapping)
 │   ├── luaphase.rs            # [feature=lua] Lua phase callbacks
-│   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd + EntityCmdQueries SystemParam
+│   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd/InputCmd + EntityCmdQueries SystemParam
 │   ├── luatimer.rs            # [feature=lua] Lua timer processing
 │   ├── timer.rs               # Rust timer processing (update_timers, timer_observer)
 │   ├── phase.rs               # Rust phase state machine (phase_system)
@@ -129,7 +130,8 @@ src/
 ├── resources/
 │   ├── mod.rs                 # Re-exports
 │   ├── worldtime.rs           # Delta time, time scale
-│   ├── input.rs               # InputState cached keyboard (F10=fullscreen, F11=debug)
+│   ├── input.rs               # InputState + BoolState (no key_binding; both derive Default)
+│   ├── input_bindings.rs      # InputBindings resource (InputAction→Vec<InputBinding>), InputBinding enum, key_from_str/key_to_str
 │   ├── fullscreen.rs          # FullScreen marker resource
 │   ├── gameconfig.rs          # GameConfig (render/window size, fps, vsync, fullscreen, background_color, window_title)
 │   ├── texturestore.rs        # FxHashMap<String, Texture2D> + load_texture_from_text() utility
@@ -155,7 +157,7 @@ src/
 │   └── lua_runtime/           # [feature=lua]
 │       ├── mod.rs             # Public exports
 │       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!), __meta table
-│       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, etc.
+│       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, InputCmd, etc.
 │       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer)
 │       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
 │       ├── entity_builder.rs  # LuaEntityBuilder fluent API (unified spawn/clone, regular/collision)
@@ -164,7 +166,7 @@ src/
     ├── mod.rs                 # Re-exports
     ├── collision.rs           # CollisionEvent
     ├── gamestate.rs           # GameStateTransition
-    ├── input.rs               # InputEvent + InputAction enum (all directions, actions, special)
+    ├── input.rs               # InputEvent + InputAction enum (14 variants: directions, actions, special, ToggleDebug, ToggleFullscreen)
     ├── menu.rs                # MenuSelection
     ├── luatimer.rs            # [feature=lua] LuaTimerEvent
     ├── timer.rs               # TimerEvent (Rust fn-pointer timer)
@@ -178,7 +180,8 @@ tests/
 ├── stub_generator_integration.rs # Stub generator tests (#![cfg(feature = "lua")])
 ├── hierarchy_integration.rs   # Parent-child hierarchy tests (mixed; Lua tests gated by #[cfg(feature = "lua")])
 ├── menu_callback_integration.rs  # Rust menu callback integration tests (pure Rust)
-└── scene_manager_integration.rs  # SceneManager integration tests (pure Rust)
+├── scene_manager_integration.rs  # SceneManager integration tests (pure Rust)
+└── input_bindings_integration.rs # InputBindings + rebinding pipeline integration tests (17 tests)
 assets/
 ├── scripts/
 │   ├── main.lua               # Entry: scene registry, callback injection, on_setup, on_enter_play, on_switch_scene
@@ -271,8 +274,10 @@ GlobalTransform2D { position: Vector2, rotation_degrees: f32, scale: Vector2 }  
 ```
 GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, window_title: String, config_path }
 WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
-InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }
-BoolState { active: bool, just_pressed: bool, just_released: bool, key_binding: KeyboardKey }
+InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, mode_debug, fullscreen_toggle, action_special: BoolState }  -- derives Default
+BoolState { active: bool, just_pressed: bool, just_released: bool }  -- derives Default; key_binding removed (now in InputBindings)
+InputBindings { map: HashMap<InputAction, Vec<InputBinding>> }  -- runtime-configurable key bindings; Default has all 14 actions mapped
+InputBinding::Keyboard(KeyboardKey)  -- extensible enum (future: GamepadButton, MouseButton)
 InputSnapshot { digital: DigitalInputs, analog: AnalogInputs }  -- frozen snapshot for Lua callbacks
 DigitalInputs { up, down, left, right, action_1, action_2, back, special: DigitalButtonState (combined/action); main_up/down/left/right (raw WASD); secondary_up/down/left/right (raw arrows); debug (F11), fullscreen (F10): DigitalButtonState }
 DigitalButtonState { pressed: bool, just_pressed: bool, just_released: bool }
@@ -534,7 +539,7 @@ Animation:        animation.rs (component + controller), animationstore.rs
 State machines:   luaphase.rs (component + system) [feature=lua], phase.rs (Rust fn-pointer equivalent)
 Signals:          signals.rs, worldsignals.rs
 Text:             dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
-Input:            inputcontrolled.rs, input.rs (InputState), input_snapshot.rs
+Input:            inputcontrolled.rs, input.rs (InputState), input_bindings.rs (InputBindings), input_snapshot.rs, systems/input.rs (poll_action!)
 Particles:        particleemitter.rs (component + system), spawn_data.rs (ParticleEmitterData)
 Hierarchy:        globaltransform2d.rs (component), propagate_transforms.rs (system), lua_commands.rs (SetParent/RemoveParent)
 Menus:            menu.rs (component + system), entity_builder.rs (with_menu_* methods)
@@ -620,3 +625,6 @@ Engine bootstrap: engine_app.rs (EngineBuilder, system schedule)
 44. `SetAnimation` EntityCmd also updates `Sprite.tex_key` to the animation's texture, keeping sprite and animation in sync when switching.
 45. imgui is integrated into debug mode (F11): `DebugOverlayConfig` resource controls individual overlay visibility; toggled via an imgui window at runtime. raylib must be built with `imgui` feature (enabled in `Cargo.toml` for linux/windows targets).
 46. `InputSnapshot`/`DigitalInputs` now expose raw WASD (`main_*`), raw arrows (`secondary_*`), and function keys (`debug`, `fullscreen`) in addition to combined directional fields. Existing combined fields (`up/down/left/right`) are unchanged — backward compatible.
+47. `InputBindings` resource decouples hardware keys from `InputState`. `BoolState` no longer has `key_binding`. `update_input_state` reads `Res<InputBindings>` instead of per-field key bindings.
+48. Lua input rebinding: `engine.rebind_action(action, key)` replaces all bindings; `engine.add_binding(action, key)` appends (multi-bind); `engine.get_binding(action)` reads snapshot (visible next frame). Action names: `main_up/down/left/right`, `secondary_up/down/left/right`, `back`, `action_1`, `action_2`, `special`, `toggle_debug`, `toggle_fullscreen`. Key names: single lowercase letters `a`-`z`, digits `0`-`9`, `space`, `enter`/`return`, `escape`/`esc`, arrows, modifiers (`lshift`/`rshift`/`lctrl`/`rctrl`/`lalt`/`ralt`), `f1`-`f12`.
+49. `InputCmd` (Rebind/AddBinding) processed by `process_input_command` in `lua_commands.rs`; drained in `lua_plugin.rs` update/switch_scene after `drain_camera_follow_commands`.

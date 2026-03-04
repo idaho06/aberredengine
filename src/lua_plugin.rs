@@ -77,6 +77,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::input_bindings::InputBindings;
 use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
@@ -89,8 +90,8 @@ use crate::systems::lua_commands::{
     EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_camera_follow_command, process_clone_command,
     process_entity_commands, process_gameconfig_command, process_group_command,
-    process_phase_command, process_render_command, process_signal_command, process_spawn_command,
-    process_tilemap_command,
+    process_input_command, process_phase_command, process_render_command, process_signal_command,
+    process_spawn_command, process_tilemap_command,
 };
 use bevy_ecs::system::SystemParam;
 use log::{error, info};
@@ -589,6 +590,7 @@ pub fn enter_play(
 /// - Lua can queue signal commands (set_flag, set_string, etc.)
 /// - Processes signal commands from Lua
 /// - Reacts to flags set by Lua: "switch_scene", "quit_game"
+#[allow(clippy::too_many_arguments)]
 pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
@@ -597,6 +599,7 @@ pub fn update(
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
     mut entities: EntityProcessing,
+    mut bindings: ResMut<InputBindings>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
@@ -624,6 +627,7 @@ pub fn update(
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
     lua_runtime.update_gameconfig_cache(&scene_state.config);
+    lua_runtime.update_bindings_cache(&bindings);
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
@@ -703,6 +707,11 @@ pub fn update(
     // Process camera follow commands from Lua
     for cmd in lua_runtime.drain_camera_follow_commands() {
         process_camera_follow_command(cmd, &mut scene_state.camera_follow);
+    }
+
+    // Process input rebinding commands from Lua
+    for cmd in lua_runtime.drain_input_commands() {
+        process_input_command(cmd, &mut bindings);
     }
 
     // Check for quit flag (set by Lua)
@@ -833,6 +842,7 @@ pub fn switch_scene(
     entities_to_clean: Query<Entity, Without<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut entities: EntityProcessing,
+    mut bindings: ResMut<InputBindings>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     info!("switch_scene: System called!");
@@ -945,6 +955,11 @@ pub fn switch_scene(
     // Process camera follow commands from Lua
     for cmd in lua_runtime.drain_camera_follow_commands() {
         process_camera_follow_command(cmd, &mut scene_state.camera_follow);
+    }
+
+    // Process input rebinding commands from Lua
+    for cmd in lua_runtime.drain_input_commands() {
+        process_input_command(cmd, &mut bindings);
     }
 
     // Update game config cache for Lua to read current values
