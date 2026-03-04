@@ -43,10 +43,11 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use log::{error, warn};
 
-// Explicit re-exports from the imgui crate to avoid ambiguous path resolution
-// (raylib also has a `raylib::imgui` module that could shadow the extern crate).
-use ::imgui::{Condition as ImguiCond, TreeNodeFlags as ImguiTreeNodeFlags};
-type ImguiUi = ::imgui::Ui;
+// The `raylib::prelude::*` glob brings the `raylib::imgui` module name into
+// scope, shadowing the external `imgui` crate.  Use `::imgui` (absolute path)
+// to refer to the crate itself.  `Ui` is aliased to `ImguiUi` for clarity next
+// to raylib's own draw-handle types.
+use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 
 type MapSpriteQueryData = (
     Entity,
@@ -952,7 +953,7 @@ fn draw_imgui_debug(
 
 fn draw_performance_panel(ui: &ImguiUi, fps: u32, world_time: &WorldTime) {
     ui.window("Performance")
-        .collapsed(false, ImguiCond::FirstUseEver)
+        .collapsed(false, Condition::FirstUseEver)
         .build(|| {
             ui.text(format!("FPS: {}", fps));
             ui.text(format!("Frame time: {:.2} ms", world_time.delta * 1000.0));
@@ -978,9 +979,9 @@ fn draw_ecs_panel(
     shader_count: usize,
 ) {
     ui.window("ECS")
-        .collapsed(true, ImguiCond::FirstUseEver)
+        .collapsed(true, Condition::FirstUseEver)
         .build(|| {
-            if ui.collapsing_header("Entities", ImguiTreeNodeFlags::empty()) {
+            if ui.collapsing_header("Entities", TreeNodeFlags::empty()) {
                 ui.text(format!("  Map sprites:    {}", sprite_count));
                 ui.text(format!("  Colliders:      {}", collider_count));
                 ui.text(format!("  Positions:      {}", position_count));
@@ -988,7 +989,7 @@ fn draw_ecs_panel(
                 ui.text(format!("  Screen sprites: {}", screen_sprite_count));
                 ui.text(format!("  Screen texts:   {}", screen_text_count));
             }
-            if ui.collapsing_header("Assets", ImguiTreeNodeFlags::empty()) {
+            if ui.collapsing_header("Assets", TreeNodeFlags::empty()) {
                 ui.text(format!("  Textures: {}", texture_count));
                 ui.text(format!("  Fonts:    {}", font_count));
                 ui.text(format!("  Shaders:  {}", shader_count));
@@ -1002,7 +1003,7 @@ fn draw_camera_panel(
     camera_follow: Option<&CameraFollowConfig>,
 ) {
     ui.window("Camera")
-        .collapsed(true, ImguiCond::FirstUseEver)
+        .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             let cam = &camera.0;
             ui.text(format!("Target:   ({:.1}, {:.1})", cam.target.x, cam.target.y));
@@ -1022,11 +1023,11 @@ fn draw_camera_panel(
 
 fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
     ui.window("World Signals")
-        .collapsed(true, ImguiCond::FirstUseEver)
+        .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             if ui.collapsing_header(
                 format!("Flags ({})", world_signals.flags.len()),
-                ImguiTreeNodeFlags::empty(),
+                TreeNodeFlags::empty(),
             ) {
                 let mut flags: Vec<&str> = world_signals.flags.iter().map(|s| s.as_str()).collect();
                 flags.sort_unstable();
@@ -1036,7 +1037,7 @@ fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
             }
             if ui.collapsing_header(
                 format!("Scalars ({})", world_signals.scalars.len()),
-                ImguiTreeNodeFlags::empty(),
+                TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, f32)> = world_signals
                     .scalars
@@ -1050,7 +1051,7 @@ fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
             }
             if ui.collapsing_header(
                 format!("Integers ({})", world_signals.integers.len()),
-                ImguiTreeNodeFlags::empty(),
+                TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, i32)> = world_signals
                     .integers
@@ -1064,7 +1065,7 @@ fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
             }
             if ui.collapsing_header(
                 format!("Strings ({})", world_signals.strings.len()),
-                ImguiTreeNodeFlags::empty(),
+                TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, &str)> = world_signals
                     .strings
@@ -1078,7 +1079,7 @@ fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
             }
             if ui.collapsing_header(
                 format!("Entities ({})", world_signals.entities.len()),
-                ImguiTreeNodeFlags::empty(),
+                TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, u64)> = world_signals
                     .entities
@@ -1095,7 +1096,7 @@ fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
 
 fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
     ui.window("Input")
-        .collapsed(true, ImguiCond::FirstUseEver)
+        .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             let inputs: &[(&str, &crate::resources::input::BoolState)] = &[
                 ("Up (WASD)",        &input_state.maindirection_up),
@@ -1114,17 +1115,28 @@ fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
                 ("Special (F12)",    &input_state.action_special),
             ];
             for (name, state) in inputs {
-                let active = if state.active { "●" } else { "○" };
-                let jp = if state.just_pressed { " ↓" } else { "" };
-                let jr = if state.just_released { " ↑" } else { "" };
-                ui.text(format!("{} {:16} {}{}", active, name, jp, jr));
+                if state.active {
+                    ui.text_colored([0.0, 1.0, 0.0, 1.0], "[ON]");
+                } else {
+                    ui.text_colored([0.5, 0.5, 0.5, 1.0], "[  ]");
+                }
+                ui.same_line();
+                ui.text(format!("{:16}", name));
+                if state.just_pressed {
+                    ui.same_line();
+                    ui.text_colored([1.0, 1.0, 0.0, 1.0], "PRESS");
+                }
+                if state.just_released {
+                    ui.same_line();
+                    ui.text_colored([1.0, 0.5, 0.0, 1.0], "RELEASE");
+                }
             }
         });
 }
 
 fn draw_overlays_panel(ui: &ImguiUi, overlay_config: &mut DebugOverlayConfig) {
     ui.window("Overlays")
-        .collapsed(true, ImguiCond::FirstUseEver)
+        .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             ui.checkbox("Collider boxes",       &mut overlay_config.show_collider_boxes);
             ui.checkbox("Position crosshairs",  &mut overlay_config.show_position_crosshairs);
@@ -1145,7 +1157,7 @@ fn draw_mouse_config_panel(
     scene_manager: Option<&SceneManager>,
 ) {
     ui.window("Mouse & Config")
-        .collapsed(true, ImguiCond::FirstUseEver)
+        .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             ui.text(format!(
                 "Mouse game:  ({:.1}, {:.1})",
