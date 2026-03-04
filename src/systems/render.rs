@@ -1099,20 +1099,21 @@ fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             let inputs: &[(&str, &crate::resources::input::BoolState)] = &[
-                ("Up (WASD)",        &input_state.maindirection_up),
-                ("Left (WASD)",      &input_state.maindirection_left),
-                ("Down (WASD)",      &input_state.maindirection_down),
-                ("Right (WASD)",     &input_state.maindirection_right),
-                ("Up (Arrow)",       &input_state.secondarydirection_up),
-                ("Down (Arrow)",     &input_state.secondarydirection_down),
-                ("Left (Arrow)",     &input_state.secondarydirection_left),
-                ("Right (Arrow)",    &input_state.secondarydirection_right),
-                ("Back (Esc)",       &input_state.action_back),
-                ("Action 1 (Space)", &input_state.action_1),
-                ("Action 2 (Enter)", &input_state.action_2),
-                ("Debug (F11)",      &input_state.mode_debug),
-                ("Fullscr (F10)",    &input_state.fullscreen_toggle),
-                ("Special (F12)",    &input_state.action_special),
+                ("Up (WASD)",           &input_state.maindirection_up),
+                ("Left (WASD)",         &input_state.maindirection_left),
+                ("Down (WASD)",         &input_state.maindirection_down),
+                ("Right (WASD)",        &input_state.maindirection_right),
+                ("Up (Arrow)",          &input_state.secondarydirection_up),
+                ("Down (Arrow)",        &input_state.secondarydirection_down),
+                ("Left (Arrow)",        &input_state.secondarydirection_left),
+                ("Right (Arrow)",       &input_state.secondarydirection_right),
+                ("Back (Esc)",          &input_state.action_back),
+                ("Action 1 (Space/LMB)", &input_state.action_1),
+                ("Action 2 (Enter/RMB)", &input_state.action_2),
+                ("Action 3 (MMB)",      &input_state.action_3),
+                ("Debug (F11)",         &input_state.mode_debug),
+                ("Fullscr (F10)",       &input_state.fullscreen_toggle),
+                ("Special (F12)",       &input_state.action_special),
             ];
             for (name, state) in inputs {
                 if state.active {
@@ -1121,7 +1122,7 @@ fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
                     ui.text_colored([0.5, 0.5, 0.5, 1.0], "[  ]");
                 }
                 ui.same_line();
-                ui.text(format!("{:16}", name));
+                ui.text(format!("{:20}", name));
                 if state.just_pressed {
                     ui.same_line();
                     ui.text_colored([1.0, 1.0, 0.0, 1.0], "PRESS");
@@ -1131,6 +1132,13 @@ fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
                     ui.text_colored([1.0, 0.5, 0.0, 1.0], "RELEASE");
                 }
             }
+            ui.separator();
+            let scroll_color = if input_state.scroll_y != 0.0 {
+                [0.0, 1.0, 0.0, 1.0]
+            } else {
+                [0.5, 0.5, 0.5, 1.0]
+            };
+            ui.text_colored(scroll_color, format!("Scroll Y: {:+.2}", input_state.scroll_y));
         });
 }
 

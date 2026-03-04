@@ -204,6 +204,7 @@ fn action_to_str(action: crate::events::input::InputAction) -> &'static str {
         InputAction::Back => "back",
         InputAction::Action1 => "action_1",
         InputAction::Action2 => "action_2",
+        InputAction::Action3 => "action_3",
         InputAction::Special => "special",
         InputAction::ToggleDebug => "toggle_debug",
         InputAction::ToggleFullscreen => "toggle_fullscreen",
@@ -225,6 +226,7 @@ pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
         "back" => Some(InputAction::Back),
         "action_1" => Some(InputAction::Action1),
         "action_2" => Some(InputAction::Action2),
+        "action_3" => Some(InputAction::Action3),
         "special" => Some(InputAction::Special),
         "toggle_debug" => Some(InputAction::ToggleDebug),
         "toggle_fullscreen" => Some(InputAction::ToggleFullscreen),
@@ -2424,15 +2426,13 @@ impl LuaRuntime {
         &self,
         bindings: &crate::resources::input_bindings::InputBindings,
     ) {
-        use crate::resources::input_bindings::{InputBinding, key_to_str};
+        use crate::resources::input_bindings::binding_to_str;
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             let mut snap = data.bindings_snapshot.borrow_mut();
             snap.clear();
             for (action, bl) in &bindings.map {
                 if let Some(first) = bl.first() {
-                    let key_str = match first {
-                        InputBinding::Keyboard(k) => key_to_str(*k),
-                    };
+                    let key_str = binding_to_str(*first);
                     let action_str = action_to_str(*action).to_string();
                     snap.insert(action_str, key_str.to_string());
                 }
@@ -2651,6 +2651,7 @@ impl LuaRuntime {
         digital.set("right", create_button_table(&snapshot.digital.right)?)?;
         digital.set("action_1", create_button_table(&snapshot.digital.action_1)?)?;
         digital.set("action_2", create_button_table(&snapshot.digital.action_2)?)?;
+        digital.set("action_3", create_button_table(&snapshot.digital.action_3)?)?;
         digital.set("back", create_button_table(&snapshot.digital.back)?)?;
         digital.set("special", create_button_table(&snapshot.digital.special)?)?;
         // Raw WASD (main directional)
@@ -2691,8 +2692,9 @@ impl LuaRuntime {
             create_button_table(&snapshot.digital.fullscreen)?,
         )?;
 
-        // Create analog inputs table (empty for now, reserved for future gamepad support)
+        // Create analog inputs table
         let analog = lua.create_table()?;
+        analog.set("scroll_y", snapshot.analog.scroll_y)?;
 
         // Create root input table
         let input = lua.create_table()?;

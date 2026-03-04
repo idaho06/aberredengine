@@ -63,7 +63,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
-use crate::resources::input_bindings::{InputBinding, InputBindings, key_from_str};
+use crate::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
     AnimationCmd, AnimationConditionData, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd,
     CloneCmd, EntityCmd, GameConfigCmd, GroupCmd, InputCmd, MenuActionData, PhaseCmd, RenderCmd,
@@ -537,22 +537,22 @@ pub fn process_input_command(cmd: InputCmd, bindings: &mut InputBindings) {
                 log::warn!("rebind_action: unknown action '{}'", action);
                 return;
             };
-            let Some(k) = key_from_str(&key) else {
-                log::warn!("rebind_action: unknown key '{}'", key);
+            let Some(b) = binding_from_str(&key) else {
+                log::warn!("rebind_action: unknown binding '{}'", key);
                 return;
             };
-            bindings.rebind(a, InputBinding::Keyboard(k));
+            bindings.rebind(a, b);
         }
         InputCmd::AddBinding { action, key } => {
             let Some(a) = action_from_str(&action) else {
                 log::warn!("add_binding: unknown action '{}'", action);
                 return;
             };
-            let Some(k) = key_from_str(&key) else {
-                log::warn!("add_binding: unknown key '{}'", key);
+            let Some(b) = binding_from_str(&key) else {
+                log::warn!("add_binding: unknown binding '{}'", key);
                 return;
             };
-            bindings.add_binding(a, InputBinding::Keyboard(k));
+            bindings.add_binding(a, b);
         }
     }
 }

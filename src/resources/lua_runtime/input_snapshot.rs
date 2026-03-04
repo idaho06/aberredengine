@@ -52,6 +52,7 @@ pub struct DigitalInputs {
     // Action buttons
     pub action_1: DigitalButtonState,
     pub action_2: DigitalButtonState,
+    pub action_3: DigitalButtonState,
     pub back: DigitalButtonState,
     pub special: DigitalButtonState,
     // Raw WASD (main directional)
@@ -69,11 +70,12 @@ pub struct DigitalInputs {
     pub fullscreen: DigitalButtonState,
 }
 
-/// Analog input values (reserved for future gamepad support).
+/// Analog input values.
 #[derive(Debug, Clone, Default)]
 pub struct AnalogInputs {
+    /// Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll.
+    pub scroll_y: f32,
     // Future: move_x, move_y, look_x, look_y, trigger_left, trigger_right
-    // For now, this is empty but the structure exists for Lua API compatibility
 }
 
 /// Frozen snapshot of all input state for a single frame.
@@ -128,6 +130,7 @@ impl InputSnapshot {
                 },
                 action_1: DigitalButtonState::from_bool_state(&input.action_1),
                 action_2: DigitalButtonState::from_bool_state(&input.action_2),
+                action_3: DigitalButtonState::from_bool_state(&input.action_3),
                 back: DigitalButtonState::from_bool_state(&input.action_back),
                 special: DigitalButtonState::from_bool_state(&input.action_special),
                 // Raw WASD
@@ -146,7 +149,9 @@ impl InputSnapshot {
                 debug: DigitalButtonState::from_bool_state(&input.mode_debug),
                 fullscreen: DigitalButtonState::from_bool_state(&input.fullscreen_toggle),
             },
-            analog: AnalogInputs::default(),
+            analog: AnalogInputs {
+                scroll_y: input.scroll_y,
+            },
         }
     }
 }
@@ -178,6 +183,7 @@ mod tests {
         assert!(!snap.digital.right.pressed);
         assert!(!snap.digital.action_1.pressed);
         assert!(!snap.digital.action_2.pressed);
+        assert!(!snap.digital.action_3.pressed);
         assert!(!snap.digital.back.pressed);
         assert!(!snap.digital.special.pressed);
     }
@@ -343,5 +349,46 @@ mod tests {
         assert!(snap.digital.right.pressed);
         assert!(snap.digital.main_right.pressed);
         assert!(snap.digital.secondary_right.pressed);
+    }
+
+    #[test]
+    fn test_action3_field_populated() {
+        let mut input = default_input();
+        input.action_3.active = true;
+        input.action_3.just_pressed = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.action_3.pressed);
+        assert!(snap.digital.action_3.just_pressed);
+        assert!(!snap.digital.action_3.just_released);
+    }
+
+    #[test]
+    fn test_action3_default_unpressed() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert!(!snap.digital.action_3.pressed);
+        assert!(!snap.digital.action_3.just_pressed);
+        assert!(!snap.digital.action_3.just_released);
+    }
+
+    #[test]
+    fn test_scroll_y_propagated() {
+        let mut input = default_input();
+        input.scroll_y = 1.5;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.scroll_y, 1.5);
+    }
+
+    #[test]
+    fn test_scroll_y_zero_by_default() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert_eq!(snap.analog.scroll_y, 0.0);
+    }
+
+    #[test]
+    fn test_scroll_y_negative_scroll_down() {
+        let mut input = default_input();
+        input.scroll_y = -2.0;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.scroll_y, -2.0);
     }
 }

@@ -22,6 +22,7 @@ use std::collections::HashMap;
 
 use bevy_ecs::prelude::*;
 use raylib::ffi::KeyboardKey;
+use raylib::ffi::MouseButton;
 
 use crate::events::input::InputAction;
 
@@ -30,9 +31,8 @@ use crate::events::input::InputAction;
 pub enum InputBinding {
     /// A physical keyboard key.
     Keyboard(KeyboardKey),
-    // Future variants:
-    // GamepadButton(GamepadButton),
-    // MouseButton(MouseButton),
+    /// A mouse button (left, right, middle, etc.).
+    MouseButton(MouseButton),
 }
 
 /// Runtime-configurable map from logical [`InputAction`]s to hardware bindings.
@@ -73,6 +73,7 @@ impl InputBindings {
     pub fn first_binding_str(&self, action: InputAction) -> Option<&'static str> {
         self.get_bindings(action).first().map(|b| match b {
             InputBinding::Keyboard(k) => key_to_str(*k),
+            InputBinding::MouseButton(m) => mouse_button_to_str(*m),
         })
     }
 }
@@ -82,6 +83,7 @@ impl Default for InputBindings {
     /// `BoolState::key_binding` fields on `InputState`.
     fn default() -> Self {
         let k = |key: KeyboardKey| InputBinding::Keyboard(key);
+        let m = |btn: MouseButton| InputBinding::MouseButton(btn);
         let mut map = HashMap::new();
 
         map.insert(
@@ -116,12 +118,19 @@ impl Default for InputBindings {
             InputAction::SecondaryDirectionRight,
             vec![k(KeyboardKey::KEY_RIGHT)],
         );
+        map.insert(InputAction::Back, vec![k(KeyboardKey::KEY_ESCAPE)]);
         map.insert(
-            InputAction::Back,
-            vec![k(KeyboardKey::KEY_ESCAPE)],
+            InputAction::Action1,
+            vec![k(KeyboardKey::KEY_SPACE), m(MouseButton::MOUSE_BUTTON_LEFT)],
         );
-        map.insert(InputAction::Action1, vec![k(KeyboardKey::KEY_SPACE)]);
-        map.insert(InputAction::Action2, vec![k(KeyboardKey::KEY_ENTER)]);
+        map.insert(
+            InputAction::Action2,
+            vec![k(KeyboardKey::KEY_ENTER), m(MouseButton::MOUSE_BUTTON_RIGHT)],
+        );
+        map.insert(
+            InputAction::Action3,
+            vec![m(MouseButton::MOUSE_BUTTON_MIDDLE)],
+        );
         map.insert(InputAction::Special, vec![k(KeyboardKey::KEY_F12)]);
         map.insert(InputAction::ToggleDebug, vec![k(KeyboardKey::KEY_F11)]);
         map.insert(
@@ -296,8 +305,49 @@ pub fn key_to_str(k: KeyboardKey) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// Unit tests
+// Mouse button ↔ string conversion helpers
 // ---------------------------------------------------------------------------
+
+/// Parse a mouse button name into a [`MouseButton`].
+///
+/// Accepted names: `"mouse_left"`, `"mouse_right"`, `"mouse_middle"`.
+pub fn mouse_button_from_str(s: &str) -> Option<MouseButton> {
+    match s {
+        "mouse_left" => Some(MouseButton::MOUSE_BUTTON_LEFT),
+        "mouse_right" => Some(MouseButton::MOUSE_BUTTON_RIGHT),
+        "mouse_middle" => Some(MouseButton::MOUSE_BUTTON_MIDDLE),
+        _ => None,
+    }
+}
+
+/// Serialize a [`MouseButton`] to a canonical lowercase string.
+pub fn mouse_button_to_str(m: MouseButton) -> &'static str {
+    match m {
+        MouseButton::MOUSE_BUTTON_LEFT => "mouse_left",
+        MouseButton::MOUSE_BUTTON_RIGHT => "mouse_right",
+        MouseButton::MOUSE_BUTTON_MIDDLE => "mouse_middle",
+        _ => "mouse_unknown",
+    }
+}
+
+/// Parse any binding string into an [`InputBinding`].
+///
+/// Tries mouse button names first (`"mouse_left"`, etc.), then keyboard key names.
+/// Returns `None` for unknown strings.
+pub fn binding_from_str(s: &str) -> Option<InputBinding> {
+    if let Some(m) = mouse_button_from_str(s) {
+        return Some(InputBinding::MouseButton(m));
+    }
+    key_from_str(s).map(InputBinding::Keyboard)
+}
+
+/// Serialize an [`InputBinding`] to a canonical string.
+pub fn binding_to_str(b: InputBinding) -> &'static str {
+    match b {
+        InputBinding::Keyboard(k) => key_to_str(k),
+        InputBinding::MouseButton(m) => mouse_button_to_str(m),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -344,11 +394,21 @@ mod tests {
         );
         assert_eq!(
             b.get_bindings(InputAction::Action1),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_SPACE)]
+            &[
+                InputBinding::Keyboard(KeyboardKey::KEY_SPACE),
+                InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT),
+            ]
         );
         assert_eq!(
             b.get_bindings(InputAction::Action2),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_ENTER)]
+            &[
+                InputBinding::Keyboard(KeyboardKey::KEY_ENTER),
+                InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_RIGHT),
+            ]
+        );
+        assert_eq!(
+            b.get_bindings(InputAction::Action3),
+            &[InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)]
         );
         assert_eq!(
             b.get_bindings(InputAction::Special),
@@ -384,10 +444,14 @@ mod tests {
             InputBinding::Keyboard(KeyboardKey::KEY_Z),
         );
         let bl = b.get_bindings(InputAction::Action1);
-        // original Space + new Z
-        assert_eq!(bl.len(), 2);
+        // default: Space + MouseLeft, plus new Z
+        assert_eq!(bl.len(), 3);
         assert_eq!(bl[0], InputBinding::Keyboard(KeyboardKey::KEY_SPACE));
-        assert_eq!(bl[1], InputBinding::Keyboard(KeyboardKey::KEY_Z));
+        assert_eq!(
+            bl[1],
+            InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)
+        );
+        assert_eq!(bl[2], InputBinding::Keyboard(KeyboardKey::KEY_Z));
     }
 
     #[test]
@@ -478,5 +542,85 @@ mod tests {
         assert_eq!(key_from_str(""), None);
         assert_eq!(key_from_str("numpad0"), None);
         assert_eq!(key_from_str("SPACE"), None); // case-sensitive
+    }
+
+    #[test]
+    fn test_mouse_button_from_str_roundtrip() {
+        let pairs = [
+            ("mouse_left", MouseButton::MOUSE_BUTTON_LEFT),
+            ("mouse_right", MouseButton::MOUSE_BUTTON_RIGHT),
+            ("mouse_middle", MouseButton::MOUSE_BUTTON_MIDDLE),
+        ];
+        for (name, btn) in pairs {
+            assert_eq!(mouse_button_from_str(name), Some(btn));
+            assert_eq!(mouse_button_to_str(btn), name);
+        }
+    }
+
+    #[test]
+    fn test_mouse_button_from_str_unknown_returns_none() {
+        assert_eq!(mouse_button_from_str(""), None);
+        assert_eq!(mouse_button_from_str("left"), None);
+        assert_eq!(mouse_button_from_str("mouse_4"), None);
+    }
+
+    #[test]
+    fn test_binding_from_str_keyboard() {
+        assert_eq!(
+            binding_from_str("space"),
+            Some(InputBinding::Keyboard(KeyboardKey::KEY_SPACE))
+        );
+        assert_eq!(
+            binding_from_str("w"),
+            Some(InputBinding::Keyboard(KeyboardKey::KEY_W))
+        );
+    }
+
+    #[test]
+    fn test_binding_from_str_mouse() {
+        assert_eq!(
+            binding_from_str("mouse_left"),
+            Some(InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT))
+        );
+        assert_eq!(
+            binding_from_str("mouse_right"),
+            Some(InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_RIGHT))
+        );
+        assert_eq!(
+            binding_from_str("mouse_middle"),
+            Some(InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE))
+        );
+    }
+
+    #[test]
+    fn test_binding_from_str_unknown_returns_none() {
+        assert_eq!(binding_from_str(""), None);
+        assert_eq!(binding_from_str("not_a_binding"), None);
+    }
+
+    #[test]
+    fn test_binding_to_str_keyboard() {
+        assert_eq!(
+            binding_to_str(InputBinding::Keyboard(KeyboardKey::KEY_SPACE)),
+            "space"
+        );
+    }
+
+    #[test]
+    fn test_binding_to_str_mouse() {
+        assert_eq!(
+            binding_to_str(InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)),
+            "mouse_left"
+        );
+    }
+
+    #[test]
+    fn test_first_binding_str_mouse_button() {
+        let b = InputBindings::default();
+        // Action3 default is mouse_middle only
+        assert_eq!(
+            b.first_binding_str(InputAction::Action3),
+            Some("mouse_middle")
+        );
     }
 }

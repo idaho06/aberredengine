@@ -39,9 +39,12 @@ pub struct InputState {
     pub action_back: BoolState,
     pub action_1: BoolState,
     pub action_2: BoolState,
+    pub action_3: BoolState,
     pub mode_debug: BoolState,
     pub fullscreen_toggle: BoolState,
     pub action_special: BoolState,
+    /// Mouse wheel scroll delta this frame. Positive = up, negative = down.
+    pub scroll_y: f32,
 }
 
 #[cfg(test)]
@@ -70,6 +73,7 @@ mod tests {
         assert!(!input.action_back.active);
         assert!(!input.action_1.active);
         assert!(!input.action_2.active);
+        assert!(!input.action_3.active);
         assert!(!input.mode_debug.active);
         assert!(!input.fullscreen_toggle.active);
         assert!(!input.action_special.active);

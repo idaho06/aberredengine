@@ -396,6 +396,7 @@ input = {
         -- Action buttons
         action_1 = { pressed = bool, just_pressed = bool, just_released = bool },
         action_2 = { pressed = bool, just_pressed = bool, just_released = bool },
+        action_3 = { pressed = bool, just_pressed = bool, just_released = bool },
         back     = { pressed = bool, just_pressed = bool, just_released = bool },
         special  = { pressed = bool, just_pressed = bool, just_released = bool },
         -- Raw WASD (main directional)
@@ -413,7 +414,7 @@ input = {
         fullscreen = { pressed = bool, just_pressed = bool, just_released = bool },  -- F10
     },
     analog = {
-        -- Reserved for future gamepad support
+        scroll_y = number,  -- Mouse wheel delta: positive = up, negative = down, 0 = no scroll
     }
 }
 ```
@@ -430,14 +431,15 @@ Each digital button has three boolean properties:
 
 **Combined fields** (OR of both key sets — use these for most gameplay):
 
-| Input Name | Keyboard Keys |
-|------------|---------------|
+| Input Name | Default Bindings |
+|------------|------------------|
 | `up` | W **or** Up Arrow |
 | `down` | S **or** Down Arrow |
 | `left` | A **or** Left Arrow |
 | `right` | D **or** Right Arrow |
-| `action_1` | Space |
-| `action_2` | Enter |
+| `action_1` | Space **or** Left Mouse Button |
+| `action_2` | Enter **or** Right Mouse Button |
+| `action_3` | Middle Mouse Button |
 | `back` | Escape |
 | `special` | F12 |
 
@@ -455,6 +457,12 @@ Each digital button has three boolean properties:
 | `secondary_right` | Right Arrow |
 | `debug` | F11 |
 | `fullscreen` | F10 |
+
+**Analog fields:**
+
+| Input Name | Type | Description |
+|------------|------|-------------|
+| `scroll_y` | number | Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll. |
 
 ### Usage Examples
 
@@ -492,6 +500,15 @@ function on_update_two_player(input, dt)
         -- move player 2 right
     end
 end
+
+-- Use scroll_y for mouse-wheel input (e.g. weapon switching)
+function on_update_gameplay(input, dt)
+    if input.analog.scroll_y > 0 then
+        -- scroll up: next weapon
+    elseif input.analog.scroll_y < 0 then
+        -- scroll down: previous weapon
+    end
+end
 ```
 
 ### Which Callbacks Receive Input
@@ -524,8 +541,9 @@ The engine supports runtime key rebinding from Lua. This lets players customize 
 | `"secondary_left"` | `left` | Secondary direction left (arrow keys) |
 | `"secondary_right"` | `right` | Secondary direction right (arrow keys) |
 | `"back"` | `escape` | Back / cancel |
-| `"action_1"` | `space` | Primary action |
-| `"action_2"` | `enter` | Secondary action |
+| `"action_1"` | `space`, `mouse_left` | Primary action |
+| `"action_2"` | `enter`, `mouse_right` | Secondary action |
+| `"action_3"` | `mouse_middle` | Tertiary action |
 | `"special"` | `f12` | Special action |
 | `"toggle_debug"` | `f11` | Toggle debug overlay |
 | `"toggle_fullscreen"` | `f10` | Toggle fullscreen |
@@ -540,10 +558,13 @@ The engine supports runtime key rebinding from Lua. This lets players customize 
 | Arrow keys | `up`, `down`, `left`, `right` |
 | Modifiers | `lshift` (alias: `shift`), `rshift`, `lctrl` (alias: `ctrl`), `rctrl`, `lalt` (alias: `alt`), `ralt` |
 | Function keys | `f1` – `f12` |
+| Mouse buttons | `mouse_left`, `mouse_right`, `mouse_middle` |
 
 > **Aliases:** `engine.get_binding()` always returns the canonical form (e.g. `"enter"`, not `"return"`), but both are accepted as input to `rebind_action`/`add_binding`.
 
-> **Unknown values:** Passing an unknown action or key name logs a warning and is silently ignored — no panic, no state change.
+> **Bindings accept both keyboard keys and mouse buttons.** Pass any name from the table above (e.g. `"mouse_left"`) wherever a key name is expected.
+
+> **Unknown values:** Passing an unknown action or binding name logs a warning and is silently ignored — no panic, no state change.
 
 #### `engine.rebind_action(action, key)`
 
@@ -552,6 +573,9 @@ Replace **all** current bindings for `action` with a single new `key`. Use this 
 ```lua
 -- Rebind jump from Space to Z
 engine.rebind_action("action_1", "z")
+
+-- Rebind primary action to left mouse button
+engine.rebind_action("action_1", "mouse_left")
 
 -- Switch movement to arrow keys
 engine.rebind_action("main_up",    "up")
@@ -582,7 +606,7 @@ end
 -- Build a full controls readout
 local actions = {
     "main_up", "main_down", "main_left", "main_right",
-    "action_1", "action_2", "back",
+    "action_1", "action_2", "action_3", "back",
 }
 for _, action in ipairs(actions) do
     local bound = engine.get_binding(action) or "(unbound)"

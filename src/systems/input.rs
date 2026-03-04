@@ -20,21 +20,24 @@ use crate::resources::input_bindings::{InputBinding, InputBindings};
 // Private helpers
 // ---------------------------------------------------------------------------
 
-fn any_key_down(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
+fn any_binding_down(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
     bindings.iter().any(|b| match b {
         InputBinding::Keyboard(k) => rl.is_key_down(*k),
+        InputBinding::MouseButton(m) => rl.is_mouse_button_down(*m),
     })
 }
 
-fn any_key_pressed(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
+fn any_binding_pressed(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
     bindings.iter().any(|b| match b {
         InputBinding::Keyboard(k) => rl.is_key_pressed(*k),
+        InputBinding::MouseButton(m) => rl.is_mouse_button_pressed(*m),
     })
 }
 
-fn any_key_released(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
+fn any_binding_released(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
     bindings.iter().any(|b| match b {
         InputBinding::Keyboard(k) => rl.is_key_released(*k),
+        InputBinding::MouseButton(m) => rl.is_mouse_button_released(*m),
     })
 }
 
@@ -67,8 +70,8 @@ pub fn update_input_state(
     macro_rules! poll_action {
         ($state:expr, $action:expr) => {{
             let bl = bindings.get_bindings($action);
-            $state.active = any_key_down(&rl, bl);
-            if any_key_pressed(&rl, bl) {
+            $state.active = any_binding_down(&rl, bl);
+            if any_binding_pressed(&rl, bl) {
                 $state.just_pressed = true;
                 commands.trigger(InputEvent {
                     action: $action,
@@ -77,7 +80,7 @@ pub fn update_input_state(
             } else {
                 $state.just_pressed = false;
             }
-            if any_key_released(&rl, bl) {
+            if any_binding_released(&rl, bl) {
                 $state.just_released = true;
                 commands.trigger(InputEvent {
                     action: $action,
@@ -89,13 +92,13 @@ pub fn update_input_state(
         }};
         (no_event; $state:expr, $action:expr) => {{
             let bl = bindings.get_bindings($action);
-            $state.active = any_key_down(&rl, bl);
-            if any_key_pressed(&rl, bl) {
+            $state.active = any_binding_down(&rl, bl);
+            if any_binding_pressed(&rl, bl) {
                 $state.just_pressed = true;
             } else {
                 $state.just_pressed = false;
             }
-            if any_key_released(&rl, bl) {
+            if any_binding_released(&rl, bl) {
                 $state.just_released = true;
             } else {
                 $state.just_released = false;
@@ -131,6 +134,7 @@ pub fn update_input_state(
     poll_action!(input.action_back, InputAction::Back);
     poll_action!(input.action_1, InputAction::Action1);
     poll_action!(input.action_2, InputAction::Action2);
+    poll_action!(input.action_3, InputAction::Action3);
     poll_action!(input.action_special, InputAction::Special);
 
     // --- Special toggles ---
@@ -147,4 +151,7 @@ pub fn update_input_state(
         debug!("Fullscreen toggle key pressed");
         commands.trigger(SwitchFullScreenEvent {});
     }
+
+    // --- Mouse wheel (analog scroll) ---
+    input.scroll_y = rl.get_mouse_wheel_move();
 }
