@@ -108,6 +108,16 @@ engine = {}
 ---@field action_2 DigitalButtonState
 ---@field back DigitalButtonState
 ---@field special DigitalButtonState
+---@field main_up DigitalButtonState Raw WASD up (W key)
+---@field main_down DigitalButtonState Raw WASD down (S key)
+---@field main_left DigitalButtonState Raw WASD left (A key)
+---@field main_right DigitalButtonState Raw WASD right (D key)
+---@field secondary_up DigitalButtonState Raw arrow up key
+---@field secondary_down DigitalButtonState Raw arrow down key
+---@field secondary_left DigitalButtonState Raw arrow left key
+---@field secondary_right DigitalButtonState Raw arrow right key
+---@field debug DigitalButtonState Debug toggle (F11)
+---@field fullscreen DigitalButtonState Fullscreen toggle (F10)
 
 ---Input state passed to callbacks
 ---@class InputSnapshot

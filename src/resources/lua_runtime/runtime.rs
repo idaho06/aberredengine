@@ -2525,6 +2525,34 @@ impl LuaRuntime {
         digital.set("action_2", create_button_table(&snapshot.digital.action_2)?)?;
         digital.set("back", create_button_table(&snapshot.digital.back)?)?;
         digital.set("special", create_button_table(&snapshot.digital.special)?)?;
+        // Raw WASD (main directional)
+        digital.set("main_up", create_button_table(&snapshot.digital.main_up)?)?;
+        digital.set("main_down", create_button_table(&snapshot.digital.main_down)?)?;
+        digital.set("main_left", create_button_table(&snapshot.digital.main_left)?)?;
+        digital.set("main_right", create_button_table(&snapshot.digital.main_right)?)?;
+        // Raw arrow keys (secondary directional)
+        digital.set(
+            "secondary_up",
+            create_button_table(&snapshot.digital.secondary_up)?,
+        )?;
+        digital.set(
+            "secondary_down",
+            create_button_table(&snapshot.digital.secondary_down)?,
+        )?;
+        digital.set(
+            "secondary_left",
+            create_button_table(&snapshot.digital.secondary_left)?,
+        )?;
+        digital.set(
+            "secondary_right",
+            create_button_table(&snapshot.digital.secondary_right)?,
+        )?;
+        // Function keys
+        digital.set("debug", create_button_table(&snapshot.digital.debug)?)?;
+        digital.set(
+            "fullscreen",
+            create_button_table(&snapshot.digital.fullscreen)?,
+        )?;
 
         // Create analog inputs table (empty for now, reserved for future gamepad support)
         let analog = lua.create_table()?;
@@ -3180,6 +3208,66 @@ impl LuaRuntime {
                     ("action_2", "DigitalButtonState", false, None),
                     ("back", "DigitalButtonState", false, None),
                     ("special", "DigitalButtonState", false, None),
+                    (
+                        "main_up",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw WASD up (W key)"),
+                    ),
+                    (
+                        "main_down",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw WASD down (S key)"),
+                    ),
+                    (
+                        "main_left",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw WASD left (A key)"),
+                    ),
+                    (
+                        "main_right",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw WASD right (D key)"),
+                    ),
+                    (
+                        "secondary_up",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw arrow up key"),
+                    ),
+                    (
+                        "secondary_down",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw arrow down key"),
+                    ),
+                    (
+                        "secondary_left",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw arrow left key"),
+                    ),
+                    (
+                        "secondary_right",
+                        "DigitalButtonState",
+                        false,
+                        Some("Raw arrow right key"),
+                    ),
+                    (
+                        "debug",
+                        "DigitalButtonState",
+                        false,
+                        Some("Debug toggle (F11)"),
+                    ),
+                    (
+                        "fullscreen",
+                        "DigitalButtonState",
+                        false,
+                        Some("Fullscreen toggle (F10)"),
+                    ),
                 ],
             ),
             (

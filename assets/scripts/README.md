@@ -384,14 +384,29 @@ The `input` table has the following structure:
 ```lua
 input = {
     digital = {
-        up = { pressed = bool, just_pressed = bool, just_released = bool },
-        down = { pressed = bool, just_pressed = bool, just_released = bool },
-        left = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Combined (WASD OR arrow keys)
+        up    = { pressed = bool, just_pressed = bool, just_released = bool },
+        down  = { pressed = bool, just_pressed = bool, just_released = bool },
+        left  = { pressed = bool, just_pressed = bool, just_released = bool },
         right = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Action buttons
         action_1 = { pressed = bool, just_pressed = bool, just_released = bool },
         action_2 = { pressed = bool, just_pressed = bool, just_released = bool },
-        back = { pressed = bool, just_pressed = bool, just_released = bool },
-        special = { pressed = bool, just_pressed = bool, just_released = bool },
+        back     = { pressed = bool, just_pressed = bool, just_released = bool },
+        special  = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Raw WASD (main directional)
+        main_up    = { pressed = bool, just_pressed = bool, just_released = bool },
+        main_down  = { pressed = bool, just_pressed = bool, just_released = bool },
+        main_left  = { pressed = bool, just_pressed = bool, just_released = bool },
+        main_right = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Raw arrow keys (secondary directional)
+        secondary_up    = { pressed = bool, just_pressed = bool, just_released = bool },
+        secondary_down  = { pressed = bool, just_pressed = bool, just_released = bool },
+        secondary_left  = { pressed = bool, just_pressed = bool, just_released = bool },
+        secondary_right = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Function keys
+        debug      = { pressed = bool, just_pressed = bool, just_released = bool },  -- F11
+        fullscreen = { pressed = bool, just_pressed = bool, just_released = bool },  -- F10
     },
     analog = {
         -- Reserved for future gamepad support
@@ -409,16 +424,33 @@ Each digital button has three boolean properties:
 
 ### Input Mapping
 
+**Combined fields** (OR of both key sets — use these for most gameplay):
+
 | Input Name | Keyboard Keys |
 |------------|---------------|
-| `up` | W, Up Arrow |
-| `down` | S, Down Arrow |
-| `left` | A, Left Arrow |
-| `right` | D, Right Arrow |
+| `up` | W **or** Up Arrow |
+| `down` | S **or** Down Arrow |
+| `left` | A **or** Left Arrow |
+| `right` | D **or** Right Arrow |
 | `action_1` | Space |
 | `action_2` | Enter |
 | `back` | Escape |
 | `special` | F12 |
+
+**Raw fields** (individual key sets — use when you need to distinguish which physical keys were pressed):
+
+| Input Name | Keyboard Key |
+|------------|--------------|
+| `main_up` | W |
+| `main_down` | S |
+| `main_left` | A |
+| `main_right` | D |
+| `secondary_up` | Up Arrow |
+| `secondary_down` | Down Arrow |
+| `secondary_left` | Left Arrow |
+| `secondary_right` | Right Arrow |
+| `debug` | F11 |
+| `fullscreen` | F10 |
 
 ### Usage Examples
 
@@ -442,6 +474,18 @@ end
 function on_update_level01(input, dt)
     if input.digital.back.just_pressed then
         engine.change_scene("menu")
+    end
+end
+
+-- Use raw fields when two players share one keyboard (WASD vs arrows)
+function on_update_two_player(input, dt)
+    -- Player 1: WASD
+    if input.digital.main_right.pressed then
+        -- move player 1 right
+    end
+    -- Player 2: arrow keys
+    if input.digital.secondary_right.pressed then
+        -- move player 2 right
     end
 end
 ```

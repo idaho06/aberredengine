@@ -44,14 +44,29 @@ impl DigitalButtonState {
 /// All digital input states.
 #[derive(Debug, Clone, Default)]
 pub struct DigitalInputs {
+    // Combined directional (WASD OR arrows)
     pub up: DigitalButtonState,
     pub down: DigitalButtonState,
     pub left: DigitalButtonState,
     pub right: DigitalButtonState,
+    // Action buttons
     pub action_1: DigitalButtonState,
     pub action_2: DigitalButtonState,
     pub back: DigitalButtonState,
     pub special: DigitalButtonState,
+    // Raw WASD (main directional)
+    pub main_up: DigitalButtonState,
+    pub main_down: DigitalButtonState,
+    pub main_left: DigitalButtonState,
+    pub main_right: DigitalButtonState,
+    // Raw arrow keys (secondary directional)
+    pub secondary_up: DigitalButtonState,
+    pub secondary_down: DigitalButtonState,
+    pub secondary_left: DigitalButtonState,
+    pub secondary_right: DigitalButtonState,
+    // Special function keys
+    pub debug: DigitalButtonState,
+    pub fullscreen: DigitalButtonState,
 }
 
 /// Analog input values (reserved for future gamepad support).
@@ -115,6 +130,25 @@ impl InputSnapshot {
                 action_2: DigitalButtonState::from_bool_state(&input.action_2),
                 back: DigitalButtonState::from_bool_state(&input.action_back),
                 special: DigitalButtonState::from_bool_state(&input.action_special),
+                // Raw WASD
+                main_up: DigitalButtonState::from_bool_state(&input.maindirection_up),
+                main_down: DigitalButtonState::from_bool_state(&input.maindirection_down),
+                main_left: DigitalButtonState::from_bool_state(&input.maindirection_left),
+                main_right: DigitalButtonState::from_bool_state(&input.maindirection_right),
+                // Raw arrow keys
+                secondary_up: DigitalButtonState::from_bool_state(&input.secondarydirection_up),
+                secondary_down: DigitalButtonState::from_bool_state(
+                    &input.secondarydirection_down,
+                ),
+                secondary_left: DigitalButtonState::from_bool_state(
+                    &input.secondarydirection_left,
+                ),
+                secondary_right: DigitalButtonState::from_bool_state(
+                    &input.secondarydirection_right,
+                ),
+                // Function keys
+                debug: DigitalButtonState::from_bool_state(&input.mode_debug),
+                fullscreen: DigitalButtonState::from_bool_state(&input.fullscreen_toggle),
             },
             analog: AnalogInputs::default(),
         }
@@ -243,5 +277,77 @@ mod tests {
         assert!(!dbs.pressed);
         assert!(!dbs.just_pressed);
         assert!(!dbs.just_released);
+    }
+
+    #[test]
+    fn test_main_direction_fields_populated() {
+        let mut input = default_input();
+        input.maindirection_up.active = true;
+        input.maindirection_up.just_pressed = true;
+        input.maindirection_left.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.main_up.pressed);
+        assert!(snap.digital.main_up.just_pressed);
+        assert!(!snap.digital.main_down.pressed);
+        assert!(snap.digital.main_left.pressed);
+        assert!(!snap.digital.main_right.pressed);
+    }
+
+    #[test]
+    fn test_secondary_direction_fields_populated() {
+        let mut input = default_input();
+        input.secondarydirection_down.active = true;
+        input.secondarydirection_right.active = true;
+        input.secondarydirection_right.just_released = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(!snap.digital.secondary_up.pressed);
+        assert!(snap.digital.secondary_down.pressed);
+        assert!(!snap.digital.secondary_left.pressed);
+        assert!(snap.digital.secondary_right.pressed);
+        assert!(snap.digital.secondary_right.just_released);
+    }
+
+    #[test]
+    fn test_raw_and_combined_independent() {
+        // Only arrow up pressed — combined up is true, main_up is false
+        let mut input = default_input();
+        input.secondarydirection_up.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.up.pressed); // combined
+        assert!(!snap.digital.main_up.pressed); // WASD raw — not pressed
+        assert!(snap.digital.secondary_up.pressed); // arrow raw — pressed
+    }
+
+    #[test]
+    fn test_debug_field_populated() {
+        let mut input = default_input();
+        input.mode_debug.active = true;
+        input.mode_debug.just_pressed = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.debug.pressed);
+        assert!(snap.digital.debug.just_pressed);
+    }
+
+    #[test]
+    fn test_fullscreen_field_populated() {
+        let mut input = default_input();
+        input.fullscreen_toggle.active = true;
+        input.fullscreen_toggle.just_released = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.fullscreen.pressed);
+        assert!(snap.digital.fullscreen.just_released);
+        assert!(!snap.digital.fullscreen.just_pressed);
+    }
+
+    #[test]
+    fn test_existing_combined_fields_unaffected() {
+        // Ensure backward compat: combined fields still OR both sources
+        let mut input = default_input();
+        input.maindirection_right.active = true;
+        input.secondarydirection_right.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.right.pressed);
+        assert!(snap.digital.main_right.pressed);
+        assert!(snap.digital.secondary_right.pressed);
     }
 }
