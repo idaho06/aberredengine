@@ -74,6 +74,7 @@ local scene_registry = {
     birthday_card        = "scenes.birthday.card",
     kraken_intro         = "scenes.kraken.intro",
     sidescroller_level01 = "scenes.sidescroller.level01",
+    bunnymark            = "scenes.bunnymark.level01",
 }
 
 -- Loaded scene modules (cached to avoid re-requiring)

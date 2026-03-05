@@ -210,6 +210,12 @@ local function load_sidescroller()
         sprite_size * 0, sprite_size * 5, sprite_size, sprite_size, 8 + 2, 10, false)
 end
 
+--- Load assets for the Bunnymark example
+local function load_bunnymark()
+    engine.log_info("Loading Bunnymark assets...")
+    engine.load_texture("bunnymark-raybunny", "./assets/textures/bunnymark/raybunny.png")
+end
+
 --- Called during the Setup game state to load all assets.
 --- Assets are queued here and processed by the Rust engine.
 function M.load_assets()
@@ -221,6 +227,7 @@ function M.load_assets()
     load_birthday()
     load_kraken()
     load_sidescroller()
+    load_bunnymark()
 
     engine.log_info("All assets queued for loading!")
 end
