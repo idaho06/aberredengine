@@ -2617,16 +2617,16 @@ impl LuaRuntime {
     /// input = {
     ///     digital = {
     ///         up = { pressed = bool, just_pressed = bool, just_released = bool },
-    ///         down = { ... },
-    ///         left = { ... },
-    ///         right = { ... },
-    ///         action_1 = { ... },
-    ///         action_2 = { ... },
-    ///         back = { ... },
-    ///         special = { ... },
+    ///         -- down, left, right, action_1/2/3, back, special,
+    ///         -- main_up/down/left/right, secondary_up/down/left/right,
+    ///         -- debug, fullscreen
     ///     },
     ///     analog = {
-    ///         -- Reserved for future gamepad support
+    ///         scroll_y      = number,  -- mouse wheel delta (positive=up)
+    ///         mouse_x       = number,  -- game-space cursor X (0..render_width)
+    ///         mouse_y       = number,  -- game-space cursor Y (0..render_height)
+    ///         mouse_world_x = number,  -- world-space cursor X (after camera)
+    ///         mouse_world_y = number,  -- world-space cursor Y (after camera)
     ///     },
     /// }
     /// ```
@@ -2695,6 +2695,12 @@ impl LuaRuntime {
         // Create analog inputs table
         let analog = lua.create_table()?;
         analog.set("scroll_y", snapshot.analog.scroll_y)?;
+        // Mouse position — game-space (letterbox-corrected, matches ScreenPosition)
+        analog.set("mouse_x", snapshot.analog.mouse_x)?;
+        analog.set("mouse_y", snapshot.analog.mouse_y)?;
+        // Mouse position — world-space (after camera transform, matches MapPosition)
+        analog.set("mouse_world_x", snapshot.analog.mouse_world_x)?;
+        analog.set("mouse_world_y", snapshot.analog.mouse_world_y)?;
 
         // Create root input table
         let input = lua.create_table()?;
@@ -3430,6 +3436,7 @@ impl LuaRuntime {
                     ("right", "DigitalButtonState", false, None),
                     ("action_1", "DigitalButtonState", false, None),
                     ("action_2", "DigitalButtonState", false, None),
+                    ("action_3", "DigitalButtonState", false, None),
                     ("back", "DigitalButtonState", false, None),
                     ("special", "DigitalButtonState", false, None),
                     (
@@ -3495,16 +3502,47 @@ impl LuaRuntime {
                 ],
             ),
             (
+                "AnalogInputs",
+                "Analog input values (mouse, scroll)",
+                &[
+                    (
+                        "scroll_y",
+                        "number",
+                        false,
+                        Some("Mouse wheel delta (positive=up, negative=down)"),
+                    ),
+                    (
+                        "mouse_x",
+                        "number",
+                        false,
+                        Some("Cursor X in game-space (0..render_width, letterbox-corrected)"),
+                    ),
+                    (
+                        "mouse_y",
+                        "number",
+                        false,
+                        Some("Cursor Y in game-space (0..render_height, letterbox-corrected)"),
+                    ),
+                    (
+                        "mouse_world_x",
+                        "number",
+                        false,
+                        Some("Cursor X in world-space (after camera transform, matches MapPosition)"),
+                    ),
+                    (
+                        "mouse_world_y",
+                        "number",
+                        false,
+                        Some("Cursor Y in world-space (after camera transform, matches MapPosition)"),
+                    ),
+                ],
+            ),
+            (
                 "InputSnapshot",
                 "Input state passed to callbacks",
                 &[
                     ("digital", "DigitalInputs", false, None),
-                    (
-                        "analog",
-                        "table",
-                        false,
-                        Some("Reserved for future gamepad support"),
-                    ),
+                    ("analog", "AnalogInputs", false, None),
                 ],
             ),
             (

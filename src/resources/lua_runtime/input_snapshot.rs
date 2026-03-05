@@ -75,7 +75,15 @@ pub struct DigitalInputs {
 pub struct AnalogInputs {
     /// Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll.
     pub scroll_y: f32,
-    // Future: move_x, move_y, look_x, look_y, trigger_left, trigger_right
+    /// Mouse X in game/render-target space (letterbox-corrected). Range: 0..render_width.
+    /// Matches ScreenPosition entity coordinates. Use for HUD hit-testing.
+    pub mouse_x: f32,
+    /// Mouse Y in game/render-target space (letterbox-corrected). Range: 0..render_height.
+    pub mouse_y: f32,
+    /// Mouse X in world-space (after camera transform). Matches MapPosition coordinates.
+    pub mouse_world_x: f32,
+    /// Mouse Y in world-space (after camera transform). Matches MapPosition coordinates.
+    pub mouse_world_y: f32,
 }
 
 /// Frozen snapshot of all input state for a single frame.
@@ -151,6 +159,10 @@ impl InputSnapshot {
             },
             analog: AnalogInputs {
                 scroll_y: input.scroll_y,
+                mouse_x: input.mouse_x,
+                mouse_y: input.mouse_y,
+                mouse_world_x: input.mouse_world_x,
+                mouse_world_y: input.mouse_world_y,
             },
         }
     }
@@ -390,5 +402,47 @@ mod tests {
         input.scroll_y = -2.0;
         let snap = InputSnapshot::from_input_state(&input);
         assert_eq!(snap.analog.scroll_y, -2.0);
+    }
+
+    #[test]
+    fn test_mouse_pos_zero_by_default() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert_eq!(snap.analog.mouse_x, 0.0);
+        assert_eq!(snap.analog.mouse_y, 0.0);
+        assert_eq!(snap.analog.mouse_world_x, 0.0);
+        assert_eq!(snap.analog.mouse_world_y, 0.0);
+    }
+
+    #[test]
+    fn test_mouse_screen_pos_propagated() {
+        let mut input = default_input();
+        input.mouse_x = 320.0;
+        input.mouse_y = 180.0;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.mouse_x, 320.0);
+        assert_eq!(snap.analog.mouse_y, 180.0);
+    }
+
+    #[test]
+    fn test_mouse_world_pos_propagated() {
+        let mut input = default_input();
+        input.mouse_world_x = -150.0;
+        input.mouse_world_y = 75.5;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.mouse_world_x, -150.0);
+        assert_eq!(snap.analog.mouse_world_y, 75.5);
+    }
+
+    #[test]
+    fn test_mouse_screen_and_world_independent() {
+        // Screen and world positions are independent: they differ when camera is offset
+        let mut input = default_input();
+        input.mouse_x = 400.0;
+        input.mouse_y = 225.0;
+        input.mouse_world_x = 0.0;
+        input.mouse_world_y = 0.0;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.mouse_x, 400.0);
+        assert_eq!(snap.analog.mouse_world_x, 0.0);
     }
 }

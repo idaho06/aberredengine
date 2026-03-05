@@ -45,6 +45,14 @@ pub struct InputState {
     pub action_special: BoolState,
     /// Mouse wheel scroll delta this frame. Positive = up, negative = down.
     pub scroll_y: f32,
+    /// Mouse X in game/render-target space (letterbox-corrected). Range: 0.0..render_width.
+    pub mouse_x: f32,
+    /// Mouse Y in game/render-target space (letterbox-corrected). Range: 0.0..render_height.
+    pub mouse_y: f32,
+    /// Mouse X in world-space (after camera transform). Matches MapPosition coordinates.
+    pub mouse_world_x: f32,
+    /// Mouse Y in world-space (after camera transform). Matches MapPosition coordinates.
+    pub mouse_world_y: f32,
 }
 
 #[cfg(test)]

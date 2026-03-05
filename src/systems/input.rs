@@ -13,8 +13,11 @@ use log::debug;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
+use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::{InputBinding, InputBindings};
+use crate::resources::screensize::ScreenSize;
+use crate::resources::windowsize::WindowSize;
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -59,6 +62,9 @@ pub fn update_input_state(
     bindings: Res<InputBindings>,
     rl: NonSendMut<raylib::RaylibHandle>,
     mut commands: Commands,
+    window_size: Res<WindowSize>,
+    screen_size: Res<ScreenSize>,
+    camera: Res<Camera2DRes>,
 ) {
     // Inline macro: update one BoolState field and optionally emit an InputEvent.
     //
@@ -154,4 +160,21 @@ pub fn update_input_state(
 
     // --- Mouse wheel (analog scroll) ---
     input.scroll_y = rl.get_mouse_wheel_move();
+
+    // --- Mouse position ---
+    // Game-space: letterbox-corrected render-target coordinates (0..render_width/height).
+    // Camera-independent — matches ScreenPosition entity coordinates.
+    let window_mouse_pos = rl.get_mouse_position();
+    let game_mouse_pos = window_size.window_to_game_pos(
+        window_mouse_pos,
+        screen_size.w as u32,
+        screen_size.h as u32,
+    );
+    input.mouse_x = game_mouse_pos.x;
+    input.mouse_y = game_mouse_pos.y;
+    // World-space: game-space projected through the current camera.
+    // Matches MapPosition entity coordinates.
+    let world_mouse_pos = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
+    input.mouse_world_x = world_mouse_pos.x;
+    input.mouse_world_y = world_mouse_pos.y;
 }

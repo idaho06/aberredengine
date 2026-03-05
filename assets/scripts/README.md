@@ -414,7 +414,11 @@ input = {
         fullscreen = { pressed = bool, just_pressed = bool, just_released = bool },  -- F10
     },
     analog = {
-        scroll_y = number,  -- Mouse wheel delta: positive = up, negative = down, 0 = no scroll
+        scroll_y      = number,  -- Mouse wheel delta: positive = up, negative = down, 0 = no scroll
+        mouse_x       = number,  -- Cursor X in game-space (0..render_width, letterbox-corrected)
+        mouse_y       = number,  -- Cursor Y in game-space (0..render_height, letterbox-corrected)
+        mouse_world_x = number,  -- Cursor X in world-space (after camera transform)
+        mouse_world_y = number,  -- Cursor Y in world-space (after camera transform)
     }
 }
 ```
@@ -463,6 +467,10 @@ Each digital button has three boolean properties:
 | Input Name | Type | Description |
 |------------|------|-------------|
 | `scroll_y` | number | Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll. |
+| `mouse_x` | number | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). Matches `ScreenPosition`. Use for HUD hit-testing. |
+| `mouse_y` | number | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
+| `mouse_world_x` | number | Cursor X in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
+| `mouse_world_y` | number | Cursor Y in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
 
 ### Usage Examples
 
