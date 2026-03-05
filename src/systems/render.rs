@@ -579,6 +579,10 @@ pub fn render_system(
                         let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                         d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
                     }
+
+                    if maybe_debug.is_some() && debug_res.overlay_config.show_sprite_bounds {
+                        draw_rotated_rect_lines(&mut d2, dest, origin_scaled, rotation, Color::BLUE);
+                    }
                 }
             } // End sprite drawing in camera space
 
@@ -798,6 +802,50 @@ pub fn render_system(
             None::<fn(&RaylibDrawHandle<'_>)>,
         );
     }
+}
+
+/// Draw a rotated rectangle outline in world space.
+///
+/// Rotates the 4 corners of `dest` around the anchor point `(dest.x, dest.y)`
+/// by `rotation` degrees (clockwise, matching Raylib's convention) and draws
+/// 4 line segments connecting them.
+fn draw_rotated_rect_lines(
+    d: &mut impl RaylibDraw,
+    dest: Rectangle,
+    origin: Vector2,
+    rotation: f32,
+    color: Color,
+) {
+    let angle = rotation.to_radians();
+    let cos_a = angle.cos();
+    let sin_a = angle.sin();
+
+    // 4 un-rotated corner offsets relative to the anchor point
+    let corners_local: [(f32, f32); 4] = [
+        (-origin.x,              -origin.y),
+        (dest.width - origin.x,  -origin.y),
+        (dest.width - origin.x,  dest.height - origin.y),
+        (-origin.x,              dest.height - origin.y),
+    ];
+
+    let rotate = |(cx, cy): (f32, f32)| -> Vector2 {
+        Vector2 {
+            x: dest.x + cx * cos_a - cy * sin_a,
+            y: dest.y + cx * sin_a + cy * cos_a,
+        }
+    };
+
+    let pts: [Vector2; 4] = [
+        rotate(corners_local[0]),
+        rotate(corners_local[1]),
+        rotate(corners_local[2]),
+        rotate(corners_local[3]),
+    ];
+
+    d.draw_line_v(pts[0], pts[1], color);
+    d.draw_line_v(pts[1], pts[2], color);
+    d.draw_line_v(pts[2], pts[3], color);
+    d.draw_line_v(pts[3], pts[0], color);
 }
 
 /// Draw screen-space sprites (UI layer).
