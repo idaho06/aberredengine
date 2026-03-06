@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-04 (mouse input: MouseButton bindings, Action3, analog scroll_y)
+# Last updated: 2026-03-06 (bunnymark scenes, mouse position in input snapshot, EntitySnapshot refactor, SetScreenPosition cmd)
 
 ## QUICK REFERENCE
 
@@ -22,12 +22,12 @@ LUA API REFERENCE: assets/scripts/engine.lua (generated EmmyLua stubs — regene
 LUA API DOCS:      assets/scripts/README.md
 COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (EntityCmd, SpawnCmd, CloneCmd, SignalCmd, etc.)
 
-## STATUS (2026-03-04)
+## STATUS (2026-03-06)
 
 - Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
-- Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro, sidescroller_level01.
+- Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro, sidescroller_level01, bunnymark_menu, bunnymark_map_loop, bunnymark_screen_loop, bunnymark_map_phase, bunnymark_screen_phase.
 - Callback injection: each scene module exports `_callbacks` table with local functions; main.lua injects/removes them from `_G` on scene switch to prevent naming conflicts between scenes.
-- Assets loaded per scene group in setup.lua: common (fonts, cursor, shaders), asteroids (ship, space tiles, asteroids, explosions, laser, sounds), arkanoid (bricks, vaus, ball, background, title, music, tilemaps), birthday (hearts, gems, photo, fonts, music), kraken (mouth, tentacle).
+- Assets loaded per scene group in setup.lua: common (fonts, cursor, shaders), asteroids (ship, space tiles, asteroids, explosions, laser, sounds), arkanoid (bricks, vaus, ball, background, title, music, tilemaps), birthday (hearts, gems, photo, fonts, music), kraken (mouth, tentacle), bunnymark (raybunny texture).
 - Shaders loaded: invert, wave, bloom, outline, crt (from crt2.fs), blink, fade.
 - Parent-child entity hierarchy: ChildOf relationship + GlobalTransform2D component for recursive transform propagation (position, rotation, scale). propagate_transforms system runs after movement/tweens, before collision.
 - Menu scrolling: visible_count + scroll_offset with "..." indicator entities for overflow.
@@ -47,8 +47,13 @@ COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (Entity
 - Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field set via `.with_on_rust_callback()`. Callback signature: `fn(Entity, &str, usize, &mut GameCtx)` (menu entity, item_id, item_index, ECS context). Priority chain in `menu_selection_observer`: Lua callback → Rust callback → `MenuActions`. Both `#[cfg]` versions of the observer updated. `MenuRustCallback` type alias defined in `components/menu.rs` (consistent with `TimerCallback`, `CollisionCallback`, `PhaseEnterFn`).
 - `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Callback signatures: `fn(&mut GameCtx)`, `fn(&mut GameCtx, f32, &InputState)`, `fn(&mut GameCtx)`. `SceneManager` resource maps scene names → descriptors. Engine-owned systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene). Builder: `.add_scene(name, descriptor)` + `.initial_scene(name)`. Conflicts: panics if combined with `.on_switch_scene()` or `.on_enter_play()`. Always compiled (no feature flag).
 - `GameCtx` unification: `TimerCtx`, `PhaseCtx`, `CollisionCtx`, `MenuCtx`, and `SceneCtx` have been unified into a single `GameCtx` SystemParam (`src/systems/game_ctx.rs`). All five had identical fields; `GameCtx` contains all 18: Commands + 6 mutable queries + 8 read-only queries + world_signals + audio + world_time + texture_store. Re-exported from `systems::GameCtx`.
-- Input rebinding refactor: `InputBindings` resource (`resources/input_bindings.rs`) maps `InputAction` → `Vec<InputBinding>` (`InputBinding::Keyboard(KeyboardKey)` or `InputBinding::MouseButton(MouseButton)`). `BoolState` no longer has `key_binding`; `InputState`/`BoolState` both derive `Default`. `update_input_state` reads `Res<InputBindings>` via `poll_action!` macro + `any_binding_down/pressed/released` helpers. `InputAction` gained `ToggleDebug` (F11) and `ToggleFullscreen` (F10) variants (15 total, including `Action3`). Lua API: `engine.rebind_action(action, key)`, `engine.add_binding(action, key)`, `engine.get_binding(action) -> string?`. Commands: `InputCmd::Rebind/AddBinding` in `commands.rs`, processed via `process_input_command` in `lua_commands.rs`. `lua_plugin.rs` update/switch_scene take `ResMut<InputBindings>`, call `update_bindings_cache` before Lua and drain after. `action_from_str`/`action_to_str` in `runtime.rs` (re-exported from `lua_runtime` mod). `key_from_str`/`key_to_str`, `mouse_button_from_str`/`mouse_button_to_str`, `binding_from_str`/`binding_to_str` in `input_bindings.rs`.
+- Input rebinding refactor: `InputBindings` resource (`resources/input_bindings.rs`) maps `InputAction` → `Vec<InputBinding>` (`InputBinding::Keyboard(KeyboardKey)` or `InputBinding::MouseButton(MouseButton)`). `BoolState` no longer has `key_binding`; `InputState`/`BoolState` both derive `Default`. `update_input_state` reads `Res<InputBindings>` via `poll_action!` macro + `any_binding_down/pressed/released` helpers. `InputAction` gained `ToggleDebug` (F11) and `ToggleFullscreen` (F10) variants (16 total, including `Action3`). Lua API: `engine.rebind_action(action, key)`, `engine.add_binding(action, key)`, `engine.get_binding(action) -> string?`. Commands: `InputCmd::Rebind/AddBinding` in `commands.rs`, processed via `process_input_command` in `lua_commands.rs`. `lua_plugin.rs` update/switch_scene take `ResMut<InputBindings>`, call `update_bindings_cache` before Lua and drain after. `action_from_str`/`action_to_str` in `runtime.rs` (re-exported from `lua_runtime` mod). `key_from_str`/`key_to_str`, `mouse_button_from_str`/`mouse_button_to_str`, `binding_from_str`/`binding_to_str` in `input_bindings.rs`.
 - Mouse input: `InputBinding::MouseButton(MouseButton)` variant added. Default bindings: Action1 = Space + mouse_left, Action2 = Enter + mouse_right, Action3 = mouse_middle (no keyboard default). Scroll wheel polled via `rl.get_mouse_wheel_move()` stored in `InputState.scroll_y: f32` and exposed as `input.analog.scroll_y` in Lua (positive = up, negative = down). Lua rebind API supports `"mouse_left"`, `"mouse_right"`, `"mouse_middle"` as binding strings.
+- Mouse position in InputState/InputSnapshot: `mouse_x`/`mouse_y` (game-space, letterbox-corrected via `WindowSize::window_to_game_pos()`) and `mouse_world_x`/`mouse_world_y` (world-space, after camera transform via `rl.get_screen_to_world2D()`). Computed in `update_input_state`. Exposed to Lua as `input.analog.mouse_x/mouse_y/mouse_world_x/mouse_world_y`.
+- Bunnymark example scenes: 5 variants demonstrating performance benchmarking with different approaches — `bunnymark_menu` (sub-menu), `bunnymark_map_loop` (MapPosition + on_update loop), `bunnymark_screen_loop` (ScreenPosition + on_update loop), `bunnymark_map_phase` (MapPosition + Phase), `bunnymark_screen_phase` (ScreenPosition + Phase). Assets: `bunnymark-raybunny` texture. Shared helpers in `scenes/bunnymark/common.lua`.
+- `EntitySnapshot` struct in `context.rs`: refactored `build_entity_context_pooled` from 20+ individual parameters to a single `EntitySnapshot` struct. Callers (luaphase, luatimer) build the snapshot and pass it.
+- `ContextQueries` SystemParam in `lua_commands.rs`: groups read-only queries (Group, Rotation, Scale, BoxCollider, LuaTimer, GlobalTransform2D, ChildOf) used by luaphase/luatimer systems for building entity context tables.
+- `SetScreenPosition` EntityCmd + `entity_set_screen_position` Lua API: sets entity's ScreenPosition (analogous to `SetPosition` for MapPosition).
 
 ## FILE TREE (ESSENTIAL)
 
@@ -110,7 +115,7 @@ src/
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController) + compute_frame_offset (row-wrapping)
 │   ├── luaphase.rs            # [feature=lua] Lua phase callbacks
-│   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd/InputCmd + EntityCmdQueries SystemParam
+│   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd/InputCmd + EntityCmdQueries/ContextQueries SystemParams
 │   ├── luatimer.rs            # [feature=lua] Lua timer processing
 │   ├── timer.rs               # Rust timer processing (update_timers, timer_observer)
 │   ├── phase.rs               # Rust phase state machine (phase_system)
@@ -159,7 +164,7 @@ src/
 │       ├── mod.rs             # Public exports
 │       ├── runtime.rs         # LuaRuntime, engine table API (macros: register_cmd!, define_entity_cmds!), __meta table
 │       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, InputCmd, etc.
-│       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer)
+│       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer); EntitySnapshot struct
 │       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
 │       ├── entity_builder.rs  # LuaEntityBuilder fluent API (unified spawn/clone, regular/collision)
 │       └── spawn_data.rs      # SpawnComponentData structures
@@ -167,7 +172,7 @@ src/
     ├── mod.rs                 # Re-exports
     ├── collision.rs           # CollisionEvent
     ├── gamestate.rs           # GameStateTransition
-    ├── input.rs               # InputEvent + InputAction enum (14 variants: directions, actions, special, ToggleDebug, ToggleFullscreen)
+    ├── input.rs               # InputEvent + InputAction enum (16 variants: directions, actions incl. Action3, special, ToggleDebug, ToggleFullscreen)
     ├── menu.rs                # MenuSelection
     ├── luatimer.rs            # [feature=lua] LuaTimerEvent
     ├── timer.rs               # TimerEvent (Rust fn-pointer timer)
@@ -199,8 +204,15 @@ assets/
 │       ├── arkanoid/level01.lua
 │       ├── birthday/intro.lua + card.lua
 │       ├── kraken/intro.lua
-│       └── sidescroller/level01.lua  # Sidescroller demo (sprite sheet animations, camera follow)
-├── textures/                  # Organized by game: asteroids/, arkanoid/, birthday/, kraken/ + shared (cursor.png, black.png)
+│       ├── sidescroller/level01.lua  # Sidescroller demo (sprite sheet animations, camera follow)
+│       └── bunnymark/               # Bunnymark benchmark (5 variants)
+│           ├── common.lua           # Shared helpers (spawn, bounce, constants)
+│           ├── menu.lua             # Sub-menu for variant selection
+│           ├── map_loop.lua         # MapPosition + on_update loop
+│           ├── screen_loop.lua      # ScreenPosition + on_update loop
+│           ├── map_phase.lua        # MapPosition + Phase state machine
+│           └── screen_phase.lua     # ScreenPosition + Phase state machine
+├── textures/                  # Organized by game: asteroids/, arkanoid/, birthday/, kraken/, bunnymark/ + shared (cursor.png, black.png)
 ├── shaders/                   # OpenGL 3.3 fragment shaders: invert.fs, wave.fs, bloom.fs, outline.fs, crt.fs, crt2.fs, blink.fs, fade.fs
 ├── audio/                     # Organized by game: asteroids/, arkanoid/, birthday/ + shared (option.wav)
 ├── fonts/                     # Arcade_Cabinet.ttf, Formal_Future.ttf, birthday/Endless_Love.ttf
@@ -240,7 +252,7 @@ BoxCollider { offset: Vector2, origin: Vector2, size: Vector2 }
 CameraTarget { priority: u8 }                         -- marks entity as camera follow candidate; highest priority wins
 LuaCollisionRule { group_a, group_b, callback: String } -- [feature=lua]
 CollisionRule { group_a, group_b, callback: CollisionCallback } -- fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)
-Sprite { tex_key: String, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
+Sprite { tex_key: Arc<str>, width: f32, height: f32, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
 Animation { animation_key: String, frame_index: usize, elapsed: f32 }
 AnimationController { fallback_key: String, rules: Vec<AnimationRule> }
 Signals { scalars: FxHashMap, integers: FxHashMap, flags: FxHashSet, strings: FxHashMap }
@@ -275,13 +287,13 @@ GlobalTransform2D { position: Vector2, rotation_degrees: f32, scale: Vector2 }  
 ```
 GameConfig { render_width, render_height, window_width, window_height, target_fps, vsync, fullscreen, background_color: Color, window_title: String, config_path }
 WorldTime { elapsed: f32, delta: f32, time_scale: f32, frame_count: u64 }
-InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, action_3, mode_debug, fullscreen_toggle, action_special: BoolState; scroll_y: f32 }  -- derives Default
+InputState { maindirection_up/down/left/right, secondarydirection_up/down/left/right, action_back, action_1, action_2, action_3, mode_debug, fullscreen_toggle, action_special: BoolState; scroll_y, mouse_x, mouse_y, mouse_world_x, mouse_world_y: f32 }  -- derives Default
 BoolState { active: bool, just_pressed: bool, just_released: bool }  -- derives Default; key_binding removed (now in InputBindings)
 InputBindings { map: HashMap<InputAction, Vec<InputBinding>> }  -- runtime-configurable key bindings; Default has all 15 actions mapped
 InputBinding::Keyboard(KeyboardKey) | InputBinding::MouseButton(MouseButton)  -- extensible enum
 InputSnapshot { digital: DigitalInputs, analog: AnalogInputs }  -- frozen snapshot for Lua callbacks
 DigitalInputs { up, down, left, right, action_1, action_2, action_3, back, special: DigitalButtonState (combined/action); main_up/down/left/right (raw WASD); secondary_up/down/left/right (raw arrows); debug (F11), fullscreen (F10): DigitalButtonState }
-AnalogInputs { scroll_y: f32 }  -- mouse wheel delta this frame (positive=up, negative=down)
+AnalogInputs { scroll_y: f32, mouse_x: f32, mouse_y: f32, mouse_world_x: f32, mouse_world_y: f32 }  -- scroll_y: mouse wheel delta (positive=up); mouse_x/y: game-space cursor (letterbox-corrected); mouse_world_x/y: world-space cursor (after camera)
 DigitalButtonState { pressed: bool, just_pressed: bool, just_released: bool }
 TextureStore(FxHashMap<String, Texture2D>)
 FontStore(FxHashMap<String, Font>)              -- NON_SEND
@@ -297,7 +309,7 @@ CameraFollowConfig { enabled: bool, mode: FollowMode, easing: EasingCurve, lerp_
 FollowMode { Instant, Lerp, SmoothDamp, Deadzone { half_w, half_h } }
 EasingCurve { Linear, EaseOut (default), EaseIn, EaseInOut }
 ScreenSize { w: i32, h: i32 }           -- game's internal render resolution
-WindowSize { w: i32, h: i32 }           -- actual window dimensions
+WindowSize { w: i32, h: i32 }           -- actual window dimensions; has window_to_game_pos() for letterbox-corrected mouse coords
 RenderTarget { texture: RenderTexture2D, game_width, game_height, filter: RenderFilter }  -- NON_SEND
 DebugMode (marker)
 DebugOverlayConfig { show_collider_boxes, show_position_crosshairs, show_entity_signals, show_text_bounds, show_sprite_bounds: bool }  -- all default true; toggled via imgui checkboxes in debug mode
@@ -318,7 +330,8 @@ RaylibAccess<'w> { rl: NonSendMut<RaylibHandle>, th: NonSend<RaylibThread> }    
 ScriptingContext<'w> { lua_runtime: NonSend<LuaRuntime>, audio_cmd_writer: MessageWriter<AudioCmd> }                  -- lua_plugin.rs [feature=lua]
 GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, systems_store: Res<SystemsStore> } -- lua_plugin.rs [feature=lua]
 EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entity, &mut LuaPhase)> }                  -- lua_plugin.rs [feature=lua]
-EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, shaders }                            -- systems/lua_commands.rs [feature=lua]
+EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, screen_positions, sprites, shaders, global_transforms } -- systems/lua_commands.rs [feature=lua]
+ContextQueries<'w, 's> { groups, rotations, scales, box_colliders, lua_timers, global_transforms, child_of }         -- systems/lua_commands.rs [feature=lua] (read-only queries for entity context building)
 RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
 RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites }     -- systems/render.rs
 GameCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, texture_store } -- systems/game_ctx.rs
@@ -336,6 +349,8 @@ input.digital.secondary_up/down/left/right -- raw arrow keys only
 input.digital.debug                       -- F11
 input.digital.fullscreen                  -- F10
 input.analog.scroll_y                     -- mouse wheel delta this frame (f32, positive=up, negative=down)
+input.analog.mouse_x / mouse_y           -- cursor in game-space (0..render_width/height, letterbox-corrected)
+input.analog.mouse_world_x / mouse_world_y -- cursor in world-space (after camera transform, matches MapPosition)
 ```
 
 Callback signatures:
@@ -626,7 +641,10 @@ Engine bootstrap: engine_app.rs (EngineBuilder, system schedule)
 43. `CollisionCallback` takes `&mut GameCtx` (not a separate `CollisionCtx` — that type is removed). Rust collision callbacks have full GameCtx access.
 44. `SetAnimation` EntityCmd also updates `Sprite.tex_key` to the animation's texture, keeping sprite and animation in sync when switching.
 45. imgui is integrated into debug mode (F11): `DebugOverlayConfig` resource controls individual overlay visibility; toggled via an imgui window at runtime. raylib must be built with `imgui` feature (enabled in `Cargo.toml` for linux/windows targets).
-46. `InputSnapshot`/`DigitalInputs` now expose raw WASD (`main_*`), raw arrows (`secondary_*`), function keys (`debug`, `fullscreen`), and `action_3` in addition to combined directional fields. `AnalogInputs` now has `scroll_y: f32` (mouse wheel delta, positive=up, negative=down). Existing combined fields (`up/down/left/right`) are unchanged — backward compatible.
+46. `InputSnapshot`/`DigitalInputs` now expose raw WASD (`main_*`), raw arrows (`secondary_*`), function keys (`debug`, `fullscreen`), and `action_3` in addition to combined directional fields. `AnalogInputs` has `scroll_y: f32` (mouse wheel delta), `mouse_x`/`mouse_y` (game-space, letterbox-corrected), `mouse_world_x`/`mouse_world_y` (world-space, after camera). Existing combined fields (`up/down/left/right`) are unchanged — backward compatible.
 47. `InputBindings` resource decouples hardware inputs from `InputState`. `BoolState` no longer has `key_binding`. `update_input_state` reads `Res<InputBindings>` and handles both `InputBinding::Keyboard` and `InputBinding::MouseButton`. Helper functions renamed `any_binding_down/pressed/released`.
 48. Lua input rebinding: `engine.rebind_action(action, key)` replaces all bindings; `engine.add_binding(action, key)` appends (multi-bind); `engine.get_binding(action)` reads snapshot (visible next frame). Action names: `main_up/down/left/right`, `secondary_up/down/left/right`, `back`, `action_1`, `action_2`, `action_3`, `special`, `toggle_debug`, `toggle_fullscreen`. Binding strings: single lowercase letters `a`-`z`, digits `0`-`9`, `space`, `enter`/`return`, `escape`/`esc`, arrows, modifiers (`lshift`/`rshift`/`lctrl`/`rctrl`/`lalt`/`ralt`), `f1`-`f12`, `mouse_left`, `mouse_right`, `mouse_middle`.
 49. `InputCmd` (Rebind/AddBinding) processed by `process_input_command` in `lua_commands.rs` using `binding_from_str` (handles both keyboard and mouse); drained in `lua_plugin.rs` update/switch_scene after `drain_camera_follow_commands`.
+50. `EntitySnapshot` struct in `context.rs` replaces 20+ individual parameters to `build_entity_context_pooled`. Callers build the snapshot struct and pass `&EntitySnapshot`. `ContextQueries` SystemParam in `lua_commands.rs` groups the read-only queries needed.
+51. `entity_set_screen_position(entity_id, x, y)` sets `ScreenPosition` (screen-space). Distinct from `entity_set_position` which sets `MapPosition` (world-space).
+52. Mouse position is computed in `update_input_state` (not just `mouse_controller`): game-space via `WindowSize::window_to_game_pos()`, world-space via `rl.get_screen_to_world2D()`. Available every frame in `InputState` and `InputSnapshot`.
