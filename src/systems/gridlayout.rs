@@ -55,7 +55,10 @@ pub fn gridlayout_spawn_system(
         let layout_data = match GridLayoutData::load_from_file(&grid_layout.path) {
             Ok(data) => data,
             Err(err) => {
-                error!("Failed to load grid layout from {}: {}", grid_layout.path, err);
+                error!(
+                    "Failed to load grid layout from {}: {}",
+                    grid_layout.path, err
+                );
                 grid_layout.spawned = true; // Prevent retrying
                 continue;
             }
@@ -117,6 +120,9 @@ pub fn gridlayout_spawn_system(
         }
         grid_layout.spawned = true;
 
-        info!("Spawned grid layout from {} with group '{}'", grid_layout.path, grid_layout.group);
+        info!(
+            "Spawned grid layout from {} with group '{}'",
+            grid_layout.path, grid_layout.group
+        );
     }
 }

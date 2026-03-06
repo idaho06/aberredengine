@@ -48,6 +48,7 @@ use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
+use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
@@ -57,7 +58,9 @@ use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
-use crate::systems::collision::{compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos};
+use crate::systems::collision::{
+    compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
+};
 use crate::systems::lua_commands::{
     process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
     process_phase_command, process_signal_command, process_spawn_command,
@@ -71,6 +74,7 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub groups: Query<'w, 's, &'static Group>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
+    pub screen_positions: Query<'w, 's, &'static mut ScreenPosition>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub signals: Query<'w, 's, &'static mut Signals>,
@@ -105,11 +109,17 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
         if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
             // Resolve world positions via shared helper
             let pos_a = resolve_world_pos(
-                &params.positions.as_readonly(), &params.global_transforms_query, ent_a,
-            ).map(|v| (v.x, v.y));
+                &params.positions.as_readonly(),
+                &params.global_transforms_query,
+                ent_a,
+            )
+            .map(|v| (v.x, v.y));
             let pos_b = resolve_world_pos(
-                &params.positions.as_readonly(), &params.global_transforms_query, ent_b,
-            ).map(|v| (v.x, v.y));
+                &params.positions.as_readonly(),
+                &params.global_transforms_query,
+                ent_b,
+            )
+            .map(|v| (v.x, v.y));
 
             let (vel_a, speed_sq_a) = params
                 .rigid_bodies
@@ -136,10 +146,16 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
 
             // Get collider rects and sides via shared helpers
             let rect_a = resolve_collider_rect(
-                &params.positions.as_readonly(), &params.global_transforms_query, &params.box_colliders, ent_a,
+                &params.positions.as_readonly(),
+                &params.global_transforms_query,
+                &params.box_colliders,
+                ent_a,
             );
             let rect_b = resolve_collider_rect(
-                &params.positions.as_readonly(), &params.global_transforms_query, &params.box_colliders, ent_b,
+                &params.positions.as_readonly(),
+                &params.global_transforms_query,
+                &params.box_colliders,
+                ent_b,
             );
             let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 
@@ -191,6 +207,7 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 &mut params.sprite_query,
                 &mut params.rigid_bodies,
                 &mut params.positions,
+                &mut params.screen_positions,
                 &mut params.shader_query,
                 &params.global_transforms_query,
                 &params.systems_store,

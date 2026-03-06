@@ -22,13 +22,13 @@ use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
 use aberredengine::components::stuckto::StuckTo;
 #[cfg(feature = "lua")]
+use aberredengine::resources::animationstore::AnimationStore;
+#[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
 #[cfg(feature = "lua")]
 use aberredengine::resources::systemsstore::SystemsStore;
 #[cfg(feature = "lua")]
 use aberredengine::resources::worldsignals::WorldSignals;
-#[cfg(feature = "lua")]
-use aberredengine::resources::animationstore::AnimationStore;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::EntityCmdQueries;
 #[cfg(feature = "lua")]
@@ -93,10 +93,7 @@ fn propagate_single_child_position_only() {
     let mut world = World::new();
 
     let parent = world
-        .spawn((
-            MapPosition::new(100.0, 100.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(100.0, 100.0), GlobalTransform2D::default()))
         .id();
 
     let child = world
@@ -255,10 +252,7 @@ fn propagate_chain_grandchild() {
     let mut world = World::new();
 
     let root = world
-        .spawn((
-            MapPosition::new(100.0, 0.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(100.0, 0.0), GlobalTransform2D::default()))
         .id();
 
     let child = world
@@ -423,15 +417,10 @@ fn propagate_child_with_own_rotation_and_scale() {
 fn propagate_inserts_missing_globaltransform2d_via_commands() {
     let mut world = World::new();
 
-    let parent = world
-        .spawn((MapPosition::new(100.0, 0.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(100.0, 0.0),)).id();
 
     let child = world
-        .spawn((
-            MapPosition::new(10.0, 0.0),
-            ChildOf(parent),
-        ))
+        .spawn((MapPosition::new(10.0, 0.0), ChildOf(parent)))
         .id();
 
     world.flush();
@@ -470,9 +459,16 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
 #[cfg(feature = "lua")]
 fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(SystemsStore::new());
-    world.insert_resource(AnimationStore { animations: Default::default() });
+    world.insert_resource(AnimationStore {
+        animations: Default::default(),
+    });
 
-    let mut state = SystemState::<(Commands, EntityCmdQueries, Res<SystemsStore>, Res<AnimationStore>)>::new(world);
+    let mut state = SystemState::<(
+        Commands,
+        EntityCmdQueries,
+        Res<SystemsStore>,
+        Res<AnimationStore>,
+    )>::new(world);
     let (mut commands, mut queries, systems_store, anim_store) = state.get_mut(world);
 
     process_entity_commands(
@@ -484,6 +480,7 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
         &mut queries.sprites,
         &mut queries.rigid_bodies,
         &mut queries.positions,
+        &mut queries.screen_positions,
         &mut queries.shaders,
         &queries.global_transforms,
         &systems_store,
@@ -655,15 +652,8 @@ fn entity_cmd_set_parent_multiple_children() {
 
     // Parent should have Children with 3 entries (auto-populated by Bevy)
     let children = world.get::<Children>(parent);
-    assert!(
-        children.is_some(),
-        "Parent should have Children component"
-    );
-    assert_eq!(
-        children.unwrap().len(),
-        3,
-        "Parent should have 3 children"
-    );
+    assert!(children.is_some(), "Parent should have Children component");
+    assert_eq!(children.unwrap().len(), 3, "Parent should have 3 children");
 }
 
 // =============================================================================
@@ -677,9 +667,7 @@ fn spawn_cmd_with_parent_applies_childof() {
     world.insert_resource(WorldSignals::default());
 
     // Spawn parent entity first
-    let parent = world
-        .spawn((MapPosition::new(100.0, 50.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(100.0, 50.0),)).id();
 
     // Build a SpawnCmd with parent set
     let cmd = SpawnCmd {
@@ -753,14 +741,10 @@ fn stuckto_skips_entities_with_childof() {
     let mut world = World::new();
 
     // Target entity
-    let target = world
-        .spawn((MapPosition::new(200.0, 200.0),))
-        .id();
+    let target = world.spawn((MapPosition::new(200.0, 200.0),)).id();
 
     // Follower that has both StuckTo AND ChildOf — should be skipped by StuckTo system
-    let parent = world
-        .spawn((MapPosition::new(0.0, 0.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
 
     let follower = world
         .spawn((
@@ -792,16 +776,11 @@ fn stuckto_still_works_without_childof() {
     let mut world = World::new();
 
     // Target entity
-    let target = world
-        .spawn((MapPosition::new(200.0, 200.0),))
-        .id();
+    let target = world.spawn((MapPosition::new(200.0, 200.0),)).id();
 
     // Follower with StuckTo only (no ChildOf) — should follow target normally
     let follower = world
-        .spawn((
-            MapPosition::new(10.0, 10.0),
-            StuckTo::new(target),
-        ))
+        .spawn((MapPosition::new(10.0, 10.0), StuckTo::new(target)))
         .id();
 
     tick_stuckto(&mut world);
@@ -954,10 +933,7 @@ fn collision_uses_world_position_for_child_entities() {
 
     // Parent at (200, 200)
     let parent = world
-        .spawn((
-            MapPosition::new(200.0, 200.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(200.0, 200.0), GlobalTransform2D::default()))
         .id();
 
     // Child with local position (0, 0), but parent is at (200, 200)
@@ -978,10 +954,7 @@ fn collision_uses_world_position_for_child_entities() {
 
     // Independent entity at (205, 205) — overlaps with child's world position
     let other = world
-        .spawn((
-            MapPosition::new(205.0, 205.0),
-            BoxCollider::new(20.0, 20.0),
-        ))
+        .spawn((MapPosition::new(205.0, 205.0), BoxCollider::new(20.0, 20.0)))
         .id();
 
     // Run collision detection
@@ -993,10 +966,14 @@ fn collision_uses_world_position_for_child_entities() {
         "Collision should be detected between child (world pos 200,200) and other (205,205)"
     );
     // Verify the collision involves the right entities
-    let has_pair = log.pairs.iter().any(|&(a, b)| {
-        (a == child && b == other) || (a == other && b == child)
-    });
-    assert!(has_pair, "Collision should be between child and other entity");
+    let has_pair = log
+        .pairs
+        .iter()
+        .any(|&(a, b)| (a == child && b == other) || (a == other && b == child));
+    assert!(
+        has_pair,
+        "Collision should be between child and other entity"
+    );
 }
 
 #[test]
@@ -1006,10 +983,7 @@ fn collision_no_false_positive_from_local_position() {
 
     // Parent at (500, 500)
     let parent = world
-        .spawn((
-            MapPosition::new(500.0, 500.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(500.0, 500.0), GlobalTransform2D::default()))
         .id();
 
     // Child with local position (5, 5) — world position = (505, 505)
@@ -1026,10 +1000,7 @@ fn collision_no_false_positive_from_local_position() {
     tick_propagate(&mut world);
 
     // Independent entity at (10, 10) — near child's LOCAL position but far from WORLD position
-    world.spawn((
-        MapPosition::new(10.0, 10.0),
-        BoxCollider::new(10.0, 10.0),
-    ));
+    world.spawn((MapPosition::new(10.0, 10.0), BoxCollider::new(10.0, 10.0)));
 
     // Run collision detection
     tick_collision(&mut world);
@@ -1047,7 +1018,7 @@ fn collision_no_false_positive_from_local_position() {
 
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{
-    LuaRuntime, build_entity_context_pooled,
+    EntitySnapshot, LuaRuntime, build_entity_context_pooled,
 };
 
 #[cfg(feature = "lua")]
@@ -1057,22 +1028,31 @@ fn entity_context_includes_world_transform_fields() {
     let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
     let lua = runtime.lua();
 
-    let ctx = build_entity_context_pooled(
-        lua, &tables, 42_u64,
-        None,                       // group
-        Some((10.0, 20.0)),         // map_pos (local)
-        None,                       // screen_pos
-        None,                       // rigid_body
-        Some(45.0),                 // rotation (local)
-        Some((1.0, 1.0)),           // scale (local)
-        None, None, None, None, None, None, None,
-        Some((110.0, 120.0)),       // world_pos
-        Some(90.0),                 // world_rotation
-        Some((2.0, 3.0)),           // world_scale
-        Some(99),                   // parent_id
-    ).expect("build_entity_context_pooled");
+    let snapshot = EntitySnapshot {
+        entity_id: 42_u64,
+        group: None,
+        map_pos: Some((10.0, 20.0)),
+        screen_pos: None,
+        rigid_body: None,
+        rotation: Some(45.0),
+        scale: Some((1.0, 1.0)),
+        rect: None,
+        sprite: None,
+        animation: None,
+        signals: None,
+        lua_phase: None,
+        lua_timer: None,
+        previous_phase: None,
+        world_pos: Some((110.0, 120.0)),
+        world_rotation: Some(90.0),
+        world_scale: Some((2.0, 3.0)),
+        parent_id: Some(99),
+    };
+    let ctx =
+        build_entity_context_pooled(lua, &tables, &snapshot).expect("build_entity_context_pooled");
 
-    lua.load(r#"
+    lua.load(
+        r#"
         local ctx = ...
         assert(ctx.world_pos ~= nil,        "world_pos should not be nil")
         assert(ctx.world_pos.x == 110.0,    "world_pos.x: " .. tostring(ctx.world_pos.x))
@@ -1082,7 +1062,10 @@ fn entity_context_includes_world_transform_fields() {
         assert(ctx.world_scale.x == 2.0,    "world_scale.x: " .. tostring(ctx.world_scale.x))
         assert(ctx.world_scale.y == 3.0,    "world_scale.y: " .. tostring(ctx.world_scale.y))
         assert(ctx.parent_id == 99,         "parent_id: " .. tostring(ctx.parent_id))
-    "#).call::<()>(ctx).expect("Lua world transform assertions");
+    "#,
+    )
+    .call::<()>(ctx)
+    .expect("Lua world transform assertions");
 }
 
 #[cfg(feature = "lua")]
@@ -1092,42 +1075,54 @@ fn entity_context_nil_world_fields_without_hierarchy() {
     let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
     let lua = runtime.lua();
 
-    let ctx = build_entity_context_pooled(
-        lua, &tables, 1_u64,
-        None, None, None, None, None, None, None,
-        None, None, None, None, None, None,
-        None, None, None, None,  // no world transform, no parent
-    ).expect("build_entity_context_pooled");
+    let snapshot = EntitySnapshot {
+        entity_id: 1_u64,
+        group: None,
+        map_pos: None,
+        screen_pos: None,
+        rigid_body: None,
+        rotation: None,
+        scale: None,
+        rect: None,
+        sprite: None,
+        animation: None,
+        signals: None,
+        lua_phase: None,
+        lua_timer: None,
+        previous_phase: None,
+        world_pos: None,
+        world_rotation: None,
+        world_scale: None,
+        parent_id: None,
+    };
+    let ctx =
+        build_entity_context_pooled(lua, &tables, &snapshot).expect("build_entity_context_pooled");
 
-    lua.load(r#"
+    lua.load(
+        r#"
         local ctx = ...
         assert(ctx.world_pos      == nil, "world_pos should be nil")
         assert(ctx.world_rotation == nil, "world_rotation should be nil")
         assert(ctx.world_scale    == nil, "world_scale should be nil")
         assert(ctx.parent_id      == nil, "parent_id should be nil")
-    "#).call::<()>(ctx).expect("Lua nil world transform assertions");
+    "#,
+    )
+    .call::<()>(ctx)
+    .expect("Lua nil world transform assertions");
 }
 
 #[test]
 fn cascade_despawn_removes_children() {
     let mut world = World::new();
 
-    let parent = world
-        .spawn((MapPosition::new(0.0, 0.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
 
     let child = world
-        .spawn((
-            MapPosition::new(10.0, 0.0),
-            ChildOf(parent),
-        ))
+        .spawn((MapPosition::new(10.0, 0.0), ChildOf(parent)))
         .id();
 
     let grandchild = world
-        .spawn((
-            MapPosition::new(20.0, 0.0),
-            ChildOf(child),
-        ))
+        .spawn((MapPosition::new(20.0, 0.0), ChildOf(child)))
         .id();
 
     world.flush();
@@ -1163,7 +1158,8 @@ fn cascade_despawn_removes_children() {
 fn meta_entity_cmds_include_parent_commands() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local fns = engine.__meta.functions
         assert(fns.entity_set_parent, "entity_set_parent missing from __meta.functions")
         assert(fns.entity_set_parent.description, "entity_set_parent missing description")
@@ -1172,7 +1168,10 @@ fn meta_entity_cmds_include_parent_commands() {
         -- Also check collision_ variants (auto-generated by define_entity_cmds!)
         assert(fns.collision_entity_set_parent, "collision_entity_set_parent missing")
         assert(fns.collision_entity_remove_parent, "collision_entity_remove_parent missing")
-    "#).exec().expect("Lua meta parent commands assertions");
+    "#,
+    )
+    .exec()
+    .expect("Lua meta parent commands assertions");
 }
 
 #[cfg(feature = "lua")]
@@ -1202,7 +1201,8 @@ fn meta_builder_includes_with_parent() {
 fn meta_entity_context_includes_world_fields() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local types = engine.__meta.types
         local ctx_type = types.EntityContext
         assert(ctx_type, "EntityContext type missing from __meta.types")
@@ -1221,5 +1221,52 @@ fn meta_entity_context_includes_world_fields() {
         assert(found_world_rotation, "world_rotation field missing from EntityContext type")
         assert(found_world_scale, "world_scale field missing from EntityContext type")
         assert(found_parent_id, "parent_id field missing from EntityContext type")
-    "#).exec().expect("Lua meta EntityContext world fields assertions");
+    "#,
+    )
+    .exec()
+    .expect("Lua meta EntityContext world fields assertions");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn entity_cmd_set_screen_position_updates_screen_position() {
+    use aberredengine::components::screenposition::ScreenPosition;
+
+    let mut world = World::new();
+    let entity = world.spawn(ScreenPosition::new(0.0, 0.0)).id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::SetScreenPosition {
+            entity_id: entity.to_bits(),
+            x: 42.0,
+            y: 77.0,
+        }],
+    );
+
+    let pos = world.get::<ScreenPosition>(entity).unwrap();
+    assert!((pos.pos.x - 42.0).abs() < EPSILON);
+    assert!((pos.pos.y - 77.0).abs() < EPSILON);
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn entity_cmd_set_screen_position_no_op_on_map_entity() {
+    // Entity has MapPosition only — SetScreenPosition should silently do nothing.
+    let mut world = World::new();
+    let entity = world.spawn(MapPosition::new(10.0, 20.0)).id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::SetScreenPosition {
+            entity_id: entity.to_bits(),
+            x: 99.0,
+            y: 99.0,
+        }],
+    );
+
+    // MapPosition unchanged
+    let pos = world.get::<MapPosition>(entity).unwrap();
+    assert!((pos.pos.x - 10.0).abs() < EPSILON);
+    assert!((pos.pos.y - 20.0).abs() < EPSILON);
 }

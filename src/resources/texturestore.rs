@@ -4,9 +4,9 @@
 //! objects keyed by string IDs. Insert textures during setup and read them in
 //! render systems.
 use bevy_ecs::prelude::Resource;
+use raylib::ffi;
 use raylib::prelude::Texture2D;
 use raylib::prelude::{Color, Font, Image, RaylibHandle, RaylibThread};
-use raylib::ffi;
 use rustc_hash::FxHashMap;
 use std::ffi::CString;
 // use std::collections::HashMap;

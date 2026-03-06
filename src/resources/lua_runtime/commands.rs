@@ -215,6 +215,8 @@ pub enum EntityCmd {
     SetSpeed { entity_id: u64, speed: f32 },
     /// Set entity position (MapPosition)
     SetPosition { entity_id: u64, x: f32, y: f32 },
+    /// Set entity screen-space position (ScreenPosition)
+    SetScreenPosition { entity_id: u64, x: f32, y: f32 },
     /// Despawn an entity
     Despawn { entity_id: u64 },
     /// Despawn a menu entity and its items/cursor/textures

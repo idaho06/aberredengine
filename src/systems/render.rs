@@ -13,8 +13,8 @@ use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
-use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::entityshader::EntityShader;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -31,13 +31,13 @@ use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
-use crate::resources::scenemanager::SceneManager;
-use crate::resources::uniformvalue::UniformValue;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
+use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::uniformvalue::UniformValue;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -332,8 +332,24 @@ pub struct RenderResources<'w> {
 #[derive(SystemParam)]
 pub struct RenderQueries<'w, 's> {
     pub map_sprites: Query<'w, 's, MapSpriteQueryData>,
-    pub colliders: Query<'w, 's, (&'static BoxCollider, &'static MapPosition, Option<&'static GlobalTransform2D>)>,
-    pub positions: Query<'w, 's, (&'static MapPosition, Option<&'static Signals>, Option<&'static GlobalTransform2D>)>,
+    pub colliders: Query<
+        'w,
+        's,
+        (
+            &'static BoxCollider,
+            &'static MapPosition,
+            Option<&'static GlobalTransform2D>,
+        ),
+    >,
+    pub positions: Query<
+        'w,
+        's,
+        (
+            &'static MapPosition,
+            Option<&'static Signals>,
+            Option<&'static GlobalTransform2D>,
+        ),
+    >,
     pub map_texts: Query<'w, 's, MapTextQueryData>,
     pub rigidbodies: Query<'w, 's, &'static RigidBody>,
     pub screen_texts: Query<
@@ -465,8 +481,17 @@ pub fn render_system(
             sprite_buffer.sort_unstable_by(|a, b| {
                 a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt) in
-                sprite_buffer.iter()
+            for (
+                entity,
+                sprite,
+                pos,
+                _z,
+                maybe_scale,
+                maybe_rot,
+                maybe_shader,
+                maybe_tint,
+                maybe_gt,
+            ) in sprite_buffer.iter()
             {
                 if let Some(tex) = textures.get(&sprite.tex_key) {
                     let mut src = Rectangle {
@@ -581,7 +606,13 @@ pub fn render_system(
                     }
 
                     if maybe_debug.is_some() && debug_res.overlay_config.show_sprite_bounds {
-                        draw_rotated_rect_lines(&mut d2, dest, origin_scaled, rotation, Color::BLUE);
+                        draw_rotated_rect_lines(
+                            &mut d2,
+                            dest,
+                            origin_scaled,
+                            rotation,
+                            Color::BLUE,
+                        );
                     }
                 }
             } // End sprite drawing in camera space
@@ -621,13 +652,21 @@ pub fn render_system(
             text_buffer.sort_unstable_by(|a, b| {
                 a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (_entity, text, pos, _z, _maybe_shader, maybe_tint, maybe_gt) in text_buffer.iter() {
+            for (_entity, text, pos, _z, _maybe_shader, maybe_tint, maybe_gt) in text_buffer.iter()
+            {
                 if let Some(font) = fonts.get(&text.font) {
                     let render_pos = maybe_gt.map_or(pos.pos, |gt| gt.position);
                     let final_color = maybe_tint
                         .map(|t| t.multiply(text.color))
                         .unwrap_or(text.color);
-                    d2.draw_text_ex(font, &text.text, render_pos, text.font_size, 1.0, final_color);
+                    d2.draw_text_ex(
+                        font,
+                        &text.text,
+                        render_pos,
+                        text.font_size,
+                        1.0,
+                        final_color,
+                    );
                     if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
                         d2.draw_rectangle_lines(
                             render_pos.x as i32,
@@ -648,7 +687,9 @@ pub fn render_system(
                         d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
                     }
                 }
-                if debug_res.overlay_config.show_position_crosshairs || debug_res.overlay_config.show_entity_signals {
+                if debug_res.overlay_config.show_position_crosshairs
+                    || debug_res.overlay_config.show_entity_signals
+                {
                     for (position, maybe_signals, maybe_gt) in query_positions.iter() {
                         let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
                         if debug_res.overlay_config.show_position_crosshairs {
@@ -670,42 +711,42 @@ pub fn render_system(
                         if debug_res.overlay_config.show_entity_signals
                             && let Some(signals) = maybe_signals
                         {
-                                let mut y_offset = 10;
-                                let font_size = 10;
-                                let font_color = Color::YELLOW;
-                                for flag in signals.get_flags() {
-                                    let text = format!("Flag: {}", flag);
-                                    d2.draw_text(
-                                        &text,
-                                        world_pos.x as i32 + 10,
-                                        world_pos.y as i32 + y_offset,
-                                        font_size,
-                                        font_color,
-                                    );
-                                    y_offset += 12;
-                                }
-                                for (key, value) in signals.get_scalars() {
-                                    let text = format!("Scalar: {} = {:.2}", key, value);
-                                    d2.draw_text(
-                                        &text,
-                                        world_pos.x as i32 + 10,
-                                        world_pos.y as i32 + y_offset,
-                                        font_size,
-                                        font_color,
-                                    );
-                                    y_offset += 12;
-                                }
-                                for (key, value) in signals.get_integers() {
-                                    let text = format!("Integer: {} = {}", key, value);
-                                    d2.draw_text(
-                                        &text,
-                                        world_pos.x as i32 + 10,
-                                        world_pos.y as i32 + y_offset,
-                                        font_size,
-                                        font_color,
-                                    );
-                                    y_offset += 12;
-                                }
+                            let mut y_offset = 10;
+                            let font_size = 10;
+                            let font_color = Color::YELLOW;
+                            for flag in signals.get_flags() {
+                                let text = format!("Flag: {}", flag);
+                                d2.draw_text(
+                                    &text,
+                                    world_pos.x as i32 + 10,
+                                    world_pos.y as i32 + y_offset,
+                                    font_size,
+                                    font_color,
+                                );
+                                y_offset += 12;
+                            }
+                            for (key, value) in signals.get_scalars() {
+                                let text = format!("Scalar: {} = {:.2}", key, value);
+                                d2.draw_text(
+                                    &text,
+                                    world_pos.x as i32 + 10,
+                                    world_pos.y as i32 + y_offset,
+                                    font_size,
+                                    font_color,
+                                );
+                                y_offset += 12;
+                            }
+                            for (key, value) in signals.get_integers() {
+                                let text = format!("Integer: {} = {}", key, value);
+                                d2.draw_text(
+                                    &text,
+                                    world_pos.x as i32 + 10,
+                                    world_pos.y as i32 + y_offset,
+                                    font_size,
+                                    font_color,
+                                );
+                                y_offset += 12;
+                            }
                         }
                     }
                 }
@@ -822,10 +863,10 @@ fn draw_rotated_rect_lines(
 
     // 4 un-rotated corner offsets relative to the anchor point
     let corners_local: [(f32, f32); 4] = [
-        (-origin.x,              -origin.y),
-        (dest.width - origin.x,  -origin.y),
-        (dest.width - origin.x,  dest.height - origin.y),
-        (-origin.x,              dest.height - origin.y),
+        (-origin.x, -origin.y),
+        (dest.width - origin.x, -origin.y),
+        (dest.width - origin.x, dest.height - origin.y),
+        (-origin.x, dest.height - origin.y),
     ];
 
     let rotate = |(cx, cy): (f32, f32)| -> Vector2 {
@@ -1054,8 +1095,14 @@ fn draw_camera_panel(
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             let cam = &camera.0;
-            ui.text(format!("Target:   ({:.1}, {:.1})", cam.target.x, cam.target.y));
-            ui.text(format!("Offset:   ({:.1}, {:.1})", cam.offset.x, cam.offset.y));
+            ui.text(format!(
+                "Target:   ({:.1}, {:.1})",
+                cam.target.x, cam.target.y
+            ));
+            ui.text(format!(
+                "Offset:   ({:.1}, {:.1})",
+                cam.offset.x, cam.offset.y
+            ));
             ui.text(format!("Rotation: {:.2}°", cam.rotation));
             ui.text(format!("Zoom:     {:.3}", cam.zoom));
             if let Some(cf) = camera_follow {
@@ -1147,21 +1194,21 @@ fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             let inputs: &[(&str, &crate::resources::input::BoolState)] = &[
-                ("Up (WASD)",           &input_state.maindirection_up),
-                ("Left (WASD)",         &input_state.maindirection_left),
-                ("Down (WASD)",         &input_state.maindirection_down),
-                ("Right (WASD)",        &input_state.maindirection_right),
-                ("Up (Arrow)",          &input_state.secondarydirection_up),
-                ("Down (Arrow)",        &input_state.secondarydirection_down),
-                ("Left (Arrow)",        &input_state.secondarydirection_left),
-                ("Right (Arrow)",       &input_state.secondarydirection_right),
-                ("Back (Esc)",          &input_state.action_back),
+                ("Up (WASD)", &input_state.maindirection_up),
+                ("Left (WASD)", &input_state.maindirection_left),
+                ("Down (WASD)", &input_state.maindirection_down),
+                ("Right (WASD)", &input_state.maindirection_right),
+                ("Up (Arrow)", &input_state.secondarydirection_up),
+                ("Down (Arrow)", &input_state.secondarydirection_down),
+                ("Left (Arrow)", &input_state.secondarydirection_left),
+                ("Right (Arrow)", &input_state.secondarydirection_right),
+                ("Back (Esc)", &input_state.action_back),
                 ("Action 1 (Space/LMB)", &input_state.action_1),
                 ("Action 2 (Enter/RMB)", &input_state.action_2),
-                ("Action 3 (MMB)",      &input_state.action_3),
-                ("Debug (F11)",         &input_state.mode_debug),
-                ("Fullscr (F10)",       &input_state.fullscreen_toggle),
-                ("Special (F12)",       &input_state.action_special),
+                ("Action 3 (MMB)", &input_state.action_3),
+                ("Debug (F11)", &input_state.mode_debug),
+                ("Fullscr (F10)", &input_state.fullscreen_toggle),
+                ("Special (F12)", &input_state.action_special),
             ];
             for (name, state) in inputs {
                 if state.active {
@@ -1186,7 +1233,10 @@ fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
             } else {
                 [0.5, 0.5, 0.5, 1.0]
             };
-            ui.text_colored(scroll_color, format!("Scroll Y: {:+.2}", input_state.scroll_y));
+            ui.text_colored(
+                scroll_color,
+                format!("Scroll Y: {:+.2}", input_state.scroll_y),
+            );
         });
 }
 
@@ -1194,11 +1244,14 @@ fn draw_overlays_panel(ui: &ImguiUi, overlay_config: &mut DebugOverlayConfig) {
     ui.window("Overlays")
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
-            ui.checkbox("Collider boxes",       &mut overlay_config.show_collider_boxes);
-            ui.checkbox("Position crosshairs",  &mut overlay_config.show_position_crosshairs);
-            ui.checkbox("Entity signals",       &mut overlay_config.show_entity_signals);
-            ui.checkbox("Text bounds",          &mut overlay_config.show_text_bounds);
-            ui.checkbox("Sprite bounds",        &mut overlay_config.show_sprite_bounds);
+            ui.checkbox("Collider boxes", &mut overlay_config.show_collider_boxes);
+            ui.checkbox(
+                "Position crosshairs",
+                &mut overlay_config.show_position_crosshairs,
+            );
+            ui.checkbox("Entity signals", &mut overlay_config.show_entity_signals);
+            ui.checkbox("Text bounds", &mut overlay_config.show_text_bounds);
+            ui.checkbox("Sprite bounds", &mut overlay_config.show_sprite_bounds);
         });
 }
 

@@ -86,22 +86,10 @@ impl Default for InputBindings {
         let m = |btn: MouseButton| InputBinding::MouseButton(btn);
         let mut map = HashMap::new();
 
-        map.insert(
-            InputAction::MainDirectionUp,
-            vec![k(KeyboardKey::KEY_W)],
-        );
-        map.insert(
-            InputAction::MainDirectionDown,
-            vec![k(KeyboardKey::KEY_S)],
-        );
-        map.insert(
-            InputAction::MainDirectionLeft,
-            vec![k(KeyboardKey::KEY_A)],
-        );
-        map.insert(
-            InputAction::MainDirectionRight,
-            vec![k(KeyboardKey::KEY_D)],
-        );
+        map.insert(InputAction::MainDirectionUp, vec![k(KeyboardKey::KEY_W)]);
+        map.insert(InputAction::MainDirectionDown, vec![k(KeyboardKey::KEY_S)]);
+        map.insert(InputAction::MainDirectionLeft, vec![k(KeyboardKey::KEY_A)]);
+        map.insert(InputAction::MainDirectionRight, vec![k(KeyboardKey::KEY_D)]);
         map.insert(
             InputAction::SecondaryDirectionUp,
             vec![k(KeyboardKey::KEY_UP)],
@@ -125,7 +113,10 @@ impl Default for InputBindings {
         );
         map.insert(
             InputAction::Action2,
-            vec![k(KeyboardKey::KEY_ENTER), m(MouseButton::MOUSE_BUTTON_RIGHT)],
+            vec![
+                k(KeyboardKey::KEY_ENTER),
+                m(MouseButton::MOUSE_BUTTON_RIGHT),
+            ],
         );
         map.insert(
             InputAction::Action3,
@@ -133,10 +124,7 @@ impl Default for InputBindings {
         );
         map.insert(InputAction::Special, vec![k(KeyboardKey::KEY_F12)]);
         map.insert(InputAction::ToggleDebug, vec![k(KeyboardKey::KEY_F11)]);
-        map.insert(
-            InputAction::ToggleFullscreen,
-            vec![k(KeyboardKey::KEY_F10)],
-        );
+        map.insert(InputAction::ToggleFullscreen, vec![k(KeyboardKey::KEY_F10)]);
 
         Self { map }
     }
@@ -466,14 +454,8 @@ mod tests {
     fn test_first_binding_str_returns_canonical_name() {
         let b = InputBindings::default();
         assert_eq!(b.first_binding_str(InputAction::Action1), Some("space"));
-        assert_eq!(
-            b.first_binding_str(InputAction::MainDirectionUp),
-            Some("w")
-        );
-        assert_eq!(
-            b.first_binding_str(InputAction::ToggleDebug),
-            Some("f11")
-        );
+        assert_eq!(b.first_binding_str(InputAction::MainDirectionUp), Some("w"));
+        assert_eq!(b.first_binding_str(InputAction::ToggleDebug), Some("f11"));
     }
 
     #[test]

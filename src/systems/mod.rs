@@ -42,8 +42,8 @@ pub struct RaylibAccess<'w> {
 }
 
 pub mod animation;
-pub mod camera_follow;
 pub mod audio;
+pub mod camera_follow;
 pub mod collision;
 pub mod collision_detector;
 pub mod dynamictext_size;
@@ -56,9 +56,9 @@ pub mod input;
 pub mod inputaccelerationcontroller;
 pub mod inputsimplecontroller;
 #[cfg(feature = "lua")]
-pub mod lua_commands;
-#[cfg(feature = "lua")]
 pub mod lua_collision;
+#[cfg(feature = "lua")]
+pub mod lua_commands;
 #[cfg(feature = "lua")]
 pub mod luaphase;
 #[cfg(feature = "lua")]
@@ -68,10 +68,10 @@ pub mod mousecontroller;
 pub mod movement;
 pub mod particleemitter;
 pub mod phase;
-pub mod rust_collision;
-pub mod scene_dispatch;
 pub mod propagate_transforms;
 pub mod render;
+pub mod rust_collision;
+pub mod scene_dispatch;
 pub mod signalbinding;
 pub mod stuckto;
 pub mod time;

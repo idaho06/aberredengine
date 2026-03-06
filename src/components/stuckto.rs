@@ -142,8 +142,10 @@ mod tests {
 
     #[test]
     fn test_with_stored_velocity() {
-        let st = StuckTo::new(dummy_entity())
-            .with_stored_velocity(Vector2 { x: 100.0, y: -200.0 });
+        let st = StuckTo::new(dummy_entity()).with_stored_velocity(Vector2 {
+            x: 100.0,
+            y: -200.0,
+        });
         let vel = st.stored_velocity.unwrap();
         assert_eq!(vel.x, 100.0);
         assert_eq!(vel.y, -200.0);

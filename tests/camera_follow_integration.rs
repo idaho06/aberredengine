@@ -11,9 +11,7 @@ use aberredengine::components::cameratarget::CameraTarget;
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::resources::camera2d::Camera2DRes;
-use aberredengine::resources::camerafollowconfig::{
-    CameraFollowConfig, EasingCurve, FollowMode,
-};
+use aberredengine::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::camera_follow::camera_follow_system;
@@ -158,8 +156,12 @@ fn equal_priority_deterministic() {
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
 
     // Same priority — the entity with the lower Entity id wins
-    let e1 = world.spawn((MapPosition::new(100.0, 100.0), CameraTarget::new(5))).id();
-    let e2 = world.spawn((MapPosition::new(900.0, 900.0), CameraTarget::new(5))).id();
+    let e1 = world
+        .spawn((MapPosition::new(100.0, 100.0), CameraTarget::new(5)))
+        .id();
+    let e2 = world
+        .spawn((MapPosition::new(900.0, 900.0), CameraTarget::new(5)))
+        .id();
     world.flush();
 
     // Figure out which entity has the lower id
@@ -179,8 +181,18 @@ fn equal_priority_deterministic() {
 
     assert!(approx_eq(t1.x, expected_x), "x: {}", t1.x);
     assert!(approx_eq(t1.y, expected_y), "y: {}", t1.y);
-    assert!(approx_eq(t1.x, t2.x), "deterministic x: {} vs {}", t1.x, t2.x);
-    assert!(approx_eq(t1.y, t2.y), "deterministic y: {} vs {}", t1.y, t2.y);
+    assert!(
+        approx_eq(t1.x, t2.x),
+        "deterministic x: {} vs {}",
+        t1.x,
+        t2.x
+    );
+    assert!(
+        approx_eq(t1.y, t2.y),
+        "deterministic y: {} vs {}",
+        t1.y,
+        t2.y
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,16 +357,8 @@ fn smooth_damp_converges() {
     }
 
     let t = camera_target(&world);
-    assert!(
-        (t.x - 50.0).abs() < 0.1,
-        "x should converge: {}",
-        t.x
-    );
-    assert!(
-        (t.y - 50.0).abs() < 0.1,
-        "y should converge: {}",
-        t.y
-    );
+    assert!((t.x - 50.0).abs() < 0.1, "x should converge: {}", t.x);
+    assert!((t.y - 50.0).abs() < 0.1, "y should converge: {}", t.y);
 }
 
 #[test]
@@ -455,7 +459,11 @@ fn deadzone_per_axis_independence() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq(t.x, 0.0), "x should hold (inside deadzone): {}", t.x);
+    assert!(
+        approx_eq(t.x, 0.0),
+        "x should hold (inside deadzone): {}",
+        t.x
+    );
     assert!(t.y > 0.0, "y should move (outside deadzone): {}", t.y);
 }
 
@@ -485,16 +493,8 @@ fn bounds_clamp_prevents_camera_leaving_world() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq(t.x, 160.0),
-        "x clamped to half-viewport: {}",
-        t.x
-    );
-    assert!(
-        approx_eq(t.y, 120.0),
-        "y clamped to half-viewport: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 160.0), "x clamped to half-viewport: {}", t.x);
+    assert!(approx_eq(t.y, 120.0), "y clamped to half-viewport: {}", t.y);
 }
 
 #[test]

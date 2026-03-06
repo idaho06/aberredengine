@@ -345,36 +345,24 @@ mod tests {
 
     #[test]
     fn test_tween_scale_with_easing() {
-        let tw = TweenScale::new(
-            Vector2 { x: 1.0, y: 1.0 },
-            Vector2 { x: 2.0, y: 2.0 },
-            1.0,
-        )
-        .with_easing(Easing::CubicInOut);
+        let tw = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 2.0 }, 1.0)
+            .with_easing(Easing::CubicInOut);
 
         assert!(matches!(tw.easing, Easing::CubicInOut));
     }
 
     #[test]
     fn test_tween_scale_with_loop_mode() {
-        let tw = TweenScale::new(
-            Vector2 { x: 1.0, y: 1.0 },
-            Vector2 { x: 2.0, y: 2.0 },
-            1.0,
-        )
-        .with_loop_mode(LoopMode::PingPong);
+        let tw = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 2.0 }, 1.0)
+            .with_loop_mode(LoopMode::PingPong);
 
         assert!(matches!(tw.loop_mode, LoopMode::PingPong));
     }
 
     #[test]
     fn test_tween_scale_with_backwards() {
-        let tw = TweenScale::new(
-            Vector2 { x: 1.0, y: 1.0 },
-            Vector2 { x: 2.0, y: 2.0 },
-            4.0,
-        )
-        .with_backwards();
+        let tw = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 2.0 }, 4.0)
+            .with_backwards();
 
         assert!(approx_eq(tw.time, 4.0));
         assert!(!tw.forward);

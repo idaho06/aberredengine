@@ -19,6 +19,7 @@ use aberredengine::components::rigidbody::RigidBody;
 use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
 use aberredengine::components::signals::Signals;
+use aberredengine::components::sprite::Sprite;
 use aberredengine::components::stuckto::StuckTo;
 use aberredengine::components::timer::Timer;
 use aberredengine::components::ttl::Ttl;
@@ -30,29 +31,28 @@ use aberredengine::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
 use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::events::timer::TimerEvent;
+use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
-use aberredengine::resources::texturestore::TextureStore;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
-use aberredengine::components::sprite::Sprite;
 use aberredengine::systems::animation::{animation, animation_controller};
 use aberredengine::systems::collision_detector::collision_detector;
+use aberredengine::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
-use aberredengine::systems::rust_collision::rust_collision_observer;
-use aberredengine::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luatimer::update_lua_timers;
 use aberredengine::systems::movement::movement;
+use aberredengine::systems::rust_collision::rust_collision_observer;
 use aberredengine::systems::stuckto::stuck_to_entity_system;
 use aberredengine::systems::time::update_world_time;
-use aberredengine::systems::timer::{update_timers, timer_observer};
+use aberredengine::systems::timer::{timer_observer, update_timers};
 use aberredengine::systems::ttl::ttl_system;
 use aberredengine::systems::tween::{
     tween_mapposition_system, tween_rotation_system, tween_scale_system,
@@ -206,7 +206,9 @@ fn collision_pipeline_triggers_lua_side_effects() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
     world.insert_resource(SystemsStore::new());
-    world.insert_resource(AnimationStore { animations: Default::default() });
+    world.insert_resource(AnimationStore {
+        animations: Default::default(),
+    });
     world.init_resource::<Messages<AudioCmd>>();
 
     let lua_runtime = LuaRuntime::new().expect("Failed to init Lua runtime");
@@ -1072,7 +1074,8 @@ fn time_scale_doubles_effective_movement() {
 fn meta_table_has_functions_and_classes() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         assert(engine.__meta, "__meta table missing")
         assert(engine.__meta.functions, "__meta.functions missing")
         assert(engine.__meta.classes, "__meta.classes missing")
@@ -1096,7 +1099,10 @@ fn meta_table_has_functions_and_classes() {
             method_count = method_count + 1
         end
         assert(method_count > 50, "expected >50 builder methods, got " .. method_count)
-    "#).exec().unwrap();
+    "#,
+    )
+    .exec()
+    .unwrap();
 }
 
 // =============================================================================
@@ -1108,7 +1114,8 @@ fn meta_table_has_functions_and_classes() {
 fn meta_types_table_is_populated() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local types = engine.__meta.types
         assert(types, "__meta.types missing")
 
@@ -1146,7 +1153,10 @@ fn meta_types_table_is_populated() {
         -- Spot-check Vector2
         local v2 = types.Vector2
         assert(#v2.fields == 2, "Vector2 should have 2 fields")
-    "#).exec().unwrap();
+    "#,
+    )
+    .exec()
+    .unwrap();
 }
 
 #[cfg(feature = "lua")]
@@ -1154,7 +1164,8 @@ fn meta_types_table_is_populated() {
 fn meta_enums_table_is_populated() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local enums = engine.__meta.enums
         assert(enums, "__meta.enums missing")
 
@@ -1197,7 +1208,10 @@ fn meta_enums_table_is_populated() {
         assert(#enums.Category.values == #expected_cats,
             "Category value count mismatch: expected " .. #expected_cats ..
             " got " .. #enums.Category.values)
-    "#).exec().unwrap();
+    "#,
+    )
+    .exec()
+    .unwrap();
 }
 
 #[cfg(feature = "lua")]
@@ -1244,7 +1258,8 @@ fn meta_callbacks_table_is_populated() {
 fn meta_functions_complete() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local fns = engine.__meta.functions
 
         -- Expected function names (comprehensive list)
@@ -1341,7 +1356,10 @@ fn meta_functions_complete() {
         assert(#missing_collision == 0,
             "Missing collision entity functions (parity check): " ..
             table.concat(missing_collision, ", "))
-    "#).exec().unwrap();
+    "#,
+    )
+    .exec()
+    .unwrap();
 }
 
 #[cfg(feature = "lua")]
@@ -1503,11 +1521,11 @@ fn update_world_time_zero_dt() {
 #[cfg(feature = "lua")]
 #[test]
 fn context_builder_passes_snapshot_strings_to_lua() {
-    use std::sync::Arc;
     use aberredengine::resources::lua_runtime::{
-        AnimationSnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, SpriteSnapshot,
+        AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, SpriteSnapshot,
         build_entity_context_pooled,
     };
+    use std::sync::Arc;
 
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
     let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
@@ -1520,22 +1538,48 @@ fn context_builder_passes_snapshot_strings_to_lua() {
     let timer_cb = String::from("on_fire");
 
     // Borrow instead of clone (the new API)
-    let sprite_snap = SpriteSnapshot { tex_key: tex_key.as_ref(), flip_h: false, flip_v: false };
-    let anim_snap   = AnimationSnapshot { key: anim_key.as_str(), frame_index: 1, elapsed: 0.1 };
-    let phase_snap  = LuaPhaseSnapshot { current: phase.as_str(), time_in_phase: 2.5 };
-    let timer_snap  = LuaTimerSnapshot { duration: 3.0, elapsed: 1.0, callback: timer_cb.as_str() };
+    let sprite_snap = SpriteSnapshot {
+        tex_key: tex_key.as_ref(),
+        flip_h: false,
+        flip_v: false,
+    };
+    let anim_snap = AnimationSnapshot {
+        key: anim_key.as_str(),
+        frame_index: 1,
+        elapsed: 0.1,
+    };
+    let phase_snap = LuaPhaseSnapshot {
+        current: phase.as_str(),
+        time_in_phase: 2.5,
+    };
+    let timer_snap = LuaTimerSnapshot {
+        duration: 3.0,
+        elapsed: 1.0,
+        callback: timer_cb.as_str(),
+    };
 
-    let ctx = build_entity_context_pooled(
-        lua, &tables, 99_u64,
-        None, None, None, None, None, None, None,
-        Some(&sprite_snap),
-        Some(&anim_snap),
-        None,
-        Some(&phase_snap),
-        Some(&timer_snap),
-        None,
-        None, None, None, None,
-    ).expect("build_entity_context_pooled");
+    let snapshot = EntitySnapshot {
+        entity_id: 99_u64,
+        group: None,
+        map_pos: None,
+        screen_pos: None,
+        rigid_body: None,
+        rotation: None,
+        scale: None,
+        rect: None,
+        sprite: Some(sprite_snap),
+        animation: Some(anim_snap),
+        signals: None,
+        lua_phase: Some(phase_snap),
+        lua_timer: Some(timer_snap),
+        previous_phase: None,
+        world_pos: None,
+        world_rotation: None,
+        world_scale: None,
+        parent_id: None,
+    };
+    let ctx =
+        build_entity_context_pooled(lua, &tables, &snapshot).expect("build_entity_context_pooled");
 
     lua.load(r#"
         local ctx = ...
@@ -1552,35 +1596,57 @@ fn context_builder_passes_snapshot_strings_to_lua() {
 #[cfg(feature = "lua")]
 #[test]
 fn context_builder_nil_when_no_snapshots() {
-    use aberredengine::resources::lua_runtime::build_entity_context_pooled;
+    use aberredengine::resources::lua_runtime::{EntitySnapshot, build_entity_context_pooled};
 
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
     let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
     let lua = runtime.lua();
 
-    let ctx = build_entity_context_pooled(
-        lua, &tables, 1_u64,
-        None, None, None, None, None, None, None,
-        None, None, None, None, None, None,
-        None, None, None, None,
-    ).expect("build_entity_context_pooled");
+    let snapshot = EntitySnapshot {
+        entity_id: 1_u64,
+        group: None,
+        map_pos: None,
+        screen_pos: None,
+        rigid_body: None,
+        rotation: None,
+        scale: None,
+        rect: None,
+        sprite: None,
+        animation: None,
+        signals: None,
+        lua_phase: None,
+        lua_timer: None,
+        previous_phase: None,
+        world_pos: None,
+        world_rotation: None,
+        world_scale: None,
+        parent_id: None,
+    };
+    let ctx =
+        build_entity_context_pooled(lua, &tables, &snapshot).expect("build_entity_context_pooled");
 
-    lua.load(r#"
+    lua.load(
+        r#"
         local ctx = ...
         assert(ctx.sprite    == nil, "sprite should be nil")
         assert(ctx.animation == nil, "animation should be nil")
         assert(ctx.phase     == nil, "phase should be nil")
         assert(ctx.timer     == nil, "timer should be nil")
-    "#).call::<()>(ctx).expect("Lua nil assertions");
+    "#,
+    )
+    .call::<()>(ctx)
+    .expect("Lua nil assertions");
 }
 
 // =============================================================================
 // Rust Phase System Tests
 // =============================================================================
 
-use aberredengine::components::phase::{Phase, PhaseCallbackFns, PhaseEnterFn, PhaseUpdateFn, PhaseExitFn};
-use aberredengine::systems::phase::phase_system;
+use aberredengine::components::phase::{
+    Phase, PhaseCallbackFns, PhaseEnterFn, PhaseExitFn, PhaseUpdateFn,
+};
 use aberredengine::systems::GameCtx;
+use aberredengine::systems::phase::phase_system;
 
 fn tick_phases(world: &mut World) {
     let mut schedule = Schedule::default();
@@ -1597,16 +1663,22 @@ fn make_phase_world(delta: f32) -> World {
 
 fn simple_two_phase_map() -> rustc_hash::FxHashMap<String, PhaseCallbackFns> {
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: None,
-        on_update: None,
-        on_exit: None,
-    });
-    phases.insert("moving".into(), PhaseCallbackFns {
-        on_enter: None,
-        on_update: None,
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+    phases.insert(
+        "moving".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: None,
+            on_exit: None,
+        },
+    );
     phases
 }
 
@@ -1622,13 +1694,18 @@ fn phase_calls_on_enter_on_first_frame() {
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: Some(enter_fn),
-        on_update: None,
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: Some(enter_fn),
+            on_update: None,
+            on_exit: None,
+        },
+    );
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     tick_phases(&mut world);
 
@@ -1649,13 +1726,18 @@ fn phase_on_enter_not_called_twice() {
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: Some(enter_fn),
-        on_update: None,
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: Some(enter_fn),
+            on_update: None,
+            on_exit: None,
+        },
+    );
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     tick_phases(&mut world);
     tick_phases(&mut world);
@@ -1669,7 +1751,12 @@ fn phase_on_enter_not_called_twice() {
 fn phase_calls_on_update_every_frame() {
     let mut world = make_phase_world(0.016);
 
-    fn update_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
+    fn update_fn(
+        entity: Entity,
+        ctx: &mut GameCtx,
+        _input: &InputState,
+        _dt: f32,
+    ) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             let count = signals.get_scalar("update_count").unwrap_or(0.0);
             signals.set_scalar("update_count", count + 1.0);
@@ -1678,13 +1765,18 @@ fn phase_calls_on_update_every_frame() {
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: None,
-        on_update: Some(update_fn),
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: Some(update_fn),
+            on_exit: None,
+        },
+    );
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     tick_phases(&mut world);
     tick_phases(&mut world);
@@ -1698,7 +1790,12 @@ fn phase_calls_on_update_every_frame() {
 fn phase_transition_via_update_return() {
     let mut world = make_phase_world(0.016);
 
-    fn update_fn(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
+    fn update_fn(
+        _entity: Entity,
+        _ctx: &mut GameCtx,
+        _input: &InputState,
+        _dt: f32,
+    ) -> Option<String> {
         Some("moving".into())
     }
 
@@ -1726,7 +1823,9 @@ fn phase_transition_via_update_return() {
 fn phase_transition_via_external_next() {
     let mut world = make_phase_world(0.016);
 
-    let entity = world.spawn((Phase::new("idle", simple_two_phase_map()),)).id();
+    let entity = world
+        .spawn((Phase::new("idle", simple_two_phase_map()),))
+        .id();
 
     // Externally request a transition
     world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
@@ -1751,7 +1850,9 @@ fn phase_on_exit_called_on_transition() {
     let mut phases = simple_two_phase_map();
     phases.get_mut("idle").unwrap().on_exit = Some(exit_fn);
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     // Request transition
     world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
@@ -1776,7 +1877,9 @@ fn phase_on_enter_called_on_transition() {
     let mut phases = simple_two_phase_map();
     phases.get_mut("moving").unwrap().on_enter = Some(enter_fn);
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     // Request transition
     world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
@@ -1791,7 +1894,9 @@ fn phase_on_enter_called_on_transition() {
 fn phase_time_in_phase_resets_on_transition() {
     let mut world = make_phase_world(0.5);
 
-    let entity = world.spawn((Phase::new("idle", simple_two_phase_map()),)).id();
+    let entity = world
+        .spawn((Phase::new("idle", simple_two_phase_map()),))
+        .id();
 
     // Run a couple frames to accumulate time
     tick_phases(&mut world);
@@ -1814,7 +1919,12 @@ fn phase_time_in_phase_resets_on_transition() {
 fn phase_update_receives_delta_time() {
     let mut world = make_phase_world(0.25);
 
-    fn update_fn(entity: Entity, ctx: &mut GameCtx, _input: &InputState, dt: f32) -> Option<String> {
+    fn update_fn(
+        entity: Entity,
+        ctx: &mut GameCtx,
+        _input: &InputState,
+        dt: f32,
+    ) -> Option<String> {
         if let Ok(mut signals) = ctx.signals.get_mut(entity) {
             signals.set_scalar("received_dt", dt);
         }
@@ -1822,13 +1932,18 @@ fn phase_update_receives_delta_time() {
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: None,
-        on_update: Some(update_fn),
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: Some(update_fn),
+            on_exit: None,
+        },
+    );
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     tick_phases(&mut world);
 
@@ -1846,11 +1961,14 @@ fn phase_callback_can_set_world_signal() {
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: Some(enter_fn),
-        on_update: None,
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: Some(enter_fn),
+            on_update: None,
+            on_exit: None,
+        },
+    );
 
     world.spawn((Phase::new("idle", phases),));
 
@@ -1865,16 +1983,21 @@ fn phase_callback_can_write_audio() {
     let mut world = make_phase_world(0.016);
 
     fn enter_fn(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
-        ctx.audio.write(AudioCmd::PlayFx { id: "phase_start".into() });
+        ctx.audio.write(AudioCmd::PlayFx {
+            id: "phase_start".into(),
+        });
         None
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: Some(enter_fn),
-        on_update: None,
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: Some(enter_fn),
+            on_update: None,
+            on_exit: None,
+        },
+    );
 
     world.spawn((Phase::new("idle", phases),));
 
@@ -1899,7 +2022,12 @@ fn phase_callback_receives_input_state() {
     input.action_1.just_pressed = true;
     world.insert_resource(input);
 
-    fn update_fn(entity: Entity, ctx: &mut GameCtx, input: &InputState, _dt: f32) -> Option<String> {
+    fn update_fn(
+        entity: Entity,
+        ctx: &mut GameCtx,
+        input: &InputState,
+        _dt: f32,
+    ) -> Option<String> {
         if input.action_1.active {
             if let Ok(mut signals) = ctx.signals.get_mut(entity) {
                 signals.set_flag("input_received");
@@ -1909,13 +2037,18 @@ fn phase_callback_receives_input_state() {
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbackFns {
-        on_enter: None,
-        on_update: Some(update_fn),
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: Some(update_fn),
+            on_exit: None,
+        },
+    );
 
-    let entity = world.spawn((Phase::new("idle", phases), Signals::default())).id();
+    let entity = world
+        .spawn((Phase::new("idle", phases), Signals::default()))
+        .id();
 
     tick_phases(&mut world);
 
@@ -2230,13 +2363,21 @@ fn animation_horizontal_only_no_wrapping() {
     // Tick once: frame 0 → frame 1
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 64.0), "frame 1: x={}", sprite.offset.x);
+    assert!(
+        approx_eq(sprite.offset.x, 64.0),
+        "frame 1: x={}",
+        sprite.offset.x
+    );
     assert!(approx_eq(sprite.offset.y, 0.0));
 
     // Tick to frame 5
     tick_animation_n(&mut world, 4);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 320.0), "frame 5: x={}", sprite.offset.x);
+    assert!(
+        approx_eq(sprite.offset.x, 320.0),
+        "frame 5: x={}",
+        sprite.offset.x
+    );
     assert!(approx_eq(sprite.offset.y, 0.0));
 }
 
@@ -2258,10 +2399,10 @@ fn animation_wraps_rows_with_vertical_displacement() {
     world.insert_resource(anim_store);
 
     // Insert a mock texture so the system can look up the width.
-    world.resource_mut::<TextureStore>().map.insert(
-        "sheet".to_string(),
-        make_dummy_texture(256, 256),
-    );
+    world
+        .resource_mut::<TextureStore>()
+        .map
+        .insert("sheet".to_string(), make_dummy_texture(256, 256));
 
     let entity = world
         .spawn((
@@ -2281,42 +2422,66 @@ fn animation_wraps_rows_with_vertical_displacement() {
     // frame 0 already set on first tick (will advance to frame 1)
     // We need frame_index=0 first (initial state, before any tick).
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
-        "initial: ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
+        "initial: ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Tick to frames 1..4 — frame 3 is last on row 0, frame 4 should wrap
     tick_animation_n(&mut world, 4);
     let anim = world.get::<Animation>(entity).unwrap();
     assert_eq!(anim.frame_index, 4, "should be on frame 4");
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
-        "frame 4: expected (0, 64), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
+        "frame 4: expected (0, 64), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Tick to frame 7 (last on row 1)
     tick_animation_n(&mut world, 3);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 64.0),
-        "frame 7: expected (192, 64), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 64.0),
+        "frame 7: expected (192, 64), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Tick to frame 8 (first on row 2)
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
-        "frame 8: expected (0, 128), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
+        "frame 8: expected (0, 128), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Tick to frame 11 (last frame)
     tick_animation_n(&mut world, 3);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 128.0),
-        "frame 11: expected (192, 128), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 128.0),
+        "frame 11: expected (192, 128), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Tick once more: looped animation wraps to frame 0
     tick_animation(&mut world);
     let anim = world.get::<Animation>(entity).unwrap();
     assert_eq!(anim.frame_index, 0, "should loop back to frame 0");
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
-        "loop: expected (0, 0), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
+        "loop: expected (0, 0), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     drain_textures(&mut world);
 }
@@ -2338,10 +2503,10 @@ fn animation_wraps_with_partial_first_row() {
     );
     world.insert_resource(anim_store);
 
-    world.resource_mut::<TextureStore>().map.insert(
-        "sheet".to_string(),
-        make_dummy_texture(256, 256),
-    );
+    world
+        .resource_mut::<TextureStore>()
+        .map
+        .insert("sheet".to_string(), make_dummy_texture(256, 256));
 
     let entity = world
         .spawn((
@@ -2359,32 +2524,50 @@ fn animation_wraps_with_partial_first_row() {
 
     // Frame 0: (128, 0)
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
-        "initial sprite offset before first tick");
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
+        "initial sprite offset before first tick"
+    );
 
     // Tick once to advance frame and compute offset for frame 1
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 0.0),
-        "frame 1: expected (192, 0), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 0.0),
+        "frame 1: expected (192, 0), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Frame 2: wraps to row 1
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
-        "frame 2: expected (0, 64), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
+        "frame 2: expected (0, 64), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Frame 5: last of row 1
     tick_animation_n(&mut world, 3);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 64.0),
-        "frame 5: expected (192, 64), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 64.0),
+        "frame 5: expected (192, 64), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     // Frame 6: row 2
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
-        "frame 6: expected (0, 128), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
+        "frame 6: expected (0, 128), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     drain_textures(&mut world);
 }
@@ -2422,7 +2605,11 @@ fn animation_vdisp_no_texture_falls_back_to_horizontal() {
     // Advance 5 frames — should still work, just no wrapping
     tick_animation_n(&mut world, 5);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 320.0), "frame 5: x={}", sprite.offset.x);
+    assert!(
+        approx_eq(sprite.offset.x, 320.0),
+        "frame 5: x={}",
+        sprite.offset.x
+    );
     assert!(approx_eq(sprite.offset.y, 0.0), "frame 5: y should stay 0");
 }
 
@@ -2442,10 +2629,10 @@ fn animation_single_frame_per_row_wrapping() {
     );
     world.insert_resource(anim_store);
 
-    world.resource_mut::<TextureStore>().map.insert(
-        "sheet".to_string(),
-        make_dummy_texture(64, 256),
-    );
+    world
+        .resource_mut::<TextureStore>()
+        .map
+        .insert("sheet".to_string(), make_dummy_texture(64, 256));
 
     let entity = world
         .spawn((
@@ -2464,18 +2651,30 @@ fn animation_single_frame_per_row_wrapping() {
     // Frame 0: (0, 0)
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
-        "frame 1: expected (0, 64), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
+        "frame 1: expected (0, 64), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
-        "frame 2: expected (0, 128), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
+        "frame 2: expected (0, 128), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     tick_animation(&mut world);
     let sprite = world.get::<Sprite>(entity).unwrap();
-    assert!(approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 192.0),
-        "frame 3: expected (0, 192), got ({}, {})", sprite.offset.x, sprite.offset.y);
+    assert!(
+        approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 192.0),
+        "frame 3: expected (0, 192), got ({}, {})",
+        sprite.offset.x,
+        sprite.offset.y
+    );
 
     drain_textures(&mut world);
 }

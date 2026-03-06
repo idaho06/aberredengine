@@ -80,8 +80,8 @@ impl Default for SceneManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systems::scene_dispatch::SceneDescriptor;
     use crate::systems::GameCtx;
+    use crate::systems::scene_dispatch::SceneDescriptor;
 
     fn dummy_enter(_ctx: &mut GameCtx) {}
 
@@ -136,7 +136,10 @@ mod tests {
         );
         assert_eq!(sm.len(), 1);
         let desc = sm.get("menu").unwrap();
-        assert_eq!(desc.on_enter as *const () as usize, other_enter as *const () as usize);
+        assert_eq!(
+            desc.on_enter as *const () as usize,
+            other_enter as *const () as usize
+        );
     }
 
     #[test]

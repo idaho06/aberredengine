@@ -13,8 +13,8 @@ use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::menu::menu_selection_observer;
 use aberredengine::systems::GameCtx;
+use aberredengine::systems::menu::menu_selection_observer;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 
@@ -178,9 +178,9 @@ fn rust_callback_takes_priority_over_menu_actions() {
         .id();
 
     // Also attach MenuActions (which should be skipped)
-    world.entity_mut(menu_entity).insert(
-        MenuActions::new().with("start", MenuAction::SetScene("level01".to_string())),
-    );
+    world
+        .entity_mut(menu_entity)
+        .insert(MenuActions::new().with("start", MenuAction::SetScene("level01".to_string())));
 
     // Register switch_scene system in case it's reached (it shouldn't be)
     let switch_id = world.register_system(|| {});
@@ -201,7 +201,11 @@ fn rust_callback_takes_priority_over_menu_actions() {
 
     // Rust callback should have run
     assert!(PRIORITY_CALLED.with(|c| c.get()));
-    assert!(world.resource::<WorldSignals>().has_flag("rust_callback_ran"));
+    assert!(
+        world
+            .resource::<WorldSignals>()
+            .has_flag("rust_callback_ran")
+    );
 
     // MenuActions should NOT have run (scene should not be set)
     assert_eq!(world.resource::<WorldSignals>().get_string("scene"), None);
@@ -340,12 +344,7 @@ thread_local! {
 }
 
 #[cfg(feature = "lua")]
-fn lua_priority_callback(
-    _entity: Entity,
-    _item_id: &str,
-    _index: usize,
-    _ctx: &mut GameCtx,
-) {
+fn lua_priority_callback(_entity: Entity, _item_id: &str, _index: usize, _ctx: &mut GameCtx) {
     RUST_CB_CALLED.with(|c| c.set(true));
 }
 

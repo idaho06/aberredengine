@@ -218,10 +218,7 @@ mod tests {
 
     #[test]
     fn test_ttl_spec_range() {
-        let ttl = TtlSpec::Range {
-            min: 0.5,
-            max: 1.5,
-        };
+        let ttl = TtlSpec::Range { min: 0.5, max: 1.5 };
         if let TtlSpec::Range { min, max } = ttl {
             assert!(approx_eq(min, 0.5));
             assert!(approx_eq(max, 1.5));
@@ -230,4 +227,3 @@ mod tests {
         }
     }
 }
-

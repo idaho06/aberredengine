@@ -26,7 +26,12 @@ use crate::events::collision::CollisionEvent;
 /// checks overlap, and triggers an event for each collision. Observers can
 /// react to despawn, apply damage, or play sounds.
 pub fn collision_detector(
-    mut query: Query<(Entity, &MapPosition, &BoxCollider, Option<&GlobalTransform2D>)>,
+    mut query: Query<(
+        Entity,
+        &MapPosition,
+        &BoxCollider,
+        Option<&GlobalTransform2D>,
+    )>,
     mut commands: Commands,
 ) {
     let mut combos = query.iter_combinations_mut();

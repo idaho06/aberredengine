@@ -41,8 +41,8 @@ mod spawn_data;
 // Re-export all public types for backwards compatibility
 pub use commands::*;
 pub use context::{
-    AnimationSnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
-    build_entity_context_pooled,
+    AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
+    SpriteSnapshot, build_entity_context_pooled,
 };
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;

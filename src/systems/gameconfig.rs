@@ -13,7 +13,7 @@ use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
 use bevy_ecs::prelude::*;
-use log::{info, error};
+use log::{error, info};
 use raylib::ffi;
 //use std::time::Duration;
 

@@ -287,6 +287,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 **Entity commands in collision callbacks** also require the `collision_` prefix. Both APIs now have full parity - all entity commands available in the regular API have a `collision_` equivalent:
 
 - `engine.collision_entity_set_position()` instead of `engine.entity_set_position()`
+- `engine.collision_entity_set_screen_position()` instead of `engine.entity_set_screen_position()`
 - `engine.collision_entity_set_velocity()` instead of `engine.entity_set_velocity()`
 - `engine.collision_entity_despawn()` instead of `engine.entity_despawn()`
 - `engine.collision_entity_signal_set_flag()` instead of `engine.entity_signal_set_flag()`
@@ -2339,10 +2340,18 @@ engine.entity_set_velocity(ball_id, 300, -300)
 
 ### `engine.entity_set_position(entity_id, x, y)`
 
-Set entity's world position.
+Set entity's world position (updates `MapPosition` component).
 
 ```lua
 engine.entity_set_position(player_id, 400, 300)
+```
+
+### `engine.entity_set_screen_position(entity_id, x, y)`
+
+Set entity's screen-space position (updates `ScreenPosition` component, for HUD/UI elements).
+
+```lua
+engine.entity_set_screen_position(hud_label_id, 10, 24)
 ```
 
 ### `engine.entity_despawn(entity_id)`

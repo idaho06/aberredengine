@@ -41,8 +41,8 @@ use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
 use crate::events::collision::CollisionEvent;
-use crate::systems::collision::{compute_sides, resolve_collider_rect, resolve_groups};
 use crate::systems::GameCtx;
+use crate::systems::collision::{compute_sides, resolve_collider_rect, resolve_groups};
 
 /// Observer that handles Rust collision rules.
 ///
@@ -72,10 +72,16 @@ pub fn rust_collision_observer(
     for rule in rules.iter() {
         if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
             let rect_a = resolve_collider_rect(
-                &ctx.positions.as_readonly(), &ctx.global_transforms, &ctx.box_colliders, ent_a,
+                &ctx.positions.as_readonly(),
+                &ctx.global_transforms,
+                &ctx.box_colliders,
+                ent_a,
             );
             let rect_b = resolve_collider_rect(
-                &ctx.positions.as_readonly(), &ctx.global_transforms, &ctx.box_colliders, ent_b,
+                &ctx.positions.as_readonly(),
+                &ctx.global_transforms,
+                &ctx.box_colliders,
+                ent_b,
             );
             let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 

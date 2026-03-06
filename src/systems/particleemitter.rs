@@ -41,7 +41,11 @@ use crate::resources::worldtime::WorldTime;
 ///
 /// Should run **before** `movement` so particles move on their spawn frame.
 pub fn particle_emitter_system(
-    mut emitter_query: Query<(&MapPosition, &mut ParticleEmitter, Option<&GlobalTransform2D>)>,
+    mut emitter_query: Query<(
+        &MapPosition,
+        &mut ParticleEmitter,
+        Option<&GlobalTransform2D>,
+    )>,
     rigidbody_query: Query<&RigidBody>,
     // mut animation_query: Query<&mut Animation>,
     time: Res<WorldTime>,

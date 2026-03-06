@@ -92,6 +92,96 @@ local function player_idle_on_update(ctx, input, dt)
     end
 end
 
+--- Collision ground/player callback.
+--- @param ctx CollisionContext
+local function collision_ground_player(ctx)
+    -- entity A is ground, entity B is player
+    -- check that the player side colliding with the ground is the bottom
+    -- engine.log_info(Dump_value(ctx, 4))
+
+    --[[ {
+      a = {
+        group = "ground",
+        id = 4294967259.0,
+        pos = {
+          x = -320.0,
+          y = 20.0,
+        },
+        rect = {
+          h = 32.0,
+          w = 640.0,
+          x = -320.0,
+          y = 20.0,
+        },
+        speed_sq = 0.0,
+      },
+      b = {
+        group = "player",
+        id = 4294967260.0,
+        pos = {
+          x = 0.0,
+          y = 21.707861,
+        },
+        rect = {
+          h = 24.0,
+          w = 20.0,
+          x = -10.0,
+          y = -2.292139,
+        },
+        signals = {
+          flags = {
+            [1.0] = "moving",
+            [2.0] = "facing_right",
+          },
+          integers = {
+          },
+          scalars = {
+            speed_sq = 7554.043457,
+          },
+          strings = {
+          },
+        },
+        speed_sq = 7554.043457,
+        vel = {
+          x = 0.0,
+          y = 86.914001,
+        },
+      },
+      sides = {
+        a = {
+          [1.0] = "top",
+        },
+        b = {
+          [1.0] = "left",
+          [2.0] = "right",
+          [3.0] = "bottom",
+        },
+      },
+    } ]]
+    -- look for "bottom" in ctx.sides.b
+    local player_on_ground = false
+    for _, side in pairs(ctx.sides.b) do
+        if side == "bottom" then
+            player_on_ground = true
+            break
+        end
+    end
+    if player_on_ground then
+        engine.entity_signal_set_flag(ctx.b.id, "on_ground")
+        engine.entity_set_force_enabled(ctx.b.id, "gravity", false)
+        -- reset vertical velocity to 0 to prevent sliding down slopes
+        local vel = ctx.b.vel
+        engine.entity_set_velocity(ctx.b.id, vel.x, 0)
+        -- reset vertical position to be exactly on top of the ground to prevent sinking due to gravity
+        -- local player_pos = ctx.b.pos
+        local ground_rect = ctx.a.rect
+        engine.entity_set_position(ctx.b.id, ctx.b.pos.x, ground_rect.y)
+    else
+        engine.entity_signal_clear_flag(ctx.b.id, "on_ground")
+        engine.entity_set_force_enabled(ctx.b.id, "gravity", true)
+    end
+end
+
 -- ─── Callback registry ──────────────────────────────────────────────────────
 -- Every function the engine calls by name must appear here.
 -- Keys must exactly match the strings passed to the engine.
@@ -104,6 +194,7 @@ M._callbacks = {
     player_walking_on_update = player_walking_on_update,
     player_idle_on_enter = player_idle_on_enter,
     player_idle_on_update = player_idle_on_update,
+    collision_ground_player = collision_ground_player,
 }
 
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -131,7 +222,7 @@ function M.spawn()
         :with_zindex(0)
         :with_position(0, 0)
         :with_group("player")
-        :with_signal_flag("on_ground")
+    --:with_signal_flag("on_ground")
         :with_signal_flag("facing_right")
         :with_phase({
             initial = "idle",
@@ -155,7 +246,21 @@ function M.spawn()
         })
         :with_collider(20, 24, 10, 24)
         :with_collider_offset(0, 0)
+        :with_accel("gravity", 0, 180, true)
         :register_as("player")
+        :build()
+
+    -- Spawn ground platform
+    engine.spawn()
+        :with_collider(640, 32, 0, 0)
+        :with_position(-320, 20)
+        :with_group("ground")
+        :build()
+
+    -- Spawn collision rules for ground-player
+    engine.spawn()
+        :with_group("collision_rules")
+        :with_lua_collision_rule("ground", "player", "collision_ground_player")
         :build()
 
     engine.log_info("Sidescroller level01 scene entities queued!")

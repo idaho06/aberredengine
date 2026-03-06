@@ -456,7 +456,14 @@ mod tests {
         let mut time = 0.0;
         let mut forward = true;
         let mut playing = true;
-        advance(&mut time, 1.0, &mut forward, &mut playing, LoopMode::Once, 0.1);
+        advance(
+            &mut time,
+            1.0,
+            &mut forward,
+            &mut playing,
+            LoopMode::Once,
+            0.1,
+        );
         assert!(approx_eq(time, 0.1));
         assert!(forward);
         assert!(playing);
@@ -467,7 +474,14 @@ mod tests {
         let mut time = 1.0;
         let mut forward = false;
         let mut playing = true;
-        advance(&mut time, 1.0, &mut forward, &mut playing, LoopMode::Once, 0.1);
+        advance(
+            &mut time,
+            1.0,
+            &mut forward,
+            &mut playing,
+            LoopMode::Once,
+            0.1,
+        );
         assert!(approx_eq(time, 0.9));
         assert!(!forward);
         assert!(playing);
@@ -478,7 +492,14 @@ mod tests {
         let mut time = 0.9;
         let mut forward = true;
         let mut playing = true;
-        advance(&mut time, 1.0, &mut forward, &mut playing, LoopMode::Once, 0.2);
+        advance(
+            &mut time,
+            1.0,
+            &mut forward,
+            &mut playing,
+            LoopMode::Once,
+            0.2,
+        );
         assert!(approx_eq(time, 1.0)); // clamped
         assert!(!playing); // stopped
     }
@@ -488,7 +509,14 @@ mod tests {
         let mut time = 0.1;
         let mut forward = false;
         let mut playing = true;
-        advance(&mut time, 1.0, &mut forward, &mut playing, LoopMode::Once, 0.2);
+        advance(
+            &mut time,
+            1.0,
+            &mut forward,
+            &mut playing,
+            LoopMode::Once,
+            0.2,
+        );
         assert!(approx_eq(time, 0.0)); // clamped
         assert!(!playing); // stopped
     }
@@ -498,7 +526,14 @@ mod tests {
         let mut time = 0.9;
         let mut forward = true;
         let mut playing = true;
-        advance(&mut time, 1.0, &mut forward, &mut playing, LoopMode::Loop, 0.2);
+        advance(
+            &mut time,
+            1.0,
+            &mut forward,
+            &mut playing,
+            LoopMode::Loop,
+            0.2,
+        );
         assert!(approx_eq(time, 0.0)); // wrapped
         assert!(playing);
     }
@@ -508,7 +543,14 @@ mod tests {
         let mut time = 0.1;
         let mut forward = false;
         let mut playing = true;
-        advance(&mut time, 1.0, &mut forward, &mut playing, LoopMode::Loop, 0.2);
+        advance(
+            &mut time,
+            1.0,
+            &mut forward,
+            &mut playing,
+            LoopMode::Loop,
+            0.2,
+        );
         assert!(approx_eq(time, 1.0)); // wrapped to end
         assert!(playing);
     }

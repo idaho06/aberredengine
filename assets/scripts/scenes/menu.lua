@@ -22,7 +22,7 @@ local function on_showcase_menu_select(ctx)
     elseif ctx.item_id == "sidescroller" then
         engine.change_scene("sidescroller_level01")
     elseif ctx.item_id == "bunnymark" then
-        engine.change_scene("bunnymark")
+        engine.change_scene("bunnymark_menu")
     elseif ctx.item_id == "exit" then
         engine.quit()
     end

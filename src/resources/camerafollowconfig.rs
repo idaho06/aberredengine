@@ -74,7 +74,6 @@ pub struct CameraFollowConfig {
     pub bounds: Option<Rectangle>,
 
     // -- internal state (not intended for direct user modification) ----------
-
     /// Spring velocity for [`FollowMode::SmoothDamp`]. Reset to zero when
     /// switching targets or modes.
     pub(crate) velocity: Vector2,

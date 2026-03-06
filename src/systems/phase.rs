@@ -79,9 +79,7 @@ pub fn phase_system(
                 let Ok((_, phase)) = phase_query.get(entity) else {
                     continue;
                 };
-                phase
-                    .current_callbacks()
-                    .and_then(|cbs| cbs.on_enter)
+                phase.current_callbacks().and_then(|cbs| cbs.on_enter)
             };
 
             if let Some(enter_fn) = on_enter_fn

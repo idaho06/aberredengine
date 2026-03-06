@@ -64,8 +64,7 @@ use crate::systems::GameCtx;
 
 /// Callback for entering a phase. Returns `Some(phase_name)` to immediately
 /// transition, or `None` to stay in the current phase.
-pub type PhaseEnterFn =
-    for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState) -> Option<String>;
+pub type PhaseEnterFn = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState) -> Option<String>;
 
 /// Callback for each frame while in a phase. Receives delta time as the last
 /// argument. Returns `Some(phase_name)` to transition, or `None` to stay.

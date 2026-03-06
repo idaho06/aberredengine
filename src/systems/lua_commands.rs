@@ -77,10 +77,6 @@ use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use log::{error, info, warn};
 
-/// Bundled queries for entity command processing.
-///
-/// This SystemParam groups queries needed by `process_entity_commands` to reduce
-/// the number of system parameters in calling functions.
 #[derive(SystemParam)]
 pub struct EntityCmdQueries<'w, 's> {
     pub stuckto: Query<'w, 's, &'static StuckTo>,
@@ -88,9 +84,25 @@ pub struct EntityCmdQueries<'w, 's> {
     pub animation: Query<'w, 's, &'static mut Animation>,
     pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub positions: Query<'w, 's, &'static mut MapPosition>,
+    pub screen_positions: Query<'w, 's, &'static mut ScreenPosition>,
     pub sprites: Query<'w, 's, &'static mut Sprite>,
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
+}
+
+/// Bundled read-only queries for building entity context tables.
+///
+/// This SystemParam includes read-only components that can be shared by systems
+/// that also hold mutable command-processing queries.
+#[derive(SystemParam)]
+pub struct ContextQueries<'w, 's> {
+    pub groups: Query<'w, 's, &'static Group>,
+    pub rotations: Query<'w, 's, &'static Rotation>,
+    pub scales: Query<'w, 's, &'static Scale>,
+    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
+    pub lua_timers: Query<'w, 's, &'static LuaTimer>,
+    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
+    pub child_of: Query<'w, 's, &'static ChildOf>,
 }
 
 /// Process a single audio command from Lua and write to the audio command channel.
@@ -620,6 +632,7 @@ pub fn process_animation_command(
 /// - `animation_query` - Query for modifying Animation components
 /// - `rigid_bodies_query` - Query for modifying RigidBody components
 /// - `positions_query` - Query for modifying MapPosition components
+/// - `screen_positions_query` - Query for modifying ScreenPosition components
 /// - `shader_query` - Query for modifying EntityShader components
 /// - `systems_store` - SystemsStore for calling registered systems
 #[allow(clippy::too_many_arguments)]
@@ -632,6 +645,7 @@ pub fn process_entity_commands(
     sprite_query: &mut Query<&mut Sprite>,
     rigid_bodies_query: &mut Query<&mut RigidBody>,
     positions_query: &mut Query<&mut MapPosition>,
+    screen_positions_query: &mut Query<&mut ScreenPosition>,
     shader_query: &mut Query<&mut EntityShader>,
     global_transforms_query: &Query<&GlobalTransform2D>,
     systems_store: &SystemsStore,
@@ -948,6 +962,13 @@ pub fn process_entity_commands(
             EntityCmd::SetPosition { entity_id, x, y } => {
                 let entity = Entity::from_bits(entity_id);
                 if let Ok(mut pos) = positions_query.get_mut(entity) {
+                    pos.pos.x = x;
+                    pos.pos.y = y;
+                }
+            }
+            EntityCmd::SetScreenPosition { entity_id, x, y } => {
+                let entity = Entity::from_bits(entity_id);
+                if let Ok(mut pos) = screen_positions_query.get_mut(entity) {
                     pos.pos.x = x;
                     pos.pos.y = y;
                 }

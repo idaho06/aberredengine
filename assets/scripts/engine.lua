@@ -604,6 +604,12 @@ function engine.collision_entity_set_rotation(entity_id, degrees) end
 ---@param sy number
 function engine.collision_entity_set_scale(entity_id, sx, sy) end
 
+---Set entity screen-space position
+---@param entity_id integer
+---@param x number
+---@param y number
+function engine.collision_entity_set_screen_position(entity_id, x, y) end
+
 ---Set per-entity shader by key
 ---@param entity_id integer
 ---@param key string
@@ -878,6 +884,12 @@ function engine.entity_set_rotation(entity_id, degrees) end
 ---@param sx number
 ---@param sy number
 function engine.entity_set_scale(entity_id, sx, sy) end
+
+---Set entity screen-space position
+---@param entity_id integer
+---@param x number
+---@param y number
+function engine.entity_set_screen_position(entity_id, x, y) end
 
 ---Set per-entity shader by key
 ---@param entity_id integer

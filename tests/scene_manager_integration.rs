@@ -11,11 +11,10 @@ use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::scene_dispatch::{
-    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
-    scene_update_system,
-};
 use aberredengine::systems::GameCtx;
+use aberredengine::systems::scene_dispatch::{
+    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
+};
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 

@@ -74,6 +74,29 @@ pub struct LuaTimerSnapshot<'a> {
     pub callback: &'a str,
 }
 
+/// Full entity snapshot used to build Lua callback context tables.
+#[derive(Debug)]
+pub struct EntitySnapshot<'a> {
+    pub entity_id: u64,
+    pub group: Option<&'a str>,
+    pub map_pos: Option<(f32, f32)>,
+    pub screen_pos: Option<(f32, f32)>,
+    pub rigid_body: Option<RigidBodySnapshot>,
+    pub rotation: Option<f32>,
+    pub scale: Option<(f32, f32)>,
+    pub rect: Option<(f32, f32, f32, f32)>,
+    pub sprite: Option<SpriteSnapshot<'a>>,
+    pub animation: Option<AnimationSnapshot<'a>>,
+    pub signals: Option<&'a Signals>,
+    pub lua_phase: Option<LuaPhaseSnapshot<'a>>,
+    pub lua_timer: Option<LuaTimerSnapshot<'a>>,
+    pub previous_phase: Option<&'a str>,
+    pub world_pos: Option<(f32, f32)>,
+    pub world_rotation: Option<f32>,
+    pub world_scale: Option<(f32, f32)>,
+    pub parent_id: Option<u64>,
+}
+
 /// Build a Lua table representing entity context for phase/timer callbacks.
 ///
 /// This function creates a context table with all available entity information.
@@ -301,41 +324,23 @@ fn populate_entity_signals(
 ///
 /// IMPORTANT: The returned table is pooled and reused. Do not store references
 /// to the context table or its subtables for later use.
-#[allow(clippy::too_many_arguments)]
 pub fn build_entity_context_pooled<'a>(
     lua: &Lua,
     tables: &EntityCtxTables,
-    entity_id: u64,
-    group: Option<&'a str>,
-    map_pos: Option<(f32, f32)>,
-    screen_pos: Option<(f32, f32)>,
-    rigid_body: Option<&'a RigidBodySnapshot>,
-    rotation: Option<f32>,
-    scale: Option<(f32, f32)>,
-    rect: Option<(f32, f32, f32, f32)>,
-    sprite: Option<&'a SpriteSnapshot<'a>>,
-    animation: Option<&'a AnimationSnapshot<'a>>,
-    signals: Option<&'a Signals>,
-    lua_phase: Option<&'a LuaPhaseSnapshot<'a>>,
-    lua_timer: Option<&'a LuaTimerSnapshot<'a>>,
-    previous_phase: Option<&'a str>,
-    world_pos: Option<(f32, f32)>,
-    world_rotation: Option<f32>,
-    world_scale: Option<(f32, f32)>,
-    parent_id: Option<u64>,
+    snapshot: &EntitySnapshot<'a>,
 ) -> LuaResult<LuaTable> {
     // Core identity (id is always present)
-    tables.ctx.set("id", entity_id)?;
+    tables.ctx.set("id", snapshot.entity_id)?;
 
     // Group (optional scalar)
-    if let Some(g) = group {
+    if let Some(g) = snapshot.group {
         tables.ctx.set("group", g)?;
     } else {
         tables.ctx.set("group", LuaValue::Nil)?;
     }
 
     // Position - MapPosition
-    if let Some((x, y)) = map_pos {
+    if let Some((x, y)) = snapshot.map_pos {
         tables.pos.set("x", x)?;
         tables.pos.set("y", y)?;
         tables.ctx.set("pos", tables.pos.clone())?;
@@ -344,7 +349,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Position - ScreenPosition
-    if let Some((x, y)) = screen_pos {
+    if let Some((x, y)) = snapshot.screen_pos {
         tables.screen_pos.set("x", x)?;
         tables.screen_pos.set("y", y)?;
         tables.ctx.set("screen_pos", tables.screen_pos.clone())?;
@@ -353,7 +358,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Physics from RigidBody
-    if let Some(rb) = rigid_body {
+    if let Some(rb) = snapshot.rigid_body.as_ref() {
         tables.vel.set("x", rb.velocity.0)?;
         tables.vel.set("y", rb.velocity.1)?;
         tables.ctx.set("vel", tables.vel.clone())?;
@@ -366,14 +371,14 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Transform - Rotation
-    if let Some(degrees) = rotation {
+    if let Some(degrees) = snapshot.rotation {
         tables.ctx.set("rotation", degrees)?;
     } else {
         tables.ctx.set("rotation", LuaValue::Nil)?;
     }
 
     // Transform - Scale
-    if let Some((sx, sy)) = scale {
+    if let Some((sx, sy)) = snapshot.scale {
         tables.scale.set("x", sx)?;
         tables.scale.set("y", sy)?;
         tables.ctx.set("scale", tables.scale.clone())?;
@@ -382,7 +387,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Collision rect from BoxCollider
-    if let Some((x, y, w, h)) = rect {
+    if let Some((x, y, w, h)) = snapshot.rect {
         tables.rect.set("x", x)?;
         tables.rect.set("y", y)?;
         tables.rect.set("w", w)?;
@@ -393,7 +398,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Sprite
-    if let Some(spr) = sprite {
+    if let Some(spr) = snapshot.sprite.as_ref() {
         tables.sprite.set("tex_key", spr.tex_key)?;
         tables.sprite.set("flip_h", spr.flip_h)?;
         tables.sprite.set("flip_v", spr.flip_v)?;
@@ -403,7 +408,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Animation
-    if let Some(anim) = animation {
+    if let Some(anim) = snapshot.animation.as_ref() {
         tables.animation.set("key", anim.key)?;
         tables.animation.set("frame_index", anim.frame_index)?;
         tables.animation.set("elapsed", anim.elapsed)?;
@@ -413,7 +418,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Signals (creates fresh inner tables for variable-length data)
-    if let Some(signals) = signals {
+    if let Some(signals) = snapshot.signals {
         populate_entity_signals(lua, &tables.signals, signals)?;
         tables.ctx.set("signals", tables.signals.clone())?;
     } else {
@@ -421,7 +426,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Phase info from LuaPhase
-    if let Some(phase) = lua_phase {
+    if let Some(phase) = snapshot.lua_phase.as_ref() {
         tables.ctx.set("phase", phase.current)?;
         tables.ctx.set("time_in_phase", phase.time_in_phase)?;
     } else {
@@ -430,14 +435,14 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // Previous phase (only set during on_enter)
-    if let Some(prev) = previous_phase {
+    if let Some(prev) = snapshot.previous_phase {
         tables.ctx.set("previous_phase", prev)?;
     } else {
         tables.ctx.set("previous_phase", LuaValue::Nil)?;
     }
 
     // Timer info from LuaTimer
-    if let Some(timer) = lua_timer {
+    if let Some(timer) = snapshot.lua_timer.as_ref() {
         tables.timer.set("duration", timer.duration)?;
         tables.timer.set("elapsed", timer.elapsed)?;
         tables.timer.set("callback", timer.callback)?;
@@ -447,7 +452,7 @@ pub fn build_entity_context_pooled<'a>(
     }
 
     // World transform from GlobalTransform2D (hierarchy)
-    if let Some((x, y)) = world_pos {
+    if let Some((x, y)) = snapshot.world_pos {
         tables.world_pos.set("x", x)?;
         tables.world_pos.set("y", y)?;
         tables.ctx.set("world_pos", tables.world_pos.clone())?;
@@ -455,13 +460,13 @@ pub fn build_entity_context_pooled<'a>(
         tables.ctx.set("world_pos", LuaValue::Nil)?;
     }
 
-    if let Some(degrees) = world_rotation {
+    if let Some(degrees) = snapshot.world_rotation {
         tables.ctx.set("world_rotation", degrees)?;
     } else {
         tables.ctx.set("world_rotation", LuaValue::Nil)?;
     }
 
-    if let Some((sx, sy)) = world_scale {
+    if let Some((sx, sy)) = snapshot.world_scale {
         tables.world_scale.set("x", sx)?;
         tables.world_scale.set("y", sy)?;
         tables.ctx.set("world_scale", tables.world_scale.clone())?;
@@ -469,7 +474,7 @@ pub fn build_entity_context_pooled<'a>(
         tables.ctx.set("world_scale", LuaValue::Nil)?;
     }
 
-    if let Some(pid) = parent_id {
+    if let Some(pid) = snapshot.parent_id {
         tables.ctx.set("parent_id", pid)?;
     } else {
         tables.ctx.set("parent_id", LuaValue::Nil)?;

@@ -30,38 +30,26 @@
 //! Context tables are pooled and reused across callbacks to reduce Lua GC pressure.
 //! See [`EntityCtxPool`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
 
-use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::SystemParam;
 use mlua::prelude::*;
 
-use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::group::Group;
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
-use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::signals::Signals;
-use crate::components::sprite::Sprite;
 use crate::events::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{
-    build_entity_context_pooled, AnimationSnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
-    LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
+    AnimationSnapshot, EntitySnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
+    LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot, build_entity_context_pooled,
 };
-use crate::resources::animationstore::AnimationStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
-    process_phase_command, process_signal_command, process_spawn_command, EntityCmdQueries,
+    ContextQueries, EntityCmdQueries, process_audio_command, process_camera_command,
+    process_clone_command, process_entity_commands, process_phase_command, process_signal_command,
+    process_spawn_command,
 };
 use log::{error, warn};
 
@@ -90,62 +78,37 @@ pub fn update_lua_timers(
     }
 }
 
-/// Bundled read-only queries for building entity context in timer callbacks.
-///
-/// This SystemParam bundles component queries that don't conflict with
-/// the mutable queries used for command processing.
-/// Note: Signals, RigidBody, MapPosition, Animation, and LuaPhase are NOT included here
-/// because they conflict with the mutable queries in the observer.
-#[derive(SystemParam)]
-pub struct TimerContextQueries<'w, 's> {
-    pub groups: Query<'w, 's, &'static Group>,
-    pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
-    pub rotations: Query<'w, 's, &'static Rotation>,
-    pub scales: Query<'w, 's, &'static Scale>,
-    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    pub lua_timers: Query<'w, 's, &'static LuaTimer>,
-    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
-    pub child_of: Query<'w, 's, &'static ChildOf>,
-}
-
 /// Build entity context for timer callbacks using pooled tables.
 ///
 /// Gathers all component data for the given entity and builds a Lua context table.
 /// Uses pooled tables to reduce allocations.
-/// Note: Some queries are passed separately because they conflict with mutable queries
-/// used for command processing.
-#[allow(clippy::too_many_arguments)]
 fn build_timer_context(
     lua_runtime: &LuaRuntime,
     entity: Entity,
-    ctx_queries: &TimerContextQueries,
-    // These are passed separately because they conflict with mutable queries
-    positions_query: &Query<&mut MapPosition>,
-    rigid_bodies_query: &Query<&mut RigidBody>,
-    animation_query: &Query<&mut Animation>,
-    sprite_query: &Query<&mut Sprite>,
-    signals_query: &Query<&mut Signals>,
+    ctx_queries: &ContextQueries,
+    cmd_queries: &EntityCmdQueries,
     luaphase_query: &Query<(Entity, &mut LuaPhase)>,
 ) -> LuaResult<LuaTable> {
     let lua = lua_runtime.lua();
     let tables = lua_runtime.get_entity_ctx_pool()?;
-    let entity_id = entity.to_bits();
 
     // Query all optional components
     let group = ctx_queries.groups.get(entity).ok().map(|g| g.name());
 
-    let map_pos = positions_query
+    let map_pos = cmd_queries
+        .positions
         .get(entity)
         .ok()
         .map(|p| (p.pos.x, p.pos.y));
 
-    let screen_pos = ctx_queries
+    let screen_pos = cmd_queries
         .screen_positions
         .get(entity)
         .ok()
         .map(|p| (p.pos.x, p.pos.y));
 
-    let rigid_body = rigid_bodies_query
+    let rigid_body = cmd_queries
+        .rigid_bodies
         .get(entity)
         .ok()
         .map(|rb| RigidBodySnapshot {
@@ -164,19 +127,24 @@ fn build_timer_context(
 
     // Compute collider rect using position
     let rect = ctx_queries.box_colliders.get(entity).ok().and_then(|bc| {
-        positions_query.get(entity).ok().map(|pos| {
+        cmd_queries.positions.get(entity).ok().map(|pos| {
             let rect = bc.as_rectangle(pos.pos);
             (rect.x, rect.y, rect.width, rect.height)
         })
     });
 
-    let sprite = sprite_query.get(entity).ok().map(|s| SpriteSnapshot {
-        tex_key: s.tex_key.as_ref(),
-        flip_h: s.flip_h,
-        flip_v: s.flip_v,
-    });
+    let sprite = cmd_queries
+        .sprites
+        .get(entity)
+        .ok()
+        .map(|s| SpriteSnapshot {
+            tex_key: s.tex_key.as_ref(),
+            flip_h: s.flip_h,
+            flip_v: s.flip_v,
+        });
 
-    let animation = animation_query
+    let animation = cmd_queries
+        .animation
         .get(entity)
         .ok()
         .map(|a| AnimationSnapshot {
@@ -185,7 +153,7 @@ fn build_timer_context(
             elapsed: a.elapsed_time,
         });
 
-    let signals_ref = signals_query.get(entity).ok();
+    let signals_ref = cmd_queries.signals.get(entity).ok();
 
     let lua_phase_snapshot = luaphase_query
         .get(entity)
@@ -214,28 +182,28 @@ fn build_timer_context(
     // Parent entity ID from ChildOf
     let parent_id = ctx_queries.child_of.get(entity).ok().map(|c| c.0.to_bits());
 
-    build_entity_context_pooled(
-        lua,
-        &tables,
-        entity_id,
+    let snapshot = EntitySnapshot {
+        entity_id: entity.to_bits(),
         group,
         map_pos,
         screen_pos,
-        rigid_body.as_ref(),
+        rigid_body,
         rotation,
         scale,
         rect,
-        sprite.as_ref(),
-        animation.as_ref(),
-        signals_ref,
-        lua_phase_snapshot.as_ref(),
-        lua_timer.as_ref(),
-        None, // previous_phase is only for phase enter callbacks
+        sprite,
+        animation,
+        signals: signals_ref,
+        lua_phase: lua_phase_snapshot,
+        lua_timer,
+        previous_phase: None,
         world_pos,
         world_rotation,
         world_scale,
         parent_id,
-    )
+    };
+
+    build_entity_context_pooled(lua, &tables, &snapshot)
 }
 
 /// Observer that handles Lua timer events by calling Lua functions.
@@ -259,7 +227,7 @@ pub fn lua_timer_observer(
     mut commands: Commands,
     input: Res<InputState>,
     // Bundled read-only queries for context building
-    ctx_queries: TimerContextQueries,
+    ctx_queries: ContextQueries,
     // Bundled mutable queries for command processing
     mut cmd_queries: EntityCmdQueries,
     mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
@@ -288,9 +256,11 @@ pub fn lua_timer_observer(
 
     // Build entity context
     let ctx_table = match build_timer_context(
-        &lua_runtime, entity, &ctx_queries,
-        &cmd_queries.positions, &cmd_queries.rigid_bodies, &cmd_queries.animation,
-        &cmd_queries.sprites, &cmd_queries.signals, &luaphase_query,
+        &lua_runtime,
+        entity,
+        &ctx_queries,
+        &cmd_queries,
+        &luaphase_query,
     ) {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -345,6 +315,7 @@ pub fn lua_timer_observer(
         &mut cmd_queries.sprites,
         &mut cmd_queries.rigid_bodies,
         &mut cmd_queries.positions,
+        &mut cmd_queries.screen_positions,
         &mut cmd_queries.shaders,
         &cmd_queries.global_transforms,
         &systems_store,

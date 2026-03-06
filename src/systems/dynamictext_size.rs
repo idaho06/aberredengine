@@ -25,21 +25,18 @@ pub fn dynamictext_size_system(
     for mut text in query.iter_mut() {
         debug!("Calculating size for DynamicText: '{}'", text.text);
         let Some(font) = fonts.get(&*text.font) else {
-            warn!("Font '{}' not found in FontStore, text size will be zero", text.font);
+            warn!(
+                "Font '{}' not found in FontStore, text size will be zero",
+                text.font
+            );
             continue;
         };
 
         let text_c_string = std::ffi::CString::new(text.text.as_bytes())
             .expect("Failed to convert text content to CString");
 
-        let measured = unsafe {
-            ffi::MeasureTextEx(
-                **font,
-                text_c_string.as_ptr(),
-                text.font_size,
-                1.0,
-            )
-        };
+        let measured =
+            unsafe { ffi::MeasureTextEx(**font, text_c_string.as_ptr(), text.font_size, 1.0) };
 
         // Convert ffi::Vector2 to math::Vector2
         let size = Vector2::new(measured.x, measured.y);

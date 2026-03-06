@@ -10,7 +10,9 @@
 //! - Unknown action/key strings in commands are silently ignored, not panicked.
 
 use aberredengine::events::input::InputAction;
-use aberredengine::resources::input_bindings::{InputBinding, InputBindings, binding_from_str, key_from_str, key_to_str};
+use aberredengine::resources::input_bindings::{
+    InputBinding, InputBindings, binding_from_str, key_from_str, key_to_str,
+};
 use bevy_ecs::prelude::*;
 use raylib::ffi::{KeyboardKey, MouseButton};
 
@@ -66,7 +68,11 @@ fn test_default_bindings_cover_all_actions() {
 #[test]
 fn test_default_bindings_count() {
     let bindings = InputBindings::default();
-    assert_eq!(bindings.map.len(), 15, "Expected 15 default action bindings");
+    assert_eq!(
+        bindings.map.len(),
+        15,
+        "Expected 15 default action bindings"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +85,10 @@ fn test_rebind_replaces_all_existing_bindings() {
     // Pre-condition: Action1 has a binding
     assert!(!bindings.get_bindings(InputAction::Action1).is_empty());
 
-    bindings.rebind(InputAction::Action1, InputBinding::Keyboard(KeyboardKey::KEY_Z));
+    bindings.rebind(
+        InputAction::Action1,
+        InputBinding::Keyboard(KeyboardKey::KEY_Z),
+    );
 
     let keys = bindings.get_bindings(InputAction::Action1);
     assert_eq!(keys.len(), 1);
@@ -91,7 +100,10 @@ fn test_add_binding_appends_without_removing_existing() {
     let mut bindings = InputBindings::default();
     let initial_count = bindings.get_bindings(InputAction::Action2).len();
 
-    bindings.add_binding(InputAction::Action2, InputBinding::Keyboard(KeyboardKey::KEY_X));
+    bindings.add_binding(
+        InputAction::Action2,
+        InputBinding::Keyboard(KeyboardKey::KEY_X),
+    );
 
     let count_after = bindings.get_bindings(InputAction::Action2).len();
     assert_eq!(count_after, initial_count + 1);
@@ -101,7 +113,9 @@ fn test_add_binding_appends_without_removing_existing() {
 fn test_first_binding_str_returns_some_for_bound_action() {
     let bindings = InputBindings::default();
     assert!(
-        bindings.first_binding_str(InputAction::MainDirectionUp).is_some(),
+        bindings
+            .first_binding_str(InputAction::MainDirectionUp)
+            .is_some(),
         "Expected a string for bound action"
     );
 }
@@ -123,14 +137,69 @@ fn test_get_bindings_returns_empty_for_unbound_action() {
 #[test]
 fn test_key_str_round_trip() {
     let cases = [
-        "space", "enter", "escape", "backspace", "tab",
-        "up", "down", "left", "right",
-        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-        "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-        "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-        "lshift", "rshift", "lctrl", "rctrl",
-        "lalt", "ralt",
+        "space",
+        "enter",
+        "escape",
+        "backspace",
+        "tab",
+        "up",
+        "down",
+        "left",
+        "right",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
+        "lshift",
+        "rshift",
+        "lctrl",
+        "rctrl",
+        "lalt",
+        "ralt",
     ];
     for name in &cases {
         let key = key_from_str(name);
@@ -223,7 +292,10 @@ fn test_process_input_cmd_add_binding_appends() {
         &mut bindings,
     );
 
-    assert_eq!(bindings.get_bindings(InputAction::Action2).len(), initial + 1);
+    assert_eq!(
+        bindings.get_bindings(InputAction::Action2).len(),
+        initial + 1
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +336,10 @@ fn test_process_input_cmd_unknown_key_does_not_panic() {
         &mut bindings,
     );
 
-    assert_eq!(bindings.get_bindings(InputAction::Action1), before.as_slice());
+    assert_eq!(
+        bindings.get_bindings(InputAction::Action1),
+        before.as_slice()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +357,11 @@ fn test_input_bindings_is_ecs_resource() {
 
     let bindings = res.unwrap();
     // Verify defaults are intact after the ECS round-trip
-    assert!(!bindings.get_bindings(InputAction::MainDirectionUp).is_empty());
+    assert!(
+        !bindings
+            .get_bindings(InputAction::MainDirectionUp)
+            .is_empty()
+    );
 }
 
 #[test]
@@ -296,7 +375,10 @@ fn test_input_bindings_mutation_via_ecs_system_state() {
     let mut state: SystemState<ResMut<InputBindings>> = SystemState::new(&mut world);
     {
         let mut bindings = state.get_mut(&mut world);
-        bindings.rebind(InputAction::Action1, InputBinding::Keyboard(KeyboardKey::KEY_Z));
+        bindings.rebind(
+            InputAction::Action1,
+            InputBinding::Keyboard(KeyboardKey::KEY_Z),
+        );
     }
     state.apply(&mut world);
 
@@ -331,7 +413,10 @@ fn test_bool_state_derives_default_without_key_binding() {
 fn test_action3_default_is_mouse_middle() {
     let bindings = InputBindings::default();
     let bl = bindings.get_bindings(InputAction::Action3);
-    assert_eq!(bl, &[InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)]);
+    assert_eq!(
+        bl,
+        &[InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)]
+    );
 }
 
 #[test]
@@ -363,7 +448,10 @@ fn test_process_input_cmd_rebind_to_mouse_button() {
 
     let bl = bindings.get_bindings(InputAction::Action3);
     assert_eq!(bl.len(), 1);
-    assert_eq!(bl[0], InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT));
+    assert_eq!(
+        bl[0],
+        InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)
+    );
 }
 
 #[cfg(feature = "lua")]
@@ -380,10 +468,15 @@ fn test_process_input_cmd_add_mouse_binding() {
         &mut bindings,
     );
 
-    assert_eq!(bindings.get_bindings(InputAction::Action1).len(), initial + 1);
-    assert!(bindings
-        .get_bindings(InputAction::Action1)
-        .contains(&InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)));
+    assert_eq!(
+        bindings.get_bindings(InputAction::Action1).len(),
+        initial + 1
+    );
+    assert!(
+        bindings
+            .get_bindings(InputAction::Action1)
+            .contains(&InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE))
+    );
 }
 
 #[test]

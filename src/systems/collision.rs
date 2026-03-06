@@ -18,7 +18,7 @@ use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;
 
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{get_colliding_sides, BoxSides};
+use crate::components::collision::{BoxSides, get_colliding_sides};
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
@@ -50,10 +50,7 @@ pub fn resolve_collider_rect(
     entity: Entity,
 ) -> Option<Rectangle> {
     let pos = resolve_world_pos(positions, global_transforms, entity)?;
-    box_colliders
-        .get(entity)
-        .ok()
-        .map(|c| c.as_rectangle(pos))
+    box_colliders.get(entity).ok().map(|c| c.as_rectangle(pos))
 }
 
 /// Compute colliding sides for two optional rectangles.
@@ -205,9 +202,8 @@ mod tests {
         let mut world = World::new();
         let e = world.spawn_empty().id();
 
-        let mut state = SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(
-            &mut world,
-        );
+        let mut state =
+            SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
         let (positions, global_transforms) = state.get(&world);
 
         assert!(resolve_world_pos(&positions, &global_transforms, e).is_none());
@@ -222,9 +218,8 @@ mod tests {
             })
             .id();
 
-        let mut state = SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(
-            &mut world,
-        );
+        let mut state =
+            SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
         let (positions, global_transforms) = state.get(&world);
 
         let result = resolve_world_pos(&positions, &global_transforms, e);
@@ -250,9 +245,8 @@ mod tests {
             ))
             .id();
 
-        let mut state = SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(
-            &mut world,
-        );
+        let mut state =
+            SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
         let (positions, global_transforms) = state.get(&world);
 
         let result = resolve_world_pos(&positions, &global_transforms, e);

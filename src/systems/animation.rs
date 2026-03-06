@@ -641,18 +641,58 @@ mod tests {
         // 256px wide, 64px frames starting at x=0 → 4 frames per row
         let tw = Some(256.0);
         // Row 0: frames 0–3
-        assert_offset(compute_frame_offset(0, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 0.0);
-        assert_offset(compute_frame_offset(1, v2(0.0, 0.0), 64.0, 64.0, tw), 64.0, 0.0);
-        assert_offset(compute_frame_offset(2, v2(0.0, 0.0), 64.0, 64.0, tw), 128.0, 0.0);
-        assert_offset(compute_frame_offset(3, v2(0.0, 0.0), 64.0, 64.0, tw), 192.0, 0.0);
+        assert_offset(
+            compute_frame_offset(0, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            0.0,
+        );
+        assert_offset(
+            compute_frame_offset(1, v2(0.0, 0.0), 64.0, 64.0, tw),
+            64.0,
+            0.0,
+        );
+        assert_offset(
+            compute_frame_offset(2, v2(0.0, 0.0), 64.0, 64.0, tw),
+            128.0,
+            0.0,
+        );
+        assert_offset(
+            compute_frame_offset(3, v2(0.0, 0.0), 64.0, 64.0, tw),
+            192.0,
+            0.0,
+        );
         // Row 1: frames 4–7
-        assert_offset(compute_frame_offset(4, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 64.0);
-        assert_offset(compute_frame_offset(5, v2(0.0, 0.0), 64.0, 64.0, tw), 64.0, 64.0);
-        assert_offset(compute_frame_offset(6, v2(0.0, 0.0), 64.0, 64.0, tw), 128.0, 64.0);
-        assert_offset(compute_frame_offset(7, v2(0.0, 0.0), 64.0, 64.0, tw), 192.0, 64.0);
+        assert_offset(
+            compute_frame_offset(4, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            64.0,
+        );
+        assert_offset(
+            compute_frame_offset(5, v2(0.0, 0.0), 64.0, 64.0, tw),
+            64.0,
+            64.0,
+        );
+        assert_offset(
+            compute_frame_offset(6, v2(0.0, 0.0), 64.0, 64.0, tw),
+            128.0,
+            64.0,
+        );
+        assert_offset(
+            compute_frame_offset(7, v2(0.0, 0.0), 64.0, 64.0, tw),
+            192.0,
+            64.0,
+        );
         // Row 2: frames 8–11
-        assert_offset(compute_frame_offset(8, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 128.0);
-        assert_offset(compute_frame_offset(11, v2(0.0, 0.0), 64.0, 64.0, tw), 192.0, 128.0);
+        assert_offset(
+            compute_frame_offset(8, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            128.0,
+        );
+        assert_offset(
+            compute_frame_offset(11, v2(0.0, 0.0), 64.0, 64.0, tw),
+            192.0,
+            128.0,
+        );
     }
 
     #[test]
@@ -704,28 +744,64 @@ mod tests {
     fn frame_offset_fits_exactly_no_wrap_needed() {
         // 3 frames exactly filling a 192px wide texture → no wrap triggered
         let tw = Some(192.0);
-        assert_offset(compute_frame_offset(0, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 0.0);
-        assert_offset(compute_frame_offset(1, v2(0.0, 0.0), 64.0, 64.0, tw), 64.0, 0.0);
-        assert_offset(compute_frame_offset(2, v2(0.0, 0.0), 64.0, 64.0, tw), 128.0, 0.0);
+        assert_offset(
+            compute_frame_offset(0, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            0.0,
+        );
+        assert_offset(
+            compute_frame_offset(1, v2(0.0, 0.0), 64.0, 64.0, tw),
+            64.0,
+            0.0,
+        );
+        assert_offset(
+            compute_frame_offset(2, v2(0.0, 0.0), 64.0, 64.0, tw),
+            128.0,
+            0.0,
+        );
     }
 
     #[test]
     fn frame_offset_boundary_last_frame_on_edge() {
         // Frame 3 at x=192, width=64, texture=256: 192+64=256 ≤ 256 → NO wrap
         let tw = Some(256.0);
-        assert_offset(compute_frame_offset(3, v2(0.0, 0.0), 64.0, 64.0, tw), 192.0, 0.0);
+        assert_offset(
+            compute_frame_offset(3, v2(0.0, 0.0), 64.0, 64.0, tw),
+            192.0,
+            0.0,
+        );
         // Frame 4: 256+64=320 > 256 → wrap
-        assert_offset(compute_frame_offset(4, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 64.0);
+        assert_offset(
+            compute_frame_offset(4, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            64.0,
+        );
     }
 
     #[test]
     fn frame_offset_single_frame_per_row() {
         // 64px wide texture, 64px frames → 1 frame per row
         let tw = Some(64.0);
-        assert_offset(compute_frame_offset(0, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 0.0);
-        assert_offset(compute_frame_offset(1, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 64.0);
-        assert_offset(compute_frame_offset(2, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 128.0);
-        assert_offset(compute_frame_offset(5, v2(0.0, 0.0), 64.0, 64.0, tw), 0.0, 320.0);
+        assert_offset(
+            compute_frame_offset(0, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            0.0,
+        );
+        assert_offset(
+            compute_frame_offset(1, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            64.0,
+        );
+        assert_offset(
+            compute_frame_offset(2, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            128.0,
+        );
+        assert_offset(
+            compute_frame_offset(5, v2(0.0, 0.0), 64.0, 64.0, tw),
+            0.0,
+            320.0,
+        );
     }
 
     #[test]
