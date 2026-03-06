@@ -282,12 +282,30 @@ impl EngineBuilder {
     /// Build the engine and run the main loop.
     ///
     /// This consumes the builder and does not return until the game exits.
-    pub fn run(self) {
+    pub fn run(mut self) {
         log::info!("Hello, world! This is the Aberred Engine!");
 
         let use_scene_manager = !self.scenes.is_empty();
+        #[cfg(feature = "lua")]
+        let has_lua = self.lua_script.is_some();
+        #[cfg(not(feature = "lua"))]
+        let has_lua = false;
 
-        // --------------- Conflict validation ---------------
+        self.validate_builder(use_scene_manager);
+        let config = self.load_config();
+        let (rl, thread, render_target) = Self::setup_window(&config);
+
+        let update_hook = self.update_hook.take();
+
+        let mut world = self.setup_world(config, rl, thread, render_target);
+        self.register_systems(&mut world, use_scene_manager);
+        Self::spawn_observers(&mut world, has_lua);
+
+        let mut update = Self::build_schedule(update_hook, &mut world, has_lua, use_scene_manager);
+        Self::main_loop(&mut world, &mut update);
+    }
+
+    fn validate_builder(&self, use_scene_manager: bool) {
         if use_scene_manager {
             if self.switch_scene_hook.is_some() {
                 panic!(
@@ -310,38 +328,50 @@ impl EngineBuilder {
                 );
             }
         }
+    }
 
-        // --------------- Config ---------------
+    fn load_config(&self) -> GameConfig {
         let mut config = GameConfig::with_path(&self.config_path);
         config.load_from_file().ok(); // ignore errors, use defaults
 
-        // Apply title override if set
         if let Some(title) = &self.title_override {
             config.window_title = title.clone();
         }
 
-        let window_width = config.window_width;
-        let window_height = config.window_height;
-        let window_title = config.window_title.clone();
+        config
+    }
 
-        // --------------- Raylib window ---------------
+    fn setup_window(
+        config: &GameConfig,
+    ) -> (raylib::RaylibHandle, raylib::RaylibThread, RenderTarget) {
         let (mut rl, thread) = raylib::init()
-            .size(window_width as i32, window_height as i32)
+            .size(config.window_width as i32, config.window_height as i32)
             .resizable()
-            .title(&window_title)
+            .title(&config.window_title)
             .imgui_theme(raylib::imgui::ImGuiTheme::Dark)
             .build();
         rl.set_target_fps(config.target_fps);
         rl.set_exit_key(None);
 
-        // --------------- Render target ---------------
+        let render_target =
+            RenderTarget::new(&mut rl, &thread, config.render_width, config.render_height)
+                .expect("Failed to create render target");
+
+        (rl, thread, render_target)
+    }
+
+    fn setup_world(
+        &self,
+        config: GameConfig,
+        rl: raylib::RaylibHandle,
+        thread: raylib::RaylibThread,
+        render_target: RenderTarget,
+    ) -> World {
         let render_width = config.render_width;
         let render_height = config.render_height;
+        let window_width = rl.get_screen_width();
+        let window_height = rl.get_screen_height();
 
-        let render_target = RenderTarget::new(&mut rl, &thread, render_width, render_height)
-            .expect("Failed to create render target");
-
-        // --------------- ECS world + resources ---------------
         let mut world = World::new();
         world.insert_resource(WorldTime::default().with_time_scale(1.0));
         world.insert_resource(WorldSignals::default());
@@ -351,8 +381,8 @@ impl EngineBuilder {
             h: render_height as i32,
         });
         world.insert_resource(WindowSize {
-            w: rl.get_screen_width(),
-            h: rl.get_screen_height(),
+            w: window_width,
+            h: window_height,
         });
         world.insert_resource(config);
         world.insert_resource(InputState::default());
@@ -369,7 +399,6 @@ impl EngineBuilder {
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DebugOverlayConfig::default());
 
-        // --------------- Lua runtime (optional) ---------------
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {
             let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
@@ -383,20 +412,22 @@ impl EngineBuilder {
         world.insert_non_send_resource(thread);
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
-        // --------------- SystemsStore: game hooks ---------------
+        world
+    }
+
+    fn register_systems(self, world: &mut World, use_scene_manager: bool) {
         let mut systems_store = SystemsStore::new();
 
         if let Some(hook) = self.setup_hook {
-            hook(&mut world, &mut systems_store);
+            hook(world, &mut systems_store);
         }
         if let Some(hook) = self.enter_play_hook {
-            hook(&mut world, &mut systems_store);
+            hook(world, &mut systems_store);
         }
         if let Some(hook) = self.switch_scene_hook {
-            hook(&mut world, &mut systems_store);
+            hook(world, &mut systems_store);
         }
 
-        // --------------- SceneManager wiring (if .add_scene() was used) ------
         if use_scene_manager {
             let mut scene_manager = SceneManager::new();
             scene_manager.initial_scene = self.initial_scene;
@@ -406,23 +437,17 @@ impl EngineBuilder {
             world.insert_resource(scene_manager);
 
             register_persistent_system(
-                &mut world,
+                world,
                 &mut systems_store,
                 "switch_scene",
                 scene_switch_system,
             );
-            register_persistent_system(
-                &mut world,
-                &mut systems_store,
-                "enter_play",
-                scene_enter_play,
-            );
+            register_persistent_system(world, &mut systems_store, "enter_play", scene_enter_play);
         }
 
-        // Engine-level systems (always registered)
-        register_persistent_system(&mut world, &mut systems_store, "quit_game", quit_game);
+        register_persistent_system(world, &mut systems_store, "quit_game", quit_game);
         register_persistent_system(
-            &mut world,
+            world,
             &mut systems_store,
             "clean_all_entities",
             clean_all_entities,
@@ -437,16 +462,16 @@ impl EngineBuilder {
         world.insert_resource(systems_store);
         world.flush();
 
-        // --------------- Initial game state ---------------
         {
             let mut next_state = world.resource_mut::<NextGameState>();
             next_state.set(GameStates::Setup);
         }
         world.trigger(GameStateChangedEvent {});
+    }
 
-        // --------------- Observers ---------------
+    fn spawn_observers(world: &mut World, has_lua: bool) {
         #[cfg(feature = "lua")]
-        if self.lua_script.is_some() {
+        if has_lua {
             world.spawn((Observer::new(lua_collision_observer), Persistent));
         }
         world.spawn((Observer::new(rust_collision_observer), Persistent));
@@ -455,13 +480,21 @@ impl EngineBuilder {
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
         #[cfg(feature = "lua")]
-        if self.lua_script.is_some() {
+        if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
         }
+        #[cfg(not(feature = "lua"))]
+        let _ = has_lua;
         world.spawn((Observer::new(timer_observer), Persistent));
         world.flush();
+    }
 
-        // --------------- System schedule ---------------
+    fn build_schedule(
+        update_hook: Option<UpdateRegistrar>,
+        world: &mut World,
+        has_lua: bool,
+        use_scene_manager: bool,
+    ) -> Schedule {
         let mut update = Schedule::default();
         update.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
         update.add_systems(menu_spawn_system);
@@ -505,7 +538,7 @@ impl EngineBuilder {
         update.add_systems(phase_system.after(collision_detector));
 
         #[cfg(feature = "lua")]
-        if self.lua_script.is_some() {
+        if has_lua {
             update.add_systems(lua_phase_system.after(collision_detector));
             update.add_systems(
                 animation_controller
@@ -516,24 +549,25 @@ impl EngineBuilder {
         }
 
         #[cfg(feature = "lua")]
-        if self.lua_script.is_none() {
+        if !has_lua {
             update.add_systems(animation_controller.after(phase_system));
         }
 
         #[cfg(not(feature = "lua"))]
-        update.add_systems(animation_controller.after(phase_system));
+        {
+            let _ = has_lua;
+            update.add_systems(animation_controller.after(phase_system));
+        }
 
         update.add_systems(animation.after(animation_controller));
         update.add_systems(update_timers);
         update.add_systems(update_world_signals_binding_system);
         update.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
 
-        // Game update hook
-        if let Some(update_hook) = self.update_hook {
+        if let Some(update_hook) = update_hook {
             update_hook(&mut update);
         }
 
-        // SceneManager per-frame update + flag polling
         if use_scene_manager {
             update.add_systems(
                 scene_update_system
@@ -550,10 +584,13 @@ impl EngineBuilder {
         update.add_systems(render_system.after(collision_detector));
 
         update
-            .initialize(&mut world)
+            .initialize(world)
             .expect("Failed to initialize schedule");
 
-        // --------------- Main loop ---------------
+        update
+    }
+
+    fn main_loop(world: &mut World, update: &mut Schedule) {
         while !world
             .non_send_resource::<raylib::RaylibHandle>()
             .window_should_close()
@@ -562,9 +599,9 @@ impl EngineBuilder {
             let dt = world
                 .non_send_resource::<raylib::RaylibHandle>()
                 .get_frame_time();
-            update_world_time(&mut world, dt);
+            update_world_time(world, dt);
 
-            update.run(&mut world);
+            update.run(world);
 
             world.clear_trackers();
 
@@ -578,7 +615,7 @@ impl EngineBuilder {
                 window_size.h = new_h;
             }
         }
-        shutdown_audio(&mut world);
+        shutdown_audio(world);
     }
 }
 
