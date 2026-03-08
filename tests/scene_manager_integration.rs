@@ -573,3 +573,145 @@ fn scene_switch_poll_noop_without_flag() {
     );
     ENTER_LOG.with(|v| assert!(v.borrow().is_empty()));
 }
+
+// ---------------------------------------------------------------------------
+// Test 11: Non-persistent registered entity is cleared on scene switch
+// ---------------------------------------------------------------------------
+
+#[test]
+fn non_persistent_entity_registration_cleared_on_scene_switch() {
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.active_scene = Some("menu".to_string());
+    sm.insert(
+        "menu",
+        SceneDescriptor {
+            on_enter: menu_enter,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    // Spawn a non-persistent entity and register it
+    let player = world.spawn(()).id();
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_entity("player", player);
+    }
+    assert!(world.resource::<WorldSignals>().get_entity("player").is_some());
+
+    // Switch scene
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_string("scene", "menu".to_string());
+    }
+    world.run_system_once(scene_switch_system).unwrap();
+    world.flush();
+
+    assert!(
+        world.resource::<WorldSignals>().get_entity("player").is_none(),
+        "Non-persistent entity registration should be cleared on scene switch"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 12: Persistent registered entity survives scene switch
+// ---------------------------------------------------------------------------
+
+#[test]
+fn persistent_entity_registration_survives_scene_switch() {
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.active_scene = Some("menu".to_string());
+    sm.insert(
+        "menu",
+        SceneDescriptor {
+            on_enter: menu_enter,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    // Spawn a persistent entity and register it
+    let cursor = world.spawn(Persistent).id();
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_entity("cursor", cursor);
+    }
+
+    // Switch scene
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_string("scene", "menu".to_string());
+    }
+    world.run_system_once(scene_switch_system).unwrap();
+    world.flush();
+
+    assert_eq!(
+        world.resource::<WorldSignals>().get_entity("cursor"),
+        Some(&cursor),
+        "Persistent entity registration should survive scene switch"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 13: Mixed registrations — only non-persistent entries are cleared
+// ---------------------------------------------------------------------------
+
+#[test]
+fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.active_scene = Some("menu".to_string());
+    sm.insert(
+        "menu",
+        SceneDescriptor {
+            on_enter: menu_enter,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    // Spawn one persistent and two non-persistent entities; register all three
+    let cursor = world.spawn(Persistent).id();
+    let player = world.spawn(()).id();
+    let enemy = world.spawn(()).id();
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_entity("cursor", cursor);
+        ws.set_entity("player", player);
+        ws.set_entity("enemy", enemy);
+    }
+
+    // Switch scene
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_string("scene", "menu".to_string());
+    }
+    world.run_system_once(scene_switch_system).unwrap();
+    world.flush();
+
+    let ws = world.resource::<WorldSignals>();
+    assert_eq!(
+        ws.get_entity("cursor"),
+        Some(&cursor),
+        "Persistent registration should survive"
+    );
+    assert!(
+        ws.get_entity("player").is_none(),
+        "Non-persistent 'player' registration should be cleared"
+    );
+    assert!(
+        ws.get_entity("enemy").is_none(),
+        "Non-persistent 'enemy' registration should be cleared"
+    );
+}

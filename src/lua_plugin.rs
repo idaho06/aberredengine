@@ -35,7 +35,7 @@ use bevy_ecs::prelude::*;
 use raylib::ffi;
 use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 //use std::collections::HashMap; // always prefer FxHashMap for performance
 
 // Import component/resource types from modules
@@ -841,6 +841,7 @@ pub fn switch_scene(
     tilemaps_store: Res<TilemapStore>,
     tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
+    persistent_entities: Query<Entity, With<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
@@ -866,6 +867,12 @@ pub fn switch_scene(
         //eprintln!("Despawning entity: {:?}", entity);
         commands.entity(entity).despawn();
     }
+
+    // Clear entity registrations for despawned (non-persistent) entities
+    let persistent_set: FxHashSet<Entity> = persistent_entities.iter().collect();
+    scene_state
+        .world_signals
+        .clear_non_persistent_entities(&persistent_set);
 
     // NOTE: tilemaps_store is NOT cleared - tilemaps are assets loaded during setup
 

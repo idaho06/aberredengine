@@ -245,6 +245,20 @@ impl WorldSignals {
         result
     }
 
+    /// Remove all entity registrations whose [`Entity`] is not in `persistent_entities`.
+    ///
+    /// Called during scene transitions to mirror the entity despawn logic:
+    /// non-persistent entities are despawned, so their registrations must be cleared too.
+    /// Registrations for persistent entities are preserved unchanged.
+    pub fn clear_non_persistent_entities(&mut self, persistent_entities: &FxHashSet<Entity>) {
+        let before = self.entities.len();
+        self.entities
+            .retain(|_, entity| persistent_entities.contains(entity));
+        if self.entities.len() != before {
+            self.mark_dirty();
+        }
+    }
+
     // Read-only view of all scalar signals (for caching).
     // pub fn scalars(&self) -> &FxHashMap<String, f32> {
     //     &self.scalars
@@ -471,6 +485,67 @@ mod tests {
     fn test_remove_entity_nonexistent() {
         let mut ws = WorldSignals::default();
         assert_eq!(ws.remove_entity("nope"), None);
+    }
+
+    #[test]
+    fn test_clear_non_persistent_entities_removes_non_persistent() {
+        let mut ws = WorldSignals::default();
+        let entity_a = Entity::from_bits(1);
+        let entity_b = Entity::from_bits(2);
+        ws.set_entity("player", entity_a);
+        ws.set_entity("cursor", entity_b);
+
+        // Only entity_b is "persistent"
+        let persistent = FxHashSet::from_iter([entity_b]);
+        ws.clear_non_persistent_entities(&persistent);
+
+        assert!(ws.get_entity("player").is_none(), "non-persistent registration should be removed");
+        assert_eq!(ws.get_entity("cursor"), Some(&entity_b), "persistent registration should be kept");
+    }
+
+    #[test]
+    fn test_clear_non_persistent_entities_empty_set_clears_all() {
+        let mut ws = WorldSignals::default();
+        ws.set_entity("player", Entity::from_bits(1));
+        ws.set_entity("cursor", Entity::from_bits(2));
+
+        ws.clear_non_persistent_entities(&FxHashSet::default());
+
+        assert!(ws.get_entity("player").is_none());
+        assert!(ws.get_entity("cursor").is_none());
+    }
+
+    #[test]
+    fn test_clear_non_persistent_entities_all_persistent_keeps_all() {
+        let mut ws = WorldSignals::default();
+        let entity_a = Entity::from_bits(1);
+        let entity_b = Entity::from_bits(2);
+        ws.set_entity("player", entity_a);
+        ws.set_entity("cursor", entity_b);
+
+        let persistent = FxHashSet::from_iter([entity_a, entity_b]);
+        ws.clear_non_persistent_entities(&persistent);
+
+        assert_eq!(ws.get_entity("player"), Some(&entity_a));
+        assert_eq!(ws.get_entity("cursor"), Some(&entity_b));
+    }
+
+    #[test]
+    fn test_clear_non_persistent_entities_marks_dirty_only_when_changed() {
+        let mut ws = WorldSignals::default();
+        let entity_a = Entity::from_bits(1);
+        ws.set_entity("player", entity_a);
+        ws.snapshot(); // clear dirty flag
+        assert!(!ws.dirty);
+
+        // Nothing removed — should stay clean
+        let persistent = FxHashSet::from_iter([entity_a]);
+        ws.clear_non_persistent_entities(&persistent);
+        assert!(!ws.dirty, "should not mark dirty when nothing was removed");
+
+        // Remove entity — should mark dirty
+        ws.clear_non_persistent_entities(&FxHashSet::default());
+        assert!(ws.dirty, "should mark dirty when an entry was removed");
     }
 
     // --- Group counts ---

@@ -26,6 +26,7 @@
 
 use bevy_ecs::prelude::*;
 use log::{error, info};
+use rustc_hash::FxHashSet;
 
 use crate::components::persistent::Persistent;
 use crate::events::audio::AudioCmd;
@@ -97,6 +98,7 @@ pub struct SceneDescriptor {
 pub fn scene_switch_system(
     mut ctx: GameCtx,
     entities_to_clean: Query<Entity, Without<Persistent>>,
+    persistent_entities: Query<Entity, With<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut scene_manager: ResMut<SceneManager>,
 ) {
@@ -107,6 +109,11 @@ pub fn scene_switch_system(
     for entity in entities_to_clean.iter() {
         ctx.commands.entity(entity).despawn();
     }
+
+    // Clear entity registrations for despawned (non-persistent) entities
+    let persistent_set: FxHashSet<Entity> = persistent_entities.iter().collect();
+    ctx.world_signals
+        .clear_non_persistent_entities(&persistent_set);
 
     tracked_groups.clear();
     ctx.world_signals.clear_group_counts();
