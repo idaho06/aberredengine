@@ -3,6 +3,26 @@
 
 local M = {}
 
+--- Returns true if `name` exists in an array-like flags table.
+--- This is a helper for checking for the presence of flags in signals, which are represented as array-like tables of strings.
+--- This should work for getting sides from collision side tables too.
+--- @param flags table|nil
+--- @param name string
+--- @return boolean
+function M.has_flag(flags, name)
+    if type(flags) ~= "table" then
+        return false
+    end
+
+    for _, flag in ipairs(flags) do -- assumes flags is an array-like table of strings
+        if flag == name then
+            return true
+        end
+    end
+
+    return false
+end
+
 -- Pretty-print Lua values (especially tables) for debugging.
 -- - `max_depth` prevents huge logs
 -- - `visited` prevents infinite loops on cyclic tables

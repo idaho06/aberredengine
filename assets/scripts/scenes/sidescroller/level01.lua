@@ -1,8 +1,11 @@
--- filepath: /home/idaho/Projects/aberredengine/assets/scripts/scenes/sidescroller/level01.lua
 -- scenes/sidescroller/level01.lua
 -- Sidescroller level 01 scene
 
+local utils = require("lib.utils")
 local M = {}
+
+local running_speed = 80
+local walking_speed = 40
 
 -- ─── Helper functions (local) ─────────────────────────────────────────────────
 --- Updates the player's facing direction based on input.
@@ -23,11 +26,20 @@ end
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
 --- Called each frame when sidescroller level01 scene is active.
+--- This is called AFTER collision and phase callbacks!
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function on_update_sidescroller_level01(input, dt)
     if input.digital.back.just_pressed then
         engine.change_scene("menu")
+    end
+    -- reset the player "on_ground" signal at the start of each frame, it will be set again by the collision callback if we are still on the ground
+    local player_id = engine.get_entity("player")
+    if player_id then
+        engine.entity_signal_clear_flag(player_id, "on_ground")
+        -- engine.entity_signal_set_flag(player_id, "falling")
+        -- engine.entity_set_force_enabled(player_id, "gravity", true)
+        engine.log_info("Cleared player on_ground signal at end of frame.")
     end
 end
 
@@ -36,7 +48,13 @@ end
 --- @param input InputSnapshot Input state table
 local function player_running_on_enter(ctx, input)
     engine.log_info("Player started running!")
-    engine.entity_set_animation(ctx.id, "sidescroller-char_red_run")
+    -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_run")
+    -- Check facing direction and set velocity accordingly
+    if input.digital.left.pressed and not input.digital.right.pressed then
+        engine.entity_set_velocity(ctx.id, -running_speed, 0)
+    elseif input.digital.right.pressed and not input.digital.left.pressed then
+        engine.entity_set_velocity(ctx.id, running_speed, 0)
+    end
 end
 
 --- Called each frame while in the running phase.
@@ -44,11 +62,21 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_running_on_update(ctx, input, dt)
+    if input.digital.action_1.just_pressed then
+        return "attack"
+    end
     if input.digital.left.pressed or input.digital.right.pressed then
         -- Keep running
+        -- check for changed direction
+        update_facing_direction(ctx.id, input)
+        if input.digital.left.pressed and not input.digital.right.pressed then
+            engine.entity_set_velocity(ctx.id, -running_speed, 0)
+        elseif input.digital.right.pressed and not input.digital.left.pressed then
+            engine.entity_set_velocity(ctx.id, running_speed, 0)
+        end
     else
-        -- Transition to walking
-        return "walking"
+        -- Transition to idle
+        return "idle"
     end
 end
 
@@ -57,7 +85,7 @@ end
 --- @param input InputSnapshot Input state table
 local function player_walking_on_enter(ctx, input)
     engine.log_info("Player started walking!")
-    engine.entity_set_animation(ctx.id, "sidescroller-char_red_walk")
+    -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_walk")
 end
 
 --- Called each frame while in the walking phase.
@@ -65,6 +93,9 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_walking_on_update(ctx, input, dt)
+    if input.digital.action_1.just_pressed then
+        return "attack"
+    end
     if input.digital.left.pressed or input.digital.right.pressed then
         update_facing_direction(ctx.id, input)
         -- Transition to running
@@ -77,7 +108,9 @@ end
 --- @param input InputSnapshot Input state table
 local function player_idle_on_enter(ctx, input)
     engine.log_info("Player is idle.")
-    engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
+    -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
+    -- remove horizontal movement when entering idle
+    engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
 end
 
 --- Called each frame while in the idle phase.
@@ -85,10 +118,75 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_idle_on_update(ctx, input, dt)
-    if input.digital.left.pressed or input.digital.right.pressed then
+    -- check for presence of "on_ground" signal, if not present, transition to falling
+    -- engine.log_info(utils.dump_value(ctx, 4))
+    local flags = ctx.signals.flags
+    -- engine.log_info(utils.dump_value(flags, 4))
+    if not utils.has_flag(flags, "on_ground") then
+        engine.log_info("Player update: Player is NOT on the ground")
+        -- It looks like we are suddendly falling, maybe we walked off a ledge or the ground was removed from under us. Transition to falling.
+
+        -- return "falling"
+    else
+        engine.log_info("Player update: Player is on the ground")
+    end
+
+    if input.digital.action_1.just_pressed then
+        return "attack"
+    end
+
+    if (input.digital.left.pressed or input.digital.right.pressed) and not (input.digital.left.pressed and input.digital.right.pressed) then
         update_facing_direction(ctx.id, input)
-        -- Transition to walking
-        return "walking"
+        -- Transition to running
+        return "running"
+    end
+end
+
+--- Called when entering the attack phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+local function player_attack_on_enter(ctx, input)
+    engine.log_info("Player is attacking!")
+    engine.entity_signal_set_flag(ctx.id, "attack")
+    -- engine.entity_freeze(ctx.id)
+    -- engine.entity_restart_animation(ctx.id)
+    engine.entity_set_velocity(ctx.id, 0, 0)
+    -- Spawn hitbox child entity in front of the player
+    local offset_x = 20
+    if utils.has_flag(ctx.signals.flags, "facing_left") then
+        offset_x = -20
+    end
+    engine.spawn()
+        :with_position(offset_x, 0)
+        :with_collider(14, 30, 7, 30)
+        :with_group("player_damage")
+        :with_parent(ctx.id)
+        :register_as("attack_hitbox")
+        :build()
+end
+
+--- Called each frame while in the attack phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+--- @param dt number Delta time in seconds
+local function player_attack_on_update(ctx, input, dt)
+    if utils.has_flag(ctx.signals.flags, "animation_ended") then
+        engine.entity_signal_clear_flag(ctx.id, "animation_ended")
+        return "idle"
+    end
+end
+
+--- Called when exiting the attack phase.
+--- @param ctx EntityContext Entity state
+local function player_attack_on_exit(ctx)
+    engine.log_info("Player finished attacking.")
+    engine.entity_signal_clear_flag(ctx.id, "attack")
+    -- engine.entity_unfreeze(ctx.id)
+    -- Despawn the hitbox child
+    local hitbox_id = engine.get_entity("attack_hitbox")
+    if hitbox_id then
+        engine.entity_despawn(hitbox_id)
+        engine.remove_entity("attack_hitbox")
     end
 end
 
@@ -97,88 +195,35 @@ end
 local function collision_ground_player(ctx)
     -- entity A is ground, entity B is player
     -- check that the player side colliding with the ground is the bottom
-    -- engine.log_info(Dump_value(ctx, 4))
+    -- engine.log_info(utils.dump_value(ctx, 4))
 
-    --[[ {
-      a = {
-        group = "ground",
-        id = 4294967259.0,
-        pos = {
-          x = -320.0,
-          y = 20.0,
-        },
-        rect = {
-          h = 32.0,
-          w = 640.0,
-          x = -320.0,
-          y = 20.0,
-        },
-        speed_sq = 0.0,
-      },
-      b = {
-        group = "player",
-        id = 4294967260.0,
-        pos = {
-          x = 0.0,
-          y = 21.707861,
-        },
-        rect = {
-          h = 24.0,
-          w = 20.0,
-          x = -10.0,
-          y = -2.292139,
-        },
-        signals = {
-          flags = {
-            [1.0] = "moving",
-            [2.0] = "facing_right",
-          },
-          integers = {
-          },
-          scalars = {
-            speed_sq = 7554.043457,
-          },
-          strings = {
-          },
-        },
-        speed_sq = 7554.043457,
-        vel = {
-          x = 0.0,
-          y = 86.914001,
-        },
-      },
-      sides = {
-        a = {
-          [1.0] = "top",
-        },
-        b = {
-          [1.0] = "left",
-          [2.0] = "right",
-          [3.0] = "bottom",
-        },
-      },
-    } ]]
     -- look for "bottom" in ctx.sides.b
     local player_on_ground = false
     for _, side in pairs(ctx.sides.b) do
         if side == "bottom" then
             player_on_ground = true
             break
-        end
+        end -- TODO: If we have a collision, but it's not the bottom, then we are touching a wall or ceiling!
     end
     if player_on_ground then
-        engine.entity_signal_set_flag(ctx.b.id, "on_ground")
-        engine.entity_set_force_enabled(ctx.b.id, "gravity", false)
+        engine.collision_entity_signal_set_flag(ctx.b.id, "on_ground")
+        engine.collision_entity_signal_clear_flag(ctx.b.id, "falling")
+        -- engine.entity_signal_set_flag(ctx.b.id, "on_ground")
+        -- engine.entity_signal_clear_flag(ctx.b.id, "falling")
+        engine.log_info("collision: setting player `on_ground` signal")
+        -- engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", false)
         -- reset vertical velocity to 0 to prevent sliding down slopes
         local vel = ctx.b.vel
-        engine.entity_set_velocity(ctx.b.id, vel.x, 0)
+        engine.collision_entity_set_velocity(ctx.b.id, vel.x, 0)
         -- reset vertical position to be exactly on top of the ground to prevent sinking due to gravity
         -- local player_pos = ctx.b.pos
         local ground_rect = ctx.a.rect
-        engine.entity_set_position(ctx.b.id, ctx.b.pos.x, ground_rect.y)
+        engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, ground_rect.y)
     else
-        engine.entity_signal_clear_flag(ctx.b.id, "on_ground")
-        engine.entity_set_force_enabled(ctx.b.id, "gravity", true)
+        engine.collision_entity_signal_clear_flag(ctx.b.id, "on_ground")
+        engine.log_info("collision: removing player `on_ground` signal")
+        engine.collision_entity_signal_set_flag(ctx.b.id, "falling")
+        engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", true)
     end
 end
 
@@ -194,6 +239,9 @@ M._callbacks = {
     player_walking_on_update = player_walking_on_update,
     player_idle_on_enter = player_idle_on_enter,
     player_idle_on_update = player_idle_on_update,
+    player_attack_on_enter = player_attack_on_enter,
+    player_attack_on_update = player_attack_on_update,
+    player_attack_on_exit = player_attack_on_exit,
     collision_ground_player = collision_ground_player,
 }
 
@@ -218,7 +266,7 @@ function M.spawn()
     -- Spawn player character
     engine.spawn()
         :with_sprite("sidescroller-char_red_1_sheet", 56, 56, 56 / 2, 56)
-        :with_animation("sidescroller-char_red_walk")
+        :with_animation("sidescroller-char_red_idle")
         :with_zindex(0)
         :with_position(0, 0)
         :with_group("player")
@@ -241,19 +289,55 @@ function M.spawn()
                     on_enter = "player_walking_on_enter",
                     on_update = "player_walking_on_update"
                     -- on_exit = "player_walking_on_exit"
+                },
+                attack = {
+                    on_enter = "player_attack_on_enter",
+                    on_update = "player_attack_on_update",
+                    on_exit = "player_attack_on_exit"
                 }
             }
         })
         :with_collider(20, 24, 10, 24)
         :with_collider_offset(0, 0)
         :with_accel("gravity", 0, 180, true)
+        :with_animation_controller("sidescroller-char_red_idle")
+    -- :with_animation_rule({
+    --     type = "all",
+    --     conditions = {
+    --         { type = "has_flag", key = "on_ground" },
+    --         { type = "has_flag", key = "attack" }
+    --     }
+    -- }, "sidescroller-char_red_attack")
+        :with_animation_rule({
+            type = "has_flag", key = "attack"
+
+        }, "sidescroller-char_red_attack")
+        :with_animation_rule({
+            type = "all",
+            conditions = {
+                { type = "lacks_flag", key = "on_ground" },
+                { type = "has_flag",   key = "moving" }
+            }
+        }, "sidescroller-char_red_jump_falling")
+        :with_animation_rule({
+            type = "all",
+            conditions = {
+                { type = "has_flag",   key = "on_ground" },
+                { type = "scalar_cmp", key = "speed_sq", op = "gt", value = 50.0 }
+            }
+        }, "sidescroller-char_red_run")
         :register_as("player")
         :build()
 
-    -- Spawn ground platform
+    -- Spawn ground platforms
     engine.spawn()
-        :with_collider(640, 32, 0, 0)
+        :with_collider(360, 32, 0, 0)
         :with_position(-320, 20)
+        :with_group("ground")
+        :build()
+    engine.spawn()
+        :with_collider(360, 32, 0, 0)
+        :with_position(0, 20 + 32)
         :with_group("ground")
         :build()
 
