@@ -87,7 +87,7 @@ use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::particleemitter::particle_emitter_system;
 use crate::systems::phase::phase_system;
-use crate::systems::propagate_transforms::propagate_transforms;
+use crate::systems::propagate_transforms::{cleanup_orphaned_global_transforms, propagate_transforms};
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
@@ -527,6 +527,11 @@ impl EngineBuilder {
                 .after(tween_mapposition_system)
                 .after(tween_rotation_system)
                 .after(tween_scale_system)
+                .before(collision_detector),
+        );
+        update.add_systems(
+            cleanup_orphaned_global_transforms
+                .after(propagate_transforms)
                 .before(collision_detector),
         );
         update.add_systems(

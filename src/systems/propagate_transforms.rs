@@ -139,3 +139,23 @@ fn propagate_children(
         }
     }
 }
+
+/// Remove stale [`GlobalTransform2D`] from entities that are no longer part
+/// of any hierarchy.
+///
+/// When a root entity loses its last child, Bevy removes [`Children`] but
+/// leaves its [`GlobalTransform2D`] in place. [`propagate_transforms`] stops
+/// updating it, so `resolve_world_pos` returns the frozen world position
+/// instead of the live [`MapPosition`]. This system removes the orphaned
+/// component so that standalone entities always resolve to [`MapPosition`].
+///
+/// Must run **after** [`propagate_transforms`] and **before** collision
+/// detection.
+pub fn cleanup_orphaned_global_transforms(
+    mut commands: Commands,
+    query: Query<Entity, (With<GlobalTransform2D>, Without<Children>, Without<ChildOf>)>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).remove::<GlobalTransform2D>();
+    }
+}

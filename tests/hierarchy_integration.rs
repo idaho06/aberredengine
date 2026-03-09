@@ -33,7 +33,9 @@ use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::systems::lua_commands::EntityCmdQueries;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
-use aberredengine::systems::propagate_transforms::propagate_transforms;
+use aberredengine::systems::propagate_transforms::{
+    cleanup_orphaned_global_transforms, propagate_transforms,
+};
 use aberredengine::systems::stuckto::stuck_to_entity_system;
 
 const EPSILON: f32 = 1e-4;
@@ -1269,4 +1271,327 @@ fn entity_cmd_set_screen_position_no_op_on_map_entity() {
     let pos = world.get::<MapPosition>(entity).unwrap();
     assert!((pos.pos.x - 10.0).abs() < EPSILON);
     assert!((pos.pos.y - 20.0).abs() < EPSILON);
+}
+
+// =============================================================================
+// PHASE 9: cleanup_orphaned_global_transforms
+//
+// Regression tests for the stale-GlobalTransform2D bug:
+// When a root entity loses its last child, propagate_transforms stops updating
+// its GT. cleanup_orphaned_global_transforms removes the stale component so
+// that resolve_world_pos falls back to the live MapPosition.
+// =============================================================================
+
+fn tick_propagate_and_cleanup(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(propagate_transforms);
+    schedule.add_systems(cleanup_orphaned_global_transforms.after(propagate_transforms));
+    schedule.run(world);
+}
+
+#[test]
+fn cleanup_removes_gt_from_entity_with_no_children_and_no_childof() {
+    let mut world = World::new();
+
+    // Entity with a GlobalTransform2D but no hierarchy relationship
+    let entity = world
+        .spawn((
+            MapPosition::new(10.0, 20.0),
+            GlobalTransform2D {
+                position: Vector2 { x: 999.0, y: 999.0 },
+                rotation_degrees: 0.0,
+                scale: Vector2 { x: 1.0, y: 1.0 },
+            },
+        ))
+        .id();
+
+    // Run cleanup only (no hierarchy, so propagate_transforms does nothing)
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    assert!(
+        world.get::<GlobalTransform2D>(entity).is_none(),
+        "GT should be removed from standalone entity with no Children and no ChildOf"
+    );
+}
+
+#[test]
+fn cleanup_preserves_gt_on_current_hierarchy_root() {
+    let mut world = World::new();
+
+    // Parent with a child — has Children, so cleanup must leave its GT alone
+    let parent = world
+        .spawn((MapPosition::new(50.0, 0.0), GlobalTransform2D::default()))
+        .id();
+    world.spawn((MapPosition::new(0.0, 0.0), ChildOf(parent)));
+    world.flush(); // Bevy populates Children on parent
+
+    assert!(
+        world.get::<Children>(parent).is_some(),
+        "Parent should have Children after flush"
+    );
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    assert!(
+        world.get::<GlobalTransform2D>(parent).is_some(),
+        "GT should be preserved on entity that still has Children"
+    );
+}
+
+#[test]
+fn cleanup_preserves_gt_on_child_entity() {
+    let mut world = World::new();
+
+    // Child entity: has both ChildOf and GT — cleanup must not touch it
+    let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+    let child = world
+        .spawn((
+            MapPosition::new(10.0, 0.0),
+            ChildOf(parent),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+    world.flush();
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_some(),
+        "GT should be preserved on child entity (has ChildOf)"
+    );
+}
+
+#[test]
+fn cleanup_does_not_affect_entity_without_gt() {
+    let mut world = World::new();
+
+    // Standalone entity with no GT — cleanup should leave it untouched
+    let entity = world.spawn(MapPosition::new(5.0, 5.0)).id();
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    // MapPosition should still be there, and no GT should have appeared
+    assert!(world.get::<GlobalTransform2D>(entity).is_none());
+    let pos = world.get::<MapPosition>(entity).unwrap();
+    assert!(approx_eq(pos.pos.x, 5.0));
+}
+
+#[test]
+fn cleanup_removes_all_orphaned_gt_entities() {
+    let mut world = World::new();
+
+    // Spawn three standalone entities each with a stale GT
+    let entities: Vec<Entity> = (0..3)
+        .map(|i| {
+            world
+                .spawn((
+                    MapPosition::new(i as f32 * 10.0, 0.0),
+                    GlobalTransform2D {
+                        position: Vector2 {
+                            x: 999.0 + i as f32,
+                            y: 999.0,
+                        },
+                        rotation_degrees: 0.0,
+                        scale: Vector2 { x: 1.0, y: 1.0 },
+                    },
+                ))
+                .id()
+        })
+        .collect();
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    for entity in &entities {
+        assert!(
+            world.get::<GlobalTransform2D>(*entity).is_none(),
+            "GT should be removed from all orphaned entities"
+        );
+    }
+}
+
+/// Regression test for the stale-GT movement freeze bug.
+///
+/// Scenario:
+/// 1. Player spawned at (100, 0).
+/// 2. A hitbox child is attached → player becomes a hierarchy root →
+///    propagate_transforms inserts GlobalTransform2D on player.
+/// 3. Player moves to (200, 0).
+/// 4. Hitbox is despawned → Bevy removes Children from player.
+/// 5. Player moves to (300, 0).
+/// 6. propagate_transforms runs — skips player (no Children).
+///    GT is now stale at (200, 0).
+/// 7. cleanup_orphaned_global_transforms runs — removes stale GT.
+/// 8. resolve_world_pos must now return MapPosition (300, 0),
+///    not the stale GT (200, 0).
+#[test]
+fn stale_gt_removed_after_child_despawn() {
+    use aberredengine::systems::collision::resolve_world_pos;
+    use bevy_ecs::system::SystemState;
+
+    let mut world = World::new();
+
+    // 1. Spawn player at (100, 0)
+    let player = world.spawn(MapPosition::new(100.0, 0.0)).id();
+
+    // 2. Attach a hitbox child — world.flush() makes Bevy add Children to player
+    let hitbox = world
+        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
+        .id();
+    world.flush();
+
+    assert!(
+        world.get::<Children>(player).is_some(),
+        "Player should have Children after hitbox attachment"
+    );
+
+    // propagate_transforms inserts GT on player (deferred — needs two ticks)
+    tick_propagate_and_cleanup(&mut world); // tick 1: inserts GT via commands
+    tick_propagate_and_cleanup(&mut world); // tick 2: GT is now visible + updated
+
+    assert!(
+        world.get::<GlobalTransform2D>(player).is_some(),
+        "Player should have GT after becoming a hierarchy root"
+    );
+
+    // 3. Move player to (200, 0) and run propagation to keep GT in sync
+    world.get_mut::<MapPosition>(player).unwrap().pos.x = 200.0;
+    tick_propagate_and_cleanup(&mut world);
+
+    {
+        let gt = world.get::<GlobalTransform2D>(player).unwrap();
+        assert!(
+            approx_eq(gt.position.x, 200.0),
+            "GT should be at 200 after move, got {}",
+            gt.position.x
+        );
+    }
+
+    // 4. Despawn the hitbox → Bevy removes Children from player
+    world.despawn(hitbox);
+    // world.flush() is implicit after despawn in direct world access
+
+    assert!(
+        world.get::<Children>(player).is_none(),
+        "Player should have no Children after hitbox despawn"
+    );
+
+    // 5. Move player to (300, 0) — GT is now stale at (200, 0)
+    world.get_mut::<MapPosition>(player).unwrap().pos.x = 300.0;
+
+    // 6. Run propagate without cleanup to confirm the bug exists:
+    //    GT is NOT updated (player not in RootsQuery)
+    {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(propagate_transforms);
+        schedule.run(&mut world);
+    }
+
+    {
+        let gt = world.get::<GlobalTransform2D>(player).unwrap();
+        assert!(
+            approx_eq(gt.position.x, 200.0),
+            "GT should still be stale at 200 (bug condition), got {}",
+            gt.position.x
+        );
+    }
+
+    // 7. Now run the cleanup — it must remove the stale GT
+    {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(cleanup_orphaned_global_transforms);
+        schedule.run(&mut world);
+    }
+
+    assert!(
+        world.get::<GlobalTransform2D>(player).is_none(),
+        "Stale GT should be removed by cleanup after child despawn"
+    );
+
+    // 8. resolve_world_pos must now return MapPosition (300, 0)
+    let mut state =
+        SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
+    let (positions, global_transforms) = state.get(&world);
+    let resolved = resolve_world_pos(&positions, &global_transforms, player).unwrap();
+
+    assert!(
+        approx_eq(resolved.x, 300.0),
+        "resolve_world_pos should return live MapPosition 300 after GT removal, got {}",
+        resolved.x
+    );
+    assert!(
+        approx_eq(resolved.y, 0.0),
+        "resolve_world_pos y should be 0, got {}",
+        resolved.y
+    );
+}
+
+/// Verifies the full frame pipeline: propagate → cleanup → collision.
+///
+/// After a child is despawned, the parent's stale GT must be cleaned up
+/// before collision detection so that collider rects use the correct,
+/// live MapPosition rather than the frozen world position from when the
+/// entity was last a hierarchy root.
+#[test]
+fn collision_uses_live_map_position_after_child_despawn() {
+    let mut world = World::new();
+    setup_collision_world(&mut world);
+
+    // Spawn player at (0, 0) — will become a hierarchy root
+    let player = world
+        .spawn((MapPosition::new(0.0, 0.0), BoxCollider::new(20.0, 20.0)))
+        .id();
+
+    // Attach a hitbox child → player gains Children
+    let hitbox = world
+        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
+        .id();
+    world.flush();
+
+    // Two propagation ticks so GT is inserted and synced
+    tick_propagate_and_cleanup(&mut world);
+    tick_propagate_and_cleanup(&mut world);
+
+    // Move player far away to (500, 500) — no overlap with origin
+    world.get_mut::<MapPosition>(player).unwrap().pos = Vector2 { x: 500.0, y: 500.0 };
+    tick_propagate_and_cleanup(&mut world); // GT updated to (500, 500)
+
+    // Despawn hitbox → Children removed from player; GT is now stale at (500, 500)
+    world.despawn(hitbox);
+
+    // Move player back to origin (0, 0)
+    world.get_mut::<MapPosition>(player).unwrap().pos = Vector2 { x: 0.0, y: 0.0 };
+
+    // Spawn a sensor at origin — should collide with player if position is correct
+    let sensor = world
+        .spawn((MapPosition::new(5.0, 5.0), BoxCollider::new(20.0, 20.0)))
+        .id();
+
+    // Run the full pipeline: propagate → cleanup → collision
+    let mut schedule = Schedule::default();
+    schedule.add_systems(propagate_transforms);
+    schedule.add_systems(cleanup_orphaned_global_transforms.after(propagate_transforms));
+    schedule.add_systems(collision_detector.after(cleanup_orphaned_global_transforms));
+    schedule.run(&mut world);
+
+    let log = world.resource::<CollisionLog>();
+    let has_collision = log
+        .pairs
+        .iter()
+        .any(|&(a, b)| (a == player && b == sensor) || (a == sensor && b == player));
+
+    assert!(
+        has_collision,
+        "Player at live MapPosition (0,0) should collide with sensor at (5,5) — \
+         stale GT at (500,500) must not prevent detection"
+    );
 }
