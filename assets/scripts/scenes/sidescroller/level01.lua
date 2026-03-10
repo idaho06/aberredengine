@@ -48,7 +48,7 @@ end
 --- @param input InputSnapshot Input state table
 local function player_running_on_enter(ctx, input)
     engine.log_info("Player started running!")
-    -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_run")
+    engine.entity_signal_set_flag(ctx.id, "running")
     -- Check facing direction and set velocity accordingly
     if input.digital.left.pressed and not input.digital.right.pressed then
         engine.entity_set_velocity(ctx.id, -running_speed, 0)
@@ -62,13 +62,19 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_running_on_update(ctx, input, dt)
+    if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
+        return "falling"
+    end
     if input.digital.action_1.just_pressed then
         return "attack"
     end
     if input.digital.left.pressed or input.digital.right.pressed then
-        -- Keep running
-        -- check for changed direction
+        -- Keep running (or switch to walking if action_3 held)
         update_facing_direction(ctx.id, input)
+        local has_single_direction = not (input.digital.left.pressed and input.digital.right.pressed)
+        if has_single_direction and input.digital.action_3.pressed then
+            return "walking"
+        end
         if input.digital.left.pressed and not input.digital.right.pressed then
             engine.entity_set_velocity(ctx.id, -running_speed, 0)
         elseif input.digital.right.pressed and not input.digital.left.pressed then
@@ -80,12 +86,25 @@ local function player_running_on_update(ctx, input, dt)
     end
 end
 
+--- Called when exiting the running phase.
+--- @param ctx EntityContext Entity state
+local function player_running_on_exit(ctx)
+    engine.log_info("Player stopped running.")
+    engine.entity_signal_clear_flag(ctx.id, "running")
+end
+
 --- Called when entering the walking phase.
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_walking_on_enter(ctx, input)
     engine.log_info("Player started walking!")
-    -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_walk")
+    engine.entity_signal_set_flag(ctx.id, "walking")
+    update_facing_direction(ctx.id, input)
+    if input.digital.left.pressed and not input.digital.right.pressed then
+        engine.entity_set_velocity(ctx.id, -walking_speed, 0)
+    elseif input.digital.right.pressed and not input.digital.left.pressed then
+        engine.entity_set_velocity(ctx.id, walking_speed, 0)
+    end
 end
 
 --- Called each frame while in the walking phase.
@@ -93,14 +112,73 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_walking_on_update(ctx, input, dt)
+    if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
+        return "falling"
+    end
     if input.digital.action_1.just_pressed then
         return "attack"
     end
-    if input.digital.left.pressed or input.digital.right.pressed then
-        update_facing_direction(ctx.id, input)
-        -- Transition to running
+
+    local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
+        and not (input.digital.left.pressed and input.digital.right.pressed)
+
+    if not has_direction then
+        return "idle"
+    end
+
+    update_facing_direction(ctx.id, input)
+
+    if not input.digital.action_3.pressed then
+        -- action_3 released while still moving — switch to running
         return "running"
     end
+
+    -- Keep walking at walking speed
+    if input.digital.left.pressed then
+        engine.entity_set_velocity(ctx.id, -walking_speed, 0)
+    else
+        engine.entity_set_velocity(ctx.id, walking_speed, 0)
+    end
+end
+
+--- Called when exiting the walking phase.
+--- @param ctx EntityContext Entity state
+local function player_walking_on_exit(ctx)
+    engine.log_info("Player stopped walking.")
+    engine.entity_signal_clear_flag(ctx.id, "walking")
+end
+
+--- Called when entering the falling phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+local function player_falling_on_enter(ctx, input)
+    engine.log_info("Player started falling!")
+    engine.entity_signal_set_flag(ctx.id, "falling")
+end
+
+--- Called each frame while in the falling phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+--- @param dt number Delta time in seconds
+local function player_falling_on_update(ctx, input, dt)
+    if utils.has_flag(ctx.signals.flags, "on_ground") then
+        return "idle"
+    end
+    -- Allow horizontal steering at walking speed; preserve vertical velocity so gravity accumulates
+    if input.digital.left.pressed and not input.digital.right.pressed then
+        update_facing_direction(ctx.id, input)
+        engine.entity_set_velocity(ctx.id, -walking_speed, ctx.vel.y)
+    elseif input.digital.right.pressed and not input.digital.left.pressed then
+        update_facing_direction(ctx.id, input)
+        engine.entity_set_velocity(ctx.id, walking_speed, ctx.vel.y)
+    end
+end
+
+--- Called when exiting the falling phase.
+--- @param ctx EntityContext Entity state
+local function player_falling_on_exit(ctx)
+    engine.log_info("Player stopped falling.")
+    engine.entity_signal_clear_flag(ctx.id, "falling")
 end
 
 --- Called when entering the idle phase.
@@ -122,23 +200,25 @@ local function player_idle_on_update(ctx, input, dt)
     -- engine.log_info(utils.dump_value(ctx, 4))
     local flags = ctx.signals.flags
     -- engine.log_info(utils.dump_value(flags, 4))
-    if not utils.has_flag(flags, "on_ground") then
-        engine.log_info("Player update: Player is NOT on the ground")
-        -- It looks like we are suddendly falling, maybe we walked off a ledge or the ground was removed from under us. Transition to falling.
-
-        -- return "falling"
-    else
-        engine.log_info("Player update: Player is on the ground")
+    if not utils.has_flag(flags, "on_ground") and ctx.vel.y >= 0 then
+        engine.log_info("Player update: walked off ledge, transitioning to falling.")
+        return "falling"
     end
 
     if input.digital.action_1.just_pressed then
         return "attack"
     end
 
-    if (input.digital.left.pressed or input.digital.right.pressed) and not (input.digital.left.pressed and input.digital.right.pressed) then
+    local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
+        and not (input.digital.left.pressed and input.digital.right.pressed)
+
+    if has_direction then
         update_facing_direction(ctx.id, input)
-        -- Transition to running
-        return "running"
+        if input.digital.action_3.pressed then
+            return "walking"
+        else
+            return "running"
+        end
     end
 end
 
@@ -170,6 +250,9 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_attack_on_update(ctx, input, dt)
+    if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
+        return "falling"
+    end
     if utils.has_flag(ctx.signals.flags, "animation_ended") then
         engine.entity_signal_clear_flag(ctx.id, "animation_ended")
         return "idle"
@@ -235,8 +318,13 @@ M._callbacks = {
     on_update_sidescroller_level01 = on_update_sidescroller_level01,
     player_running_on_enter = player_running_on_enter,
     player_running_on_update = player_running_on_update,
+    player_running_on_exit = player_running_on_exit,
     player_walking_on_enter = player_walking_on_enter,
     player_walking_on_update = player_walking_on_update,
+    player_walking_on_exit = player_walking_on_exit,
+    player_falling_on_enter = player_falling_on_enter,
+    player_falling_on_update = player_falling_on_update,
+    player_falling_on_exit = player_falling_on_exit,
     player_idle_on_enter = player_idle_on_enter,
     player_idle_on_update = player_idle_on_update,
     player_attack_on_enter = player_attack_on_enter,
@@ -282,18 +370,23 @@ function M.spawn()
                 },
                 running = {
                     on_enter = "player_running_on_enter",
-                    on_update = "player_running_on_update"
-                    -- on_exit = "player_running_on_exit"
+                    on_update = "player_running_on_update",
+                    on_exit = "player_running_on_exit"
                 },
                 walking = {
                     on_enter = "player_walking_on_enter",
-                    on_update = "player_walking_on_update"
-                    -- on_exit = "player_walking_on_exit"
+                    on_update = "player_walking_on_update",
+                    on_exit = "player_walking_on_exit"
                 },
                 attack = {
                     on_enter = "player_attack_on_enter",
                     on_update = "player_attack_on_update",
                     on_exit = "player_attack_on_exit"
+                },
+                falling = {
+                    on_enter = "player_falling_on_enter",
+                    on_update = "player_falling_on_update",
+                    on_exit = "player_falling_on_exit"
                 }
             }
         })
@@ -310,21 +403,15 @@ function M.spawn()
     -- }, "sidescroller-char_red_attack")
         :with_animation_rule({
             type = "has_flag", key = "attack"
-
         }, "sidescroller-char_red_attack")
         :with_animation_rule({
-            type = "all",
-            conditions = {
-                { type = "lacks_flag", key = "on_ground" },
-                { type = "has_flag",   key = "moving" }
-            }
+            type = "has_flag", key = "walking"
+        }, "sidescroller-char_red_walk")
+        :with_animation_rule({
+            type = "has_flag", key = "falling"
         }, "sidescroller-char_red_jump_falling")
         :with_animation_rule({
-            type = "all",
-            conditions = {
-                { type = "has_flag",   key = "on_ground" },
-                { type = "scalar_cmp", key = "speed_sq", op = "gt", value = 50.0 }
-            }
+            type = "has_flag", key = "running"
         }, "sidescroller-char_red_run")
         :register_as("player")
         :build()

@@ -823,9 +823,11 @@ mod tests {
 /// target is used. When the selected key differs from the current one, the
 /// animation state is reset.
 pub fn animation_controller(
-    mut query: Query<(&mut AnimationController, &mut Animation, &Signals)>,
+    mut query: Query<(Entity, &mut AnimationController, &mut Animation, &Signals)>,
+    mut sprite_query: Query<&mut Sprite>,
+    animation_store: Res<AnimationStore>,
 ) {
-    for (mut controller, mut animation, signals) in query.iter_mut() {
+    for (entity, mut controller, mut animation, signals) in query.iter_mut() {
         let mut selected: Option<&str> = None;
         for rule in &controller.rules {
             if evaluate_condition(signals, &rule.when) {
@@ -840,7 +842,13 @@ pub fn animation_controller(
             animation.animation_key = owned.clone();
             animation.frame_index = 0;
             animation.elapsed_time = 0.0;
-            controller.current_key = owned;
+            controller.current_key = owned.clone();
+            // Sync Sprite.tex_key to the new animation's texture (mirrors SetAnimation EntityCmd)
+            if let Some(anim_res) = animation_store.animations.get(owned.as_str())
+                && let Ok(mut sprite) = sprite_query.get_mut(entity)
+            {
+                sprite.tex_key = anim_res.tex_key.clone();
+            }
         }
     }
 }

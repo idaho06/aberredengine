@@ -151,6 +151,7 @@ fn propagate_children(
 ///
 /// Must run **after** [`propagate_transforms`] and **before** collision
 /// detection.
+#[allow(clippy::type_complexity)]
 pub fn cleanup_orphaned_global_transforms(
     mut commands: Commands,
     query: Query<Entity, (With<GlobalTransform2D>, Without<Children>, Without<ChildOf>)>,
