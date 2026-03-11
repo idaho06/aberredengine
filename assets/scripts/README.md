@@ -253,11 +253,11 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, CameraFollow, Render, GameConfig, InputBinding | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, CameraFollow, Render, GameConfig, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning (see warning below) |
-| Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
-| Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
-| Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Tilemap, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
+| Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
+| Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
+| Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
 
@@ -265,10 +265,10 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
-| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
-| Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity → Camera |
-| Collision callbacks | Entity → Signal → Audio → Spawn → Phase → Camera |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
+| `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
+| Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
+| Collision callbacks | Entity → Signal → Audio → Spawn → Clone → Phase → Camera |
 
 **Important: Collision Callbacks Use Separate Queues**
 
@@ -277,6 +277,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 **Use collision-specific functions in collision callbacks:**
 
 - `engine.collision_spawn()` instead of `engine.spawn()`
+- `engine.collision_clone()` instead of `engine.clone()`
 - `engine.collision_play_sound()` instead of `engine.play_sound()`
 - `engine.collision_play_sound_pitched()` instead of `engine.play_sound_pitched()`
 - `engine.collision_set_flag()` / `engine.collision_clear_flag()` instead of `engine.set_flag()` / `engine.clear_flag()`
@@ -284,7 +285,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
-**Entity commands in collision callbacks** also require the `collision_` prefix. Both APIs now have full parity - all entity commands available in the regular API have a `collision_` equivalent:
+**Entity commands in collision callbacks** also require the `collision_` prefix. Collision callbacks have matching entity APIs for the same areas as the regular runtime API, including menu cleanup, shader/tint control, parenting, and camera targets:
 
 - `engine.collision_entity_set_position()` instead of `engine.entity_set_position()`
 - `engine.collision_entity_set_screen_position()` instead of `engine.entity_set_screen_position()`
@@ -308,6 +309,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_insert_tween_position()` instead of `engine.entity_insert_tween_position()`
 - `engine.collision_entity_insert_tween_rotation()` instead of `engine.entity_insert_tween_rotation()`
 - `engine.collision_entity_insert_tween_scale()` instead of `engine.entity_insert_tween_scale()`
+- `engine.collision_entity_menu_despawn()` instead of `engine.entity_menu_despawn()`
 - `engine.collision_entity_remove_tween_position()` instead of `engine.entity_remove_tween_position()`
 - `engine.collision_entity_remove_tween_rotation()` instead of `engine.entity_remove_tween_rotation()`
 - `engine.collision_entity_remove_tween_scale()` instead of `engine.entity_remove_tween_scale()`
@@ -320,6 +322,14 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_freeze()` instead of `engine.entity_freeze()`
 - `engine.collision_entity_unfreeze()` instead of `engine.entity_unfreeze()`
 - `engine.collision_entity_set_speed()` instead of `engine.entity_set_speed()`
+- `engine.collision_entity_set_shader()` instead of `engine.entity_set_shader()`
+- `engine.collision_entity_remove_shader()` instead of `engine.entity_remove_shader()`
+- `engine.collision_entity_shader_set_float()` instead of `engine.entity_shader_set_float()`
+- `engine.collision_entity_shader_set_int()` instead of `engine.entity_shader_set_int()`
+- `engine.collision_entity_shader_set_vec2()` instead of `engine.entity_shader_set_vec2()`
+- `engine.collision_entity_shader_set_vec4()` instead of `engine.entity_shader_set_vec4()`
+- `engine.collision_entity_shader_clear_uniform()` instead of `engine.entity_shader_clear_uniform()`
+- `engine.collision_entity_shader_clear_uniforms()` instead of `engine.entity_shader_clear_uniforms()`
 - `engine.collision_entity_set_tint()` instead of `engine.entity_set_tint()`
 - `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
 - `engine.collision_entity_set_parent()` instead of `engine.entity_set_parent()`
@@ -649,7 +659,7 @@ engine.load_font("future", "./assets/fonts/Formal_Future.ttf", 64)
 
 ### `engine.load_music(id, path)`
 
-Load a music track (supports XM tracker format).
+Load a music track from disk.
 
 ```lua
 engine.load_music("menu", "./assets/audio/menu_theme.xm")
@@ -658,7 +668,7 @@ engine.load_music("boss_fight", "./assets/audio/boss_fight.xm")
 
 ### `engine.load_sound(id, path)`
 
-Load a sound effect (supports WAV format).
+Load a sound effect from disk.
 
 ```lua
 engine.load_sound("ping", "./assets/audio/ping.wav")
@@ -667,7 +677,7 @@ engine.load_sound("ding", "./assets/audio/ding.wav")
 
 ### `engine.load_tilemap(id, path)`
 
-Load a tilemap from directory (requires PNG atlas and JSON metadata).
+Load a tilemap from a directory. The loader expects the directory name to match both files inside it: `<dirname>.png` for the tileset texture and `<dirname>.txt` for the JSON tilemap data.
 
 ```lua
 engine.load_tilemap("level01", "./assets/tilemaps/level01")
@@ -675,7 +685,7 @@ engine.load_tilemap("level01", "./assets/tilemaps/level01")
 
 ### `engine.load_shader(id, vs_path, fs_path)`
 
-Load a shader for post-processing effects. At least one of `vs_path` or `fs_path` must be provided (the other can be `nil` to use the default).
+Load a shader for post-processing or per-entity effects. At least one of `vs_path` or `fs_path` must be provided (the other can be `nil` to use the default).
 
 **Parameters:**
 
@@ -914,33 +924,31 @@ Add RigidBody component with initial velocity.
 
 #### `:with_friction(friction)`
 
-Set velocity damping on RigidBody (requires `:with_velocity()` first).
+Set velocity damping on RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
 **Parameters:**
 
 - `friction` - Damping factor (0.0 = no friction, ~5.0 = responsive, ~10.0 = heavy drag)
 
 ```lua
-:with_velocity(0, 0)
 :with_friction(5.0)  -- Responsive friction for player control
 ```
 
 #### `:with_max_speed(max_speed)`
 
-Set maximum velocity magnitude on RigidBody (requires `:with_velocity()` first).
+Set maximum velocity magnitude on RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
 **Parameters:**
 
 - `max_speed` - Maximum speed in world units per second
 
 ```lua
-:with_velocity(0, 0)
 :with_max_speed(300.0)  -- Clamp speed to 300 units/sec
 ```
 
 #### `:with_accel(name, x, y, enabled)`
 
-Add a named acceleration force to RigidBody (requires `:with_velocity()` first).
+Add a named acceleration force to RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
 Forces are accumulated each frame and applied to velocity. Multiple forces can be added with different names and toggled independently.
 
@@ -951,25 +959,19 @@ Forces are accumulated each frame and applied to velocity. Multiple forces can b
 - `enabled` - Whether this force is active (true/false)
 
 ```lua
-:with_velocity(0, 0)
 :with_accel("gravity", 0, 980, true)      -- Enabled gravity
 :with_accel("thrust", 0, -500, false)     -- Disabled thrust (toggle later)
 :with_accel("wind", 50, 0, true)          -- Enabled wind
 ```
 
-#### `:with_frozen(frozen)`
+#### `:with_frozen()`
 
-Set frozen state on RigidBody (requires `:with_velocity()` first).
+Freeze the entity's `RigidBody`. If the entity does not already have a `RigidBody`, this call creates one and marks it as frozen.
 
 When frozen, the movement system skips all physics calculations for this entity. Position can still be modified externally (e.g., by StuckTo system or direct manipulation).
 
-**Parameters:**
-
-- `frozen` - Whether entity is frozen (true/false)
-
 ```lua
-:with_velocity(300, -300)
-:with_frozen(true)  -- Start frozen (e.g., ball stuck to paddle)
+:with_frozen()  -- Start frozen (e.g., ball stuck to paddle)
 ```
 
 **Complete Physics Example:**
@@ -1109,7 +1111,7 @@ Add dynamic text rendering.
 
 #### `:with_signal_binding(key)`
 
-Bind text to a world signal (auto-updates) (requires `:with_text()`).
+Bind a world signal key for dynamic text updates. This is most useful together with `:with_text()`, which provides the visible text component.
 
 ```lua
 :with_text("0", "arcade", 24, 255, 255, 255, 255)
@@ -1118,7 +1120,7 @@ Bind text to a world signal (auto-updates) (requires `:with_text()`).
 
 #### `:with_signal_binding_format(format)`
 
-Format signal value in text (use `{}` as placeholder).
+Format signal value in text (use `{}` as placeholder). Call this after `:with_signal_binding()`; if no binding exists yet, this call is ignored.
 
 ```lua
 :with_signal_binding("score")
@@ -1774,7 +1776,7 @@ As the planet rotates via its tween, the satellite orbits at 80px radius. No man
 
 1. **MouseControlled on children:** The mouse sets world coordinates into `MapPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
 2. **StuckTo with hierarchy:** `StuckTo` is automatically skipped for entities with a parent. Don't combine both systems on the same entity.
-3. **One-frame delay:** On the frame an entity is spawned with `:with_parent()` or receives `entity_set_parent()`, it renders at its local position. World-space rendering starts the next frame.
+3. **Spawn-time vs runtime parenting:** `:with_parent()` initializes the child's world transform immediately, so the child renders in the correct world position on its first frame. Runtime reparenting via `engine.entity_set_parent()` still depends on the next transform propagation pass before all derived world-space data reflects the new parent.
 
 ---
 
@@ -2009,7 +2011,7 @@ engine.spawn()
 
 #### `:with_lua_timer(duration, callback)`
 
-Add LuaTimer component that calls a Lua function after duration.
+Add a repeating LuaTimer component that calls a Lua function every `duration` seconds.
 
 **Parameters:**
 
@@ -2024,7 +2026,7 @@ function callback_name(ctx, input)
     -- ctx.id: entity ID (u64) - the entity that owns this timer
     -- ctx.timer: { duration, elapsed, callback } - timer info
     -- input: input state table
-    -- Full access to engine API
+    -- Can queue phase, audio, signal, spawn, clone, entity, and camera commands
 end
 ```
 
@@ -2048,8 +2050,9 @@ end
 
 **Features:**
 
-- Timer automatically resets after firing (repeats every `duration` seconds)
-- Lua callback has full engine API access (spawn/despawn entities, play audio, modify signals, etc.)
+- Timer automatically repeats every `duration` seconds
+- Timer reset subtracts the duration instead of zeroing elapsed time, which preserves cadence if a frame runs long
+- Timer callbacks receive `ctx` and `input`, and can queue phase, audio, signal, spawn, clone, entity, and camera commands
 - Can be added at spawn-time with `:with_lua_timer()` or at runtime with `engine.entity_insert_lua_timer()`
 
 **See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
@@ -4669,7 +4672,7 @@ engine.spawn()
 #### Fade Out Effect
 
 ```lua
--- In a timer callback that runs repeatedly
+-- In a repeating timer callback
 function fade_out(ctx)
     local alpha = ctx.signals.integers["alpha"] or 255
     alpha = alpha - 15
@@ -4678,7 +4681,6 @@ function fade_out(ctx)
     else
         engine.entity_signal_set_integer(ctx.id, "alpha", alpha)
         engine.entity_set_tint(ctx.id, 255, 255, 255, alpha)
-        engine.entity_insert_lua_timer(ctx.id, 0.05, "fade_out")
     end
 end
 ```
