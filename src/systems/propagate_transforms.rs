@@ -44,12 +44,38 @@ type ChildrenQuery<'w, 's> = Query<
 >;
 
 /// Rotate a 2D vector by `angle_degrees`.
-fn rotate(v: Vector2, angle_degrees: f32) -> Vector2 {
+pub(crate) fn rotate(v: Vector2, angle_degrees: f32) -> Vector2 {
     let rad = angle_degrees * std::f32::consts::PI / 180.0;
     let (sin, cos) = rad.sin_cos();
     Vector2 {
         x: v.x * cos - v.y * sin,
         y: v.x * sin + v.y * cos,
+    }
+}
+
+/// Compose a child [`GlobalTransform2D`] from a parent world transform and the
+/// child's local position, rotation, and scale.
+fn compose_child_transform(
+    parent_gt: &GlobalTransform2D,
+    local_pos: Vector2,
+    local_rot: f32,
+    local_scale: Vector2,
+) -> GlobalTransform2D {
+    let scaled_offset = Vector2 {
+        x: local_pos.x * parent_gt.scale.x,
+        y: local_pos.y * parent_gt.scale.y,
+    };
+    let rotated_offset = rotate(scaled_offset, parent_gt.rotation_degrees);
+    GlobalTransform2D {
+        position: Vector2 {
+            x: parent_gt.position.x + rotated_offset.x,
+            y: parent_gt.position.y + rotated_offset.y,
+        },
+        rotation_degrees: parent_gt.rotation_degrees + local_rot,
+        scale: Vector2 {
+            x: parent_gt.scale.x * local_scale.x,
+            y: parent_gt.scale.y * local_scale.y,
+        },
     }
 }
 
@@ -108,24 +134,7 @@ fn propagate_children(
         let local_rot = rot.map(|r| r.degrees).unwrap_or(0.0);
         let local_scale = scale.map(|s| s.scale).unwrap_or(Vector2 { x: 1.0, y: 1.0 });
 
-        // Scale the child's local offset by the parent's scale, then rotate
-        let scaled_offset = Vector2 {
-            x: pos.pos.x * parent_gt.scale.x,
-            y: pos.pos.y * parent_gt.scale.y,
-        };
-        let rotated_offset = rotate(scaled_offset, parent_gt.rotation_degrees);
-
-        let child_gt = GlobalTransform2D {
-            position: Vector2 {
-                x: parent_gt.position.x + rotated_offset.x,
-                y: parent_gt.position.y + rotated_offset.y,
-            },
-            rotation_degrees: parent_gt.rotation_degrees + local_rot,
-            scale: Vector2 {
-                x: parent_gt.scale.x * local_scale.x,
-                y: parent_gt.scale.y * local_scale.y,
-            },
-        };
+        let child_gt = compose_child_transform(parent_gt, pos.pos, local_rot, local_scale);
 
         if let Ok(mut gt) = globals.get_mut(child_entity) {
             *gt = child_gt;
@@ -158,5 +167,83 @@ pub fn cleanup_orphaned_global_transforms(
 ) {
     for entity in query.iter() {
         commands.entity(entity).remove::<GlobalTransform2D>();
+    }
+}
+
+/// [`EntityCommand`] that computes the correct initial [`GlobalTransform2D`]
+/// for a newly spawned child entity.
+///
+/// Queue it via [`EntityCommands::queue`] immediately after giving an entity
+/// its [`ChildOf`] component. It reads the parent's current
+/// [`GlobalTransform2D`] via [`world_scope`] and composes it with the child's
+/// local [`MapPosition`], [`Rotation`], and [`Scale`] to produce the correct
+/// world-space transform on the very first frame the entity exists — avoiding
+/// the one-frame flash at world origin caused by `GlobalTransform2D::default()`.
+///
+/// If the parent has no [`GlobalTransform2D`] yet, the command attempts to
+/// synthesize one from the parent's local transform when the parent is a
+/// standalone root. If the parent is itself a child and still lacks a global
+/// transform, the command is a no-op and [`propagate_transforms`] will insert
+/// the component on the next frame.
+pub struct ComputeInitialGlobalTransform;
+
+impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
+    fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
+        // Resolve parent — bail if entity has no ChildOf
+        let Some(parent_entity) = entity.get::<ChildOf>().map(|c| c.parent()) else {
+            return;
+        };
+
+        // Extract child's local components. All are Copy so the borrows end
+        // immediately and don't conflict with the world_scope call below.
+        let pos = entity
+            .get::<MapPosition>()
+            .map(|p| p.pos)
+            .unwrap_or(Vector2 { x: 0.0, y: 0.0 });
+        let local_rot = entity.get::<Rotation>().map(|r| r.degrees).unwrap_or(0.0);
+        let local_scale = entity
+            .get::<Scale>()
+            .map(|s| s.scale)
+            .unwrap_or(Vector2 { x: 1.0, y: 1.0 });
+
+        // Read the parent's world transform. world_scope gives temporary &mut
+        // World access; reading a *different* entity is safe.
+        //
+        // Prefer an existing GlobalTransform2D. If the parent is a standalone
+        // root without one yet, synthesize it from local components so the
+        // first child attached to a previously-standalone entity still renders
+        // correctly on its first frame.
+        let Some(parent_gt) = entity.world_scope(|world| {
+            world
+                .get::<GlobalTransform2D>(parent_entity)
+                .copied()
+                .or_else(|| {
+                    if world.get::<ChildOf>(parent_entity).is_some() {
+                        return None;
+                    }
+
+                    let parent_pos = world.get::<MapPosition>(parent_entity)?.pos;
+                    let parent_rot = world
+                        .get::<Rotation>(parent_entity)
+                        .map(|r| r.degrees)
+                        .unwrap_or(0.0);
+                    let parent_scale = world
+                        .get::<Scale>(parent_entity)
+                        .map(|s| s.scale)
+                        .unwrap_or(Vector2 { x: 1.0, y: 1.0 });
+
+                    Some(GlobalTransform2D {
+                        position: parent_pos,
+                        rotation_degrees: parent_rot,
+                        scale: parent_scale,
+                    })
+                })
+        }) else {
+            // Parent still has no resolvable world transform — leave child
+            // without GT; propagate_transforms will handle both next frame.
+            return;
+        };
+
+        entity.insert(compose_child_transform(&parent_gt, pos, local_rot, local_scale));
     }
 }

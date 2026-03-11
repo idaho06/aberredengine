@@ -75,6 +75,7 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
+use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use log::{error, info, warn};
 
 #[derive(SystemParam)]
@@ -1598,12 +1599,12 @@ fn apply_components(
         entity_commands.insert(Tint::new(r, g, b, a));
     }
 
-    // Parent (ChildOf + GlobalTransform2D)
+    // Parent — set ChildOf and immediately compute the correct initial
+    // GlobalTransform2D so the child renders at the right world position on
+    // its very first frame (avoids a one-frame flash at world origin).
     if let Some(parent_id) = cmd.parent {
-        entity_commands.insert((
-            ChildOf(Entity::from_bits(parent_id)),
-            GlobalTransform2D::default(),
-        ));
+        entity_commands.insert(ChildOf(Entity::from_bits(parent_id)));
+        entity_commands.queue(ComputeInitialGlobalTransform);
     }
 
     // CameraTarget

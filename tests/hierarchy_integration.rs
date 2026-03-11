@@ -662,14 +662,28 @@ fn entity_cmd_set_parent_multiple_children() {
 // PHASE 3: Builder with_parent (SpawnCmd.parent field)
 // =============================================================================
 
+/// When the parent already has a GlobalTransform2D (the normal case — parent
+/// has existed for at least one frame), the child should receive the correct
+/// world-space GlobalTransform2D immediately on the same frame it is spawned,
+/// with no propagation ticks required.
 #[cfg(feature = "lua")]
 #[test]
 fn spawn_cmd_with_parent_applies_childof() {
     let mut world = World::new();
     world.insert_resource(WorldSignals::default());
 
-    // Spawn parent entity first
-    let parent = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+    // Spawn parent with an already-computed GlobalTransform2D, as would be
+    // the case in real gameplay (parent existed for at least one frame).
+    let parent = world
+        .spawn((
+            MapPosition::new(100.0, 50.0),
+            GlobalTransform2D {
+                position: Vector2 { x: 100.0, y: 50.0 },
+                rotation_degrees: 0.0,
+                scale: Vector2 { x: 1.0, y: 1.0 },
+            },
+        ))
+        .id();
 
     // Build a SpawnCmd with parent set
     let cmd = SpawnCmd {
@@ -695,13 +709,23 @@ fn spawn_cmd_with_parent_applies_childof() {
 
     let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
 
-    // Child should have GlobalTransform2D
+    // Child should have the correct world-space GlobalTransform2D immediately
+    // after spawn — ComputeInitialGlobalTransform ran during state.apply().
+    let gt = world
+        .get::<GlobalTransform2D>(child)
+        .expect("Spawned child should have GlobalTransform2D");
     assert!(
-        world.get::<GlobalTransform2D>(child).is_some(),
-        "Spawned child should have GlobalTransform2D"
+        approx_eq(gt.position.x, 110.0),
+        "Child world X immediately after spawn: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y immediately after spawn: expected 50, got {}",
+        gt.position.y
     );
 
-    // Child should have MapPosition at the local offset
+    // Child's local MapPosition should be unchanged
     let pos = world.get::<MapPosition>(child).unwrap();
     assert!(
         approx_eq(pos.pos.x, 10.0),
@@ -709,22 +733,156 @@ fn spawn_cmd_with_parent_applies_childof() {
         pos.pos.x
     );
 
-    // Run propagation and verify world transform
-    tick_propagate(&mut world);
-
-    // After a second tick (first tick inserts GT on parent via commands, second computes)
+    // After a propagation tick the world transform should still be correct.
     tick_propagate(&mut world);
 
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
         approx_eq(gt.position.x, 110.0),
-        "Child world X: expected 110, got {}",
+        "Child world X after propagation: expected 110, got {}",
         gt.position.x
     );
     assert!(
         approx_eq(gt.position.y, 50.0),
-        "Child world Y: expected 50, got {}",
+        "Child world Y after propagation: expected 50, got {}",
         gt.position.y
+    );
+}
+
+/// When a standalone parent has no GlobalTransform2D yet, the initial child
+/// world transform can still be synthesized from the parent's local transform.
+#[cfg(feature = "lua")]
+#[test]
+fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
+    let mut world = World::new();
+    world.insert_resource(WorldSignals::default());
+
+    // Spawn a standalone parent without GlobalTransform2D.
+    let parent = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+
+    let cmd = SpawnCmd {
+        position: Some((10.0, 0.0)),
+        parent: Some(parent.to_bits()),
+        ..SpawnCmd::default()
+    };
+
+    let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
+    let (mut commands, mut world_signals) = state.get_mut(&mut world);
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    state.apply(&mut world);
+
+    let mut child_entity = None;
+    let mut query = world.query::<(Entity, &ChildOf)>();
+    for (entity, child_of) in query.iter(&world) {
+        if child_of.0 == parent {
+            child_entity = Some(entity);
+        }
+    }
+    let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
+
+    // Child should get the correct world-space transform immediately.
+    let gt = world
+        .get::<GlobalTransform2D>(child)
+        .expect("Child should have GlobalTransform2D synthesized from parent local transform");
+    assert!(
+        approx_eq(gt.position.x, 110.0),
+        "Child world X immediately after spawn: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y immediately after spawn: expected 50, got {}",
+        gt.position.y
+    );
+
+    // After one propagation tick the result should remain correct.
+    tick_propagate(&mut world);
+
+    let gt = world.get::<GlobalTransform2D>(child).unwrap();
+    assert!(
+        approx_eq(gt.position.x, 110.0),
+        "Child world X after propagation: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y after propagation: expected 50, got {}",
+        gt.position.y
+    );
+}
+
+/// When the parent is itself a child and lacks GlobalTransform2D, the initial
+/// child world transform remains unresolved until propagation runs.
+#[cfg(feature = "lua")]
+#[test]
+fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
+    let mut world = World::new();
+    world.insert_resource(WorldSignals::default());
+
+    let grandparent = world
+        .spawn((
+            MapPosition::new(100.0, 50.0),
+            GlobalTransform2D {
+                position: Vector2 { x: 100.0, y: 50.0 },
+                rotation_degrees: 0.0,
+                scale: Vector2 { x: 1.0, y: 1.0 },
+            },
+        ))
+        .id();
+    let parent = world
+        .spawn((MapPosition::new(10.0, 0.0), ChildOf(grandparent)))
+        .id();
+    world.flush();
+
+    let cmd = SpawnCmd {
+        position: Some((5.0, 0.0)),
+        parent: Some(parent.to_bits()),
+        ..SpawnCmd::default()
+    };
+
+    let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
+    let (mut commands, mut world_signals) = state.get_mut(&mut world);
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    state.apply(&mut world);
+
+    let mut child_entity = None;
+    let mut query = world.query::<(Entity, &ChildOf)>();
+    for (entity, child_of) in query.iter(&world) {
+        if child_of.0 == parent {
+            child_entity = Some(entity);
+        }
+    }
+    let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
+
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_none(),
+        "Nested parent without GT should still defer child GT until propagation"
+    );
+
+    tick_propagate(&mut world);
+
+    let parent_gt = world.get::<GlobalTransform2D>(parent).unwrap();
+    assert!(
+        approx_eq(parent_gt.position.x, 110.0),
+        "Parent world X after propagation: expected 110, got {}",
+        parent_gt.position.x
+    );
+    assert!(
+        approx_eq(parent_gt.position.y, 50.0),
+        "Parent world Y after propagation: expected 50, got {}",
+        parent_gt.position.y
+    );
+
+    let child_gt = world.get::<GlobalTransform2D>(child).unwrap();
+    assert!(
+        approx_eq(child_gt.position.x, 115.0),
+        "Child world X after propagation: expected 115, got {}",
+        child_gt.position.x
+    );
+    assert!(
+        approx_eq(child_gt.position.y, 50.0),
+        "Child world Y after propagation: expected 50, got {}",
+        child_gt.position.y
     );
 }
 
