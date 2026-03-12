@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-11 (lua runtime refactor, engine_app refactor, hierarchy fixes, scene cleanup, animation controller sprite sync)
+# Last updated: 2026-03-12 (Latest changes: Phase generic refactor, phase_core.rs shared loop, lua_commands EntityCmdQueries simplification)
 
 ## QUICK REFERENCE
 
@@ -41,7 +41,7 @@ COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (Entity
 - `InputSnapshot` / `DigitalInputs`: exposes raw WASD (`main_up/down/left/right`), raw arrow keys (`secondary_up/down/left/right`), function keys (`debug` F11, `fullscreen` F10), and `action_3` in addition to combined directional fields (`up/down/left/right`) and action buttons. All fields exposed to Lua callbacks via `input.digital.*`.
 - `lua` Cargo feature flag: all Lua-specific code gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]`. `cargo build --no-default-features` compiles a pure-Rust engine.
 - Rust `Timer` component: repeating countdown timer with fn-pointer callback. Event-based: `update_timers` → `TimerEvent` → `timer_observer`. Callback signature: `fn(Entity, &mut GameCtx, &InputState)`.
-- Rust `Phase` component: fn-pointer state machine mirroring LuaPhase. Direct system (not event-based). Callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled.
+- `Phase<C>` generic component: shared state machine storage used by both the Rust and Lua phase paths. Default form `Phase<PhaseCallbackFns>` stores Rust fn-pointers; `LuaPhase` (= `Phase<PhaseCallbacks>`) stores Lua callback name strings. Rust callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled. Shared phase loop logic lives in `systems/phase_core.rs` (`PhaseRunner` trait + `run_phase_callbacks` / `apply_callback_transitions` free functions, pub(crate) only).
 - `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping into a configurable builder with discrete methods: `validate_builder`, `load_config`, `setup_window`, `setup_world`, `register_systems`, `spawn_observers`, `build_schedule`, `main_loop`. `run()` orchestrates them in sequence. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")`. Rust multi-scene games use `.add_scene(name, descriptor)` + `.initial_scene(name)`. `main.rs` is a thin CLI + builder call (~100 lines).
 - Rust `CollisionRule` component: fn-pointer collision callback. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)`. Always compiled.
 - Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field. Callback signature: `fn(Entity, &str, usize, &mut GameCtx)`. Priority: Lua callback → Rust callback → `MenuActions`.
@@ -76,8 +76,8 @@ src/
 │   ├── luacollision.rs        # [feature=lua] LuaCollisionRule for Lua callbacks
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
-│   ├── luaphase.rs            # [feature=lua] Lua-based phase state machine
-│   ├── phase.rs               # Rust fn-pointer phase state machine (mirrors LuaPhase)
+│   ├── luaphase.rs            # [feature=lua] LuaPhase type alias = Phase<PhaseCallbacks> (Lua callback names)
+│   ├── phase.rs               # Generic Phase<C> component; default Phase = Phase<PhaseCallbackFns> (Rust fn-ptrs)
 │   ├── signals.rs             # Per-entity signals (scalars/ints/flags/strings)
 │   ├── dynamictext.rs         # Text rendering component with cached size
 │   ├── entityshader.rs        # Per-entity shader for custom rendering effects
@@ -114,11 +114,16 @@ src/
 │   ├── inputaccelerationcontroller.rs # Input→acceleration
 │   ├── mousecontroller.rs     # Mouse position tracking (with letterbox correction)
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController) + compute_frame_offset (row-wrapping)
-│   ├── luaphase.rs            # [feature=lua] Lua phase callbacks
-│   ├── lua_commands.rs        # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd/InputCmd + EntityCmdQueries/ContextQueries SystemParams
+│   ├── luaphase.rs            # [feature=lua] Lua phase callbacks (LuaPhaseRunner impl + lua_phase_system)
+│   ├── lua_commands/          # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd/InputCmd
+│   │   ├── mod.rs             # Re-exports + EntityCmdQueries/ContextQueries SystemParam bundles + shared imports
+│   │   ├── entity_cmd.rs      # process_entity_commands: runtime entity manipulation
+│   │   ├── spawn_cmd.rs       # process_spawn_command, process_clone_command: entity creation
+│   │   └── parse.rs           # parse_cmp_op, convert_animation_condition: animation condition helpers
 │   ├── luatimer.rs            # [feature=lua] Lua timer processing
 │   ├── timer.rs               # Rust timer processing (update_timers, timer_observer)
-│   ├── phase.rs               # Rust phase state machine (phase_system)
+│   ├── phase.rs               # Rust phase state machine (RustPhaseRunner impl + phase_system)
+│   ├── phase_core.rs          # Shared phase loop: PhaseRunner<C> trait, run_phase_callbacks, apply_callback_transitions (pub(crate))
 │   ├── time.rs                # WorldTime update
 │   ├── signalbinding.rs       # Update bound text
 │   ├── dynamictext_size.rs    # Cache DynamicText bounding box sizes
@@ -259,9 +264,9 @@ Sprite { tex_key: Arc<str>, width: f32, height: f32, offset: Vector2, origin: Ve
 Animation { animation_key: String, frame_index: usize, elapsed: f32 }
 AnimationController { fallback_key: String, rules: Vec<AnimationRule> }
 Signals { scalars: FxHashMap, integers: FxHashMap, flags: FxHashSet, strings: FxHashMap }
-LuaPhase { definition: LuaPhaseDefinition, current_phase: String, time_in_phase: f32, pending_transition: Option<String> }
-Phase { current: String, previous: Option<String>, next: Option<String>, time_in_phase: f32, needs_enter_callback: bool, phases: FxHashMap<String, PhaseCallbackFns> }
+Phase<C = PhaseCallbackFns> { current: String, previous: Option<String>, next: Option<String>, time_in_phase: f32, needs_enter_callback: bool, phases: FxHashMap<String, C> }
   PhaseCallbackFns { on_enter: Option<PhaseEnterFn>, on_update: Option<PhaseUpdateFn>, on_exit: Option<PhaseExitFn> }
+LuaPhase = Phase<PhaseCallbacks>   -- type alias; PhaseCallbacks { on_enter: Option<String>, on_update: Option<String>, on_exit: Option<String> }
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
@@ -333,8 +338,8 @@ RaylibAccess<'w> { rl: NonSendMut<RaylibHandle>, th: NonSend<RaylibThread> }    
 ScriptingContext<'w> { lua_runtime: NonSend<LuaRuntime>, audio_cmd_writer: MessageWriter<AudioCmd> }                  -- lua_plugin.rs [feature=lua]
 GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, systems_store: Res<SystemsStore> } -- lua_plugin.rs [feature=lua]
 EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entity, &mut LuaPhase)> }                  -- lua_plugin.rs [feature=lua]
-EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, screen_positions, sprites, shaders, global_transforms } -- systems/lua_commands.rs [feature=lua]
-ContextQueries<'w, 's> { groups, rotations, scales, box_colliders, lua_timers, global_transforms, child_of }         -- systems/lua_commands.rs [feature=lua] (read-only queries for entity context building)
+EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, screen_positions, sprites, shaders, global_transforms } -- systems/lua_commands/mod.rs [feature=lua]
+ContextQueries<'w, 's> { groups, rotations, scales, box_colliders, lua_timers, global_transforms, child_of }         -- systems/lua_commands/mod.rs [feature=lua] (read-only queries for entity context building)
 RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
 RenderQueries<'w, 's> { map_sprites, colliders, positions, map_texts, rigidbodies, screen_texts, screen_sprites }     -- systems/render.rs
 GameCtx<'w, 's> { commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, texture_store } -- systems/game_ctx.rs
@@ -553,6 +558,7 @@ movement_system
 ```
 Physics:          rigidbody.rs, movement.rs
 Lua API:          runtime.rs, engine_api.rs, command_queues.rs, stub_meta.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs  [feature=lua]
+Lua commands:     lua_commands/mod.rs (SystemParams), lua_commands/entity_cmd.rs (entity ops), lua_commands/spawn_cmd.rs (spawn/clone), lua_commands/parse.rs (anim conditions)  [feature=lua]
 Collision:        collision_detector.rs, collision.rs (shared helpers), rust_collision.rs, lua_collision.rs (systems)
                   collision.rs, boxcollider.rs, luacollision.rs (components)
 Camera follow:    cameratarget.rs (component), camerafollowconfig.rs (resource), camera_follow.rs (system)
@@ -661,3 +667,9 @@ Engine bootstrap: engine_app.rs (EngineBuilder, system schedule)
 57. `scene_switch_poll` is added to the schedule when using `SceneManager` (`.add_scene()`). It polls the `"switch_scene"` flag in `WorldSignals` each frame and runs `scene_switch_system` when set. This is distinct from `scene_switch_system` itself (which is registered as a persistent `SystemsStore` entry but not in the per-frame schedule directly).
 58. `utils.lua` (`assets/scripts/lib/utils.lua`) exports `M.has_flag(flags, name)` (checks array-like flags table) and `M.dump_value(value, max_depth, ...)` (pretty-print for debugging). Load with `local utils = require("lib.utils")`.
 59. `EngineBuilder.run()` calls these methods in order: `validate_builder` → `load_config` → `setup_window` → `setup_world` → `register_systems` → `spawn_observers` → `build_schedule` → `main_loop`. Each is a private method; `run()` consumes the builder.
+60. `lua_commands` is now a **submodule** (`systems/lua_commands/`), not a single file. `EntityCmdQueries` and `ContextQueries` SystemParams live in `mod.rs`; command processing is split across `entity_cmd.rs` (runtime entity ops), `spawn_cmd.rs` (spawn/clone), and `parse.rs` (animation condition helpers). Public API: `process_entity_commands`, `process_spawn_command`, `process_clone_command`.
+61. `Easing` and `LoopMode` (in `components/tween.rs`) implement `std::str::FromStr`. Parse strings directly: `"linear".parse::<Easing>()`, `"ping_pong".parse::<LoopMode>()`. Unknown strings default to `Easing::Linear` / `LoopMode::Once` respectively (infallible).
+62. `LuaPhase` is now a type alias `Phase<PhaseCallbacks>` (not a separate struct). `Phase<C>` is generic; both Rust and Lua phases share the same component with different callback payload types (`PhaseCallbackFns` for Rust, `PhaseCallbacks` for Lua).
+63. Phase `on_exit` fires AFTER the phase swap: when `on_exit` is called, `phase.current` is already the new phase. Exit callbacks are looked up by the old phase name, but the component reflects the new state.
+64. `process_entity_commands` takes `&mut EntityCmdQueries` (not individual query parameters). `LuaCollisionObserverParams` embeds `EntityCmdQueries` as `entity_cmds` field instead of separate query fields.
+65. `phase_core.rs` (`systems/phase_core.rs`) is `pub(crate)` — not public API. `PhaseRunner<C>` trait + `run_phase_callbacks` / `apply_callback_transitions` / `queue_phase_transition` are internal shared helpers used by both `phase_system` and `lua_phase_system`.
