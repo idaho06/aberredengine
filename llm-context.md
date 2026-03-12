@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-12 (Latest changes: Timer generic refactor, timer_core.rs shared loop, LuaTimerCallback newtype)
+# Last updated: 2026-03-13 (Latest changes: CollisionRule<C> generic refactor, LuaCollisionCallback newtype, LuaCollisionRule type alias)
 
 ## QUICK REFERENCE
 
@@ -43,7 +43,7 @@ COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (Entity
 - `Timer<C>` generic component: shared timer storage used by both the Rust and Lua timer paths. Default `Timer<TimerCallback>` stores a Rust fn-pointer; `LuaTimer` (= `Timer<LuaTimerCallback>`) stores a Lua callback name string. Rust callback: `TimerCallback = fn(Entity, &mut GameCtx, &InputState)`. Event-based: `update_timers`/`update_lua_timers` → `TimerEvent`/`LuaTimerEvent` → `timer_observer`/`lua_timer_observer`. Shared update loop in `systems/timer_core.rs` (`TimerRunner<C>` trait + `run_timer_update`, pub(crate) only).
 - `Phase<C>` generic component: shared state machine storage used by both the Rust and Lua phase paths. Default form `Phase<PhaseCallbackFns>` stores Rust fn-pointers; `LuaPhase` (= `Phase<PhaseCallbacks>`) stores Lua callback name strings. Rust callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled. Shared phase loop logic lives in `systems/phase_core.rs` (`PhaseRunner` trait + `run_phase_callbacks` / `apply_callback_transitions` free functions, pub(crate) only).
 - `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping into a configurable builder with discrete methods: `validate_builder`, `load_config`, `setup_window`, `setup_world`, `register_systems`, `spawn_observers`, `build_schedule`, `main_loop`. `run()` orchestrates them in sequence. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")`. Rust multi-scene games use `.add_scene(name, descriptor)` + `.initial_scene(name)`. `main.rs` is a thin CLI + builder call (~100 lines).
-- Rust `CollisionRule` component: fn-pointer collision callback. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)`. Always compiled.
+- `CollisionRule<C>` generic component: shared collision rule storage used by both the Rust and Lua collision paths. Default `CollisionRule<CollisionCallback>` stores a Rust fn-pointer; `LuaCollisionRule` (= `CollisionRule<LuaCollisionCallback>`) stores a Lua callback name string. Rust callback: `CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)`. Event-based: `collision_detector` → `CollisionEvent` → `rust_collision_observer` / `lua_collision_observer`. `match_and_order` is generic on `impl<C> CollisionRule<C>` — shared by both paths. Always compiled (Lua alias in `luacollision.rs` is `#[cfg(feature = "lua")]`).
 - Rust `MenuRustCallback`: fn-pointer menu selection callback. `Menu` has optional `on_rust_callback: Option<MenuRustCallback>` field. Callback signature: `fn(Entity, &str, usize, &mut GameCtx)`. Priority: Lua callback → Rust callback → `MenuActions`.
 - `SceneManager` pattern: optional higher-level alternative to raw `.on_switch_scene()`. `SceneDescriptor` has fn-pointer fields: `on_enter: SceneEnterFn`, `on_update: Option<SceneUpdateFn>`, `on_exit: Option<SceneExitFn>`. Engine systems: `scene_switch_system` (despawn non-Persistent → on_exit → on_enter), `scene_update_system` (per-frame on_update with dt), `scene_enter_play` (seeds initial scene), `scene_switch_poll` (polls `"switch_scene"` flag in `WorldSignals` each frame and runs `scene_switch_system` when set). Always compiled.
 - `GameCtx` SystemParam (`src/systems/game_ctx.rs`): Commands + 6 mutable queries + 8 read-only queries + world_signals + audio + world_time + texture_store. Re-exported from `systems::GameCtx`.
@@ -72,8 +72,8 @@ src/
 │   ├── rigidbody.rs           # Velocity, friction, max_speed, named accel forces, frozen
 │   ├── boxcollider.rs         # BoxCollider (AABB collision shape)
 │   ├── cameratarget.rs        # CameraTarget { priority: u8 } — marks entity as camera follow candidate
-│   ├── collision.rs           # CollisionRule + CollisionCallback (Rust fn-pointer), BoxSide, get_colliding_sides, match_groups
-│   ├── luacollision.rs        # [feature=lua] LuaCollisionRule for Lua callbacks
+│   ├── collision.rs           # Generic CollisionRule<C = CollisionCallback> component; CollisionCallback fn-pointer type alias; BoxSide, get_colliding_sides, match_groups
+│   ├── luacollision.rs        # [feature=lua] LuaCollisionRule type alias = CollisionRule<LuaCollisionCallback>; LuaCollisionCallback { name: String }
 │   ├── sprite.rs              # Sprite rendering (tex_key, offset, origin, flip)
 │   ├── animation.rs           # Animation playback state + AnimationController
 │   ├── luaphase.rs            # [feature=lua] LuaPhase type alias = Phase<PhaseCallbacks> (Lua callback names)
@@ -259,8 +259,9 @@ RigidBody { velocity: Vector2, friction: Option<f32>, max_speed: Option<f32>, fo
 AccelerationForce { value: Vector2, enabled: bool }
 BoxCollider { offset: Vector2, origin: Vector2, size: Vector2 }
 CameraTarget { priority: u8 }                         -- marks entity as camera follow candidate; highest priority wins
-LuaCollisionRule { group_a, group_b, callback: String } -- [feature=lua]
-CollisionRule { group_a, group_b, callback: CollisionCallback } -- fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)
+CollisionRule<C = CollisionCallback> { group_a: String, group_b: String, callback: C }  -- derives Component, Clone, Debug
+  CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)  -- Rust fn-pointer (default C)
+LuaCollisionRule = CollisionRule<LuaCollisionCallback>   -- type alias [feature=lua]; LuaCollisionCallback { name: String }
 Sprite { tex_key: Arc<str>, width: f32, height: f32, offset: Vector2, origin: Vector2, flip_h: bool, flip_v: bool }
 Animation { animation_key: String, frame_index: usize, elapsed: f32 }
 AnimationController { fallback_key: String, rules: Vec<AnimationRule> }
@@ -676,3 +677,4 @@ Engine bootstrap: engine_app.rs (EngineBuilder, system schedule)
 63. Phase `on_exit` fires AFTER the phase swap: when `on_exit` is called, `phase.current` is already the new phase. Exit callbacks are looked up by the old phase name, but the component reflects the new state.
 64. `process_entity_commands` takes `&mut EntityCmdQueries` (not individual query parameters). `LuaCollisionObserverParams` embeds `EntityCmdQueries` as `entity_cmds` field instead of separate query fields.
 65. `phase_core.rs` (`systems/phase_core.rs`) is `pub(crate)` — not public API. `PhaseRunner<C>` trait + `run_phase_callbacks` / `apply_callback_transitions` / `queue_phase_transition` are internal shared helpers used by both `phase_system` and `lua_phase_system`.
+66. `CollisionRule<C>` generic pattern: `CollisionRule::new` takes `callback: C` (generic). When constructing a Rust collision rule, always cast explicitly: `CollisionRule::new("a", "b", my_fn as CollisionCallback)`. Without the cast, Rust stores the function item type instead of `CollisionCallback`, and `Query<&CollisionRule>` (= `Query<&CollisionRule<CollisionCallback>>`) won't find the entity. For Lua rules: `CollisionRule::new("a", "b", LuaCollisionCallback { name: "fn_name".into() })`. Same constraint applies to `Timer<C>` (use `my_fn as TimerCallback`).

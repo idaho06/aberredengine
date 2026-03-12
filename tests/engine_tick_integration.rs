@@ -8,10 +8,10 @@ use raylib::prelude::Vector2;
 
 use aberredengine::components::animation::{Animation, AnimationController, Condition};
 use aberredengine::components::boxcollider::BoxCollider;
-use aberredengine::components::collision::{BoxSides, CollisionRule};
+use aberredengine::components::collision::{BoxSides, CollisionCallback, CollisionRule};
 use aberredengine::components::group::Group;
 #[cfg(feature = "lua")]
-use aberredengine::components::luacollision::LuaCollisionRule;
+use aberredengine::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
 #[cfg(feature = "lua")]
 use aberredengine::components::luaphase::{LuaPhase, PhaseCallbacks};
 #[cfg(feature = "lua")]
@@ -252,7 +252,11 @@ fn collision_pipeline_triggers_lua_side_effects() {
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
-    world.spawn((LuaCollisionRule::new("player", "enemy", "on_player_enemy"),));
+    world.spawn((CollisionRule::new(
+        "player",
+        "enemy",
+        LuaCollisionCallback { name: "on_player_enemy".into() },
+    ),));
 
     // Track if collision event was triggered
     let saw_collision = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -2545,7 +2549,7 @@ fn collision_rule_callback_fires_on_matching_groups() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2588,7 +2592,7 @@ fn collision_rule_callback_not_fired_on_non_matching_groups() {
         BoxCollider::new(10.0, 10.0),
     ));
     // Rule is for "ball" vs "brick", not "player" vs "enemy"
-    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2643,7 +2647,7 @@ fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
             Signals::default(),
         ))
         .id();
-    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2695,7 +2699,7 @@ fn collision_rule_sides_passed_to_callback() {
         MapPosition::new(8.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((CollisionRule::new("ball", "brick", on_collision),));
+    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2704,6 +2708,77 @@ fn collision_rule_sides_passed_to_callback() {
 
     let signals = world.get::<Signals>(a).unwrap();
     assert!(signals.has_flag("sides_correct"));
+}
+
+// =============================================================================
+// CollisionRule<C> generic consistency — CollisionRule and LuaCollisionRule
+// must produce identical match_and_order results for the same group inputs.
+// =============================================================================
+
+fn dummy_callback(
+    _a: Entity,
+    _b: Entity,
+    _sa: &BoxSides,
+    _sb: &BoxSides,
+    _ctx: &mut GameCtx,
+) {
+}
+
+/// Build matching CollisionRule and LuaCollisionRule pairs with the same groups.
+#[cfg(feature = "lua")]
+fn make_matching_rules(
+    ga: &str,
+    gb: &str,
+) -> (CollisionRule, LuaCollisionRule) {
+    let rust_rule = CollisionRule::new(ga, gb, dummy_callback as CollisionCallback);
+    let lua_rule = CollisionRule::new(ga, gb, LuaCollisionCallback { name: "cb".into() });
+    (rust_rule, lua_rule)
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn collision_rule_and_lua_rule_match_direct_groups_consistently() {
+    let (rust_rule, lua_rule) = make_matching_rules("ball", "brick");
+    let ent_a = Entity::from_bits(1);
+    let ent_b = Entity::from_bits(2);
+    assert_eq!(
+        rust_rule.match_and_order(ent_a, ent_b, "ball", "brick"),
+        lua_rule.match_and_order(ent_a, ent_b, "ball", "brick"),
+    );
+    assert_eq!(
+        lua_rule.match_and_order(ent_a, ent_b, "ball", "brick"),
+        Some((ent_a, ent_b))
+    );
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn collision_rule_and_lua_rule_reorder_entities_consistently_when_groups_swapped() {
+    let (rust_rule, lua_rule) = make_matching_rules("ball", "brick");
+    let ent_a = Entity::from_bits(1);
+    let ent_b = Entity::from_bits(2);
+    // Groups arrive swapped relative to the rule — both types must reorder identically.
+    assert_eq!(
+        rust_rule.match_and_order(ent_a, ent_b, "brick", "ball"),
+        lua_rule.match_and_order(ent_a, ent_b, "brick", "ball"),
+    );
+    assert_eq!(
+        lua_rule.match_and_order(ent_a, ent_b, "brick", "ball"),
+        Some((ent_b, ent_a))
+    );
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn collision_rule_and_lua_rule_both_return_none_for_non_matching_groups() {
+    let (rust_rule, lua_rule) = make_matching_rules("ball", "brick");
+    let ent_a = Entity::from_bits(1);
+    let ent_b = Entity::from_bits(2);
+    assert_eq!(
+        rust_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
+        lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
+    );
+    assert_eq!(lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"), None);
 }
 
 // =============================================================================

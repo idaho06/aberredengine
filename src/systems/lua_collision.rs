@@ -90,7 +90,8 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
 
     // Check Lua-based collision rules
     for lua_rule in params.lua_rules.iter() {
-        if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
+        if let Some((ent_a, ent_b)) = lua_rule.match_and_order(a, b, ga, gb) {
+            let callback_name = lua_rule.callback.name.as_str();
             // Resolve world positions via shared helper
             let pos_a = resolve_world_pos(
                 &params.entity_cmds.positions.as_readonly(),

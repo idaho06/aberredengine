@@ -285,11 +285,12 @@ pub(super) fn apply_components(
 
     // LuaCollisionRule
     if let Some(rule_data) = cmd.lua_collision_rule {
-        use crate::components::luacollision::LuaCollisionRule;
-        entity_commands.insert(LuaCollisionRule::new(
+        use crate::components::collision::CollisionRule;
+        use crate::components::luacollision::LuaCollisionCallback;
+        entity_commands.insert(CollisionRule::new(
             rule_data.group_a,
             rule_data.group_b,
-            rule_data.callback,
+            LuaCollisionCallback { name: rule_data.callback },
         ));
     }
 

@@ -53,25 +53,34 @@ pub type CollisionCallback =
 
 /// Defines how collisions between two entity groups should be handled.
 ///
+/// The default `CollisionRule` stores a Rust function pointer via
+/// [`CollisionCallback`] and is processed by
+/// [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer).
+/// The Lua-facing [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule)
+/// alias reuses this same storage with a [`LuaCollisionCallback`](crate::components::luacollision::LuaCollisionCallback)
+/// payload.
+///
 /// When a collision is detected between entities with groups matching
-/// `group_a` and `group_b`, the `callback` function is invoked with
-/// the entities, collision sides, and a [`GameCtx`](crate::systems::GameCtx).
-#[derive(Component)]
-pub struct CollisionRule {
+/// `group_a` and `group_b`, the `callback` is invoked with the entities and
+/// collision context.
+#[derive(Component, Clone, Debug)]
+pub struct CollisionRule<C = CollisionCallback> {
     /// First group name to match.
     pub group_a: String,
     /// Second group name to match.
     pub group_b: String,
-    /// Rust function to call on collision.
-    pub callback: CollisionCallback,
+    /// Callback payload — a Rust fn pointer for `CollisionRule`, or a
+    /// [`LuaCollisionCallback`](crate::components::luacollision::LuaCollisionCallback)
+    /// for `LuaCollisionRule`.
+    pub callback: C,
 }
 
-impl CollisionRule {
-    /// Create a new collision rule for two groups with a callback.
+impl<C> CollisionRule<C> {
+    /// Create a new collision rule for two groups with a callback payload.
     pub fn new(
         group_a: impl Into<String>,
         group_b: impl Into<String>,
-        callback: CollisionCallback,
+        callback: C,
     ) -> Self {
         Self {
             group_a: group_a.into(),
@@ -98,8 +107,7 @@ impl CollisionRule {
 /// Check if a collision rule's groups match the given group names and return
 /// entities ordered to match `rule_a` and `rule_b`.
 ///
-/// This is the core matching logic shared by both [`CollisionRule`] and
-/// [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule).
+/// This is the core matching logic used by [`CollisionRule::match_and_order`].
 pub fn match_groups(
     rule_a: &str,
     rule_b: &str,
