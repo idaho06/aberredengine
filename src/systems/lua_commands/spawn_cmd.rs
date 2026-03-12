@@ -16,7 +16,7 @@ use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
-use crate::components::luatimer::LuaTimer;
+use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
 use crate::components::rigidbody::RigidBody;
@@ -326,7 +326,7 @@ pub(super) fn apply_components(
 
     // LuaTimer
     if let Some((duration, callback)) = cmd.lua_timer {
-        entity_commands.insert(LuaTimer::new(duration, callback));
+        entity_commands.insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
     }
 
     // Ttl (time-to-live)

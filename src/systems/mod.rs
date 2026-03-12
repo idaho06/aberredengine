@@ -77,5 +77,6 @@ pub mod signalbinding;
 pub mod stuckto;
 pub mod time;
 pub mod timer;
+mod timer_core;
 pub mod ttl;
 pub mod tween;

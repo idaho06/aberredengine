@@ -34,7 +34,7 @@ use bevy_ecs::prelude::*;
 use mlua::prelude::*;
 
 use crate::components::luaphase::LuaPhase;
-use crate::components::luatimer::LuaTimer;
+use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::events::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::resources::animationstore::AnimationStore;
@@ -53,6 +53,21 @@ use crate::systems::lua_commands::{
 };
 use log::{error, warn};
 
+use super::timer_core::{TimerRunner, run_timer_update};
+
+struct LuaTimerRunner<'a, 'w, 's> {
+    commands: &'a mut Commands<'w, 's>,
+}
+
+impl<'a, 'w, 's> TimerRunner<LuaTimerCallback> for LuaTimerRunner<'a, 'w, 's> {
+    fn on_fire(&mut self, entity: Entity, callback: &LuaTimerCallback) {
+        self.commands.trigger(LuaTimerEvent {
+            entity,
+            callback: callback.name.clone(),
+        });
+    }
+}
+
 /// Update all Lua timer components and emit events when they expire.
 ///
 /// Accumulates delta time on each [`LuaTimer`](crate::components::luatimer::LuaTimer)
@@ -64,18 +79,9 @@ pub fn update_lua_timers(
     mut query: Query<(Entity, &mut LuaTimer)>,
     mut commands: Commands,
 ) {
-    for (entity, mut timer) in query.iter_mut() {
-        timer.elapsed += world_time.delta;
-        if timer.elapsed >= timer.duration {
-            // Emit timer event
-            commands.trigger(LuaTimerEvent {
-                entity,
-                callback: timer.callback.clone(),
-            });
-            // Reset timer (subtract duration instead of zeroing)
-            timer.reset();
-        }
-    }
+    let delta = world_time.delta;
+    let mut runner = LuaTimerRunner { commands: &mut commands };
+    run_timer_update(delta, &mut query, &mut runner);
 }
 
 /// Build entity context for timer callbacks using pooled tables.
@@ -170,7 +176,7 @@ fn build_timer_context(
         .map(|t| LuaTimerSnapshot {
             duration: t.duration,
             elapsed: t.elapsed,
-            callback: t.callback.as_str(),
+            callback: t.callback.name.as_str(),
         });
 
     // World transform from GlobalTransform2D (hierarchy)

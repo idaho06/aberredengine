@@ -15,7 +15,7 @@ use aberredengine::components::luacollision::LuaCollisionRule;
 #[cfg(feature = "lua")]
 use aberredengine::components::luaphase::{LuaPhase, PhaseCallbacks};
 #[cfg(feature = "lua")]
-use aberredengine::components::luatimer::LuaTimer;
+use aberredengine::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rigidbody::RigidBody;
 use aberredengine::components::rotation::Rotation;
@@ -23,7 +23,7 @@ use aberredengine::components::scale::Scale;
 use aberredengine::components::signals::Signals;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::stuckto::StuckTo;
-use aberredengine::components::timer::Timer;
+use aberredengine::components::timer::{Timer, TimerCallback};
 use aberredengine::components::ttl::Ttl;
 use aberredengine::components::tween::{
     Easing, LoopMode, TweenPosition, TweenRotation, TweenScale,
@@ -893,7 +893,7 @@ fn tick_lua_phases(world: &mut World) {
 fn lua_timer_accumulates_time() {
     let mut world = make_world(0.3);
 
-    let entity = world.spawn((LuaTimer::new(1.0, "my_callback"),)).id();
+    let entity = world.spawn((LuaTimer::new(1.0, LuaTimerCallback { name: "my_callback".to_string() }),)).id();
 
     tick_lua_timers(&mut world);
 
@@ -906,7 +906,7 @@ fn lua_timer_accumulates_time() {
 fn lua_timer_fires_event_when_expired() {
     let mut world = make_world(1.0);
 
-    let entity = world.spawn((LuaTimer::new(0.5, "on_timer"),)).id();
+    let entity = world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "on_timer".to_string() }),)).id();
 
     // Track if event was triggered
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -931,7 +931,7 @@ fn lua_timer_fires_event_when_expired() {
 fn lua_timer_resets_after_firing() {
     let mut world = make_world(0.6);
 
-    let entity = world.spawn((LuaTimer::new(0.5, "callback"),)).id();
+    let entity = world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "callback".to_string() }),)).id();
 
     // Add dummy observer so events are processed
     world.add_observer(|_trigger: On<LuaTimerEvent>| {});
@@ -949,7 +949,7 @@ fn lua_timer_resets_after_firing() {
 fn lua_timer_does_not_fire_before_duration() {
     let mut world = make_world(0.3);
 
-    world.spawn((LuaTimer::new(1.0, "callback"),));
+    world.spawn((LuaTimer::new(1.0, LuaTimerCallback { name: "callback".to_string() }),));
 
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
     let fired_clone = fired.clone();
@@ -962,6 +962,106 @@ fn lua_timer_does_not_fire_before_duration() {
     tick_lua_timers(&mut world);
 
     assert!(!*fired.lock().unwrap());
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_timer_event_carries_correct_callback_name() {
+    // Specific to the LuaTimerCallback refactor: LuaTimerCallback.name must
+    // flow correctly into LuaTimerEvent.callback.
+    let mut world = make_world(1.0);
+
+    world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "my_func".to_string() }),));
+
+    let received_name = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let name_clone = received_name.clone();
+
+    world.add_observer(move |trigger: On<LuaTimerEvent>| {
+        *name_clone.lock().unwrap() = trigger.event().callback.clone();
+    });
+    world.flush();
+
+    tick_lua_timers(&mut world);
+
+    assert_eq!(*received_name.lock().unwrap(), "my_func");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_timer_multiple_entities_fire_with_correct_names() {
+    // Each entity's LuaTimerCallback.name must appear in its own event — not swapped.
+    let mut world = make_world(1.0);
+
+    let entity_a = world
+        .spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "func_a".to_string() }),))
+        .id();
+    let entity_b = world
+        .spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "func_b".to_string() }),))
+        .id();
+
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(Entity, String)>::new()));
+    let events_clone = events.clone();
+
+    world.add_observer(move |trigger: On<LuaTimerEvent>| {
+        events_clone
+            .lock()
+            .unwrap()
+            .push((trigger.event().entity, trigger.event().callback.clone()));
+    });
+    world.flush();
+
+    tick_lua_timers(&mut world);
+
+    let events = events.lock().unwrap().clone();
+    assert_eq!(events.len(), 2);
+
+    let a_event = events.iter().find(|(e, _)| *e == entity_a).unwrap();
+    let b_event = events.iter().find(|(e, _)| *e == entity_b).unwrap();
+    assert_eq!(a_event.1, "func_a");
+    assert_eq!(b_event.1, "func_b");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_timer_callback_name_preserved_after_reset() {
+    // reset() only modifies elapsed — LuaTimerCallback.name must survive unchanged.
+    let mut world = make_world(1.0);
+
+    let entity =
+        world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "persist_cb".to_string() }),)).id();
+    world.add_observer(|_trigger: On<LuaTimerEvent>| {});
+    world.flush();
+
+    tick_lua_timers(&mut world); // fires and resets
+
+    let timer = world.get::<LuaTimer>(entity).unwrap();
+    assert_eq!(timer.callback.name, "persist_cb");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_timer_fires_across_multiple_ticks() {
+    // Verify elapsed accumulates correctly over multiple ticks before firing.
+    // duration=0.8, delta=0.3 per tick: ticks 1+2 no fire, tick 3 fires.
+    let fired_count = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+    let fired_clone = fired_count.clone();
+
+    let mut world = make_world(0.3);
+    world.spawn((LuaTimer::new(0.8, LuaTimerCallback { name: "cb".to_string() }),));
+
+    world.add_observer(move |_trigger: On<LuaTimerEvent>| {
+        *fired_clone.lock().unwrap() += 1;
+    });
+    world.flush();
+
+    tick_lua_timers(&mut world); // elapsed=0.3
+    assert_eq!(*fired_count.lock().unwrap(), 0);
+
+    tick_lua_timers(&mut world); // elapsed=0.6
+    assert_eq!(*fired_count.lock().unwrap(), 0);
+
+    tick_lua_timers(&mut world); // elapsed=0.9 >= 0.8, fires, resets to 0.1
+    assert_eq!(*fired_count.lock().unwrap(), 1);
 }
 
 // =============================================================================
@@ -979,7 +1079,7 @@ fn rust_timer_accumulates_time() {
     let mut world = make_world(0.3);
 
     fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
-    let entity = world.spawn((Timer::new(1.0, noop),)).id();
+    let entity = world.spawn((Timer::new(1.0, noop as TimerCallback),)).id();
 
     tick_timers(&mut world);
 
@@ -992,7 +1092,7 @@ fn rust_timer_fires_event_when_expired() {
     let mut world = make_world(1.0);
 
     fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
-    let entity = world.spawn((Timer::new(0.5, noop),)).id();
+    let entity = world.spawn((Timer::new(0.5, noop as TimerCallback),)).id();
 
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
     let fired_entity = std::sync::Arc::new(std::sync::Mutex::new(None));
@@ -1016,7 +1116,7 @@ fn rust_timer_resets_after_firing() {
     let mut world = make_world(0.6);
 
     fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
-    let entity = world.spawn((Timer::new(0.5, noop),)).id();
+    let entity = world.spawn((Timer::new(0.5, noop as TimerCallback),)).id();
 
     world.add_observer(|_trigger: On<TimerEvent>| {});
     world.flush();
@@ -1033,7 +1133,7 @@ fn rust_timer_does_not_fire_before_duration() {
     let mut world = make_world(0.3);
 
     fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
-    world.spawn((Timer::new(1.0, noop),));
+    world.spawn((Timer::new(1.0, noop as TimerCallback),));
 
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
     let fired_clone = fired.clone();
@@ -1061,7 +1161,7 @@ fn rust_timer_observer_calls_callback() {
     }
 
     let entity = world
-        .spawn((Timer::new(0.5, set_flag), Signals::default()))
+        .spawn((Timer::new(0.5, set_flag as TimerCallback), Signals::default()))
         .id();
 
     // Register the real timer_observer so the callback gets invoked
@@ -1086,7 +1186,7 @@ fn rust_timer_observer_can_write_audio() {
         });
     }
 
-    world.spawn((Timer::new(0.5, play_sound),));
+    world.spawn((Timer::new(0.5, play_sound as TimerCallback),));
 
     world.add_observer(timer_observer);
     world.flush();
@@ -1114,7 +1214,7 @@ fn rust_timer_observer_can_set_world_signal() {
         ctx.world_signals.set_flag("game_over");
     }
 
-    world.spawn((Timer::new(0.5, set_signal),));
+    world.spawn((Timer::new(0.5, set_signal as TimerCallback),));
 
     world.add_observer(timer_observer);
     world.flush();
@@ -1145,7 +1245,7 @@ fn rust_timer_observer_receives_input_state() {
     }
 
     let entity = world
-        .spawn((Timer::new(0.5, check_input), Signals::default()))
+        .spawn((Timer::new(0.5, check_input as TimerCallback), Signals::default()))
         .id();
 
     world.add_observer(timer_observer);
@@ -1155,6 +1255,81 @@ fn rust_timer_observer_receives_input_state() {
 
     let signals = world.get::<Signals>(entity).unwrap();
     assert!(signals.has_flag("input_received"));
+}
+
+#[test]
+fn rust_timer_fires_across_multiple_ticks() {
+    // Verify elapsed accumulates correctly over multiple ticks before firing.
+    // duration=0.8, delta=0.3 per tick: ticks 1+2 no fire, tick 3 fires.
+    let fired_count = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+    let fired_clone = fired_count.clone();
+
+    fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
+    let mut world = make_world(0.3);
+    world.spawn((Timer::new(0.8, noop as TimerCallback),));
+
+    world.add_observer(move |_trigger: On<TimerEvent>| {
+        *fired_clone.lock().unwrap() += 1;
+    });
+    world.flush();
+
+    tick_timers(&mut world); // elapsed=0.3
+    assert_eq!(*fired_count.lock().unwrap(), 0);
+
+    tick_timers(&mut world); // elapsed=0.6
+    assert_eq!(*fired_count.lock().unwrap(), 0);
+
+    tick_timers(&mut world); // elapsed=0.9 >= 0.8, fires, resets to 0.1
+    assert_eq!(*fired_count.lock().unwrap(), 1);
+}
+
+#[test]
+fn rust_timer_multiple_entities_fire_independently() {
+    // Short-duration timer fires; long-duration timer does not.
+    let fired_count = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+    let fired_clone = fired_count.clone();
+
+    fn noop(_: Entity, _: &mut GameCtx, _: &InputState) {}
+    let mut world = make_world(1.0);
+    world.spawn((Timer::new(0.5, noop as TimerCallback),)); // fires (1.0 >= 0.5)
+    world.spawn((Timer::new(2.0, noop as TimerCallback),)); // does not fire (1.0 < 2.0)
+
+    world.add_observer(move |_trigger: On<TimerEvent>| {
+        *fired_clone.lock().unwrap() += 1;
+    });
+    world.flush();
+
+    tick_timers(&mut world);
+
+    assert_eq!(*fired_count.lock().unwrap(), 1);
+}
+
+#[test]
+fn rust_timer_callback_receives_correct_entity() {
+    // Verify the entity passed to the callback is the timer's own entity,
+    // not another entity that happens to have Signals.
+    let mut world = make_world(1.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(InputState::default());
+
+    fn mark_self(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
+        if let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("fired");
+        }
+    }
+
+    let bystander = world.spawn(Signals::default()).id();
+    let timer_entity = world
+        .spawn((Timer::new(0.5, mark_self as TimerCallback), Signals::default()))
+        .id();
+
+    world.add_observer(timer_observer);
+    world.flush();
+
+    tick_timers(&mut world);
+
+    assert!(world.get::<Signals>(timer_entity).unwrap().has_flag("fired"));
+    assert!(!world.get::<Signals>(bystander).unwrap().has_flag("fired"));
 }
 
 // =============================================================================

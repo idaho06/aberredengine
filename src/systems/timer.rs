@@ -32,11 +32,26 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::timer::Timer;
+use crate::components::timer::{Timer, TimerCallback};
 use crate::events::timer::TimerEvent;
 use crate::resources::input::InputState;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
+
+use super::timer_core::{TimerRunner, run_timer_update};
+
+struct RustTimerRunner<'a, 'w, 's> {
+    commands: &'a mut Commands<'w, 's>,
+}
+
+impl<'a, 'w, 's> TimerRunner<TimerCallback> for RustTimerRunner<'a, 'w, 's> {
+    fn on_fire(&mut self, entity: Entity, callback: &TimerCallback) {
+        self.commands.trigger(TimerEvent {
+            entity,
+            callback: *callback,
+        });
+    }
+}
 
 /// Update all Rust timer components and emit events when they expire.
 ///
@@ -49,16 +64,9 @@ pub fn update_timers(
     mut query: Query<(Entity, &mut Timer)>,
     mut commands: Commands,
 ) {
-    for (entity, mut timer) in query.iter_mut() {
-        timer.elapsed += world_time.delta;
-        if timer.elapsed >= timer.duration {
-            commands.trigger(TimerEvent {
-                entity,
-                callback: timer.callback,
-            });
-            timer.reset();
-        }
-    }
+    let delta = world_time.delta;
+    let mut runner = RustTimerRunner { commands: &mut commands };
+    run_timer_update(delta, &mut query, &mut runner);
 }
 
 /// Observer that handles Rust timer events by calling the callback function.

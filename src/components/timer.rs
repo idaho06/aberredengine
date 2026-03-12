@@ -50,32 +50,34 @@ use crate::systems::GameCtx;
 /// providing full ECS query/resource access, and the current input state.
 pub type TimerCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState);
 
-/// Repeating countdown timer with a Rust function-pointer callback.
+/// Generic repeating countdown timer.
 ///
-/// Mirrors [`LuaTimer`](crate::components::luatimer::LuaTimer) but invokes a
-/// Rust function pointer instead of a Lua function name. The timer fires every
-/// `duration` seconds; when it fires a [`TimerEvent`](crate::events::timer::TimerEvent)
-/// is triggered and the observer calls `callback`.
+/// The default `Timer` type stores a Rust function pointer via [`TimerCallback`]
+/// and is processed by [`update_timers`](crate::systems::timer::update_timers).
+/// The Lua-facing [`LuaTimer`](crate::components::luatimer::LuaTimer) alias
+/// reuses this same storage with a [`LuaTimerCallback`](crate::components::luatimer::LuaTimerCallback)
+/// payload.
 ///
 /// `elapsed` is reset by subtracting `duration` (not zeroed) for timing accuracy.
 #[derive(Component, Clone, Copy)]
-pub struct Timer {
+pub struct Timer<C = TimerCallback> {
     /// Total duration in seconds before the timer fires.
     pub duration: f32,
     /// Elapsed time since last reset.
     pub elapsed: f32,
-    /// Rust function to call when timer expires.
-    pub callback: TimerCallback,
+    /// Callback payload — a Rust fn pointer for `Timer`, or a
+    /// [`LuaTimerCallback`](crate::components::luatimer::LuaTimerCallback) for `LuaTimer`.
+    pub callback: C,
 }
 
-impl Timer {
+impl<C> Timer<C> {
     /// Create a new Timer with the given duration and callback.
     ///
     /// # Arguments
     ///
     /// * `duration` - Time in seconds before firing (repeats every `duration` seconds)
-    /// * `callback` - Rust function to call when the timer fires
-    pub fn new(duration: f32, callback: TimerCallback) -> Self {
+    /// * `callback` - Callback payload to store
+    pub fn new(duration: f32, callback: C) -> Self {
         Timer {
             duration,
             elapsed: 0.0,

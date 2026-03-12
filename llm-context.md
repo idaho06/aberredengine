@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-12 (Latest changes: Phase generic refactor, phase_core.rs shared loop, lua_commands EntityCmdQueries simplification)
+# Last updated: 2026-03-12 (Latest changes: Timer generic refactor, timer_core.rs shared loop, LuaTimerCallback newtype)
 
 ## QUICK REFERENCE
 
@@ -40,7 +40,7 @@ COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (Entity
 - imgui debug overlay: `imgui = "0.12"` dependency; raylib built with `imgui` feature. When F11 debug mode is active, an imgui window renders with checkboxes to toggle individual world-space overlays. `DebugOverlayConfig` resource (`resources/debugoverlayconfig.rs`) controls: `show_collider_boxes`, `show_position_crosshairs`, `show_entity_signals`, `show_text_bounds`, `show_sprite_bounds` (all default true). Inserted by `EngineBuilder` alongside `DebugMode`.
 - `InputSnapshot` / `DigitalInputs`: exposes raw WASD (`main_up/down/left/right`), raw arrow keys (`secondary_up/down/left/right`), function keys (`debug` F11, `fullscreen` F10), and `action_3` in addition to combined directional fields (`up/down/left/right`) and action buttons. All fields exposed to Lua callbacks via `input.digital.*`.
 - `lua` Cargo feature flag: all Lua-specific code gated behind `#[cfg(feature = "lua")]`. Feature is in `default = ["lua"]`. `cargo build --no-default-features` compiles a pure-Rust engine.
-- Rust `Timer` component: repeating countdown timer with fn-pointer callback. Event-based: `update_timers` → `TimerEvent` → `timer_observer`. Callback signature: `fn(Entity, &mut GameCtx, &InputState)`.
+- `Timer<C>` generic component: shared timer storage used by both the Rust and Lua timer paths. Default `Timer<TimerCallback>` stores a Rust fn-pointer; `LuaTimer` (= `Timer<LuaTimerCallback>`) stores a Lua callback name string. Rust callback: `TimerCallback = fn(Entity, &mut GameCtx, &InputState)`. Event-based: `update_timers`/`update_lua_timers` → `TimerEvent`/`LuaTimerEvent` → `timer_observer`/`lua_timer_observer`. Shared update loop in `systems/timer_core.rs` (`TimerRunner<C>` trait + `run_timer_update`, pub(crate) only).
 - `Phase<C>` generic component: shared state machine storage used by both the Rust and Lua phase paths. Default form `Phase<PhaseCallbackFns>` stores Rust fn-pointers; `LuaPhase` (= `Phase<PhaseCallbacks>`) stores Lua callback name strings. Rust callbacks: `PhaseEnterFn(Entity, &mut GameCtx, &InputState) -> Option<String>`, `PhaseUpdateFn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>`, `PhaseExitFn(Entity, &mut GameCtx)`. Transitions via callback return value or external `phase.next` mutation. `phase_system` runs after collision_detector, always compiled. Shared phase loop logic lives in `systems/phase_core.rs` (`PhaseRunner` trait + `run_phase_callbacks` / `apply_callback_transitions` free functions, pub(crate) only).
 - `EngineBuilder` pattern: `src/engine_app.rs` extracts all engine bootstrapping into a configurable builder with discrete methods: `validate_builder`, `load_config`, `setup_window`, `setup_world`, `register_systems`, `spawn_observers`, `build_schedule`, `main_loop`. `run()` orchestrates them in sequence. Developer supplies game hooks via `.on_setup()`, `.on_enter_play()`, `.on_update()`, `.on_switch_scene()`. Lua games use `.with_lua("path")`. Rust multi-scene games use `.add_scene(name, descriptor)` + `.initial_scene(name)`. `main.rs` is a thin CLI + builder call (~100 lines).
 - Rust `CollisionRule` component: fn-pointer collision callback. Event-based dispatch: `collision_detector` → `CollisionEvent` → `rust_collision_observer` → callback. Callback signature: `fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx)`. Always compiled.
@@ -83,8 +83,8 @@ src/
 │   ├── entityshader.rs        # Per-entity shader for custom rendering effects
 │   ├── signalbinding.rs       # Bind text to world signals
 │   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
-│   ├── luatimer.rs            # [feature=lua] Lua callback timer
-│   ├── timer.rs               # Rust fn-pointer timer (mirrors LuaTimer)
+│   ├── luatimer.rs            # [feature=lua] LuaTimer type alias = Timer<LuaTimerCallback>; LuaTimerCallback { name: String }
+│   ├── timer.rs               # Generic Timer<C = TimerCallback> component; TimerCallback fn-pointer type alias
 │   ├── stuckto.rs             # Attach entity to another
 │   ├── tint.rs                # Color tint for rendering (sprites/text)
 │   ├── menu.rs                # Interactive menu (with scroll support); MenuRustCallback type alias
@@ -120,8 +120,9 @@ src/
 │   │   ├── entity_cmd.rs      # process_entity_commands: runtime entity manipulation
 │   │   ├── spawn_cmd.rs       # process_spawn_command, process_clone_command: entity creation
 │   │   └── parse.rs           # parse_cmp_op, convert_animation_condition: animation condition helpers
-│   ├── luatimer.rs            # [feature=lua] Lua timer processing
-│   ├── timer.rs               # Rust timer processing (update_timers, timer_observer)
+│   ├── luatimer.rs            # [feature=lua] Lua timer: LuaTimerRunner + update_lua_timers + lua_timer_observer
+│   ├── timer.rs               # Rust timer: RustTimerRunner + update_timers + timer_observer
+│   ├── timer_core.rs          # Shared timer loop: TimerRunner<C> trait + run_timer_update (pub(crate))
 │   ├── phase.rs               # Rust phase state machine (RustPhaseRunner impl + phase_system)
 │   ├── phase_core.rs          # Shared phase loop: PhaseRunner<C> trait, run_phase_callbacks, apply_callback_transitions (pub(crate))
 │   ├── time.rs                # WorldTime update
@@ -270,8 +271,9 @@ LuaPhase = Phase<PhaseCallbacks>   -- type alias; PhaseCallbacks { on_enter: Opt
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
 TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
-LuaTimer { duration: f32, elapsed: f32, callback: String }
-Timer { duration: f32, elapsed: f32, callback: TimerCallback }  -- fn(Entity, &mut GameCtx, &InputState)
+Timer<C = TimerCallback> { duration: f32, elapsed: f32, callback: C }
+  TimerCallback = fn(Entity, &mut GameCtx, &InputState)
+LuaTimer = Timer<LuaTimerCallback>   -- type alias; LuaTimerCallback { name: String }
 Ttl { remaining: f32 }
 StuckTo { target: Entity, follow_x: bool, follow_y: bool, offset: Vector2, stored_velocity: Vector2 }
 Menu { items: Vec<MenuItem>, selected_index, font, font_size, item_spacing, normal_color, selected_color, cursor_entity, selection_change_sound, origin, use_screen_space, on_select_callback, on_rust_callback: Option<MenuRustCallback>, visible_count: Option<usize>, scroll_offset, top_indicator_entity, bottom_indicator_entity }
@@ -566,6 +568,7 @@ Rendering:        render.rs, sprite.rs, rendertarget.rs, shaderstore.rs, postpro
 Debug overlay:    debugoverlayconfig.rs (resource), render.rs (imgui integration)
 Animation:        animation.rs (component + controller), animationstore.rs
 State machines:   luaphase.rs (component + system) [feature=lua], phase.rs (Rust fn-pointer equivalent)
+Timers:           luatimer.rs (LuaTimer alias + LuaTimerCallback) [feature=lua], timer.rs (Timer<C> generic), timer_core.rs (shared loop)
 Signals:          signals.rs, worldsignals.rs
 Text:             dynamictext.rs, dynamictext_size.rs (system), signalbinding.rs
 Input:            inputcontrolled.rs, input.rs (InputState), input_bindings.rs (InputBindings), input_snapshot.rs, systems/input.rs (poll_action!)

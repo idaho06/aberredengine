@@ -148,7 +148,7 @@ fn build_phase_context(
         .map(|t| LuaTimerSnapshot {
             duration: t.duration,
             elapsed: t.elapsed,
-            callback: t.callback.as_str(),
+            callback: t.callback.name.as_str(),
         });
 
     // World transform from GlobalTransform2D (hierarchy)

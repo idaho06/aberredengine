@@ -12,7 +12,7 @@ use raylib::prelude::Vector2;
 use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::luatimer::LuaTimer;
+use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::stuckto::StuckTo;
@@ -141,7 +141,7 @@ pub fn process_entity_commands(
                 let entity = Entity::from_bits(entity_id);
                 commands
                     .entity(entity)
-                    .insert(LuaTimer::new(duration, callback));
+                    .insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
             }
             EntityCmd::RemoveLuaTimer { entity_id } => {
                 let entity = Entity::from_bits(entity_id);
