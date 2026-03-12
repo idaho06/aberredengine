@@ -13,6 +13,8 @@ use aberredengine::components::group::Group;
 #[cfg(feature = "lua")]
 use aberredengine::components::luacollision::LuaCollisionRule;
 #[cfg(feature = "lua")]
+use aberredengine::components::luaphase::{LuaPhase, PhaseCallbacks};
+#[cfg(feature = "lua")]
 use aberredengine::components::luatimer::LuaTimer;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::rigidbody::RigidBody;
@@ -46,6 +48,8 @@ use aberredengine::systems::collision_detector::collision_detector;
 use aberredengine::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
+#[cfg(feature = "lua")]
+use aberredengine::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luatimer::update_lua_timers;
 use aberredengine::systems::movement::movement;
@@ -874,6 +878,13 @@ fn tween_position_with_quad_in_easing() {
 fn tick_lua_timers(world: &mut World) {
     let mut schedule = Schedule::default();
     schedule.add_systems(update_lua_timers);
+    schedule.run(world);
+}
+
+#[cfg(feature = "lua")]
+fn tick_lua_phases(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(lua_phase_system);
     schedule.run(world);
 }
 
@@ -1964,6 +1975,32 @@ fn phase_transition_via_external_next() {
 }
 
 #[test]
+fn phase_on_enter_return_is_applied_on_next_frame() {
+    let mut world = make_phase_world(0.016);
+
+    fn enter_fn(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
+        Some("moving".into())
+    }
+
+    let mut phases = simple_two_phase_map();
+    phases.get_mut("idle").unwrap().on_enter = Some(enter_fn);
+
+    let entity = world.spawn((Phase::new("idle", phases),)).id();
+
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "idle");
+    assert_eq!(phase.next.as_deref(), Some("moving"));
+
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "moving");
+    assert_eq!(phase.previous.as_deref(), Some("idle"));
+}
+
+#[test]
 fn phase_on_exit_called_on_transition() {
     let mut world = make_phase_world(0.016);
 
@@ -1987,6 +2024,66 @@ fn phase_on_exit_called_on_transition() {
 
     let signals = world.get::<Signals>(entity).unwrap();
     assert!(signals.has_flag("exited_idle"));
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_phase_on_exit_sees_post_swap_phase_state() {
+    let mut world = make_world(0.25);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(SystemsStore::new());
+    world.insert_resource(InputState::default());
+    world.insert_resource(AnimationStore {
+        animations: Default::default(),
+    });
+
+    let lua_runtime = LuaRuntime::new().expect("Failed to init Lua runtime");
+    world.insert_non_send_resource(lua_runtime);
+
+    {
+        let lua_runtime = world.non_send_resource::<LuaRuntime>();
+        lua_runtime
+            .lua()
+            .load(
+                r#"
+                function moving_exit(ctx)
+                    engine.set_string("exit_phase_seen", ctx.phase)
+                    engine.set_scalar("exit_time_in_phase_seen", ctx.time_in_phase)
+                end
+                "#,
+            )
+            .exec()
+            .expect("Failed to load Lua phase callback");
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbacks::default());
+    phases.insert(
+        "moving".into(),
+        PhaseCallbacks {
+            on_enter: None,
+            on_update: None,
+            on_exit: Some("moving_exit".into()),
+        },
+    );
+    phases.insert("attacking".into(), PhaseCallbacks::default());
+
+    let entity = world.spawn((LuaPhase::new("moving", phases),)).id();
+    world.get_mut::<LuaPhase>(entity).unwrap().next = Some("attacking".into());
+
+    tick_lua_phases(&mut world);
+
+    let world_signals = world.resource::<WorldSignals>();
+    assert_eq!(
+        world_signals.get_string("exit_phase_seen").map(|s| s.as_str()),
+        Some("attacking")
+    );
+    assert!(approx_eq(
+        world_signals
+            .get_scalar("exit_time_in_phase_seen")
+            .expect("exit time signal"),
+        0.0
+    ));
 }
 
 #[test]
@@ -2014,6 +2111,62 @@ fn phase_on_enter_called_on_transition() {
 
     let signals = world.get::<Signals>(entity).unwrap();
     assert!(signals.has_flag("entered_moving"));
+}
+
+#[test]
+fn phase_callback_return_takes_precedence_after_external_transition() {
+    let mut world = make_phase_world(0.016);
+
+    fn update_fn(
+        _entity: Entity,
+        _ctx: &mut GameCtx,
+        _input: &InputState,
+        _dt: f32,
+    ) -> Option<String> {
+        Some("attacking".into())
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert(
+        "idle".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+    phases.insert(
+        "moving".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: Some(update_fn),
+            on_exit: None,
+        },
+    );
+    phases.insert(
+        "attacking".into(),
+        PhaseCallbackFns {
+            on_enter: None,
+            on_update: None,
+            on_exit: None,
+        },
+    );
+
+    let entity = world.spawn((Phase::new("idle", phases),)).id();
+    world.get_mut::<Phase>(entity).unwrap().next = Some("moving".into());
+
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "moving");
+    assert_eq!(phase.next.as_deref(), Some("attacking"));
+    assert_eq!(phase.previous.as_deref(), Some("idle"));
+
+    tick_phases(&mut world);
+
+    let phase = world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "attacking");
+    assert_eq!(phase.previous.as_deref(), Some("moving"));
 }
 
 #[test]

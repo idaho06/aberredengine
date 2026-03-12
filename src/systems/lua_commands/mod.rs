@@ -30,7 +30,7 @@ use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::luaphase::LuaPhase;
+use crate::components::phase::Phase;
 use crate::components::luatimer::LuaTimer;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -57,6 +57,7 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
+use crate::systems::phase_core::queue_phase_transition;
 use log::{error, info, warn};
 use std::sync::Arc;
 
@@ -227,13 +228,14 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
 }
 
 /// Process a single phase command from Lua and apply it to the appropriate entity.
-pub fn process_phase_command(luaphase_query: &mut Query<(Entity, &mut LuaPhase)>, cmd: PhaseCmd) {
+pub fn process_phase_command<C>(phase_query: &mut Query<(Entity, &mut Phase<C>)>, cmd: PhaseCmd)
+where
+    C: Send + Sync + 'static,
+{
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
             let entity = Entity::from_bits(entity_id);
-            if let Ok((_, mut lua_phase)) = luaphase_query.get_mut(entity) {
-                lua_phase.next = Some(phase);
-            }
+            queue_phase_transition(phase_query, entity, phase);
         }
     }
 }
