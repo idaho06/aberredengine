@@ -656,15 +656,7 @@ pub fn update(
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &entities.cmd_queries.stuckto,
-        &mut entities.cmd_queries.signals,
-        &mut entities.cmd_queries.animation,
-        &mut entities.cmd_queries.sprites,
-        &mut entities.cmd_queries.rigid_bodies,
-        &mut entities.cmd_queries.positions,
-        &mut entities.cmd_queries.screen_positions,
-        &mut entities.cmd_queries.shaders,
-        &entities.cmd_queries.global_transforms,
+        &mut entities.cmd_queries,
         &scene_state.systems_store,
         &scene_state.anim_store,
     );
@@ -900,15 +892,7 @@ pub fn switch_scene(
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &entities.cmd_queries.stuckto,
-        &mut entities.cmd_queries.signals,
-        &mut entities.cmd_queries.animation,
-        &mut entities.cmd_queries.sprites,
-        &mut entities.cmd_queries.rigid_bodies,
-        &mut entities.cmd_queries.positions,
-        &mut entities.cmd_queries.screen_positions,
-        &mut entities.cmd_queries.shaders,
-        &entities.cmd_queries.global_transforms,
+        &mut entities.cmd_queries,
         &scene_state.systems_store,
         &scene_state.anim_store,
     );

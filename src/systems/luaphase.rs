@@ -464,15 +464,7 @@ pub fn lua_phase_system(
     process_entity_commands(
         &mut commands,
         lua_runtime.drain_entity_commands(),
-        &cmd_queries.stuckto,
-        &mut cmd_queries.signals,
-        &mut cmd_queries.animation,
-        &mut cmd_queries.sprites,
-        &mut cmd_queries.rigid_bodies,
-        &mut cmd_queries.positions,
-        &mut cmd_queries.screen_positions,
-        &mut cmd_queries.shaders,
-        &ctx_queries.global_transforms,
+        &mut cmd_queries,
         &systems_store,
         &animation_store,
     );

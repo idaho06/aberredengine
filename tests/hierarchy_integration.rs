@@ -476,15 +476,7 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     process_entity_commands(
         &mut commands,
         cmds,
-        &queries.stuckto,
-        &mut queries.signals,
-        &mut queries.animation,
-        &mut queries.sprites,
-        &mut queries.rigid_bodies,
-        &mut queries.positions,
-        &mut queries.screen_positions,
-        &mut queries.shaders,
-        &queries.global_transforms,
+        &mut queries,
         &systems_store,
         &anim_store,
     );

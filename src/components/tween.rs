@@ -23,6 +23,20 @@ pub enum LoopMode {
     PingPong,
 }
 
+impl std::str::FromStr for LoopMode {
+    type Err = std::convert::Infallible;
+
+    /// Parse a Lua string into a `LoopMode`. Unknown strings default to `Once`.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "once" => LoopMode::Once,
+            "loop" => LoopMode::Loop,
+            "ping_pong" => LoopMode::PingPong,
+            _ => LoopMode::Once,
+        })
+    }
+}
+
 /// Easing functions for smooth interpolation.
 ///
 /// These functions transform a linear `t` value (0.0 to 1.0) to create
@@ -43,6 +57,24 @@ pub enum Easing {
     CubicOut,
     /// Slow start and end (cubic).
     CubicInOut,
+}
+
+impl std::str::FromStr for Easing {
+    type Err = std::convert::Infallible;
+
+    /// Parse a Lua string into an `Easing`. Unknown strings default to `Linear`.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "linear" => Easing::Linear,
+            "quad_in" => Easing::QuadIn,
+            "quad_out" => Easing::QuadOut,
+            "quad_in_out" => Easing::QuadInOut,
+            "cubic_in" => Easing::CubicIn,
+            "cubic_out" => Easing::CubicOut,
+            "cubic_in_out" => Easing::CubicInOut,
+            _ => Easing::Linear,
+        })
+    }
 }
 
 /// Animates an entity's [`MapPosition`](super::mapposition::MapPosition) between two points.
@@ -415,5 +447,84 @@ mod tests {
         let l2 = l1; // copy
         assert!(matches!(l1, LoopMode::PingPong));
         assert!(matches!(l2, LoopMode::PingPong));
+    }
+
+    // ==================== EASING FROM_STR TESTS ====================
+
+    #[test]
+    fn test_easing_from_str_linear() {
+        assert!(matches!("linear".parse::<Easing>().unwrap(), Easing::Linear));
+    }
+
+    #[test]
+    fn test_easing_from_str_quad_in() {
+        assert!(matches!("quad_in".parse::<Easing>().unwrap(), Easing::QuadIn));
+    }
+
+    #[test]
+    fn test_easing_from_str_quad_out() {
+        assert!(matches!("quad_out".parse::<Easing>().unwrap(), Easing::QuadOut));
+    }
+
+    #[test]
+    fn test_easing_from_str_quad_in_out() {
+        assert!(matches!(
+            "quad_in_out".parse::<Easing>().unwrap(),
+            Easing::QuadInOut
+        ));
+    }
+
+    #[test]
+    fn test_easing_from_str_cubic_in() {
+        assert!(matches!("cubic_in".parse::<Easing>().unwrap(), Easing::CubicIn));
+    }
+
+    #[test]
+    fn test_easing_from_str_cubic_out() {
+        assert!(matches!("cubic_out".parse::<Easing>().unwrap(), Easing::CubicOut));
+    }
+
+    #[test]
+    fn test_easing_from_str_cubic_in_out() {
+        assert!(matches!(
+            "cubic_in_out".parse::<Easing>().unwrap(),
+            Easing::CubicInOut
+        ));
+    }
+
+    #[test]
+    fn test_easing_from_str_unknown_defaults_to_linear() {
+        assert!(matches!("unknown".parse::<Easing>().unwrap(), Easing::Linear));
+        assert!(matches!("".parse::<Easing>().unwrap(), Easing::Linear));
+    }
+
+    // ==================== LOOP MODE FROM_STR TESTS ====================
+
+    #[test]
+    fn test_loop_mode_from_str_once() {
+        assert!(matches!("once".parse::<LoopMode>().unwrap(), LoopMode::Once));
+    }
+
+    #[test]
+    fn test_loop_mode_from_str_loop() {
+        assert!(matches!("loop".parse::<LoopMode>().unwrap(), LoopMode::Loop));
+    }
+
+    #[test]
+    fn test_loop_mode_from_str_ping_pong() {
+        assert!(matches!(
+            "ping_pong".parse::<LoopMode>().unwrap(),
+            LoopMode::PingPong
+        ));
+    }
+
+    #[test]
+    fn test_loop_mode_from_str_unknown_defaults_to_once() {
+        assert!(matches!("unknown".parse::<LoopMode>().unwrap(), LoopMode::Once));
+    }
+
+    #[test]
+    fn test_loop_mode_from_str_empty_defaults_to_once() {
+        assert!(matches!("".parse::<LoopMode>().unwrap(), LoopMode::Once));
     }
 }
