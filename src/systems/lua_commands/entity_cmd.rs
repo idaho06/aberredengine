@@ -19,10 +19,10 @@ use crate::components::scale::Scale;
 use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
-use crate::components::tween::Tween;
+use crate::components::tween::{Tween, TweenValue};
 
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::lua_runtime::{EntityCmd, UniformValue};
+use crate::resources::lua_runtime::{EntityCmd, TweenConfig, UniformValue};
 use crate::resources::systemsstore::SystemsStore;
 
 use super::EntityCmdQueries;
@@ -238,49 +238,21 @@ fn process_animation_cmd(
 
 fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
-        EntityCmd::InsertTweenPosition {
-            entity_id,
-            from_x,
-            from_y,
-            to_x,
-            to_y,
-            config,
-        } => {
-            let tween = super::build_tween(
+        EntityCmd::InsertTweenPosition { entity_id, from_x, from_y, to_x, to_y, config } =>
+            insert_tween(commands, entity_id,
                 MapPosition::from_vec(Vector2 { x: from_x, y: from_y }),
                 MapPosition::from_vec(Vector2 { x: to_x, y: to_y }),
-                &config,
-            );
-            commands.entity(Entity::from_bits(entity_id)).insert(tween);
-        }
-        EntityCmd::InsertTweenRotation {
-            entity_id,
-            from,
-            to,
-            config,
-        } => {
-            let tween = super::build_tween(
+                &config),
+        EntityCmd::InsertTweenRotation { entity_id, from, to, config } =>
+            insert_tween(commands, entity_id,
                 Rotation { degrees: from },
                 Rotation { degrees: to },
-                &config,
-            );
-            commands.entity(Entity::from_bits(entity_id)).insert(tween);
-        }
-        EntityCmd::InsertTweenScale {
-            entity_id,
-            from_x,
-            from_y,
-            to_x,
-            to_y,
-            config,
-        } => {
-            let tween = super::build_tween(
+                &config),
+        EntityCmd::InsertTweenScale { entity_id, from_x, from_y, to_x, to_y, config } =>
+            insert_tween(commands, entity_id,
                 Scale::new(from_x, from_y),
                 Scale::new(to_x, to_y),
-                &config,
-            );
-            commands.entity(Entity::from_bits(entity_id)).insert(tween);
-        }
+                &config),
         EntityCmd::RemoveTweenPosition { entity_id } => {
             commands.entity(Entity::from_bits(entity_id)).remove::<Tween<MapPosition>>();
         }
@@ -292,6 +264,14 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
         }
         _ => unreachable!(),
     }
+}
+
+fn insert_tween<T>(commands: &mut Commands, entity_id: u64, from: T, to: T, config: &TweenConfig)
+where
+    T: TweenValue + Send + Sync + 'static,
+{
+    let tween = super::build_tween(from, to, config);
+    commands.entity(Entity::from_bits(entity_id)).insert(tween);
 }
 
 fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
@@ -308,30 +288,10 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
                 entity_cmds.remove::<EntityShader>();
             }
         }
-        EntityCmd::ShaderSetFloat { entity_id, name, value } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms.insert(Arc::from(name), UniformValue::Float(value));
-            }
-        }
-        EntityCmd::ShaderSetInt { entity_id, name, value } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms.insert(Arc::from(name), UniformValue::Int(value));
-            }
-        }
-        EntityCmd::ShaderSetVec2 { entity_id, name, x, y } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms.insert(Arc::from(name), UniformValue::Vec2 { x, y });
-            }
-        }
-        EntityCmd::ShaderSetVec4 { entity_id, name, x, y, z, w } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms.insert(Arc::from(name), UniformValue::Vec4 { x, y, z, w });
-            }
-        }
+        cmd @ (EntityCmd::ShaderSetFloat { .. }
+        | EntityCmd::ShaderSetInt { .. }
+        | EntityCmd::ShaderSetVec2 { .. }
+        | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, queries),
         EntityCmd::ShaderClearUniform { entity_id, name } => {
             let entity = Entity::from_bits(entity_id);
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
@@ -351,6 +311,24 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
             commands.entity(Entity::from_bits(entity_id)).remove::<Tint>();
         }
         _ => unreachable!(),
+    }
+}
+
+fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
+    let (entity_id, name, value) = match cmd {
+        EntityCmd::ShaderSetFloat { entity_id, name, value } =>
+            (entity_id, name, UniformValue::Float(value)),
+        EntityCmd::ShaderSetInt { entity_id, name, value } =>
+            (entity_id, name, UniformValue::Int(value)),
+        EntityCmd::ShaderSetVec2 { entity_id, name, x, y } =>
+            (entity_id, name, UniformValue::Vec2 { x, y }),
+        EntityCmd::ShaderSetVec4 { entity_id, name, x, y, z, w } =>
+            (entity_id, name, UniformValue::Vec4 { x, y, z, w }),
+        _ => unreachable!(),
+    };
+    let entity = Entity::from_bits(entity_id);
+    if let Ok(mut shader) = queries.shaders.get_mut(entity) {
+        shader.uniforms.insert(Arc::from(name), value);
     }
 }
 
