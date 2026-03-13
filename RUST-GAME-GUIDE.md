@@ -561,6 +561,9 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled { up_velocity, down_velocity, left_velocity, right_velocity }` |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
+| `Timer` | `Timer::new(duration_secs, callback as TimerCallback)` — **must cast** |
+| `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b", callback as CollisionCallback)` — **must cast** |
 
 ### Spawning context: GameCtx vs. raw hooks
 
@@ -698,16 +701,12 @@ type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
 **Creating a timer:**
 
 ```rust
-use aberredengine::components::timer::Timer;
+use aberredengine::components::timer::{Timer, TimerCallback};
 
 // Spawn an entity with a 2-second repeating timer
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
-    Timer {
-        duration: 2.0,
-        elapsed: 0.0,
-        callback: on_timer_fire,
-    },
+    Timer::new(2.0, on_timer_fire as TimerCallback),
 ));
 
 fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -716,9 +715,16 @@ fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
 }
 ```
 
-**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback:
+> **Warning:** The `as TimerCallback` cast is required. `Timer<C>` is generic — without the cast, Rust infers `C` from the specific function item type rather than the `TimerCallback` alias. The `update_timers` system queries `Query<(Entity, &mut Timer)>` (which expands to `Timer<TimerCallback>`), so it will **never find the entity** and the timer will silently never fire.
+
+**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback. Remember to use the `as TimerCallback` cast when spawning:
 
 ```rust
+ctx.commands.spawn((
+    MapPosition::new(0.0, 0.0),
+    Timer::new(5.0, one_shot_callback as TimerCallback),
+));
+
 fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
     // Do the one-time action
     ctx.audio.write(AudioCmd::PlayFx { id: "explosion".into() });
@@ -779,6 +785,16 @@ ctx.commands.spawn((
     // ... sprite, rigidbody, etc ...
     Phase::new("idle", phases),
 ));
+```
+
+`PhaseCallbackFns` derives `Default` (all callbacks `None`), so you can use `..Default::default()` when only some callbacks are needed:
+
+```rust
+// Equivalent to the "falling" entry above — only on_update is set
+phases.insert("falling".to_string(), PhaseCallbackFns {
+    on_update: Some(falling_update),
+    ..Default::default()
+});
 ```
 
 **Phase fields:**
@@ -869,14 +885,16 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 **Creating a collision rule:**
 
 ```rust
-use aberredengine::components::collision::{CollisionRule, BoxSide};
+use aberredengine::components::collision::{CollisionRule, CollisionCallback, BoxSide};
 use aberredengine::components::persistent::Persistent;
 
 ctx.commands.spawn((
-    CollisionRule::new("ball", "brick", ball_brick_collision),
+    CollisionRule::new("ball", "brick", ball_brick_collision as CollisionCallback),
     Persistent, // survive scene switches
 ));
 ```
+
+> **Warning:** The `as CollisionCallback` cast is required. `CollisionRule<C>` is generic — without the cast, Rust infers `C` from the specific function item type rather than the `CollisionCallback` alias. The `rust_collision_observer` queries `Query<&CollisionRule>` (which expands to `CollisionRule<CollisionCallback>`), so it will **never find the entity** and the callback will silently never fire.
 
 > **Note:** `CollisionRule` entities are regular entities — they get despawned on scene switch unless marked `Persistent`.
 
