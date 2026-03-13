@@ -50,9 +50,7 @@ use crate::systems::lua_commands::{
     process_camera_command, process_clone_command, process_entity_commands, process_phase_command,
     process_signal_command, process_spawn_command,
 };
-use crate::systems::phase_core::{
-    PhaseRunner, apply_callback_transitions, run_phase_callbacks,
-};
+use crate::systems::phase_core::{PhaseRunner, apply_callback_transitions, run_phase_callbacks};
 use log::{error, warn};
 
 fn build_phase_context(
@@ -67,7 +65,14 @@ fn build_phase_context(
         current: lua_phase.current.as_str(),
         time_in_phase: lua_phase.time_in_phase,
     });
-    build_entity_context(lua_runtime, entity, ctx_queries, cmd_queries, lua_phase_snapshot, previous_phase)
+    build_entity_context(
+        lua_runtime,
+        entity,
+        ctx_queries,
+        cmd_queries,
+        lua_phase_snapshot,
+        previous_phase,
+    )
 }
 
 /// Process the return value from a phase callback.
@@ -285,7 +290,7 @@ pub fn lua_phase_system(
 
     // Create input snapshot once for all callbacks this frame
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.create_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table for phase system: {}", e);
@@ -301,12 +306,7 @@ pub fn lua_phase_system(
         cmd_queries: &cmd_queries,
     };
 
-    run_phase_callbacks(
-        &mut query,
-        delta,
-        &mut callback_transitions,
-        &mut runner,
-    );
+    run_phase_callbacks(&mut query, delta, &mut callback_transitions, &mut runner);
 
     // Process phase commands from Lua (from engine.phase_transition calls)
     for cmd in lua_runtime.drain_phase_commands() {

@@ -31,11 +31,6 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::*;
-use raylib::ffi;
-use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
-use raylib::prelude::*;
-use rustc_hash::{FxHashMap, FxHashSet};
 use crate::components::group::Group;
 use crate::components::luaphase::LuaPhase;
 use crate::components::mapposition::MapPosition;
@@ -67,8 +62,13 @@ use crate::systems::lua_commands::{
     process_input_command, process_phase_command, process_render_command, process_signal_command,
     process_spawn_command, process_tilemap_command,
 };
+use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{error, info};
+use raylib::ffi;
+use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
+use raylib::prelude::*;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
 #[derive(SystemParam)]
@@ -305,7 +305,6 @@ pub fn enter_play(
             .get("switch_scene")
             .expect("switch_scene system not found"),
     );
-
 }
 
 /// Drains and processes the 11 command queues that are common to both [`update`] and
@@ -394,7 +393,7 @@ pub fn update(
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.create_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table: {}", e);
@@ -511,5 +510,4 @@ pub fn switch_scene(
 
     // Refresh the config cache after the drain may have applied GameConfigCmds.
     lua_runtime.update_gameconfig_cache(&scene_state.config);
-
 }

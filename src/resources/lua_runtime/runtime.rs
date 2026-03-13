@@ -127,6 +127,61 @@ pub struct CollisionCtxTables {
     pub sides_b: LuaTable,
 }
 
+/// Registry keys for a pooled input callback table.
+///
+/// Created once during LuaRuntime initialization and reused for scene, phase,
+/// and timer callbacks.
+struct InputCtxPool {
+    input: LuaRegistryKey,
+    digital: LuaRegistryKey,
+    analog: LuaRegistryKey,
+    up: LuaRegistryKey,
+    down: LuaRegistryKey,
+    left: LuaRegistryKey,
+    right: LuaRegistryKey,
+    action_1: LuaRegistryKey,
+    action_2: LuaRegistryKey,
+    action_3: LuaRegistryKey,
+    back: LuaRegistryKey,
+    special: LuaRegistryKey,
+    main_up: LuaRegistryKey,
+    main_down: LuaRegistryKey,
+    main_left: LuaRegistryKey,
+    main_right: LuaRegistryKey,
+    secondary_up: LuaRegistryKey,
+    secondary_down: LuaRegistryKey,
+    secondary_left: LuaRegistryKey,
+    secondary_right: LuaRegistryKey,
+    debug: LuaRegistryKey,
+    fullscreen: LuaRegistryKey,
+}
+
+/// Borrowed references to the pooled input callback table.
+pub struct InputCtxTables {
+    pub input: LuaTable,
+    pub digital: LuaTable,
+    pub analog: LuaTable,
+    pub up: LuaTable,
+    pub down: LuaTable,
+    pub left: LuaTable,
+    pub right: LuaTable,
+    pub action_1: LuaTable,
+    pub action_2: LuaTable,
+    pub action_3: LuaTable,
+    pub back: LuaTable,
+    pub special: LuaTable,
+    pub main_up: LuaTable,
+    pub main_down: LuaTable,
+    pub main_left: LuaTable,
+    pub main_right: LuaTable,
+    pub secondary_up: LuaTable,
+    pub secondary_down: LuaTable,
+    pub secondary_left: LuaTable,
+    pub secondary_right: LuaTable,
+    pub debug: LuaTable,
+    pub fullscreen: LuaTable,
+}
+
 /// Registry keys for pooled entity context tables.
 /// Created once during LuaRuntime initialization, reused for phase/timer callbacks.
 struct EntityCtxPool {
@@ -171,6 +226,8 @@ pub struct LuaRuntime {
     collision_ctx_pool: Option<CollisionCtxPool>,
     /// Pooled entity context tables for reuse across phase/timer callbacks.
     entity_ctx_pool: Option<EntityCtxPool>,
+    /// Pooled input callback table reused across Lua callback sites.
+    input_ctx_pool: Option<InputCtxPool>,
 }
 
 /// Converts an [`InputAction`] to its canonical Lua-facing string name.
@@ -270,10 +327,14 @@ impl LuaRuntime {
         // Create entity context pool for table reuse (LuaPhase/LuaTimer)
         let entity_ctx_pool = Some(Self::create_entity_ctx_pool(&lua)?);
 
+        // Create input callback table pool for scene/phase/timer callbacks
+        let input_ctx_pool = Some(Self::create_input_ctx_pool(&lua)?);
+
         let runtime = Self {
             lua,
             collision_ctx_pool,
             entity_ctx_pool,
+            input_ctx_pool,
         };
         runtime.register_base_api()?;
         runtime.register_asset_api()?;
@@ -450,6 +511,124 @@ impl LuaRuntime {
         })
     }
 
+    /// Creates the pooled input callback tables.
+    fn create_input_ctx_pool(lua: &Lua) -> LuaResult<InputCtxPool> {
+        let input = lua.create_table()?;
+        let digital = lua.create_table()?;
+        let analog = lua.create_table()?;
+
+        let up = lua.create_table()?;
+        let down = lua.create_table()?;
+        let left = lua.create_table()?;
+        let right = lua.create_table()?;
+        let action_1 = lua.create_table()?;
+        let action_2 = lua.create_table()?;
+        let action_3 = lua.create_table()?;
+        let back = lua.create_table()?;
+        let special = lua.create_table()?;
+        let main_up = lua.create_table()?;
+        let main_down = lua.create_table()?;
+        let main_left = lua.create_table()?;
+        let main_right = lua.create_table()?;
+        let secondary_up = lua.create_table()?;
+        let secondary_down = lua.create_table()?;
+        let secondary_left = lua.create_table()?;
+        let secondary_right = lua.create_table()?;
+        let debug = lua.create_table()?;
+        let fullscreen = lua.create_table()?;
+
+        digital.set("up", up.clone())?;
+        digital.set("down", down.clone())?;
+        digital.set("left", left.clone())?;
+        digital.set("right", right.clone())?;
+        digital.set("action_1", action_1.clone())?;
+        digital.set("action_2", action_2.clone())?;
+        digital.set("action_3", action_3.clone())?;
+        digital.set("back", back.clone())?;
+        digital.set("special", special.clone())?;
+        digital.set("main_up", main_up.clone())?;
+        digital.set("main_down", main_down.clone())?;
+        digital.set("main_left", main_left.clone())?;
+        digital.set("main_right", main_right.clone())?;
+        digital.set("secondary_up", secondary_up.clone())?;
+        digital.set("secondary_down", secondary_down.clone())?;
+        digital.set("secondary_left", secondary_left.clone())?;
+        digital.set("secondary_right", secondary_right.clone())?;
+        digital.set("debug", debug.clone())?;
+        digital.set("fullscreen", fullscreen.clone())?;
+
+        input.set("digital", digital.clone())?;
+        input.set("analog", analog.clone())?;
+
+        Ok(InputCtxPool {
+            input: lua.create_registry_value(input)?,
+            digital: lua.create_registry_value(digital)?,
+            analog: lua.create_registry_value(analog)?,
+            up: lua.create_registry_value(up)?,
+            down: lua.create_registry_value(down)?,
+            left: lua.create_registry_value(left)?,
+            right: lua.create_registry_value(right)?,
+            action_1: lua.create_registry_value(action_1)?,
+            action_2: lua.create_registry_value(action_2)?,
+            action_3: lua.create_registry_value(action_3)?,
+            back: lua.create_registry_value(back)?,
+            special: lua.create_registry_value(special)?,
+            main_up: lua.create_registry_value(main_up)?,
+            main_down: lua.create_registry_value(main_down)?,
+            main_left: lua.create_registry_value(main_left)?,
+            main_right: lua.create_registry_value(main_right)?,
+            secondary_up: lua.create_registry_value(secondary_up)?,
+            secondary_down: lua.create_registry_value(secondary_down)?,
+            secondary_left: lua.create_registry_value(secondary_left)?,
+            secondary_right: lua.create_registry_value(secondary_right)?,
+            debug: lua.create_registry_value(debug)?,
+            fullscreen: lua.create_registry_value(fullscreen)?,
+        })
+    }
+
+    /// Returns the pooled input callback tables for reuse.
+    pub fn get_input_ctx_pool(&self) -> LuaResult<InputCtxTables> {
+        let pool = self
+            .input_ctx_pool
+            .as_ref()
+            .ok_or_else(|| LuaError::runtime("Input context pool not initialized"))?;
+
+        Ok(InputCtxTables {
+            input: self.lua.registry_value(&pool.input)?,
+            digital: self.lua.registry_value(&pool.digital)?,
+            analog: self.lua.registry_value(&pool.analog)?,
+            up: self.lua.registry_value(&pool.up)?,
+            down: self.lua.registry_value(&pool.down)?,
+            left: self.lua.registry_value(&pool.left)?,
+            right: self.lua.registry_value(&pool.right)?,
+            action_1: self.lua.registry_value(&pool.action_1)?,
+            action_2: self.lua.registry_value(&pool.action_2)?,
+            action_3: self.lua.registry_value(&pool.action_3)?,
+            back: self.lua.registry_value(&pool.back)?,
+            special: self.lua.registry_value(&pool.special)?,
+            main_up: self.lua.registry_value(&pool.main_up)?,
+            main_down: self.lua.registry_value(&pool.main_down)?,
+            main_left: self.lua.registry_value(&pool.main_left)?,
+            main_right: self.lua.registry_value(&pool.main_right)?,
+            secondary_up: self.lua.registry_value(&pool.secondary_up)?,
+            secondary_down: self.lua.registry_value(&pool.secondary_down)?,
+            secondary_left: self.lua.registry_value(&pool.secondary_left)?,
+            secondary_right: self.lua.registry_value(&pool.secondary_right)?,
+            debug: self.lua.registry_value(&pool.debug)?,
+            fullscreen: self.lua.registry_value(&pool.fullscreen)?,
+        })
+    }
+
+    fn update_button_table(
+        table: &LuaTable,
+        state: &super::input_snapshot::DigitalButtonState,
+    ) -> LuaResult<()> {
+        table.set("pressed", state.pressed)?;
+        table.set("just_pressed", state.just_pressed)?;
+        table.set("just_released", state.just_released)?;
+        Ok(())
+    }
+
     /// Builds a Lua table representing the full input state for this frame.
     ///
     /// The returned table has the following shape:
@@ -472,83 +651,48 @@ impl LuaRuntime {
     /// }
     /// ```
     pub fn create_input_table(&self, snapshot: &InputSnapshot) -> LuaResult<LuaTable> {
-        let lua = &self.lua;
+        self.update_input_table(snapshot)
+    }
 
-        // Helper to create a button state table
-        let create_button_table =
-            |state: &super::input_snapshot::DigitalButtonState| -> LuaResult<LuaTable> {
-                let table = lua.create_table()?;
-                table.set("pressed", state.pressed)?;
-                table.set("just_pressed", state.just_pressed)?;
-                table.set("just_released", state.just_released)?;
-                Ok(table)
-            };
+    /// Updates the pooled input callback table in-place and returns it.
+    ///
+    /// The returned table is ephemeral and reused across callbacks. Lua code
+    /// should treat it as read-only callback data and not retain it across
+    /// frames.
+    pub fn update_input_table(&self, snapshot: &InputSnapshot) -> LuaResult<LuaTable> {
+        let tables = self.get_input_ctx_pool()?;
 
-        // Create digital inputs table
-        let digital = lua.create_table()?;
-        digital.set("up", create_button_table(&snapshot.digital.up)?)?;
-        digital.set("down", create_button_table(&snapshot.digital.down)?)?;
-        digital.set("left", create_button_table(&snapshot.digital.left)?)?;
-        digital.set("right", create_button_table(&snapshot.digital.right)?)?;
-        digital.set("action_1", create_button_table(&snapshot.digital.action_1)?)?;
-        digital.set("action_2", create_button_table(&snapshot.digital.action_2)?)?;
-        digital.set("action_3", create_button_table(&snapshot.digital.action_3)?)?;
-        digital.set("back", create_button_table(&snapshot.digital.back)?)?;
-        digital.set("special", create_button_table(&snapshot.digital.special)?)?;
-        // Raw WASD (main directional)
-        digital.set("main_up", create_button_table(&snapshot.digital.main_up)?)?;
-        digital.set(
-            "main_down",
-            create_button_table(&snapshot.digital.main_down)?,
-        )?;
-        digital.set(
-            "main_left",
-            create_button_table(&snapshot.digital.main_left)?,
-        )?;
-        digital.set(
-            "main_right",
-            create_button_table(&snapshot.digital.main_right)?,
-        )?;
-        // Raw arrow keys (secondary directional)
-        digital.set(
-            "secondary_up",
-            create_button_table(&snapshot.digital.secondary_up)?,
-        )?;
-        digital.set(
-            "secondary_down",
-            create_button_table(&snapshot.digital.secondary_down)?,
-        )?;
-        digital.set(
-            "secondary_left",
-            create_button_table(&snapshot.digital.secondary_left)?,
-        )?;
-        digital.set(
-            "secondary_right",
-            create_button_table(&snapshot.digital.secondary_right)?,
-        )?;
-        // Function keys
-        digital.set("debug", create_button_table(&snapshot.digital.debug)?)?;
-        digital.set(
-            "fullscreen",
-            create_button_table(&snapshot.digital.fullscreen)?,
-        )?;
+        Self::update_button_table(&tables.up, &snapshot.digital.up)?;
+        Self::update_button_table(&tables.down, &snapshot.digital.down)?;
+        Self::update_button_table(&tables.left, &snapshot.digital.left)?;
+        Self::update_button_table(&tables.right, &snapshot.digital.right)?;
+        Self::update_button_table(&tables.action_1, &snapshot.digital.action_1)?;
+        Self::update_button_table(&tables.action_2, &snapshot.digital.action_2)?;
+        Self::update_button_table(&tables.action_3, &snapshot.digital.action_3)?;
+        Self::update_button_table(&tables.back, &snapshot.digital.back)?;
+        Self::update_button_table(&tables.special, &snapshot.digital.special)?;
+        Self::update_button_table(&tables.main_up, &snapshot.digital.main_up)?;
+        Self::update_button_table(&tables.main_down, &snapshot.digital.main_down)?;
+        Self::update_button_table(&tables.main_left, &snapshot.digital.main_left)?;
+        Self::update_button_table(&tables.main_right, &snapshot.digital.main_right)?;
+        Self::update_button_table(&tables.secondary_up, &snapshot.digital.secondary_up)?;
+        Self::update_button_table(&tables.secondary_down, &snapshot.digital.secondary_down)?;
+        Self::update_button_table(&tables.secondary_left, &snapshot.digital.secondary_left)?;
+        Self::update_button_table(&tables.secondary_right, &snapshot.digital.secondary_right)?;
+        Self::update_button_table(&tables.debug, &snapshot.digital.debug)?;
+        Self::update_button_table(&tables.fullscreen, &snapshot.digital.fullscreen)?;
 
-        // Create analog inputs table
-        let analog = lua.create_table()?;
-        analog.set("scroll_y", snapshot.analog.scroll_y)?;
-        // Mouse position — game-space (letterbox-corrected, matches ScreenPosition)
-        analog.set("mouse_x", snapshot.analog.mouse_x)?;
-        analog.set("mouse_y", snapshot.analog.mouse_y)?;
-        // Mouse position — world-space (after camera transform, matches MapPosition)
-        analog.set("mouse_world_x", snapshot.analog.mouse_world_x)?;
-        analog.set("mouse_world_y", snapshot.analog.mouse_world_y)?;
+        tables.analog.set("scroll_y", snapshot.analog.scroll_y)?;
+        tables.analog.set("mouse_x", snapshot.analog.mouse_x)?;
+        tables.analog.set("mouse_y", snapshot.analog.mouse_y)?;
+        tables
+            .analog
+            .set("mouse_world_x", snapshot.analog.mouse_world_x)?;
+        tables
+            .analog
+            .set("mouse_world_y", snapshot.analog.mouse_world_y)?;
 
-        // Create root input table
-        let input = lua.create_table()?;
-        input.set("digital", digital)?;
-        input.set("analog", analog)?;
-
-        Ok(input)
+        Ok(tables.input)
     }
 
     /// Loads and executes a Lua script from a file path.
@@ -610,5 +754,53 @@ impl LuaRuntime {
 impl Default for LuaRuntime {
     fn default() -> Self {
         Self::new().expect("Failed to create Lua runtime")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pooled_input_table_updates_values() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut snapshot = InputSnapshot::default();
+        snapshot.digital.action_1.pressed = true;
+        snapshot.digital.action_1.just_pressed = true;
+        snapshot.analog.mouse_x = 12.5;
+        snapshot.analog.mouse_world_y = -4.0;
+
+        let input = runtime.update_input_table(&snapshot).unwrap();
+        let digital: LuaTable = input.get("digital").unwrap();
+        let action_1: LuaTable = digital.get("action_1").unwrap();
+        let analog: LuaTable = input.get("analog").unwrap();
+
+        assert!(action_1.get::<bool>("pressed").unwrap());
+        assert!(action_1.get::<bool>("just_pressed").unwrap());
+        assert_eq!(analog.get::<f32>("mouse_x").unwrap(), 12.5);
+        assert_eq!(analog.get::<f32>("mouse_world_y").unwrap(), -4.0);
+    }
+
+    #[test]
+    fn pooled_input_table_reuses_same_lua_table() {
+        let runtime = LuaRuntime::new().unwrap();
+        let first = runtime
+            .update_input_table(&InputSnapshot::default())
+            .unwrap();
+
+        let mut snapshot = InputSnapshot::default();
+        snapshot.digital.back.just_pressed = true;
+        let second = runtime.update_input_table(&snapshot).unwrap();
+
+        let globals = runtime.lua().globals();
+        globals.set("first_input", first).unwrap();
+        globals.set("second_input", second).unwrap();
+
+        let same_identity = runtime
+            .lua()
+            .load("return first_input == second_input")
+            .eval::<bool>()
+            .unwrap();
+        assert!(same_identity);
     }
 }

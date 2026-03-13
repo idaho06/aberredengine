@@ -77,7 +77,9 @@ pub fn update_lua_timers(
     mut commands: Commands,
 ) {
     let delta = world_time.delta;
-    let mut runner = LuaTimerRunner { commands: &mut commands };
+    let mut runner = LuaTimerRunner {
+        commands: &mut commands,
+    };
     run_timer_update(delta, &mut query, &mut runner);
 }
 
@@ -95,7 +97,14 @@ fn build_timer_context(
             current: p.current.as_str(),
             time_in_phase: p.time_in_phase,
         });
-    build_entity_context(lua_runtime, entity, ctx_queries, cmd_queries, lua_phase_snapshot, None)
+    build_entity_context(
+        lua_runtime,
+        entity,
+        ctx_queries,
+        cmd_queries,
+        lua_phase_snapshot,
+        None,
+    )
 }
 
 /// Observer that handles Lua timer events by calling Lua functions.
@@ -138,7 +147,7 @@ pub fn lua_timer_observer(
 
     // Create input snapshot and table
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.create_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table for timer callback: {}", e);
