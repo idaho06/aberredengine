@@ -9,7 +9,7 @@ use bevy_ecs::prelude::Component;
 /// Rotation angle in degrees for 2D rendering.
 ///
 /// Positive values rotate clockwise. Used by the render system when drawing
-/// sprites and can be animated via [`TweenRotation`](super::tween::TweenRotation).
+/// sprites and can be animated via `Tween<Rotation>`.
 #[derive(Component, Clone, Debug, Copy, Default)]
 pub struct Rotation {
     pub degrees: f32,

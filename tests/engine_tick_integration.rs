@@ -25,9 +25,7 @@ use aberredengine::components::sprite::Sprite;
 use aberredengine::components::stuckto::StuckTo;
 use aberredengine::components::timer::{Timer, TimerCallback};
 use aberredengine::components::ttl::Ttl;
-use aberredengine::components::tween::{
-    Easing, LoopMode, TweenPosition, TweenRotation, TweenScale,
-};
+use aberredengine::components::tween::{Easing, LoopMode, Tween};
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
@@ -58,9 +56,7 @@ use aberredengine::systems::stuckto::stuck_to_entity_system;
 use aberredengine::systems::time::update_world_time;
 use aberredengine::systems::timer::{timer_observer, update_timers};
 use aberredengine::systems::ttl::ttl_system;
-use aberredengine::systems::tween::{
-    tween_mapposition_system, tween_rotation_system, tween_scale_system,
-};
+use aberredengine::systems::tween::tween_system;
 
 const EPSILON: f32 = 1e-6;
 
@@ -729,19 +725,19 @@ fn animation_controller_skips_tex_key_when_animation_not_in_store() {
 
 fn tick_tween_position(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(tween_mapposition_system);
+    schedule.add_systems(tween_system::<MapPosition>);
     schedule.run(world);
 }
 
 fn tick_tween_rotation(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(tween_rotation_system);
+    schedule.add_systems(tween_system::<Rotation>);
     schedule.run(world);
 }
 
 fn tick_tween_scale(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(tween_scale_system);
+    schedule.add_systems(tween_system::<Scale>);
     schedule.run(world);
 }
 
@@ -749,9 +745,9 @@ fn tick_tween_scale(world: &mut World) {
 fn tween_position_interpolates_linearly() {
     let mut world = make_world(0.5); // 0.5 second delta
 
-    let tween = TweenPosition::new(
-        Vector2 { x: 0.0, y: 0.0 },
-        Vector2 { x: 100.0, y: 200.0 },
+    let tween = Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 100.0, y: 200.0 }),
         1.0, // 1 second duration
     );
 
@@ -768,9 +764,9 @@ fn tween_position_interpolates_linearly() {
 fn tween_position_stops_at_end_with_once_mode() {
     let mut world = make_world(1.0);
 
-    let tween = TweenPosition::new(
-        Vector2 { x: 0.0, y: 0.0 },
-        Vector2 { x: 100.0, y: 0.0 },
+    let tween = Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
         0.5, // Half second duration
     )
     .with_loop_mode(LoopMode::Once);
@@ -780,7 +776,7 @@ fn tween_position_stops_at_end_with_once_mode() {
     tick_tween_position(&mut world);
 
     let pos = world.get::<MapPosition>(entity).unwrap();
-    let tween = world.get::<TweenPosition>(entity).unwrap();
+    let tween = world.get::<Tween<MapPosition>>(entity).unwrap();
     assert!(approx_eq(pos.pos.x, 100.0)); // At end
     assert!(!tween.playing); // Stopped
 }
@@ -789,9 +785,9 @@ fn tween_position_stops_at_end_with_once_mode() {
 fn tween_position_loops_with_loop_mode() {
     let mut world = make_world(0.6);
 
-    let tween = TweenPosition::new(
-        Vector2 { x: 0.0, y: 0.0 },
-        Vector2 { x: 100.0, y: 0.0 },
+    let tween = Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
         0.5,
     )
     .with_loop_mode(LoopMode::Loop);
@@ -800,7 +796,7 @@ fn tween_position_loops_with_loop_mode() {
 
     tick_tween_position(&mut world);
 
-    let tween = world.get::<TweenPosition>(entity).unwrap();
+    let tween = world.get::<Tween<MapPosition>>(entity).unwrap();
     assert!(tween.playing); // Still playing
     assert!(tween.time < 0.5); // Wrapped around
 }
@@ -809,9 +805,9 @@ fn tween_position_loops_with_loop_mode() {
 fn tween_position_pingpong_reverses() {
     let mut world = make_world(0.6);
 
-    let tween = TweenPosition::new(
-        Vector2 { x: 0.0, y: 0.0 },
-        Vector2 { x: 100.0, y: 0.0 },
+    let tween = Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
         0.5,
     )
     .with_loop_mode(LoopMode::PingPong);
@@ -820,7 +816,7 @@ fn tween_position_pingpong_reverses() {
 
     tick_tween_position(&mut world);
 
-    let tween = world.get::<TweenPosition>(entity).unwrap();
+    let tween = world.get::<Tween<MapPosition>>(entity).unwrap();
     assert!(tween.playing);
     assert!(!tween.forward); // Direction reversed
 }
@@ -829,7 +825,7 @@ fn tween_position_pingpong_reverses() {
 fn tween_rotation_interpolates() {
     let mut world = make_world(0.5);
 
-    let tween = TweenRotation::new(0.0, 180.0, 1.0);
+    let tween = Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0);
 
     let entity = world.spawn((Rotation { degrees: 0.0 }, tween)).id();
 
@@ -843,7 +839,7 @@ fn tween_rotation_interpolates() {
 fn tween_scale_interpolates() {
     let mut world = make_world(0.5);
 
-    let tween = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 3.0 }, 1.0);
+    let tween = Tween::new(Scale::new(1.0, 1.0), Scale::new(2.0, 3.0), 1.0);
 
     let entity = world.spawn((Scale::new(1.0, 1.0), tween)).id();
 
@@ -858,9 +854,9 @@ fn tween_scale_interpolates() {
 fn tween_position_with_quad_in_easing() {
     let mut world = make_world(0.5);
 
-    let tween = TweenPosition::new(
-        Vector2 { x: 0.0, y: 0.0 },
-        Vector2 { x: 100.0, y: 0.0 },
+    let tween = Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
         1.0,
     )
     .with_easing(Easing::QuadIn);

@@ -564,6 +564,77 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Timer` | `Timer::new(duration_secs, callback as TimerCallback)` — **must cast** |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::new("group_a", "group_b", callback as CollisionCallback)` — **must cast** |
+| `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
+| `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
+| `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
+
+### Tween components in Rust
+
+Tweens are now represented by a single generic component: `Tween<T>`.
+
+Use the target component type as `T`:
+
+- `Tween<MapPosition>` for position animation
+- `Tween<Rotation>` for rotation animation
+- `Tween<Scale>` for scale animation
+
+This replaces the older concrete Rust types such as `TweenPosition`, `TweenRotation`, and `TweenScale`.
+
+`EngineBuilder` already registers the built-in tween systems for these three component types, so in normal game code you only need to spawn the tween component itself.
+
+**Position tween example:**
+
+```rust
+use aberredengine::components::mapposition::MapPosition;
+use aberredengine::components::tween::{Easing, LoopMode, Tween};
+use raylib::prelude::Vector2;
+
+ctx.commands.spawn((
+    MapPosition::new(0.0, 0.0),
+    Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 200.0, y: 120.0 }),
+        1.5,
+    )
+    .with_easing(Easing::CubicOut)
+    .with_loop_mode(LoopMode::PingPong),
+));
+```
+
+**Rotation tween example:**
+
+```rust
+use aberredengine::components::rotation::Rotation;
+use aberredengine::components::tween::Tween;
+
+ctx.commands.spawn((
+    Rotation { degrees: 0.0 },
+    Tween::new(
+        Rotation { degrees: 0.0 },
+        Rotation { degrees: 360.0 },
+        2.0,
+    ),
+));
+```
+
+**Scale tween example:**
+
+```rust
+use aberredengine::components::scale::Scale;
+use aberredengine::components::tween::Tween;
+
+ctx.commands.spawn((
+    Scale::new(1.0, 1.0),
+    Tween::new(
+        Scale::new(1.0, 1.0),
+        Scale::new(1.5, 0.75),
+        0.75,
+    )
+    .with_backwards(),
+));
+```
+
+> **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vector2>`. The tween systems query concrete ECS component types, not raw value types.
 
 ### Spawning context: GameCtx vs. raw hooks
 

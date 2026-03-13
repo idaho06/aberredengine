@@ -41,7 +41,10 @@ use std::path::PathBuf;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 
+use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
+use crate::components::rotation::Rotation;
+use crate::components::scale::Scale;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::switch_debug_observer;
@@ -98,9 +101,7 @@ use crate::systems::stuckto::stuck_to_entity_system;
 use crate::systems::time::update_world_time;
 use crate::systems::timer::{timer_observer, update_timers};
 use crate::systems::ttl::ttl_system;
-use crate::systems::tween::tween_mapposition_system;
-use crate::systems::tween::tween_rotation_system;
-use crate::systems::tween::tween_scale_system;
+use crate::systems::tween::tween_system;
 
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
@@ -515,18 +516,18 @@ impl EngineBuilder {
         update.add_systems(input_acceleration_controller);
         update.add_systems(mouse_controller);
         update.add_systems(stuck_to_entity_system.after(collision_detector));
-        update.add_systems(tween_mapposition_system);
-        update.add_systems(tween_rotation_system);
-        update.add_systems(tween_scale_system);
+        update.add_systems(tween_system::<MapPosition>);
+        update.add_systems(tween_system::<Rotation>);
+        update.add_systems(tween_system::<Scale>);
         update.add_systems(particle_emitter_system.before(movement));
         update.add_systems(movement);
         update.add_systems(ttl_system.after(movement));
         update.add_systems(
             propagate_transforms
                 .after(movement)
-                .after(tween_mapposition_system)
-                .after(tween_rotation_system)
-                .after(tween_scale_system)
+                .after(tween_system::<MapPosition>)
+                .after(tween_system::<Rotation>)
+                .after(tween_system::<Scale>)
                 .before(collision_detector),
         );
         update.add_systems(

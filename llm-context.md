@@ -82,7 +82,7 @@ src/
 │   ├── dynamictext.rs         # Text rendering component with cached size
 │   ├── entityshader.rs        # Per-entity shader for custom rendering effects
 │   ├── signalbinding.rs       # Bind text to world signals
-│   ├── tween.rs               # TweenPosition, TweenRotation, TweenScale
+│   ├── tween.rs               # Generic Tween<T> component + TweenValue impls for MapPosition/Rotation/Scale
 │   ├── luatimer.rs            # [feature=lua] LuaTimer type alias = Timer<LuaTimerCallback>; LuaTimerCallback { name: String }
 │   ├── timer.rs               # Generic Timer<C = TimerCallback> component; TimerCallback fn-pointer type alias
 │   ├── stuckto.rs             # Attach entity to another
@@ -271,7 +271,7 @@ Phase<C = PhaseCallbackFns> { current: String, previous: Option<String>, next: O
 LuaPhase = Phase<PhaseCallbacks>   -- type alias; PhaseCallbacks { on_enter: Option<String>, on_update: Option<String>, on_exit: Option<String> }
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
-TweenPosition/TweenRotation/TweenScale { from, to, duration, elapsed, easing, loop_mode }
+Tween<T> { from: T, to: T, duration, easing, loop_mode, playing, time, forward }  -- used as Tween<MapPosition>, Tween<Rotation>, Tween<Scale>
 Timer<C = TimerCallback> { duration: f32, elapsed: f32, callback: C }
   TimerCallback = fn(Entity, &mut GameCtx, &InputState)
 LuaTimer = Timer<LuaTimerCallback>   -- type alias; LuaTimerCallback { name: String }
@@ -445,7 +445,7 @@ Ordering constraints (see engine_app.rs for authoritative schedule):
 
 ```
 particle_emitter_system.before(movement)
-propagate_transforms.after(movement, tween_*).before(collision_detector)
+propagate_transforms.after(movement, tween_system::<MapPosition/Rotation/Scale>).before(collision_detector)
 cleanup_orphaned_global_transforms.after(propagate_transforms).before(collision_detector)
 camera_follow_system.after(propagate_transforms).before(render_system)
 collision_detector.after(mouse_controller, movement)

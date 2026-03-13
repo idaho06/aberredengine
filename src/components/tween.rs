@@ -1,16 +1,23 @@
-//! Tween components for animated interpolation.
+//! Generic tween components for animated interpolation.
 //!
-//! This module provides components for smoothly animating entity properties
-//! over time:
-//! - [`TweenPosition`] – animate [`MapPosition`](super::mapposition::MapPosition)
-//! - [`TweenRotation`] – animate [`Rotation`](super::rotation::Rotation)
-//! - [`TweenScale`] – animate [`Scale`](super::scale::Scale)
+//! This module provides a shared [`Tween<T>`] component for smoothly animating
+//! entity properties over time:
+//! - `Tween<MapPosition>` – animate [`MapPosition`](super::mapposition::MapPosition)
+//! - `Tween<Rotation>` – animate [`Rotation`](super::rotation::Rotation)
+//! - `Tween<Scale>` – animate [`Scale`](super::scale::Scale)
 //!
 //! Each tween supports multiple [`Easing`] functions and [`LoopMode`] settings.
 //! See [`crate::systems::tween`] for the update systems.
 
+use std::fmt::Debug;
+
+use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
+
+use crate::components::mapposition::MapPosition;
+use crate::components::rotation::Rotation;
+use crate::components::scale::Scale;
 
 /// Determines how a tween behaves when it reaches the end.
 #[derive(Copy, Clone, Debug)]
@@ -77,16 +84,54 @@ impl std::str::FromStr for Easing {
     }
 }
 
-/// Animates an entity's [`MapPosition`](super::mapposition::MapPosition) between two points.
+fn lerp_v2(a: Vector2, b: Vector2, t: f32) -> Vector2 {
+    Vector2 {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+    }
+}
+
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Value trait for tweenable ECS components.
 ///
-/// The tween interpolates `from` to `to` over `duration` seconds using the
-/// specified `easing` function and `loop_mode`.
+/// Implementors define how to interpolate between two component values for a
+/// normalized time `t` in the range `[0.0, 1.0]`.
+pub trait TweenValue: Component<Mutability = Mutable> + Clone + Debug {
+    fn interpolate(from: &Self, to: &Self, t: f32) -> Self;
+}
+
+impl TweenValue for MapPosition {
+    fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
+        Self::from_vec(lerp_v2(from.pos, to.pos, t))
+    }
+}
+
+impl TweenValue for Rotation {
+    fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
+        Self {
+            degrees: lerp_f32(from.degrees, to.degrees, t),
+        }
+    }
+}
+
+impl TweenValue for Scale {
+    fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
+        Self {
+            scale: lerp_v2(from.scale, to.scale, t),
+        }
+    }
+}
+
+/// Generic tween component for interpolating between two component values.
 #[derive(Component, Clone, Debug)]
-pub struct TweenPosition {
-    /// Starting position.
-    pub from: Vector2,
-    /// Ending position.
-    pub to: Vector2,
+pub struct Tween<T: TweenValue> {
+    /// Starting value.
+    pub from: T,
+    /// Ending value.
+    pub to: T,
     /// Duration in seconds.
     pub duration: f32,
     /// Easing function to use.
@@ -101,9 +146,9 @@ pub struct TweenPosition {
     pub forward: bool,
 }
 
-impl TweenPosition {
-    pub fn new(from: Vector2, to: Vector2, duration: f32) -> Self {
-        TweenPosition {
+impl<T: TweenValue> Tween<T> {
+    pub fn new(from: T, to: T, duration: f32) -> Self {
+        Self {
             from,
             to,
             duration,
@@ -114,115 +159,17 @@ impl TweenPosition {
             forward: true,
         }
     }
+
     pub fn with_easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
         self
     }
+
     pub fn with_loop_mode(mut self, loop_mode: LoopMode) -> Self {
         self.loop_mode = loop_mode;
         self
     }
-    pub fn with_backwards(mut self) -> Self {
-        self.time = self.duration;
-        self.forward = false;
-        self
-    }
-}
 
-/// Animates an entity's [`Rotation`](super::rotation::Rotation) between two angles.
-///
-/// The tween interpolates `from` to `to` (in degrees) over `duration` seconds.
-#[derive(Component, Clone, Debug)]
-pub struct TweenRotation {
-    /// Starting angle in degrees.
-    pub from: f32,
-    /// Ending angle in degrees.
-    pub to: f32,
-    /// Duration in seconds.
-    pub duration: f32,
-    /// Easing function to use.
-    pub easing: Easing,
-    /// Behavior when the tween ends.
-    pub loop_mode: LoopMode,
-    /// Whether the tween is currently playing.
-    pub playing: bool,
-    /// Current time within the tween.
-    pub time: f32,
-    /// Direction of playback (true = forward).
-    pub forward: bool,
-}
-impl TweenRotation {
-    pub fn new(from: f32, to: f32, duration: f32) -> Self {
-        TweenRotation {
-            from,
-            to,
-            duration,
-            easing: Easing::Linear,
-            loop_mode: LoopMode::Once,
-            playing: true,
-            time: 0.0,
-            forward: true,
-        }
-    }
-    pub fn with_easing(mut self, easing: Easing) -> Self {
-        self.easing = easing;
-        self
-    }
-    pub fn with_loop_mode(mut self, loop_mode: LoopMode) -> Self {
-        self.loop_mode = loop_mode;
-        self
-    }
-    pub fn with_backwards(mut self) -> Self {
-        self.time = self.duration;
-        self.forward = false;
-        self
-    }
-}
-
-/// Animates an entity's [`Scale`](super::scale::Scale) between two values.
-///
-/// The tween interpolates `from` to `to` over `duration` seconds.
-#[derive(Component, Clone, Debug)]
-pub struct TweenScale {
-    /// Starting scale.
-    pub from: Vector2,
-    /// Ending scale.
-    pub to: Vector2,
-    /// Duration in seconds.
-    pub duration: f32,
-    /// Easing function to use.
-    pub easing: Easing,
-    /// Behavior when the tween ends.
-    pub loop_mode: LoopMode,
-    /// Whether the tween is currently playing.
-    pub playing: bool,
-    /// Current time within the tween.
-    pub time: f32,
-    /// Direction of playback (true = forward).
-    pub forward: bool,
-}
-
-impl TweenScale {
-    pub fn new(from: Vector2, to: Vector2, duration: f32) -> Self {
-        TweenScale {
-            from,
-            to,
-            duration,
-            easing: Easing::Linear,
-            loop_mode: LoopMode::Once,
-            playing: true,
-            time: 0.0,
-            forward: true,
-        }
-    }
-    pub fn with_easing(mut self, easing: Easing) -> Self {
-        self.easing = easing;
-        self
-    }
-    pub fn with_loop_mode(mut self, loop_mode: LoopMode) -> Self {
-        self.loop_mode = loop_mode;
-        self
-    }
     pub fn with_backwards(mut self) -> Self {
         self.time = self.duration;
         self.forward = false;
@@ -244,16 +191,24 @@ mod tests {
         approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
     }
 
-    // ==================== TWEEN POSITION TESTS ====================
+    fn map_position(x: f32, y: f32) -> MapPosition {
+        MapPosition::from_vec(Vector2 { x, y })
+    }
+
+    fn scale(x: f32, y: f32) -> Scale {
+        Scale::new(x, y)
+    }
+
+    // ==================== GENERIC TWEEN TESTS ====================
 
     #[test]
-    fn test_tween_position_new() {
-        let from = Vector2 { x: 0.0, y: 0.0 };
-        let to = Vector2 { x: 100.0, y: 200.0 };
-        let tw = TweenPosition::new(from, to, 2.0);
+    fn test_tween_map_position_new() {
+        let from = map_position(0.0, 0.0);
+        let to = map_position(100.0, 200.0);
+        let tw: Tween<MapPosition> = Tween::new(from, to, 2.0);
 
-        assert!(vec_approx_eq(tw.from, from));
-        assert!(vec_approx_eq(tw.to, to));
+        assert!(vec_approx_eq(tw.from.pos, from.pos));
+        assert!(vec_approx_eq(tw.to.pos, to.pos));
         assert!(approx_eq(tw.duration, 2.0));
         assert!(matches!(tw.easing, Easing::Linear));
         assert!(matches!(tw.loop_mode, LoopMode::Once));
@@ -263,66 +218,51 @@ mod tests {
     }
 
     #[test]
-    fn test_tween_position_with_easing() {
-        let tw = TweenPosition::new(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 10.0, y: 10.0 },
-            1.0,
-        )
-        .with_easing(Easing::QuadIn);
+    fn test_tween_map_position_with_easing() {
+        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
+            .with_easing(Easing::QuadIn);
 
         assert!(matches!(tw.easing, Easing::QuadIn));
     }
 
     #[test]
-    fn test_tween_position_with_loop_mode() {
-        let tw = TweenPosition::new(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 10.0, y: 10.0 },
-            1.0,
-        )
-        .with_loop_mode(LoopMode::PingPong);
+    fn test_tween_map_position_with_loop_mode() {
+        let tw: Tween<MapPosition> =
+            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
+                .with_loop_mode(LoopMode::PingPong);
 
         assert!(matches!(tw.loop_mode, LoopMode::PingPong));
     }
 
     #[test]
-    fn test_tween_position_with_backwards() {
-        let tw = TweenPosition::new(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 10.0, y: 10.0 },
-            2.0,
-        )
-        .with_backwards();
+    fn test_tween_map_position_with_backwards() {
+        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 2.0)
+            .with_backwards();
 
-        assert!(approx_eq(tw.time, 2.0)); // time set to duration
+        assert!(approx_eq(tw.time, 2.0));
         assert!(!tw.forward);
     }
 
     #[test]
-    fn test_tween_position_builder_chaining() {
-        let tw = TweenPosition::new(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 10.0, y: 10.0 },
-            1.0,
-        )
-        .with_easing(Easing::CubicOut)
-        .with_loop_mode(LoopMode::Loop)
-        .with_backwards();
+    fn test_tween_map_position_builder_chaining() {
+        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
+            .with_easing(Easing::CubicOut)
+            .with_loop_mode(LoopMode::Loop)
+            .with_backwards();
 
         assert!(matches!(tw.easing, Easing::CubicOut));
         assert!(matches!(tw.loop_mode, LoopMode::Loop));
         assert!(!tw.forward);
     }
 
-    // ==================== TWEEN ROTATION TESTS ====================
-
     #[test]
     fn test_tween_rotation_new() {
-        let tw = TweenRotation::new(0.0, 360.0, 1.5);
+        let from = Rotation { degrees: 0.0 };
+        let to = Rotation { degrees: 360.0 };
+        let tw: Tween<Rotation> = Tween::new(from, to, 1.5);
 
-        assert!(approx_eq(tw.from, 0.0));
-        assert!(approx_eq(tw.to, 360.0));
+        assert!(approx_eq(tw.from.degrees, from.degrees));
+        assert!(approx_eq(tw.to.degrees, to.degrees));
         assert!(approx_eq(tw.duration, 1.5));
         assert!(matches!(tw.easing, Easing::Linear));
         assert!(matches!(tw.loop_mode, LoopMode::Once));
@@ -333,40 +273,45 @@ mod tests {
 
     #[test]
     fn test_tween_rotation_with_easing() {
-        let tw = TweenRotation::new(0.0, 180.0, 1.0).with_easing(Easing::QuadOut);
+        let tw: Tween<Rotation> =
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
+                .with_easing(Easing::QuadOut);
         assert!(matches!(tw.easing, Easing::QuadOut));
     }
 
     #[test]
     fn test_tween_rotation_with_loop_mode() {
-        let tw = TweenRotation::new(0.0, 180.0, 1.0).with_loop_mode(LoopMode::Loop);
+        let tw: Tween<Rotation> =
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
+                .with_loop_mode(LoopMode::Loop);
         assert!(matches!(tw.loop_mode, LoopMode::Loop));
     }
 
     #[test]
     fn test_tween_rotation_with_backwards() {
-        let tw = TweenRotation::new(0.0, 180.0, 3.0).with_backwards();
+        let tw: Tween<Rotation> =
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 3.0)
+                .with_backwards();
         assert!(approx_eq(tw.time, 3.0));
         assert!(!tw.forward);
     }
 
     #[test]
     fn test_tween_rotation_negative_angles() {
-        let tw = TweenRotation::new(-90.0, 90.0, 1.0);
-        assert!(approx_eq(tw.from, -90.0));
-        assert!(approx_eq(tw.to, 90.0));
+        let tw: Tween<Rotation> =
+            Tween::new(Rotation { degrees: -90.0 }, Rotation { degrees: 90.0 }, 1.0);
+        assert!(approx_eq(tw.from.degrees, -90.0));
+        assert!(approx_eq(tw.to.degrees, 90.0));
     }
-
-    // ==================== TWEEN SCALE TESTS ====================
 
     #[test]
     fn test_tween_scale_new() {
-        let from = Vector2 { x: 1.0, y: 1.0 };
-        let to = Vector2 { x: 2.0, y: 2.0 };
-        let tw = TweenScale::new(from, to, 0.5);
+        let from = scale(1.0, 1.0);
+        let to = scale(2.0, 2.0);
+        let tw: Tween<Scale> = Tween::new(from, to, 0.5);
 
-        assert!(vec_approx_eq(tw.from, from));
-        assert!(vec_approx_eq(tw.to, to));
+        assert!(vec_approx_eq(tw.from.scale, from.scale));
+        assert!(vec_approx_eq(tw.to.scale, to.scale));
         assert!(approx_eq(tw.duration, 0.5));
         assert!(matches!(tw.easing, Easing::Linear));
         assert!(matches!(tw.loop_mode, LoopMode::Once));
@@ -377,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_tween_scale_with_easing() {
-        let tw = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 2.0 }, 1.0)
+        let tw: Tween<Scale> = Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0)
             .with_easing(Easing::CubicInOut);
 
         assert!(matches!(tw.easing, Easing::CubicInOut));
@@ -385,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_tween_scale_with_loop_mode() {
-        let tw = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 2.0 }, 1.0)
+        let tw: Tween<Scale> = Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0)
             .with_loop_mode(LoopMode::PingPong);
 
         assert!(matches!(tw.loop_mode, LoopMode::PingPong));
@@ -393,8 +338,7 @@ mod tests {
 
     #[test]
     fn test_tween_scale_with_backwards() {
-        let tw = TweenScale::new(Vector2 { x: 1.0, y: 1.0 }, Vector2 { x: 2.0, y: 2.0 }, 4.0)
-            .with_backwards();
+        let tw: Tween<Scale> = Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 4.0).with_backwards();
 
         assert!(approx_eq(tw.time, 4.0));
         assert!(!tw.forward);
@@ -402,19 +346,40 @@ mod tests {
 
     #[test]
     fn test_tween_scale_non_uniform() {
-        let from = Vector2 { x: 1.0, y: 2.0 };
-        let to = Vector2 { x: 3.0, y: 0.5 };
-        let tw = TweenScale::new(from, to, 1.0);
+        let from = scale(1.0, 2.0);
+        let to = scale(3.0, 0.5);
+        let tw: Tween<Scale> = Tween::new(from, to, 1.0);
 
-        assert!(vec_approx_eq(tw.from, from));
-        assert!(vec_approx_eq(tw.to, to));
+        assert!(vec_approx_eq(tw.from.scale, from.scale));
+        assert!(vec_approx_eq(tw.to.scale, to.scale));
+    }
+
+    #[test]
+    fn test_map_position_interpolation() {
+        let mid = MapPosition::interpolate(&map_position(0.0, 0.0), &map_position(10.0, 20.0), 0.5);
+        assert!(vec_approx_eq(mid.pos, Vector2 { x: 5.0, y: 10.0 }));
+    }
+
+    #[test]
+    fn test_rotation_interpolation() {
+        let mid = Rotation::interpolate(
+            &Rotation { degrees: -90.0 },
+            &Rotation { degrees: 90.0 },
+            0.75,
+        );
+        assert!(approx_eq(mid.degrees, 45.0));
+    }
+
+    #[test]
+    fn test_scale_interpolation() {
+        let mid = Scale::interpolate(&scale(1.0, 2.0), &scale(3.0, 6.0), 0.5);
+        assert!(vec_approx_eq(mid.scale, Vector2 { x: 2.0, y: 4.0 }));
     }
 
     // ==================== EASING ENUM TESTS ====================
 
     #[test]
     fn test_easing_variants_exist() {
-        // Ensure all variants can be created
         let _linear = Easing::Linear;
         let _quad_in = Easing::QuadIn;
         let _quad_out = Easing::QuadOut;
@@ -427,7 +392,7 @@ mod tests {
     #[test]
     fn test_easing_is_copy() {
         let e1 = Easing::Linear;
-        let e2 = e1; // copy
+        let e2 = e1;
         assert!(matches!(e1, Easing::Linear));
         assert!(matches!(e2, Easing::Linear));
     }
@@ -444,7 +409,7 @@ mod tests {
     #[test]
     fn test_loop_mode_is_copy() {
         let l1 = LoopMode::PingPong;
-        let l2 = l1; // copy
+        let l2 = l1;
         assert!(matches!(l1, LoopMode::PingPong));
         assert!(matches!(l2, LoopMode::PingPong));
     }

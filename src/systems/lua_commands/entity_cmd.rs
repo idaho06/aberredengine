@@ -13,12 +13,13 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
+use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
-use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
+use crate::components::tween::{Easing, LoopMode, Tween};
 
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{EntityCmd, UniformValue};
@@ -251,9 +252,9 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             let entity = Entity::from_bits(entity_id);
             let parsed_easing = easing.parse::<Easing>().unwrap();
             let parsed_loop = loop_mode.parse::<LoopMode>().unwrap();
-            let mut tween = TweenPosition::new(
-                Vector2 { x: from_x, y: from_y },
-                Vector2 { x: to_x, y: to_y },
+            let mut tween = Tween::new(
+                MapPosition::from_vec(Vector2 { x: from_x, y: from_y }),
+                MapPosition::from_vec(Vector2 { x: to_x, y: to_y }),
                 duration,
             )
             .with_easing(parsed_easing)
@@ -275,9 +276,13 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             let entity = Entity::from_bits(entity_id);
             let parsed_easing = easing.parse::<Easing>().unwrap();
             let parsed_loop = loop_mode.parse::<LoopMode>().unwrap();
-            let mut tween = TweenRotation::new(from, to, duration)
-                .with_easing(parsed_easing)
-                .with_loop_mode(parsed_loop);
+            let mut tween = Tween::new(
+                Rotation { degrees: from },
+                Rotation { degrees: to },
+                duration,
+            )
+            .with_easing(parsed_easing)
+            .with_loop_mode(parsed_loop);
             if backwards {
                 tween = tween.with_backwards();
             }
@@ -297,9 +302,9 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             let entity = Entity::from_bits(entity_id);
             let parsed_easing = easing.parse::<Easing>().unwrap();
             let parsed_loop = loop_mode.parse::<LoopMode>().unwrap();
-            let mut tween = TweenScale::new(
-                Vector2 { x: from_x, y: from_y },
-                Vector2 { x: to_x, y: to_y },
+            let mut tween = Tween::new(
+                Scale::new(from_x, from_y),
+                Scale::new(to_x, to_y),
                 duration,
             )
             .with_easing(parsed_easing)
@@ -310,13 +315,13 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             commands.entity(entity).insert(tween);
         }
         EntityCmd::RemoveTweenPosition { entity_id } => {
-            commands.entity(Entity::from_bits(entity_id)).remove::<TweenPosition>();
+            commands.entity(Entity::from_bits(entity_id)).remove::<Tween<MapPosition>>();
         }
         EntityCmd::RemoveTweenRotation { entity_id } => {
-            commands.entity(Entity::from_bits(entity_id)).remove::<TweenRotation>();
+            commands.entity(Entity::from_bits(entity_id)).remove::<Tween<Rotation>>();
         }
         EntityCmd::RemoveTweenScale { entity_id } => {
-            commands.entity(Entity::from_bits(entity_id)).remove::<TweenScale>();
+            commands.entity(Entity::from_bits(entity_id)).remove::<Tween<Scale>>();
         }
         _ => unreachable!(),
     }

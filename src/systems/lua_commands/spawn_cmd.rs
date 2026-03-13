@@ -29,7 +29,7 @@ use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
-use crate::components::tween::{Easing, LoopMode, TweenPosition, TweenRotation, TweenScale};
+use crate::components::tween::{Easing, LoopMode, Tween};
 use crate::components::zindex::ZIndex;
 
 use crate::resources::lua_runtime::{
@@ -249,9 +249,9 @@ fn apply_animation_components(
     if let Some(tween_data) = tween_position {
         let easing = tween_data.easing.parse::<Easing>().unwrap();
         let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
-        let mut tween = TweenPosition::new(
-            Vector2 { x: tween_data.from_x, y: tween_data.from_y },
-            Vector2 { x: tween_data.to_x, y: tween_data.to_y },
+        let mut tween = Tween::new(
+            MapPosition::from_vec(Vector2 { x: tween_data.from_x, y: tween_data.from_y }),
+            MapPosition::from_vec(Vector2 { x: tween_data.to_x, y: tween_data.to_y }),
             tween_data.duration,
         )
         .with_easing(easing)
@@ -264,9 +264,13 @@ fn apply_animation_components(
     if let Some(tween_data) = tween_rotation {
         let easing = tween_data.easing.parse::<Easing>().unwrap();
         let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
-        let mut tween = TweenRotation::new(tween_data.from, tween_data.to, tween_data.duration)
-            .with_easing(easing)
-            .with_loop_mode(loop_mode);
+        let mut tween = Tween::new(
+            Rotation { degrees: tween_data.from },
+            Rotation { degrees: tween_data.to },
+            tween_data.duration,
+        )
+        .with_easing(easing)
+        .with_loop_mode(loop_mode);
         if tween_data.backwards {
             tween = tween.with_backwards();
         }
@@ -275,9 +279,9 @@ fn apply_animation_components(
     if let Some(tween_data) = tween_scale {
         let easing = tween_data.easing.parse::<Easing>().unwrap();
         let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
-        let mut tween = TweenScale::new(
-            Vector2 { x: tween_data.from_x, y: tween_data.from_y },
-            Vector2 { x: tween_data.to_x, y: tween_data.to_y },
+        let mut tween = Tween::new(
+            Scale::new(tween_data.from_x, tween_data.from_y),
+            Scale::new(tween_data.to_x, tween_data.to_y),
             tween_data.duration,
         )
         .with_easing(easing)
