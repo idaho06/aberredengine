@@ -14,12 +14,14 @@
 //! - [`EntityCmdQueries`] – mutable queries needed by `process_entity_commands`
 //! - [`ContextQueries`] – read-only queries for building entity context tables
 
+mod context;
 mod entity_cmd;
 mod parse;
 mod spawn_cmd;
 
 pub use entity_cmd::process_entity_commands;
 pub use spawn_cmd::{process_clone_command, process_spawn_command};
+pub(crate) use context::build_entity_context;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;

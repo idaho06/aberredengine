@@ -41,27 +41,20 @@ use crate::components::luaphase::LuaPhase;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{
-    AnimationSnapshot, EntitySnapshot, InputSnapshot, LuaPhaseSnapshot, LuaRuntime,
-    LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot, build_entity_context_pooled,
-};
+use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    ContextQueries, EntityCmdQueries, process_audio_command, process_camera_command,
-    process_clone_command, process_entity_commands, process_phase_command, process_signal_command,
-    process_spawn_command,
+    ContextQueries, EntityCmdQueries, build_entity_context, process_audio_command,
+    process_camera_command, process_clone_command, process_entity_commands, process_phase_command,
+    process_signal_command, process_spawn_command,
 };
 use crate::systems::phase_core::{
     PhaseRunner, apply_callback_transitions, run_phase_callbacks,
 };
 use log::{error, warn};
 
-/// Build entity context for phase callbacks using pooled tables.
-///
-/// Gathers all component data for the given entity and builds a Lua context table.
-/// Uses pooled tables to reduce allocations.
 fn build_phase_context(
     lua_runtime: &LuaRuntime,
     entity: Entity,
@@ -70,118 +63,11 @@ fn build_phase_context(
     ctx_queries: &ContextQueries,
     cmd_queries: &EntityCmdQueries,
 ) -> LuaResult<LuaTable> {
-    let lua = lua_runtime.lua();
-    let tables = lua_runtime.get_entity_ctx_pool()?;
-
-    // Query all optional components
-    let group = ctx_queries.groups.get(entity).ok().map(|g| g.name());
-
-    let map_pos = cmd_queries
-        .positions
-        .get(entity)
-        .ok()
-        .map(|p| (p.pos.x, p.pos.y));
-
-    let screen_pos = cmd_queries
-        .screen_positions
-        .get(entity)
-        .ok()
-        .map(|p| (p.pos.x, p.pos.y));
-
-    let rigid_body = cmd_queries
-        .rigid_bodies
-        .get(entity)
-        .ok()
-        .map(|rb| RigidBodySnapshot {
-            velocity: (rb.velocity.x, rb.velocity.y),
-            speed_sq: rb.velocity.length_sqr(),
-            frozen: rb.frozen,
-        });
-
-    let rotation = ctx_queries.rotations.get(entity).ok().map(|r| r.degrees);
-
-    let scale = ctx_queries
-        .scales
-        .get(entity)
-        .ok()
-        .map(|s| (s.scale.x, s.scale.y));
-
-    // Compute collider rect using position
-    let rect = ctx_queries.box_colliders.get(entity).ok().and_then(|bc| {
-        cmd_queries.positions.get(entity).ok().map(|pos| {
-            let rect = bc.as_rectangle(pos.pos);
-            (rect.x, rect.y, rect.width, rect.height)
-        })
-    });
-
-    let sprite = cmd_queries
-        .sprites
-        .get(entity)
-        .ok()
-        .map(|s| SpriteSnapshot {
-            tex_key: s.tex_key.as_ref(),
-            flip_h: s.flip_h,
-            flip_v: s.flip_v,
-        });
-
-    let animation = cmd_queries
-        .animation
-        .get(entity)
-        .ok()
-        .map(|a| AnimationSnapshot {
-            key: a.animation_key.as_str(),
-            frame_index: a.frame_index,
-            elapsed: a.elapsed_time,
-        });
-
-    let signals_ref = cmd_queries.signals.get(entity).ok();
-
     let lua_phase_snapshot = Some(LuaPhaseSnapshot {
         current: lua_phase.current.as_str(),
         time_in_phase: lua_phase.time_in_phase,
     });
-
-    let lua_timer = ctx_queries
-        .lua_timers
-        .get(entity)
-        .ok()
-        .map(|t| LuaTimerSnapshot {
-            duration: t.duration,
-            elapsed: t.elapsed,
-            callback: t.callback.name.as_str(),
-        });
-
-    // World transform from GlobalTransform2D (hierarchy)
-    let gt = ctx_queries.global_transforms.get(entity).ok();
-    let world_pos = gt.map(|g| (g.position.x, g.position.y));
-    let world_rotation = gt.map(|g| g.rotation_degrees);
-    let world_scale = gt.map(|g| (g.scale.x, g.scale.y));
-
-    // Parent entity ID from ChildOf
-    let parent_id = ctx_queries.child_of.get(entity).ok().map(|c| c.0.to_bits());
-
-    let snapshot = EntitySnapshot {
-        entity_id: entity.to_bits(),
-        group,
-        map_pos,
-        screen_pos,
-        rigid_body,
-        rotation,
-        scale,
-        rect,
-        sprite,
-        animation,
-        signals: signals_ref,
-        lua_phase: lua_phase_snapshot,
-        lua_timer,
-        previous_phase,
-        world_pos,
-        world_rotation,
-        world_scale,
-        parent_id,
-    };
-
-    build_entity_context_pooled(lua, &tables, &snapshot)
+    build_entity_context(lua_runtime, entity, ctx_queries, cmd_queries, lua_phase_snapshot, previous_phase)
 }
 
 /// Process the return value from a phase callback.
