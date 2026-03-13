@@ -609,11 +609,11 @@ fn animation_controller_syncs_sprite_tex_key_on_switch() {
     };
     anim_store.animations.insert(
         "idle".to_string(),
-        make_animation_resource("sheet_idle", 0.0, 0.0, 64.0, 0.0, 4, 10.0, true),
+        make_animation_resource("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
     );
     anim_store.animations.insert(
         "walk".to_string(),
-        make_animation_resource("sheet_walk", 0.0, 0.0, 64.0, 0.0, 8, 12.0, true),
+        make_animation_resource("sheet_walk", (0.0, 0.0), (64.0, 0.0), 8, 12.0, true),
     );
     world.insert_resource(anim_store);
 
@@ -657,7 +657,7 @@ fn animation_controller_does_not_change_sprite_tex_key_when_no_switch() {
     };
     anim_store.animations.insert(
         "idle".to_string(),
-        make_animation_resource("sheet_idle", 0.0, 0.0, 64.0, 0.0, 4, 10.0, true),
+        make_animation_resource("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
     );
     world.insert_resource(anim_store);
 
@@ -1237,10 +1237,8 @@ fn rust_timer_observer_receives_input_state() {
 
     fn check_input(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
         // Verify input is passed through — set a signal if action_1 is pressed
-        if input.action_1.active {
-            if let Ok(mut signals) = ctx.signals.get_mut(entity) {
-                signals.set_flag("input_received");
-            }
+        if input.action_1.active && let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("input_received");
         }
     }
 
@@ -2482,10 +2480,8 @@ fn phase_callback_receives_input_state() {
         input: &InputState,
         _dt: f32,
     ) -> Option<String> {
-        if input.action_1.active {
-            if let Ok(mut signals) = ctx.signals.get_mut(entity) {
-                signals.set_flag("input_received");
-            }
+        if input.action_1.active && let Ok(mut signals) = ctx.signals.get_mut(entity) {
+            signals.set_flag("input_received");
         }
         None
     }
@@ -2615,12 +2611,11 @@ fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
         ctx: &mut GameCtx,
     ) {
         // ent_a should be ball (group_a of rule)
-        if let Ok(group) = ctx.groups.get(ent_a) {
-            if group.name() == "ball" {
-                if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
-                    signals.set_flag("ball_is_first");
-                }
-            }
+        if let Ok(group) = ctx.groups.get(ent_a)
+            && group.name() == "ball"
+            && let Ok(mut signals) = ctx.signals.get_mut(ent_a)
+        {
+            signals.set_flag("ball_is_first");
         }
     }
 
@@ -2675,10 +2670,8 @@ fn collision_rule_sides_passed_to_callback() {
         use aberredengine::components::collision::BoxSide;
         let has_right_a = sides_a.iter().any(|s| matches!(s, BoxSide::Right));
         let has_left_b = sides_b.iter().any(|s| matches!(s, BoxSide::Left));
-        if has_right_a && has_left_b {
-            if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
-                signals.set_flag("sides_correct");
-            }
+        if has_right_a && has_left_b && let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+            signals.set_flag("sides_correct");
         }
     }
 
@@ -2785,19 +2778,20 @@ use std::sync::Arc;
 
 fn make_animation_resource(
     tex_key: &str,
-    pos_x: f32,
-    pos_y: f32,
-    h_disp: f32,
-    v_disp: f32,
+    position: (f32, f32),
+    displacement: (f32, f32),
     frame_count: usize,
     fps: f32,
     looped: bool,
 ) -> AnimationResource {
     AnimationResource {
         tex_key: Arc::from(tex_key),
-        position: Vector2 { x: pos_x, y: pos_y },
-        horizontal_displacement: h_disp,
-        vertical_displacement: v_disp,
+        position: Vector2 {
+            x: position.0,
+            y: position.1,
+        },
+        horizontal_displacement: displacement.0,
+        vertical_displacement: displacement.1,
         frame_count,
         fps,
         looped,
@@ -2867,7 +2861,7 @@ fn animation_horizontal_only_no_wrapping() {
     };
     anim_store.animations.insert(
         "walk".to_string(),
-        make_animation_resource("sheet", 0.0, 0.0, 64.0, 0.0, 8, fps, true),
+        make_animation_resource("sheet", (0.0, 0.0), (64.0, 0.0), 8, fps, true),
     );
     world.insert_resource(anim_store);
 
@@ -2919,7 +2913,7 @@ fn animation_wraps_rows_with_vertical_displacement() {
     };
     anim_store.animations.insert(
         "big".to_string(),
-        make_animation_resource("sheet", 0.0, 0.0, 64.0, 64.0, 12, fps, true),
+        make_animation_resource("sheet", (0.0, 0.0), (64.0, 64.0), 12, fps, true),
     );
     world.insert_resource(anim_store);
 
@@ -3024,7 +3018,7 @@ fn animation_wraps_with_partial_first_row() {
     };
     anim_store.animations.insert(
         "partial".to_string(),
-        make_animation_resource("sheet", 128.0, 0.0, 64.0, 64.0, 10, fps, true),
+        make_animation_resource("sheet", (128.0, 0.0), (64.0, 64.0), 10, fps, true),
     );
     world.insert_resource(anim_store);
 
@@ -3109,7 +3103,7 @@ fn animation_vdisp_no_texture_falls_back_to_horizontal() {
     };
     anim_store.animations.insert(
         "missing_tex".to_string(),
-        make_animation_resource("nonexistent", 0.0, 0.0, 64.0, 64.0, 8, fps, true),
+        make_animation_resource("nonexistent", (0.0, 0.0), (64.0, 64.0), 8, fps, true),
     );
     world.insert_resource(anim_store);
 
@@ -3150,7 +3144,7 @@ fn animation_single_frame_per_row_wrapping() {
     };
     anim_store.animations.insert(
         "column".to_string(),
-        make_animation_resource("sheet", 0.0, 0.0, 64.0, 64.0, 4, fps, false),
+        make_animation_resource("sheet", (0.0, 0.0), (64.0, 64.0), 4, fps, false),
     );
     world.insert_resource(anim_store);
 

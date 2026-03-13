@@ -20,14 +20,15 @@ pub(crate) fn run_phase_callbacks<C, R>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     delta: f32,
     callback_transitions: &mut Vec<(Entity, String)>,
+    entity_scratch: &mut Vec<Entity>,
     runner: &mut R,
 ) where
     C: Send + Sync + 'static,
     R: PhaseRunner<C>,
 {
-    let entities: Vec<Entity> = phase_query.iter().map(|(entity, _)| entity).collect();
+    entity_scratch.extend(phase_query.iter().map(|(entity, _)| entity));
 
-    for entity in entities {
+    for entity in entity_scratch.iter().copied() {
         let needs_enter = {
             let Ok((_, phase)) = phase_query.get(entity) else {
                 continue;

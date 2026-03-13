@@ -98,8 +98,10 @@ pub fn phase_system(
     mut ctx: GameCtx,
     input: Res<InputState>,
     mut callback_transitions: Local<Vec<(Entity, String)>>,
+    mut phase_entities: Local<Vec<Entity>>,
 ) {
     callback_transitions.clear();
+    phase_entities.clear();
 
     let delta = ctx.world_time.delta;
     let mut runner = RustPhaseRunner {
@@ -111,6 +113,7 @@ pub fn phase_system(
         &mut phase_query,
         delta,
         &mut callback_transitions,
+        &mut phase_entities,
         &mut runner,
     );
 

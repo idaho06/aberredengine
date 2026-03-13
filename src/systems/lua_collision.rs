@@ -246,6 +246,7 @@ fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use crate::components::collision::BoxSide;

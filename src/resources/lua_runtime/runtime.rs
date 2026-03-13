@@ -730,8 +730,23 @@ impl LuaRuntime {
         A: IntoLuaMulti,
         R: FromLuaMulti,
     {
-        let func: LuaFunction = self.lua.globals().get(name)?;
-        func.call(args)
+        match self.get_function(name)? {
+            Some(func) => func.call(args),
+            None => Err(LuaError::runtime(format!(
+                "global function '{name}' not found"
+            ))),
+        }
+    }
+
+    /// Returns a global Lua function if present.
+    pub fn get_function(&self, name: &str) -> LuaResult<Option<LuaFunction>> {
+        match self.lua.globals().get::<LuaValue>(name)? {
+            LuaValue::Nil => Ok(None),
+            LuaValue::Function(func) => Ok(Some(func)),
+            _ => Err(LuaError::runtime(format!(
+                "global '{name}' exists but is not a function"
+            ))),
+        }
     }
 
     /// Checks if a global function exists.
@@ -740,7 +755,9 @@ impl LuaRuntime {
     ///
     /// * `name` - Name of the function to check
     pub fn has_function(&self, name: &str) -> bool {
-        self.lua.globals().get::<LuaFunction>(name).is_ok()
+        self.get_function(name)
+            .map(|func| func.is_some())
+            .unwrap_or(false)
     }
 
     /// Returns a reference to the underlying Lua state.

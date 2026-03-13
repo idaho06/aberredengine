@@ -77,16 +77,24 @@ pub(super) fn apply_components(
 
     apply_transform_components(
         entity_commands,
-        cmd.position,
-        cmd.screen_position,
-        cmd.rotation,
-        cmd.scale,
-        cmd.parent,
-        cmd.stuckto,
-        cmd.camera_target,
+        TransformComponents {
+            position: cmd.position,
+            screen_position: cmd.screen_position,
+            rotation: cmd.rotation,
+            scale: cmd.scale,
+            parent: cmd.parent,
+            stuckto: cmd.stuckto,
+            camera_target: cmd.camera_target,
+        },
     );
     apply_physics_components(entity_commands, cmd.rigidbody, cmd.collider);
-    apply_render_components(entity_commands, cmd.sprite, cmd.zindex, cmd.shader, cmd.tint);
+    apply_render_components(
+        entity_commands,
+        cmd.sprite,
+        cmd.zindex,
+        cmd.shader,
+        cmd.tint,
+    );
     apply_animation_components(
         entity_commands,
         cmd.animation,
@@ -126,8 +134,7 @@ pub(super) fn apply_components(
     }
 }
 
-fn apply_transform_components(
-    entity_commands: &mut EntityCommands,
+struct TransformComponents {
     position: Option<(f32, f32)>,
     screen_position: Option<(f32, f32)>,
     rotation: Option<f32>,
@@ -135,30 +142,40 @@ fn apply_transform_components(
     parent: Option<u64>,
     stuckto: Option<StuckToData>,
     camera_target: Option<u8>,
+}
+
+fn apply_transform_components(
+    entity_commands: &mut EntityCommands,
+    transform: TransformComponents,
 ) {
-    if let Some((x, y)) = position {
+    if let Some((x, y)) = transform.position {
         entity_commands.insert(MapPosition::new(x, y));
     }
-    if let Some((x, y)) = screen_position {
+    if let Some((x, y)) = transform.screen_position {
         entity_commands.insert(ScreenPosition::new(x, y));
     }
-    if let Some(degrees) = rotation {
+    if let Some(degrees) = transform.rotation {
         entity_commands.insert(Rotation { degrees });
     }
-    if let Some((sx, sy)) = scale {
-        entity_commands.insert(Scale { scale: Vector2 { x: sx, y: sy } });
+    if let Some((sx, sy)) = transform.scale {
+        entity_commands.insert(Scale {
+            scale: Vector2 { x: sx, y: sy },
+        });
     }
     // Set ChildOf and immediately compute the correct initial GlobalTransform2D
     // so the child renders at the right world position on its very first frame
     // (avoids a one-frame flash at world origin).
-    if let Some(parent_id) = parent {
+    if let Some(parent_id) = transform.parent {
         entity_commands.insert(ChildOf(Entity::from_bits(parent_id)));
         entity_commands.queue(ComputeInitialGlobalTransform);
     }
-    if let Some(stuckto_data) = stuckto {
+    if let Some(stuckto_data) = transform.stuckto {
         let target = Entity::from_bits(stuckto_data.target_entity_id);
         let mut stuckto = StuckTo::new(target);
-        stuckto.offset = Vector2 { x: stuckto_data.offset_x, y: stuckto_data.offset_y };
+        stuckto.offset = Vector2 {
+            x: stuckto_data.offset_x,
+            y: stuckto_data.offset_y,
+        };
         stuckto.follow_x = stuckto_data.follow_x;
         stuckto.follow_y = stuckto_data.follow_y;
         stuckto.stored_velocity = stuckto_data
@@ -166,7 +183,7 @@ fn apply_transform_components(
             .map(|(vx, vy)| Vector2 { x: vx, y: vy });
         entity_commands.insert(stuckto);
     }
-    if let Some(priority) = camera_target {
+    if let Some(priority) = transform.camera_target {
         entity_commands.insert(CameraTarget { priority });
     }
 }
@@ -178,18 +195,37 @@ fn apply_physics_components(
 ) {
     if let Some(rb_data) = rigidbody {
         let mut rb = RigidBody::with_physics(rb_data.friction, rb_data.max_speed);
-        rb.velocity = Vector2 { x: rb_data.velocity_x, y: rb_data.velocity_y };
+        rb.velocity = Vector2 {
+            x: rb_data.velocity_x,
+            y: rb_data.velocity_y,
+        };
         rb.frozen = rb_data.frozen;
         for force in rb_data.forces {
-            rb.add_force_with_state(&force.name, Vector2 { x: force.x, y: force.y }, force.enabled);
+            rb.add_force_with_state(
+                &force.name,
+                Vector2 {
+                    x: force.x,
+                    y: force.y,
+                },
+                force.enabled,
+            );
         }
         entity_commands.insert(rb);
     }
     if let Some(collider_data) = collider {
         entity_commands.insert(BoxCollider {
-            size: Vector2 { x: collider_data.width, y: collider_data.height },
-            offset: Vector2 { x: collider_data.offset_x, y: collider_data.offset_y },
-            origin: Vector2 { x: collider_data.origin_x, y: collider_data.origin_y },
+            size: Vector2 {
+                x: collider_data.width,
+                y: collider_data.height,
+            },
+            offset: Vector2 {
+                x: collider_data.offset_x,
+                y: collider_data.offset_y,
+            },
+            origin: Vector2 {
+                x: collider_data.origin_x,
+                y: collider_data.origin_y,
+            },
         });
     }
 }
@@ -206,8 +242,14 @@ fn apply_render_components(
             tex_key: Arc::from(sprite_data.tex_key),
             width: sprite_data.width,
             height: sprite_data.height,
-            origin: Vector2 { x: sprite_data.origin_x, y: sprite_data.origin_y },
-            offset: Vector2 { x: sprite_data.offset_x, y: sprite_data.offset_y },
+            origin: Vector2 {
+                x: sprite_data.origin_x,
+                y: sprite_data.origin_y,
+            },
+            offset: Vector2 {
+                x: sprite_data.offset_x,
+                y: sprite_data.offset_y,
+            },
             flip_h: sprite_data.flip_h,
             flip_v: sprite_data.flip_v,
         });
@@ -250,8 +292,14 @@ fn apply_animation_components(
         let easing = tween_data.easing.parse::<Easing>().unwrap();
         let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
         let mut tween = Tween::new(
-            MapPosition::from_vec(Vector2 { x: tween_data.from_x, y: tween_data.from_y }),
-            MapPosition::from_vec(Vector2 { x: tween_data.to_x, y: tween_data.to_y }),
+            MapPosition::from_vec(Vector2 {
+                x: tween_data.from_x,
+                y: tween_data.from_y,
+            }),
+            MapPosition::from_vec(Vector2 {
+                x: tween_data.to_x,
+                y: tween_data.to_y,
+            }),
             tween_data.duration,
         )
         .with_easing(easing)
@@ -265,8 +313,12 @@ fn apply_animation_components(
         let easing = tween_data.easing.parse::<Easing>().unwrap();
         let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
         let mut tween = Tween::new(
-            Rotation { degrees: tween_data.from },
-            Rotation { degrees: tween_data.to },
+            Rotation {
+                degrees: tween_data.from,
+            },
+            Rotation {
+                degrees: tween_data.to,
+            },
             tween_data.duration,
         )
         .with_easing(easing)
@@ -364,7 +416,9 @@ fn apply_behavior_components(
         entity_commands.insert(CollisionRule::new(
             rule_data.group_a,
             rule_data.group_b,
-            LuaCollisionCallback { name: rule_data.callback },
+            LuaCollisionCallback {
+                name: rule_data.callback,
+            },
         ));
     }
 }
@@ -394,7 +448,10 @@ fn apply_ui_components(
             .collect();
         let mut menu_component = Menu::new(
             &labels,
-            Vector2 { x: menu_data.origin_x, y: menu_data.origin_y },
+            Vector2 {
+                x: menu_data.origin_x,
+                y: menu_data.origin_y,
+            },
             menu_data.font,
             menu_data.font_size,
             menu_data.item_spacing,
@@ -454,7 +511,9 @@ fn apply_particle_emitter(
     world_signals: &mut WorldSignals,
     particle_emitter: Option<ParticleEmitterData>,
 ) {
-    let Some(emitter_data) = particle_emitter else { return };
+    let Some(emitter_data) = particle_emitter else {
+        return;
+    };
 
     use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
     use crate::resources::lua_runtime::{ParticleEmitterShapeData, ParticleTtlData};
@@ -503,7 +562,10 @@ fn apply_particle_emitter(
     entity_commands.insert(ParticleEmitter {
         templates,
         shape,
-        offset: Vector2 { x: emitter_data.offset_x, y: emitter_data.offset_y },
+        offset: Vector2 {
+            x: emitter_data.offset_x,
+            y: emitter_data.offset_y,
+        },
         particles_per_emission: emitter_data.particles_per_emission,
         emissions_per_second: emitter_data.emissions_per_second,
         emissions_remaining: emitter_data.emissions_remaining,

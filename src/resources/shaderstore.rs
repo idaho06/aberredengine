@@ -68,6 +68,12 @@ impl ShaderStore {
     }
 }
 
+impl Default for ShaderStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,11 +84,5 @@ mod tests {
         assert!(store.is_empty());
         assert_eq!(store.len(), 0);
         assert!(!store.contains("any"));
-    }
-}
-
-impl Default for ShaderStore {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -45,6 +45,7 @@ pub enum InputBinding {
 #[derive(Resource, Debug, Clone)]
 pub struct InputBindings {
     pub map: HashMap<InputAction, Vec<InputBinding>>,
+    dirty: bool,
 }
 
 impl InputBindings {
@@ -54,12 +55,19 @@ impl InputBindings {
     /// old binding is discarded.
     pub fn rebind(&mut self, action: InputAction, binding: InputBinding) {
         self.map.insert(action, vec![binding]);
+        self.dirty = true;
     }
 
     /// Append `binding` to the list of bindings for `action` without removing
     /// existing ones (multi-bind / combo support).
     pub fn add_binding(&mut self, action: InputAction, binding: InputBinding) {
         self.map.entry(action).or_default().push(binding);
+        self.dirty = true;
+    }
+
+    /// Returns whether bindings changed since the last cache refresh and clears the flag.
+    pub fn take_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.dirty)
     }
 
     /// Return all bindings registered for `action`, or an empty slice if none.
@@ -126,7 +134,7 @@ impl Default for InputBindings {
         map.insert(InputAction::ToggleDebug, vec![k(KeyboardKey::KEY_F11)]);
         map.insert(InputAction::ToggleFullscreen, vec![k(KeyboardKey::KEY_F10)]);
 
-        Self { map }
+        Self { map, dirty: true }
     }
 }
 
@@ -446,6 +454,7 @@ mod tests {
     fn test_get_bindings_unregistered_returns_empty() {
         let b = InputBindings {
             map: HashMap::new(),
+            dirty: false,
         };
         assert!(b.get_bindings(InputAction::Action1).is_empty());
     }
@@ -462,6 +471,7 @@ mod tests {
     fn test_first_binding_str_unbound_returns_none() {
         let b = InputBindings {
             map: HashMap::new(),
+            dirty: false,
         };
         assert_eq!(b.first_binding_str(InputAction::Action1), None);
     }

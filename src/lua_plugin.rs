@@ -389,7 +389,9 @@ pub fn update(
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
     lua_runtime.update_gameconfig_cache(&scene_state.config);
-    lua_runtime.update_bindings_cache(&bindings);
+    if bindings.take_dirty() {
+        lua_runtime.update_bindings_cache(&bindings);
+    }
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
@@ -403,10 +405,16 @@ pub fn update(
 
     // Call scene-specific update callback with (input, dt)
     let callback_name = format!("on_update_{}", scene);
-    if lua_runtime.has_function(&callback_name)
-        && let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, (input_table, delta_sec))
-    {
-        error!("Error calling {}: {}", callback_name, e);
+    match lua_runtime.get_function(&callback_name) {
+        Ok(Some(func)) => {
+            if let Err(e) = func.call::<()>((input_table, delta_sec)) {
+                error!("Error calling {}: {}", callback_name, e);
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            error!("Error resolving {}: {}", callback_name, e);
+        }
     }
 
     drain_common_commands(

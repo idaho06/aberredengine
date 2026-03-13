@@ -119,13 +119,19 @@ fn call_phase_enter(
     input_table: &LuaTable,
     current_phase: &str,
 ) -> Option<String> {
-    if lua_runtime.has_function(fn_name) {
-        let result = lua_runtime
-            .call_function::<_, LuaValue>(fn_name, (ctx_table.clone(), input_table.clone()));
-        process_callback_return(result, current_phase, fn_name)
-    } else {
-        warn!(target: "lua", "Phase callback '{}' not found", fn_name);
-        None
+    match lua_runtime.get_function(fn_name) {
+        Ok(Some(func)) => {
+            let result = func.call::<LuaValue>((ctx_table.clone(), input_table.clone()));
+            process_callback_return(result, current_phase, fn_name)
+        }
+        Ok(None) => {
+            warn!(target: "lua", "Phase callback '{}' not found", fn_name);
+            None
+        }
+        Err(e) => {
+            error!(target: "lua", "Error resolving {}(): {}", fn_name, e);
+            None
+        }
     }
 }
 
@@ -139,24 +145,36 @@ fn call_phase_update(
     dt: f32,
     current_phase: &str,
 ) -> Option<String> {
-    if lua_runtime.has_function(fn_name) {
-        let result = lua_runtime
-            .call_function::<_, LuaValue>(fn_name, (ctx_table.clone(), input_table.clone(), dt));
-        process_callback_return(result, current_phase, fn_name)
-    } else {
-        warn!(target: "lua", "Phase callback '{}' not found", fn_name);
-        None
+    match lua_runtime.get_function(fn_name) {
+        Ok(Some(func)) => {
+            let result = func.call::<LuaValue>((ctx_table.clone(), input_table.clone(), dt));
+            process_callback_return(result, current_phase, fn_name)
+        }
+        Ok(None) => {
+            warn!(target: "lua", "Phase callback '{}' not found", fn_name);
+            None
+        }
+        Err(e) => {
+            error!(target: "lua", "Error resolving {}(): {}", fn_name, e);
+            None
+        }
     }
 }
 
 /// Call phase exit callback: (ctx)
 fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, ctx_table: &LuaTable) {
-    if lua_runtime.has_function(fn_name) {
-        if let Err(e) = lua_runtime.call_function::<_, ()>(fn_name, ctx_table.clone()) {
-            error!(target: "lua", "Error in {}(): {}", fn_name, e);
+    match lua_runtime.get_function(fn_name) {
+        Ok(Some(func)) => {
+            if let Err(e) = func.call::<()>(ctx_table.clone()) {
+                error!(target: "lua", "Error in {}(): {}", fn_name, e);
+            }
         }
-    } else {
-        warn!(target: "lua", "Phase callback '{}' not found", fn_name);
+        Ok(None) => {
+            warn!(target: "lua", "Phase callback '{}' not found", fn_name);
+        }
+        Err(e) => {
+            error!(target: "lua", "Error resolving {}(): {}", fn_name, e);
+        }
     }
 }
 
@@ -281,9 +299,11 @@ pub fn lua_phase_system(
     animation_store: Res<AnimationStore>,
     // Local resource to avoid per-frame allocation for callback return transitions
     mut callback_transitions: Local<Vec<(Entity, String)>>,
+    mut phase_entities: Local<Vec<Entity>>,
 ) {
     // Clear previous frame's transitions (reuses allocated capacity)
     callback_transitions.clear();
+    phase_entities.clear();
 
     // Update signal cache so Lua can read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
@@ -306,7 +326,13 @@ pub fn lua_phase_system(
         cmd_queries: &cmd_queries,
     };
 
-    run_phase_callbacks(&mut query, delta, &mut callback_transitions, &mut runner);
+    run_phase_callbacks(
+        &mut query,
+        delta,
+        &mut callback_transitions,
+        &mut phase_entities,
+        &mut runner,
+    );
 
     // Process phase commands from Lua (from engine.phase_transition calls)
     for cmd in lua_runtime.drain_phase_commands() {

@@ -127,8 +127,10 @@ mod tests {
 
     #[test]
     fn reset_velocity_zeroes() {
-        let mut cfg = CameraFollowConfig::default();
-        cfg.velocity = Vector2 { x: 99.0, y: -42.0 };
+        let mut cfg = CameraFollowConfig {
+            velocity: Vector2 { x: 99.0, y: -42.0 },
+            ..Default::default()
+        };
         cfg.reset_velocity();
         assert_eq!(cfg.velocity.x, 0.0);
         assert_eq!(cfg.velocity.y, 0.0);

@@ -171,14 +171,18 @@ pub fn lua_timer_observer(
     };
 
     // Call the Lua callback with (ctx, input)
-    if lua_runtime.has_function(&event.callback) {
-        if let Err(e) =
-            lua_runtime.call_function::<_, ()>(&event.callback, (ctx_table, input_table))
-        {
-            error!(target: "lua", "Error in {}(): {}", event.callback, e);
+    match lua_runtime.get_function(&event.callback) {
+        Ok(Some(func)) => {
+            if let Err(e) = func.call::<()>((ctx_table, input_table)) {
+                error!(target: "lua", "Error in {}(): {}", event.callback, e);
+            }
         }
-    } else {
-        warn!(target: "lua", "Timer callback '{}' not found", event.callback);
+        Ok(None) => {
+            warn!(target: "lua", "Timer callback '{}' not found", event.callback);
+        }
+        Err(e) => {
+            error!(target: "lua", "Error resolving {}(): {}", event.callback, e);
+        }
     }
 
     // Process phase commands from Lua
