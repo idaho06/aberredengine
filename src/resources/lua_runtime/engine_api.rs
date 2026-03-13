@@ -151,7 +151,8 @@ macro_rules! define_entity_cmds {
                 |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool),
                 EntityCmd::InsertTweenPosition {
-                    entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards,
+                    entity_id, from_x, from_y, to_x, to_y,
+                    config: TweenConfig { duration, easing, loop_mode, backwards },
                 },
                 desc = "Insert a position tween on an entity",
                 params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),
@@ -161,7 +162,8 @@ macro_rules! define_entity_cmds {
                 |(entity_id, from, to, duration, easing, loop_mode, backwards)|
                 (u64, f32, f32, f32, String, String, bool),
                 EntityCmd::InsertTweenRotation {
-                    entity_id, from, to, duration, easing, loop_mode, backwards,
+                    entity_id, from, to,
+                    config: TweenConfig { duration, easing, loop_mode, backwards },
                 },
                 desc = "Insert a rotation tween on an entity",
                 params = [("entity_id", "integer"), ("from", "number"), ("to", "number"),
@@ -171,7 +173,8 @@ macro_rules! define_entity_cmds {
                 |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool),
                 EntityCmd::InsertTweenScale {
-                    entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards,
+                    entity_id, from_x, from_y, to_x, to_y,
+                    config: TweenConfig { duration, easing, loop_mode, backwards },
                 },
                 desc = "Insert a scale tween on an entity",
                 params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),

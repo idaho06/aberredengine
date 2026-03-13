@@ -660,10 +660,7 @@ impl LuaUserData for LuaEntityBuilder {
                     from_y,
                     to_x,
                     to_y,
-                    duration,
-                    easing: "linear".to_string(),
-                    loop_mode: "once".to_string(),
-                    backwards: false,
+                    config: TweenConfig::new(duration),
                 });
                 Ok(this.clone())
             },
@@ -673,7 +670,7 @@ impl LuaUserData for LuaEntityBuilder {
         // Valid values: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
         methods.add_method_mut("with_tween_position_easing", |_, this, easing: String| {
             if let Some(ref mut tween) = this.cmd.tween_position {
-                tween.easing = easing;
+                tween.config.easing = easing;
             }
             Ok(this.clone())
         });
@@ -682,7 +679,7 @@ impl LuaUserData for LuaEntityBuilder {
         // Valid values: "once", "loop", "ping_pong"
         methods.add_method_mut("with_tween_position_loop", |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_position {
-                tween.loop_mode = loop_mode;
+                tween.config.loop_mode = loop_mode;
             }
             Ok(this.clone())
         });
@@ -690,7 +687,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_position_backwards() - Start position tween from the end, playing in reverse
         methods.add_method_mut("with_tween_position_backwards", |_, this, ()| {
             if let Some(ref mut tween) = this.cmd.tween_position {
-                tween.backwards = true;
+                tween.config.backwards = true;
             }
             Ok(this.clone())
         });
@@ -704,10 +701,7 @@ impl LuaUserData for LuaEntityBuilder {
                 this.cmd.tween_rotation = Some(TweenRotationData {
                     from,
                     to,
-                    duration,
-                    easing: "linear".to_string(),
-                    loop_mode: "once".to_string(),
-                    backwards: false,
+                    config: TweenConfig::new(duration),
                 });
                 Ok(this.clone())
             },
@@ -716,7 +710,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_rotation_easing(easing) - Set easing for TweenRotation
         methods.add_method_mut("with_tween_rotation_easing", |_, this, easing: String| {
             if let Some(ref mut tween) = this.cmd.tween_rotation {
-                tween.easing = easing;
+                tween.config.easing = easing;
             }
             Ok(this.clone())
         });
@@ -724,7 +718,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_rotation_loop(loop_mode) - Set loop mode for TweenRotation
         methods.add_method_mut("with_tween_rotation_loop", |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_rotation {
-                tween.loop_mode = loop_mode;
+                tween.config.loop_mode = loop_mode;
             }
             Ok(this.clone())
         });
@@ -732,7 +726,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_rotation_backwards() - Start rotation tween from the end, playing in reverse
         methods.add_method_mut("with_tween_rotation_backwards", |_, this, ()| {
             if let Some(ref mut tween) = this.cmd.tween_rotation {
-                tween.backwards = true;
+                tween.config.backwards = true;
             }
             Ok(this.clone())
         });
@@ -748,10 +742,7 @@ impl LuaUserData for LuaEntityBuilder {
                     from_y,
                     to_x,
                     to_y,
-                    duration,
-                    easing: "linear".to_string(),
-                    loop_mode: "once".to_string(),
-                    backwards: false,
+                    config: TweenConfig::new(duration),
                 });
                 Ok(this.clone())
             },
@@ -760,7 +751,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_scale_easing(easing) - Set easing for TweenScale
         methods.add_method_mut("with_tween_scale_easing", |_, this, easing: String| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
-                tween.easing = easing;
+                tween.config.easing = easing;
             }
             Ok(this.clone())
         });
@@ -768,7 +759,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_scale_loop(loop_mode) - Set loop mode for TweenScale
         methods.add_method_mut("with_tween_scale_loop", |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
-                tween.loop_mode = loop_mode;
+                tween.config.loop_mode = loop_mode;
             }
             Ok(this.clone())
         });
@@ -776,7 +767,7 @@ impl LuaUserData for LuaEntityBuilder {
         // :with_tween_scale_backwards() - Start scale tween from the end, playing in reverse
         methods.add_method_mut("with_tween_scale_backwards", |_, this, ()| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
-                tween.backwards = true;
+                tween.config.backwards = true;
             }
             Ok(this.clone())
         });

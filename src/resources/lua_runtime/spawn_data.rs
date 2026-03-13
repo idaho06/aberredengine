@@ -70,6 +70,26 @@ pub struct StuckToData {
     pub stored_velocity: Option<(f32, f32)>,
 }
 
+/// Shared tween configuration (easing, loop mode, duration, direction).
+#[derive(Debug, Clone)]
+pub struct TweenConfig {
+    pub duration: f32,
+    pub easing: String,
+    pub loop_mode: String,
+    pub backwards: bool,
+}
+
+impl TweenConfig {
+    pub fn new(duration: f32) -> Self {
+        Self {
+            duration,
+            easing: "linear".to_string(),
+            loop_mode: "once".to_string(),
+            backwards: false,
+        }
+    }
+}
+
 /// TweenPosition component data for spawning.
 #[derive(Debug, Clone)]
 pub struct TweenPositionData {
@@ -77,10 +97,7 @@ pub struct TweenPositionData {
     pub from_y: f32,
     pub to_x: f32,
     pub to_y: f32,
-    pub duration: f32,
-    pub easing: String,
-    pub loop_mode: String,
-    pub backwards: bool,
+    pub config: TweenConfig,
 }
 
 /// TweenRotation component data for spawning.
@@ -88,10 +105,7 @@ pub struct TweenPositionData {
 pub struct TweenRotationData {
     pub from: f32,
     pub to: f32,
-    pub duration: f32,
-    pub easing: String,
-    pub loop_mode: String,
-    pub backwards: bool,
+    pub config: TweenConfig,
 }
 
 /// TweenScale component data for spawning.
@@ -101,10 +115,7 @@ pub struct TweenScaleData {
     pub from_y: f32,
     pub to_x: f32,
     pub to_y: f32,
-    pub duration: f32,
-    pub easing: String,
-    pub loop_mode: String,
-    pub backwards: bool,
+    pub config: TweenConfig,
 }
 
 /// LuaCollisionRule component data for spawning.

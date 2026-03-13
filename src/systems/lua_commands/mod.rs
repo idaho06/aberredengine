@@ -63,6 +63,22 @@ use crate::systems::phase_core::queue_phase_transition;
 use log::{error, info, warn};
 use std::sync::Arc;
 
+use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
+use crate::resources::lua_runtime::TweenConfig;
+
+/// Build a configured `Tween<T>` from component values and shared config.
+pub(crate) fn build_tween<T: TweenValue>(from: T, to: T, config: &TweenConfig) -> Tween<T> {
+    let easing = config.easing.parse::<Easing>().unwrap();
+    let loop_mode = config.loop_mode.parse::<LoopMode>().unwrap();
+    let mut tween = Tween::new(from, to, config.duration)
+        .with_easing(easing)
+        .with_loop_mode(loop_mode);
+    if config.backwards {
+        tween = tween.with_backwards();
+    }
+    tween
+}
+
 // ── SystemParam bundles ───────────────────────────────────────────────────────
 
 /// Mutable queries required by [`process_entity_commands`].

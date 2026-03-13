@@ -5,6 +5,7 @@
 
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use crate::resources::uniformvalue::UniformValue;
+pub use super::spawn_data::TweenConfig;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.
@@ -128,20 +129,14 @@ pub enum EntityCmd {
         from_y: f32,
         to_x: f32,
         to_y: f32,
-        duration: f32,
-        easing: String,
-        loop_mode: String,
-        backwards: bool,
+        config: TweenConfig,
     },
     /// Insert TweenRotation component
     InsertTweenRotation {
         entity_id: u64,
         from: f32,
         to: f32,
-        duration: f32,
-        easing: String,
-        loop_mode: String,
-        backwards: bool,
+        config: TweenConfig,
     },
     /// Insert TweenScale component
     InsertTweenScale {
@@ -150,10 +145,7 @@ pub enum EntityCmd {
         from_y: f32,
         to_x: f32,
         to_y: f32,
-        duration: f32,
-        easing: String,
-        loop_mode: String,
-        backwards: bool,
+        config: TweenConfig,
     },
     /// Remove TweenPosition component
     RemoveTweenPosition { entity_id: u64 },

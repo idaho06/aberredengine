@@ -29,7 +29,6 @@ use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
-use crate::components::tween::{Easing, LoopMode, Tween};
 use crate::components::zindex::ZIndex;
 
 use crate::resources::lua_runtime::{
@@ -288,60 +287,26 @@ fn apply_animation_components(
         }
         entity_commands.insert(controller);
     }
-    if let Some(tween_data) = tween_position {
-        let easing = tween_data.easing.parse::<Easing>().unwrap();
-        let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
-        let mut tween = Tween::new(
-            MapPosition::from_vec(Vector2 {
-                x: tween_data.from_x,
-                y: tween_data.from_y,
-            }),
-            MapPosition::from_vec(Vector2 {
-                x: tween_data.to_x,
-                y: tween_data.to_y,
-            }),
-            tween_data.duration,
-        )
-        .with_easing(easing)
-        .with_loop_mode(loop_mode);
-        if tween_data.backwards {
-            tween = tween.with_backwards();
-        }
-        entity_commands.insert(tween);
+    if let Some(td) = tween_position {
+        entity_commands.insert(super::build_tween(
+            MapPosition::from_vec(Vector2 { x: td.from_x, y: td.from_y }),
+            MapPosition::from_vec(Vector2 { x: td.to_x, y: td.to_y }),
+            &td.config,
+        ));
     }
-    if let Some(tween_data) = tween_rotation {
-        let easing = tween_data.easing.parse::<Easing>().unwrap();
-        let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
-        let mut tween = Tween::new(
-            Rotation {
-                degrees: tween_data.from,
-            },
-            Rotation {
-                degrees: tween_data.to,
-            },
-            tween_data.duration,
-        )
-        .with_easing(easing)
-        .with_loop_mode(loop_mode);
-        if tween_data.backwards {
-            tween = tween.with_backwards();
-        }
-        entity_commands.insert(tween);
+    if let Some(td) = tween_rotation {
+        entity_commands.insert(super::build_tween(
+            Rotation { degrees: td.from },
+            Rotation { degrees: td.to },
+            &td.config,
+        ));
     }
-    if let Some(tween_data) = tween_scale {
-        let easing = tween_data.easing.parse::<Easing>().unwrap();
-        let loop_mode = tween_data.loop_mode.parse::<LoopMode>().unwrap();
-        let mut tween = Tween::new(
-            Scale::new(tween_data.from_x, tween_data.from_y),
-            Scale::new(tween_data.to_x, tween_data.to_y),
-            tween_data.duration,
-        )
-        .with_easing(easing)
-        .with_loop_mode(loop_mode);
-        if tween_data.backwards {
-            tween = tween.with_backwards();
-        }
-        entity_commands.insert(tween);
+    if let Some(td) = tween_scale {
+        entity_commands.insert(super::build_tween(
+            Scale::new(td.from_x, td.from_y),
+            Scale::new(td.to_x, td.to_y),
+            &td.config,
+        ));
     }
 }
 

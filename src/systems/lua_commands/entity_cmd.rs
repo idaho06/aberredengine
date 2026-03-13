@@ -19,7 +19,7 @@ use crate::components::scale::Scale;
 use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
-use crate::components::tween::{Easing, LoopMode, Tween};
+use crate::components::tween::Tween;
 
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{EntityCmd, UniformValue};
@@ -244,49 +244,27 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             from_y,
             to_x,
             to_y,
-            duration,
-            easing,
-            loop_mode,
-            backwards,
+            config,
         } => {
-            let entity = Entity::from_bits(entity_id);
-            let parsed_easing = easing.parse::<Easing>().unwrap();
-            let parsed_loop = loop_mode.parse::<LoopMode>().unwrap();
-            let mut tween = Tween::new(
+            let tween = super::build_tween(
                 MapPosition::from_vec(Vector2 { x: from_x, y: from_y }),
                 MapPosition::from_vec(Vector2 { x: to_x, y: to_y }),
-                duration,
-            )
-            .with_easing(parsed_easing)
-            .with_loop_mode(parsed_loop);
-            if backwards {
-                tween = tween.with_backwards();
-            }
-            commands.entity(entity).insert(tween);
+                &config,
+            );
+            commands.entity(Entity::from_bits(entity_id)).insert(tween);
         }
         EntityCmd::InsertTweenRotation {
             entity_id,
             from,
             to,
-            duration,
-            easing,
-            loop_mode,
-            backwards,
+            config,
         } => {
-            let entity = Entity::from_bits(entity_id);
-            let parsed_easing = easing.parse::<Easing>().unwrap();
-            let parsed_loop = loop_mode.parse::<LoopMode>().unwrap();
-            let mut tween = Tween::new(
+            let tween = super::build_tween(
                 Rotation { degrees: from },
                 Rotation { degrees: to },
-                duration,
-            )
-            .with_easing(parsed_easing)
-            .with_loop_mode(parsed_loop);
-            if backwards {
-                tween = tween.with_backwards();
-            }
-            commands.entity(entity).insert(tween);
+                &config,
+            );
+            commands.entity(Entity::from_bits(entity_id)).insert(tween);
         }
         EntityCmd::InsertTweenScale {
             entity_id,
@@ -294,25 +272,14 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             from_y,
             to_x,
             to_y,
-            duration,
-            easing,
-            loop_mode,
-            backwards,
+            config,
         } => {
-            let entity = Entity::from_bits(entity_id);
-            let parsed_easing = easing.parse::<Easing>().unwrap();
-            let parsed_loop = loop_mode.parse::<LoopMode>().unwrap();
-            let mut tween = Tween::new(
+            let tween = super::build_tween(
                 Scale::new(from_x, from_y),
                 Scale::new(to_x, to_y),
-                duration,
-            )
-            .with_easing(parsed_easing)
-            .with_loop_mode(parsed_loop);
-            if backwards {
-                tween = tween.with_backwards();
-            }
-            commands.entity(entity).insert(tween);
+                &config,
+            );
+            commands.entity(Entity::from_bits(entity_id)).insert(tween);
         }
         EntityCmd::RemoveTweenPosition { entity_id } => {
             commands.entity(Entity::from_bits(entity_id)).remove::<Tween<MapPosition>>();
