@@ -2,7 +2,7 @@
 
 # Machine-readable context for AI assistants working on this codebase
 
-# Last updated: 2026-03-13 (Latest changes: CollisionRule<C> generic refactor, LuaCollisionCallback newtype, LuaCollisionRule type alias)
+# Last updated: 2026-03-13 (Latest changes: TweenConfig shared struct in spawn_data.rs + build_tween<T> helper in lua_commands/mod.rs; Tween<T> generic refactor; InputCtxPool/pooled input tables; LuaPhaseRunner/LuaTimerRunner structs; build_entity_context extracted to lua_commands/context.rs; set_opt! macro; snapshot types in lua_runtime/context.rs; GameSceneState gains camera_follow+anim_store; drain_common_commands extracted)
 
 ## QUICK REFERENCE
 
@@ -22,7 +22,7 @@ LUA API REFERENCE: assets/scripts/engine.lua (generated EmmyLua stubs — regene
 LUA API DOCS:      assets/scripts/README.md
 COMMAND ENUMS:     src/resources/lua_runtime/commands.rs + spawn_data.rs (EntityCmd, SpawnCmd, CloneCmd, SignalCmd, etc.)
 
-## STATUS (2026-03-11)
+## STATUS (2026-03-13)
 
 - Multi-game showcase: main.lua uses a scene registry + callback injection system to run multiple independent game examples from a shared menu.
 - Registered scenes: menu, asteroids_level01, arkanoid_level01, birthday_intro, birthday_card, kraken_intro, sidescroller_level01, bunnymark_menu, bunnymark_map_loop, bunnymark_screen_loop, bunnymark_map_phase, bunnymark_screen_phase.
@@ -62,7 +62,7 @@ src/
 ├── main.rs                    # App entry, CLI (clap), delegates to EngineBuilder
 ├── lib.rs                     # Library crate entry (components, engine_app, events, lua_plugin, resources, systems, stub_generator, luarc_generator)
 ├── engine_app.rs              # EngineBuilder: builder pattern for engine bootstrapping (world, window, resources, schedule, main loop)
-├── lua_plugin.rs              # [feature=lua] Lua plugin: GameState logic, scene switching, Lua callbacks + ScriptingContext/GameSceneState/EntityProcessing SystemParams
+├── lua_plugin.rs              # [feature=lua] Lua plugin: GameState logic, scene switching, Lua callbacks + ScriptingContext/GameSceneState/EntityProcessing SystemParams; drain_common_commands shared helper
 ├── stub_generator.rs          # [feature=lua] Lua EmmyLua stub generator (reads __meta, emits engine.lua)
 ├── luarc_generator.rs         # [feature=lua] .luarc.json generator (Lua Language Server config from __meta)
 ├── components/
@@ -116,9 +116,10 @@ src/
 │   ├── animation.rs           # Frame advancement + rule evaluation (AnimationController) + compute_frame_offset (row-wrapping)
 │   ├── luaphase.rs            # [feature=lua] Lua phase callbacks (LuaPhaseRunner impl + lua_phase_system)
 │   ├── lua_commands/          # [feature=lua] Process EntityCmd/CollisionEntityCmd/SpawnCmd/InputCmd
-│   │   ├── mod.rs             # Re-exports + EntityCmdQueries/ContextQueries SystemParam bundles + shared imports
-│   │   ├── entity_cmd.rs      # process_entity_commands: runtime entity manipulation
-│   │   ├── spawn_cmd.rs       # process_spawn_command, process_clone_command: entity creation
+│   │   ├── mod.rs             # Re-exports + EntityCmdQueries/ContextQueries SystemParam bundles + shared imports; build_tween<T: TweenValue> helper (pub(crate))
+│   │   ├── context.rs         # build_entity_context: gathers ECS component data and builds pooled Lua ctx table (used by phase and timer systems)
+│   │   ├── entity_cmd.rs      # process_entity_commands: runtime entity manipulation (split into process_physics_cmd, process_signal_cmd, process_animation_cmd, process_tween_cmd sub-fns)
+│   │   ├── spawn_cmd.rs       # process_spawn_command, process_clone_command: entity creation (split into apply_transform/physics/render/animation_components)
 │   │   └── parse.rs           # parse_cmp_op, convert_animation_condition: animation condition helpers
 │   ├── luatimer.rs            # [feature=lua] Lua timer: LuaTimerRunner + update_lua_timers + lua_timer_observer
 │   ├── timer.rs               # Rust timer: RustTimerRunner + update_timers + timer_observer
@@ -168,15 +169,15 @@ src/
 │   ├── uniformvalue.rs        # UniformValue enum (Float/Vec2/Vec3/Vec4/Int/Bool) used by shaders
 │   └── lua_runtime/           # [feature=lua]
 │       ├── mod.rs             # Public exports
-│       ├── runtime.rs         # LuaRuntime, LuaAppData, GameConfigSnapshot, pool types (CollisionCtxPool, EntityCtxPool, etc.), action_to_str/action_from_str
+│       ├── runtime.rs         # LuaRuntime, LuaAppData, GameConfigSnapshot, pool types (CollisionCtxPool, EntityCtxPool, InputCtxPool/InputCtxTables), action_to_str/action_from_str; LuaRuntime::get_function, update_input_table, get_input_ctx_pool
 │       ├── engine_api.rs      # All register_*_api methods + free functions: push_fn_meta, register_cmd, register_entity_cmds, define_entity_cmds
 │       ├── command_queues.rs  # All drain_*_commands methods, clear_all_commands, update_signal_cache, update_bindings_cache, etc.
 │       ├── stub_meta.rs       # Stub metadata types (BuilderMethodParam, BuilderMethodDef, TypeFieldDef, LuaTypeDef), push_type_field, stub/meta registration methods
 │       ├── commands.rs        # EntityCmd, SpawnCmd, SignalCmd, InputCmd, etc.
-│       ├── context.rs         # Entity context builder for Lua callbacks (phase/timer); EntitySnapshot struct
+│       ├── context.rs         # Entity context builder for Lua callbacks; snapshot types (EntitySnapshot, RigidBodySnapshot, SpriteSnapshot, AnimationSnapshot, LuaPhaseSnapshot, LuaTimerSnapshot); set_opt! macro; build_entity_context_pooled; populate_entity_signals
 │       ├── input_snapshot.rs  # InputSnapshot for Lua callbacks
 │       ├── entity_builder.rs  # LuaEntityBuilder fluent API (unified spawn/clone, regular/collision)
-│       └── spawn_data.rs      # SpawnComponentData structures
+│       └── spawn_data.rs      # SpawnComponentData structures; TweenConfig shared struct (duration/easing/loop_mode/backwards)
 └── events/
     ├── mod.rs                 # Re-exports
     ├── collision.rs           # CollisionEvent
@@ -271,7 +272,9 @@ Phase<C = PhaseCallbackFns> { current: String, previous: Option<String>, next: O
 LuaPhase = Phase<PhaseCallbacks>   -- type alias; PhaseCallbacks { on_enter: Option<String>, on_update: Option<String>, on_exit: Option<String> }
 DynamicText { text: Arc<str>, font: Arc<str>, font_size: f32, color: Color, size: Vector2 }
 SignalBinding { key: String, format: Option<String>, binding_type: BindingType }
-Tween<T> { from: T, to: T, duration, easing, loop_mode, playing, time, forward }  -- used as Tween<MapPosition>, Tween<Rotation>, Tween<Scale>
+Tween<T: TweenValue> { from: T, to: T, duration, easing: Easing, loop_mode: LoopMode, playing, time, forward }  -- used as Tween<MapPosition>, Tween<Rotation>, Tween<Scale>
+  TweenValue: trait { interpolate(from: &Self, to: &Self, t: f32) -> Self } -- implemented for MapPosition, Rotation, Scale
+  Easing: Linear|QuadIn|QuadOut|QuadInOut|CubicIn|CubicOut|CubicInOut (str: "linear"|"quad_in"|"quad_out"|"quad_in_out"|"cubic_in"|"cubic_out"|"cubic_in_out")
 Timer<C = TimerCallback> { duration: f32, elapsed: f32, callback: C }
   TimerCallback = fn(Entity, &mut GameCtx, &InputState)
 LuaTimer = Timer<LuaTimerCallback>   -- type alias; LuaTimerCallback { name: String }
@@ -339,8 +342,10 @@ UniformValue { Float(f32), Vec2([f32;2]), Vec3([f32;3]), Vec4([f32;4]), Int(i32)
 ```
 RaylibAccess<'w> { rl: NonSendMut<RaylibHandle>, th: NonSend<RaylibThread> }                                          -- systems/mod.rs
 ScriptingContext<'w> { lua_runtime: NonSend<LuaRuntime>, audio_cmd_writer: MessageWriter<AudioCmd> }                  -- lua_plugin.rs [feature=lua]
-GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, systems_store: Res<SystemsStore> } -- lua_plugin.rs [feature=lua]
+GameSceneState<'w> { world_signals: ResMut<WorldSignals>, post_process: ResMut<PostProcessShader>, config: ResMut<GameConfig>, camera_follow: ResMut<CameraFollowConfig>, systems_store: Res<SystemsStore>, anim_store: Res<AnimationStore> } -- lua_plugin.rs [feature=lua]
 EntityProcessing<'w, 's> { cmd_queries: EntityCmdQueries, luaphase: Query<(Entity, &mut LuaPhase)> }                  -- lua_plugin.rs [feature=lua]
+LuaPhaseRunner<'a,'w,'s> { lua_runtime, input_table, ctx_queries, cmd_queries }                                       -- systems/luaphase.rs [feature=lua]; implements PhaseRunner<PhaseCallbacks>
+LuaTimerRunner<'a,'w,'s> { commands }                                                                                  -- systems/luatimer.rs [feature=lua]; implements TimerRunner<LuaTimerCallback>
 EntityCmdQueries<'w, 's> { stuckto, signals, animation, rigid_bodies, positions, screen_positions, sprites, shaders, global_transforms } -- systems/lua_commands/mod.rs [feature=lua]
 ContextQueries<'w, 's> { groups, rotations, scales, box_colliders, lua_timers, global_transforms, child_of }         -- systems/lua_commands/mod.rs [feature=lua] (read-only queries for entity context building)
 RenderResources<'w> { camera, screensize, window_size, textures, world_time, post_process, config, maybe_debug, fonts } -- systems/render.rs
@@ -445,7 +450,7 @@ Ordering constraints (see engine_app.rs for authoritative schedule):
 
 ```
 particle_emitter_system.before(movement)
-propagate_transforms.after(movement, tween_system::<MapPosition/Rotation/Scale>).before(collision_detector)
+propagate_transforms.after(movement).after(tween_system::<MapPosition>).after(tween_system::<Rotation>).after(tween_system::<Scale>).before(collision_detector)
 cleanup_orphaned_global_transforms.after(propagate_transforms).before(collision_detector)
 camera_follow_system.after(propagate_transforms).before(render_system)
 collision_detector.after(mouse_controller, movement)
@@ -561,7 +566,7 @@ movement_system
 ```
 Physics:          rigidbody.rs, movement.rs
 Lua API:          runtime.rs, engine_api.rs, command_queues.rs, stub_meta.rs, commands.rs, entity_builder.rs, context.rs, input_snapshot.rs  [feature=lua]
-Lua commands:     lua_commands/mod.rs (SystemParams), lua_commands/entity_cmd.rs (entity ops), lua_commands/spawn_cmd.rs (spawn/clone), lua_commands/parse.rs (anim conditions)  [feature=lua]
+Lua commands:     lua_commands/mod.rs (SystemParams), lua_commands/context.rs (build_entity_context), lua_commands/entity_cmd.rs (entity ops), lua_commands/spawn_cmd.rs (spawn/clone), lua_commands/parse.rs (anim conditions)  [feature=lua]
 Collision:        collision_detector.rs, collision.rs (shared helpers), rust_collision.rs, lua_collision.rs (systems)
                   collision.rs, boxcollider.rs, luacollision.rs (components)
 Camera follow:    cameratarget.rs (component), camerafollowconfig.rs (resource), camera_follow.rs (system)
@@ -671,10 +676,18 @@ Engine bootstrap: engine_app.rs (EngineBuilder, system schedule)
 57. `scene_switch_poll` is added to the schedule when using `SceneManager` (`.add_scene()`). It polls the `"switch_scene"` flag in `WorldSignals` each frame and runs `scene_switch_system` when set. This is distinct from `scene_switch_system` itself (which is registered as a persistent `SystemsStore` entry but not in the per-frame schedule directly).
 58. `utils.lua` (`assets/scripts/lib/utils.lua`) exports `M.has_flag(flags, name)` (checks array-like flags table) and `M.dump_value(value, max_depth, ...)` (pretty-print for debugging). Load with `local utils = require("lib.utils")`.
 59. `EngineBuilder.run()` calls these methods in order: `validate_builder` → `load_config` → `setup_window` → `setup_world` → `register_systems` → `spawn_observers` → `build_schedule` → `main_loop`. Each is a private method; `run()` consumes the builder.
-60. `lua_commands` is now a **submodule** (`systems/lua_commands/`), not a single file. `EntityCmdQueries` and `ContextQueries` SystemParams live in `mod.rs`; command processing is split across `entity_cmd.rs` (runtime entity ops), `spawn_cmd.rs` (spawn/clone), and `parse.rs` (animation condition helpers). Public API: `process_entity_commands`, `process_spawn_command`, `process_clone_command`.
-61. `Easing` and `LoopMode` (in `components/tween.rs`) implement `std::str::FromStr`. Parse strings directly: `"linear".parse::<Easing>()`, `"ping_pong".parse::<LoopMode>()`. Unknown strings default to `Easing::Linear` / `LoopMode::Once` respectively (infallible).
+60. `lua_commands` is now a **submodule** (`systems/lua_commands/`), not a single file. `EntityCmdQueries` and `ContextQueries` SystemParams live in `mod.rs`; command processing is split across `context.rs` (entity context building), `entity_cmd.rs` (runtime entity ops), `spawn_cmd.rs` (spawn/clone), and `parse.rs` (animation condition helpers). `mod.rs` re-exports `build_entity_context` from `context.rs` as `pub(crate)`. Public API: `process_entity_commands`, `process_spawn_command`, `process_clone_command`, `build_entity_context`.
+61. `Easing` and `LoopMode` (in `components/tween.rs`) implement `std::str::FromStr`. `Easing` variants: `Linear`, `QuadIn`, `QuadOut`, `QuadInOut`, `CubicIn`, `CubicOut`, `CubicInOut`. String forms: `"linear"`, `"quad_in"`, `"quad_out"`, `"quad_in_out"`, `"cubic_in"`, `"cubic_out"`, `"cubic_in_out"`. `LoopMode` string forms: `"once"`, `"loop"`, `"ping_pong"`. Unknown strings default to `Easing::Linear` / `LoopMode::Once` (infallible). `TweenValue` trait: `fn interpolate(from: &Self, to: &Self, t: f32) -> Self` — implemented for `MapPosition`, `Rotation`, `Scale`. `tween_system::<T>` is generic and scheduled three times (for MapPosition, Rotation, Scale). `TweenConfig` (in `spawn_data.rs`, re-exported from `commands.rs`) is a shared Lua-side data struct `{ duration: f32, easing: String, loop_mode: String, backwards: bool }` used by `TweenPositionData`/`TweenRotationData`/`TweenScaleData` and `EntityCmd::InsertTween*` variants; `TweenConfig::new(duration)` creates with linear/once/forward defaults. `build_tween::<T>(from, to, config)` in `lua_commands/mod.rs` converts a `TweenConfig` into a fully configured `Tween<T>` component (pub(crate)).
 62. `LuaPhase` is now a type alias `Phase<PhaseCallbacks>` (not a separate struct). `Phase<C>` is generic; both Rust and Lua phases share the same component with different callback payload types (`PhaseCallbackFns` for Rust, `PhaseCallbacks` for Lua).
 63. Phase `on_exit` fires AFTER the phase swap: when `on_exit` is called, `phase.current` is already the new phase. Exit callbacks are looked up by the old phase name, but the component reflects the new state.
 64. `process_entity_commands` takes `&mut EntityCmdQueries` (not individual query parameters). `LuaCollisionObserverParams` embeds `EntityCmdQueries` as `entity_cmds` field instead of separate query fields.
 65. `phase_core.rs` (`systems/phase_core.rs`) is `pub(crate)` — not public API. `PhaseRunner<C>` trait + `run_phase_callbacks` / `apply_callback_transitions` / `queue_phase_transition` are internal shared helpers used by both `phase_system` and `lua_phase_system`.
 66. `CollisionRule<C>` generic pattern: `CollisionRule::new` takes `callback: C` (generic). When constructing a Rust collision rule, always cast explicitly: `CollisionRule::new("a", "b", my_fn as CollisionCallback)`. Without the cast, Rust stores the function item type instead of `CollisionCallback`, and `Query<&CollisionRule>` (= `Query<&CollisionRule<CollisionCallback>>`) won't find the entity. For Lua rules: `CollisionRule::new("a", "b", LuaCollisionCallback { name: "fn_name".into() })`. Same constraint applies to `Timer<C>` (use `my_fn as TimerCallback`).
+67. `LuaRuntime` gains `input_ctx_pool` field — pooled `InputCtxTables` reused across all Lua callbacks (on_update, phase, timer). Access via `lua_runtime.get_input_ctx_pool()` → `InputCtxTables`; update live values via `lua_runtime.update_input_table(&InputSnapshot)`. Avoids creating a new Lua input table every frame. `LuaRuntime::get_function(name) -> LuaResult<Option<LuaFunction>>` resolves a global Lua function by name (used by `LuaPhaseRunner` and `lua_timer_observer`).
+68. `set_opt!` macro in `resources/lua_runtime/context.rs` — two forms: `set_opt!(ctx, "key", opt)` (scalar: sets value or Nil directly on ctx table); `set_opt!(ctx, "key", opt, pat, { body })` (block: pattern-destructs the `Some` value and runs body, or sets Nil). Used in `build_entity_context_pooled` to populate the entity ctx table without repeated `if let Some` boilerplate.
+69. Snapshot types in `resources/lua_runtime/context.rs` (intermediate data structs passed to `build_entity_context_pooled`): `RigidBodySnapshot { velocity: (f32,f32), speed_sq: f32, frozen: bool }`, `SpriteSnapshot { tex_key: &str, flip_h, flip_v }`, `AnimationSnapshot { key: &str, frame_index: usize, elapsed: f32 }`, `LuaPhaseSnapshot { current: &str, time_in_phase: f32 }`, `LuaTimerSnapshot { duration, elapsed, callback: &str }`.
+70. `build_entity_context` (`systems/lua_commands/context.rs`, `pub(crate)`) consolidates entity context building for both `lua_phase_system` and `lua_timer_observer`. Accepts `ContextQueries` + `EntityCmdQueries` + optional phase/timer snapshots. Calls `build_entity_context_pooled` (low-level table writer in `resources/lua_runtime/context.rs`). Distinct from `build_entity_context_pooled` — the former is the ECS-facing adapter; the latter is the pure-Lua table writer.
+71. `drain_common_commands` (`lua_plugin.rs`) — shared helper called from both `update` and `switch_scene` to drain signal/audio/input/camera-follow commands in one place. Signature: `fn drain_common_commands(lua_runtime, scene_state, audio_cmd_writer, bindings)`.
+72. `process_entity_commands` (entity_cmd.rs) dispatches to sub-functions: `process_physics_cmd` (position/velocity/freeze), `process_signal_cmd` (signals/flags), `process_animation_cmd` (RestartAnimation/SetAnimation/SetSpriteFlip — takes `&AnimationStore` for tex_key sync), `process_tween_cmd` (inserts Tween<T> components). `process_animation_cmd` now receives `anim_store: &AnimationStore` directly (was previously passed via the main query bundle).
+73. `LuaPhaseRunner` struct (`systems/luaphase.rs`) holds `lua_runtime`, `input_table` (pre-fetched pooled table), `ctx_queries`, `cmd_queries`. Implements `PhaseRunner<PhaseCallbacks>` with `call_enter`/`call_update`/`call_exit`. Free functions: `build_phase_context`, `process_callback_return`, `call_phase_enter/update/exit`. `lua_phase_system` pre-fetches the pooled input table once then passes it to the runner.
+74. `LuaTimerRunner` struct (`systems/luatimer.rs`) holds `commands: &mut Commands`. Implements `TimerRunner<LuaTimerCallback>` with `on_fire`. `build_timer_context` free function builds the entity ctx table for timer callbacks. `update_lua_timers` uses `run_timer_update` from `timer_core.rs` via the `LuaTimerRunner` impl.
