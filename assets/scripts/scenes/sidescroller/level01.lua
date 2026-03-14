@@ -6,6 +6,7 @@ local M = {}
 
 local running_speed = 80
 local walking_speed = 40
+local jump_speed = -100
 
 -- ─── Helper functions (local) ─────────────────────────────────────────────────
 --- Updates the player's facing direction based on input.
@@ -68,6 +69,10 @@ local function player_running_on_update(ctx, input, dt)
     if input.digital.action_1.just_pressed then
         return "attack"
     end
+    if input.digital.action_2.just_pressed then
+        engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
+        return "jumping"
+    end
     if input.digital.left.pressed or input.digital.right.pressed then
         -- Keep running (or switch to walking if action_3 held)
         update_facing_direction(ctx.id, input)
@@ -117,6 +122,10 @@ local function player_walking_on_update(ctx, input, dt)
     end
     if input.digital.action_1.just_pressed then
         return "attack"
+    end
+    if input.digital.action_2.just_pressed then
+        engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
+        return "jumping"
     end
 
     local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
@@ -181,6 +190,42 @@ local function player_falling_on_exit(ctx)
     engine.entity_signal_clear_flag(ctx.id, "falling")
 end
 
+--- Called when entering the jumping phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+local function player_jumping_on_enter(ctx, input)
+    engine.log_info("Player started jumping!")
+    engine.entity_signal_set_flag(ctx.id, "jumping")
+end
+
+--- Called each frame while in the jumping phase.
+--- @param ctx EntityContext Entity state
+--- @param input InputSnapshot Input state table
+--- @param dt number Delta time in seconds
+local function player_jumping_on_update(ctx, input, dt)
+    if utils.has_flag(ctx.signals.flags, "on_ground") then
+        return "idle"
+    end
+    if ctx.vel.y > 0 then
+        return "falling"
+    end
+    -- Allow horizontal steering while rising
+    if input.digital.left.pressed and not input.digital.right.pressed then
+        update_facing_direction(ctx.id, input)
+        engine.entity_set_velocity(ctx.id, -walking_speed, ctx.vel.y)
+    elseif input.digital.right.pressed and not input.digital.left.pressed then
+        update_facing_direction(ctx.id, input)
+        engine.entity_set_velocity(ctx.id, walking_speed, ctx.vel.y)
+    end
+end
+
+--- Called when exiting the jumping phase.
+--- @param ctx EntityContext Entity state
+local function player_jumping_on_exit(ctx)
+    engine.log_info("Player stopped jumping.")
+    engine.entity_signal_clear_flag(ctx.id, "jumping")
+end
+
 --- Called when entering the idle phase.
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
@@ -207,6 +252,11 @@ local function player_idle_on_update(ctx, input, dt)
 
     if input.digital.action_1.just_pressed then
         return "attack"
+    end
+
+    if input.digital.action_2.just_pressed then
+        engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
+        return "jumping"
     end
 
     local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
@@ -282,15 +332,23 @@ local function collision_ground_player(ctx)
 
     -- look for "bottom" in ctx.sides.b
     local player_on_ground = false
-    for _, side in pairs(ctx.sides.b) do
-        if side == "bottom" then
-            player_on_ground = true
-            break
-        end -- TODO: If we have a collision, but it's not the bottom, then we are touching a wall or ceiling!
+
+    -- for _, side in pairs(ctx.sides.b) do
+    --     if side == "bottom" then
+    --         player_on_ground = true
+    --         break
+    --     end -- TODO: If we have a collision, but it's not the bottom, then we are touching a wall or ceiling!
+    -- end
+
+    if utils.has_flag(ctx.sides.b, "bottom") and utils.has_flag(ctx.sides.a, "top") then
+        player_on_ground = true
     end
+
+
     if player_on_ground then
         engine.collision_entity_signal_set_flag(ctx.b.id, "on_ground")
         engine.collision_entity_signal_clear_flag(ctx.b.id, "falling")
+        engine.collision_entity_signal_clear_flag(ctx.b.id, "jumping")
         -- engine.entity_signal_set_flag(ctx.b.id, "on_ground")
         -- engine.entity_signal_clear_flag(ctx.b.id, "falling")
         engine.log_info("collision: setting player `on_ground` signal")
@@ -325,6 +383,9 @@ M._callbacks = {
     player_falling_on_enter = player_falling_on_enter,
     player_falling_on_update = player_falling_on_update,
     player_falling_on_exit = player_falling_on_exit,
+    player_jumping_on_enter = player_jumping_on_enter,
+    player_jumping_on_update = player_jumping_on_update,
+    player_jumping_on_exit = player_jumping_on_exit,
     player_idle_on_enter = player_idle_on_enter,
     player_idle_on_update = player_idle_on_update,
     player_attack_on_enter = player_attack_on_enter,
@@ -387,6 +448,11 @@ function M.spawn()
                     on_enter = "player_falling_on_enter",
                     on_update = "player_falling_on_update",
                     on_exit = "player_falling_on_exit"
+                },
+                jumping = {
+                    on_enter = "player_jumping_on_enter",
+                    on_update = "player_jumping_on_update",
+                    on_exit = "player_jumping_on_exit"
                 }
             }
         })
@@ -407,6 +473,9 @@ function M.spawn()
         :with_animation_rule({
             type = "has_flag", key = "walking"
         }, "sidescroller-char_red_walk")
+        :with_animation_rule({
+            type = "has_flag", key = "jumping"
+        }, "sidescroller-char_red_jump")
         :with_animation_rule({
             type = "has_flag", key = "falling"
         }, "sidescroller-char_red_jump_falling")
