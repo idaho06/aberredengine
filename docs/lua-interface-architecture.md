@@ -61,12 +61,26 @@ The Lua runtime is organized in `src/resources/lua_runtime/`:
 ```text
 src/resources/lua_runtime/
 ├── mod.rs              # Public exports
-├── runtime.rs          # LuaRuntime struct, engine table API registration, context pools
-├── commands.rs         # Command enums (EntityCmd, SignalCmd, etc.)
-├── context.rs          # Entity context builder for Lua callbacks (pooled)
-├── entity_builder.rs   # LuaEntityBuilder fluent API for spawning
-├── input_snapshot.rs   # InputSnapshot for Lua callbacks
-└── spawn_data.rs       # Data structures for spawn configuration
+├── runtime.rs          # LuaRuntime struct, LuaAppData, pool types, GameConfigSnapshot
+├── engine_api.rs       # API registration: register_*_api() methods, macros (register_cmd!, etc.), push_fn_meta()
+├── command_queues.rs   # drain_*_commands() methods, clear_all_commands, cache updates
+├── stub_meta.rs        # Stub metadata types, meta registration (types, enums, callbacks, builder meta)
+├── commands.rs         # Command enums (EntityCmd, SignalCmd, CameraFollowCmd, InputCmd, etc.)
+├── context.rs          # Entity context builder for Lua callbacks (pooled), snapshot types
+├── entity_builder.rs   # LuaEntityBuilder fluent API for spawning/cloning
+├── input_snapshot.rs   # InputSnapshot, DigitalInputs, AnalogInputs for Lua callbacks
+└── spawn_data.rs       # Data structures for spawn configuration (SpawnCmd, component data structs)
+```
+
+Command processing lives in a separate submodule:
+
+```text
+src/systems/lua_commands/
+├── mod.rs              # Re-exports, EntityCmdQueries/ContextQueries SystemParams, build_tween helper
+├── context.rs          # build_entity_context: gathers ECS data → pooled Lua ctx table
+├── entity_cmd.rs       # process_entity_commands: runtime entity manipulation (physics, signals, tweens, shaders, hierarchy)
+├── spawn_cmd.rs        # process_spawn_command, process_clone_command: entity creation via apply_components()
+└── parse.rs            # Animation condition parsing helpers
 ```
 
 ### Key Components
@@ -76,20 +90,26 @@ src/resources/lua_runtime/
 The main struct managing the Lua interpreter. It:
 
 - Initializes the Lua state with MLua
-- Registers the global `engine` table with all API functions via `register_*_api()` methods
-- Populates `engine.__meta` with structured metadata for introspection (via `register_cmd!` macro and `push_fn_meta()` helper)
-- Registers builder class metadata via `register_builder_meta()` in `engine.__meta.classes` (includes `schema` refs for complex table params)
-- Registers type shape definitions via `register_types_meta()` in `engine.__meta.types`
-- Registers enum value sets via `register_enums_meta()` in `engine.__meta.enums`
-- Registers callback signatures via `register_callbacks_meta()` in `engine.__meta.callbacks`
+- Delegates API registration to `register_*_api()` methods in `engine_api.rs`
 - Manages `LuaAppData` for command queuing
-- Provides `drain_*_commands()` methods for Rust to retrieve queued commands
-- Provides `clear_all_commands()` to discard stale commands on scene switches
-- Manages **context table pools** for collision and entity callbacks (see [Context Table Pooling](#context-table-pooling))
-- Uses three macros for registration:
-  - `register_cmd!` — registers a single Lua function that pushes to a queue, with metadata
-  - `register_entity_cmds!` — batch-registers entity commands with a name prefix
-  - `define_entity_cmds!` — defines all entity commands once; called with `""` and `"collision_"` prefixes
+- Manages **context table pools** for collision, entity, and input callbacks (see [Context Table Pooling](#context-table-pooling))
+- Provides `get_function()` to resolve global Lua functions by name
+
+#### `engine_api.rs`
+
+Contains all `engine` table API registration. Uses three macros:
+
+- `register_cmd!` — registers a single Lua function that pushes to a queue, with metadata
+- `register_entity_cmds!` — batch-registers entity commands with a name prefix
+- `define_entity_cmds!` — defines all entity commands once; called with `""` and `"collision_"` prefixes
+
+And one helper function:
+
+- `push_fn_meta()` — pushes function metadata to `engine.__meta.functions` (used for manually registered functions that don't go through `register_cmd!`)
+
+#### `command_queues.rs`
+
+Contains all `drain_*_commands()` methods and cache update functions (`update_signal_cache`, `update_bindings_cache`, etc.).
 
 #### `LuaAppData` (runtime.rs)
 
@@ -97,8 +117,9 @@ Internal shared state accessible from Lua closures:
 
 ```rust
 pub(super) struct LuaAppData {
+    // Regular command queues
     asset_commands: RefCell<Vec<AssetCmd>>,
-    pub(super) spawn_commands: RefCell<Vec<SpawnCmd>>,
+    spawn_commands: RefCell<Vec<SpawnCmd>>,
     audio_commands: RefCell<Vec<AudioLuaCmd>>,
     signal_commands: RefCell<Vec<SignalCmd>>,
     phase_commands: RefCell<Vec<PhaseCmd>>,
@@ -108,79 +129,31 @@ pub(super) struct LuaAppData {
     camera_commands: RefCell<Vec<CameraCmd>>,
     animation_commands: RefCell<Vec<AnimationCmd>>,
     render_commands: RefCell<Vec<RenderCmd>>,
-
-    /// Clone commands for regular context (scene setup, phase callbacks)
-    pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
+    clone_commands: RefCell<Vec<CloneCmd>>,
+    gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
+    camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
+    input_commands: RefCell<Vec<InputCmd>>,
 
     // Collision-scoped command queues (processed immediately after each collision callback)
     collision_entity_commands: RefCell<Vec<EntityCmd>>,
     collision_signal_commands: RefCell<Vec<SignalCmd>>,
     collision_audio_commands: RefCell<Vec<AudioLuaCmd>>,
-    pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
+    collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
     collision_phase_commands: RefCell<Vec<PhaseCmd>>,
     collision_camera_commands: RefCell<Vec<CameraCmd>>,
+    collision_clone_commands: RefCell<Vec<CloneCmd>>,
 
-    /// Clone commands for collision context (processed after collision callbacks)
-    pub(super) collision_clone_commands: RefCell<Vec<CloneCmd>>,
-
-    /// Cached world signal snapshot (read-only for Lua)
+    // Cached snapshots (read-only for Lua)
     signal_snapshot: RefCell<Arc<SignalSnapshot>>,
-    /// Cached tracked group names (read-only snapshot for Lua)
     tracked_groups: RefCell<FxHashSet<String>>,
+    gameconfig_snapshot: RefCell<GameConfigSnapshot>,
+    bindings_snapshot: RefCell<HashMap<String, String>>,
 }
 ```
 
 #### Command Enums (commands.rs)
 
-Each command type is a Rust enum that encapsulates all data needed to perform an operation:
-
-```rust
-/// Value types for shader uniforms.
-pub enum UniformValue {
-    Float(f32),
-    Int(i32),
-    Vec2 { x: f32, y: f32 },
-    Vec4 { x: f32, y: f32, z: f32, w: f32 },
-}
-
-/// Commands for render-related operations from Lua.
-pub enum RenderCmd {
-    SetPostProcessShader { ids: Option<Vec<String>> },
-    SetPostProcessUniform { name: String, value: UniformValue },
-    ClearPostProcessUniform { name: String },
-    ClearPostProcessUniforms,
-}
-
-pub enum EntityCmd {
-    SetVelocity { entity_id: u64, vx: f32, vy: f32 },
-    Despawn { entity_id: u64 },
-    SignalSetFlag { entity_id: u64, flag: String },
-    // ... physics, tween, signal variants ...
-    SetShader { entity_id: u64, key: String },
-    RemoveShader { entity_id: u64 },
-    ShaderSetFloat { entity_id: u64, name: String, value: f32 },
-    ShaderSetInt { entity_id: u64, name: String, value: i32 },
-    ShaderSetVec2 { entity_id: u64, name: String, x: f32, y: f32 },
-    ShaderSetVec4 { entity_id: u64, name: String, x: f32, y: f32, z: f32, w: f32 },
-    ShaderClearUniform { entity_id: u64, name: String },
-    ShaderClearUniforms { entity_id: u64 },
-    SetTint { entity_id: u64, r: u8, g: u8, b: u8, a: u8 },
-    RemoveTint { entity_id: u64 },
-}
-
-pub enum SignalCmd {
-    SetScalar { key: String, value: f32 },
-    SetInteger { key: String, value: i32 },
-    SetString { key: String, value: String },
-    SetFlag { key: String },
-    ClearFlag { key: String },
-    ClearScalar { key: String },
-    ClearInteger { key: String },
-    ClearString { key: String },
-    SetEntity { key: String, entity_id: u64 },
-    RemoveEntity { key: String },
-}
-```
+Each command type is a Rust enum that encapsulates all data needed to perform an operation. See [Command Types and Queues](#command-types-and-queues) for the full list.
 
 ---
 
@@ -199,7 +172,7 @@ engine.set_flag("switch_scene")
 Most Lua functions are registered via the `register_cmd!` macro, which generates the closure, pushes to the correct queue, and registers metadata in `engine.__meta` — all in one declaration:
 
 ```rust
-// In runtime.rs — macro-based registration (typical pattern)
+// In engine_api.rs — macro-based registration (typical pattern)
 register_cmd!(engine, self.lua, meta_fns, "set_scalar", signal_commands,
     |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
     desc = "Set a world signal scalar value", cat = "signal",
@@ -209,12 +182,12 @@ register_cmd!(engine, self.lua, meta_fns, "set_scalar", signal_commands,
 Entity commands are registered in bulk via `define_entity_cmds!`, which calls `register_entity_cmds!` under the hood. A single definition under `define_entity_cmds!` is invoked twice — once with `""` prefix for regular commands and once with `"collision_"` for collision commands:
 
 ```rust
-// In runtime.rs
+// In engine_api.rs
 define_entity_cmds!(engine, self.lua, meta_fns, "", entity_commands);
 define_entity_cmds!(engine, self.lua, meta_fns, "collision_", collision_entity_commands);
 ```
 
-For the ~17 functions with non-push logic (reads, builders, validation), registration is still manual with a separate `push_fn_meta()` call for metadata:
+For functions with non-push logic (reads, builders, validation), registration is manual with a separate `push_fn_meta()` call for metadata:
 
 ```rust
 // Manual registration example (read function)
@@ -229,10 +202,10 @@ push_fn_meta(&self.lua, &meta_fns, "get_scalar", "Get a world signal scalar valu
 
 ### Step 3: Rust Drains Commands
 
-After the Lua callback returns, Rust calls `drain_*_commands()`:
+After the Lua callback returns, Rust calls `drain_*_commands()` (defined in `command_queues.rs`):
 
 ```rust
-// In game.rs update()
+// In lua_plugin.rs update()
 for cmd in lua_runtime.drain_entity_commands() {
     // Process each command
 }
@@ -240,34 +213,20 @@ for cmd in lua_runtime.drain_entity_commands() {
 
 ### Step 4: Commands are Processed
 
-The `process_*` functions in `lua_commands.rs` apply changes to the ECS:
+The processing functions in `systems/lua_commands/` apply changes to the ECS. `process_entity_commands` takes an `EntityCmdQueries` SystemParam bundle and dispatches to sub-functions:
 
 ```rust
-// In lua_commands.rs
+// In lua_commands/entity_cmd.rs
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
-    stuckto_query: &Query<&StuckTo>,
-    signals_query: &mut Query<&mut Signals>,
-    animation_query: &mut Query<&mut Animation>,
-    rigid_bodies_query: &mut Query<&mut RigidBody>,
-    positions_query: &mut Query<&mut MapPosition>,
-    shader_query: &mut Query<&mut EntityShader>,
+    cmd_queries: &mut EntityCmdQueries,
     systems_store: &SystemsStore,
-) {
-    for cmd in entity_commands {
-        match cmd {
-            EntityCmd::SetVelocity { entity_id, vx, vy } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
-                    rb.velocity = Vector2 { x: vx, y: vy };
-                }
-            }
-            // ... handle other variants
-        }
-    }
-}
+    anim_store: &AnimationStore,
+) { ... }
 ```
+
+Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands/spawn_cmd.rs`. Both delegate to the shared `apply_components()` helper.
 
 ---
 
@@ -288,18 +247,21 @@ This distinction matters because collision callbacks need immediate processing t
 
 | Category | Enum | Purpose |
 | -------- | ---- | ------- |
-| **Entity** | `EntityCmd` | Manipulate existing entities (velocity, position, signals, components) |
+| **Entity** | `EntityCmd` | Manipulate existing entities (velocity, position, signals, shaders, tweens, hierarchy, camera target) |
 | **Spawn** | `SpawnCmd` | Create new entities with components |
 | **Clone** | `CloneCmd` | Clone an entity registered in WorldSignals and apply builder overrides |
 | **Signal** | `SignalCmd` | Modify global WorldSignals |
-| **Audio** | `AudioLuaCmd` | Play/stop music and sounds |
+| **Audio** | `AudioLuaCmd` | Play/stop music and sounds (with optional pitch) |
 | **Phase** | `PhaseCmd` | Trigger state machine transitions |
-| **Camera** | `CameraCmd` | Configure the 2D camera |
-| **Asset** | `AssetCmd` | Load textures, fonts, music (setup only) |
+| **Camera** | `CameraCmd` | Set 2D camera target/offset/rotation/zoom directly |
+| **CameraFollow** | `CameraFollowCmd` | Configure the camera follow system (mode, speed, bounds, deadzone) |
+| **Asset** | `AssetCmd` | Load textures, fonts, music, sounds, tilemaps, shaders (setup only) |
 | **Group** | `GroupCmd` | Manage tracked entity groups |
 | **Tilemap** | `TilemapCmd` | Spawn tiles from tilemap data |
 | **Animation** | `AnimationCmd` | Register animation definitions |
 | **Render** | `RenderCmd` | Configure post-process shaders and uniforms |
+| **GameConfig** | `GameConfigCmd` | Runtime game settings (fullscreen, vsync, FPS, render size, background color) |
+| **Input** | `InputCmd` | Runtime input rebinding (rebind action, add binding) |
 
 In addition to the regular queues, most write APIs have a collision-scoped variant (prefixed with `collision_` or `collision_entity_`) that queues into collision-specific buffers.
 
@@ -309,7 +271,7 @@ In addition to the regular queues, most write APIs have a collision-scoped varia
 
 This section is meant to stay in sync with the actual implementation.
 
-- Source of truth for `engine.*`: `src/resources/lua_runtime/runtime.rs` (`engine.set(...)` registrations)
+- Source of truth for `engine.*`: `src/resources/lua_runtime/engine_api.rs` (`register_*_api()` methods)
 - Source of truth for `engine.spawn()/engine.clone()` builder methods: `src/resources/lua_runtime/entity_builder.rs`
 
 ### `engine` Table Functions
@@ -328,7 +290,11 @@ This section is meant to stay in sync with the actual implementation.
 
 #### Audio
 
-- `play_music`, `play_sound`, `stop_all_music`, `stop_all_sounds`
+- `play_music`, `play_sound`, `play_sound_pitched`, `stop_all_music`, `stop_all_sounds`
+
+#### Navigation
+
+- `change_scene`, `quit`
 
 #### Global Signals (read)
 
@@ -344,12 +310,22 @@ This section is meant to stay in sync with the actual implementation.
 
 - `track_group`, `untrack_group`, `clear_tracked_groups`
 
-#### Phase / Camera / Tilemap / Animation
+#### Phase / Tilemap / Animation
 
 - `phase_transition`
-- `set_camera`
 - `spawn_tiles`
 - `register_animation`
+
+#### Camera
+
+- `set_camera`
+
+#### Camera Follow
+
+- `camera_follow_enable`, `camera_follow_set_mode`, `camera_follow_set_deadzone`
+- `camera_follow_set_easing`, `camera_follow_set_speed`, `camera_follow_set_spring`
+- `camera_follow_set_offset`, `camera_follow_set_bounds`, `camera_follow_clear_bounds`
+- `camera_follow_reset_velocity`
 
 #### Game Config
 
@@ -359,6 +335,10 @@ This section is meant to stay in sync with the actual implementation.
 - `set_render_size`, `get_render_size`
 - `set_background_color`, `get_background_color`
 
+#### Input Rebinding
+
+- `rebind_action`, `add_binding`, `get_binding`
+
 #### Post-Process Shaders
 
 - `post_process_shader`
@@ -367,11 +347,11 @@ This section is meant to stay in sync with the actual implementation.
 
 #### Entity Commands
 
-- `entity_set_position`, `entity_set_velocity`, `entity_set_speed`, `entity_set_rotation`, `entity_set_scale`
+- `entity_set_position`, `entity_set_screen_position`, `entity_set_velocity`, `entity_set_speed`, `entity_set_rotation`, `entity_set_scale`
 - `entity_add_force`, `entity_remove_force`, `entity_set_force_enabled`, `entity_set_force_value`
 - `entity_set_friction`, `entity_set_max_speed`
 - `entity_freeze`, `entity_unfreeze`
-- `entity_set_animation`, `entity_restart_animation`
+- `entity_set_animation`, `entity_restart_animation`, `entity_set_sprite_flip`
 - `entity_insert_lua_timer`, `entity_remove_lua_timer`
 - `entity_insert_ttl`
 - `entity_insert_tween_position`, `entity_remove_tween_position`
@@ -385,11 +365,13 @@ This section is meant to stay in sync with the actual implementation.
 - `entity_shader_set_float`, `entity_shader_set_int`, `entity_shader_set_vec2`, `entity_shader_set_vec4`
 - `entity_shader_clear_uniform`, `entity_shader_clear_uniforms`
 - `entity_set_tint`, `entity_remove_tint`
+- `entity_set_parent`, `entity_remove_parent`
+- `entity_set_camera_target`, `entity_remove_camera_target`
 
 #### Collision Context Functions
 
 - `collision_spawn`, `collision_clone`
-- `collision_play_sound`
+- `collision_play_sound`, `collision_play_sound_pitched`
 - `collision_phase_transition`
 - `collision_set_camera`
 - `collision_set_scalar`, `collision_set_integer`, `collision_set_string`, `collision_set_flag`
@@ -397,24 +379,7 @@ This section is meant to stay in sync with the actual implementation.
 
 #### Collision Entity Commands
 
-- `collision_entity_set_position`, `collision_entity_set_velocity`, `collision_entity_set_speed`, `collision_entity_set_rotation`, `collision_entity_set_scale`
-- `collision_entity_add_force`, `collision_entity_remove_force`, `collision_entity_set_force_enabled`, `collision_entity_set_force_value`
-- `collision_entity_set_friction`, `collision_entity_set_max_speed`
-- `collision_entity_freeze`, `collision_entity_unfreeze`
-- `collision_entity_set_animation`, `collision_entity_restart_animation`
-- `collision_entity_insert_lua_timer`, `collision_entity_remove_lua_timer`
-- `collision_entity_insert_ttl`
-- `collision_entity_insert_tween_position`, `collision_entity_remove_tween_position`
-- `collision_entity_insert_tween_rotation`, `collision_entity_remove_tween_rotation`
-- `collision_entity_insert_tween_scale`, `collision_entity_remove_tween_scale`
-- `collision_entity_insert_stuckto`, `collision_release_stuckto`
-- `collision_entity_signal_set_scalar`, `collision_entity_signal_set_integer`, `collision_entity_signal_set_string`, `collision_entity_signal_set_flag`
-- `collision_entity_signal_clear_flag`
-- `collision_entity_despawn`
-- `collision_entity_set_shader`, `collision_entity_remove_shader`
-- `collision_entity_shader_set_float`, `collision_entity_shader_set_int`, `collision_entity_shader_set_vec2`, `collision_entity_shader_set_vec4`
-- `collision_entity_shader_clear_uniform`, `collision_entity_shader_clear_uniforms`
-- `collision_entity_set_tint`, `collision_entity_remove_tint`
+All `entity_*` commands have a `collision_entity_*` counterpart (auto-generated via `define_entity_cmds!`). These queue into collision-scoped buffers for immediate processing.
 
 ### `LuaEntityBuilder` Methods
 
@@ -427,6 +392,7 @@ with_accel
 with_animation
 with_animation_controller
 with_animation_rule
+with_camera_target
 with_collider
 with_collider_offset
 with_friction
@@ -440,13 +406,14 @@ with_menu
 with_menu_action_quit
 with_menu_action_set_scene
 with_menu_action_show_submenu
+with_menu_callback
 with_menu_colors
 with_menu_cursor
 with_menu_dynamic_text
-with_menu_callback
 with_menu_selection_sound
 with_menu_visible_count
 with_mouse_controlled
+with_parent
 with_particle_emitter
 with_persistent
 with_phase
@@ -454,6 +421,7 @@ with_position
 with_rotation
 with_scale
 with_screen_position
+with_shader
 with_signal_binding
 with_signal_binding_format
 with_signal_flag
@@ -468,6 +436,7 @@ with_stuckto
 with_stuckto_offset
 with_stuckto_stored_velocity
 with_text
+with_tint
 with_ttl
 with_tween_position
 with_tween_position_backwards
@@ -477,8 +446,6 @@ with_tween_rotation
 with_tween_rotation_backwards
 with_tween_rotation_easing
 with_tween_rotation_loop
-with_shader
-with_tint
 with_tween_scale
 with_tween_scale_backwards
 with_tween_scale_easing
@@ -527,19 +494,14 @@ Menus can optionally invoke a Lua callback when an item is selected.
 - Set the callback via `:with_menu_callback("callback_name")`.
 - When a callback is set, `MenuActions` are ignored (the callback takes full control).
 
-The callback receives a single context table:
+The callback receives three arguments:
 
 ```lua
--- ctx = { menu_id = <u64>, item_id = <string>, item_index = <number> }
-function on_menu_select(ctx)
-    -- Use engine.* to queue commands (scene switching, signals, despawn, etc.)
+-- entity_id = menu entity, item_id = string ID, item_index = 1-based index
+function on_menu_select(entity_id, item_id, item_index)
+    -- Use engine.* to queue commands
 end
 ```
-
-Notes:
-
-- The callback is invoked from the menu selection observer (i.e. it is not passed `input` or `dt`).
-- If the function name is not found, a warning is logged and the selection does nothing.
 
 ### How it Works
 
@@ -548,65 +510,9 @@ Notes:
 3. `:build()` pushes a `SpawnCmd` (spawn mode) or a `CloneCmd` (clone mode) to the correct queue based on context (regular vs collision)
 4. `:register_as(key)` stores the entity ID in WorldSignals after spawning
 
-### Builder Implementation
-
-```rust
-// In entity_builder.rs
-impl LuaUserData for LuaEntityBuilder {
-    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("with_velocity", |_, this, (vx, vy): (f32, f32)| {
-            if let Some(ref mut rb) = this.cmd.rigidbody {
-                rb.velocity_x = vx;
-                rb.velocity_y = vy;
-            } else {
-                this.cmd.rigidbody = Some(RigidBodyData {
-                    velocity_x: vx,
-                    velocity_y: vy,
-                    ..RigidBodyData::default()
-                });
-            }
-            Ok(this.clone())  // Return self for chaining
-        });
-
-        // build() - queue spawn or clone, regular or collision context
-        methods.add_method("build", |lua, this, ()| {
-            let app_data = lua
-                .app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-
-            match (this.mode, this.context) {
-                (BuilderMode::Spawn, BuilderContext::Regular) => {
-                    app_data.spawn_commands.borrow_mut().push(this.cmd.clone());
-                }
-                (BuilderMode::Spawn, BuilderContext::Collision) => {
-                    app_data
-                        .collision_spawn_commands
-                        .borrow_mut()
-                        .push(this.cmd.clone());
-                }
-                (BuilderMode::Clone, BuilderContext::Regular) => {
-                    app_data.clone_commands.borrow_mut().push(CloneCmd {
-                        source_key: this.source_key.clone().unwrap_or_default(),
-                        overrides: this.cmd.clone(),
-                    });
-                }
-                (BuilderMode::Clone, BuilderContext::Collision) => {
-                    app_data.collision_clone_commands.borrow_mut().push(CloneCmd {
-                        source_key: this.source_key.clone().unwrap_or_default(),
-                        overrides: this.cmd.clone(),
-                    });
-                }
-            }
-
-            Ok(())
-        });
-    }
-}
-```
-
 ### Builder Metadata
 
-Builder methods are documented in `engine.__meta.classes` via `register_builder_meta()` in `runtime.rs`. All `with_*` methods, `register_as`, and `build` are listed with descriptions and parameter types for both `EntityBuilder` and `CollisionEntityBuilder` classes. When adding a new builder method, add its entry to the `builder_methods` array in `register_builder_meta()`.
+Builder methods are documented in `engine.__meta.classes` via `register_builder_meta()` in `stub_meta.rs`. All `with_*` methods, `register_as`, and `build` are listed with descriptions and parameter types for both `EntityBuilder` and `CollisionEntityBuilder` classes.
 
 For builder methods that accept complex table arguments, a `schema` field on the param points to a type name in `engine.__meta.types`:
 
@@ -627,7 +533,146 @@ When adding a new builder method that accepts a table, add a `schema_refs` entry
 
 ### Spawn Processing
 
-Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support.
+Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands/spawn_cmd.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support.
+
+`apply_components()` is split into focused sub-functions:
+- `apply_transform_components()` — position, screen position, rotation, scale, parent, stuckto, camera target
+- `apply_physics_components()` — rigidbody, collider
+- `apply_render_components()` — sprite, zindex, shader, tint
+- `apply_animation_components()` — animation, animation controller, tweens
+- `apply_signal_components()` — signals, signal bindings
+- `apply_behavior_components()` — phase, lua timer, lua collision rule
+- `apply_ui_components()` — text, menu, grid layout, mouse controlled
+- `apply_particle_emitter()` — particle emitter setup with template resolution
+
+---
+
+## Camera Follow System
+
+The camera follow system allows the camera to automatically track an entity marked with `CameraTarget`.
+
+### Lua API
+
+**Configuration** (called from `on_enter_play` or `on_switch_scene`):
+
+```lua
+engine.camera_follow_enable(true)
+engine.camera_follow_set_mode("lerp")       -- "instant", "lerp", "smooth_damp"
+engine.camera_follow_set_speed(5.0)
+engine.camera_follow_set_easing("ease_out") -- "linear", "ease_out", "ease_in", "ease_in_out"
+engine.camera_follow_set_offset(0, -20)
+engine.camera_follow_set_bounds(0, 0, 2000, 1000) -- world-space bounds
+```
+
+**Deadzone mode:**
+
+```lua
+engine.camera_follow_set_deadzone(32, 24) -- sets mode to deadzone with half-dimensions
+```
+
+**Spring mode:**
+
+```lua
+engine.camera_follow_set_mode("smooth_damp")
+engine.camera_follow_set_spring(80.0, 8.0) -- stiffness, damping
+```
+
+**Marking an entity as the camera target:**
+
+```lua
+-- Via builder
+engine.spawn()
+    :with_camera_target(10) -- priority (highest wins)
+    :build()
+
+-- At runtime
+engine.entity_set_camera_target(entity_id, 10)
+engine.entity_remove_camera_target(entity_id)
+```
+
+### Command Enum
+
+```rust
+pub enum CameraFollowCmd {
+    Enable { enabled: bool },
+    SetMode { mode: String },
+    SetDeadzone { half_w: f32, half_h: f32 },
+    SetEasing { easing: String },
+    SetSpeed { speed: f32 },
+    SetSpring { stiffness: f32, damping: f32 },
+    SetOffset { x: f32, y: f32 },
+    SetBounds { x: f32, y: f32, w: f32, h: f32 },
+    ClearBounds,
+    ResetVelocity,
+}
+```
+
+---
+
+## Input Rebinding
+
+Lua can rebind input actions at runtime via the input API.
+
+### Lua API
+
+```lua
+-- Replace all bindings for an action
+engine.rebind_action("action_1", "z")
+
+-- Add an extra binding (multi-bind)
+engine.add_binding("action_1", "space")
+
+-- Read current first binding (snapshot, visible next frame)
+local key = engine.get_binding("action_1") -- "z" or nil
+```
+
+### Valid Action Names
+
+`main_up`, `main_down`, `main_left`, `main_right`, `secondary_up`, `secondary_down`, `secondary_left`, `secondary_right`, `back`, `action_1`, `action_2`, `action_3`, `special`, `toggle_debug`, `toggle_fullscreen`
+
+### Valid Key Strings
+
+Single lowercase letters `a`-`z`, digits `0`-`9`, `space`, `enter`/`return`, `escape`/`esc`, arrow keys (`up`, `down`, `left`, `right`), modifiers (`lshift`/`rshift`/`lctrl`/`rctrl`/`lalt`/`ralt`), `f1`-`f12`, `mouse_left`, `mouse_right`, `mouse_middle`.
+
+### Command Enum
+
+```rust
+pub enum InputCmd {
+    Rebind { action: String, key: String },
+    AddBinding { action: String, key: String },
+}
+```
+
+---
+
+## Parent-Child Hierarchy
+
+Entities can be organized into parent-child hierarchies for transform propagation.
+
+### Lua API
+
+**At spawn time:**
+
+```lua
+engine.spawn()
+    :with_parent(parent_id)
+    :with_position(10, 0) -- local offset from parent
+    :build()
+```
+
+**At runtime:**
+
+```lua
+engine.entity_set_parent(child_id, parent_id)
+engine.entity_remove_parent(child_id) -- snaps to current world position
+```
+
+### Notes
+
+- `GlobalTransform2D` is computed automatically by `propagate_transforms` system.
+- Use `ComputeInitialGlobalTransform` EntityCommand after setting `ChildOf` on a newly spawned entity to avoid a one-frame world-origin flash.
+- `ChildOf` entities skip the `StuckTo` system (hierarchy takes precedence).
+- Entity context exposes `ctx.world_pos`, `ctx.world_rotation`, `ctx.world_scale`, and `ctx.parent_id` in phase/timer callbacks.
 
 ---
 
@@ -639,8 +684,10 @@ Lua reads world state through a **cached snapshot**, not directly from ECS resou
 // Before calling Lua callbacks
 lua_runtime.update_signal_cache(world_signals.snapshot());
 lua_runtime.update_tracked_groups_cache(&tracked_groups);
+```
 
-// In Lua
+```lua
+-- In Lua
 local score = engine.get_integer("score")  -- Reads from cache
 ```
 
@@ -650,17 +697,17 @@ local score = engine.get_integer("score")  -- Reads from cache
 2. **Consistency**: All reads within a callback see the same state
 3. **Performance**: `Arc<SignalSnapshot>` is cheap to clone
 
-### Updating the Cache
+### Additional Snapshots
 
-```rust
-// In game.rs or system that calls Lua
-lua_runtime.update_signal_cache(world_signals.snapshot());
-lua_runtime.update_tracked_groups_cache(&tracked_groups);
-```
+Beyond signal snapshots, the engine also caches:
+- **GameConfig snapshot** — fullscreen, vsync, fps, render size, background color (read via `get_fullscreen()`, `get_render_size()`, etc.)
+- **Bindings snapshot** — current input bindings (read via `get_binding()`)
+
+These are updated before Lua callbacks run and ensure consistent reads.
 
 ### Input Data
 
-Input is not read from the signal snapshot; it is passed to callbacks via a dedicated input table built from an `InputSnapshot`.
+Input is not read from the signal snapshot; it is passed to callbacks via a dedicated input table built from an `InputSnapshot` using pooled tables.
 
 ---
 
@@ -674,62 +721,23 @@ Without pooling, each callback would allocate many Lua tables:
 
 - **Collision callbacks**: ~15-17 tables per collision (ctx, ctx.a, ctx.b, pos tables, vel tables, rect tables, signals, sides, etc.)
 - **Entity callbacks** (phase/timer): ~10-14 tables per callback (ctx, pos, screen_pos, vel, scale, rect, sprite, animation, timer, signals)
+- **Input tables**: digital/analog subtables reused across all callbacks each frame
 
 In a game with frequent collisions or many entities with phase/timer components, this creates significant GC pressure.
 
 ### Pool Architecture
 
-#### CollisionCtxPool (for collision callbacks)
+Three pool types are maintained:
 
-```rust
-struct CollisionCtxPool {
-    ctx: LuaRegistryKey,
-    entity_a: LuaRegistryKey,   // ctx.a
-    entity_b: LuaRegistryKey,   // ctx.b
-
-    pos_a: LuaRegistryKey,      // ctx.a.pos
-    vel_a: LuaRegistryKey,      // ctx.a.vel
-    rect_a: LuaRegistryKey,     // ctx.a.rect
-    signals_a: LuaRegistryKey,  // ctx.a.signals
-
-    pos_b: LuaRegistryKey,      // ctx.b.pos
-    vel_b: LuaRegistryKey,      // ctx.b.vel
-    rect_b: LuaRegistryKey,     // ctx.b.rect
-    signals_b: LuaRegistryKey,  // ctx.b.signals
-
-    sides_a: LuaRegistryKey,    // ctx.sides.a
-    sides_b: LuaRegistryKey,    // ctx.sides.b
-}
-```
-
-#### EntityCtxPool (for phase/timer callbacks)
-
-```rust
-struct EntityCtxPool {
-    ctx: LuaRegistryKey,        // Root context table
-    pos: LuaRegistryKey,        // ctx.pos
-    screen_pos: LuaRegistryKey, // ctx.screen_pos
-    vel: LuaRegistryKey,        // ctx.vel
-    scale: LuaRegistryKey,      // ctx.scale
-    rect: LuaRegistryKey,       // ctx.rect
-    sprite: LuaRegistryKey,     // ctx.sprite
-    animation: LuaRegistryKey,  // ctx.animation
-    timer: LuaRegistryKey,      // ctx.timer
-    signals: LuaRegistryKey,    // ctx.signals
-}
-```
+- **CollisionCtxPool** — for collision callbacks (ctx.a, ctx.b, sides, subtables)
+- **EntityCtxPool** — for phase/timer callbacks (ctx, pos, vel, scale, rect, etc.)
+- **InputCtxPool** — for the input table passed to all callbacks (digital, analog subtables)
 
 ### How It Works
 
-1. **Initialization**: Pools are created once in `LuaRuntime::new()` via `create_collision_ctx_pool()` and `create_entity_ctx_pool()`
-
-2. **Retrieval**: Before each callback, `get_collision_ctx_pool()` or `get_entity_ctx_pool()` fetches tables from the registry
-
-3. **Population**: The context builder functions populate the pooled tables with current entity data:
-   - Scalar values (id, speed_sq, rotation, etc.) are set directly
-   - Optional fields are explicitly set to `nil` when absent (prevents stale data)
-   - Variable-length data (signal maps) is still created fresh each time
-
+1. **Initialization**: Pools are created once in `LuaRuntime::new()` via `create_*_pool()` functions
+2. **Retrieval**: Before each callback, `get_*_pool()` fetches tables from the registry
+3. **Population**: Context builder functions populate the pooled tables with current entity data — optional fields are explicitly set to `nil` when absent (prevents stale data)
 4. **Reuse**: The same tables are reused for the next callback
 
 ### What Gets Pooled vs Created Fresh
@@ -756,9 +764,9 @@ local saved_y = ctx.pos.y
 
 ### Implementation Files
 
-- `runtime.rs`: Pool structs, `create_*_pool()`, `get_*_pool()` methods
-- `context.rs`: `build_entity_context_pooled()` function
-- `collision.rs`: Collision callback context population using pool
+- `runtime.rs`: Pool structs (`CollisionCtxPool`, `EntityCtxPool`, `InputCtxPool`), `create_*_pool()`, `get_*_pool()` methods
+- `lua_runtime/context.rs`: `build_entity_context_pooled()` — low-level Lua table writer
+- `lua_commands/context.rs`: `build_entity_context()` — ECS-facing adapter that gathers component data and calls `build_entity_context_pooled()`
 
 ---
 
@@ -780,7 +788,7 @@ engine.__meta = {
 
 ### `__meta.types` — Type Shape Definitions
 
-Each entry describes a Lua table shape with typed fields. Registered by `register_types_meta()`.
+Each entry describes a Lua table shape with typed fields. Registered by `register_types_meta()` in `stub_meta.rs`.
 
 ```lua
 engine.__meta.types["EntityContext"] = {
@@ -798,7 +806,7 @@ Current types: `Vector2`, `Rect`, `SpriteInfo`, `AnimationInfo`, `TimerInfo`, `S
 
 ### `__meta.enums` — String Literal Value Sets
 
-Each entry lists the valid string values for a domain concept. Registered by `register_enums_meta()`.
+Each entry lists the valid string values for a domain concept. Registered by `register_enums_meta()` in `stub_meta.rs`.
 
 ```lua
 engine.__meta.enums["Easing"] = {
@@ -812,7 +820,7 @@ Current enums: `Easing`, `LoopMode`, `BoxSide`, `ComparisonOp`, `ConditionType`,
 
 ### `__meta.callbacks` — Engine-Invoked Callback Signatures
 
-Each entry documents a global Lua function the engine calls, including parameter types, return types, and context. Registered by `register_callbacks_meta()`.
+Each entry documents a global Lua function the engine calls, including parameter types, return types, and context. Registered by `register_callbacks_meta()` in `stub_meta.rs`.
 
 ```lua
 engine.__meta.callbacks["phase_on_enter"] = {
@@ -837,7 +845,7 @@ Tests in `tests/engine_tick_integration.rs` verify the meta schema stays in sync
 - `meta_functions_complete` — comprehensive function list + collision/entity command parity check
 - `meta_builder_methods_have_schema_refs` — schema references point to existing types
 
-When adding new Rust types, easing functions, callback conventions, or API functions, update the corresponding `register_*_meta()` method. If you don't, these tests will fail.
+When adding new Rust types, easing functions, callback conventions, or API functions, update the corresponding `register_*_meta()` method in `stub_meta.rs`. If you don't, these tests will fail.
 
 ---
 
@@ -856,37 +864,27 @@ In `src/resources/lua_runtime/commands.rs`:
 ```rust
 pub enum EntityCmd {
     // ... existing variants ...
-    
-    /// Set the health value on an entity's Signals component
     SetHealth { entity_id: u64, health: f32 },
 }
 ```
 
 #### Step 2: Register Lua Function
 
-In `src/resources/lua_runtime/runtime.rs`, add the entry to the `define_entity_cmds!` macro. This single entry auto-registers both the regular (`entity_set_health`) and collision (`collision_entity_set_health`) variants, along with metadata:
+In `src/resources/lua_runtime/engine_api.rs`, add the entry to the `define_entity_cmds!` macro body. This single entry auto-registers both the regular (`entity_set_health`) and collision (`collision_entity_set_health`) variants, along with metadata:
 
 ```rust
-// In runtime.rs, inside define_entity_cmds! macro body
-macro_rules! define_entity_cmds {
-    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident) => {
-        register_entity_cmds!($engine, $lua, $meta_fns, $prefix, $queue, [
-            // ... existing entries ...
-
-            ("entity_set_health",
-                |(entity_id, health)| (u64, f32),
-                EntityCmd::SetHealth { entity_id, health },
-                desc = "Set entity health signal",
-                params = [("entity_id", "integer"), ("health", "number")]),
-        ]);
-    };
-}
+// Inside define_entity_cmds! macro body in engine_api.rs
+("entity_set_health",
+    |(entity_id, health)| (u64, f32),
+    EntityCmd::SetHealth { entity_id, health },
+    desc = "Set entity health signal",
+    params = [("entity_id", "integer"), ("health", "number")]),
 ```
 
-For non-entity commands (signals, audio, etc.), use `register_cmd!` directly in the appropriate `register_*_api()` function:
+For non-entity commands (signals, audio, etc.), use `register_cmd!` directly in the appropriate `register_*_api()` method:
 
 ```rust
-// In the relevant register_*_api() function
+// In the relevant register_*_api() method in engine_api.rs
 register_cmd!(engine, self.lua, meta_fns, "set_health", health_commands,
     |(entity_id, health)| (u64, f32), HealthCmd::SetHealth { entity_id, health },
     desc = "Set entity health", cat = "entity",
@@ -895,38 +893,20 @@ register_cmd!(engine, self.lua, meta_fns, "set_health", health_commands,
 
 #### Step 3: Process the Command
 
-In `src/systems/lua_commands.rs`, add to `process_entity_commands()`:
+In `src/systems/lua_commands/entity_cmd.rs`, add the match arm to the appropriate sub-function (or create a new one):
 
 ```rust
-pub fn process_entity_commands(
-    commands: &mut Commands,
-    entity_commands: impl IntoIterator<Item = EntityCmd>,
-    stuckto_query: &Query<&StuckTo>,
-    signals_query: &mut Query<&mut Signals>,
-    animation_query: &mut Query<&mut Animation>,
-    rigid_bodies_query: &mut Query<&mut RigidBody>,
-    positions_query: &mut Query<&mut MapPosition>,
-    shader_query: &mut Query<&mut EntityShader>,
-    systems_store: &SystemsStore,
-) {
-    for cmd in entity_commands {
-        match cmd {
-            // ... existing matches ...
-            
-            EntityCmd::SetHealth { entity_id, health } => {
-                let entity = Entity::from_bits(entity_id);
-                if let Ok(mut signals) = signals_query.get_mut(entity) {
-                    signals.set_scalar("health", health);
-                }
-            }
-        }
+EntityCmd::SetHealth { entity_id, health } => {
+    let entity = Entity::from_bits(entity_id);
+    if let Ok(mut signals) = cmd_queries.signals.get_mut(entity) {
+        signals.set_scalar("health", health);
     }
 }
 ```
 
 #### Step 4: Update Meta Schema (If Applicable)
 
-If the new command introduces new string literal values (e.g. a new easing mode or condition type), update `register_enums_meta()` in `runtime.rs`. If it introduces a new callback convention, update `register_callbacks_meta()`. If it accepts a complex table argument, add a type definition in `register_types_meta()`.
+If the new command introduces new string literal values (e.g. a new easing mode or condition type), update `register_enums_meta()` in `stub_meta.rs`. If it introduces a new callback convention, update `register_callbacks_meta()`. If it accepts a complex table argument, add a type definition in `register_types_meta()`.
 
 #### Step 5: Update LSP Stubs (Optional but Recommended)
 
@@ -939,17 +919,6 @@ In `assets/scripts/engine.lua`:
 function engine.entity_set_health(entity_id, health) end
 ```
 
-#### Step 6: Document in README (Optional)
-
-Add to `assets/scripts/README.md`:
-
-```markdown
-### engine.entity_set_health(entity_id, health)
-Sets the "health" scalar signal on an entity.
-- `entity_id`: Entity ID (u64)
-- `health`: Health value (float)
-```
-
 > **Note**: Because entity commands are registered via `define_entity_cmds!`, the collision-prefixed variant (`collision_entity_set_health`) is automatically available — no extra registration step is needed. Metadata for `engine.__meta` is also generated automatically by the macro.
 
 ---
@@ -960,36 +929,32 @@ If you need a new category of commands (e.g., `HealthCmd`):
 
 #### Step 1: Define the Enum
 
+In `commands.rs`:
+
 ```rust
-// In commands.rs
 #[derive(Debug, Clone)]
 pub enum HealthCmd {
     SetEntityHealth { entity_id: u64, health: f32 },
     HealEntity { entity_id: u64, amount: f32 },
-    DamageEntity { entity_id: u64, amount: f32 },
 }
 ```
 
 #### Step 2: Add Queue to LuaAppData
 
+In `runtime.rs`, add the field to `LuaAppData`:
+
 ```rust
-// In runtime.rs
 pub(super) struct LuaAppData {
     // ... existing fields ...
     health_commands: RefCell<Vec<HealthCmd>>,
 }
 ```
 
-And initialize it in `LuaRuntime::new()`:
-
-```rust
-lua.set_app_data(LuaAppData {
-    // ... existing fields ...
-    health_commands: RefCell::new(Vec::new()),
-});
-```
+And initialize it in `LuaRuntime::new()`.
 
 #### Step 3: Add Drain Function
+
+In `command_queues.rs`:
 
 ```rust
 impl LuaRuntime {
@@ -1004,10 +969,10 @@ impl LuaRuntime {
 
 #### Step 4: Register API Functions
 
-Use `register_cmd!` macro for push-to-queue functions (preferred), or manual registration for functions with custom logic:
+Use `register_cmd!` macro in a new `register_health_api()` method in `engine_api.rs`:
 
 ```rust
-fn register_health_api(&self) -> LuaResult<()> {
+pub(super) fn register_health_api(&self) -> LuaResult<()> {
     let engine: LuaTable = self.lua.globals().get("engine")?;
     let meta: LuaTable = engine.get("__meta")?;
     let meta_fns: LuaTable = meta.get("functions")?;
@@ -1021,12 +986,13 @@ fn register_health_api(&self) -> LuaResult<()> {
 }
 ```
 
-Don't forget to call `register_health_api()?` in `LuaRuntime::new()`.
+Don't forget to call `self.register_health_api()?` in `LuaRuntime::new()`.
 
 #### Step 5: Create Processing Function
 
+In `lua_commands/mod.rs` (or a new sub-file if complex):
+
 ```rust
-// In lua_commands.rs
 pub fn process_health_commands(
     health_query: &mut Query<&mut Signals>,
     commands: impl IntoIterator<Item = HealthCmd>,
@@ -1048,8 +1014,9 @@ pub fn process_health_commands(
 
 #### Step 6: Call from Game Loop
 
+In `lua_plugin.rs` (or the appropriate system):
+
 ```rust
-// In game.rs update() or appropriate system
 for cmd in lua_runtime.drain_health_commands() {
     process_health_commands(&mut signals_query, std::iter::once(cmd));
 }
@@ -1063,8 +1030,9 @@ To add spawning capabilities:
 
 #### Step 1: Add Data Structure (if needed)
 
+In `spawn_data.rs`:
+
 ```rust
-// In spawn_data.rs
 #[derive(Debug, Clone, Default)]
 pub struct HealthData {
     pub initial_health: f32,
@@ -1074,9 +1042,9 @@ pub struct HealthData {
 
 #### Step 2: Add to SpawnCmd
 
+In `spawn_data.rs`:
+
 ```rust
-// In spawn_data.rs
-#[derive(Debug, Clone, Default)]
 pub struct SpawnCmd {
     // ... existing fields ...
     pub health: Option<HealthData>,
@@ -1085,8 +1053,9 @@ pub struct SpawnCmd {
 
 #### Step 3: Add Builder Method
 
+In `entity_builder.rs`, inside `impl LuaUserData for LuaEntityBuilder`:
+
 ```rust
-// In entity_builder.rs, inside impl LuaUserData for LuaEntityBuilder
 methods.add_method_mut("with_health", |_, this, (initial, max): (f32, f32)| {
     this.cmd.health = Some(HealthData {
         initial_health: initial,
@@ -1098,7 +1067,7 @@ methods.add_method_mut("with_health", |_, this, (initial, max): (f32, f32)| {
 
 #### Step 4: Register Builder Metadata
 
-In `register_builder_meta()` in `runtime.rs`, add the method to the `builder_methods` array:
+In `register_builder_meta()` in `stub_meta.rs`, add the method to the `builder_methods` array:
 
 ```rust
 let builder_methods: &[(&str, &str, &[(&str, &str)])] = &[
@@ -1111,14 +1080,11 @@ This populates `engine.__meta.classes.EntityBuilder.methods` and `engine.__meta.
 
 #### Step 5: Process During Spawn
 
+In `lua_commands/spawn_cmd.rs`, inside `apply_components()` (or the appropriate sub-function):
+
 ```rust
-// In lua_commands.rs, inside apply_components() (shared by spawn and clone)
 if let Some(health_data) = cmd.health {
-    // Ensure Signals component exists
-    if cmd.signals.is_none() {
-        entity_commands.insert(Signals::default());
-    }
-    // Or configure a Health component if you have one
+    // Add Health component or set signals
 }
 ```
 
@@ -1148,15 +1114,8 @@ EntityCmd::SetPositionAndVelocity { ... }  // Too broad
 
 ```rust
 // Good: Silent failure if entity doesn't exist
-if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
+if let Ok(mut rb) = cmd_queries.rigid_bodies.get_mut(entity) {
     rb.velocity = Vector2 { x: vx, y: vy };
-}
-
-// Better: Log for debugging
-if let Ok(mut rb) = rigid_bodies_query.get_mut(entity) {
-    rb.velocity = Vector2 { x: vx, y: vy };
-} else {
-    eprintln!("[Lua] Entity {:?} not found for SetVelocity", entity);
 }
 ```
 
@@ -1173,24 +1132,10 @@ Bevy's `Entity` type is not directly usable in Lua. Always convert:
 
 Always update:
 
-- `assets/scripts/engine.lua` - LSP stubs for autocomplete
+- `assets/scripts/engine.lua` - LSP stubs for autocomplete (regenerate via `cargo run -- --create-lua-stubs`)
 - `assets/scripts/README.md` - Human-readable documentation
-- `llm-context.md` - LLM context file
 
-### 6. Test Your Commands
-
-Add Lua test scripts to verify behavior:
-
-```lua
--- Test entity_set_health
-function test_set_health()
-    local player_id = engine.get_entity("player")
-    engine.entity_set_health(player_id, 100)
-    engine.log("Health set to 100")
-end
-```
-
-### 7. Consider Collision Context
+### 6. Consider Collision Context
 
 For entity commands, the `define_entity_cmds!` macro automatically registers both regular and collision variants from a single definition — no manual duplication needed.
 
@@ -1210,6 +1155,17 @@ register_cmd!(engine, self.lua, meta_fns, "collision_play_sound", collision_audi
     params = [("id", "string")]);
 ```
 
+### 7. Registration Patterns Summary
+
+| What | Macro/Function | File |
+| ---- | -------------- | ---- |
+| Entity commands (with auto collision variants) | `define_entity_cmds!` macro | `engine_api.rs` |
+| Simple push-to-queue functions | `register_cmd!` macro | `engine_api.rs` |
+| Functions with custom logic (reads, validation) | Manual `engine.set()` + `push_fn_meta()` | `engine_api.rs` |
+| Builder methods | `methods.add_method_mut()` in `LuaUserData` impl | `entity_builder.rs` |
+| Builder metadata | Add to `builder_methods` array in `register_builder_meta()` | `stub_meta.rs` |
+| Type/enum/callback metadata | `register_types_meta()` / `register_enums_meta()` / `register_callbacks_meta()` | `stub_meta.rs` |
+
 ---
 
 ## Summary
@@ -1225,8 +1181,9 @@ The Lua interface follows these principles:
 To add new commands:
 
 1. Add variant to appropriate command enum in `commands.rs`
-2. Register Lua function in `runtime.rs` (use `register_cmd!` macro for push-to-queue, or add to `define_entity_cmds!` for entity commands)
-3. Process command in `lua_commands.rs`
-4. Optionally add builder method in `entity_builder.rs` + update `register_builder_meta()` in `runtime.rs`
-5. Update `register_types_meta()` / `register_enums_meta()` / `register_callbacks_meta()` if the command introduces new types, enum values, or callback conventions
-6. Update documentation files
+2. Register Lua function in `engine_api.rs` (use `register_cmd!` macro for push-to-queue, or add to `define_entity_cmds!` for entity commands)
+3. Add drain method in `command_queues.rs` (if new command type)
+4. Process command in `lua_commands/` (entity_cmd.rs, spawn_cmd.rs, or mod.rs)
+5. Optionally add builder method in `entity_builder.rs` + update `register_builder_meta()` in `stub_meta.rs`
+6. Update `register_types_meta()` / `register_enums_meta()` / `register_callbacks_meta()` in `stub_meta.rs` if the command introduces new types, enum values, or callback conventions
+7. Update documentation files
