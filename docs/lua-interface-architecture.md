@@ -468,10 +468,18 @@ engine.spawn()
     :with_velocity(0, 0)
     :with_collider(48, 12, 24, 6)
     :with_phase({
-        initial = "playing",
-        callbacks = {
-            playing = "on_player_playing",
-            hit = "on_player_hit",
+        initial = "idle",
+        phases = {
+            idle = {
+                on_enter = "player_idle_on_enter",
+                on_update = "player_idle_on_update"
+                -- on_exit = "player_idle_on_exit"
+            },
+            running = {
+                on_enter = "player_running_on_enter",
+                on_update = "player_running_on_update",
+                on_exit = "player_running_on_exit"
+            }            
         }
     })
     :register_as("player")
