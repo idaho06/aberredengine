@@ -7,8 +7,15 @@ local M = {}
 local running_speed = 80
 local walking_speed = 40
 local jump_speed = -100
+local debug_log = true
 
 -- ─── Helper functions (local) ─────────────────────────────────────────────────
+local function log_info(message)
+    if debug_log then
+        engine.log_info(message)
+    end
+end
+
 --- Updates the player's facing direction based on input.
 --- @param id number
 --- @param input InputSnapshot
@@ -40,7 +47,7 @@ local function on_update_sidescroller_level01(input, dt)
         engine.entity_signal_clear_flag(player_id, "on_ground")
         -- engine.entity_signal_set_flag(player_id, "falling")
         -- engine.entity_set_force_enabled(player_id, "gravity", true)
-        engine.log_info("Cleared player on_ground signal at end of frame.")
+        log_info("Cleared player on_ground signal at end of frame.")
     end
 end
 
@@ -48,7 +55,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_running_on_enter(ctx, input)
-    engine.log_info("Player started running!")
+    log_info("Player started running!")
     engine.entity_signal_set_flag(ctx.id, "running")
     -- Check facing direction and set velocity accordingly
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -69,7 +76,7 @@ local function player_running_on_update(ctx, input, dt)
     if input.digital.action_1.just_pressed then
         return "attack"
     end
-    if input.digital.action_2.just_pressed then
+    if input.digital.action_2.just_pressed and not input.digital.down.pressed then
         engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
         return "jumping"
     end
@@ -94,7 +101,7 @@ end
 --- Called when exiting the running phase.
 --- @param ctx EntityContext Entity state
 local function player_running_on_exit(ctx)
-    engine.log_info("Player stopped running.")
+    log_info("Player stopped running.")
     engine.entity_signal_clear_flag(ctx.id, "running")
 end
 
@@ -102,7 +109,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_walking_on_enter(ctx, input)
-    engine.log_info("Player started walking!")
+    log_info("Player started walking!")
     engine.entity_signal_set_flag(ctx.id, "walking")
     update_facing_direction(ctx.id, input)
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -153,7 +160,7 @@ end
 --- Called when exiting the walking phase.
 --- @param ctx EntityContext Entity state
 local function player_walking_on_exit(ctx)
-    engine.log_info("Player stopped walking.")
+    log_info("Player stopped walking.")
     engine.entity_signal_clear_flag(ctx.id, "walking")
 end
 
@@ -161,7 +168,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_falling_on_enter(ctx, input)
-    engine.log_info("Player started falling!")
+    log_info("Player started falling!")
     engine.entity_signal_set_flag(ctx.id, "falling")
 end
 
@@ -173,20 +180,22 @@ local function player_falling_on_update(ctx, input, dt)
     if utils.has_flag(ctx.signals.flags, "on_ground") then
         return "idle"
     end
-    -- Allow horizontal steering at walking speed; preserve vertical velocity so gravity accumulates
+    -- Allow horizontal steering at running speed; preserve vertical velocity so gravity accumulates
     if input.digital.left.pressed and not input.digital.right.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, -walking_speed, ctx.vel.y)
+        engine.entity_set_velocity(ctx.id, -running_speed, ctx.vel.y)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, walking_speed, ctx.vel.y)
+        engine.entity_set_velocity(ctx.id, running_speed, ctx.vel.y)
+    elseif not input.digital.right.pressed and not input.digital.left.pressed then
+        engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
     end
 end
 
 --- Called when exiting the falling phase.
 --- @param ctx EntityContext Entity state
 local function player_falling_on_exit(ctx)
-    engine.log_info("Player stopped falling.")
+    log_info("Player stopped falling.")
     engine.entity_signal_clear_flag(ctx.id, "falling")
 end
 
@@ -194,7 +203,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_jumping_on_enter(ctx, input)
-    engine.log_info("Player started jumping!")
+    log_info("Player started jumping!")
     engine.entity_signal_set_flag(ctx.id, "jumping")
 end
 
@@ -212,17 +221,19 @@ local function player_jumping_on_update(ctx, input, dt)
     -- Allow horizontal steering while rising
     if input.digital.left.pressed and not input.digital.right.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, -walking_speed, ctx.vel.y)
+        engine.entity_set_velocity(ctx.id, -running_speed, ctx.vel.y)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, walking_speed, ctx.vel.y)
+        engine.entity_set_velocity(ctx.id, running_speed, ctx.vel.y)
+    elseif not input.digital.right.pressed and not input.digital.left.pressed then
+        engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
     end
 end
 
 --- Called when exiting the jumping phase.
 --- @param ctx EntityContext Entity state
 local function player_jumping_on_exit(ctx)
-    engine.log_info("Player stopped jumping.")
+    log_info("Player stopped jumping.")
     engine.entity_signal_clear_flag(ctx.id, "jumping")
 end
 
@@ -230,7 +241,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_idle_on_enter(ctx, input)
-    engine.log_info("Player is idle.")
+    log_info("Player is idle.")
     -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
     -- remove horizontal movement when entering idle
     engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
@@ -276,7 +287,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_attack_on_enter(ctx, input)
-    engine.log_info("Player is attacking!")
+    log_info("Player is attacking!")
     engine.entity_signal_set_flag(ctx.id, "attack")
     -- engine.entity_freeze(ctx.id)
     -- engine.entity_restart_animation(ctx.id)
@@ -312,7 +323,7 @@ end
 --- Called when exiting the attack phase.
 --- @param ctx EntityContext Entity state
 local function player_attack_on_exit(ctx)
-    engine.log_info("Player finished attacking.")
+    log_info("Player finished attacking.")
     engine.entity_signal_clear_flag(ctx.id, "attack")
     -- engine.entity_unfreeze(ctx.id)
     -- Despawn the hitbox child
@@ -351,7 +362,7 @@ local function collision_ground_player(ctx)
         engine.collision_entity_signal_clear_flag(ctx.b.id, "jumping")
         -- engine.entity_signal_set_flag(ctx.b.id, "on_ground")
         -- engine.entity_signal_clear_flag(ctx.b.id, "falling")
-        engine.log_info("collision: setting player `on_ground` signal")
+        log_info("collision: setting player `on_ground` signal")
         -- engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", false)
         -- reset vertical velocity to 0 to prevent sliding down slopes
         local vel = ctx.b.vel
@@ -362,7 +373,7 @@ local function collision_ground_player(ctx)
         engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, ground_rect.y)
     else
         engine.collision_entity_signal_clear_flag(ctx.b.id, "on_ground")
-        engine.log_info("collision: removing player `on_ground` signal")
+        log_info("collision: removing player `on_ground` signal")
         engine.collision_entity_signal_set_flag(ctx.b.id, "falling")
         engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", true)
     end
@@ -399,6 +410,9 @@ M._callbacks = {
 --- Spawn all entities for the sidescroller level01 scene.
 function M.spawn()
     engine.log_info("Spawning sidescroller level01 scene...")
+
+    -- debug_log = true
+    log_info("Debug logging enabled for sidescroller level01.")
 
     -- Set render resolution
     engine.set_render_size(640, 360)
