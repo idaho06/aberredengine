@@ -71,27 +71,26 @@ type MapTextQueryData = (
     Option<&'static GlobalTransform2D>,
 );
 
-type SpriteBufferItem = (
-    Entity,
-    Sprite,
-    MapPosition,
-    ZIndex,
-    Option<Scale>,
-    Option<Rotation>,
-    Option<EntityShader>,
-    Option<Tint>,
-    Option<GlobalTransform2D>,
-);
+pub(crate) struct SpriteBufferItem {
+    entity: Entity,
+    sprite: Sprite,
+    z_index: ZIndex,
+    resolved_pos: MapPosition,
+    resolved_scale: Option<Scale>,
+    resolved_rot: Option<Rotation>,
+    maybe_shader: Option<EntityShader>,
+    maybe_tint: Option<Tint>,
+}
 
-type TextBufferItem = (
-    Entity,
-    DynamicText,
-    MapPosition,
-    ZIndex,
-    Option<EntityShader>,
-    Option<Tint>,
-    Option<GlobalTransform2D>,
-);
+pub(crate) struct TextBufferItem {
+    entity: Entity,
+    text: DynamicText,
+    z_index: ZIndex,
+    resolved_pos: MapPosition,
+    text_size: Vector2,
+    maybe_shader: Option<EntityShader>,
+    maybe_tint: Option<Tint>,
+}
 
 /// Computed geometry for a sprite draw call via Raylib's `draw_texture_pro`.
 ///
@@ -401,7 +400,7 @@ enum SourceBuffer {
 ///   camera parameters, and optional collider boxes/signals).
 /// - When `DebugMode` is present, draws additional information (entity counts,
 ///   camera parameters, and optional collider boxes/signals).
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
@@ -445,84 +444,69 @@ pub fn render_system(
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
                 |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt)| {
-                    // Use world transform for culling when available
-                    let (cull_pos, cull_scale, cull_rot) = resolve_world_transform(
+                    let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
                         *p,
                         maybe_scale.copied(),
                         maybe_rot.copied(),
                         maybe_gt.copied(),
                     );
                     let (min, max) = compute_sprite_cull_bounds(
-                        &cull_pos,
+                        &resolved_pos,
                         s,
-                        cull_scale.as_ref(),
-                        cull_rot.as_ref(),
+                        resolved_scale.as_ref(),
+                        resolved_rot.as_ref(),
                     );
 
                     let overlap = !(max.x < view_min.x
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((
+                    overlap.then_some(SpriteBufferItem {
                         entity,
-                        s.clone(),
-                        *p,
-                        *z,
-                        maybe_scale.copied(),
-                        maybe_rot.copied(),
-                        maybe_shader.cloned(),
-                        maybe_tint.copied(),
-                        maybe_gt.copied(),
-                    ))
+                        sprite: s.clone(),
+                        z_index: *z,
+                        resolved_pos,
+                        resolved_scale,
+                        resolved_rot,
+                        maybe_shader: maybe_shader.cloned(),
+                        maybe_tint: maybe_tint.copied(),
+                    })
                 },
             ));
 
-            // sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _, _)| *z);
+            // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
             sprite_buffer.sort_unstable_by(|a, b| {
-                a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+                a.z_index.partial_cmp(&b.z_index).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (
-                entity,
-                sprite,
-                pos,
-                _z,
-                maybe_scale,
-                maybe_rot,
-                maybe_shader,
-                maybe_tint,
-                maybe_gt,
-            ) in sprite_buffer.iter()
-            {
-                if let Some(tex) = textures.get(&sprite.tex_key) {
+            for item in sprite_buffer.iter() {
+                if let Some(tex) = textures.get(&item.sprite.tex_key) {
                     let mut src = Rectangle {
-                        x: sprite.offset.x,
-                        y: sprite.offset.y,
-                        width: sprite.width,
-                        height: sprite.height,
+                        x: item.sprite.offset.x,
+                        y: item.sprite.offset.y,
+                        width: item.sprite.width,
+                        height: item.sprite.height,
                     };
-                    if sprite.flip_h {
+                    if item.sprite.flip_h {
                         src.width = -src.width;
                     }
-                    if sprite.flip_v {
+                    if item.sprite.flip_v {
                         src.height = -src.height;
                     }
 
-                    // Resolve world transform: use GlobalTransform2D when present
-                    let (render_pos, render_scale, render_rot) =
-                        resolve_world_transform(*pos, *maybe_scale, *maybe_rot, *maybe_gt);
-
                     let geom = compute_sprite_geometry(
-                        &render_pos,
-                        sprite,
-                        render_scale.as_ref(),
-                        render_rot.as_ref(),
+                        &item.resolved_pos,
+                        &item.sprite,
+                        item.resolved_scale.as_ref(),
+                        item.resolved_rot.as_ref(),
                     );
                     let dest = geom.dest;
                     let origin_scaled = geom.origin;
                     let rotation = geom.rotation;
 
+                    let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+
                     // Apply entity shader if present
-                    if let Some(entity_shader) = maybe_shader {
+                    if let Some(entity_shader) = &item.maybe_shader {
                         if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
                             if entry.shader.is_shader_valid() {
                                 // Set standard uniforms
@@ -539,11 +523,11 @@ pub fn render_system(
                                 set_entity_uniforms(
                                     &mut entry.shader,
                                     &mut entry.locations,
-                                    *entity,
-                                    pos,
-                                    maybe_rot.as_ref(),
-                                    maybe_scale.as_ref(),
-                                    sprite,
+                                    item.entity,
+                                    &item.resolved_pos,
+                                    item.resolved_rot.as_ref(),
+                                    item.resolved_scale.as_ref(),
+                                    Vector2 { x: item.sprite.width, y: item.sprite.height },
                                     query_rigidbodies,
                                 );
 
@@ -557,9 +541,6 @@ pub fn render_system(
                                     );
                                 }
 
-                                // Draw with shader
-                                let tint_color =
-                                    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
                                 d_shader.draw_texture_pro(
                                     tex,
@@ -574,8 +555,6 @@ pub fn render_system(
                                     "Entity shader '{}' is invalid, rendering without shader",
                                     entity_shader.shader_key
                                 );
-                                let tint_color =
-                                    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 d2.draw_texture_pro(
                                     tex,
                                     src,
@@ -590,7 +569,6 @@ pub fn render_system(
                                 "Entity shader '{}' not found, rendering without shader",
                                 entity_shader.shader_key
                             );
-                            let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                             d2.draw_texture_pro(
                                 tex,
                                 src,
@@ -601,7 +579,6 @@ pub fn render_system(
                             );
                         }
                     } else {
-                        let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                         d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
                     }
 
@@ -620,14 +597,11 @@ pub fn render_system(
             text_buffer.clear();
             text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
                 |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
-                    let text_size = t.size();
-
-                    // Use world position for culling when available
-                    let cull_pos = maybe_gt.map_or(p.pos, |gt| gt.position);
-                    let min = Vector2 {
-                        x: cull_pos.x,
-                        y: cull_pos.y,
+                    let resolved_pos = MapPosition {
+                        pos: maybe_gt.map_or(p.pos, |gt| gt.position),
                     };
+                    let text_size = t.size();
+                    let min = resolved_pos.pos;
                     let max = Vector2 {
                         x: min.x + text_size.x,
                         y: min.y + text_size.y,
@@ -637,42 +611,116 @@ pub fn render_system(
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((
+                    overlap.then_some(TextBufferItem {
                         entity,
-                        t.clone(),
-                        *p,
-                        *z,
-                        maybe_shader.cloned(),
-                        maybe_tint.copied(),
-                        maybe_gt.copied(),
-                    ))
+                        text: t.clone(),
+                        z_index: *z,
+                        resolved_pos,
+                        text_size,
+                        maybe_shader: maybe_shader.cloned(),
+                        maybe_tint: maybe_tint.copied(),
+                    })
                 },
             ));
-            //text_buffer.sort_unstable_by_key(|(_, _, _, z, _, _)| *z);
             text_buffer.sort_unstable_by(|a, b| {
-                a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+                a.z_index.partial_cmp(&b.z_index).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (_entity, text, pos, _z, _maybe_shader, maybe_tint, maybe_gt) in text_buffer.iter()
-            {
-                if let Some(font) = fonts.get(&text.font) {
-                    let render_pos = maybe_gt.map_or(pos.pos, |gt| gt.position);
-                    let final_color = maybe_tint
-                        .map(|t| t.multiply(text.color))
-                        .unwrap_or(text.color);
-                    d2.draw_text_ex(
-                        font,
-                        &text.text,
-                        render_pos,
-                        text.font_size,
-                        1.0,
-                        final_color,
-                    );
+            for item in text_buffer.iter() {
+                if let Some(font) = fonts.get(&item.text.font) {
+                    let final_color = item
+                        .maybe_tint
+                        .map(|t| t.multiply(item.text.color))
+                        .unwrap_or(item.text.color);
+
+                    if let Some(entity_shader) = &item.maybe_shader {
+                        if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
+                            if entry.shader.is_shader_valid() {
+                                let dest = Rectangle {
+                                    x: item.resolved_pos.pos.x,
+                                    y: item.resolved_pos.pos.y,
+                                    width: item.text_size.x,
+                                    height: item.text_size.y,
+                                };
+                                set_standard_uniforms(
+                                    &mut entry.shader,
+                                    &mut entry.locations,
+                                    &res.world_time,
+                                    screensize,
+                                    window_size,
+                                    &dest,
+                                );
+                                set_entity_uniforms(
+                                    &mut entry.shader,
+                                    &mut entry.locations,
+                                    item.entity,
+                                    &item.resolved_pos,
+                                    None,
+                                    None,
+                                    item.text_size,
+                                    query_rigidbodies,
+                                );
+                                for (name, value) in &entity_shader.uniforms {
+                                    set_uniform_value(
+                                        &mut entry.shader,
+                                        &mut entry.locations,
+                                        name,
+                                        value,
+                                    );
+                                }
+                                let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
+                                d_shader.draw_text_ex(
+                                    font,
+                                    &item.text.text,
+                                    item.resolved_pos.pos,
+                                    item.text.font_size,
+                                    1.0,
+                                    final_color,
+                                );
+                            } else {
+                                warn!(
+                                    "Entity shader '{}' is invalid, rendering without shader",
+                                    entity_shader.shader_key
+                                );
+                                d2.draw_text_ex(
+                                    font,
+                                    &item.text.text,
+                                    item.resolved_pos.pos,
+                                    item.text.font_size,
+                                    1.0,
+                                    final_color,
+                                );
+                            }
+                        } else {
+                            warn!(
+                                "Entity shader '{}' not found, rendering without shader",
+                                entity_shader.shader_key
+                            );
+                            d2.draw_text_ex(
+                                font,
+                                &item.text.text,
+                                item.resolved_pos.pos,
+                                item.text.font_size,
+                                1.0,
+                                final_color,
+                            );
+                        }
+                    } else {
+                        d2.draw_text_ex(
+                            font,
+                            &item.text.text,
+                            item.resolved_pos.pos,
+                            item.text.font_size,
+                            1.0,
+                            final_color,
+                        );
+                    }
+
                     if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
                         d2.draw_rectangle_lines(
-                            render_pos.x as i32,
-                            render_pos.y as i32,
-                            text.size().x as i32,
-                            text.size().y as i32,
+                            item.resolved_pos.pos.x as i32,
+                            item.resolved_pos.pos.y as i32,
+                            item.text_size.x as i32,
+                            item.text_size.y as i32,
                             Color::ORANGE,
                         );
                     }
@@ -1332,115 +1380,19 @@ fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
 
     if shader_chain.is_empty() {
         // No post-processing - draw directly to window
-        let mut d = rl.begin_drawing(th);
-        d.clear_background(Color::BLACK);
-        d.draw_texture_pro(
-            &render_target.texture,
-            src,
-            dest,
-            Vector2 { x: 0.0, y: 0.0 },
-            0.0,
-            Color::WHITE,
-        );
-        if let Some(f) = post_blit.take() {
-            f(&d);
-        }
-    } else if shader_chain.len() == 1 {
-        // Single shader - draw directly to window (existing behavior)
-        let shader_key = &shader_chain[0];
-        let mut use_shader = false;
-
-        if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
-            if entry.shader.is_shader_valid() {
-                use_shader = true;
-
-                // Set standard uniforms
-                set_standard_uniforms(
-                    &mut entry.shader,
-                    &mut entry.locations,
-                    world_time,
-                    screensize,
-                    window_size,
-                    &dest,
-                );
-
-                // Set user uniforms
-                for (name, value) in post_process.uniforms.iter() {
-                    set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
-                }
-            } else {
-                warn!(
-                    "Post-process shader '{}' is invalid, rendering without shader",
-                    shader_key
-                );
-            }
-        } else {
-            warn!(
-                "Post-process shader '{}' not found, rendering without shader",
-                shader_key
-            );
-        }
-
-        let mut d = rl.begin_drawing(th);
-        d.clear_background(Color::BLACK);
-
-        if use_shader {
-            if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
-                let mut d_shader = d.begin_shader_mode(&mut entry.shader);
-                d_shader.draw_texture_pro(
-                    &render_target.texture,
-                    src,
-                    dest,
-                    Vector2 { x: 0.0, y: 0.0 },
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-        } else {
-            d.draw_texture_pro(
-                &render_target.texture,
-                src,
-                dest,
-                Vector2 { x: 0.0, y: 0.0 },
-                0.0,
-                Color::WHITE,
-            );
-        }
-        if let Some(f) = post_blit.take() {
-            f(&d);
-        }
+        blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
     } else {
         // Multi-pass: ensure ping-pong buffers exist
         if let Err(e) = render_target.ensure_ping_pong_buffers(rl, th) {
             error!("Failed to create ping-pong buffers: {}", e);
             // Fallback: draw without shader
-            let mut d = rl.begin_drawing(th);
-            d.clear_background(Color::BLACK);
-            d.draw_texture_pro(
-                &render_target.texture,
-                src,
-                dest,
-                Vector2 { x: 0.0, y: 0.0 },
-                0.0,
-                Color::WHITE,
-            );
-            if let Some(f) = post_blit.take() {
-                f(&d);
-            }
+            blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
             return;
         }
 
         let mut source_buffer = SourceBuffer::Main;
         let mut valid_passes = 0;
         let mut final_blit_done = false;
-
-        // Source rect with Y-flip for all textures
-        let pass_src = Rectangle {
-            x: 0.0,
-            y: 0.0,
-            width: render_target.game_width as f32,
-            height: -(render_target.game_height as f32),
-        };
 
         // Get raw pointers to independently borrow texture, ping, and pong
         // SAFETY: These fields are independent and don't alias
@@ -1505,7 +1457,7 @@ fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                     let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                     d_shader.draw_texture_pro(
                         source_tex,
-                        pass_src,
+                        src,
                         dest,
                         Vector2 { x: 0.0, y: 0.0 },
                         0.0,
@@ -1531,7 +1483,7 @@ fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                         let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                         d_shader.draw_texture_pro(
                             source_tex,
-                            pass_src,
+                            src,
                             full_dest,
                             Vector2 { x: 0.0, y: 0.0 },
                             0.0,
@@ -1548,7 +1500,7 @@ fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                         let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                         d_shader.draw_texture_pro(
                             source_tex,
-                            pass_src,
+                            src,
                             full_dest,
                             Vector2 { x: 0.0, y: 0.0 },
                             0.0,
@@ -1582,21 +1534,37 @@ fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                      blitting last valid intermediate result without shader"
                 );
             }
-            let mut d = rl.begin_drawing(th);
-            d.clear_background(Color::BLACK);
-            d.draw_texture_pro(
-                source_tex,
-                pass_src,
-                dest,
-                Vector2 { x: 0.0, y: 0.0 },
-                0.0,
-                Color::WHITE,
-            );
-            if let Some(f) = post_blit.take() {
-                f(&d);
-            }
+            blit_to_window(rl, th, source_tex, src, dest, post_blit.take());
         }
     }
+}
+
+/// Blit a render texture to the window with optional post-blit callback.
+fn blit_to_window<F: FnOnce(&RaylibDrawHandle<'_>)>(
+    rl: &mut RaylibHandle,
+    th: &RaylibThread,
+    tex: &RenderTexture2D,
+    src: Rectangle,
+    dest: Rectangle,
+    post_blit: Option<F>,
+) {
+    let mut d = rl.begin_drawing(th);
+    d.clear_background(Color::BLACK);
+    d.draw_texture_pro(tex, src, dest, Vector2 { x: 0.0, y: 0.0 }, 0.0, Color::WHITE);
+    if let Some(f) = post_blit {
+        f(&d);
+    }
+}
+
+/// Get or cache a uniform location by name.
+fn get_uniform_loc(
+    shader: &Shader,
+    locations: &mut rustc_hash::FxHashMap<String, i32>,
+    name: &str,
+) -> i32 {
+    *locations
+        .entry(name.to_string())
+        .or_insert_with(|| shader.get_shader_location(name))
 }
 
 /// Set standard uniforms on a shader for post-processing.
@@ -1616,16 +1584,8 @@ fn set_standard_uniforms(
     window_size: &WindowSize,
     dest: &Rectangle,
 ) {
-    // Helper to get or cache uniform location
-    let get_loc =
-        |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
-            *locations
-                .entry(name.to_string())
-                .or_insert_with(|| shader.get_shader_location(name))
-        };
-
     // uTime (float)
-    let loc = get_loc(shader, locations, "uTime");
+    let loc = get_uniform_loc(shader, locations, "uTime");
     if loc >= 0 {
         unsafe {
             ffi::SetShaderValue(
@@ -1638,7 +1598,7 @@ fn set_standard_uniforms(
     }
 
     // uDeltaTime (float)
-    let loc = get_loc(shader, locations, "uDeltaTime");
+    let loc = get_uniform_loc(shader, locations, "uDeltaTime");
     if loc >= 0 {
         unsafe {
             ffi::SetShaderValue(
@@ -1651,7 +1611,7 @@ fn set_standard_uniforms(
     }
 
     // uResolution (vec2) - game resolution
-    let loc = get_loc(shader, locations, "uResolution");
+    let loc = get_uniform_loc(shader, locations, "uResolution");
     if loc >= 0 {
         let resolution = [screensize.w as f32, screensize.h as f32];
         unsafe {
@@ -1665,7 +1625,7 @@ fn set_standard_uniforms(
     }
 
     // uFrame (int)
-    let loc = get_loc(shader, locations, "uFrame");
+    let loc = get_uniform_loc(shader, locations, "uFrame");
     if loc >= 0 {
         let frame = world_time.frame_count as i32;
         unsafe {
@@ -1679,7 +1639,7 @@ fn set_standard_uniforms(
     }
 
     // uWindowResolution (vec2)
-    let loc = get_loc(shader, locations, "uWindowResolution");
+    let loc = get_uniform_loc(shader, locations, "uWindowResolution");
     if loc >= 0 {
         let window_res = [window_size.w as f32, window_size.h as f32];
         unsafe {
@@ -1693,7 +1653,7 @@ fn set_standard_uniforms(
     }
 
     // uLetterbox (vec4) - destination rectangle
-    let loc = get_loc(shader, locations, "uLetterbox");
+    let loc = get_uniform_loc(shader, locations, "uLetterbox");
     if loc >= 0 {
         let letterbox = [dest.x, dest.y, dest.width, dest.height];
         unsafe {
@@ -1714,9 +1674,7 @@ fn set_uniform_value(
     name: &str,
     value: &UniformValue,
 ) {
-    let loc = *locations
-        .entry(name.to_string())
-        .or_insert_with(|| shader.get_shader_location(name));
+    let loc = get_uniform_loc(shader, locations, name);
 
     if loc < 0 {
         return; // Uniform not found in shader, silently skip
@@ -1768,7 +1726,7 @@ fn set_uniform_value(
 /// Entity-specific uniforms:
 /// - uEntityId (int) - entity index
 /// - uEntityPos (vec2) - world position
-/// - uSpriteSize (vec2) - sprite dimensions
+/// - uSpriteSize (vec2) - entity dimensions (sprite size or text bounding box)
 /// - uRotation (float) - rotation degrees (if present)
 /// - uScale (vec2) - scale factor (if present)
 /// - uVelocity (vec2) - velocity (if RigidBody present)
@@ -1779,19 +1737,11 @@ fn set_entity_uniforms(
     pos: &MapPosition,
     rotation: Option<&Rotation>,
     scale: Option<&Scale>,
-    sprite: &Sprite,
+    size: Vector2,
     rigidbody_query: &Query<&RigidBody>,
 ) {
-    // Helper to get or cache uniform location
-    let get_loc =
-        |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
-            *locations
-                .entry(name.to_string())
-                .or_insert_with(|| shader.get_shader_location(name))
-        };
-
     // uEntityId (int) - use bits representation truncated to i32
-    let loc = get_loc(shader, locations, "uEntityId");
+    let loc = get_uniform_loc(shader, locations, "uEntityId");
     if loc >= 0 {
         let entity_id = (entity.to_bits() & 0xFFFFFFFF) as i32;
         unsafe {
@@ -1805,7 +1755,7 @@ fn set_entity_uniforms(
     }
 
     // uEntityPos (vec2)
-    let loc = get_loc(shader, locations, "uEntityPos");
+    let loc = get_uniform_loc(shader, locations, "uEntityPos");
     if loc >= 0 {
         let entity_pos = [pos.pos.x, pos.pos.y];
         unsafe {
@@ -1819,9 +1769,9 @@ fn set_entity_uniforms(
     }
 
     // uSpriteSize (vec2)
-    let loc = get_loc(shader, locations, "uSpriteSize");
+    let loc = get_uniform_loc(shader, locations, "uSpriteSize");
     if loc >= 0 {
-        let sprite_size = [sprite.width, sprite.height];
+        let sprite_size = [size.x, size.y];
         unsafe {
             ffi::SetShaderValue(
                 **shader,
@@ -1834,7 +1784,7 @@ fn set_entity_uniforms(
 
     // uRotation (float) - only if Rotation component present
     if let Some(rot) = rotation {
-        let loc = get_loc(shader, locations, "uRotation");
+        let loc = get_uniform_loc(shader, locations, "uRotation");
         if loc >= 0 {
             unsafe {
                 ffi::SetShaderValue(
@@ -1849,7 +1799,7 @@ fn set_entity_uniforms(
 
     // uScale (vec2) - only if Scale component present
     if let Some(s) = scale {
-        let loc = get_loc(shader, locations, "uScale");
+        let loc = get_uniform_loc(shader, locations, "uScale");
         if loc >= 0 {
             let scale_vec = [s.scale.x, s.scale.y];
             unsafe {
@@ -1865,7 +1815,7 @@ fn set_entity_uniforms(
 
     // uVelocity (vec2) - only if RigidBody component present
     if let Ok(rb) = rigidbody_query.get(entity) {
-        let loc = get_loc(shader, locations, "uVelocity");
+        let loc = get_uniform_loc(shader, locations, "uVelocity");
         if loc >= 0 {
             let velocity = [rb.velocity.x, rb.velocity.y];
             unsafe {
