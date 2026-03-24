@@ -36,9 +36,14 @@ pub enum InputAction {
     Action1,
     /// Secondary action button (default: Enter).
     Action2,
+    /// Tertiary action button (default: mouse middle button).
+    Action3,
     /// Special function (default: F12).
     Special,
-    // ToggleDebug, // Debug toggle has its own event
+    /// Toggle debug overlays (default: F11). Still triggers [`SwitchDebugEvent`] internally.
+    ToggleDebug,
+    /// Toggle fullscreen mode (default: F10). Still triggers [`SwitchFullScreenEvent`] internally.
+    ToggleFullscreen,
 }
 
 /// Event emitted when an input action is pressed or released.

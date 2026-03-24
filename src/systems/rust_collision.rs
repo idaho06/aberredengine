@@ -39,9 +39,10 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::collision::{get_colliding_sides, CollisionRule};
+use crate::components::collision::CollisionRule;
 use crate::events::collision::CollisionEvent;
 use crate::systems::GameCtx;
+use crate::systems::collision::{compute_sides, resolve_collider_rect, resolve_groups};
 
 /// Observer that handles Rust collision rules.
 ///
@@ -49,7 +50,7 @@ use crate::systems::GameCtx;
 ///
 /// 1. Looks up [`Group`] names for both entities (returns early if missing)
 /// 2. Queries all [`CollisionRule`] entities for a matching rule
-/// 3. Computes collision sides via [`get_colliding_sides`]
+/// 3. Computes collision sides via [`compute_sides`]
 /// 4. Calls the matched callback with `(ent_a, ent_b, &sides_a, &sides_b, &mut ctx)`
 pub fn rust_collision_observer(
     trigger: On<CollisionEvent>,
@@ -63,57 +64,26 @@ pub fn rust_collision_observer(
     let a = trigger.event().a;
     let b = trigger.event().b;
 
-    let ga = if let Ok(group) = ctx.groups.get(a) {
-        group.name()
-    } else {
-        return;
-    };
-    let gb = if let Ok(group) = ctx.groups.get(b) {
-        group.name()
-    } else {
-        return;
+    let (ga, gb) = match resolve_groups(&ctx.groups, a, b) {
+        Some(names) => names,
+        None => return,
     };
 
     for rule in rules.iter() {
         if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
-            // Resolve world positions using GlobalTransform2D when available
-            let pos_a = ctx
-                .positions
-                .get(ent_a)
-                .ok()
-                .map(|p| {
-                    ctx.global_transforms
-                        .get(ent_a)
-                        .ok()
-                        .map_or(p.pos, |gt| gt.position)
-                });
-            let pos_b = ctx
-                .positions
-                .get(ent_b)
-                .ok()
-                .map(|p| {
-                    ctx.global_transforms
-                        .get(ent_b)
-                        .ok()
-                        .map_or(p.pos, |gt| gt.position)
-                });
-
-            // Compute collider rectangles for side detection
-            let rect_a = ctx
-                .box_colliders
-                .get(ent_a)
-                .ok()
-                .and_then(|c| pos_a.map(|pos| c.as_rectangle(pos)));
-            let rect_b = ctx
-                .box_colliders
-                .get(ent_b)
-                .ok()
-                .and_then(|c| pos_b.map(|pos| c.as_rectangle(pos)));
-
-            let (sides_a, sides_b) = match (rect_a, rect_b) {
-                (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_default(),
-                _ => Default::default(),
-            };
+            let rect_a = resolve_collider_rect(
+                &ctx.positions.as_readonly(),
+                &ctx.global_transforms,
+                &ctx.box_colliders,
+                ent_a,
+            );
+            let rect_b = resolve_collider_rect(
+                &ctx.positions.as_readonly(),
+                &ctx.global_transforms,
+                &ctx.box_colliders,
+                ent_b,
+            );
+            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 
             let callback = rule.callback;
             callback(ent_a, ent_b, &sides_a, &sides_b, &mut ctx);

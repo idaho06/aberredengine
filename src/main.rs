@@ -16,8 +16,11 @@ use std::path::PathBuf;
 
 /// Aberred Engine 2D
 #[derive(Parser)]
-#[command(version, author = "Idaho06 from AkinoSoft! cesar.idaho@gmail.com",
-          about = "This is the Aberred Engine 2D! https://github.com/idaho06/aberredengine/")]
+#[command(
+    version,
+    author = "Idaho06 from AkinoSoft! cesar.idaho@gmail.com",
+    about = "This is the Aberred Engine 2D! https://github.com/idaho06/aberredengine/"
+)]
 struct Cli {
     /// Generate Lua LSP stubs from engine metadata and exit.
     /// Optionally provide a path (default: assets/scripts/engine.lua).
@@ -44,8 +47,7 @@ fn main() {
         use aberredengine::stub_generator;
 
         let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/engine.lua"));
-        let runtime =
-            LuaRuntime::new().expect("Failed to create Lua runtime for stub generation");
+        let runtime = LuaRuntime::new().expect("Failed to create Lua runtime for stub generation");
         match stub_generator::generate_stubs(&runtime) {
             Ok(content) => {
                 if let Err(e) = stub_generator::write_stubs(&path, &content) {

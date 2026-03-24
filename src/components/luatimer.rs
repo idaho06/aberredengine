@@ -52,43 +52,23 @@
 //! - [`crate::systems::luatimer::lua_timer_observer`] – observer that executes Lua callbacks
 //! - [`crate::events::luatimer::LuaTimerEvent`] – event emitted when timer expires
 
-use bevy_ecs::prelude::Component;
+use super::timer::Timer;
+
+/// Lua callback function name for a timer.
+///
+/// Stores the name of the Lua function to call when the timer expires.
+/// Used as the callback payload type in [`LuaTimer`].
+#[derive(Clone, Debug, Default)]
+pub struct LuaTimerCallback {
+    /// Lua function name to invoke when the timer fires.
+    pub name: String,
+}
 
 /// Countdown timer that calls a Lua function when finished.
 ///
-/// The timer accumulates time from [`WorldTime`](crate::resources::worldtime::WorldTime)
-/// and emits a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when `elapsed >= duration`.
-/// The Lua callback receives the entity ID and can perform any engine operations.
-#[derive(Component, Clone)]
-pub struct LuaTimer {
-    /// Total duration in seconds before the timer fires.
-    pub duration: f32,
-    /// Elapsed time since last reset.
-    pub elapsed: f32,
-    /// Lua function name to call when timer expires.
-    pub callback: String,
-}
-
-impl LuaTimer {
-    /// Create a new LuaTimer with the given duration and callback function name.
-    ///
-    /// # Arguments
-    ///
-    /// * `duration` - Time in seconds before firing
-    /// * `callback` - Name of Lua function to call (receives entity_id as parameter)
-    pub fn new(duration: f32, callback: impl Into<String>) -> Self {
-        LuaTimer {
-            duration,
-            elapsed: 0.0,
-            callback: callback.into(),
-        }
-    }
-
-    /// Reset the timer by subtracting the duration from elapsed time.
-    ///
-    /// This maintains timing accuracy even if processing is delayed,
-    /// allowing for consistent periodic callbacks.
-    pub fn reset(&mut self) {
-        self.elapsed -= self.duration;
-    }
-}
+/// Type alias over the generic [`Timer`] using [`LuaTimerCallback`] as the
+/// callback payload. The timer accumulates time from
+/// [`WorldTime`](crate::resources::worldtime::WorldTime) and emits a
+/// [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when
+/// `elapsed >= duration`.
+pub type LuaTimer = Timer<LuaTimerCallback>;

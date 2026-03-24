@@ -120,27 +120,29 @@ fn main() {
         .initial_scene("menu")
         .run();
 }
+
 ```
 
 Scene callback signatures:
 
 ```rust
-use aberredengine::systems::scene_dispatch::SceneCtx;
+use aberredengine::systems::GameCtx;
+use aberredengine::resources::input::InputState;
 
 // Called once when the scene becomes active
-fn enter(ctx: &mut SceneCtx) { /* spawn entities, set signals */ }
+fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
 
 // Called every frame while the scene is active
-fn update(ctx: &mut SceneCtx, dt: f32, input: &InputState) { /* per-frame logic */ }
+fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic */ }
 
 // Called once when leaving the scene (before entities are despawned)
-fn exit(ctx: &mut SceneCtx) { /* cleanup */ }
+fn exit(ctx: &mut GameCtx) { /* cleanup */ }
 ```
 
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
 
 ```rust
-fn update(ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {
+fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if some_condition() {
         ctx.world_signals.set_string("scene", "level01".to_string());
         ctx.world_signals.set_flag("switch_scene");
@@ -349,18 +351,20 @@ let mut anim_store = AnimationStore {
 };
 
 anim_store.animations.insert("player_idle".to_string(), AnimationResource {
-    tex_key: Arc::from("player"),        // must match a TextureStore key
-    position: Vector2 { x: 0.0, y: 0.0 }, // base offset in spritesheet
-    displacement: 0.0,                    // per-frame X displacement
-    frame_count: 4,                       // number of frames
-    fps: 8.0,                             // playback speed
-    looped: true,                         // restart after last frame
+    tex_key: Arc::from("player"),              // must match a TextureStore key
+    position: Vector2 { x: 0.0, y: 0.0},      // base offset in spritesheet
+    horizontal_displacement: 32.0,             // per-frame X step (= frame width)
+    vertical_displacement: 0.0,                // non-zero enables row-wrapping
+    frame_count: 4,                            // number of frames
+    fps: 8.0,                                  // playback speed
+    looped: true,                              // restart after last frame
 });
 
 anim_store.animations.insert("player_run".to_string(), AnimationResource {
     tex_key: Arc::from("player"),
-    position: Vector2 { x: 0.0, y: 64.0 }, // second row of spritesheet
-    displacement: 0.0,
+    position: Vector2 { x: 0.0, y: 64.0 },    // second row of spritesheet
+    horizontal_displacement: 32.0,
+    vertical_displacement: 0.0,
     frame_count: 6,
     fps: 12.0,
     looped: true,
@@ -437,7 +441,8 @@ fn setup(
     anim_store.animations.insert("player_idle".into(), AnimationResource {
         tex_key: Arc::from("player"),
         position: Vector2 { x: 0.0, y: 0.0 },
-        displacement: 0.0,
+        horizontal_displacement: 32.0,
+        vertical_displacement: 0.0,
         frame_count: 4,
         fps: 8.0,
         looped: true,
@@ -556,13 +561,87 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled { up_velocity, down_velocity, left_velocity, right_velocity }` |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
+| `Timer` | `Timer::new(duration_secs, callback as TimerCallback)` — **must cast** |
+| `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b", callback as CollisionCallback)` — **must cast** |
+| `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
+| `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
+| `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
 
-### Spawning context: SceneCtx vs. raw hooks
+### Tween components in Rust
+
+Tweens are now represented by a single generic component: `Tween<T>`.
+
+Use the target component type as `T`:
+
+- `Tween<MapPosition>` for position animation
+- `Tween<Rotation>` for rotation animation
+- `Tween<Scale>` for scale animation
+
+This replaces the older concrete Rust types such as `TweenPosition`, `TweenRotation`, and `TweenScale`.
+
+`EngineBuilder` already registers the built-in tween systems for these three component types, so in normal game code you only need to spawn the tween component itself.
+
+**Position tween example:**
+
+```rust
+use aberredengine::components::mapposition::MapPosition;
+use aberredengine::components::tween::{Easing, LoopMode, Tween};
+use raylib::prelude::Vector2;
+
+ctx.commands.spawn((
+    MapPosition::new(0.0, 0.0),
+    Tween::new(
+        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vector2 { x: 200.0, y: 120.0 }),
+        1.5,
+    )
+    .with_easing(Easing::CubicOut)
+    .with_loop_mode(LoopMode::PingPong),
+));
+```
+
+**Rotation tween example:**
+
+```rust
+use aberredengine::components::rotation::Rotation;
+use aberredengine::components::tween::Tween;
+
+ctx.commands.spawn((
+    Rotation { degrees: 0.0 },
+    Tween::new(
+        Rotation { degrees: 0.0 },
+        Rotation { degrees: 360.0 },
+        2.0,
+    ),
+));
+```
+
+**Scale tween example:**
+
+```rust
+use aberredengine::components::scale::Scale;
+use aberredengine::components::tween::Tween;
+
+ctx.commands.spawn((
+    Scale::new(1.0, 1.0),
+    Tween::new(
+        Scale::new(1.0, 1.0),
+        Scale::new(1.5, 0.75),
+        0.75,
+    )
+    .with_backwards(),
+));
+```
+
+> **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vector2>`. The tween systems query concrete ECS component types, not raw value types.
+
+### Spawning context: GameCtx vs. raw hooks
 
 In **scene callbacks**, use `ctx.commands` to spawn entities:
 
 ```rust
-fn enter(ctx: &mut SceneCtx) {
+fn enter(ctx: &mut GameCtx) {
     ctx.commands.spawn(( /* ... */ ));
 }
 ```
@@ -606,7 +685,7 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 **2. Flag-based from scene callbacks:** Set the target scene name and the `"switch_scene"` flag on `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition:
 
 ```rust
-fn update(ctx: &mut SceneCtx, _dt: f32, _input: &InputState) {
+fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if player_reached_exit(ctx) {
         ctx.world_signals.set_string("scene", "level02".to_string());
         ctx.world_signals.set_flag("switch_scene");
@@ -640,9 +719,9 @@ ctx.commands.spawn((
 
 ```rust
 // In your scene's on_enter callback:
-fn enter(ctx: &mut SceneCtx) {
+fn enter(ctx: &mut GameCtx) {
     // Assume tracked_groups is accessed via a separate system or passed in
-    // For SceneCtx callbacks, use world_signals directly to read counts
+    // For scene callbacks, use world_signals directly to read counts
 }
 ```
 
@@ -658,7 +737,7 @@ Key behaviors:
 The `scene_update_system` (`src/systems/scene_dispatch.rs:220-236`) runs every frame while a scene is active. It looks up the active scene in `SceneManager`, and if it has an `on_update` callback, calls it:
 
 ```rust
-fn update(ctx: &mut SceneCtx, dt: f32, input: &InputState) {
+fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) {
     // dt = world_time.delta (unscaled frame time in seconds)
     // input = current keyboard state (just_pressed, active, just_released)
     // Use ctx to read/write ECS state every frame
@@ -673,7 +752,7 @@ The `dt` parameter is `WorldTime.delta` — the unscaled time since the last fra
 
 The engine provides four major gameplay systems: **timers**, **phase state machines**, **collision rules**, and **menus**. Each follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All four context types (`TimerCtx`, `PhaseCtx`, `CollisionCtx`, `MenuCtx`) provide the same set of queries and resources as `SceneCtx`: commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, and world_time. Callbacks have full ECS access.
+All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides: commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, and texture_store. Callbacks have full ECS access.
 
 ### 7.1 Timers
 
@@ -684,34 +763,40 @@ All four context types (`TimerCtx`, `PhaseCtx`, `CollisionCtx`, `MenuCtx`) provi
 **Callback signature:**
 
 ```rust
-type TimerCallback = fn(Entity, &mut TimerCtx, &InputState);
+use aberredengine::systems::GameCtx;
+use aberredengine::resources::input::InputState;
+
+type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
 ```
 
 **Creating a timer:**
 
 ```rust
-use aberredengine::components::timer::Timer;
+use aberredengine::components::timer::{Timer, TimerCallback};
 
 // Spawn an entity with a 2-second repeating timer
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
-    Timer {
-        duration: 2.0,
-        elapsed: 0.0,
-        callback: on_timer_fire,
-    },
+    Timer::new(2.0, on_timer_fire as TimerCallback),
 ));
 
-fn on_timer_fire(entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
     // This fires every 2 seconds
     ctx.world_signals.set_string("timer_count", "fired!".to_string());
 }
 ```
 
-**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback:
+> **Warning:** The `as TimerCallback` cast is required. `Timer<C>` is generic — without the cast, Rust infers `C` from the specific function item type rather than the `TimerCallback` alias. The `update_timers` system queries `Query<(Entity, &mut Timer)>` (which expands to `Timer<TimerCallback>`), so it will **never find the entity** and the timer will silently never fire.
+
+**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback. Remember to use the `as TimerCallback` cast when spawning:
 
 ```rust
-fn one_shot_callback(entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
+ctx.commands.spawn((
+    MapPosition::new(0.0, 0.0),
+    Timer::new(5.0, one_shot_callback as TimerCallback),
+));
+
+fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
     // Do the one-time action
     ctx.audio.write(AudioCmd::PlayFx { id: "explosion".into() });
     // Then despawn to prevent future fires
@@ -728,14 +813,16 @@ fn one_shot_callback(entity: Entity, ctx: &mut TimerCtx, _input: &InputState) {
 **Callback signatures:**
 
 ```rust
+use aberredengine::systems::GameCtx;
+
 // Called when entering a phase. Return Some("phase") to immediately chain-transition.
-type PhaseEnterFn = fn(Entity, &mut PhaseCtx, &InputState) -> Option<String>;
+type PhaseEnterFn = fn(Entity, &mut GameCtx, &InputState) -> Option<String>;
 
 // Called every frame in a phase. Return Some("phase") to transition.
-type PhaseUpdateFn = fn(Entity, &mut PhaseCtx, &InputState, f32) -> Option<String>;
+type PhaseUpdateFn = fn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>;
 
 // Called when exiting a phase. No return — the transition is already committed.
-type PhaseExitFn = fn(Entity, &mut PhaseCtx);
+type PhaseExitFn = fn(Entity, &mut GameCtx);
 ```
 
 **Creating a phase state machine:**
@@ -771,6 +858,16 @@ ctx.commands.spawn((
 ));
 ```
 
+`PhaseCallbackFns` derives `Default` (all callbacks `None`), so you can use `..Default::default()` when only some callbacks are needed:
+
+```rust
+// Equivalent to the "falling" entry above — only on_update is set
+phases.insert("falling".to_string(), PhaseCallbackFns {
+    on_update: Some(falling_update),
+    ..Default::default()
+});
+```
+
 **Phase fields:**
 
 | Field | Type | Description |
@@ -785,11 +882,11 @@ ctx.commands.spawn((
 **Example callbacks:**
 
 ```rust
-fn idle_enter(_entity: Entity, _ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+fn idle_enter(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
     None // stay in idle
 }
 
-fn idle_update(entity: Entity, ctx: &mut PhaseCtx, input: &InputState, _dt: f32) -> Option<String> {
+fn idle_update(entity: Entity, ctx: &mut GameCtx, input: &InputState, _dt: f32) -> Option<String> {
     if input.action_1.just_pressed {
         // Apply jump velocity
         if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
@@ -800,12 +897,12 @@ fn idle_update(entity: Entity, ctx: &mut PhaseCtx, input: &InputState, _dt: f32)
     None
 }
 
-fn jumping_enter(_entity: Entity, ctx: &mut PhaseCtx, _input: &InputState) -> Option<String> {
+fn jumping_enter(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
     ctx.audio.write(AudioCmd::PlayFx { id: "jump".into() });
     None
 }
 
-fn jumping_update(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, _dt: f32) -> Option<String> {
+fn jumping_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
     if let Ok(rb) = ctx.rigid_bodies.get(entity) {
         if rb.velocity.y > 0.0 {
             return Some("falling".to_string());
@@ -814,11 +911,11 @@ fn jumping_update(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, _dt: 
     None
 }
 
-fn jumping_exit(_entity: Entity, _ctx: &mut PhaseCtx) {
+fn jumping_exit(_entity: Entity, _ctx: &mut GameCtx) {
     // cleanup if needed
 }
 
-fn falling_update(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, _dt: f32) -> Option<String> {
+fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
     // Transition back to idle when landing (detected by some condition)
     if let Ok(rb) = ctx.rigid_bodies.get(entity) {
         if rb.velocity.y == 0.0 {
@@ -838,7 +935,9 @@ fn falling_update(entity: Entity, ctx: &mut PhaseCtx, _input: &InputState, _dt: 
 **Callback signature:**
 
 ```rust
-type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut CollisionCtx);
+use aberredengine::systems::GameCtx;
+
+type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 ```
 
 - `Entity, Entity` — the two colliding entities, ordered to match `group_a` and `group_b`
@@ -857,14 +956,16 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut Collision
 **Creating a collision rule:**
 
 ```rust
-use aberredengine::components::collision::{CollisionRule, BoxSide};
+use aberredengine::components::collision::{CollisionRule, CollisionCallback, BoxSide};
 use aberredengine::components::persistent::Persistent;
 
 ctx.commands.spawn((
-    CollisionRule::new("ball", "brick", ball_brick_collision),
+    CollisionRule::new("ball", "brick", ball_brick_collision as CollisionCallback),
     Persistent, // survive scene switches
 ));
 ```
+
+> **Warning:** The `as CollisionCallback` cast is required. `CollisionRule<C>` is generic — without the cast, Rust infers `C` from the specific function item type rather than the `CollisionCallback` alias. The `rust_collision_observer` queries `Query<&CollisionRule>` (which expands to `CollisionRule<CollisionCallback>`), so it will **never find the entity** and the callback will silently never fire.
 
 > **Note:** `CollisionRule` entities are regular entities — they get despawned on scene switch unless marked `Persistent`.
 
@@ -876,7 +977,7 @@ fn ball_brick_collision(
     brick: Entity,
     ball_sides: &BoxSides,
     _brick_sides: &BoxSides,
-    ctx: &mut CollisionCtx,
+    ctx: &mut GameCtx,
 ) {
     // Despawn the brick
     ctx.commands.entity(brick).despawn();
@@ -951,9 +1052,10 @@ ctx.commands.spawn((menu, actions));
 **2. Rust callback:** For custom logic, use `.with_on_rust_callback()`:
 
 ```rust
-use aberredengine::systems::menu::MenuRustCallback;
+use aberredengine::components::menu::MenuRustCallback;
+use aberredengine::systems::GameCtx;
 
-fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut MenuCtx) {
+fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
     match item_id {
         "start" => {
             ctx.world_signals.set_string("scene", "level01".to_string());
@@ -984,7 +1086,7 @@ The first match wins; later options are skipped.
 **Complete menu example:**
 
 ```rust
-fn enter(ctx: &mut SceneCtx) {
+fn enter(ctx: &mut GameCtx) {
     let menu = Menu::new(
         &[("play", "Play"), ("quit", "Quit")],
         Vector2 { x: 200.0, y: 150.0 },
@@ -1008,7 +1110,7 @@ fn enter(ctx: &mut SceneCtx) {
 
 ## 8. Engine Resources Quick Reference
 
-All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources. Scene callbacks access most of these through `SceneCtx` fields.
+All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources. Scene callbacks access most of these through `GameCtx` fields.
 
 ### Engine-inserted resources (Send)
 
@@ -1020,7 +1122,8 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `ScreenSize` | `Res` | Internal render resolution (`w`, `h`) |
 | `WindowSize` | `Res` | OS window dimensions (`w`, `h`), has `calculate_letterbox()` and `window_to_game_pos()` |
 | `GameConfig` | `ResMut` | Loaded from `config.ini` — all render/window settings |
-| `InputState` | `Res` | Keyboard state — each field is a `BoolState { active, just_pressed, just_released }` |
+| `InputState` | `Res` | Input state — digital fields are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32` |
+| `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions with `.set(GameStates::Playing)` |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
@@ -1101,10 +1204,12 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 ### InputState key bindings
 
-Each field is a `BoolState { active, just_pressed, just_released, key_binding }`.
+Each digital field is a `BoolState { active, just_pressed, just_released }`. Hardware assignments live in `InputBindings`, not in `BoolState`. Analog fields are plain `f32`.
 
-| Field | Key | Description |
-|-------|-----|-------------|
+**Digital fields (`BoolState`):**
+
+| Field | Default binding | Description |
+|-------|-----------------|-------------|
 | `maindirection_up` | W | WASD up |
 | `maindirection_down` | S | WASD down |
 | `maindirection_left` | A | WASD left |
@@ -1113,12 +1218,37 @@ Each field is a `BoolState { active, just_pressed, just_released, key_binding }`
 | `secondarydirection_down` | Down arrow | Alternative down |
 | `secondarydirection_left` | Left arrow | Alternative left |
 | `secondarydirection_right` | Right arrow | Alternative right |
-| `action_1` | Space | Primary action |
-| `action_2` | Enter | Secondary action |
+| `action_1` | Space, mouse left | Primary action |
+| `action_2` | Enter, mouse right | Secondary action |
+| `action_3` | Mouse middle | Tertiary action (no keyboard default) |
 | `action_back` | Escape | Back/cancel |
+| `action_special` | F12 | Special action |
 | `mode_debug` | F11 | Debug toggle |
 | `fullscreen_toggle` | F10 | Fullscreen toggle |
-| `action_special` | F12 | Special action |
+
+**Analog fields (`f32`):**
+
+| Field | Description |
+|-------|-------------|
+| `scroll_y` | Mouse wheel delta this frame. Positive = up, negative = down. |
+| `mouse_x` | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). |
+| `mouse_y` | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
+| `mouse_world_x` | Cursor X in world-space (after camera transform, matches `MapPosition`). |
+| `mouse_world_y` | Cursor Y in world-space (after camera transform, matches `MapPosition`). |
+
+### InputBindings resource
+
+`InputBindings` (`src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. W and Up arrow both trigger `main_up`).
+
+```rust
+use aberredengine::resources::input_bindings::{InputBindings, InputBinding, InputAction};
+
+// InputBinding variants:
+InputBinding::Keyboard(KeyboardKey)       // a keyboard key
+InputBinding::MouseButton(MouseButton)    // a mouse button
+```
+
+Key binding strings accepted by the Lua API (also useful as reference): `a`–`z`, `0`–`9`, `space`, `enter`/`return`, `escape`/`esc`, `up`/`down`/`left`/`right`, `lshift`/`rshift`/`lctrl`/`rctrl`/`lalt`/`ralt`, `f1`–`f12`, `mouse_left`, `mouse_right`, `mouse_middle`.
 
 ---
 

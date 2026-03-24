@@ -5,6 +5,7 @@
 
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use crate::resources::uniformvalue::UniformValue;
+pub use super::spawn_data::TweenConfig;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.
@@ -107,6 +108,12 @@ pub enum EntityCmd {
         entity_id: u64,
         animation_key: String,
     },
+    /// Set sprite flip on horizontal and vertical axes
+    SetSpriteFlip {
+        entity_id: u64,
+        flip_h: bool,
+        flip_v: bool,
+    },
     /// Insert a LuaTimer component
     InsertLuaTimer {
         entity_id: u64,
@@ -122,20 +129,14 @@ pub enum EntityCmd {
         from_y: f32,
         to_x: f32,
         to_y: f32,
-        duration: f32,
-        easing: String,
-        loop_mode: String,
-        backwards: bool,
+        config: TweenConfig,
     },
     /// Insert TweenRotation component
     InsertTweenRotation {
         entity_id: u64,
         from: f32,
         to: f32,
-        duration: f32,
-        easing: String,
-        loop_mode: String,
-        backwards: bool,
+        config: TweenConfig,
     },
     /// Insert TweenScale component
     InsertTweenScale {
@@ -144,10 +145,7 @@ pub enum EntityCmd {
         from_y: f32,
         to_x: f32,
         to_y: f32,
-        duration: f32,
-        easing: String,
-        loop_mode: String,
-        backwards: bool,
+        config: TweenConfig,
     },
     /// Remove TweenPosition component
     RemoveTweenPosition { entity_id: u64 },
@@ -209,6 +207,8 @@ pub enum EntityCmd {
     SetSpeed { entity_id: u64, speed: f32 },
     /// Set entity position (MapPosition)
     SetPosition { entity_id: u64, x: f32, y: f32 },
+    /// Set entity screen-space position (ScreenPosition)
+    SetScreenPosition { entity_id: u64, x: f32, y: f32 },
     /// Despawn an entity
     Despawn { entity_id: u64 },
     /// Despawn a menu entity and its items/cursor/textures
@@ -344,7 +344,8 @@ pub enum AnimationCmd {
         tex_key: String,
         pos_x: f32,
         pos_y: f32,
-        displacement: f32,
+        horizontal_displacement: f32,
+        vertical_displacement: f32,
         frame_count: usize,
         fps: f32,
         looped: bool,
@@ -378,4 +379,17 @@ pub enum GameConfigCmd {
     RenderSize { width: u32, height: u32 },
     /// Set background clear color
     BackgroundColor { r: u8, g: u8, b: u8 },
+}
+
+/// Commands for runtime input rebinding from Lua.
+#[derive(Debug, Clone)]
+pub enum InputCmd {
+    /// Rebind a logical action to a single new key (replaces all existing bindings).
+    ///
+    /// String-based to keep Lua decoupled from Rust key types.
+    /// `action` is a canonical action name like `"action_1"`, `"main_up"`, etc.
+    /// `key` is a canonical key name like `"z"`, `"space"`, `"f1"`.
+    Rebind { action: String, key: String },
+    /// Add an extra binding for an action without removing the existing ones.
+    AddBinding { action: String, key: String },
 }

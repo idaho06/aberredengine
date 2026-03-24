@@ -38,6 +38,5 @@ pub fn generate_luarc(runtime: &LuaRuntime, stubs_filename: &str) -> Result<Stri
 
 /// Write the generated `.luarc.json` content to a file.
 pub fn write_luarc(path: &Path, content: &str) -> Result<(), String> {
-    std::fs::write(path, content)
-        .map_err(|e| format!("Failed to write {}: {e}", path.display()))
+    std::fs::write(path, content).map_err(|e| format!("Failed to write {}: {e}", path.display()))
 }

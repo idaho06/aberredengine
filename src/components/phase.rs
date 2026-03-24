@@ -1,8 +1,10 @@
 //! Rust-based phase state machine component.
 //!
-//! The [`Phase`] component provides a phase state machine similar to
-//! [`LuaPhase`](super::luaphase::LuaPhase), but with callbacks defined as
-//! Rust function pointers rather than Lua function names.
+//! [`Phase`] is the shared generic phase-state storage used by both the
+//! Rust callback path and the Lua callback path. The default
+//! `Phase<PhaseCallbackFns>` form is the Rust-facing component, while
+//! [`LuaPhase`](super::luaphase::LuaPhase) is a type alias over the same
+//! storage with Lua callback names.
 //!
 //! # How It Works
 //!
@@ -64,8 +66,7 @@ use crate::systems::GameCtx;
 
 /// Callback for entering a phase. Returns `Some(phase_name)` to immediately
 /// transition, or `None` to stay in the current phase.
-pub type PhaseEnterFn =
-    for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState) -> Option<String>;
+pub type PhaseEnterFn = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState) -> Option<String>;
 
 /// Callback for each frame while in a phase. Receives delta time as the last
 /// argument. Returns `Some(phase_name)` to transition, or `None` to stay.
@@ -97,13 +98,15 @@ impl std::fmt::Debug for PhaseCallbackFns {
     }
 }
 
-/// Rust-based phase state machine component.
+/// Generic phase state machine component.
 ///
-/// Mirrors [`LuaPhase`](super::luaphase::LuaPhase) but stores Rust function
-/// pointers instead of Lua callback names. Processed by
-/// [`phase_system`](crate::systems::phase::phase_system) each frame.
-#[derive(Component)]
-pub struct Phase {
+/// The default `Phase` type stores Rust function pointers via
+/// [`PhaseCallbackFns`] and is processed by
+/// [`phase_system`](crate::systems::phase::phase_system). The Lua-facing
+/// [`LuaPhase`](super::luaphase::LuaPhase) alias reuses this same storage with
+/// a different callback payload type.
+#[derive(Clone, Component)]
+pub struct Phase<C = PhaseCallbackFns> {
     /// The current phase label (e.g., "idle", "playing").
     pub current: String,
     /// The phase before the last transition, if any.
@@ -115,15 +118,12 @@ pub struct Phase {
     /// Whether to call on_enter on the first frame.
     pub needs_enter_callback: bool,
     /// Map of phase name → callback function pointers.
-    pub phases: FxHashMap<String, PhaseCallbackFns>,
+    pub phases: FxHashMap<String, C>,
 }
 
-impl Phase {
+impl<C> Phase<C> {
     /// Create a new Phase with the given initial phase and phase definitions.
-    pub fn new(
-        initial_phase: impl Into<String>,
-        phases: FxHashMap<String, PhaseCallbackFns>,
-    ) -> Self {
+    pub fn new(initial_phase: impl Into<String>, phases: FxHashMap<String, C>) -> Self {
         Self {
             current: initial_phase.into(),
             previous: None,
@@ -135,17 +135,17 @@ impl Phase {
     }
 
     /// Get the callbacks for the current phase.
-    pub fn current_callbacks(&self) -> Option<&PhaseCallbackFns> {
+    pub fn current_callbacks(&self) -> Option<&C> {
         self.phases.get(&self.current)
     }
 
     /// Get the callbacks for a specific phase.
-    pub fn get_callbacks(&self, phase: &str) -> Option<&PhaseCallbackFns> {
+    pub fn get_callbacks(&self, phase: &str) -> Option<&C> {
         self.phases.get(phase)
     }
 }
 
-impl std::fmt::Debug for Phase {
+impl<C> std::fmt::Debug for Phase<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Phase")
             .field("current", &self.current)
@@ -252,8 +252,22 @@ mod tests {
 
     #[test]
     fn test_new_with_empty_phases() {
-        let phase = Phase::new("start", FxHashMap::default());
+        let phase = Phase::new("start", FxHashMap::<String, PhaseCallbackFns>::default());
         assert_eq!(phase.current, "start");
         assert!(phase.current_callbacks().is_none());
+    }
+
+    #[test]
+    fn test_generic_phase_supports_custom_callback_payloads() {
+        #[derive(Clone, Debug, PartialEq, Eq)]
+        struct CustomCallbacks {
+            token: &'static str,
+        }
+
+        let mut phases = FxHashMap::default();
+        phases.insert("idle".to_string(), CustomCallbacks { token: "custom" });
+
+        let phase = Phase::new("idle", phases);
+        assert_eq!(phase.current_callbacks().unwrap().token, "custom");
     }
 }

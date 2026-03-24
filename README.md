@@ -2,80 +2,78 @@
 
 ![Aberred Engine](aberred.ico)
 
-A compact 2D game engine with full Lua scripting support. Currently demonstrated as "DRIFTERS", an Asteroids-style arcade game.
+A compact 2D game engine built in Rust with optional Lua scripting.
+
+Aberred Engine currently ships as a multi-scene showcase containing a menu plus several example games and demos, including Asteroids, Arkanoid, a sidescroller, a birthday card, Kraken, and multiple Bunnymark variants.
 
 Built with:
 
-- **Rust** (2024 edition) — core engine
-- **bevy_ecs** (0.18) — Entity-Component-System architecture
-- **raylib** (5.5.1) — windowing, input, 2D rendering
-- **mlua** (0.11, LuaJIT) — game logic scripting
-- **fastrand** — RNG for particle systems
+- **Rust** (edition 2024)
+- **bevy_ecs** (0.18) for ECS
+- **raylib** (5.5.1) for windowing, rendering, input, and audio integration
+- **mlua** (0.11, LuaJIT) for optional Lua scripting
 
-## Current status (2026-02-19)
+## What it includes
 
-Playable loop: menu → level01 asteroids prototype with ship (idle/propulsion phases), drifting asteroids, tiled space background, and laser firing.
+- Custom engine bootstrap via `EngineBuilder`
+- Optional Lua-driven game logic through `assets/scripts/main.lua`
+- Rust-native scene support via `SceneManager`
+- Sprites, animation, text, menus, tweening, collision, timers, phases, signals, particles, shaders, and camera follow
+- Parent-child hierarchy support using Bevy relationships plus `GlobalTransform2D`
+- Generated Lua stubs for editor support in `assets/scripts/engine.lua`
 
-**Core subsystems:**
+## Lua scripting
 
-- Rendering (sprites, z-ordering, rotation, scale, camera, dynamic text)
-- Physics (velocity, friction, max speed, named acceleration forces)
-- Collision (AABB with group-based Lua callbacks)
-- Animation (frame-based with rule-driven state machine)
-- Tweening (position/rotation/scale with easing)
-- Audio (background thread, WAV sounds)
-- Menus (keyboard navigation, scene switching)
-- Phases (Lua state machine with enter/update/exit callbacks)
-- Signals (per-entity and global: scalars, integers, strings, flags, entities)
-- Entity cloning (template-based spawning with overrides)
-- Particle emitter (WIP — configurable shape, arc, speed, TTL)
-- TTL (time-to-live auto-despawn)
+Lua game content lives in `assets/scripts/`. The engine exposes a global `engine` table for asset loading, audio, signals, entity spawning, scene control, camera/shader commands, and more.
 
-**ECS architecture:**
+Main Lua entrypoints:
 
-- 28 components, 23 systems, 15+ resources
-- Debug mode (F11): collision boxes, entity signals, diagnostics
+- `on_setup()`
+- `on_enter_play()`
+- `on_switch_scene(scene_name)`
+- `on_update_<scene>(input, dt)`
 
-**TODO:**
+Useful Lua docs:
 
-- ~~Shader support~~
-- _Automated tests and CI_ Work in progress
-- _Cross-platform packaging_ Linux and Windows
+- `assets/scripts/README.md` — full Lua API reference
+- `assets/scripts/engine.lua` — generated EmmyLua stubs
+- `assets/scripts/.luarc.json` — generated Lua language server config
 
-## Lua Scripting
+Regenerate the generated Lua files with:
 
-Game logic is defined in `assets/scripts/`. The engine exposes a global `engine` table with 100+ functions for asset loading, audio, signals, entity commands, camera, and groups.
-
-```lua
--- Fluent entity builder example
-engine.spawn()
-    :with_group("ship")
-    :with_position(320, 180)
-    :with_sprite("ship_sheet", 32, 32, 16, 16)
-    :with_phase({ idle = { on_enter = "ship_idle_enter", on_update = "ship_idle_update" } })
-    :with_collider(24, 24, 12, 12)
-    :register_as("player_ship")
-    :build()
+```bash
+cargo run -- --create-lua-stubs
+cargo run -- --create-luarc
 ```
 
-**Callbacks:** `on_setup()`, `on_enter_play()`, `on_switch_scene(name)`, `on_update_<scene>(input, dt)`
+## Rust-native usage
 
-See `assets/scripts/README.md` for the full API reference (78k+ lines).
+You can also use the engine without Lua:
+
+- `cargo build --no-default-features`
+- configure hooks with `EngineBuilder`
+- or register scenes with `SceneManager`
+
+See `RUST-GAME-GUIDE.md` for the Rust path.
 
 ## Repository layout
 
 ```plaintext
 src/
-├── main.rs, game.rs          # Entry point, main loop, scene callbacks
-├── components/               # 28 ECS components
-├── systems/                  # 23 game systems
-├── resources/                # Shared resources + lua_runtime/
-└── events/                   # Event types and observers
+├── main.rs                   # CLI entry point
+├── lib.rs                    # Library crate exports
+├── engine_app.rs             # EngineBuilder, world setup, schedule, main loop
+├── components/               # ECS components
+├── resources/                # ECS resources + lua_runtime/
+├── systems/                  # Systems and observers
+└── events/                   # Event and message types
 assets/
-├── scripts/                  # Lua: main.lua, setup.lua, scenes/
-├── textures/                 # Space/asteroid PNG sprites
-├── audio/                    # WAV sounds
-└── fonts/                    # TTF fonts
+├── scripts/                  # Lua entrypoint, setup, scenes, generated stubs
+├── textures/                 # Art assets grouped by showcase
+├── audio/                    # Audio assets grouped by showcase
+├── shaders/                  # Fragment shaders
+└── fonts/                    # Font assets
+tests/                        # Integration tests
 config.ini                    # Runtime configuration
 ```
 
@@ -83,31 +81,32 @@ config.ini                    # Runtime configuration
 
 Prerequisites:
 
-- Rust stable (rustup recommended). The project uses standard crates and raylib bindings; on most Linux systems the `raylib-sys` crate will build the native dependency automatically.
+- Rust stable (rustup recommended)
+- On Linux, the native Raylib dependency may need system packages; see the Wayland section below
 
 Quick start:
 
-```fish
+```bash
 cargo run
 ```
 
-For a release build:
+Run tests:
 
-```fish
-cargo run --release
+```bash
+cargo test
 ```
 
-Generate documentation:
+Build without Lua support:
 
-```fish
-cargo doc --open
+```bash
+cargo build --no-default-features
 ```
 
 ### System dependencies for Wayland
 
 On Debian/Ubuntu-based systems, raylib (and the native `raylib-sys` bindings) may require several development packages to compile and link correctly when using Wayland/GL. The exact packages depend on your distribution and available renderers, but the following list is a good starting point on an `apt` based system:
 
-```fish
+```bash
 sudo apt update
 sudo apt install -y \
  build-essential pkg-config cmake \
@@ -121,4 +120,6 @@ sudo apt install -y \
 
 ## Notes
 
-- The project is intentionally small and experimental. Expect breaking changes while APIs stabilize.
+- The default build enables Lua support.
+- The generated Lua stubs should not be edited by hand.
+- `engine_app.rs` is the main source of truth for engine startup and schedule ordering.

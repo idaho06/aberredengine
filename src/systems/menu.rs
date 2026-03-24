@@ -31,11 +31,10 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::texturestore::load_texture_from_text;
 use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
-use log::{info, debug, warn};
 #[cfg(feature = "lua")]
 use log::error;
+use log::{debug, info, warn};
 use raylib::prelude::Vector2;
-
 
 /// Spawns entities for newly added [`Menu`] components.
 ///
@@ -102,10 +101,12 @@ pub fn menu_spawn_system(
                 );
             } else {
                 // Static text sprite
-                let font_handle = font_store.get(&font_string).unwrap_or_else(|| panic!(
-                    "menu_spawn_system: Font {} not found in FontStore",
-                    font_string
-                ));
+                let font_handle = font_store.get(&font_string).unwrap_or_else(|| {
+                    panic!(
+                        "menu_spawn_system: Font {} not found in FontStore",
+                        font_string
+                    )
+                });
                 let texture_handle = load_texture_from_text(
                     &mut rl,
                     &th,
@@ -524,10 +525,10 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 commands.entity(top_entity).insert(MapPosition { pos });
             }
         } else if menu.use_screen_space {
-                commands.entity(top_entity).remove::<ScreenPosition>();
-            } else {
-                commands.entity(top_entity).remove::<MapPosition>();
-            }
+            commands.entity(top_entity).remove::<ScreenPosition>();
+        } else {
+            commands.entity(top_entity).remove::<MapPosition>();
+        }
     }
 
     if let Some(bottom_entity) = menu.bottom_indicator_entity {
@@ -544,10 +545,10 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 commands.entity(bottom_entity).insert(MapPosition { pos });
             }
         } else if menu.use_screen_space {
-                commands.entity(bottom_entity).remove::<ScreenPosition>();
-            } else {
-                commands.entity(bottom_entity).remove::<MapPosition>();
-            }
+            commands.entity(bottom_entity).remove::<ScreenPosition>();
+        } else {
+            commands.entity(bottom_entity).remove::<MapPosition>();
+        }
     }
 }
 
@@ -713,7 +714,8 @@ fn dispatch_menu_action(
             );
         }
         MenuAction::ShowSubMenu(submenu_name) => {
-            ctx.world_signals.set_string("show_submenu", submenu_name.clone());
+            ctx.world_signals
+                .set_string("show_submenu", submenu_name.clone());
             // TODO: trigger submenu display system
         }
         MenuAction::QuitGame => {

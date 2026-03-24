@@ -67,12 +67,18 @@ Remap = math_helpers.remap
 --
 -- To add a new example, add one entry here and create the scene module.
 local scene_registry = {
-    menu              = "scenes.menu",
-    asteroids_level01 = "scenes.asteroids.level01",
-    arkanoid_level01  = "scenes.arkanoid.level01",
-    birthday_intro    = "scenes.birthday.intro",
-    birthday_card     = "scenes.birthday.card",
-    kraken_intro      = "scenes.kraken.intro",
+    menu                 = "scenes.menu",
+    asteroids_level01    = "scenes.asteroids.level01",
+    arkanoid_level01     = "scenes.arkanoid.level01",
+    birthday_intro       = "scenes.birthday.intro",
+    birthday_card        = "scenes.birthday.card",
+    kraken_intro         = "scenes.kraken.intro",
+    sidescroller_level01 = "scenes.sidescroller.level01",
+    bunnymark_menu       = "scenes.bunnymark.menu",
+    bunnymark_map_loop   = "scenes.bunnymark.map_loop",
+    bunnymark_screen_loop= "scenes.bunnymark.screen_loop",
+    bunnymark_map_phase  = "scenes.bunnymark.map_phase",
+    bunnymark_screen_phase="scenes.bunnymark.screen_phase",
 }
 
 -- Loaded scene modules (cached to avoid re-requiring)
@@ -107,7 +113,7 @@ end
 local function get_scene(name)
     local path = scene_registry[name]
     if not path then
-        engine.log_warn("No registry entry for scene: " .. name)
+        engine.log_error("No registry entry for scene: " .. name)
         return nil
     end
     if not scene_cache[name] then
@@ -147,7 +153,7 @@ function on_enter_play()
     engine.set_integer("high_score", 0)
     engine.set_integer("lives", 3)
     engine.set_integer("level", 1)
-    engine.set_string("scene", "menu")
+    engine.set_string("scene", "menu") -- Start at menu scene
 
     return "Hello from Lua! Ready to play."
 end
@@ -171,7 +177,7 @@ function on_switch_scene(scene_name)
             scene.spawn()
         end
     else
-        engine.log_warn("No scene module for '" .. scene_name .. "'")
+        engine.log_error("No scene module for '" .. scene_name .. "'")
     end
 end
 

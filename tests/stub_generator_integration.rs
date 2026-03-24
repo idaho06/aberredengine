@@ -9,10 +9,16 @@ fn generate_stubs_produces_valid_output() {
     let content = stub_generator::generate_stubs(&rt).unwrap();
 
     // Must start with @meta annotation
-    assert!(content.starts_with("---@meta"), "Should start with ---@meta");
+    assert!(
+        content.starts_with("---@meta"),
+        "Should start with ---@meta"
+    );
 
     // Must contain the engine table declaration
-    assert!(content.contains("engine = {}"), "Should declare engine table");
+    assert!(
+        content.contains("engine = {}"),
+        "Should declare engine table"
+    );
 }
 
 #[test]
@@ -21,47 +27,121 @@ fn generated_stubs_contain_representative_signatures() {
     let content = stub_generator::generate_stubs(&rt).unwrap();
 
     // Core functions
-    assert!(content.contains("function engine.spawn()"), "Missing engine.spawn()");
-    assert!(content.contains("function engine.clone(source_key)"), "Missing engine.clone()");
-    assert!(content.contains("function engine.log(message)"), "Missing engine.log()");
-    assert!(content.contains("function engine.load_texture(id, path)"), "Missing engine.load_texture()");
-    assert!(content.contains("function engine.play_sound(id)"), "Missing engine.play_sound()");
+    assert!(
+        content.contains("function engine.spawn()"),
+        "Missing engine.spawn()"
+    );
+    assert!(
+        content.contains("function engine.clone(source_key)"),
+        "Missing engine.clone()"
+    );
+    assert!(
+        content.contains("function engine.log(message)"),
+        "Missing engine.log()"
+    );
+    assert!(
+        content.contains("function engine.load_texture(id, path)"),
+        "Missing engine.load_texture()"
+    );
+    assert!(
+        content.contains("function engine.play_sound(id)"),
+        "Missing engine.play_sound()"
+    );
 
     // Signal functions
-    assert!(content.contains("function engine.set_flag(key)"), "Missing engine.set_flag()");
-    assert!(content.contains("function engine.get_scalar(key)"), "Missing engine.get_scalar()");
+    assert!(
+        content.contains("function engine.set_flag(key)"),
+        "Missing engine.set_flag()"
+    );
+    assert!(
+        content.contains("function engine.get_scalar(key)"),
+        "Missing engine.get_scalar()"
+    );
 
     // Entity commands
-    assert!(content.contains("function engine.entity_despawn(entity_id)"), "Missing engine.entity_despawn()");
-    assert!(content.contains("function engine.entity_set_position(entity_id, x, y)"), "Missing engine.entity_set_position()");
+    assert!(
+        content.contains("function engine.entity_despawn(entity_id)"),
+        "Missing engine.entity_despawn()"
+    );
+    assert!(
+        content.contains("function engine.entity_set_position(entity_id, x, y)"),
+        "Missing engine.entity_set_position()"
+    );
 
     // Collision commands
-    assert!(content.contains("function engine.collision_spawn()"), "Missing engine.collision_spawn()");
-    assert!(content.contains("function engine.collision_entity_despawn(entity_id)"), "Missing engine.collision_entity_despawn()");
-    assert!(content.contains("function engine.collision_clone(source_key)"), "Missing engine.collision_clone()");
+    assert!(
+        content.contains("function engine.collision_spawn()"),
+        "Missing engine.collision_spawn()"
+    );
+    assert!(
+        content.contains("function engine.collision_entity_despawn(entity_id)"),
+        "Missing engine.collision_entity_despawn()"
+    );
+    assert!(
+        content.contains("function engine.collision_clone(source_key)"),
+        "Missing engine.collision_clone()"
+    );
 
     // Builder classes
-    assert!(content.contains("---@class EntityBuilder"), "Missing EntityBuilder class");
-    assert!(content.contains("---@class CollisionEntityBuilder"), "Missing CollisionEntityBuilder class");
+    assert!(
+        content.contains("---@class EntityBuilder"),
+        "Missing EntityBuilder class"
+    );
+    assert!(
+        content.contains("---@class CollisionEntityBuilder"),
+        "Missing CollisionEntityBuilder class"
+    );
 
     // Builder methods with return types
-    assert!(content.contains("---@return EntityBuilder\nfunction EntityBuilder:with_position(x, y)"), "Missing EntityBuilder:with_position");
-    assert!(content.contains("function EntityBuilder:build()"), "Missing EntityBuilder:build()");
-    assert!(content.contains("---@return CollisionEntityBuilder\nfunction CollisionEntityBuilder:with_position(x, y)"), "Missing CollisionEntityBuilder:with_position");
+    assert!(
+        content.contains("---@return EntityBuilder\nfunction EntityBuilder:with_position(x, y)"),
+        "Missing EntityBuilder:with_position"
+    );
+    assert!(
+        content.contains("function EntityBuilder:build()"),
+        "Missing EntityBuilder:build()"
+    );
+    assert!(
+        content.contains(
+            "---@return CollisionEntityBuilder\nfunction CollisionEntityBuilder:with_position(x, y)"
+        ),
+        "Missing CollisionEntityBuilder:with_position"
+    );
 
     // Types
-    assert!(content.contains("---@class EntityContext"), "Missing EntityContext type");
-    assert!(content.contains("---@class CollisionContext"), "Missing CollisionContext type");
-    assert!(content.contains("---@class InputSnapshot"), "Missing InputSnapshot type");
-    assert!(content.contains("---@class Vector2"), "Missing Vector2 type");
+    assert!(
+        content.contains("---@class EntityContext"),
+        "Missing EntityContext type"
+    );
+    assert!(
+        content.contains("---@class CollisionContext"),
+        "Missing CollisionContext type"
+    );
+    assert!(
+        content.contains("---@class InputSnapshot"),
+        "Missing InputSnapshot type"
+    );
+    assert!(
+        content.contains("---@class Vector2"),
+        "Missing Vector2 type"
+    );
 
     // Enums
     assert!(content.contains("---@alias Easing"), "Missing Easing enum");
-    assert!(content.contains("---@alias LoopMode"), "Missing LoopMode enum");
+    assert!(
+        content.contains("---@alias LoopMode"),
+        "Missing LoopMode enum"
+    );
 
     // Callbacks
-    assert!(content.contains("function on_setup()"), "Missing on_setup callback");
-    assert!(content.contains("function collision_callback(ctx)"), "Missing collision_callback");
+    assert!(
+        content.contains("function on_setup()"),
+        "Missing on_setup callback"
+    );
+    assert!(
+        content.contains("function collision_callback(ctx)"),
+        "Missing collision_callback"
+    );
 }
 
 #[test]
@@ -142,7 +222,10 @@ fn write_stubs_creates_file() {
 
     assert!(path.exists(), "Stub file should be created");
     let written = std::fs::read_to_string(&path).unwrap();
-    assert_eq!(written, content, "Written content should match generated content");
+    assert_eq!(
+        written, content,
+        "Written content should match generated content"
+    );
 
     // Cleanup
     std::fs::remove_dir_all(&dir).ok();

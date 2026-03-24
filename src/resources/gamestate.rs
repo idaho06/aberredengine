@@ -165,10 +165,7 @@ mod tests {
     fn test_next_gamestate_set_pending() {
         let mut next = NextGameState::new();
         next.set(GameStates::Playing);
-        assert_eq!(
-            *next.get(),
-            NextGameStates::Pending(GameStates::Playing)
-        );
+        assert_eq!(*next.get(), NextGameStates::Pending(GameStates::Playing));
     }
 
     #[test]
@@ -184,10 +181,7 @@ mod tests {
         let mut next = NextGameState::new();
         next.set(GameStates::Setup);
         next.set(GameStates::Playing);
-        assert_eq!(
-            *next.get(),
-            NextGameStates::Pending(GameStates::Playing)
-        );
+        assert_eq!(*next.get(), NextGameStates::Pending(GameStates::Playing));
     }
 
     // --- GameStates enum ---

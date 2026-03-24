@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn test_zindex_sorting() {
-        let mut zindices = vec![
+        let mut zindices = [
             ZIndex(10.0),
             ZIndex(-5.0),
             ZIndex(0.0),
@@ -139,7 +139,7 @@ mod tests {
     fn test_zindex_clone_and_copy() {
         let z1 = ZIndex(42.5);
         let z2 = z1; // Copy
-        let z3 = z1.clone(); // Clone
+        let z3 = z1;
 
         assert_eq!(z1, z2);
         assert_eq!(z1, z3);

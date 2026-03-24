@@ -13,8 +13,8 @@ use raylib::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
-use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::entityshader::EntityShader;
+use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -25,18 +25,29 @@ use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
+use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::uniformvalue::UniformValue;
+use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
+use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::uniformvalue::UniformValue;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use log::{error, warn};
+
+// The `raylib::prelude::*` glob brings the `raylib::imgui` module name into
+// scope, shadowing the external `imgui` crate.  Use `::imgui` (absolute path)
+// to refer to the crate itself.  `Ui` is aliased to `ImguiUi` for clarity next
+// to raylib's own draw-handle types.
+use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 
 type MapSpriteQueryData = (
     Entity,
@@ -60,27 +71,26 @@ type MapTextQueryData = (
     Option<&'static GlobalTransform2D>,
 );
 
-type SpriteBufferItem = (
-    Entity,
-    Sprite,
-    MapPosition,
-    ZIndex,
-    Option<Scale>,
-    Option<Rotation>,
-    Option<EntityShader>,
-    Option<Tint>,
-    Option<GlobalTransform2D>,
-);
+pub(crate) struct SpriteBufferItem {
+    entity: Entity,
+    sprite: Sprite,
+    z_index: ZIndex,
+    resolved_pos: MapPosition,
+    resolved_scale: Option<Scale>,
+    resolved_rot: Option<Rotation>,
+    maybe_shader: Option<EntityShader>,
+    maybe_tint: Option<Tint>,
+}
 
-type TextBufferItem = (
-    Entity,
-    DynamicText,
-    MapPosition,
-    ZIndex,
-    Option<EntityShader>,
-    Option<Tint>,
-    Option<GlobalTransform2D>,
-);
+pub(crate) struct TextBufferItem {
+    entity: Entity,
+    text: DynamicText,
+    z_index: ZIndex,
+    resolved_pos: MapPosition,
+    text_size: Vector2,
+    maybe_shader: Option<EntityShader>,
+    maybe_tint: Option<Tint>,
+}
 
 /// Computed geometry for a sprite draw call via Raylib's `draw_texture_pro`.
 ///
@@ -321,8 +331,24 @@ pub struct RenderResources<'w> {
 #[derive(SystemParam)]
 pub struct RenderQueries<'w, 's> {
     pub map_sprites: Query<'w, 's, MapSpriteQueryData>,
-    pub colliders: Query<'w, 's, (&'static BoxCollider, &'static MapPosition, Option<&'static GlobalTransform2D>)>,
-    pub positions: Query<'w, 's, (&'static MapPosition, Option<&'static Signals>, Option<&'static GlobalTransform2D>)>,
+    pub colliders: Query<
+        'w,
+        's,
+        (
+            &'static BoxCollider,
+            &'static MapPosition,
+            Option<&'static GlobalTransform2D>,
+        ),
+    >,
+    pub positions: Query<
+        'w,
+        's,
+        (
+            &'static MapPosition,
+            Option<&'static Signals>,
+            Option<&'static GlobalTransform2D>,
+        ),
+    >,
     pub map_texts: Query<'w, 's, MapTextQueryData>,
     pub rigidbodies: Query<'w, 's, &'static RigidBody>,
     pub screen_texts: Query<
@@ -345,6 +371,16 @@ pub struct RenderQueries<'w, 's> {
     >,
 }
 
+/// Extra resources needed for the imgui debug panels.
+#[derive(SystemParam)]
+pub struct DebugResources<'w> {
+    pub world_signals: Res<'w, WorldSignals>,
+    pub input_state: Res<'w, InputState>,
+    pub camera_follow: Option<Res<'w, CameraFollowConfig>>,
+    pub scene_manager: Option<Res<'w, SceneManager>>,
+    pub overlay_config: ResMut<'w, DebugOverlayConfig>,
+}
+
 /// Tracks which render buffer is the current source during multi-pass
 /// post-processing (ping-pong pattern).
 #[derive(Clone, Copy)]
@@ -362,12 +398,16 @@ enum SourceBuffer {
 /// - Uses `Camera2D` for world rendering, then overlays UI/debug in screen space.
 /// - When `DebugMode` is present, draws additional information (entity counts,
 ///   camera parameters, and optional collider boxes/signals).
+/// - When `DebugMode` is present, draws additional information (entity counts,
+///   camera parameters, and optional collider boxes/signals).
+#[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut shader_store: NonSendMut<ShaderStore>,
     res: RenderResources,
     queries: RenderQueries,
+    mut debug_res: DebugResources,
     mut sprite_buffer: Local<Vec<SpriteBufferItem>>,
     mut text_buffer: Local<Vec<TextBufferItem>>,
 ) {
@@ -404,75 +444,69 @@ pub fn render_system(
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
                 |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt)| {
-                    // Use world transform for culling when available
-                    let (cull_pos, cull_scale, cull_rot) = resolve_world_transform(
+                    let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
                         *p,
                         maybe_scale.copied(),
                         maybe_rot.copied(),
                         maybe_gt.copied(),
                     );
                     let (min, max) = compute_sprite_cull_bounds(
-                        &cull_pos,
+                        &resolved_pos,
                         s,
-                        cull_scale.as_ref(),
-                        cull_rot.as_ref(),
+                        resolved_scale.as_ref(),
+                        resolved_rot.as_ref(),
                     );
 
                     let overlap = !(max.x < view_min.x
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((
+                    overlap.then_some(SpriteBufferItem {
                         entity,
-                        s.clone(),
-                        *p,
-                        *z,
-                        maybe_scale.copied(),
-                        maybe_rot.copied(),
-                        maybe_shader.cloned(),
-                        maybe_tint.copied(),
-                        maybe_gt.copied(),
-                    ))
+                        sprite: s.clone(),
+                        z_index: *z,
+                        resolved_pos,
+                        resolved_scale,
+                        resolved_rot,
+                        maybe_shader: maybe_shader.cloned(),
+                        maybe_tint: maybe_tint.copied(),
+                    })
                 },
             ));
 
-            // sprite_buffer.sort_unstable_by_key(|(_, _, _, z, _, _, _, _)| *z);
+            // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
             sprite_buffer.sort_unstable_by(|a, b| {
-                a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+                a.z_index.partial_cmp(&b.z_index).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (entity, sprite, pos, _z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt) in
-                sprite_buffer.iter()
-            {
-                if let Some(tex) = textures.get(&sprite.tex_key) {
+            for item in sprite_buffer.iter() {
+                if let Some(tex) = textures.get(&item.sprite.tex_key) {
                     let mut src = Rectangle {
-                        x: sprite.offset.x,
-                        y: sprite.offset.y,
-                        width: sprite.width,
-                        height: sprite.height,
+                        x: item.sprite.offset.x,
+                        y: item.sprite.offset.y,
+                        width: item.sprite.width,
+                        height: item.sprite.height,
                     };
-                    if sprite.flip_h {
+                    if item.sprite.flip_h {
                         src.width = -src.width;
                     }
-                    if sprite.flip_v {
+                    if item.sprite.flip_v {
                         src.height = -src.height;
                     }
 
-                    // Resolve world transform: use GlobalTransform2D when present
-                    let (render_pos, render_scale, render_rot) =
-                        resolve_world_transform(*pos, *maybe_scale, *maybe_rot, *maybe_gt);
-
                     let geom = compute_sprite_geometry(
-                        &render_pos,
-                        sprite,
-                        render_scale.as_ref(),
-                        render_rot.as_ref(),
+                        &item.resolved_pos,
+                        &item.sprite,
+                        item.resolved_scale.as_ref(),
+                        item.resolved_rot.as_ref(),
                     );
                     let dest = geom.dest;
                     let origin_scaled = geom.origin;
                     let rotation = geom.rotation;
 
+                    let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+
                     // Apply entity shader if present
-                    if let Some(entity_shader) = maybe_shader {
+                    if let Some(entity_shader) = &item.maybe_shader {
                         if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
                             if entry.shader.is_shader_valid() {
                                 // Set standard uniforms
@@ -489,11 +523,11 @@ pub fn render_system(
                                 set_entity_uniforms(
                                     &mut entry.shader,
                                     &mut entry.locations,
-                                    *entity,
-                                    pos,
-                                    maybe_rot.as_ref(),
-                                    maybe_scale.as_ref(),
-                                    sprite,
+                                    item.entity,
+                                    &item.resolved_pos,
+                                    item.resolved_rot.as_ref(),
+                                    item.resolved_scale.as_ref(),
+                                    Vector2 { x: item.sprite.width, y: item.sprite.height },
                                     query_rigidbodies,
                                 );
 
@@ -507,9 +541,6 @@ pub fn render_system(
                                     );
                                 }
 
-                                // Draw with shader
-                                let tint_color =
-                                    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
                                 d_shader.draw_texture_pro(
                                     tex,
@@ -524,8 +555,6 @@ pub fn render_system(
                                     "Entity shader '{}' is invalid, rendering without shader",
                                     entity_shader.shader_key
                                 );
-                                let tint_color =
-                                    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                                 d2.draw_texture_pro(
                                     tex,
                                     src,
@@ -540,7 +569,6 @@ pub fn render_system(
                                 "Entity shader '{}' not found, rendering without shader",
                                 entity_shader.shader_key
                             );
-                            let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                             d2.draw_texture_pro(
                                 tex,
                                 src,
@@ -551,8 +579,17 @@ pub fn render_system(
                             );
                         }
                     } else {
-                        let tint_color = maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
                         d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+                    }
+
+                    if maybe_debug.is_some() && debug_res.overlay_config.show_sprite_bounds {
+                        draw_rotated_rect_lines(
+                            &mut d2,
+                            dest,
+                            origin_scaled,
+                            rotation,
+                            Color::BLUE,
+                        );
                     }
                 }
             } // End sprite drawing in camera space
@@ -560,14 +597,11 @@ pub fn render_system(
             text_buffer.clear();
             text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
                 |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
-                    let text_size = t.size();
-
-                    // Use world position for culling when available
-                    let cull_pos = maybe_gt.map_or(p.pos, |gt| gt.position);
-                    let min = Vector2 {
-                        x: cull_pos.x,
-                        y: cull_pos.y,
+                    let resolved_pos = MapPosition {
+                        pos: maybe_gt.map_or(p.pos, |gt| gt.position),
                     };
+                    let text_size = t.size();
+                    let min = resolved_pos.pos;
                     let max = Vector2 {
                         x: min.x + text_size.x,
                         y: min.y + text_size.y,
@@ -577,34 +611,116 @@ pub fn render_system(
                         || min.x > view_max.x
                         || max.y < view_min.y
                         || min.y > view_max.y);
-                    overlap.then_some((
+                    overlap.then_some(TextBufferItem {
                         entity,
-                        t.clone(),
-                        *p,
-                        *z,
-                        maybe_shader.cloned(),
-                        maybe_tint.copied(),
-                        maybe_gt.copied(),
-                    ))
+                        text: t.clone(),
+                        z_index: *z,
+                        resolved_pos,
+                        text_size,
+                        maybe_shader: maybe_shader.cloned(),
+                        maybe_tint: maybe_tint.copied(),
+                    })
                 },
             ));
-            //text_buffer.sort_unstable_by_key(|(_, _, _, z, _, _)| *z);
             text_buffer.sort_unstable_by(|a, b| {
-                a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+                a.z_index.partial_cmp(&b.z_index).unwrap_or(std::cmp::Ordering::Equal)
             });
-            for (_entity, text, pos, _z, _maybe_shader, maybe_tint, maybe_gt) in text_buffer.iter() {
-                if let Some(font) = fonts.get(&text.font) {
-                    let render_pos = maybe_gt.map_or(pos.pos, |gt| gt.position);
-                    let final_color = maybe_tint
-                        .map(|t| t.multiply(text.color))
-                        .unwrap_or(text.color);
-                    d2.draw_text_ex(font, &text.text, render_pos, text.font_size, 1.0, final_color);
-                    if maybe_debug.is_some() {
+            for item in text_buffer.iter() {
+                if let Some(font) = fonts.get(&item.text.font) {
+                    let final_color = item
+                        .maybe_tint
+                        .map(|t| t.multiply(item.text.color))
+                        .unwrap_or(item.text.color);
+
+                    if let Some(entity_shader) = &item.maybe_shader {
+                        if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
+                            if entry.shader.is_shader_valid() {
+                                let dest = Rectangle {
+                                    x: item.resolved_pos.pos.x,
+                                    y: item.resolved_pos.pos.y,
+                                    width: item.text_size.x,
+                                    height: item.text_size.y,
+                                };
+                                set_standard_uniforms(
+                                    &mut entry.shader,
+                                    &mut entry.locations,
+                                    &res.world_time,
+                                    screensize,
+                                    window_size,
+                                    &dest,
+                                );
+                                set_entity_uniforms(
+                                    &mut entry.shader,
+                                    &mut entry.locations,
+                                    item.entity,
+                                    &item.resolved_pos,
+                                    None,
+                                    None,
+                                    item.text_size,
+                                    query_rigidbodies,
+                                );
+                                for (name, value) in &entity_shader.uniforms {
+                                    set_uniform_value(
+                                        &mut entry.shader,
+                                        &mut entry.locations,
+                                        name,
+                                        value,
+                                    );
+                                }
+                                let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
+                                d_shader.draw_text_ex(
+                                    font,
+                                    &item.text.text,
+                                    item.resolved_pos.pos,
+                                    item.text.font_size,
+                                    1.0,
+                                    final_color,
+                                );
+                            } else {
+                                warn!(
+                                    "Entity shader '{}' is invalid, rendering without shader",
+                                    entity_shader.shader_key
+                                );
+                                d2.draw_text_ex(
+                                    font,
+                                    &item.text.text,
+                                    item.resolved_pos.pos,
+                                    item.text.font_size,
+                                    1.0,
+                                    final_color,
+                                );
+                            }
+                        } else {
+                            warn!(
+                                "Entity shader '{}' not found, rendering without shader",
+                                entity_shader.shader_key
+                            );
+                            d2.draw_text_ex(
+                                font,
+                                &item.text.text,
+                                item.resolved_pos.pos,
+                                item.text.font_size,
+                                1.0,
+                                final_color,
+                            );
+                        }
+                    } else {
+                        d2.draw_text_ex(
+                            font,
+                            &item.text.text,
+                            item.resolved_pos.pos,
+                            item.text.font_size,
+                            1.0,
+                            final_color,
+                        );
+                    }
+
+                    if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
                         d2.draw_rectangle_lines(
-                            render_pos.x as i32,
-                            render_pos.y as i32,
-                            text.size().x as i32,
-                            text.size().y as i32,
+                            item.resolved_pos.pos.x as i32,
+                            item.resolved_pos.pos.y as i32,
+                            item.text_size.x as i32,
+                            item.text_size.y as i32,
                             Color::ORANGE,
                         );
                     }
@@ -612,63 +728,73 @@ pub fn render_system(
             }
 
             if maybe_debug.is_some() {
-                for (collider, position, maybe_gt) in query_colliders.iter() {
-                    let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
-                    let (x, y, w, h) = collider.get_aabb(world_pos);
-                    d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
+                if debug_res.overlay_config.show_collider_boxes {
+                    for (collider, position, maybe_gt) in query_colliders.iter() {
+                        let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
+                        let (x, y, w, h) = collider.get_aabb(world_pos);
+                        d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
+                    }
                 }
-                for (position, maybe_signals, maybe_gt) in query_positions.iter() {
-                    let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
-                    d2.draw_line(
-                        world_pos.x as i32 - 5,
-                        world_pos.y as i32,
-                        world_pos.x as i32 + 5,
-                        world_pos.y as i32,
-                        Color::GREEN,
-                    );
-                    d2.draw_line(
-                        world_pos.x as i32,
-                        world_pos.y as i32 - 5,
-                        world_pos.x as i32,
-                        world_pos.y as i32 + 5,
-                        Color::GREEN,
-                    );
-                    if let Some(signals) = maybe_signals {
-                        let mut y_offset = 10;
-                        let font_size = 10;
-                        let font_color = Color::YELLOW;
-                        for flag in signals.get_flags() {
-                            let text = format!("Flag: {}", flag);
-                            d2.draw_text(
-                                &text,
-                                world_pos.x as i32 + 10,
-                                world_pos.y as i32 + y_offset,
-                                font_size,
-                                font_color,
+                if debug_res.overlay_config.show_position_crosshairs
+                    || debug_res.overlay_config.show_entity_signals
+                {
+                    for (position, maybe_signals, maybe_gt) in query_positions.iter() {
+                        let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
+                        if debug_res.overlay_config.show_position_crosshairs {
+                            d2.draw_line(
+                                world_pos.x as i32 - 5,
+                                world_pos.y as i32,
+                                world_pos.x as i32 + 5,
+                                world_pos.y as i32,
+                                Color::GREEN,
                             );
-                            y_offset += 12;
+                            d2.draw_line(
+                                world_pos.x as i32,
+                                world_pos.y as i32 - 5,
+                                world_pos.x as i32,
+                                world_pos.y as i32 + 5,
+                                Color::GREEN,
+                            );
                         }
-                        for (key, value) in signals.get_scalars() {
-                            let text = format!("Scalar: {} = {:.2}", key, value);
-                            d2.draw_text(
-                                &text,
-                                world_pos.x as i32 + 10,
-                                world_pos.y as i32 + y_offset,
-                                font_size,
-                                font_color,
-                            );
-                            y_offset += 12;
-                        }
-                        for (key, value) in signals.get_integers() {
-                            let text = format!("Integer: {} = {}", key, value);
-                            d2.draw_text(
-                                &text,
-                                world_pos.x as i32 + 10,
-                                world_pos.y as i32 + y_offset,
-                                font_size,
-                                font_color,
-                            );
-                            y_offset += 12;
+                        if debug_res.overlay_config.show_entity_signals
+                            && let Some(signals) = maybe_signals
+                        {
+                            let mut y_offset = 10;
+                            let font_size = 10;
+                            let font_color = Color::YELLOW;
+                            for flag in signals.get_flags() {
+                                let text = format!("Flag: {}", flag);
+                                d2.draw_text(
+                                    &text,
+                                    world_pos.x as i32 + 10,
+                                    world_pos.y as i32 + y_offset,
+                                    font_size,
+                                    font_color,
+                                );
+                                y_offset += 12;
+                            }
+                            for (key, value) in signals.get_scalars() {
+                                let text = format!("Scalar: {} = {:.2}", key, value);
+                                d2.draw_text(
+                                    &text,
+                                    world_pos.x as i32 + 10,
+                                    world_pos.y as i32 + y_offset,
+                                    font_size,
+                                    font_color,
+                                );
+                                y_offset += 12;
+                            }
+                            for (key, value) in signals.get_integers() {
+                                let text = format!("Integer: {} = {}", key, value);
+                                d2.draw_text(
+                                    &text,
+                                    world_pos.x as i32 + 10,
+                                    world_pos.y as i32 + y_offset,
+                                    font_size,
+                                    font_color,
+                                );
+                                y_offset += 12;
+                            }
                         }
                     }
                 }
@@ -677,47 +803,138 @@ pub fn render_system(
 
         // Draw in screen coordinates (UI layer) - still on the render target
         let debug = maybe_debug.is_some();
-        draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug);
-        draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug);
-
-        if debug {
-            // Compute values that require RaylibHandle (via Deref) before passing to draw fn
-            let fps = d.get_fps();
-            let window_mouse_pos = d.get_mouse_position();
-            let game_mouse_pos = window_size.window_to_game_pos(
-                window_mouse_pos,
-                screensize.w as u32,
-                screensize.h as u32,
-            );
-            let mouse_world = d.get_screen_to_world2D(game_mouse_pos, camera.0);
-
-            draw_debug_hud(
-                &mut d,
-                screensize,
-                camera,
-                textures,
-                fonts,
-                fps,
-                query_map_sprites.iter().count(),
-                query_colliders.iter().count(),
-                query_positions.iter().count(),
-                game_mouse_pos,
-                mouse_world,
-            );
-        }
+        let debug_sprites = debug && debug_res.overlay_config.show_sprite_bounds;
+        let debug_texts = debug && debug_res.overlay_config.show_text_bounds;
+        draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug_sprites);
+        draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug_texts);
     } // End texture mode - render target is complete
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
-    apply_postprocess_passes(
-        rl,
-        th,
-        &mut render_target,
-        &mut shader_store,
-        &res.post_process,
-        &res.world_time,
-        &res.screensize,
-        &res.window_size,
-    );
+    let debug_active = maybe_debug.is_some();
+    if debug_active {
+        // Pre-compute values accessible from RaylibHandle before begin_drawing
+        let fps = rl.get_fps();
+        let window_mouse_pos = rl.get_mouse_position();
+        let game_mouse_pos = window_size.window_to_game_pos(
+            window_mouse_pos,
+            screensize.w as u32,
+            screensize.h as u32,
+        );
+        let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
+
+        // ECS entity counts
+        let sprite_count = queries.map_sprites.iter().count();
+        let collider_count = queries.colliders.iter().count();
+        let position_count = queries.positions.iter().count();
+        let rigidbody_count = queries.rigidbodies.iter().count();
+        let screen_sprite_count = queries.screen_sprites.iter().count();
+        let screen_text_count = queries.screen_texts.iter().count();
+        let shader_count = shader_store.len();
+
+        // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
+        let overlay_config = &mut *debug_res.overlay_config;
+        let world_signals = &*debug_res.world_signals;
+        let input_state = &*debug_res.input_state;
+        let camera_follow = debug_res.camera_follow.as_deref();
+        let scene_manager = debug_res.scene_manager.as_deref();
+        let world_time = &*res.world_time;
+        let config = &*res.config;
+
+        let closure = move |d: &RaylibDrawHandle<'_>| {
+            draw_imgui_debug(
+                d,
+                overlay_config,
+                world_signals,
+                input_state,
+                camera,
+                camera_follow,
+                scene_manager,
+                textures,
+                fonts,
+                shader_count,
+                screensize,
+                window_size,
+                world_time,
+                config,
+                fps,
+                sprite_count,
+                collider_count,
+                position_count,
+                rigidbody_count,
+                screen_sprite_count,
+                screen_text_count,
+                game_mouse_pos,
+                mouse_world,
+            );
+        };
+        apply_postprocess_passes(
+            rl,
+            th,
+            &mut render_target,
+            &mut shader_store,
+            &res.post_process,
+            world_time,
+            &res.screensize,
+            &res.window_size,
+            Some(closure),
+        );
+    } else {
+        apply_postprocess_passes(
+            rl,
+            th,
+            &mut render_target,
+            &mut shader_store,
+            &res.post_process,
+            &res.world_time,
+            &res.screensize,
+            &res.window_size,
+            None::<fn(&RaylibDrawHandle<'_>)>,
+        );
+    }
+}
+
+/// Draw a rotated rectangle outline in world space.
+///
+/// Rotates the 4 corners of `dest` around the anchor point `(dest.x, dest.y)`
+/// by `rotation` degrees (clockwise, matching Raylib's convention) and draws
+/// 4 line segments connecting them.
+fn draw_rotated_rect_lines(
+    d: &mut impl RaylibDraw,
+    dest: Rectangle,
+    origin: Vector2,
+    rotation: f32,
+    color: Color,
+) {
+    let angle = rotation.to_radians();
+    let cos_a = angle.cos();
+    let sin_a = angle.sin();
+
+    // 4 un-rotated corner offsets relative to the anchor point
+    let corners_local: [(f32, f32); 4] = [
+        (-origin.x, -origin.y),
+        (dest.width - origin.x, -origin.y),
+        (dest.width - origin.x, dest.height - origin.y),
+        (-origin.x, dest.height - origin.y),
+    ];
+
+    let rotate = |(cx, cy): (f32, f32)| -> Vector2 {
+        Vector2 {
+            x: dest.x + cx * cos_a - cy * sin_a,
+            y: dest.y + cx * sin_a + cy * cos_a,
+        }
+    };
+
+    let pts: [Vector2; 4] = [
+        rotate(corners_local[0]),
+        rotate(corners_local[1]),
+        rotate(corners_local[2]),
+        rotate(corners_local[3]),
+    ];
+
+    d.draw_line_v(pts[0], pts[1], color);
+    d.draw_line_v(pts[1], pts[2], color);
+    d.draw_line_v(pts[2], pts[3], color);
+    d.draw_line_v(pts[3], pts[0], color);
 }
 
 /// Draw screen-space sprites (UI layer).
@@ -814,50 +1031,314 @@ fn draw_screen_texts(
     }
 }
 
-/// Draw the debug HUD overlay (FPS, entity counts, camera info, mouse position).
+/// Orchestrates all imgui debug panels drawn at window resolution over the game image.
 #[allow(clippy::too_many_arguments)]
-fn draw_debug_hud(
-    d: &mut impl RaylibDraw,
-    screensize: &ScreenSize,
+fn draw_imgui_debug(
+    d: &RaylibDrawHandle<'_>,
+    overlay_config: &mut DebugOverlayConfig,
+    world_signals: &WorldSignals,
+    input_state: &InputState,
     camera: &Camera2DRes,
+    camera_follow: Option<&CameraFollowConfig>,
+    scene_manager: Option<&SceneManager>,
     textures: &TextureStore,
     fonts: &FontStore,
+    shader_count: usize,
+    screensize: &ScreenSize,
+    window_size: &WindowSize,
+    world_time: &WorldTime,
+    config: &GameConfig,
     fps: u32,
     sprite_count: usize,
     collider_count: usize,
     position_count: usize,
+    rigidbody_count: usize,
+    screen_sprite_count: usize,
+    screen_text_count: usize,
     game_mouse_pos: Vector2,
     mouse_world: Vector2,
 ) {
-    let debug_text = "DEBUG MODE (press F11 to toggle)";
-
-    let text = format!("{} | FPS: {}", debug_text, fps);
-    d.draw_text(&text, 10, 10, 10, Color::GREENYELLOW);
-
-    let entity_count = sprite_count + collider_count + position_count;
-    let text = format!("Map Sprites+colliders+positions: {}", entity_count);
-    d.draw_text(&text, 10, 30, 10, Color::GREENYELLOW);
-
-    let textures_count = textures.map.len();
-    let text = format!("Loaded Textures: {}", textures_count);
-    d.draw_text(&text, 10, 50, 10, Color::GREENYELLOW);
-
-    let fonts_count = fonts.len();
-    let text = format!("Loaded Fonts: {}", fonts_count);
-    d.draw_text(&text, 10, 70, 10, Color::GREENYELLOW);
-
-    let cam = &camera.0;
-    let cam_text = format!(
-        "Camera pos: ({:.1}, {:.1}) Zoom: {:.2}",
-        cam.target.x, cam.target.y, cam.zoom
+    use raylib::imgui::RayImGUITrait;
+    let Some(ui) = d.begin_imgui() else { return };
+    draw_performance_panel(&ui, fps, world_time);
+    draw_ecs_panel(
+        &ui,
+        sprite_count,
+        collider_count,
+        position_count,
+        rigidbody_count,
+        screen_sprite_count,
+        screen_text_count,
+        textures.map.len(),
+        fonts.len(),
+        shader_count,
     );
-    d.draw_text(&cam_text, 10, screensize.h - 30, 10, Color::GREENYELLOW);
-
-    let mouse_text = format!(
-        "Mouse game: ({:.1}, {:.1}) World: ({:.1}, {:.1})",
-        game_mouse_pos.x, game_mouse_pos.y, mouse_world.x, mouse_world.y
+    draw_camera_panel(&ui, camera, camera_follow);
+    draw_world_signals_panel(&ui, world_signals);
+    draw_input_panel(&ui, input_state);
+    draw_overlays_panel(&ui, overlay_config);
+    draw_mouse_config_panel(
+        &ui,
+        game_mouse_pos,
+        mouse_world,
+        screensize,
+        window_size,
+        config,
+        scene_manager,
     );
-    d.draw_text(&mouse_text, 10, 90, 10, Color::GREENYELLOW);
+}
+
+fn draw_performance_panel(ui: &ImguiUi, fps: u32, world_time: &WorldTime) {
+    ui.window("Performance")
+        .collapsed(false, Condition::FirstUseEver)
+        .build(|| {
+            ui.text(format!("FPS: {}", fps));
+            ui.text(format!("Frame time: {:.2} ms", world_time.delta * 1000.0));
+            ui.text(format!("Elapsed: {:.2} s", world_time.elapsed));
+            ui.text(format!("Frame: {}", world_time.frame_count));
+            ui.text(format!("Time scale: {:.2}x", world_time.time_scale));
+            ui.separator();
+            ui.text("Press F11 to toggle debug");
+        });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_ecs_panel(
+    ui: &ImguiUi,
+    sprite_count: usize,
+    collider_count: usize,
+    position_count: usize,
+    rigidbody_count: usize,
+    screen_sprite_count: usize,
+    screen_text_count: usize,
+    texture_count: usize,
+    font_count: usize,
+    shader_count: usize,
+) {
+    ui.window("ECS")
+        .collapsed(true, Condition::FirstUseEver)
+        .build(|| {
+            if ui.collapsing_header("Entities", TreeNodeFlags::empty()) {
+                ui.text(format!("  Map sprites:    {}", sprite_count));
+                ui.text(format!("  Colliders:      {}", collider_count));
+                ui.text(format!("  Positions:      {}", position_count));
+                ui.text(format!("  Rigidbodies:    {}", rigidbody_count));
+                ui.text(format!("  Screen sprites: {}", screen_sprite_count));
+                ui.text(format!("  Screen texts:   {}", screen_text_count));
+            }
+            if ui.collapsing_header("Assets", TreeNodeFlags::empty()) {
+                ui.text(format!("  Textures: {}", texture_count));
+                ui.text(format!("  Fonts:    {}", font_count));
+                ui.text(format!("  Shaders:  {}", shader_count));
+            }
+        });
+}
+
+fn draw_camera_panel(
+    ui: &ImguiUi,
+    camera: &Camera2DRes,
+    camera_follow: Option<&CameraFollowConfig>,
+) {
+    ui.window("Camera")
+        .collapsed(true, Condition::FirstUseEver)
+        .build(|| {
+            let cam = &camera.0;
+            ui.text(format!(
+                "Target:   ({:.1}, {:.1})",
+                cam.target.x, cam.target.y
+            ));
+            ui.text(format!(
+                "Offset:   ({:.1}, {:.1})",
+                cam.offset.x, cam.offset.y
+            ));
+            ui.text(format!("Rotation: {:.2}°", cam.rotation));
+            ui.text(format!("Zoom:     {:.3}", cam.zoom));
+            if let Some(cf) = camera_follow {
+                ui.separator();
+                ui.text(format!("Enabled:    {}", cf.enabled));
+                ui.text(format!("Mode:       {:?}", cf.mode));
+                ui.text(format!("Lerp speed: {:.2}", cf.lerp_speed));
+                ui.text(format!("Spring K:   {:.2}", cf.spring_stiffness));
+                ui.text(format!("Spring D:   {:.2}", cf.spring_damping));
+            }
+        });
+}
+
+fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
+    ui.window("World Signals")
+        .collapsed(true, Condition::FirstUseEver)
+        .build(|| {
+            if ui.collapsing_header(
+                format!("Flags ({})", world_signals.flags.len()),
+                TreeNodeFlags::empty(),
+            ) {
+                let mut flags: Vec<&str> = world_signals.flags.iter().map(|s| s.as_str()).collect();
+                flags.sort_unstable();
+                for flag in flags {
+                    ui.text(format!("  {}", flag));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Scalars ({})", world_signals.scalars.len()),
+                TreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, f32)> = world_signals
+                    .scalars
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), *v))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, val) in entries {
+                    ui.text(format!("  {} = {:.4}", key, val));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Integers ({})", world_signals.integers.len()),
+                TreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, i32)> = world_signals
+                    .integers
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), *v))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, val) in entries {
+                    ui.text(format!("  {} = {}", key, val));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Strings ({})", world_signals.strings.len()),
+                TreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, &str)> = world_signals
+                    .strings
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, val) in entries {
+                    ui.text(format!("  {} = {:?}", key, val));
+                }
+            }
+            if ui.collapsing_header(
+                format!("Entities ({})", world_signals.entities.len()),
+                TreeNodeFlags::empty(),
+            ) {
+                let mut entries: Vec<(&str, u64)> = world_signals
+                    .entities
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.to_bits()))
+                    .collect();
+                entries.sort_unstable_by_key(|(k, _)| *k);
+                for (key, bits) in entries {
+                    ui.text(format!("  {} = {:x}", key, bits));
+                }
+            }
+        });
+}
+
+fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
+    ui.window("Input")
+        .collapsed(true, Condition::FirstUseEver)
+        .build(|| {
+            let inputs: &[(&str, &crate::resources::input::BoolState)] = &[
+                ("Up (WASD)", &input_state.maindirection_up),
+                ("Left (WASD)", &input_state.maindirection_left),
+                ("Down (WASD)", &input_state.maindirection_down),
+                ("Right (WASD)", &input_state.maindirection_right),
+                ("Up (Arrow)", &input_state.secondarydirection_up),
+                ("Down (Arrow)", &input_state.secondarydirection_down),
+                ("Left (Arrow)", &input_state.secondarydirection_left),
+                ("Right (Arrow)", &input_state.secondarydirection_right),
+                ("Back (Esc)", &input_state.action_back),
+                ("Action 1 (Space/LMB)", &input_state.action_1),
+                ("Action 2 (Enter/RMB)", &input_state.action_2),
+                ("Action 3 (MMB)", &input_state.action_3),
+                ("Debug (F11)", &input_state.mode_debug),
+                ("Fullscr (F10)", &input_state.fullscreen_toggle),
+                ("Special (F12)", &input_state.action_special),
+            ];
+            for (name, state) in inputs {
+                if state.active {
+                    ui.text_colored([0.0, 1.0, 0.0, 1.0], "[ON]");
+                } else {
+                    ui.text_colored([0.5, 0.5, 0.5, 1.0], "[  ]");
+                }
+                ui.same_line();
+                ui.text(format!("{:20}", name));
+                if state.just_pressed {
+                    ui.same_line();
+                    ui.text_colored([1.0, 1.0, 0.0, 1.0], "PRESS");
+                }
+                if state.just_released {
+                    ui.same_line();
+                    ui.text_colored([1.0, 0.5, 0.0, 1.0], "RELEASE");
+                }
+            }
+            ui.separator();
+            let scroll_color = if input_state.scroll_y != 0.0 {
+                [0.0, 1.0, 0.0, 1.0]
+            } else {
+                [0.5, 0.5, 0.5, 1.0]
+            };
+            ui.text_colored(
+                scroll_color,
+                format!("Scroll Y: {:+.2}", input_state.scroll_y),
+            );
+        });
+}
+
+fn draw_overlays_panel(ui: &ImguiUi, overlay_config: &mut DebugOverlayConfig) {
+    ui.window("Overlays")
+        .collapsed(true, Condition::FirstUseEver)
+        .build(|| {
+            ui.checkbox("Collider boxes", &mut overlay_config.show_collider_boxes);
+            ui.checkbox(
+                "Position crosshairs",
+                &mut overlay_config.show_position_crosshairs,
+            );
+            ui.checkbox("Entity signals", &mut overlay_config.show_entity_signals);
+            ui.checkbox("Text bounds", &mut overlay_config.show_text_bounds);
+            ui.checkbox("Sprite bounds", &mut overlay_config.show_sprite_bounds);
+        });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_mouse_config_panel(
+    ui: &ImguiUi,
+    game_mouse_pos: Vector2,
+    mouse_world: Vector2,
+    screensize: &ScreenSize,
+    window_size: &WindowSize,
+    config: &GameConfig,
+    scene_manager: Option<&SceneManager>,
+) {
+    ui.window("Mouse & Config")
+        .collapsed(true, Condition::FirstUseEver)
+        .build(|| {
+            ui.text(format!(
+                "Mouse game:  ({:.1}, {:.1})",
+                game_mouse_pos.x, game_mouse_pos.y
+            ));
+            ui.text(format!(
+                "Mouse world: ({:.1}, {:.1})",
+                mouse_world.x, mouse_world.y
+            ));
+            ui.separator();
+            ui.text(format!("Render size: {}x{}", screensize.w, screensize.h));
+            ui.text(format!("Window size: {}x{}", window_size.w, window_size.h));
+            ui.separator();
+            ui.text(format!("FPS target: {}", config.target_fps));
+            ui.text(format!("VSync: {}", config.vsync));
+            if let Some(sm) = scene_manager {
+                ui.separator();
+                if let Some(ref current) = sm.active_scene {
+                    ui.text(format!("Scene: {}", current));
+                } else {
+                    ui.text("Scene: (none)");
+                }
+            }
+        });
 }
 
 /// Apply post-processing shader passes and blit the final image to the window.
@@ -865,8 +1346,11 @@ fn draw_debug_hud(
 /// Handles three cases: no shaders (direct blit), single shader, and multi-pass
 /// ping-pong. Always guarantees a frame is presented even if shaders are missing
 /// or invalid.
+///
+/// `post_blit` is an optional callback invoked inside `begin_drawing()` after
+/// the final blit, used to draw imgui overlays at window resolution.
 #[allow(clippy::too_many_arguments)]
-fn apply_postprocess_passes(
+fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
     rl: &mut RaylibHandle,
     th: &RaylibThread,
     render_target: &mut RenderTarget,
@@ -875,6 +1359,7 @@ fn apply_postprocess_passes(
     world_time: &WorldTime,
     screensize: &ScreenSize,
     window_size: &WindowSize,
+    mut post_blit: Option<F>,
 ) {
     // Source rectangle (the entire render target, Y-flipped for OpenGL)
     let src = render_target.source_rect();
@@ -895,106 +1380,19 @@ fn apply_postprocess_passes(
 
     if shader_chain.is_empty() {
         // No post-processing - draw directly to window
-        let mut d = rl.begin_drawing(th);
-        d.clear_background(Color::BLACK);
-        d.draw_texture_pro(
-            &render_target.texture,
-            src,
-            dest,
-            Vector2 { x: 0.0, y: 0.0 },
-            0.0,
-            Color::WHITE,
-        );
-    } else if shader_chain.len() == 1 {
-        // Single shader - draw directly to window (existing behavior)
-        let shader_key = &shader_chain[0];
-        let mut use_shader = false;
-
-        if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
-            if entry.shader.is_shader_valid() {
-                use_shader = true;
-
-                // Set standard uniforms
-                set_standard_uniforms(
-                    &mut entry.shader,
-                    &mut entry.locations,
-                    world_time,
-                    screensize,
-                    window_size,
-                    &dest,
-                );
-
-                // Set user uniforms
-                for (name, value) in post_process.uniforms.iter() {
-                    set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
-                }
-            } else {
-                warn!(
-                    "Post-process shader '{}' is invalid, rendering without shader",
-                    shader_key
-                );
-            }
-        } else {
-            warn!(
-                "Post-process shader '{}' not found, rendering without shader",
-                shader_key
-            );
-        }
-
-        let mut d = rl.begin_drawing(th);
-        d.clear_background(Color::BLACK);
-
-        if use_shader {
-            if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
-                let mut d_shader = d.begin_shader_mode(&mut entry.shader);
-                d_shader.draw_texture_pro(
-                    &render_target.texture,
-                    src,
-                    dest,
-                    Vector2 { x: 0.0, y: 0.0 },
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-        } else {
-            d.draw_texture_pro(
-                &render_target.texture,
-                src,
-                dest,
-                Vector2 { x: 0.0, y: 0.0 },
-                0.0,
-                Color::WHITE,
-            );
-        }
+        blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
     } else {
         // Multi-pass: ensure ping-pong buffers exist
         if let Err(e) = render_target.ensure_ping_pong_buffers(rl, th) {
             error!("Failed to create ping-pong buffers: {}", e);
             // Fallback: draw without shader
-            let mut d = rl.begin_drawing(th);
-            d.clear_background(Color::BLACK);
-            d.draw_texture_pro(
-                &render_target.texture,
-                src,
-                dest,
-                Vector2 { x: 0.0, y: 0.0 },
-                0.0,
-                Color::WHITE,
-            );
+            blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
             return;
         }
 
         let mut source_buffer = SourceBuffer::Main;
         let mut valid_passes = 0;
         let mut final_blit_done = false;
-
-        // Source rect with Y-flip for all textures
-        let pass_src = Rectangle {
-            x: 0.0,
-            y: 0.0,
-            width: render_target.game_width as f32,
-            height: -(render_target.game_height as f32),
-        };
 
         // Get raw pointers to independently borrow texture, ping, and pong
         // SAFETY: These fields are independent and don't alias
@@ -1059,12 +1457,15 @@ fn apply_postprocess_passes(
                     let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                     d_shader.draw_texture_pro(
                         source_tex,
-                        pass_src,
+                        src,
                         dest,
                         Vector2 { x: 0.0, y: 0.0 },
                         0.0,
                         Color::WHITE,
                     );
+                }
+                if let Some(f) = post_blit.take() {
+                    f(&d);
                 }
                 final_blit_done = true;
             } else {
@@ -1082,7 +1483,7 @@ fn apply_postprocess_passes(
                         let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                         d_shader.draw_texture_pro(
                             source_tex,
-                            pass_src,
+                            src,
                             full_dest,
                             Vector2 { x: 0.0, y: 0.0 },
                             0.0,
@@ -1099,7 +1500,7 @@ fn apply_postprocess_passes(
                         let mut d_shader = d.begin_shader_mode(&mut entry.shader);
                         d_shader.draw_texture_pro(
                             source_tex,
-                            pass_src,
+                            src,
                             full_dest,
                             Vector2 { x: 0.0, y: 0.0 },
                             0.0,
@@ -1133,18 +1534,37 @@ fn apply_postprocess_passes(
                      blitting last valid intermediate result without shader"
                 );
             }
-            let mut d = rl.begin_drawing(th);
-            d.clear_background(Color::BLACK);
-            d.draw_texture_pro(
-                source_tex,
-                pass_src,
-                dest,
-                Vector2 { x: 0.0, y: 0.0 },
-                0.0,
-                Color::WHITE,
-            );
+            blit_to_window(rl, th, source_tex, src, dest, post_blit.take());
         }
     }
+}
+
+/// Blit a render texture to the window with optional post-blit callback.
+fn blit_to_window<F: FnOnce(&RaylibDrawHandle<'_>)>(
+    rl: &mut RaylibHandle,
+    th: &RaylibThread,
+    tex: &RenderTexture2D,
+    src: Rectangle,
+    dest: Rectangle,
+    post_blit: Option<F>,
+) {
+    let mut d = rl.begin_drawing(th);
+    d.clear_background(Color::BLACK);
+    d.draw_texture_pro(tex, src, dest, Vector2 { x: 0.0, y: 0.0 }, 0.0, Color::WHITE);
+    if let Some(f) = post_blit {
+        f(&d);
+    }
+}
+
+/// Get or cache a uniform location by name.
+fn get_uniform_loc(
+    shader: &Shader,
+    locations: &mut rustc_hash::FxHashMap<String, i32>,
+    name: &str,
+) -> i32 {
+    *locations
+        .entry(name.to_string())
+        .or_insert_with(|| shader.get_shader_location(name))
 }
 
 /// Set standard uniforms on a shader for post-processing.
@@ -1164,16 +1584,8 @@ fn set_standard_uniforms(
     window_size: &WindowSize,
     dest: &Rectangle,
 ) {
-    // Helper to get or cache uniform location
-    let get_loc =
-        |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
-            *locations
-                .entry(name.to_string())
-                .or_insert_with(|| shader.get_shader_location(name))
-        };
-
     // uTime (float)
-    let loc = get_loc(shader, locations, "uTime");
+    let loc = get_uniform_loc(shader, locations, "uTime");
     if loc >= 0 {
         unsafe {
             ffi::SetShaderValue(
@@ -1186,7 +1598,7 @@ fn set_standard_uniforms(
     }
 
     // uDeltaTime (float)
-    let loc = get_loc(shader, locations, "uDeltaTime");
+    let loc = get_uniform_loc(shader, locations, "uDeltaTime");
     if loc >= 0 {
         unsafe {
             ffi::SetShaderValue(
@@ -1199,7 +1611,7 @@ fn set_standard_uniforms(
     }
 
     // uResolution (vec2) - game resolution
-    let loc = get_loc(shader, locations, "uResolution");
+    let loc = get_uniform_loc(shader, locations, "uResolution");
     if loc >= 0 {
         let resolution = [screensize.w as f32, screensize.h as f32];
         unsafe {
@@ -1213,7 +1625,7 @@ fn set_standard_uniforms(
     }
 
     // uFrame (int)
-    let loc = get_loc(shader, locations, "uFrame");
+    let loc = get_uniform_loc(shader, locations, "uFrame");
     if loc >= 0 {
         let frame = world_time.frame_count as i32;
         unsafe {
@@ -1227,7 +1639,7 @@ fn set_standard_uniforms(
     }
 
     // uWindowResolution (vec2)
-    let loc = get_loc(shader, locations, "uWindowResolution");
+    let loc = get_uniform_loc(shader, locations, "uWindowResolution");
     if loc >= 0 {
         let window_res = [window_size.w as f32, window_size.h as f32];
         unsafe {
@@ -1241,7 +1653,7 @@ fn set_standard_uniforms(
     }
 
     // uLetterbox (vec4) - destination rectangle
-    let loc = get_loc(shader, locations, "uLetterbox");
+    let loc = get_uniform_loc(shader, locations, "uLetterbox");
     if loc >= 0 {
         let letterbox = [dest.x, dest.y, dest.width, dest.height];
         unsafe {
@@ -1262,9 +1674,7 @@ fn set_uniform_value(
     name: &str,
     value: &UniformValue,
 ) {
-    let loc = *locations
-        .entry(name.to_string())
-        .or_insert_with(|| shader.get_shader_location(name));
+    let loc = get_uniform_loc(shader, locations, name);
 
     if loc < 0 {
         return; // Uniform not found in shader, silently skip
@@ -1316,7 +1726,7 @@ fn set_uniform_value(
 /// Entity-specific uniforms:
 /// - uEntityId (int) - entity index
 /// - uEntityPos (vec2) - world position
-/// - uSpriteSize (vec2) - sprite dimensions
+/// - uSpriteSize (vec2) - entity dimensions (sprite size or text bounding box)
 /// - uRotation (float) - rotation degrees (if present)
 /// - uScale (vec2) - scale factor (if present)
 /// - uVelocity (vec2) - velocity (if RigidBody present)
@@ -1327,19 +1737,11 @@ fn set_entity_uniforms(
     pos: &MapPosition,
     rotation: Option<&Rotation>,
     scale: Option<&Scale>,
-    sprite: &Sprite,
+    size: Vector2,
     rigidbody_query: &Query<&RigidBody>,
 ) {
-    // Helper to get or cache uniform location
-    let get_loc =
-        |shader: &Shader, locations: &mut rustc_hash::FxHashMap<String, i32>, name: &str| -> i32 {
-            *locations
-                .entry(name.to_string())
-                .or_insert_with(|| shader.get_shader_location(name))
-        };
-
     // uEntityId (int) - use bits representation truncated to i32
-    let loc = get_loc(shader, locations, "uEntityId");
+    let loc = get_uniform_loc(shader, locations, "uEntityId");
     if loc >= 0 {
         let entity_id = (entity.to_bits() & 0xFFFFFFFF) as i32;
         unsafe {
@@ -1353,7 +1755,7 @@ fn set_entity_uniforms(
     }
 
     // uEntityPos (vec2)
-    let loc = get_loc(shader, locations, "uEntityPos");
+    let loc = get_uniform_loc(shader, locations, "uEntityPos");
     if loc >= 0 {
         let entity_pos = [pos.pos.x, pos.pos.y];
         unsafe {
@@ -1367,9 +1769,9 @@ fn set_entity_uniforms(
     }
 
     // uSpriteSize (vec2)
-    let loc = get_loc(shader, locations, "uSpriteSize");
+    let loc = get_uniform_loc(shader, locations, "uSpriteSize");
     if loc >= 0 {
-        let sprite_size = [sprite.width, sprite.height];
+        let sprite_size = [size.x, size.y];
         unsafe {
             ffi::SetShaderValue(
                 **shader,
@@ -1382,7 +1784,7 @@ fn set_entity_uniforms(
 
     // uRotation (float) - only if Rotation component present
     if let Some(rot) = rotation {
-        let loc = get_loc(shader, locations, "uRotation");
+        let loc = get_uniform_loc(shader, locations, "uRotation");
         if loc >= 0 {
             unsafe {
                 ffi::SetShaderValue(
@@ -1397,7 +1799,7 @@ fn set_entity_uniforms(
 
     // uScale (vec2) - only if Scale component present
     if let Some(s) = scale {
-        let loc = get_loc(shader, locations, "uScale");
+        let loc = get_uniform_loc(shader, locations, "uScale");
         if loc >= 0 {
             let scale_vec = [s.scale.x, s.scale.y];
             unsafe {
@@ -1413,7 +1815,7 @@ fn set_entity_uniforms(
 
     // uVelocity (vec2) - only if RigidBody component present
     if let Ok(rb) = rigidbody_query.get(entity) {
-        let loc = get_loc(shader, locations, "uVelocity");
+        let loc = get_uniform_loc(shader, locations, "uVelocity");
         if loc >= 0 {
             let velocity = [rb.velocity.x, rb.velocity.y];
             unsafe {

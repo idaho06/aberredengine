@@ -1,330 +1,180 @@
 //! Input systems.
 //!
-//! - [`update_input_state`] reads hardware input from Raylib each frame and
-//!   writes the results into [`crate::resources::input::InputState`].
-//! - Input events are emitted for key presses/releases (e.g., toggling debug
-//!   mode via [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent)).
+//! - [`update_input_state`] reads hardware input from Raylib each frame,
+//!   looks up the current bindings from [`InputBindings`], and writes the
+//!   results into [`InputState`].
+//! - Input events are emitted for key presses/releases. Debug and fullscreen
+//!   toggle actions additionally trigger their own events
+//!   ([`SwitchDebugEvent`], [`SwitchFullScreenEvent`]).
 use bevy_ecs::prelude::*;
-use raylib::ffi::KeyboardKey;
 
 use log::debug;
 
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
+use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::InputState;
+use crate::resources::input_bindings::{InputBinding, InputBindings};
+use crate::resources::screensize::ScreenSize;
+use crate::resources::windowsize::WindowSize;
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+fn any_binding_down(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
+    bindings.iter().any(|b| match b {
+        InputBinding::Keyboard(k) => rl.is_key_down(*k),
+        InputBinding::MouseButton(m) => rl.is_mouse_button_down(*m),
+    })
+}
+
+fn any_binding_pressed(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
+    bindings.iter().any(|b| match b {
+        InputBinding::Keyboard(k) => rl.is_key_pressed(*k),
+        InputBinding::MouseButton(m) => rl.is_mouse_button_pressed(*m),
+    })
+}
+
+fn any_binding_released(rl: &raylib::RaylibHandle, bindings: &[InputBinding]) -> bool {
+    bindings.iter().any(|b| match b {
+        InputBinding::Keyboard(k) => rl.is_key_released(*k),
+        InputBinding::MouseButton(m) => rl.is_mouse_button_released(*m),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// System
+// ---------------------------------------------------------------------------
 
 /// Poll Raylib for keyboard input and update the `InputState` resource.
+///
+/// This system is the single source of truth for input polling.  It looks up
+/// each action's hardware bindings from [`InputBindings`] and writes the
+/// resulting state into [`InputState`].  Consuming systems (movement
+/// controllers, menu observer, etc.) are unchanged.
+///
+/// The `just_pressed` / `just_released` fields use **any-binding** semantics:
+/// either is `true` when *at least one* bound key triggered that edge.
 pub fn update_input_state(
     mut input: ResMut<InputState>,
+    bindings: Res<InputBindings>,
     rl: NonSendMut<raylib::RaylibHandle>,
     mut commands: Commands,
+    window_size: Res<WindowSize>,
+    screen_size: Res<ScreenSize>,
+    camera: Res<Camera2DRes>,
 ) {
-    // eprintln!("update_input_state: Updating input state from Raylib");
-    // Update the input resource each frame
-    let is_key_down = |key: KeyboardKey| rl.is_key_down(key);
-    let is_key_pressed = |key: KeyboardKey| rl.is_key_pressed(key);
-    let is_key_released = |key: KeyboardKey| rl.is_key_released(key);
-
-    // WASD keys
-    input.maindirection_up.active = is_key_down(input.maindirection_up.key_binding);
-    input.maindirection_left.active = is_key_down(input.maindirection_left.key_binding);
-    input.maindirection_down.active = is_key_down(input.maindirection_down.key_binding);
-    input.maindirection_right.active = is_key_down(input.maindirection_right.key_binding);
-    // Arrow keys
-    input.secondarydirection_up.active = is_key_down(input.secondarydirection_up.key_binding);
-    input.secondarydirection_down.active = is_key_down(input.secondarydirection_down.key_binding);
-    input.secondarydirection_left.active = is_key_down(input.secondarydirection_left.key_binding);
-    input.secondarydirection_right.active = is_key_down(input.secondarydirection_right.key_binding);
-    // Action special keys
-    input.action_back.active = is_key_down(input.action_back.key_binding);
-    input.action_1.active = is_key_down(input.action_1.key_binding);
-    input.action_2.active = is_key_down(input.action_2.key_binding);
-    input.mode_debug.active = is_key_down(input.mode_debug.key_binding);
-    input.action_special.active = is_key_down(input.action_special.key_binding);
-
-    // Emit input events for actions that were just pressed or released
-    if is_key_pressed(input.mode_debug.key_binding) {
-        debug!("Debug mode key pressed");
-        input.mode_debug.just_pressed = true;
-        commands.trigger(SwitchDebugEvent {});
-    } else {
-        input.mode_debug.just_pressed = false;
+    // Inline macro: update one BoolState field and optionally emit an InputEvent.
+    //
+    // `$state`  – a field path into `input` (e.g. `input.maindirection_up`)
+    // `$action` – the InputAction variant used to look up bindings
+    // Variants:
+    //   poll_action!($state, $action)           — updates state, emits InputEvent
+    //   poll_action!(no_event; $state, $action) — updates state only (special actions)
+    macro_rules! poll_action {
+        ($state:expr, $action:expr) => {{
+            let bl = bindings.get_bindings($action);
+            $state.active = any_binding_down(&rl, bl);
+            if any_binding_pressed(&rl, bl) {
+                $state.just_pressed = true;
+                commands.trigger(InputEvent {
+                    action: $action,
+                    pressed: true,
+                });
+            } else {
+                $state.just_pressed = false;
+            }
+            if any_binding_released(&rl, bl) {
+                $state.just_released = true;
+                commands.trigger(InputEvent {
+                    action: $action,
+                    pressed: false,
+                });
+            } else {
+                $state.just_released = false;
+            }
+        }};
+        (no_event; $state:expr, $action:expr) => {{
+            let bl = bindings.get_bindings($action);
+            $state.active = any_binding_down(&rl, bl);
+            if any_binding_pressed(&rl, bl) {
+                $state.just_pressed = true;
+            } else {
+                $state.just_pressed = false;
+            }
+            if any_binding_released(&rl, bl) {
+                $state.just_released = true;
+            } else {
+                $state.just_released = false;
+            }
+        }};
     }
-    if is_key_pressed(input.fullscreen_toggle.key_binding) {
+
+    // --- Primary direction (WASD) ---
+    poll_action!(input.maindirection_up, InputAction::MainDirectionUp);
+    poll_action!(input.maindirection_down, InputAction::MainDirectionDown);
+    poll_action!(input.maindirection_left, InputAction::MainDirectionLeft);
+    poll_action!(input.maindirection_right, InputAction::MainDirectionRight);
+
+    // --- Secondary direction (arrow keys) ---
+    poll_action!(
+        input.secondarydirection_up,
+        InputAction::SecondaryDirectionUp
+    );
+    poll_action!(
+        input.secondarydirection_down,
+        InputAction::SecondaryDirectionDown
+    );
+    poll_action!(
+        input.secondarydirection_left,
+        InputAction::SecondaryDirectionLeft
+    );
+    poll_action!(
+        input.secondarydirection_right,
+        InputAction::SecondaryDirectionRight
+    );
+
+    // --- Action buttons ---
+    poll_action!(input.action_back, InputAction::Back);
+    poll_action!(input.action_1, InputAction::Action1);
+    poll_action!(input.action_2, InputAction::Action2);
+    poll_action!(input.action_3, InputAction::Action3);
+    poll_action!(input.action_special, InputAction::Special);
+
+    // --- Special toggles ---
+    // mode_debug and fullscreen_toggle don't emit InputEvent; they trigger their
+    // own dedicated events so existing observers don't need to change.
+    poll_action!(no_event; input.mode_debug, InputAction::ToggleDebug);
+    if input.mode_debug.just_pressed {
+        debug!("Debug mode key pressed");
+        commands.trigger(SwitchDebugEvent {});
+    }
+
+    poll_action!(no_event; input.fullscreen_toggle, InputAction::ToggleFullscreen);
+    if input.fullscreen_toggle.just_pressed {
         debug!("Fullscreen toggle key pressed");
         commands.trigger(SwitchFullScreenEvent {});
     }
 
-    if is_key_pressed(input.action_special.key_binding) {
-        debug!("Action Special key pressed");
-        input.action_special.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Special,
-            pressed: true,
-        });
-    } else {
-        input.action_special.just_pressed = false;
-    }
-    if is_key_released(input.action_special.key_binding) {
-        debug!("Action Special key released");
-        input.action_special.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Special,
-            pressed: false,
-        });
-    } else {
-        input.action_special.just_released = false;
-    }
-    if is_key_pressed(input.action_1.key_binding) {
-        debug!("Action 1 key pressed");
-        input.action_1.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Action1,
-            pressed: true,
-        });
-    } else {
-        input.action_1.just_pressed = false;
-    }
-    if is_key_released(input.action_1.key_binding) {
-        debug!("Action 1 key released");
-        input.action_1.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Action1,
-            pressed: false,
-        });
-    } else {
-        input.action_1.just_released = false;
-    }
-    if is_key_pressed(input.action_2.key_binding) {
-        debug!("Action 2 key pressed");
-        input.action_2.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Action2,
-            pressed: true,
-        });
-    } else {
-        input.action_2.just_pressed = false;
-    }
-    if is_key_released(input.action_2.key_binding) {
-        debug!("Action 2 key released");
-        input.action_2.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Action2,
-            pressed: false,
-        });
-    } else {
-        input.action_2.just_released = false;
-    }
-    if is_key_pressed(input.action_back.key_binding) {
-        input.action_back.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Back,
-            pressed: true,
-        });
-    } else {
-        input.action_back.just_pressed = false;
-    }
-    if is_key_released(input.action_back.key_binding) {
-        input.action_back.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::Back,
-            pressed: false,
-        });
-    } else {
-        input.action_back.just_released = false;
-    }
-    if is_key_pressed(input.maindirection_up.key_binding) {
-        input.maindirection_up.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionUp,
-            pressed: true,
-        });
-    } else {
-        input.maindirection_up.just_pressed = false;
-    }
-    if is_key_released(input.maindirection_up.key_binding) {
-        input.maindirection_up.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionUp,
-            pressed: false,
-        });
-    } else {
-        input.maindirection_up.just_released = false;
-    }
-    if is_key_pressed(input.maindirection_down.key_binding) {
-        input.maindirection_down.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionDown,
-            pressed: true,
-        });
-    } else {
-        input.maindirection_down.just_pressed = false;
-    }
-    if is_key_released(input.maindirection_down.key_binding) {
-        input.maindirection_down.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionDown,
-            pressed: false,
-        });
-    } else {
-        input.maindirection_down.just_released = false;
-    }
-    if is_key_pressed(input.maindirection_left.key_binding) {
-        input.maindirection_left.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionLeft,
-            pressed: true,
-        });
-    } else {
-        input.maindirection_left.just_pressed = false;
-    }
-    if is_key_released(input.maindirection_left.key_binding) {
-        input.maindirection_left.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionLeft,
-            pressed: false,
-        });
-    } else {
-        input.maindirection_left.just_released = false;
-    }
-    if is_key_pressed(input.maindirection_right.key_binding) {
-        input.maindirection_right.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionRight,
-            pressed: true,
-        });
-    } else {
-        input.maindirection_right.just_pressed = false;
-    }
-    if is_key_released(input.maindirection_right.key_binding) {
-        input.maindirection_right.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::MainDirectionRight,
-            pressed: false,
-        });
-    } else {
-        input.maindirection_right.just_released = false;
-    }
-    if is_key_pressed(input.secondarydirection_up.key_binding) {
-        input.secondarydirection_up.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionUp,
-            pressed: true,
-        });
-    } else {
-        input.secondarydirection_up.just_pressed = false;
-    }
-    if is_key_released(input.secondarydirection_up.key_binding) {
-        input.secondarydirection_up.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionUp,
-            pressed: false,
-        });
-    } else {
-        input.secondarydirection_up.just_released = false;
-    }
-    if is_key_pressed(input.secondarydirection_down.key_binding) {
-        input.secondarydirection_down.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionDown,
-            pressed: true,
-        });
-    } else {
-        input.secondarydirection_down.just_pressed = false;
-    }
-    if is_key_released(input.secondarydirection_down.key_binding) {
-        input.secondarydirection_down.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionDown,
-            pressed: false,
-        });
-    } else {
-        input.secondarydirection_down.just_released = false;
-    }
-    if is_key_pressed(input.secondarydirection_left.key_binding) {
-        input.secondarydirection_left.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionLeft,
-            pressed: true,
-        });
-    } else {
-        input.secondarydirection_left.just_pressed = false;
-    }
-    if is_key_released(input.secondarydirection_left.key_binding) {
-        input.secondarydirection_left.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionLeft,
-            pressed: false,
-        });
-    } else {
-        input.secondarydirection_left.just_released = false;
-    }
-    if is_key_pressed(input.secondarydirection_right.key_binding) {
-        input.secondarydirection_right.just_pressed = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionRight,
-            pressed: true,
-        });
-    } else {
-        input.secondarydirection_right.just_pressed = false;
-    }
-    if is_key_released(input.secondarydirection_right.key_binding) {
-        input.secondarydirection_right.just_released = true;
-        commands.trigger(InputEvent {
-            action: InputAction::SecondaryDirectionRight,
-            pressed: false,
-        });
-    } else {
-        input.secondarydirection_right.just_released = false;
-    }
-}
+    // --- Mouse wheel (analog scroll) ---
+    input.scroll_y = rl.get_mouse_wheel_move();
 
-// Example system that reacts to the current input state.
-//
-// This can be used as a place to trigger events such as
-// [`SwitchDebugEvent`] when certain keys are pressed.
-// TODO: Remove this example system when no longer needed.
-/* pub fn check_input(mut commands: Commands, input: Res<InputState>) {
-    // React to the input resource this frame
-    if input.maindirection_up.active {
-        println!("W key pressed");
-    }
-    if input.maindirection_down.active {
-        println!("S key pressed");
-    }
-    if input.maindirection_left.active {
-        println!("A key pressed");
-    }
-    if input.maindirection_right.active {
-        println!("D key pressed");
-    }
-    if input.secondarydirection_up.active {
-        println!("Up arrow pressed");
-    }
-    if input.secondarydirection_down.active {
-        println!("Down arrow pressed");
-    }
-    if input.secondarydirection_left.active {
-        println!("Left arrow pressed");
-    }
-    if input.secondarydirection_right.active {
-        println!("Right arrow pressed");
-    }
-    if input.action_back.active {
-        println!("Esc pressed");
-    }
-    if input.action_1.active {
-        println!("Space pressed");
-    }
-    if input.action_2.active {
-        println!("Enter pressed");
-    }
-    if input.mode_debug.active {
-        println!("F11 pressed");
-        // commands.trigger(SwitchDebugEvent {});
-    }
-    if input.action_special.active {
-        println!("F12 pressed");
-    }
-} */
+    // --- Mouse position ---
+    // Game-space: letterbox-corrected render-target coordinates (0..render_width/height).
+    // Camera-independent — matches ScreenPosition entity coordinates.
+    let window_mouse_pos = rl.get_mouse_position();
+    let game_mouse_pos = window_size.window_to_game_pos(
+        window_mouse_pos,
+        screen_size.w as u32,
+        screen_size.h as u32,
+    );
+    input.mouse_x = game_mouse_pos.x;
+    input.mouse_y = game_mouse_pos.y;
+    // World-space: game-space projected through the current camera.
+    // Matches MapPosition entity coordinates.
+    let world_mouse_pos = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
+    input.mouse_world_x = world_mouse_pos.x;
+    input.mouse_world_y = world_mouse_pos.y;
+}

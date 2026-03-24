@@ -8,9 +8,9 @@ pub mod engine_app;
 pub mod events;
 #[cfg(feature = "lua")]
 pub mod lua_plugin;
-pub mod resources;
 #[cfg(feature = "lua")]
 pub mod luarc_generator;
+pub mod resources;
 #[cfg(feature = "lua")]
 pub mod stub_generator;
 pub mod systems;

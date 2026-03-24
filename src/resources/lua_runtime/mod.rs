@@ -10,7 +10,10 @@
 //! - [`commands`] - Command enums for Lua-Rust communication
 //! - [`spawn_data`] - Component data structures for entity spawning
 //! - [`entity_builder`] - Fluent builder interface for entity construction
-//! - [`runtime`] - Core Lua runtime implementation and `engine` table API
+//! - [`runtime`] - Core `LuaRuntime` struct, struct definitions, and utility methods
+//! - [`engine_api`] - `engine` table API registration (all `register_*_api` methods)
+//! - [`command_queues`] - Command queue draining and cache update methods
+//! - [`stub_meta`] - `engine.__meta` stub metadata for IDE/tooling support
 //!
 //! # Example
 //!
@@ -31,20 +34,23 @@
 //!     :build()
 //! ```
 
+mod command_queues;
 mod commands;
 mod context;
+mod engine_api;
 mod entity_builder;
 mod input_snapshot;
 mod runtime;
 mod spawn_data;
+mod stub_meta;
 
 // Re-export all public types for backwards compatibility
 pub use commands::*;
 pub use context::{
-    AnimationSnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot, SpriteSnapshot,
-    build_entity_context_pooled,
+    AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
+    SpriteSnapshot, build_entity_context_pooled,
 };
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
-pub use runtime::LuaRuntime;
+pub use runtime::{LuaRuntime, action_from_str};
 pub use spawn_data::*;

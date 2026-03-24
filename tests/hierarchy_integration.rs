@@ -22,6 +22,8 @@ use aberredengine::components::rotation::Rotation;
 use aberredengine::components::scale::Scale;
 use aberredengine::components::stuckto::StuckTo;
 #[cfg(feature = "lua")]
+use aberredengine::resources::animationstore::AnimationStore;
+#[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
 #[cfg(feature = "lua")]
 use aberredengine::resources::systemsstore::SystemsStore;
@@ -31,7 +33,9 @@ use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::systems::lua_commands::EntityCmdQueries;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
-use aberredengine::systems::propagate_transforms::propagate_transforms;
+use aberredengine::systems::propagate_transforms::{
+    cleanup_orphaned_global_transforms, propagate_transforms,
+};
 use aberredengine::systems::stuckto::stuck_to_entity_system;
 
 const EPSILON: f32 = 1e-4;
@@ -91,10 +95,7 @@ fn propagate_single_child_position_only() {
     let mut world = World::new();
 
     let parent = world
-        .spawn((
-            MapPosition::new(100.0, 100.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(100.0, 100.0), GlobalTransform2D::default()))
         .id();
 
     let child = world
@@ -253,10 +254,7 @@ fn propagate_chain_grandchild() {
     let mut world = World::new();
 
     let root = world
-        .spawn((
-            MapPosition::new(100.0, 0.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(100.0, 0.0), GlobalTransform2D::default()))
         .id();
 
     let child = world
@@ -421,15 +419,10 @@ fn propagate_child_with_own_rotation_and_scale() {
 fn propagate_inserts_missing_globaltransform2d_via_commands() {
     let mut world = World::new();
 
-    let parent = world
-        .spawn((MapPosition::new(100.0, 0.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(100.0, 0.0),)).id();
 
     let child = world
-        .spawn((
-            MapPosition::new(10.0, 0.0),
-            ChildOf(parent),
-        ))
+        .spawn((MapPosition::new(10.0, 0.0), ChildOf(parent)))
         .id();
 
     world.flush();
@@ -468,21 +461,24 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
 #[cfg(feature = "lua")]
 fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(SystemsStore::new());
+    world.insert_resource(AnimationStore {
+        animations: Default::default(),
+    });
 
-    let mut state = SystemState::<(Commands, EntityCmdQueries, Res<SystemsStore>)>::new(world);
-    let (mut commands, mut queries, systems_store) = state.get_mut(world);
+    let mut state = SystemState::<(
+        Commands,
+        EntityCmdQueries,
+        Res<SystemsStore>,
+        Res<AnimationStore>,
+    )>::new(world);
+    let (mut commands, mut queries, systems_store, anim_store) = state.get_mut(world);
 
     process_entity_commands(
         &mut commands,
         cmds,
-        &queries.stuckto,
-        &mut queries.signals,
-        &mut queries.animation,
-        &mut queries.rigid_bodies,
-        &mut queries.positions,
-        &mut queries.shaders,
-        &queries.global_transforms,
+        &mut queries,
         &systems_store,
+        &anim_store,
     );
 
     state.apply(world);
@@ -650,30 +646,35 @@ fn entity_cmd_set_parent_multiple_children() {
 
     // Parent should have Children with 3 entries (auto-populated by Bevy)
     let children = world.get::<Children>(parent);
-    assert!(
-        children.is_some(),
-        "Parent should have Children component"
-    );
-    assert_eq!(
-        children.unwrap().len(),
-        3,
-        "Parent should have 3 children"
-    );
+    assert!(children.is_some(), "Parent should have Children component");
+    assert_eq!(children.unwrap().len(), 3, "Parent should have 3 children");
 }
 
 // =============================================================================
 // PHASE 3: Builder with_parent (SpawnCmd.parent field)
 // =============================================================================
 
+/// When the parent already has a GlobalTransform2D (the normal case — parent
+/// has existed for at least one frame), the child should receive the correct
+/// world-space GlobalTransform2D immediately on the same frame it is spawned,
+/// with no propagation ticks required.
 #[cfg(feature = "lua")]
 #[test]
 fn spawn_cmd_with_parent_applies_childof() {
     let mut world = World::new();
     world.insert_resource(WorldSignals::default());
 
-    // Spawn parent entity first
+    // Spawn parent with an already-computed GlobalTransform2D, as would be
+    // the case in real gameplay (parent existed for at least one frame).
     let parent = world
-        .spawn((MapPosition::new(100.0, 50.0),))
+        .spawn((
+            MapPosition::new(100.0, 50.0),
+            GlobalTransform2D {
+                position: Vector2 { x: 100.0, y: 50.0 },
+                rotation_degrees: 0.0,
+                scale: Vector2 { x: 1.0, y: 1.0 },
+            },
+        ))
         .id();
 
     // Build a SpawnCmd with parent set
@@ -700,13 +701,23 @@ fn spawn_cmd_with_parent_applies_childof() {
 
     let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
 
-    // Child should have GlobalTransform2D
+    // Child should have the correct world-space GlobalTransform2D immediately
+    // after spawn — ComputeInitialGlobalTransform ran during state.apply().
+    let gt = world
+        .get::<GlobalTransform2D>(child)
+        .expect("Spawned child should have GlobalTransform2D");
     assert!(
-        world.get::<GlobalTransform2D>(child).is_some(),
-        "Spawned child should have GlobalTransform2D"
+        approx_eq(gt.position.x, 110.0),
+        "Child world X immediately after spawn: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y immediately after spawn: expected 50, got {}",
+        gt.position.y
     );
 
-    // Child should have MapPosition at the local offset
+    // Child's local MapPosition should be unchanged
     let pos = world.get::<MapPosition>(child).unwrap();
     assert!(
         approx_eq(pos.pos.x, 10.0),
@@ -714,22 +725,156 @@ fn spawn_cmd_with_parent_applies_childof() {
         pos.pos.x
     );
 
-    // Run propagation and verify world transform
-    tick_propagate(&mut world);
-
-    // After a second tick (first tick inserts GT on parent via commands, second computes)
+    // After a propagation tick the world transform should still be correct.
     tick_propagate(&mut world);
 
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
         approx_eq(gt.position.x, 110.0),
-        "Child world X: expected 110, got {}",
+        "Child world X after propagation: expected 110, got {}",
         gt.position.x
     );
     assert!(
         approx_eq(gt.position.y, 50.0),
-        "Child world Y: expected 50, got {}",
+        "Child world Y after propagation: expected 50, got {}",
         gt.position.y
+    );
+}
+
+/// When a standalone parent has no GlobalTransform2D yet, the initial child
+/// world transform can still be synthesized from the parent's local transform.
+#[cfg(feature = "lua")]
+#[test]
+fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
+    let mut world = World::new();
+    world.insert_resource(WorldSignals::default());
+
+    // Spawn a standalone parent without GlobalTransform2D.
+    let parent = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+
+    let cmd = SpawnCmd {
+        position: Some((10.0, 0.0)),
+        parent: Some(parent.to_bits()),
+        ..SpawnCmd::default()
+    };
+
+    let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
+    let (mut commands, mut world_signals) = state.get_mut(&mut world);
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    state.apply(&mut world);
+
+    let mut child_entity = None;
+    let mut query = world.query::<(Entity, &ChildOf)>();
+    for (entity, child_of) in query.iter(&world) {
+        if child_of.0 == parent {
+            child_entity = Some(entity);
+        }
+    }
+    let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
+
+    // Child should get the correct world-space transform immediately.
+    let gt = world
+        .get::<GlobalTransform2D>(child)
+        .expect("Child should have GlobalTransform2D synthesized from parent local transform");
+    assert!(
+        approx_eq(gt.position.x, 110.0),
+        "Child world X immediately after spawn: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y immediately after spawn: expected 50, got {}",
+        gt.position.y
+    );
+
+    // After one propagation tick the result should remain correct.
+    tick_propagate(&mut world);
+
+    let gt = world.get::<GlobalTransform2D>(child).unwrap();
+    assert!(
+        approx_eq(gt.position.x, 110.0),
+        "Child world X after propagation: expected 110, got {}",
+        gt.position.x
+    );
+    assert!(
+        approx_eq(gt.position.y, 50.0),
+        "Child world Y after propagation: expected 50, got {}",
+        gt.position.y
+    );
+}
+
+/// When the parent is itself a child and lacks GlobalTransform2D, the initial
+/// child world transform remains unresolved until propagation runs.
+#[cfg(feature = "lua")]
+#[test]
+fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
+    let mut world = World::new();
+    world.insert_resource(WorldSignals::default());
+
+    let grandparent = world
+        .spawn((
+            MapPosition::new(100.0, 50.0),
+            GlobalTransform2D {
+                position: Vector2 { x: 100.0, y: 50.0 },
+                rotation_degrees: 0.0,
+                scale: Vector2 { x: 1.0, y: 1.0 },
+            },
+        ))
+        .id();
+    let parent = world
+        .spawn((MapPosition::new(10.0, 0.0), ChildOf(grandparent)))
+        .id();
+    world.flush();
+
+    let cmd = SpawnCmd {
+        position: Some((5.0, 0.0)),
+        parent: Some(parent.to_bits()),
+        ..SpawnCmd::default()
+    };
+
+    let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
+    let (mut commands, mut world_signals) = state.get_mut(&mut world);
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    state.apply(&mut world);
+
+    let mut child_entity = None;
+    let mut query = world.query::<(Entity, &ChildOf)>();
+    for (entity, child_of) in query.iter(&world) {
+        if child_of.0 == parent {
+            child_entity = Some(entity);
+        }
+    }
+    let child = child_entity.expect("Spawned entity should have ChildOf pointing to parent");
+
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_none(),
+        "Nested parent without GT should still defer child GT until propagation"
+    );
+
+    tick_propagate(&mut world);
+
+    let parent_gt = world.get::<GlobalTransform2D>(parent).unwrap();
+    assert!(
+        approx_eq(parent_gt.position.x, 110.0),
+        "Parent world X after propagation: expected 110, got {}",
+        parent_gt.position.x
+    );
+    assert!(
+        approx_eq(parent_gt.position.y, 50.0),
+        "Parent world Y after propagation: expected 50, got {}",
+        parent_gt.position.y
+    );
+
+    let child_gt = world.get::<GlobalTransform2D>(child).unwrap();
+    assert!(
+        approx_eq(child_gt.position.x, 115.0),
+        "Child world X after propagation: expected 115, got {}",
+        child_gt.position.x
+    );
+    assert!(
+        approx_eq(child_gt.position.y, 50.0),
+        "Child world Y after propagation: expected 50, got {}",
+        child_gt.position.y
     );
 }
 
@@ -748,14 +893,10 @@ fn stuckto_skips_entities_with_childof() {
     let mut world = World::new();
 
     // Target entity
-    let target = world
-        .spawn((MapPosition::new(200.0, 200.0),))
-        .id();
+    let target = world.spawn((MapPosition::new(200.0, 200.0),)).id();
 
     // Follower that has both StuckTo AND ChildOf — should be skipped by StuckTo system
-    let parent = world
-        .spawn((MapPosition::new(0.0, 0.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
 
     let follower = world
         .spawn((
@@ -787,16 +928,11 @@ fn stuckto_still_works_without_childof() {
     let mut world = World::new();
 
     // Target entity
-    let target = world
-        .spawn((MapPosition::new(200.0, 200.0),))
-        .id();
+    let target = world.spawn((MapPosition::new(200.0, 200.0),)).id();
 
     // Follower with StuckTo only (no ChildOf) — should follow target normally
     let follower = world
-        .spawn((
-            MapPosition::new(10.0, 10.0),
-            StuckTo::new(target),
-        ))
+        .spawn((MapPosition::new(10.0, 10.0), StuckTo::new(target)))
         .id();
 
     tick_stuckto(&mut world);
@@ -949,10 +1085,7 @@ fn collision_uses_world_position_for_child_entities() {
 
     // Parent at (200, 200)
     let parent = world
-        .spawn((
-            MapPosition::new(200.0, 200.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(200.0, 200.0), GlobalTransform2D::default()))
         .id();
 
     // Child with local position (0, 0), but parent is at (200, 200)
@@ -973,10 +1106,7 @@ fn collision_uses_world_position_for_child_entities() {
 
     // Independent entity at (205, 205) — overlaps with child's world position
     let other = world
-        .spawn((
-            MapPosition::new(205.0, 205.0),
-            BoxCollider::new(20.0, 20.0),
-        ))
+        .spawn((MapPosition::new(205.0, 205.0), BoxCollider::new(20.0, 20.0)))
         .id();
 
     // Run collision detection
@@ -988,10 +1118,14 @@ fn collision_uses_world_position_for_child_entities() {
         "Collision should be detected between child (world pos 200,200) and other (205,205)"
     );
     // Verify the collision involves the right entities
-    let has_pair = log.pairs.iter().any(|&(a, b)| {
-        (a == child && b == other) || (a == other && b == child)
-    });
-    assert!(has_pair, "Collision should be between child and other entity");
+    let has_pair = log
+        .pairs
+        .iter()
+        .any(|&(a, b)| (a == child && b == other) || (a == other && b == child));
+    assert!(
+        has_pair,
+        "Collision should be between child and other entity"
+    );
 }
 
 #[test]
@@ -1001,10 +1135,7 @@ fn collision_no_false_positive_from_local_position() {
 
     // Parent at (500, 500)
     let parent = world
-        .spawn((
-            MapPosition::new(500.0, 500.0),
-            GlobalTransform2D::default(),
-        ))
+        .spawn((MapPosition::new(500.0, 500.0), GlobalTransform2D::default()))
         .id();
 
     // Child with local position (5, 5) — world position = (505, 505)
@@ -1021,10 +1152,7 @@ fn collision_no_false_positive_from_local_position() {
     tick_propagate(&mut world);
 
     // Independent entity at (10, 10) — near child's LOCAL position but far from WORLD position
-    world.spawn((
-        MapPosition::new(10.0, 10.0),
-        BoxCollider::new(10.0, 10.0),
-    ));
+    world.spawn((MapPosition::new(10.0, 10.0), BoxCollider::new(10.0, 10.0)));
 
     // Run collision detection
     tick_collision(&mut world);
@@ -1042,7 +1170,7 @@ fn collision_no_false_positive_from_local_position() {
 
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{
-    LuaRuntime, build_entity_context_pooled,
+    EntitySnapshot, LuaRuntime, build_entity_context_pooled,
 };
 
 #[cfg(feature = "lua")]
@@ -1052,22 +1180,31 @@ fn entity_context_includes_world_transform_fields() {
     let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
     let lua = runtime.lua();
 
-    let ctx = build_entity_context_pooled(
-        lua, &tables, 42_u64,
-        None,                       // group
-        Some((10.0, 20.0)),         // map_pos (local)
-        None,                       // screen_pos
-        None,                       // rigid_body
-        Some(45.0),                 // rotation (local)
-        Some((1.0, 1.0)),           // scale (local)
-        None, None, None, None, None, None, None,
-        Some((110.0, 120.0)),       // world_pos
-        Some(90.0),                 // world_rotation
-        Some((2.0, 3.0)),           // world_scale
-        Some(99),                   // parent_id
-    ).expect("build_entity_context_pooled");
+    let snapshot = EntitySnapshot {
+        entity_id: 42_u64,
+        group: None,
+        map_pos: Some((10.0, 20.0)),
+        screen_pos: None,
+        rigid_body: None,
+        rotation: Some(45.0),
+        scale: Some((1.0, 1.0)),
+        rect: None,
+        sprite: None,
+        animation: None,
+        signals: None,
+        lua_phase: None,
+        lua_timer: None,
+        previous_phase: None,
+        world_pos: Some((110.0, 120.0)),
+        world_rotation: Some(90.0),
+        world_scale: Some((2.0, 3.0)),
+        parent_id: Some(99),
+    };
+    let ctx =
+        build_entity_context_pooled(lua, &tables, &snapshot).expect("build_entity_context_pooled");
 
-    lua.load(r#"
+    lua.load(
+        r#"
         local ctx = ...
         assert(ctx.world_pos ~= nil,        "world_pos should not be nil")
         assert(ctx.world_pos.x == 110.0,    "world_pos.x: " .. tostring(ctx.world_pos.x))
@@ -1077,7 +1214,10 @@ fn entity_context_includes_world_transform_fields() {
         assert(ctx.world_scale.x == 2.0,    "world_scale.x: " .. tostring(ctx.world_scale.x))
         assert(ctx.world_scale.y == 3.0,    "world_scale.y: " .. tostring(ctx.world_scale.y))
         assert(ctx.parent_id == 99,         "parent_id: " .. tostring(ctx.parent_id))
-    "#).call::<()>(ctx).expect("Lua world transform assertions");
+    "#,
+    )
+    .call::<()>(ctx)
+    .expect("Lua world transform assertions");
 }
 
 #[cfg(feature = "lua")]
@@ -1087,42 +1227,54 @@ fn entity_context_nil_world_fields_without_hierarchy() {
     let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
     let lua = runtime.lua();
 
-    let ctx = build_entity_context_pooled(
-        lua, &tables, 1_u64,
-        None, None, None, None, None, None, None,
-        None, None, None, None, None, None,
-        None, None, None, None,  // no world transform, no parent
-    ).expect("build_entity_context_pooled");
+    let snapshot = EntitySnapshot {
+        entity_id: 1_u64,
+        group: None,
+        map_pos: None,
+        screen_pos: None,
+        rigid_body: None,
+        rotation: None,
+        scale: None,
+        rect: None,
+        sprite: None,
+        animation: None,
+        signals: None,
+        lua_phase: None,
+        lua_timer: None,
+        previous_phase: None,
+        world_pos: None,
+        world_rotation: None,
+        world_scale: None,
+        parent_id: None,
+    };
+    let ctx =
+        build_entity_context_pooled(lua, &tables, &snapshot).expect("build_entity_context_pooled");
 
-    lua.load(r#"
+    lua.load(
+        r#"
         local ctx = ...
         assert(ctx.world_pos      == nil, "world_pos should be nil")
         assert(ctx.world_rotation == nil, "world_rotation should be nil")
         assert(ctx.world_scale    == nil, "world_scale should be nil")
         assert(ctx.parent_id      == nil, "parent_id should be nil")
-    "#).call::<()>(ctx).expect("Lua nil world transform assertions");
+    "#,
+    )
+    .call::<()>(ctx)
+    .expect("Lua nil world transform assertions");
 }
 
 #[test]
 fn cascade_despawn_removes_children() {
     let mut world = World::new();
 
-    let parent = world
-        .spawn((MapPosition::new(0.0, 0.0),))
-        .id();
+    let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
 
     let child = world
-        .spawn((
-            MapPosition::new(10.0, 0.0),
-            ChildOf(parent),
-        ))
+        .spawn((MapPosition::new(10.0, 0.0), ChildOf(parent)))
         .id();
 
     let grandchild = world
-        .spawn((
-            MapPosition::new(20.0, 0.0),
-            ChildOf(child),
-        ))
+        .spawn((MapPosition::new(20.0, 0.0), ChildOf(child)))
         .id();
 
     world.flush();
@@ -1158,7 +1310,8 @@ fn cascade_despawn_removes_children() {
 fn meta_entity_cmds_include_parent_commands() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local fns = engine.__meta.functions
         assert(fns.entity_set_parent, "entity_set_parent missing from __meta.functions")
         assert(fns.entity_set_parent.description, "entity_set_parent missing description")
@@ -1167,7 +1320,10 @@ fn meta_entity_cmds_include_parent_commands() {
         -- Also check collision_ variants (auto-generated by define_entity_cmds!)
         assert(fns.collision_entity_set_parent, "collision_entity_set_parent missing")
         assert(fns.collision_entity_remove_parent, "collision_entity_remove_parent missing")
-    "#).exec().expect("Lua meta parent commands assertions");
+    "#,
+    )
+    .exec()
+    .expect("Lua meta parent commands assertions");
 }
 
 #[cfg(feature = "lua")]
@@ -1197,7 +1353,8 @@ fn meta_builder_includes_with_parent() {
 fn meta_entity_context_includes_world_fields() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local types = engine.__meta.types
         local ctx_type = types.EntityContext
         assert(ctx_type, "EntityContext type missing from __meta.types")
@@ -1216,5 +1373,375 @@ fn meta_entity_context_includes_world_fields() {
         assert(found_world_rotation, "world_rotation field missing from EntityContext type")
         assert(found_world_scale, "world_scale field missing from EntityContext type")
         assert(found_parent_id, "parent_id field missing from EntityContext type")
-    "#).exec().expect("Lua meta EntityContext world fields assertions");
+    "#,
+    )
+    .exec()
+    .expect("Lua meta EntityContext world fields assertions");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn entity_cmd_set_screen_position_updates_screen_position() {
+    use aberredengine::components::screenposition::ScreenPosition;
+
+    let mut world = World::new();
+    let entity = world.spawn(ScreenPosition::new(0.0, 0.0)).id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::SetScreenPosition {
+            entity_id: entity.to_bits(),
+            x: 42.0,
+            y: 77.0,
+        }],
+    );
+
+    let pos = world.get::<ScreenPosition>(entity).unwrap();
+    assert!((pos.pos.x - 42.0).abs() < EPSILON);
+    assert!((pos.pos.y - 77.0).abs() < EPSILON);
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn entity_cmd_set_screen_position_no_op_on_map_entity() {
+    // Entity has MapPosition only — SetScreenPosition should silently do nothing.
+    let mut world = World::new();
+    let entity = world.spawn(MapPosition::new(10.0, 20.0)).id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::SetScreenPosition {
+            entity_id: entity.to_bits(),
+            x: 99.0,
+            y: 99.0,
+        }],
+    );
+
+    // MapPosition unchanged
+    let pos = world.get::<MapPosition>(entity).unwrap();
+    assert!((pos.pos.x - 10.0).abs() < EPSILON);
+    assert!((pos.pos.y - 20.0).abs() < EPSILON);
+}
+
+// =============================================================================
+// PHASE 9: cleanup_orphaned_global_transforms
+//
+// Regression tests for the stale-GlobalTransform2D bug:
+// When a root entity loses its last child, propagate_transforms stops updating
+// its GT. cleanup_orphaned_global_transforms removes the stale component so
+// that resolve_world_pos falls back to the live MapPosition.
+// =============================================================================
+
+fn tick_propagate_and_cleanup(world: &mut World) {
+    let mut schedule = Schedule::default();
+    schedule.add_systems(propagate_transforms);
+    schedule.add_systems(cleanup_orphaned_global_transforms.after(propagate_transforms));
+    schedule.run(world);
+}
+
+#[test]
+fn cleanup_removes_gt_from_entity_with_no_children_and_no_childof() {
+    let mut world = World::new();
+
+    // Entity with a GlobalTransform2D but no hierarchy relationship
+    let entity = world
+        .spawn((
+            MapPosition::new(10.0, 20.0),
+            GlobalTransform2D {
+                position: Vector2 { x: 999.0, y: 999.0 },
+                rotation_degrees: 0.0,
+                scale: Vector2 { x: 1.0, y: 1.0 },
+            },
+        ))
+        .id();
+
+    // Run cleanup only (no hierarchy, so propagate_transforms does nothing)
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    assert!(
+        world.get::<GlobalTransform2D>(entity).is_none(),
+        "GT should be removed from standalone entity with no Children and no ChildOf"
+    );
+}
+
+#[test]
+fn cleanup_preserves_gt_on_current_hierarchy_root() {
+    let mut world = World::new();
+
+    // Parent with a child — has Children, so cleanup must leave its GT alone
+    let parent = world
+        .spawn((MapPosition::new(50.0, 0.0), GlobalTransform2D::default()))
+        .id();
+    world.spawn((MapPosition::new(0.0, 0.0), ChildOf(parent)));
+    world.flush(); // Bevy populates Children on parent
+
+    assert!(
+        world.get::<Children>(parent).is_some(),
+        "Parent should have Children after flush"
+    );
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    assert!(
+        world.get::<GlobalTransform2D>(parent).is_some(),
+        "GT should be preserved on entity that still has Children"
+    );
+}
+
+#[test]
+fn cleanup_preserves_gt_on_child_entity() {
+    let mut world = World::new();
+
+    // Child entity: has both ChildOf and GT — cleanup must not touch it
+    let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+    let child = world
+        .spawn((
+            MapPosition::new(10.0, 0.0),
+            ChildOf(parent),
+            GlobalTransform2D::default(),
+        ))
+        .id();
+    world.flush();
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    assert!(
+        world.get::<GlobalTransform2D>(child).is_some(),
+        "GT should be preserved on child entity (has ChildOf)"
+    );
+}
+
+#[test]
+fn cleanup_does_not_affect_entity_without_gt() {
+    let mut world = World::new();
+
+    // Standalone entity with no GT — cleanup should leave it untouched
+    let entity = world.spawn(MapPosition::new(5.0, 5.0)).id();
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    // MapPosition should still be there, and no GT should have appeared
+    assert!(world.get::<GlobalTransform2D>(entity).is_none());
+    let pos = world.get::<MapPosition>(entity).unwrap();
+    assert!(approx_eq(pos.pos.x, 5.0));
+}
+
+#[test]
+fn cleanup_removes_all_orphaned_gt_entities() {
+    let mut world = World::new();
+
+    // Spawn three standalone entities each with a stale GT
+    let entities: Vec<Entity> = (0..3)
+        .map(|i| {
+            world
+                .spawn((
+                    MapPosition::new(i as f32 * 10.0, 0.0),
+                    GlobalTransform2D {
+                        position: Vector2 {
+                            x: 999.0 + i as f32,
+                            y: 999.0,
+                        },
+                        rotation_degrees: 0.0,
+                        scale: Vector2 { x: 1.0, y: 1.0 },
+                    },
+                ))
+                .id()
+        })
+        .collect();
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(cleanup_orphaned_global_transforms);
+    schedule.run(&mut world);
+
+    for entity in &entities {
+        assert!(
+            world.get::<GlobalTransform2D>(*entity).is_none(),
+            "GT should be removed from all orphaned entities"
+        );
+    }
+}
+
+/// Regression test for the stale-GT movement freeze bug.
+///
+/// Scenario:
+/// 1. Player spawned at (100, 0).
+/// 2. A hitbox child is attached → player becomes a hierarchy root →
+///    propagate_transforms inserts GlobalTransform2D on player.
+/// 3. Player moves to (200, 0).
+/// 4. Hitbox is despawned → Bevy removes Children from player.
+/// 5. Player moves to (300, 0).
+/// 6. propagate_transforms runs — skips player (no Children).
+///    GT is now stale at (200, 0).
+/// 7. cleanup_orphaned_global_transforms runs — removes stale GT.
+/// 8. resolve_world_pos must now return MapPosition (300, 0),
+///    not the stale GT (200, 0).
+#[test]
+fn stale_gt_removed_after_child_despawn() {
+    use aberredengine::systems::collision::resolve_world_pos;
+    use bevy_ecs::system::SystemState;
+
+    let mut world = World::new();
+
+    // 1. Spawn player at (100, 0)
+    let player = world.spawn(MapPosition::new(100.0, 0.0)).id();
+
+    // 2. Attach a hitbox child — world.flush() makes Bevy add Children to player
+    let hitbox = world
+        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
+        .id();
+    world.flush();
+
+    assert!(
+        world.get::<Children>(player).is_some(),
+        "Player should have Children after hitbox attachment"
+    );
+
+    // propagate_transforms inserts GT on player (deferred — needs two ticks)
+    tick_propagate_and_cleanup(&mut world); // tick 1: inserts GT via commands
+    tick_propagate_and_cleanup(&mut world); // tick 2: GT is now visible + updated
+
+    assert!(
+        world.get::<GlobalTransform2D>(player).is_some(),
+        "Player should have GT after becoming a hierarchy root"
+    );
+
+    // 3. Move player to (200, 0) and run propagation to keep GT in sync
+    world.get_mut::<MapPosition>(player).unwrap().pos.x = 200.0;
+    tick_propagate_and_cleanup(&mut world);
+
+    {
+        let gt = world.get::<GlobalTransform2D>(player).unwrap();
+        assert!(
+            approx_eq(gt.position.x, 200.0),
+            "GT should be at 200 after move, got {}",
+            gt.position.x
+        );
+    }
+
+    // 4. Despawn the hitbox → Bevy removes Children from player
+    world.despawn(hitbox);
+    // world.flush() is implicit after despawn in direct world access
+
+    assert!(
+        world.get::<Children>(player).is_none(),
+        "Player should have no Children after hitbox despawn"
+    );
+
+    // 5. Move player to (300, 0) — GT is now stale at (200, 0)
+    world.get_mut::<MapPosition>(player).unwrap().pos.x = 300.0;
+
+    // 6. Run propagate without cleanup to confirm the bug exists:
+    //    GT is NOT updated (player not in RootsQuery)
+    {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(propagate_transforms);
+        schedule.run(&mut world);
+    }
+
+    {
+        let gt = world.get::<GlobalTransform2D>(player).unwrap();
+        assert!(
+            approx_eq(gt.position.x, 200.0),
+            "GT should still be stale at 200 (bug condition), got {}",
+            gt.position.x
+        );
+    }
+
+    // 7. Now run the cleanup — it must remove the stale GT
+    {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(cleanup_orphaned_global_transforms);
+        schedule.run(&mut world);
+    }
+
+    assert!(
+        world.get::<GlobalTransform2D>(player).is_none(),
+        "Stale GT should be removed by cleanup after child despawn"
+    );
+
+    // 8. resolve_world_pos must now return MapPosition (300, 0)
+    let mut state =
+        SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
+    let (positions, global_transforms) = state.get(&world);
+    let resolved = resolve_world_pos(&positions, &global_transforms, player).unwrap();
+
+    assert!(
+        approx_eq(resolved.x, 300.0),
+        "resolve_world_pos should return live MapPosition 300 after GT removal, got {}",
+        resolved.x
+    );
+    assert!(
+        approx_eq(resolved.y, 0.0),
+        "resolve_world_pos y should be 0, got {}",
+        resolved.y
+    );
+}
+
+/// Verifies the full frame pipeline: propagate → cleanup → collision.
+///
+/// After a child is despawned, the parent's stale GT must be cleaned up
+/// before collision detection so that collider rects use the correct,
+/// live MapPosition rather than the frozen world position from when the
+/// entity was last a hierarchy root.
+#[test]
+fn collision_uses_live_map_position_after_child_despawn() {
+    let mut world = World::new();
+    setup_collision_world(&mut world);
+
+    // Spawn player at (0, 0) — will become a hierarchy root
+    let player = world
+        .spawn((MapPosition::new(0.0, 0.0), BoxCollider::new(20.0, 20.0)))
+        .id();
+
+    // Attach a hitbox child → player gains Children
+    let hitbox = world
+        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
+        .id();
+    world.flush();
+
+    // Two propagation ticks so GT is inserted and synced
+    tick_propagate_and_cleanup(&mut world);
+    tick_propagate_and_cleanup(&mut world);
+
+    // Move player far away to (500, 500) — no overlap with origin
+    world.get_mut::<MapPosition>(player).unwrap().pos = Vector2 { x: 500.0, y: 500.0 };
+    tick_propagate_and_cleanup(&mut world); // GT updated to (500, 500)
+
+    // Despawn hitbox → Children removed from player; GT is now stale at (500, 500)
+    world.despawn(hitbox);
+
+    // Move player back to origin (0, 0)
+    world.get_mut::<MapPosition>(player).unwrap().pos = Vector2 { x: 0.0, y: 0.0 };
+
+    // Spawn a sensor at origin — should collide with player if position is correct
+    let sensor = world
+        .spawn((MapPosition::new(5.0, 5.0), BoxCollider::new(20.0, 20.0)))
+        .id();
+
+    // Run the full pipeline: propagate → cleanup → collision
+    let mut schedule = Schedule::default();
+    schedule.add_systems(propagate_transforms);
+    schedule.add_systems(cleanup_orphaned_global_transforms.after(propagate_transforms));
+    schedule.add_systems(collision_detector.after(cleanup_orphaned_global_transforms));
+    schedule.run(&mut world);
+
+    let log = world.resource::<CollisionLog>();
+    let has_collision = log
+        .pairs
+        .iter()
+        .any(|&(a, b)| (a == player && b == sensor) || (a == sensor && b == player));
+
+    assert!(
+        has_collision,
+        "Player at live MapPosition (0,0) should collide with sensor at (5,5) — \
+         stale GT at (500,500) must not prevent detection"
+    );
 }

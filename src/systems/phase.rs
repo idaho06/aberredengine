@@ -12,8 +12,8 @@
 //!
 //! 1. If `needs_enter_callback` is set, call on_enter for current phase
 //! 2. If `next` is set (transition requested):
-//!    - Call on_exit for old phase
 //!    - Swap phases, reset time
+//!    - Call on_exit for old phase (phase.current is now the new phase)
 //!    - Call on_enter for new phase
 //! 3. Call on_update for current phase
 //! 4. Increment `time_in_phase` by delta
@@ -38,6 +38,51 @@ use crate::components::phase::Phase;
 use crate::resources::input::InputState;
 use crate::systems::GameCtx;
 
+use super::phase_core::{PhaseRunner, apply_callback_transitions, run_phase_callbacks};
+
+struct RustPhaseRunner<'a, 'w, 's> {
+    ctx: &'a mut GameCtx<'w, 's>,
+    input: &'a InputState,
+}
+
+impl<'a, 'w, 's> PhaseRunner<crate::components::phase::PhaseCallbackFns>
+    for RustPhaseRunner<'a, 'w, 's>
+{
+    fn call_enter(
+        &mut self,
+        entity: Entity,
+        _phase: &Phase,
+        callbacks: &crate::components::phase::PhaseCallbackFns,
+    ) -> Option<String> {
+        callbacks
+            .on_enter
+            .and_then(|enter_fn| enter_fn(entity, self.ctx, self.input))
+    }
+
+    fn call_update(
+        &mut self,
+        entity: Entity,
+        _phase: &Phase,
+        callbacks: &crate::components::phase::PhaseCallbackFns,
+        delta: f32,
+    ) -> Option<String> {
+        callbacks
+            .on_update
+            .and_then(|update_fn| update_fn(entity, self.ctx, self.input, delta))
+    }
+
+    fn call_exit(
+        &mut self,
+        entity: Entity,
+        _phase: &Phase,
+        callbacks: &crate::components::phase::PhaseCallbackFns,
+    ) {
+        if let Some(exit_fn) = callbacks.on_exit {
+            exit_fn(entity, self.ctx);
+        }
+    }
+}
+
 /// Process Rust-based phase state machines.
 ///
 /// This system:
@@ -53,118 +98,24 @@ pub fn phase_system(
     mut ctx: GameCtx,
     input: Res<InputState>,
     mut callback_transitions: Local<Vec<(Entity, String)>>,
+    mut phase_entities: Local<Vec<Entity>>,
 ) {
     callback_transitions.clear();
-
-    // Collect entity IDs to avoid borrowing phase_query during callbacks.
-    let entities: Vec<Entity> = phase_query.iter().map(|(e, _)| e).collect();
+    phase_entities.clear();
 
     let delta = ctx.world_time.delta;
+    let mut runner = RustPhaseRunner {
+        ctx: &mut ctx,
+        input: &input,
+    };
 
-    for entity in entities {
-        // --- Initial enter callback ---
-        let needs_enter = {
-            let Ok((_, phase)) = phase_query.get(entity) else {
-                continue;
-            };
-            phase.needs_enter_callback
-        };
+    run_phase_callbacks(
+        &mut phase_query,
+        delta,
+        &mut callback_transitions,
+        &mut phase_entities,
+        &mut runner,
+    );
 
-        if needs_enter {
-            if let Ok((_, mut phase)) = phase_query.get_mut(entity) {
-                phase.needs_enter_callback = false;
-            }
-
-            let on_enter_fn = {
-                let Ok((_, phase)) = phase_query.get(entity) else {
-                    continue;
-                };
-                phase
-                    .current_callbacks()
-                    .and_then(|cbs| cbs.on_enter)
-            };
-
-            if let Some(enter_fn) = on_enter_fn
-                && let Some(next) = enter_fn(entity, &mut ctx, &input)
-            {
-                callback_transitions.push((entity, next));
-            }
-        }
-
-        // --- Pending transition ---
-        let pending = {
-            let Ok((_, mut phase)) = phase_query.get_mut(entity) else {
-                continue;
-            };
-            phase.next.take()
-        };
-
-        if let Some(next_phase) = pending {
-            // Get exit callback for old phase
-            let exit_fn = {
-                let Ok((_, phase)) = phase_query.get(entity) else {
-                    continue;
-                };
-                phase.current_callbacks().and_then(|cbs| cbs.on_exit)
-            };
-
-            // Call on_exit for old phase
-            if let Some(exit_fn) = exit_fn {
-                exit_fn(entity, &mut ctx);
-            }
-
-            // Swap phases
-            let old_phase = {
-                let Ok((_, mut phase)) = phase_query.get_mut(entity) else {
-                    continue;
-                };
-                let old = std::mem::replace(&mut phase.current, next_phase);
-                phase.previous = Some(old.clone());
-                phase.time_in_phase = 0.0;
-                old
-            };
-            let _ = old_phase;
-
-            // Get enter callback for new phase
-            let enter_fn = {
-                let Ok((_, phase)) = phase_query.get(entity) else {
-                    continue;
-                };
-                phase.current_callbacks().and_then(|cbs| cbs.on_enter)
-            };
-
-            // Call on_enter for new phase
-            if let Some(enter_fn) = enter_fn
-                && let Some(next) = enter_fn(entity, &mut ctx, &input)
-            {
-                callback_transitions.push((entity, next));
-            }
-        }
-
-        // --- Update callback ---
-        let update_fn = {
-            let Ok((_, phase)) = phase_query.get(entity) else {
-                continue;
-            };
-            phase.current_callbacks().and_then(|cbs| cbs.on_update)
-        };
-
-        if let Some(update_fn) = update_fn
-            && let Some(next) = update_fn(entity, &mut ctx, &input, delta)
-        {
-            callback_transitions.push((entity, next));
-        }
-
-        // --- Increment time ---
-        if let Ok((_, mut phase)) = phase_query.get_mut(entity) {
-            phase.time_in_phase += delta;
-        }
-    }
-
-    // Apply callback return transitions (take precedence, matching LuaPhase behavior)
-    for (entity, next_phase) in callback_transitions.drain(..) {
-        if let Ok((_, mut phase)) = phase_query.get_mut(entity) {
-            phase.next = Some(next_phase);
-        }
-    }
+    apply_callback_transitions(&mut phase_query, &mut callback_transitions);
 }

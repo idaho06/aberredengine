@@ -118,9 +118,7 @@ mod tests {
         shader
             .uniforms
             .insert(Arc::from("a"), UniformValue::Float(1.0));
-        shader
-            .uniforms
-            .insert(Arc::from("b"), UniformValue::Int(2));
+        shader.uniforms.insert(Arc::from("b"), UniformValue::Int(2));
         shader
             .uniforms
             .insert(Arc::from("c"), UniformValue::Vec2 { x: 0.0, y: 0.0 });

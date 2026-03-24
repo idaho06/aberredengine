@@ -24,7 +24,12 @@ use crate::resources::worldtime::WorldTime;
 ///
 /// Scheduling: runs after `propagate_transforms` and before `render_system`.
 pub fn camera_follow_system(
-    targets: Query<(Entity, &CameraTarget, &MapPosition, Option<&GlobalTransform2D>)>,
+    targets: Query<(
+        Entity,
+        &CameraTarget,
+        &MapPosition,
+        Option<&GlobalTransform2D>,
+    )>,
     mut camera: ResMut<Camera2DRes>,
     mut config: ResMut<CameraFollowConfig>,
     time: Res<WorldTime>,
@@ -35,14 +40,9 @@ pub fn camera_follow_system(
     }
 
     // --- 1. Find highest-priority target ---
-    let Some((_entity, _target, pos, maybe_gt)) = targets
-        .iter()
-        .max_by(|a, b| {
-            a.1.priority
-                .cmp(&b.1.priority)
-                .then_with(|| b.0.cmp(&a.0)) // lower Entity id wins ties
-        })
-    else {
+    let Some((_entity, _target, pos, maybe_gt)) = targets.iter().max_by(|a, b| {
+        a.1.priority.cmp(&b.1.priority).then_with(|| b.0.cmp(&a.0)) // lower Entity id wins ties
+    }) else {
         return;
     };
 

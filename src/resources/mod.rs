@@ -11,6 +11,7 @@
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
+//! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
 //! - [`fontstore`] – loaded fonts keyed by string IDs
 //! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
@@ -31,19 +32,21 @@ pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
 pub mod debugmode;
+pub mod debugoverlayconfig;
 pub mod fontstore;
 pub mod fullscreen;
 pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
 pub mod input;
+pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
 pub mod postprocessshader;
 pub mod rendertarget;
+pub mod scenemanager;
 pub mod screensize;
 pub mod shaderstore;
-pub mod scenemanager;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod tilemapstore;

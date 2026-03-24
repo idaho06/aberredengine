@@ -39,26 +39,23 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::collision::get_colliding_sides;
-use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
-use crate::components::luaphase::LuaPhase;
-use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
-use crate::components::stuckto::StuckTo;
+use crate::components::luaphase::LuaPhase;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
+use crate::systems::collision::{
+    compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
+};
 use crate::systems::lua_commands::{
-    process_audio_command, process_camera_command, process_clone_command, process_entity_commands,
-    process_phase_command, process_signal_command, process_spawn_command,
+    EntityCmdQueries, process_audio_command, process_camera_command, process_clone_command,
+    process_entity_commands, process_phase_command, process_signal_command, process_spawn_command,
 };
 use log::error;
 
@@ -68,19 +65,14 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
-    pub positions: Query<'w, 's, &'static mut MapPosition>,
-    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    pub signals: Query<'w, 's, &'static mut Signals>,
-    pub stuckto_query: Query<'w, 's, &'static StuckTo>,
-    pub animation_query: Query<'w, 's, &'static mut Animation>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
-    pub shader_query: Query<'w, 's, &'static mut EntityShader>,
-    pub global_transforms_query: Query<'w, 's, &'static GlobalTransform2D>,
+    pub entity_cmds: EntityCmdQueries<'w, 's>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub audio_cmds: MessageWriter<'w, AudioCmd>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub systems_store: Res<'w, SystemsStore>,
+    pub animation_store: Res<'w, AnimationStore>,
 }
 
 pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollisionObserverParams) {
@@ -91,33 +83,31 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
     let a = trigger.event().a;
     let b = trigger.event().b;
 
-    //eprintln!("Collision detected: {:?} and {:?}", a, b);
-    let ga = if let Ok(group) = params.groups.get(a) {
-        group.name()
-    } else {
-        return;
-    };
-    let gb = if let Ok(group) = params.groups.get(b) {
-        group.name()
-    } else {
-        return;
+    let (ga, gb) = match resolve_groups(&params.groups, a, b) {
+        Some(names) => names,
+        None => return,
     };
 
     // Check Lua-based collision rules
     for lua_rule in params.lua_rules.iter() {
-        if let Some((ent_a, ent_b, callback_name)) = lua_rule.match_and_order(a, b, ga, gb) {
-            // Gather entity data for Lua callback
-            // Use world position from GlobalTransform2D when available
-            let pos_a = params.positions.get(ent_a).ok().map(|p| {
-                params.global_transforms_query.get(ent_a).ok()
-                    .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
-            });
-            let pos_b = params.positions.get(ent_b).ok().map(|p| {
-                params.global_transforms_query.get(ent_b).ok()
-                    .map_or((p.pos.x, p.pos.y), |gt| (gt.position.x, gt.position.y))
-            });
+        if let Some((ent_a, ent_b)) = lua_rule.match_and_order(a, b, ga, gb) {
+            let callback_name = lua_rule.callback.name.as_str();
+            // Resolve world positions via shared helper
+            let pos_a = resolve_world_pos(
+                &params.entity_cmds.positions.as_readonly(),
+                &params.entity_cmds.global_transforms,
+                ent_a,
+            )
+            .map(|v| (v.x, v.y));
+            let pos_b = resolve_world_pos(
+                &params.entity_cmds.positions.as_readonly(),
+                &params.entity_cmds.global_transforms,
+                ent_b,
+            )
+            .map(|v| (v.x, v.y));
+
             let (vel_a, speed_sq_a) = params
-                .rigid_bodies
+                .entity_cmds.rigid_bodies
                 .get(ent_a)
                 .ok()
                 .map(|rb| {
@@ -128,7 +118,7 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 })
                 .unwrap_or((None, 0.0));
             let (vel_b, speed_sq_b) = params
-                .rigid_bodies
+                .entity_cmds.rigid_bodies
                 .get(ent_b)
                 .ok()
                 .map(|rb| {
@@ -139,23 +129,24 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 })
                 .unwrap_or((None, 0.0));
 
-            // Get collider rects for side detection
-            let rect_a = params.box_colliders.get(ent_a).ok().and_then(|c| {
-                pos_a.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
-            });
-            let rect_b = params.box_colliders.get(ent_b).ok().and_then(|c| {
-                pos_b.map(|(px, py)| c.as_rectangle(raylib::math::Vector2 { x: px, y: py }))
-            });
-
-            // Get colliding sides (uses SmallVec to avoid heap allocation)
-            let (sides_a, sides_b) = match (rect_a, rect_b) {
-                (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_default(),
-                _ => Default::default(),
-            };
+            // Get collider rects and sides via shared helpers
+            let rect_a = resolve_collider_rect(
+                &params.entity_cmds.positions.as_readonly(),
+                &params.entity_cmds.global_transforms,
+                &params.box_colliders,
+                ent_a,
+            );
+            let rect_b = resolve_collider_rect(
+                &params.entity_cmds.positions.as_readonly(),
+                &params.entity_cmds.global_transforms,
+                &params.box_colliders,
+                ent_b,
+            );
+            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 
             // Get entity signals (integers and flags)
-            let signals_a = params.signals.get(ent_a).ok();
-            let signals_b = params.signals.get(ent_b).ok();
+            let signals_a = params.entity_cmds.signals.get(ent_a).ok();
+            let signals_b = params.entity_cmds.signals.get(ent_b).ok();
 
             // Get group names
             let group_a = params.groups.get(ent_a).ok().map(|g| g.name().to_string());
@@ -195,14 +186,9 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
             process_entity_commands(
                 &mut params.commands,
                 params.lua_runtime.drain_collision_entity_commands(),
-                &params.stuckto_query,
-                &mut params.signals,
-                &mut params.animation_query,
-                &mut params.rigid_bodies,
-                &mut params.positions,
-                &mut params.shader_query,
-                &params.global_transforms_query,
+                &mut params.entity_cmds,
                 &params.systems_store,
+                &params.animation_store,
             );
 
             // Process collision signal commands
@@ -260,6 +246,7 @@ fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use crate::components::collision::BoxSide;

@@ -9,7 +9,7 @@ use crate::resources::fullscreen::FullScreen;
 use crate::resources::gameconfig::GameConfig;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
-use log::{info, error};
+use log::{error, info};
 use raylib::ffi;
 
 /// Event triggered to toggle fullscreen mode.

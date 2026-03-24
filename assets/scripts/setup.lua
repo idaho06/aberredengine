@@ -63,11 +63,11 @@ local function load_asteroids()
     engine.load_sound("asteroids-explosion01", "./assets/audio/asteroids/explosion01.ogg")
 
     -- Animations
-    engine.register_animation("asteroids-ship_idle", "asteroids-ship_sheet", 0, 0, 64, 8, 15, true)
-    engine.register_animation("asteroids-ship_propulsion", "asteroids-ship_sheet", 0, 64, 64, 8, 15, true)
-    engine.register_animation("asteroids-explosion01", "asteroids-explosion01_sheet", 0, 0, 64, 16, 20, false)
-    engine.register_animation("asteroids-explosion02", "asteroids-explosion02_sheet", 0, 0, 32, 7, 20, false)
-    engine.register_animation("asteroids-explosion03", "asteroids-explosion03_sheet", 0, 0, 16, 7, 20, false)
+    engine.register_animation("asteroids-ship_idle", "asteroids-ship_sheet", 0, 0, 64, 0, 8, 15, true)
+    engine.register_animation("asteroids-ship_propulsion", "asteroids-ship_sheet", 0, 64, 64, 0, 8, 15, true)
+    engine.register_animation("asteroids-explosion01", "asteroids-explosion01_sheet", 0, 0, 64, 0, 16, 20, false)
+    engine.register_animation("asteroids-explosion02", "asteroids-explosion02_sheet", 0, 0, 32, 0, 7, 20, false)
+    engine.register_animation("asteroids-explosion03", "asteroids-explosion03_sheet", 0, 0, 16, 0, 7, 20, false)
 end
 
 --- Load assets for the Arkanoid example
@@ -102,8 +102,8 @@ local function load_arkanoid()
     engine.load_tilemap("arkanoid-level01", "./assets/tilemaps/arkanoid/level01")
 
     -- Animations
-    engine.register_animation("arkanoid-vaus_glowing", "arkanoid-vaus_sheet", 0, 0, 96, 16, 15, true)
-    engine.register_animation("arkanoid-vaus_hit", "arkanoid-vaus_sheet", 0, 24, 96, 6, 15, false)
+    engine.register_animation("arkanoid-vaus_glowing", "arkanoid-vaus_sheet", 0, 0, 96, 0, 16, 15, true)
+    engine.register_animation("arkanoid-vaus_hit", "arkanoid-vaus_sheet", 0, 24, 96, 0, 6, 15, false)
 end
 
 --- Load assets for the Birthday Card example
@@ -126,20 +126,20 @@ local function load_birthday()
     engine.load_music("birthday-harry", "./assets/audio/birthday/adore_you_karaoke_harry_styles.ogg")
 
     -- Animations
-    engine.register_animation("birthday-heart_beat_big", "birthday-big_heart-sheet", 0, 0, 400, 10, 15, true)
-    engine.register_animation("birthday-heart_spin01", "birthday-spin_hearts-sheet", 0, 0, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_spin02", "birthday-spin_hearts-sheet", 0, 16, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_spin03", "birthday-spin_hearts-sheet", 0, 32, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_spin04", "birthday-spin_hearts-sheet", 0, 48, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_spin05", "birthday-spin_hearts-sheet", 0, 64, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_spin06", "birthday-spin_hearts-sheet", 0, 80, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_spin07", "birthday-spin_hearts-sheet", 0, 96, 16, 6, 15, true)
-    engine.register_animation("birthday-heart_beat01", "birthday-beat_hearts-sheet", 0, 0, 16, 4, 12, true)
-    engine.register_animation("birthday-heart_beat02", "birthday-beat_hearts-sheet", 0, 16, 16, 4, 12, true)
-    engine.register_animation("birthday-heart_beat03", "birthday-beat_hearts-sheet", 0, 32, 16, 4, 12, true)
-    engine.register_animation("birthday-heart_beat04", "birthday-beat_hearts-sheet", 0, 48, 16, 4, 12, true)
-    engine.register_animation("birthday-heart_beat05", "birthday-beat_hearts-sheet", 0, 64, 16, 4, 12, true)
-    engine.register_animation("birthday-heart_beat06", "birthday-beat_hearts-sheet", 0, 80, 16, 4, 12, true)
+    engine.register_animation("birthday-heart_beat_big", "birthday-big_heart-sheet", 0, 0, 400, 0, 10, 15, true)
+    engine.register_animation("birthday-heart_spin01", "birthday-spin_hearts-sheet", 0, 0, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_spin02", "birthday-spin_hearts-sheet", 0, 16, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_spin03", "birthday-spin_hearts-sheet", 0, 32, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_spin04", "birthday-spin_hearts-sheet", 0, 48, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_spin05", "birthday-spin_hearts-sheet", 0, 64, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_spin06", "birthday-spin_hearts-sheet", 0, 80, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_spin07", "birthday-spin_hearts-sheet", 0, 96, 16, 0, 6, 15, true)
+    engine.register_animation("birthday-heart_beat01", "birthday-beat_hearts-sheet", 0, 0, 16, 0, 4, 12, true)
+    engine.register_animation("birthday-heart_beat02", "birthday-beat_hearts-sheet", 0, 16, 16, 0, 4, 12, true)
+    engine.register_animation("birthday-heart_beat03", "birthday-beat_hearts-sheet", 0, 32, 16, 0, 4, 12, true)
+    engine.register_animation("birthday-heart_beat04", "birthday-beat_hearts-sheet", 0, 48, 16, 0, 4, 12, true)
+    engine.register_animation("birthday-heart_beat05", "birthday-beat_hearts-sheet", 0, 64, 16, 0, 4, 12, true)
+    engine.register_animation("birthday-heart_beat06", "birthday-beat_hearts-sheet", 0, 80, 16, 0, 4, 12, true)
 end
 
 --- Load assets for the Kraken example
@@ -149,6 +149,73 @@ local function load_kraken()
     -- Textures
     engine.load_texture("kraken-mouth", "./assets/textures/kraken/mouth.png")
     engine.load_texture("kraken-tentacle", "./assets/textures/kraken/tentacle.png")
+end
+
+--- Load assets for the Sidescroller example
+local function load_sidescroller()
+    engine.log_info("Loading Sidescroller assets...")
+    -- Textures
+    engine.load_texture("sidescroller-char_red_1_sheet", "./assets/textures/sidescroller/char_red_1.png")
+    engine.load_texture("sidescroller-char_red_2_sheet", "./assets/textures/sidescroller/char_red_2.png")
+
+    -- Animations
+    local sprite_size = 56
+    engine.register_animation("sidescroller-char_red_idle", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 0, sprite_size, 0, 6, 10, true)
+    engine.register_animation("sidescroller-char_red_attack", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 1, sprite_size, 0, 6, 10, false)
+    engine.register_animation("sidescroller-char_red_attack_combo", "sidescroller-char_red_1_sheet",
+        sprite_size * 6, sprite_size * 1, sprite_size, 0, 2, 10, false)
+    engine.register_animation("sidescroller-char_red_run", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 2, sprite_size, 0, 8, 10, true)
+    engine.register_animation("sidescroller-char_red_jump_prep", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 3, sprite_size, 0, 2, 10, false)
+    engine.register_animation("sidescroller-char_red_jump_up", "sidescroller-char_red_1_sheet",
+        sprite_size * 2, sprite_size * 3, sprite_size, 0, 4, 10, false)
+    engine.register_animation("sidescroller-char_red_jump_reload", "sidescroller-char_red_1_sheet",
+        sprite_size * 6, sprite_size * 3, sprite_size, sprite_size, 3, 10, false) -- 2 frames in the first row, then 1 more frame in the second row
+    engine.register_animation("sidescroller-char_red_jump_falling", "sidescroller-char_red_1_sheet",
+        sprite_size * 1, sprite_size * 4, sprite_size, 0, 4, 10, false)
+    engine.register_animation("sidescroller-char_red_jump_landing", "sidescroller-char_red_1_sheet",
+        sprite_size * 5, sprite_size * 4, sprite_size, 0, 3, 10, false)
+    engine.register_animation("sidescroller-char_red_jump", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 3, sprite_size, sprite_size, 8 * 2, 10, false) -- two rows of 8 frames each for the full jump animation
+    engine.register_animation("sidescroller-char_red_damage", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 5, sprite_size, 0, 4, 10, false)
+    engine.register_animation("sidescroller-char_red_death", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 6, sprite_size, sprite_size, 8 + 4, 10, false) -- two rows of 8 frames, then 4 more frames in a third row
+    engine.register_animation("sidescroller-char_red_cast", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 8, sprite_size, 0, 8, 10, false)
+    engine.register_animation("sidescroller-char_red_crouch", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 9, sprite_size, 0, 3, 10, false)
+    engine.register_animation("sidescroller-char_red_shield", "sidescroller-char_red_1_sheet",
+        sprite_size * 0, sprite_size * 10, sprite_size, 0, 3, 10, false)
+    engine.register_animation("sidescroller-char_red_walk", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 0, sprite_size, sprite_size, 8 + 2, 10, true) -- 8 frames in the first row, then 2 more frames in the second row for the full walk cycle
+    engine.register_animation("sidescroller-char_red_slide_start", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 2, sprite_size, 0, 3, 10, false)
+    engine.register_animation("sidescroller-char_red_slide_loop", "sidescroller-char_red_2_sheet",
+        sprite_size * 3, sprite_size * 2, sprite_size, 0, 3, 10, true)
+    engine.register_animation("sidescroller-char_red_slide_end", "sidescroller-char_red_2_sheet",
+        sprite_size * 6, sprite_size * 2, sprite_size, 0, 2, 10, false)
+    engine.register_animation("sidescroller-char_red_slide", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 2, sprite_size, 0, 8, 10, false)
+    engine.register_animation("sidescroller-char_red_wall_slide", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 3, sprite_size, 0, 3, 10, true)
+    engine.register_animation("sidescroller-char_red_wall", "sidescroller-char_red_2_sheet",
+        sprite_size * 3, sprite_size * 3, sprite_size, 0, 1, 10, false)
+    engine.register_animation("sidescroller-char_red_attack_critical", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 4, sprite_size, 0, 8, 10, false)
+    engine.register_animation("sidescroller-char_red_ladder", "sidescroller-char_red_2_sheet",
+        sprite_size * 0, sprite_size * 5, sprite_size, sprite_size, 8 + 2, 10, false)
+
+    engine.load_tilemap("sidescroller_level01_tilemap", "./assets/tilemaps/sidescroller_test01")
+end
+
+--- Load assets for the Bunnymark example
+local function load_bunnymark()
+    engine.log_info("Loading Bunnymark assets...")
+    engine.load_texture("bunnymark-raybunny", "./assets/textures/bunnymark/raybunny.png")
 end
 
 --- Called during the Setup game state to load all assets.
@@ -161,6 +228,8 @@ function M.load_assets()
     load_arkanoid()
     load_birthday()
     load_kraken()
+    load_sidescroller()
+    load_bunnymark()
 
     engine.log_info("All assets queued for loading!")
 end

@@ -8,6 +8,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Script Execution Flow](#script-execution-flow)
 - [Logging Functions](#logging-functions)
 - [Input System](#input-system)
+  - [Input Rebinding](#input-rebinding)
 - [Asset Loading](#asset-loading)
 - [Audio Playback](#audio-playback)
 - [Entity Spawning](#entity-spawning)
@@ -216,15 +217,18 @@ return M
 1. Create a directory under `scenes/` (e.g., `scenes/myexample/`)
 2. Create scene files following the template above
 3. Add one entry to the `scene_registry` table in `main.lua`:
+
    ```lua
    myexample_level01 = "scenes.myexample.level01",
    ```
+
 4. Add a menu item in `scenes/menu.lua`
 5. Add asset loading in `setup.lua`
 
 #### Asset Key Convention
 
 Each example prefixes its asset keys to avoid conflicts:
+
 - Asteroids: `asteroids-ship_sheet`, `asteroids-explosion01`, etc.
 - Arkanoid: `arkanoid-ball`, `arkanoid-brick_red`, etc.
 - Birthday: `birthday-love`, `birthday-spin_hearts-sheet`, etc.
@@ -249,11 +253,11 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Group, Tilemap, Camera, CameraFollow, Render, GameConfig | **Most complete** - spawn entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps |
-| `on_update_<scene>(dt)` | Signal, Entity, Spawn, Phase, Audio, Camera, CameraFollow, Render, GameConfig | Per-frame logic - camera effects, post-process control, game config changes, but avoid spawning (see warning below) |
-| Phase callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Transition phases; play sounds; spawn/modify entities; camera effects |
-| Timer callbacks | Phase, Audio, Signal, Spawn, Entity, Camera | Same as phase callbacks |
-| Collision callbacks | Entity, Signal, Audio, Spawn, Phase, Camera | Same capabilities as phase/timer callbacks; camera shake on impact |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Tilemap, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
+| Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
+| Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
+| Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
 
@@ -261,10 +265,10 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Group → Tilemap → Camera → Render → GameConfig → CameraFollow |
-| `on_update_<scene>(dt)` | Signal → Entity → Spawn → Phase → Audio → Camera → Render → GameConfig → CameraFollow |
-| Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Entity → Camera |
-| Collision callbacks | Entity → Signal → Audio → Spawn → Phase → Camera |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
+| `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
+| Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
+| Collision callbacks | Entity → Signal → Audio → Spawn → Clone → Phase → Camera |
 
 **Important: Collision Callbacks Use Separate Queues**
 
@@ -273,6 +277,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 **Use collision-specific functions in collision callbacks:**
 
 - `engine.collision_spawn()` instead of `engine.spawn()`
+- `engine.collision_clone()` instead of `engine.clone()`
 - `engine.collision_play_sound()` instead of `engine.play_sound()`
 - `engine.collision_play_sound_pitched()` instead of `engine.play_sound_pitched()`
 - `engine.collision_set_flag()` / `engine.collision_clear_flag()` instead of `engine.set_flag()` / `engine.clear_flag()`
@@ -280,9 +285,10 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
-**Entity commands in collision callbacks** also require the `collision_` prefix. Both APIs now have full parity - all entity commands available in the regular API have a `collision_` equivalent:
+**Entity commands in collision callbacks** also require the `collision_` prefix. Collision callbacks have matching entity APIs for the same areas as the regular runtime API, including menu cleanup, shader/tint control, parenting, and camera targets:
 
 - `engine.collision_entity_set_position()` instead of `engine.entity_set_position()`
+- `engine.collision_entity_set_screen_position()` instead of `engine.entity_set_screen_position()`
 - `engine.collision_entity_set_velocity()` instead of `engine.entity_set_velocity()`
 - `engine.collision_entity_despawn()` instead of `engine.entity_despawn()`
 - `engine.collision_entity_signal_set_flag()` instead of `engine.entity_signal_set_flag()`
@@ -297,11 +303,13 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_release_stuckto()` instead of `engine.release_stuckto()`
 - `engine.collision_entity_set_animation()` instead of `engine.entity_set_animation()`
 - `engine.collision_entity_restart_animation()` instead of `engine.entity_restart_animation()`
+- `engine.collision_entity_set_sprite_flip()` instead of `engine.entity_set_sprite_flip()`
 - `engine.collision_entity_set_rotation()` instead of `engine.entity_set_rotation()`
 - `engine.collision_entity_set_scale()` instead of `engine.entity_set_scale()`
 - `engine.collision_entity_insert_tween_position()` instead of `engine.entity_insert_tween_position()`
 - `engine.collision_entity_insert_tween_rotation()` instead of `engine.entity_insert_tween_rotation()`
 - `engine.collision_entity_insert_tween_scale()` instead of `engine.entity_insert_tween_scale()`
+- `engine.collision_entity_menu_despawn()` instead of `engine.entity_menu_despawn()`
 - `engine.collision_entity_remove_tween_position()` instead of `engine.entity_remove_tween_position()`
 - `engine.collision_entity_remove_tween_rotation()` instead of `engine.entity_remove_tween_rotation()`
 - `engine.collision_entity_remove_tween_scale()` instead of `engine.entity_remove_tween_scale()`
@@ -314,6 +322,14 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_freeze()` instead of `engine.entity_freeze()`
 - `engine.collision_entity_unfreeze()` instead of `engine.entity_unfreeze()`
 - `engine.collision_entity_set_speed()` instead of `engine.entity_set_speed()`
+- `engine.collision_entity_set_shader()` instead of `engine.entity_set_shader()`
+- `engine.collision_entity_remove_shader()` instead of `engine.entity_remove_shader()`
+- `engine.collision_entity_shader_set_float()` instead of `engine.entity_shader_set_float()`
+- `engine.collision_entity_shader_set_int()` instead of `engine.entity_shader_set_int()`
+- `engine.collision_entity_shader_set_vec2()` instead of `engine.entity_shader_set_vec2()`
+- `engine.collision_entity_shader_set_vec4()` instead of `engine.entity_shader_set_vec4()`
+- `engine.collision_entity_shader_clear_uniform()` instead of `engine.entity_shader_clear_uniform()`
+- `engine.collision_entity_shader_clear_uniforms()` instead of `engine.entity_shader_clear_uniforms()`
 - `engine.collision_entity_set_tint()` instead of `engine.entity_set_tint()`
 - `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
 - `engine.collision_entity_set_parent()` instead of `engine.entity_set_parent()`
@@ -383,17 +399,37 @@ The `input` table has the following structure:
 ```lua
 input = {
     digital = {
-        up = { pressed = bool, just_pressed = bool, just_released = bool },
-        down = { pressed = bool, just_pressed = bool, just_released = bool },
-        left = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Combined (WASD OR arrow keys)
+        up    = { pressed = bool, just_pressed = bool, just_released = bool },
+        down  = { pressed = bool, just_pressed = bool, just_released = bool },
+        left  = { pressed = bool, just_pressed = bool, just_released = bool },
         right = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Action buttons
         action_1 = { pressed = bool, just_pressed = bool, just_released = bool },
         action_2 = { pressed = bool, just_pressed = bool, just_released = bool },
-        back = { pressed = bool, just_pressed = bool, just_released = bool },
-        special = { pressed = bool, just_pressed = bool, just_released = bool },
+        action_3 = { pressed = bool, just_pressed = bool, just_released = bool },
+        back     = { pressed = bool, just_pressed = bool, just_released = bool },
+        special  = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Raw WASD (main directional)
+        main_up    = { pressed = bool, just_pressed = bool, just_released = bool },
+        main_down  = { pressed = bool, just_pressed = bool, just_released = bool },
+        main_left  = { pressed = bool, just_pressed = bool, just_released = bool },
+        main_right = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Raw arrow keys (secondary directional)
+        secondary_up    = { pressed = bool, just_pressed = bool, just_released = bool },
+        secondary_down  = { pressed = bool, just_pressed = bool, just_released = bool },
+        secondary_left  = { pressed = bool, just_pressed = bool, just_released = bool },
+        secondary_right = { pressed = bool, just_pressed = bool, just_released = bool },
+        -- Function keys
+        debug      = { pressed = bool, just_pressed = bool, just_released = bool },  -- F11
+        fullscreen = { pressed = bool, just_pressed = bool, just_released = bool },  -- F10
     },
     analog = {
-        -- Reserved for future gamepad support
+        scroll_y      = number,  -- Mouse wheel delta: positive = up, negative = down, 0 = no scroll
+        mouse_x       = number,  -- Cursor X in game-space (0..render_width, letterbox-corrected)
+        mouse_y       = number,  -- Cursor Y in game-space (0..render_height, letterbox-corrected)
+        mouse_world_x = number,  -- Cursor X in world-space (after camera transform)
+        mouse_world_y = number,  -- Cursor Y in world-space (after camera transform)
     }
 }
 ```
@@ -408,16 +444,44 @@ Each digital button has three boolean properties:
 
 ### Input Mapping
 
-| Input Name | Keyboard Keys |
-|------------|---------------|
-| `up` | W, Up Arrow |
-| `down` | S, Down Arrow |
-| `left` | A, Left Arrow |
-| `right` | D, Right Arrow |
-| `action_1` | Space |
-| `action_2` | Enter |
+**Combined fields** (OR of both key sets — use these for most gameplay):
+
+| Input Name | Default Bindings |
+|------------|------------------|
+| `up` | W **or** Up Arrow |
+| `down` | S **or** Down Arrow |
+| `left` | A **or** Left Arrow |
+| `right` | D **or** Right Arrow |
+| `action_1` | Space **or** Left Mouse Button |
+| `action_2` | Enter **or** Right Mouse Button |
+| `action_3` | Middle Mouse Button |
 | `back` | Escape |
 | `special` | F12 |
+
+**Raw fields** (individual key sets — use when you need to distinguish which physical keys were pressed):
+
+| Input Name | Keyboard Key |
+|------------|--------------|
+| `main_up` | W |
+| `main_down` | S |
+| `main_left` | A |
+| `main_right` | D |
+| `secondary_up` | Up Arrow |
+| `secondary_down` | Down Arrow |
+| `secondary_left` | Left Arrow |
+| `secondary_right` | Right Arrow |
+| `debug` | F11 |
+| `fullscreen` | F10 |
+
+**Analog fields:**
+
+| Input Name | Type | Description |
+|------------|------|-------------|
+| `scroll_y` | number | Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll. |
+| `mouse_x` | number | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). Matches `ScreenPosition`. Use for HUD hit-testing. |
+| `mouse_y` | number | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
+| `mouse_world_x` | number | Cursor X in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
+| `mouse_world_y` | number | Cursor Y in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
 
 ### Usage Examples
 
@@ -443,6 +507,27 @@ function on_update_level01(input, dt)
         engine.change_scene("menu")
     end
 end
+
+-- Use raw fields when two players share one keyboard (WASD vs arrows)
+function on_update_two_player(input, dt)
+    -- Player 1: WASD
+    if input.digital.main_right.pressed then
+        -- move player 1 right
+    end
+    -- Player 2: arrow keys
+    if input.digital.secondary_right.pressed then
+        -- move player 2 right
+    end
+end
+
+-- Use scroll_y for mouse-wheel input (e.g. weapon switching)
+function on_update_gameplay(input, dt)
+    if input.analog.scroll_y > 0 then
+        -- scroll up: next weapon
+    elseif input.analog.scroll_y < 0 then
+        -- scroll down: previous weapon
+    end
+end
 ```
 
 ### Which Callbacks Receive Input
@@ -457,6 +542,96 @@ end
 | Collision | ✗ | `callback(ctx)` |
 
 **Note:** Phase and timer callbacks now receive an `EntityContext` (`ctx`) object instead of just `entity_id`. The context contains all entity component data. See [Phase Component](#phase-component) for details. Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
+
+### Input Rebinding
+
+The engine supports runtime key rebinding from Lua. This lets players customize controls through in-game settings screens, or lets different scenes use different default layouts.
+
+**Action names** (pass as the `action` argument):
+
+| Action Name | Default Key | Description |
+|---|---|---|
+| `"main_up"` | `w` | Main direction up (WASD) |
+| `"main_down"` | `s` | Main direction down (WASD) |
+| `"main_left"` | `a` | Main direction left (WASD) |
+| `"main_right"` | `d` | Main direction right (WASD) |
+| `"secondary_up"` | `up` | Secondary direction up (arrow keys) |
+| `"secondary_down"` | `down` | Secondary direction down (arrow keys) |
+| `"secondary_left"` | `left` | Secondary direction left (arrow keys) |
+| `"secondary_right"` | `right` | Secondary direction right (arrow keys) |
+| `"back"` | `escape` | Back / cancel |
+| `"action_1"` | `space`, `mouse_left` | Primary action |
+| `"action_2"` | `enter`, `mouse_right` | Secondary action |
+| `"action_3"` | `mouse_middle` | Tertiary action |
+| `"special"` | `f12` | Special action |
+| `"toggle_debug"` | `f11` | Toggle debug overlay |
+| `"toggle_fullscreen"` | `f10` | Toggle fullscreen |
+
+**Key names** (pass as the `key` argument):
+
+| Category | Accepted names |
+|---|---|
+| Letters | `a` – `z` |
+| Digits | `0` – `9` |
+| Special | `space`, `enter` (alias: `return`), `escape` (alias: `esc`), `backspace`, `tab` |
+| Arrow keys | `up`, `down`, `left`, `right` |
+| Modifiers | `lshift` (alias: `shift`), `rshift`, `lctrl` (alias: `ctrl`), `rctrl`, `lalt` (alias: `alt`), `ralt` |
+| Function keys | `f1` – `f12` |
+| Mouse buttons | `mouse_left`, `mouse_right`, `mouse_middle` |
+
+> **Aliases:** `engine.get_binding()` always returns the canonical form (e.g. `"enter"`, not `"return"`), but both are accepted as input to `rebind_action`/`add_binding`.
+
+> **Bindings accept both keyboard keys and mouse buttons.** Pass any name from the table above (e.g. `"mouse_left"`) wherever a key name is expected.
+
+> **Unknown values:** Passing an unknown action or binding name logs a warning and is silently ignored — no panic, no state change.
+
+#### `engine.rebind_action(action, key)`
+
+Replace **all** current bindings for `action` with a single new `key`. Use this for a standard one-key-per-action settings screen.
+
+```lua
+-- Rebind jump from Space to Z
+engine.rebind_action("action_1", "z")
+
+-- Rebind primary action to left mouse button
+engine.rebind_action("action_1", "mouse_left")
+
+-- Switch movement to arrow keys
+engine.rebind_action("main_up",    "up")
+engine.rebind_action("main_down",  "down")
+engine.rebind_action("main_left",  "left")
+engine.rebind_action("main_right", "right")
+```
+
+#### `engine.add_binding(action, key)`
+
+Append `key` to the binding list for `action` **without removing** existing bindings. Useful for supporting multiple control schemes simultaneously.
+
+```lua
+-- Accept both W and Up-Arrow for "move up"
+engine.add_binding("main_up", "up")
+```
+
+#### `engine.get_binding(action) -> string?`
+
+Return the first key name bound to `action` as a lowercase string, or `nil` if the action is unknown or has no bindings. Reads from a snapshot captured at frame start — rebinds issued in `on_update_<scene>` are visible from the **next** frame.
+
+```lua
+local key = engine.get_binding("action_1")
+if key then
+    engine.set_string("prompt_jump", "Press [" .. key .. "] to jump")
+end
+
+-- Build a full controls readout
+local actions = {
+    "main_up", "main_down", "main_left", "main_right",
+    "action_1", "action_2", "action_3", "back",
+}
+for _, action in ipairs(actions) do
+    local bound = engine.get_binding(action) or "(unbound)"
+    engine.log(action .. " = " .. bound)
+end
+```
 
 ---
 
@@ -484,7 +659,7 @@ engine.load_font("future", "./assets/fonts/Formal_Future.ttf", 64)
 
 ### `engine.load_music(id, path)`
 
-Load a music track (supports XM tracker format).
+Load a music track from disk.
 
 ```lua
 engine.load_music("menu", "./assets/audio/menu_theme.xm")
@@ -493,7 +668,7 @@ engine.load_music("boss_fight", "./assets/audio/boss_fight.xm")
 
 ### `engine.load_sound(id, path)`
 
-Load a sound effect (supports WAV format).
+Load a sound effect from disk.
 
 ```lua
 engine.load_sound("ping", "./assets/audio/ping.wav")
@@ -502,7 +677,7 @@ engine.load_sound("ding", "./assets/audio/ding.wav")
 
 ### `engine.load_tilemap(id, path)`
 
-Load a tilemap from directory (requires PNG atlas and JSON metadata).
+Load a tilemap from a directory. The loader expects the directory name to match both files inside it: `<dirname>.png` for the tileset texture and `<dirname>.txt` for the JSON tilemap data.
 
 ```lua
 engine.load_tilemap("level01", "./assets/tilemaps/level01")
@@ -510,7 +685,7 @@ engine.load_tilemap("level01", "./assets/tilemaps/level01")
 
 ### `engine.load_shader(id, vs_path, fs_path)`
 
-Load a shader for post-processing effects. At least one of `vs_path` or `fs_path` must be provided (the other can be `nil` to use the default).
+Load a shader for post-processing or per-entity effects. At least one of `vs_path` or `fs_path` must be provided (the other can be `nil` to use the default).
 
 **Parameters:**
 
@@ -527,7 +702,7 @@ engine.load_shader("crt", nil, "./assets/shaders/crt.fs")
 engine.load_shader("custom", "./assets/shaders/custom.vs", "./assets/shaders/custom.fs")
 ```
 
-### `engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped)`
+### `engine.register_animation(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped)`
 
 Register a frame-based sprite animation.
 
@@ -536,17 +711,25 @@ Register a frame-based sprite animation.
 - `id` - Unique animation identifier
 - `tex_key` - Texture to use as sprite sheet
 - `pos_x`, `pos_y` - Starting pixel position in sprite sheet
-- `displacement` - Pixel offset between frames (horizontal)
+- `horizontal_displacement` - Pixel width of each frame (frames are packed with no gaps)
+- `vertical_displacement` - Pixel height to advance when wrapping to the next row. Set to `0` for single-row sprite sheets (no wrapping)
 - `frame_count` - Number of frames in animation
 - `fps` - Playback speed in frames per second
 - `looped` - Whether animation loops (true/false)
 
-```lua
--- 16-frame looping animation at 15fps
-engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
+**Row-wrapping behavior** (when `vertical_displacement > 0`):
 
--- 6-frame non-looping animation at 15fps
-engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false)
+When the next frame's x offset would exceed the texture width, the animation wraps to the next row. The first row starts at `pos_x`; subsequent rows start at x = 0. This allows a single animation definition to span multiple rows of a sprite sheet.
+
+```lua
+-- Single-row animation (no wrapping): vertical_displacement = 0
+engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 0, 16, 15, true)
+
+-- Single-row, non-looping
+engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 0, 6, 15, false)
+
+-- Multi-row animation: 56x56 frames wrapping across rows of a sprite sheet
+engine.register_animation("char_run", "char_sheet", 0, 0, 56, 56, 12, 10, true)
 ```
 
 ---
@@ -741,33 +924,31 @@ Add RigidBody component with initial velocity.
 
 #### `:with_friction(friction)`
 
-Set velocity damping on RigidBody (requires `:with_velocity()` first).
+Set velocity damping on RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
 **Parameters:**
 
 - `friction` - Damping factor (0.0 = no friction, ~5.0 = responsive, ~10.0 = heavy drag)
 
 ```lua
-:with_velocity(0, 0)
 :with_friction(5.0)  -- Responsive friction for player control
 ```
 
 #### `:with_max_speed(max_speed)`
 
-Set maximum velocity magnitude on RigidBody (requires `:with_velocity()` first).
+Set maximum velocity magnitude on RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
 **Parameters:**
 
 - `max_speed` - Maximum speed in world units per second
 
 ```lua
-:with_velocity(0, 0)
 :with_max_speed(300.0)  -- Clamp speed to 300 units/sec
 ```
 
 #### `:with_accel(name, x, y, enabled)`
 
-Add a named acceleration force to RigidBody (requires `:with_velocity()` first).
+Add a named acceleration force to RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
 Forces are accumulated each frame and applied to velocity. Multiple forces can be added with different names and toggled independently.
 
@@ -778,25 +959,19 @@ Forces are accumulated each frame and applied to velocity. Multiple forces can b
 - `enabled` - Whether this force is active (true/false)
 
 ```lua
-:with_velocity(0, 0)
 :with_accel("gravity", 0, 980, true)      -- Enabled gravity
 :with_accel("thrust", 0, -500, false)     -- Disabled thrust (toggle later)
 :with_accel("wind", 50, 0, true)          -- Enabled wind
 ```
 
-#### `:with_frozen(frozen)`
+#### `:with_frozen()`
 
-Set frozen state on RigidBody (requires `:with_velocity()` first).
+Freeze the entity's `RigidBody`. If the entity does not already have a `RigidBody`, this call creates one and marks it as frozen.
 
 When frozen, the movement system skips all physics calculations for this entity. Position can still be modified externally (e.g., by StuckTo system or direct manipulation).
 
-**Parameters:**
-
-- `frozen` - Whether entity is frozen (true/false)
-
 ```lua
-:with_velocity(300, -300)
-:with_frozen(true)  -- Start frozen (e.g., ball stuck to paddle)
+:with_frozen()  -- Start frozen (e.g., ball stuck to paddle)
 ```
 
 **Complete Physics Example:**
@@ -936,7 +1111,7 @@ Add dynamic text rendering.
 
 #### `:with_signal_binding(key)`
 
-Bind text to a world signal (auto-updates) (requires `:with_text()`).
+Bind a world signal key for dynamic text updates. This is most useful together with `:with_text()`, which provides the visible text component.
 
 ```lua
 :with_text("0", "arcade", 24, 255, 255, 255, 255)
@@ -945,7 +1120,7 @@ Bind text to a world signal (auto-updates) (requires `:with_text()`).
 
 #### `:with_signal_binding_format(format)`
 
-Format signal value in text (use `{}` as placeholder).
+Format signal value in text (use `{}` as placeholder). Call this after `:with_signal_binding()`; if no binding exists yet, this call is ignored.
 
 ```lua
 :with_signal_binding("score")
@@ -1601,7 +1776,7 @@ As the planet rotates via its tween, the satellite orbits at 80px radius. No man
 
 1. **MouseControlled on children:** The mouse sets world coordinates into `MapPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
 2. **StuckTo with hierarchy:** `StuckTo` is automatically skipped for entities with a parent. Don't combine both systems on the same entity.
-3. **One-frame delay:** On the frame an entity is spawned with `:with_parent()` or receives `entity_set_parent()`, it renders at its local position. World-space rendering starts the next frame.
+3. **Spawn-time vs runtime parenting:** `:with_parent()` initializes the child's world transform immediately, so the child renders in the correct world position on its first frame. Runtime reparenting via `engine.entity_set_parent()` still depends on the next transform propagation pass before all derived world-space data reflects the new parent.
 
 ---
 
@@ -1836,7 +2011,7 @@ engine.spawn()
 
 #### `:with_lua_timer(duration, callback)`
 
-Add LuaTimer component that calls a Lua function after duration.
+Add a repeating LuaTimer component that calls a Lua function every `duration` seconds.
 
 **Parameters:**
 
@@ -1851,7 +2026,7 @@ function callback_name(ctx, input)
     -- ctx.id: entity ID (u64) - the entity that owns this timer
     -- ctx.timer: { duration, elapsed, callback } - timer info
     -- input: input state table
-    -- Full access to engine API
+    -- Can queue phase, audio, signal, spawn, clone, entity, and camera commands
 end
 ```
 
@@ -1875,8 +2050,9 @@ end
 
 **Features:**
 
-- Timer automatically resets after firing (repeats every `duration` seconds)
-- Lua callback has full engine API access (spawn/despawn entities, play audio, modify signals, etc.)
+- Timer automatically repeats every `duration` seconds
+- Timer reset subtracts the duration instead of zeroing elapsed time, which preserves cadence if a frame runs long
+- Timer callbacks receive `ctx` and `input`, and can queue phase, audio, signal, spawn, clone, entity, and camera commands
 - Can be added at spawn-time with `:with_lua_timer()` or at runtime with `engine.entity_insert_lua_timer()`
 
 **See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
@@ -2167,10 +2343,18 @@ engine.entity_set_velocity(ball_id, 300, -300)
 
 ### `engine.entity_set_position(entity_id, x, y)`
 
-Set entity's world position.
+Set entity's world position (updates `MapPosition` component).
 
 ```lua
 engine.entity_set_position(player_id, 400, 300)
+```
+
+### `engine.entity_set_screen_position(entity_id, x, y)`
+
+Set entity's screen-space position (updates `ScreenPosition` component, for HUD/UI elements).
+
+```lua
+engine.entity_set_screen_position(hud_label_id, 10, 24)
 ```
 
 ### `engine.entity_despawn(entity_id)`
@@ -2555,6 +2739,21 @@ Restart current animation from frame 0.
 
 ```lua
 engine.entity_restart_animation(player_id)
+```
+
+### `engine.entity_set_sprite_flip(entity_id, flip_h, flip_v)`
+
+Set sprite flipping on horizontal and vertical axes.
+
+**Parameters:**
+
+- `entity_id` - Entity with Sprite component
+- `flip_h` - Flip horizontally (boolean)
+- `flip_v` - Flip vertically (boolean)
+
+```lua
+engine.entity_set_sprite_flip(player_id, true, false)   -- Flip horizontally
+engine.entity_set_sprite_flip(player_id, false, false)   -- Reset to normal
 ```
 
 ### Physics Commands
@@ -3481,6 +3680,23 @@ Set entity's scale during collision handling.
 function on_player_shrink_zone(ctx)
     local player_id = ctx.a.id
     engine.collision_entity_set_scale(player_id, 0.5, 0.5)
+end
+```
+
+#### `engine.collision_entity_set_sprite_flip(entity_id, flip_h, flip_v)`
+
+Set sprite flipping during collision handling.
+
+**Parameters:**
+
+- `entity_id` - Entity with Sprite component
+- `flip_h` - Flip horizontally (boolean)
+- `flip_v` - Flip vertically (boolean)
+
+```lua
+function on_player_mirror_zone(ctx)
+    local player_id = ctx.a.id
+    engine.collision_entity_set_sprite_flip(player_id, true, false)
 end
 ```
 
@@ -4456,7 +4672,7 @@ engine.spawn()
 #### Fade Out Effect
 
 ```lua
--- In a timer callback that runs repeatedly
+-- In a repeating timer callback
 function fade_out(ctx)
     local alpha = ctx.signals.integers["alpha"] or 255
     alpha = alpha - 15
@@ -4465,7 +4681,6 @@ function fade_out(ctx)
     else
         engine.entity_signal_set_integer(ctx.id, "alpha", alpha)
         engine.entity_set_tint(ctx.id, 255, 255, 255, alpha)
-        engine.entity_insert_lua_timer(ctx.id, 0.05, "fade_out")
     end
 end
 ```

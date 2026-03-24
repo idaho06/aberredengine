@@ -27,8 +27,11 @@ pub struct AnimationResource {
     pub tex_key: Arc<str>,
     /// Base screen/world position where the animation is anchored.
     pub position: Vector2,
-    /// Optional per-frame displacement in the forward axis.
-    pub displacement: f32,
+    /// Per-frame horizontal displacement (also the frame width, as frames are packed with no gaps).
+    pub horizontal_displacement: f32,
+    /// Vertical displacement per row. When non-zero, enables row-wrapping: frames that exceed
+    /// the texture width continue on the next row offset by this amount.
+    pub vertical_displacement: f32,
     /// Number of frames in the animation.
     pub frame_count: usize,
     /// Frames per second playback speed.

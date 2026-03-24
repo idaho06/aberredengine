@@ -19,6 +19,10 @@ local function on_showcase_menu_select(ctx)
         engine.change_scene("birthday_intro")
     elseif ctx.item_id == "kraken" then
         engine.change_scene("kraken_intro")
+    elseif ctx.item_id == "sidescroller" then
+        engine.change_scene("sidescroller_level01")
+    elseif ctx.item_id == "bunnymark" then
+        engine.change_scene("bunnymark_menu")
     elseif ctx.item_id == "exit" then
         engine.quit()
     end
@@ -50,6 +54,8 @@ function M.spawn()
 
     -- Set render resolution for menu
     engine.set_render_size(640, 360)
+    engine.set_vsync(true)     -- vsync on for menu to cap FPS and reduce CPU/GPU load
+    engine.set_target_fps(120) -- target 120 FPS for menu
 
     -- Camera at origin, top-left
     engine.set_camera(0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
@@ -98,11 +104,13 @@ function M.spawn()
         :with_group("main_menu")
         :with_menu(
             {
-                { id = "asteroids", label = "Asteroids" },
-                { id = "arkanoid",  label = "Arkanoid" },
-                { id = "birthday",  label = "Birthday Card" },
-                { id = "kraken",    label = "Kraken" },
-                { id = "exit",      label = "Exit" },
+                { id = "asteroids",    label = "Asteroids" },
+                { id = "arkanoid",     label = "Arkanoid" },
+                { id = "birthday",     label = "Birthday Card" },
+                { id = "kraken",       label = "Kraken" },
+                { id = "sidescroller", label = "Ember Paths" },
+                { id = "bunnymark",    label = "Bunnymark" },
+                { id = "exit",         label = "Exit" },
             },
             16 + 8,
             100,

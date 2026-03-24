@@ -106,13 +106,24 @@ engine = {}
 ---@field right DigitalButtonState
 ---@field action_1 DigitalButtonState
 ---@field action_2 DigitalButtonState
+---@field action_3 DigitalButtonState
 ---@field back DigitalButtonState
 ---@field special DigitalButtonState
+---@field main_up DigitalButtonState Raw WASD up (W key)
+---@field main_down DigitalButtonState Raw WASD down (S key)
+---@field main_left DigitalButtonState Raw WASD left (A key)
+---@field main_right DigitalButtonState Raw WASD right (D key)
+---@field secondary_up DigitalButtonState Raw arrow up key
+---@field secondary_down DigitalButtonState Raw arrow down key
+---@field secondary_left DigitalButtonState Raw arrow left key
+---@field secondary_right DigitalButtonState Raw arrow right key
+---@field debug DigitalButtonState Debug toggle (F11)
+---@field fullscreen DigitalButtonState Fullscreen toggle (F10)
 
 ---Input state passed to callbacks
 ---@class InputSnapshot
 ---@field digital DigitalInputs
----@field analog table Reserved for future gamepad support
+---@field analog AnalogInputs
 
 ---Callbacks for a single phase
 ---@class PhaseCallbacks
@@ -151,6 +162,14 @@ engine = {}
 ---@field min number|nil Range minimum (for range conditions)
 ---@field max number|nil Range maximum (for range conditions)
 ---@field conditions AnimationRuleCondition[]|nil Sub-conditions (for all/any/not)
+
+---Analog input values (mouse, scroll)
+---@class AnalogInputs
+---@field scroll_y number Mouse wheel delta (positive=up, negative=down)
+---@field mouse_x number Cursor X in game-space (0..render_width, letterbox-corrected)
+---@field mouse_y number Cursor Y in game-space (0..render_height, letterbox-corrected)
+---@field mouse_world_x number Cursor X in world-space (after camera transform, matches MapPosition)
+---@field mouse_world_y number Cursor Y in world-space (after camera transform, matches MapPosition)
 
 -- ==================== Enums ====================
 
@@ -585,6 +604,12 @@ function engine.collision_entity_set_rotation(entity_id, degrees) end
 ---@param sy number
 function engine.collision_entity_set_scale(entity_id, sx, sy) end
 
+---Set entity screen-space position
+---@param entity_id integer
+---@param x number
+---@param y number
+function engine.collision_entity_set_screen_position(entity_id, x, y) end
+
 ---Set per-entity shader by key
 ---@param entity_id integer
 ---@param key string
@@ -594,6 +619,12 @@ function engine.collision_entity_set_shader(entity_id, key) end
 ---@param entity_id integer
 ---@param speed number
 function engine.collision_entity_set_speed(entity_id, speed) end
+
+---Set sprite flip on horizontal and vertical axes
+---@param entity_id integer
+---@param flip_h boolean
+---@param flip_v boolean
+function engine.collision_entity_set_sprite_flip(entity_id, flip_h, flip_v) end
 
 ---Set entity tint color (RGBA 0-255)
 ---@param entity_id integer
@@ -854,6 +885,12 @@ function engine.entity_set_rotation(entity_id, degrees) end
 ---@param sy number
 function engine.entity_set_scale(entity_id, sx, sy) end
 
+---Set entity screen-space position
+---@param entity_id integer
+---@param x number
+---@param y number
+function engine.entity_set_screen_position(entity_id, x, y) end
+
 ---Set per-entity shader by key
 ---@param entity_id integer
 ---@param key string
@@ -863,6 +900,12 @@ function engine.entity_set_shader(entity_id, key) end
 ---@param entity_id integer
 ---@param speed number
 function engine.entity_set_speed(entity_id, speed) end
+
+---Set sprite flip on horizontal and vertical axes
+---@param entity_id integer
+---@param flip_h boolean
+---@param flip_v boolean
+function engine.entity_set_sprite_flip(entity_id, flip_h, flip_v) end
 
 ---Set entity tint color (RGBA 0-255)
 ---@param entity_id integer
@@ -1106,11 +1149,12 @@ function engine.collision_spawn() end
 ---@param tex_key string
 ---@param pos_x number
 ---@param pos_y number
----@param displacement number
+---@param horizontal_displacement number
+---@param vertical_displacement number
 ---@param frame_count integer
 ---@param fps number
 ---@param looped boolean
-function engine.register_animation(id, tex_key, pos_x, pos_y, displacement, frame_count, fps, looped) end
+function engine.register_animation(id, tex_key, pos_x, pos_y, horizontal_displacement, vertical_displacement, frame_count, fps, looped) end
 
 -- ==================== Rendering & Shaders ====================
 
@@ -1197,6 +1241,23 @@ function engine.set_target_fps(fps) end
 ---Set vertical sync
 ---@param enabled boolean
 function engine.set_vsync(enabled) end
+
+-- ==================== input ====================
+
+---Add an extra key binding for an action (supports multi-bind)
+---@param action string
+---@param key string
+function engine.add_binding(action, key) end
+
+---Get the first key binding for an action as a string (nil if unbound)
+---@param action string
+---@return string|nil
+function engine.get_binding(action) end
+
+---Rebind a logical action to a new key (replaces existing binding)
+---@param action string
+---@param key string
+function engine.rebind_action(action, key) end
 
 -- ==================== Entity Builder ====================
 

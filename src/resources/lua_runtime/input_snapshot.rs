@@ -44,21 +44,46 @@ impl DigitalButtonState {
 /// All digital input states.
 #[derive(Debug, Clone, Default)]
 pub struct DigitalInputs {
+    // Combined directional (WASD OR arrows)
     pub up: DigitalButtonState,
     pub down: DigitalButtonState,
     pub left: DigitalButtonState,
     pub right: DigitalButtonState,
+    // Action buttons
     pub action_1: DigitalButtonState,
     pub action_2: DigitalButtonState,
+    pub action_3: DigitalButtonState,
     pub back: DigitalButtonState,
     pub special: DigitalButtonState,
+    // Raw WASD (main directional)
+    pub main_up: DigitalButtonState,
+    pub main_down: DigitalButtonState,
+    pub main_left: DigitalButtonState,
+    pub main_right: DigitalButtonState,
+    // Raw arrow keys (secondary directional)
+    pub secondary_up: DigitalButtonState,
+    pub secondary_down: DigitalButtonState,
+    pub secondary_left: DigitalButtonState,
+    pub secondary_right: DigitalButtonState,
+    // Special function keys
+    pub debug: DigitalButtonState,
+    pub fullscreen: DigitalButtonState,
 }
 
-/// Analog input values (reserved for future gamepad support).
+/// Analog input values.
 #[derive(Debug, Clone, Default)]
 pub struct AnalogInputs {
-    // Future: move_x, move_y, look_x, look_y, trigger_left, trigger_right
-    // For now, this is empty but the structure exists for Lua API compatibility
+    /// Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll.
+    pub scroll_y: f32,
+    /// Mouse X in game/render-target space (letterbox-corrected). Range: 0..render_width.
+    /// Matches ScreenPosition entity coordinates. Use for HUD hit-testing.
+    pub mouse_x: f32,
+    /// Mouse Y in game/render-target space (letterbox-corrected). Range: 0..render_height.
+    pub mouse_y: f32,
+    /// Mouse X in world-space (after camera transform). Matches MapPosition coordinates.
+    pub mouse_world_x: f32,
+    /// Mouse Y in world-space (after camera transform). Matches MapPosition coordinates.
+    pub mouse_world_y: f32,
 }
 
 /// Frozen snapshot of all input state for a single frame.
@@ -113,10 +138,32 @@ impl InputSnapshot {
                 },
                 action_1: DigitalButtonState::from_bool_state(&input.action_1),
                 action_2: DigitalButtonState::from_bool_state(&input.action_2),
+                action_3: DigitalButtonState::from_bool_state(&input.action_3),
                 back: DigitalButtonState::from_bool_state(&input.action_back),
                 special: DigitalButtonState::from_bool_state(&input.action_special),
+                // Raw WASD
+                main_up: DigitalButtonState::from_bool_state(&input.maindirection_up),
+                main_down: DigitalButtonState::from_bool_state(&input.maindirection_down),
+                main_left: DigitalButtonState::from_bool_state(&input.maindirection_left),
+                main_right: DigitalButtonState::from_bool_state(&input.maindirection_right),
+                // Raw arrow keys
+                secondary_up: DigitalButtonState::from_bool_state(&input.secondarydirection_up),
+                secondary_down: DigitalButtonState::from_bool_state(&input.secondarydirection_down),
+                secondary_left: DigitalButtonState::from_bool_state(&input.secondarydirection_left),
+                secondary_right: DigitalButtonState::from_bool_state(
+                    &input.secondarydirection_right,
+                ),
+                // Function keys
+                debug: DigitalButtonState::from_bool_state(&input.mode_debug),
+                fullscreen: DigitalButtonState::from_bool_state(&input.fullscreen_toggle),
             },
-            analog: AnalogInputs::default(),
+            analog: AnalogInputs {
+                scroll_y: input.scroll_y,
+                mouse_x: input.mouse_x,
+                mouse_y: input.mouse_y,
+                mouse_world_x: input.mouse_world_x,
+                mouse_world_y: input.mouse_world_y,
+            },
         }
     }
 }
@@ -131,12 +178,11 @@ mod tests {
         InputState::default()
     }
 
-    fn bool_state_pressed(key: KeyboardKey) -> BoolState {
+    fn bool_state_pressed(_key: KeyboardKey) -> BoolState {
         BoolState {
             active: true,
             just_pressed: true,
             just_released: false,
-            key_binding: key,
         }
     }
 
@@ -149,6 +195,7 @@ mod tests {
         assert!(!snap.digital.right.pressed);
         assert!(!snap.digital.action_1.pressed);
         assert!(!snap.digital.action_2.pressed);
+        assert!(!snap.digital.action_3.pressed);
         assert!(!snap.digital.back.pressed);
         assert!(!snap.digital.special.pressed);
     }
@@ -229,7 +276,6 @@ mod tests {
             active: true,
             just_pressed: false,
             just_released: true,
-            key_binding: KeyboardKey::KEY_SPACE,
         };
         let dbs = DigitalButtonState::from_bool_state(&bs);
         assert!(dbs.pressed);
@@ -243,5 +289,160 @@ mod tests {
         assert!(!dbs.pressed);
         assert!(!dbs.just_pressed);
         assert!(!dbs.just_released);
+    }
+
+    #[test]
+    fn test_main_direction_fields_populated() {
+        let mut input = default_input();
+        input.maindirection_up.active = true;
+        input.maindirection_up.just_pressed = true;
+        input.maindirection_left.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.main_up.pressed);
+        assert!(snap.digital.main_up.just_pressed);
+        assert!(!snap.digital.main_down.pressed);
+        assert!(snap.digital.main_left.pressed);
+        assert!(!snap.digital.main_right.pressed);
+    }
+
+    #[test]
+    fn test_secondary_direction_fields_populated() {
+        let mut input = default_input();
+        input.secondarydirection_down.active = true;
+        input.secondarydirection_right.active = true;
+        input.secondarydirection_right.just_released = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(!snap.digital.secondary_up.pressed);
+        assert!(snap.digital.secondary_down.pressed);
+        assert!(!snap.digital.secondary_left.pressed);
+        assert!(snap.digital.secondary_right.pressed);
+        assert!(snap.digital.secondary_right.just_released);
+    }
+
+    #[test]
+    fn test_raw_and_combined_independent() {
+        // Only arrow up pressed — combined up is true, main_up is false
+        let mut input = default_input();
+        input.secondarydirection_up.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.up.pressed); // combined
+        assert!(!snap.digital.main_up.pressed); // WASD raw — not pressed
+        assert!(snap.digital.secondary_up.pressed); // arrow raw — pressed
+    }
+
+    #[test]
+    fn test_debug_field_populated() {
+        let mut input = default_input();
+        input.mode_debug.active = true;
+        input.mode_debug.just_pressed = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.debug.pressed);
+        assert!(snap.digital.debug.just_pressed);
+    }
+
+    #[test]
+    fn test_fullscreen_field_populated() {
+        let mut input = default_input();
+        input.fullscreen_toggle.active = true;
+        input.fullscreen_toggle.just_released = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.fullscreen.pressed);
+        assert!(snap.digital.fullscreen.just_released);
+        assert!(!snap.digital.fullscreen.just_pressed);
+    }
+
+    #[test]
+    fn test_existing_combined_fields_unaffected() {
+        // Ensure backward compat: combined fields still OR both sources
+        let mut input = default_input();
+        input.maindirection_right.active = true;
+        input.secondarydirection_right.active = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.right.pressed);
+        assert!(snap.digital.main_right.pressed);
+        assert!(snap.digital.secondary_right.pressed);
+    }
+
+    #[test]
+    fn test_action3_field_populated() {
+        let mut input = default_input();
+        input.action_3.active = true;
+        input.action_3.just_pressed = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.action_3.pressed);
+        assert!(snap.digital.action_3.just_pressed);
+        assert!(!snap.digital.action_3.just_released);
+    }
+
+    #[test]
+    fn test_action3_default_unpressed() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert!(!snap.digital.action_3.pressed);
+        assert!(!snap.digital.action_3.just_pressed);
+        assert!(!snap.digital.action_3.just_released);
+    }
+
+    #[test]
+    fn test_scroll_y_propagated() {
+        let mut input = default_input();
+        input.scroll_y = 1.5;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.scroll_y, 1.5);
+    }
+
+    #[test]
+    fn test_scroll_y_zero_by_default() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert_eq!(snap.analog.scroll_y, 0.0);
+    }
+
+    #[test]
+    fn test_scroll_y_negative_scroll_down() {
+        let mut input = default_input();
+        input.scroll_y = -2.0;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.scroll_y, -2.0);
+    }
+
+    #[test]
+    fn test_mouse_pos_zero_by_default() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert_eq!(snap.analog.mouse_x, 0.0);
+        assert_eq!(snap.analog.mouse_y, 0.0);
+        assert_eq!(snap.analog.mouse_world_x, 0.0);
+        assert_eq!(snap.analog.mouse_world_y, 0.0);
+    }
+
+    #[test]
+    fn test_mouse_screen_pos_propagated() {
+        let mut input = default_input();
+        input.mouse_x = 320.0;
+        input.mouse_y = 180.0;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.mouse_x, 320.0);
+        assert_eq!(snap.analog.mouse_y, 180.0);
+    }
+
+    #[test]
+    fn test_mouse_world_pos_propagated() {
+        let mut input = default_input();
+        input.mouse_world_x = -150.0;
+        input.mouse_world_y = 75.5;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.mouse_world_x, -150.0);
+        assert_eq!(snap.analog.mouse_world_y, 75.5);
+    }
+
+    #[test]
+    fn test_mouse_screen_and_world_independent() {
+        // Screen and world positions are independent: they differ when camera is offset
+        let mut input = default_input();
+        input.mouse_x = 400.0;
+        input.mouse_y = 225.0;
+        input.mouse_world_x = 0.0;
+        input.mouse_world_y = 0.0;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert_eq!(snap.analog.mouse_x, 400.0);
+        assert_eq!(snap.analog.mouse_world_x, 0.0);
     }
 }

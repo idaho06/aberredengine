@@ -10,7 +10,7 @@ use raylib::prelude::Vector2;
 /// 2D scale factor for sprite rendering.
 ///
 /// The render system multiplies sprite dimensions by these values. Can be
-/// animated via [`TweenScale`](super::tween::TweenScale).
+/// animated via `Tween<Scale>`.
 #[derive(Component, Clone, Debug, Copy)]
 pub struct Scale {
     pub scale: Vector2,
