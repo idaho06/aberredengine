@@ -48,6 +48,7 @@ use log::{error, warn};
 // to refer to the crate itself.  `Ui` is aliased to `ImguiUi` for clarity next
 // to raylib's own draw-handle types.
 use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
+use crate::systems::scene_dispatch::GuiCallback;
 
 type MapSpriteQueryData = (
     Entity,
@@ -374,7 +375,7 @@ pub struct RenderQueries<'w, 's> {
 /// Extra resources needed for the imgui debug panels.
 #[derive(SystemParam)]
 pub struct DebugResources<'w> {
-    pub world_signals: Res<'w, WorldSignals>,
+    pub world_signals: ResMut<'w, WorldSignals>,
     pub input_state: Res<'w, InputState>,
     pub camera_follow: Option<Res<'w, CameraFollowConfig>>,
     pub scene_manager: Option<Res<'w, SceneManager>>,
@@ -811,61 +812,91 @@ pub fn render_system(
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
     let debug_active = maybe_debug.is_some();
-    if debug_active {
-        // Pre-compute values accessible from RaylibHandle before begin_drawing
-        let fps = rl.get_fps();
-        let window_mouse_pos = rl.get_mouse_position();
-        let game_mouse_pos = window_size.window_to_game_pos(
-            window_mouse_pos,
-            screensize.w as u32,
-            screensize.h as u32,
-        );
-        let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
 
-        // ECS entity counts
-        let sprite_count = queries.map_sprites.iter().count();
-        let collider_count = queries.colliders.iter().count();
-        let position_count = queries.positions.iter().count();
-        let rigidbody_count = queries.rigidbodies.iter().count();
-        let screen_sprite_count = queries.screen_sprites.iter().count();
-        let screen_text_count = queries.screen_texts.iter().count();
-        let shader_count = shader_store.len();
+    // Extract gui_callback from the active scene (fn pointer is Copy — no borrow held).
+    // Must be done before taking mutable borrows of other debug_res fields below.
+    let gui_callback: Option<GuiCallback> = debug_res
+        .scene_manager
+        .as_deref()
+        .and_then(|sm| sm.active_scene.as_deref().and_then(|name| sm.get(name)))
+        .and_then(|desc| desc.gui_callback);
+
+    let needs_imgui = debug_active || gui_callback.is_some();
+
+    if needs_imgui {
+        // Debug-only values — computed only when needed
+        let (fps, game_mouse_pos, mouse_world,
+             sprite_count, collider_count, position_count, rigidbody_count,
+             screen_sprite_count, screen_text_count, shader_count) = if debug_active {
+            let fps = rl.get_fps();
+            let window_mouse_pos = rl.get_mouse_position();
+            let game_mouse_pos = window_size.window_to_game_pos(
+                window_mouse_pos,
+                screensize.w as u32,
+                screensize.h as u32,
+            );
+            let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
+            let sprite_count = queries.map_sprites.iter().count();
+            let collider_count = queries.colliders.iter().count();
+            let position_count = queries.positions.iter().count();
+            let rigidbody_count = queries.rigidbodies.iter().count();
+            let screen_sprite_count = queries.screen_sprites.iter().count();
+            let screen_text_count = queries.screen_texts.iter().count();
+            let shader_count = shader_store.len();
+            (fps, game_mouse_pos, mouse_world,
+             sprite_count, collider_count, position_count, rigidbody_count,
+             screen_sprite_count, screen_text_count, shader_count)
+        } else {
+            // Dummy values — only reached when gui_callback is Some; debug_active is false
+            // so the debug branch inside the closure will not execute them.
+            (0, Vector2::zero(), Vector2::zero(),
+             0, 0, 0, 0, 0, 0, 0)
+        };
 
         // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
-        let overlay_config = &mut *debug_res.overlay_config;
-        let world_signals = &*debug_res.world_signals;
-        let input_state = &*debug_res.input_state;
-        let camera_follow = debug_res.camera_follow.as_deref();
-        let scene_manager = debug_res.scene_manager.as_deref();
-        let world_time = &*res.world_time;
-        let config = &*res.config;
+        let overlay_config   = &mut *debug_res.overlay_config;
+        let world_signals    = &mut *debug_res.world_signals;
+        let input_state      = &*debug_res.input_state;
+        let camera_follow    = debug_res.camera_follow.as_deref();
+        let scene_manager    = debug_res.scene_manager.as_deref();
+        let world_time       = &*res.world_time;
+        let config           = &*res.config;
 
         let closure = move |d: &RaylibDrawHandle<'_>| {
-            draw_imgui_debug(
-                d,
-                overlay_config,
-                world_signals,
-                input_state,
-                camera,
-                camera_follow,
-                scene_manager,
-                textures,
-                fonts,
-                shader_count,
-                screensize,
-                window_size,
-                world_time,
-                config,
-                fps,
-                sprite_count,
-                collider_count,
-                position_count,
-                rigidbody_count,
-                screen_sprite_count,
-                screen_text_count,
-                game_mouse_pos,
-                mouse_world,
-            );
+            use raylib::imgui::RayImGUITrait;
+            let Some(ui) = d.begin_imgui() else { return };
+
+            if debug_active {
+                draw_imgui_debug(
+                    &ui,
+                    overlay_config,
+                    world_signals,
+                    input_state,
+                    camera,
+                    camera_follow,
+                    scene_manager,
+                    textures,
+                    fonts,
+                    shader_count,
+                    screensize,
+                    window_size,
+                    world_time,
+                    config,
+                    fps,
+                    sprite_count,
+                    collider_count,
+                    position_count,
+                    rigidbody_count,
+                    screen_sprite_count,
+                    screen_text_count,
+                    game_mouse_pos,
+                    mouse_world,
+                );
+            }
+
+            if let Some(cb) = gui_callback {
+                cb(&ui, world_signals);
+            }
         };
         apply_postprocess_passes(
             rl,
@@ -1034,7 +1065,7 @@ fn draw_screen_texts(
 /// Orchestrates all imgui debug panels drawn at window resolution over the game image.
 #[allow(clippy::too_many_arguments)]
 fn draw_imgui_debug(
-    d: &RaylibDrawHandle<'_>,
+    ui: &ImguiUi,
     overlay_config: &mut DebugOverlayConfig,
     world_signals: &WorldSignals,
     input_state: &InputState,
@@ -1058,11 +1089,9 @@ fn draw_imgui_debug(
     game_mouse_pos: Vector2,
     mouse_world: Vector2,
 ) {
-    use raylib::imgui::RayImGUITrait;
-    let Some(ui) = d.begin_imgui() else { return };
-    draw_performance_panel(&ui, fps, world_time);
+    draw_performance_panel(ui, fps, world_time);
     draw_ecs_panel(
-        &ui,
+        ui,
         sprite_count,
         collider_count,
         position_count,
@@ -1073,12 +1102,12 @@ fn draw_imgui_debug(
         fonts.len(),
         shader_count,
     );
-    draw_camera_panel(&ui, camera, camera_follow);
-    draw_world_signals_panel(&ui, world_signals);
-    draw_input_panel(&ui, input_state);
-    draw_overlays_panel(&ui, overlay_config);
+    draw_camera_panel(ui, camera, camera_follow);
+    draw_world_signals_panel(ui, world_signals);
+    draw_input_panel(ui, input_state);
+    draw_overlays_panel(ui, overlay_config);
     draw_mouse_config_panel(
-        &ui,
+        ui,
         game_mouse_pos,
         mouse_world,
         screensize,

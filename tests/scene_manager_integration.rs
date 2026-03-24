@@ -13,7 +13,8 @@ use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::GameCtx;
 use aberredengine::systems::scene_dispatch::{
-    SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
+    GuiCallback, SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
+    scene_update_system,
 };
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
@@ -112,6 +113,7 @@ fn initial_scene_on_enter_called() {
             on_enter: menu_enter,
             on_update: Some(menu_update),
             on_exit: Some(menu_exit),
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -151,6 +153,7 @@ fn exit_called_before_enter_on_switch() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: Some(menu_exit),
+            gui_callback: None,
         },
     );
     sm.insert(
@@ -159,6 +162,7 @@ fn exit_called_before_enter_on_switch() {
             on_enter: level1_enter,
             on_update: Some(level1_update),
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -211,6 +215,7 @@ fn on_update_called_with_dt() {
             on_enter: menu_enter,
             on_update: Some(menu_update),
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -247,6 +252,7 @@ fn no_update_callback_does_not_panic() {
             on_enter: minimal_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -272,6 +278,7 @@ fn no_exit_callback_does_not_panic_on_switch() {
             on_enter: minimal_enter,
             on_update: None,
             on_exit: None, // no exit callback
+            gui_callback: None,
         },
     );
     sm.insert(
@@ -280,6 +287,7 @@ fn no_exit_callback_does_not_panic_on_switch() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -326,6 +334,7 @@ fn unknown_scene_name_does_not_panic() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: Some(menu_exit),
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -369,6 +378,7 @@ fn non_persistent_entities_despawned() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -425,6 +435,7 @@ fn active_scene_tracked_through_multiple_switches() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: Some(menu_exit),
+            gui_callback: None,
         },
     );
     sm.insert(
@@ -433,6 +444,7 @@ fn active_scene_tracked_through_multiple_switches() {
             on_enter: level1_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -498,6 +510,7 @@ fn scene_switch_poll_triggers_transition() {
             on_enter: menu_enter,
             on_update: Some(menu_update),
             on_exit: Some(menu_exit),
+            gui_callback: None,
         },
     );
     sm.insert(
@@ -506,6 +519,7 @@ fn scene_switch_poll_triggers_transition() {
             on_enter: level1_enter,
             on_update: Some(level1_update),
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -557,6 +571,7 @@ fn scene_switch_poll_noop_without_flag() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -590,6 +605,7 @@ fn non_persistent_entity_registration_cleared_on_scene_switch() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -633,6 +649,7 @@ fn persistent_entity_registration_survives_scene_switch() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -676,6 +693,7 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
             on_enter: menu_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -713,5 +731,81 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
     assert!(
         ws.get_entity("enemy").is_none(),
         "Non-persistent 'enemy' registration should be cleared"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 14: gui_callback fn pointer roundtrips through SceneManager unchanged
+// ---------------------------------------------------------------------------
+
+#[test]
+fn gui_callback_stored_and_retrieved_via_scene_manager() {
+    fn my_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals) {}
+
+    let mut sm = SceneManager::new();
+    sm.insert(
+        "editor",
+        SceneDescriptor {
+            on_enter: minimal_enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: Some(my_gui as GuiCallback),
+        },
+    );
+
+    let desc = sm.get("editor").expect("scene must be present");
+    let stored = desc.gui_callback.expect("gui_callback must be Some");
+    assert_eq!(
+        stored as *const () as usize,
+        my_gui as *const () as usize,
+        "fn pointer must survive insertion/retrieval unchanged"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 15: scene_enter_play with gui_callback — on_enter fires, callback accessible
+// ---------------------------------------------------------------------------
+
+#[test]
+fn scene_with_gui_callback_enters_correctly() {
+    clear_logs();
+    fn editor_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals) {}
+
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.initial_scene = Some("editor".to_string());
+    sm.insert(
+        "editor",
+        SceneDescriptor {
+            on_enter: menu_enter, // reuse menu_enter to check ENTER_LOG
+            on_update: None,
+            on_exit: None,
+            gui_callback: Some(editor_gui as GuiCallback),
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    world.run_system_once(scene_enter_play).unwrap();
+    world.flush();
+
+    // on_enter must have fired
+    ENTER_LOG.with(|v| {
+        assert_eq!(*v.borrow(), vec!["menu"], "on_enter must fire for scene with gui_callback");
+    });
+
+    // gui_callback must still be accessible on the active scene descriptor
+    let sm = world.resource::<SceneManager>();
+    let active = sm.active_scene.as_deref().expect("active_scene must be set");
+    let desc = sm.get(active).expect("descriptor must be present");
+    assert!(
+        desc.gui_callback.is_some(),
+        "gui_callback must be preserved on the descriptor after scene activation"
+    );
+    assert_eq!(
+        desc.gui_callback.unwrap() as *const () as usize,
+        editor_gui as *const () as usize,
+        "gui_callback fn pointer must be unchanged after scene activation"
     );
 }

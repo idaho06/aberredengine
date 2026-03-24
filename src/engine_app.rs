@@ -780,6 +780,7 @@ mod tests {
             on_enter: dummy_scene_enter,
             on_update: Some(dummy_scene_update),
             on_exit: None,
+            gui_callback: None,
         }
     }
 

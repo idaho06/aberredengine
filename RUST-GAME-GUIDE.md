@@ -108,14 +108,16 @@ fn main() {
         .title("My Game")
         .on_setup(scenes::load_assets)
         .add_scene("menu", SceneDescriptor {
-            on_enter:  scenes::menu::enter,
-            on_update: Some(scenes::menu::update),
-            on_exit:   None,
+            on_enter:     scenes::menu::enter,
+            on_update:    Some(scenes::menu::update),
+            on_exit:      None,
+            gui_callback: None,
         })
         .add_scene("level01", SceneDescriptor {
-            on_enter:  scenes::level01::enter,
-            on_update: Some(scenes::level01::update),
-            on_exit:   Some(scenes::level01::exit),
+            on_enter:     scenes::level01::enter,
+            on_update:    Some(scenes::level01::update),
+            on_exit:      Some(scenes::level01::exit),
+            gui_callback: None,
         })
         .initial_scene("menu")
         .run();
@@ -128,6 +130,7 @@ Scene callback signatures:
 ```rust
 use aberredengine::systems::GameCtx;
 use aberredengine::resources::input::InputState;
+use aberredengine::systems::scene_dispatch::GuiCallback; // only needed if using gui_callback
 
 // Called once when the scene becomes active
 fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -137,6 +140,10 @@ fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic *
 
 // Called once when leaving the scene (before entities are despawned)
 fn exit(ctx: &mut GameCtx) { /* cleanup */ }
+
+// Called every frame to draw ImGui widgets — Rust-only, optional
+// Signature must match: fn(&imgui::Ui, &mut WorldSignals)
+fn my_gui(ui: &imgui::Ui, signals: &mut WorldSignals) { /* draw widgets, write signals */ }
 ```
 
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
@@ -151,6 +158,52 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 ```
 
 > **Tip:** Scene transitions can be triggered from callbacks by setting the `"switch_scene"` flag on `WorldSignals` — the engine polls this automatically. For menu-driven transitions, `MenuAction::SetScene` handles the switch internally. See [Section 6.2](#62-triggering-scene-transitions) for details.
+
+### ImGui GUI callback (Rust-only)
+
+`gui_callback` lets a scene draw an ImGui overlay every frame — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
+
+The callback receives a `&imgui::Ui` handle for drawing widgets and a `&mut WorldSignals` for bidirectional communication with the scene's `on_update`:
+
+```rust
+use aberredengine::resources::worldsignals::WorldSignals;
+
+fn editor_gui(ui: &imgui::Ui, signals: &mut WorldSignals) {
+    // Read state written by on_update
+    let tool = signals.get_string("gui:state:active_tool")
+        .map(|s| s.as_str())
+        .unwrap_or("select");
+
+    if let Some(_mb) = ui.begin_main_menu_bar() {
+        if let Some(_file) = ui.begin_menu("File") {
+            if ui.menu_item("Save") {
+                signals.set_flag("gui:action:file:save"); // consumed by on_update next frame
+            }
+        }
+    }
+}
+
+fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+    ctx.world_signals.set_string("gui:state:active_tool", "place");
+
+    if ctx.world_signals.flags.remove("gui:action:file:save") {
+        // handle save
+    }
+}
+```
+
+Register it on the descriptor:
+
+```rust
+.add_scene("editor", SceneDescriptor {
+    on_enter:     editor_enter,
+    on_update:    Some(editor_update),
+    on_exit:      None,
+    gui_callback: Some(editor_gui),
+})
+```
+
+> **Convention:** prefix all GUI signal keys with `"gui:"` to avoid collisions with game signals. Use `"gui:action:<verb>"` for flags set by the GUI and consumed by `on_update`, and `"gui:state:<name>"` for values set by `on_update` and read by the GUI.
 
 ### Approach B — Raw hooks (single-scene or full manual control)
 

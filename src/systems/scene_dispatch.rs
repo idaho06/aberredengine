@@ -24,6 +24,7 @@
 //! - [`crate::resources::scenemanager::SceneManager`] — the registry resource
 //! - [`crate::engine_app::EngineBuilder::add_scene`] — builder method for registration
 
+use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
 use log::{error, info};
 use rustc_hash::FxHashSet;
@@ -51,6 +52,33 @@ pub type SceneUpdateFn = for<'w, 's> fn(&mut GameCtx<'w, 's>, f32, &InputState);
 /// Called when leaving a scene (cleanup before despawn).
 pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
+/// Called every frame to draw the scene's ImGui GUI.
+///
+/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets and a mutable
+/// reference to [`WorldSignals`] for reading current state and writing user
+/// actions back to game logic.
+///
+/// # Contract
+/// - Called from inside the render system's ImGui frame — after the game world
+///   is drawn, at window resolution (not render-target resolution).
+/// - Called whether or not debug mode (F11) is active.
+/// - All interaction results must be communicated via `WorldSignals`.
+///   Use the `"gui:"` prefix for all signal keys to avoid collisions.
+///
+/// # Example
+/// ```rust,ignore
+/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals) {
+///     if let Some(_mb) = ui.begin_main_menu_bar() {
+///         if let Some(_file) = ui.begin_menu("File") {
+///             if ui.menu_item("Save Map") {
+///                 signals.set_flag("gui:action:file:save");
+///             }
+///         }
+///     }
+/// }
+/// ```
+pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals);
+
 // ---------------------------------------------------------------------------
 // SceneDescriptor
 // ---------------------------------------------------------------------------
@@ -63,9 +91,10 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 ///
 /// ```ignore
 /// SceneDescriptor {
-///     on_enter:  menu::setup,
-///     on_update: Some(menu::update),
-///     on_exit:   None,
+///     on_enter:     menu::setup,
+///     on_update:    Some(menu::update),
+///     on_exit:      None,
+///     gui_callback: None,
 /// }
 /// ```
 #[derive(Clone)]
@@ -76,6 +105,10 @@ pub struct SceneDescriptor {
     pub on_update: Option<SceneUpdateFn>,
     /// Called once when leaving the scene (optional).
     pub on_exit: Option<SceneExitFn>,
+    /// Called every frame to draw ImGui GUI widgets (optional). Rust-only.
+    ///
+    /// See [`GuiCallback`] for the full contract.
+    pub gui_callback: Option<GuiCallback>,
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +268,7 @@ mod tests {
             on_enter: dummy_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         };
         assert!(desc.on_update.is_none());
         assert!(desc.on_exit.is_none());
@@ -249,6 +283,7 @@ mod tests {
             on_enter: enter,
             on_update: Some(update),
             on_exit: Some(exit),
+            gui_callback: None,
         };
         assert!(desc.on_update.is_some());
         assert!(desc.on_exit.is_some());
@@ -261,12 +296,59 @@ mod tests {
             on_enter: enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         };
         let cloned = desc.clone();
         // fn pointers are Copy — both point to the same function
         assert_eq!(
             desc.on_enter as *const () as usize,
             cloned.on_enter as *const () as usize
+        );
+    }
+
+    #[test]
+    fn gui_callback_none_by_default_intent() {
+        fn enter(_ctx: &mut GameCtx) {}
+        let desc = SceneDescriptor {
+            on_enter: enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: None,
+        };
+        assert!(desc.gui_callback.is_none());
+    }
+
+    #[test]
+    fn gui_callback_some_stores_fn_pointer() {
+        fn enter(_ctx: &mut GameCtx) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals) {}
+        let desc = SceneDescriptor {
+            on_enter: enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: Some(my_gui),
+        };
+        assert!(desc.gui_callback.is_some());
+        assert_eq!(
+            desc.gui_callback.unwrap() as *const () as usize,
+            my_gui as *const () as usize
+        );
+    }
+
+    #[test]
+    fn gui_callback_clone_preserves_fn_pointer() {
+        fn enter(_ctx: &mut GameCtx) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals) {}
+        let desc = SceneDescriptor {
+            on_enter: enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: Some(my_gui),
+        };
+        let cloned = desc.clone();
+        assert_eq!(
+            desc.gui_callback.unwrap() as *const () as usize,
+            cloned.gui_callback.unwrap() as *const () as usize
         );
     }
 }
