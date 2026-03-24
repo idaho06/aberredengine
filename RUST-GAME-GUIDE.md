@@ -278,16 +278,15 @@ use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::shaderstore::ShaderStore;
 use aberredengine::resources::animationstore::{AnimationStore, AnimationResource};
-use aberredengine::resources::camera2d::Camera2DRes;
 use aberredengine::events::audio::AudioCmd;
 use bevy_ecs::prelude::*;
 use raylib::prelude::*;
-use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 fn setup(
-    mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
+    mut tex_store: ResMut<TextureStore>,
+    mut anim_store: ResMut<AnimationStore>,
     mut raylib: RaylibAccess,
     mut fonts: NonSendMut<FontStore>,
     mut shaders: NonSendMut<ShaderStore>,
@@ -306,15 +305,15 @@ fn setup(
 |----------|------------------------|-------|
 | `FontStore` | Yes | No (`NonSendMut`) |
 | `ShaderStore` | Yes | No (`NonSendMut`) |
-| `TextureStore` | **No** — you create and insert it | Yes (`Res`/`ResMut`) |
-| `AnimationStore` | **No** — you create and insert it | Yes |
-| `Camera2DRes` | **No** — you create and insert it | Yes |
+| `TextureStore` | Yes — request via `ResMut<TextureStore>` | Yes (`Res`/`ResMut`) |
+| `AnimationStore` | Yes — request via `ResMut<AnimationStore>` | Yes |
+| `Camera2DRes` | Yes — pre-set to center offset; override via `ResMut<Camera2DRes>` | Yes |
 
 ### Textures
 
-```rust
-let mut tex_store = TextureStore::new();
+`TextureStore` is pre-inserted by the engine. Request it as `ResMut<TextureStore>` and call `.insert()` to populate it:
 
+```rust
 let tex = rl.load_texture(th, "assets/textures/player.png")
     .expect("Failed to load player texture");
 tex_store.insert("player", tex);
@@ -322,11 +321,9 @@ tex_store.insert("player", tex);
 let bg = rl.load_texture(th, "assets/textures/background.png")
     .expect("Failed to load background texture");
 tex_store.insert("background", bg);
-
-commands.insert_resource(tex_store);
 ```
 
-`TextureStore` is a simple `FxHashMap<String, Texture2D>` wrapper. Keys are arbitrary strings you'll reference later in `Sprite` components.
+Keys are arbitrary strings you'll reference later in `Sprite` components.
 
 ### Fonts
 
@@ -396,13 +393,9 @@ The first argument to `load_shader` is the vertex shader (`None` uses the defaul
 
 ### Animations
 
-Animations are pure data — no Raylib calls needed. Create an `AnimationStore` and populate it with `AnimationResource` entries:
+Animations are pure data — no Raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
 
 ```rust
-let mut anim_store = AnimationStore {
-    animations: FxHashMap::default(),
-};
-
 anim_store.animations.insert("player_idle".to_string(), AnimationResource {
     tex_key: Arc::from("player"),              // must match a TextureStore key
     position: Vector2 { x: 0.0, y: 0.0},      // base offset in spritesheet
@@ -422,16 +415,14 @@ anim_store.animations.insert("player_run".to_string(), AnimationResource {
     fps: 12.0,
     looped: true,
 });
-
-commands.insert_resource(anim_store);
 ```
 
 ### Camera
 
-Create and insert a `Camera2DRes` to set the initial camera position:
+`Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it:
 
 ```rust
-commands.insert_resource(Camera2DRes(Camera2D {
+camera.0 = Camera2D {
     target: Vector2 { x: 0.0, y: 0.0 },
     offset: Vector2 {
         x: rl.get_screen_width() as f32 * 0.5,
@@ -439,17 +430,18 @@ commands.insert_resource(Camera2DRes(Camera2D {
     },
     rotation: 0.0,
     zoom: 1.0,
-}));
+};
 ```
 
-The `offset` is typically half the render resolution to center the camera. `target` is the world position the camera looks at.
+`offset` is the screen point the camera looks through. `target` is the world position it looks at.
 
 ### Complete setup example
 
 ```rust
 fn setup(
-    mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
+    mut tex_store: ResMut<TextureStore>,
+    mut anim_store: ResMut<AnimationStore>,
     mut raylib: RaylibAccess,
     mut fonts: NonSendMut<FontStore>,
     mut shaders: NonSendMut<ShaderStore>,
@@ -457,22 +449,9 @@ fn setup(
 ) {
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
 
-    // Camera
-    commands.insert_resource(Camera2DRes(Camera2D {
-        target: Vector2 { x: 0.0, y: 0.0 },
-        offset: Vector2 {
-            x: rl.get_screen_width() as f32 * 0.5,
-            y: rl.get_screen_height() as f32 * 0.5,
-        },
-        rotation: 0.0,
-        zoom: 1.0,
-    }));
-
-    // Textures
-    let mut tex_store = TextureStore::new();
+    // Textures (TextureStore is pre-inserted — just populate it)
     let player_tex = rl.load_texture(th, "assets/textures/player.png").unwrap();
     tex_store.insert("player", player_tex);
-    commands.insert_resource(tex_store);
 
     // Fonts
     let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32);
@@ -489,8 +468,7 @@ fn setup(
         }
     }
 
-    // Animations
-    let mut anim_store = AnimationStore { animations: FxHashMap::default() };
+    // Animations (AnimationStore is pre-inserted — just populate it)
     anim_store.animations.insert("player_idle".into(), AnimationResource {
         tex_key: Arc::from("player"),
         position: Vector2 { x: 0.0, y: 0.0 },
@@ -500,9 +478,8 @@ fn setup(
         fps: 8.0,
         looped: true,
     });
-    commands.insert_resource(anim_store);
 
-    // Transition to Playing state
+    // Transition to Playing state — required, or the game stays in Setup forever
     next_state.set(GameStates::Playing);
 }
 ```

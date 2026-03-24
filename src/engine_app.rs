@@ -62,7 +62,11 @@ use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::animationstore::AnimationStore;
+use crate::resources::camera2d::Camera2DRes;
+use raylib::prelude::{Camera2D, Vector2};
 use crate::resources::shaderstore::ShaderStore;
+use crate::resources::texturestore::TextureStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
@@ -396,6 +400,17 @@ impl EngineBuilder {
         world.insert_resource(NextGameState::new());
         world.insert_non_send_resource(FontStore::new());
         world.insert_non_send_resource(ShaderStore::new());
+        world.insert_resource(TextureStore::new());
+        world.insert_resource(Camera2DRes(Camera2D {
+            target: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vector2 {
+                x: render_width as f32 * 0.5,
+                y: render_height as f32 * 0.5,
+            },
+            rotation: 0.0,
+            zoom: 1.0,
+        }));
+        world.insert_resource(AnimationStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DebugOverlayConfig::default());

@@ -11,7 +11,7 @@ use raylib::prelude::Vector2;
 use rustc_hash::FxHashMap;
 
 /// Central registry of reusable animation definitions keyed by string IDs.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct AnimationStore {
     pub animations: FxHashMap<String, AnimationResource>,
 }
