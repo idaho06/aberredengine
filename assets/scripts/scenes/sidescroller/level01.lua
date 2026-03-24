@@ -45,6 +45,8 @@ local function on_update_sidescroller_level01(input, dt)
     local player_id = engine.get_entity("player")
     if player_id then
         engine.entity_signal_clear_flag(player_id, "on_ground")
+        engine.entity_signal_clear_flag(player_id, "touching_wall")
+        engine.entity_signal_clear_flag(player_id, "touching_ceiling")
         -- engine.entity_signal_set_flag(player_id, "falling")
         -- engine.entity_set_force_enabled(player_id, "gravity", true)
         log_info("Cleared player on_ground signal at end of frame.")
@@ -70,16 +72,20 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_running_on_update(ctx, input, dt)
+    -- Transition to falling if we walked off a ledge
     if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
         return "falling"
     end
+    -- Check for attack input
     if input.digital.action_1.just_pressed then
         return "attack"
     end
+    -- Check for jump input
     if input.digital.action_2.just_pressed and not input.digital.down.pressed then
         engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
         return "jumping"
     end
+    -- Check for directional input; if no directional input, transition to idle
     if input.digital.left.pressed or input.digital.right.pressed then
         -- Keep running (or switch to walking if action_3 held)
         update_facing_direction(ctx.id, input)
@@ -337,24 +343,46 @@ end
 --- Collision ground/player callback.
 --- @param ctx CollisionContext
 local function collision_ground_player(ctx)
-    -- entity A is ground, entity B is player
+    -- entity ctx.a is ground, entity ctx.b is player
     -- check that the player side colliding with the ground is the bottom
     -- engine.log_info(utils.dump_value(ctx, 4))
 
     -- look for "bottom" in ctx.sides.b
     local player_on_ground = false
+    local player_touching_ceiling = false
+    local player_touching_wall_left = false
+    local player_touching_wall_right = false
 
-    -- for _, side in pairs(ctx.sides.b) do
-    --     if side == "bottom" then
-    --         player_on_ground = true
-    --         break
-    --     end -- TODO: If we have a collision, but it's not the bottom, then we are touching a wall or ceiling!
-    -- end
-
+    -- if player is touching the ground with their bottom side, and the ground is touching the player with its top side, then we are on the ground
     if utils.has_flag(ctx.sides.b, "bottom") and utils.has_flag(ctx.sides.a, "top") then
         player_on_ground = true
     end
 
+    -- if player is touching the ground with their top side, and the ground is touching the player with its bottom side, then we are touching the ceiling
+    if utils.has_flag(ctx.sides.b, "top") and utils.has_flag(ctx.sides.a, "bottom") then
+        player_touching_ceiling = true
+    end
+
+    -- if player is touching the ground with their left side, and the ground is touching the player with its right side, then we are touching a wall on the left
+    if utils.has_flag(ctx.sides.b, "left") and utils.has_flag(ctx.sides.a, "right") then
+        player_touching_wall_left = true
+    end
+
+    if utils.has_flag(ctx.sides.b, "right") and utils.has_flag(ctx.sides.a, "left") then
+        player_touching_wall_right = true
+    end
+
+    if player_touching_ceiling then
+        engine.collision_entity_set_velocity(ctx.b.id, ctx.b.vel.x, math.min(ctx.b.vel.y, 0))
+    end
+
+    if player_touching_wall_left or player_touching_wall_right then
+        if ctx.b.pos.y >= ctx.a.rect.y + ctx.a.rect.h / 4 then
+            -- only set "touching_wall" flag if player is above the midpoint of the ground, to prevent sticking when landing on the ground while moving into a walls
+            engine.collision_entity_signal_set_flag(ctx.b.id, "touching_wall")
+            engine.log_info("collision: setting player `touching_wall` signal")
+        end
+    end
 
     if player_on_ground then
         engine.collision_entity_signal_set_flag(ctx.b.id, "on_ground")
@@ -418,7 +446,7 @@ function M.spawn()
     engine.set_render_size(640, 360)
 
     -- Set camera
-    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0) -- target to 0,0, centered, no rotation, default zoom
+    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.5) -- target to 0,0, centered, no rotation, default zoom
 
     -- Set background color
     engine.set_background_color(20, 20, 30)
@@ -516,6 +544,8 @@ function M.spawn()
         :with_group("collision_rules")
         :with_lua_collision_rule("ground", "player", "collision_ground_player")
         :build()
+
+    engine.spawn_tiles("sidescroller_level01_tilemap")
 
     engine.log_info("Sidescroller level01 scene entities queued!")
 end

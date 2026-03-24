@@ -208,6 +208,8 @@ local function load_sidescroller()
         sprite_size * 0, sprite_size * 4, sprite_size, 0, 8, 10, false)
     engine.register_animation("sidescroller-char_red_ladder", "sidescroller-char_red_2_sheet",
         sprite_size * 0, sprite_size * 5, sprite_size, sprite_size, 8 + 2, 10, false)
+
+    engine.load_tilemap("sidescroller_level01_tilemap", "./assets/tilemaps/sidescroller_test01")
 end
 
 --- Load assets for the Bunnymark example
