@@ -142,8 +142,8 @@ fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic *
 fn exit(ctx: &mut GameCtx) { /* cleanup */ }
 
 // Called every frame to draw ImGui widgets — Rust-only, optional
-// Signature must match: fn(&imgui::Ui, &mut WorldSignals)
-fn my_gui(ui: &imgui::Ui, signals: &mut WorldSignals) { /* draw widgets, write signals */ }
+// Signature must match: fn(&aberredengine::imgui::Ui, &mut WorldSignals)
+fn my_gui(ui: &aberredengine::imgui::Ui, signals: &mut WorldSignals) { /* draw widgets, write signals */ }
 ```
 
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
@@ -163,9 +163,10 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 `gui_callback` lets a scene draw an ImGui overlay every frame — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
 
-The callback receives a `&imgui::Ui` handle for drawing widgets and a `&mut WorldSignals` for bidirectional communication with the scene's `on_update`:
+The callback receives a `&aberredengine::imgui::Ui` handle for drawing widgets and a `&mut WorldSignals` for bidirectional communication with the scene's `on_update`:
 
 ```rust
+use aberredengine::imgui;
 use aberredengine::resources::worldsignals::WorldSignals;
 
 fn editor_gui(ui: &imgui::Ui, signals: &mut WorldSignals) {
@@ -227,9 +228,9 @@ fn main() {
 Each hook is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
 
 ```rust
+use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::input::InputState;
-use bevy_ecs::prelude::*;
 
 fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
     if input.action_1.just_pressed {
@@ -278,9 +279,9 @@ use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::shaderstore::ShaderStore;
 use aberredengine::resources::animationstore::{AnimationStore, AnimationResource};
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::raylib::prelude::*;
 use aberredengine::events::audio::AudioCmd;
-use bevy_ecs::prelude::*;
-use raylib::prelude::*;
 use std::sync::Arc;
 
 fn setup(
@@ -330,7 +331,7 @@ Keys are arbitrary strings you'll reference later in `Sprite` components.
 Fonts require `NonSendMut<FontStore>` (already pre-inserted). After loading, you **must** generate mipmaps and set anisotropic filtering to avoid blurry text at non-native sizes.
 
 ```rust
-use raylib::ffi::{self, TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X};
+use aberredengine::raylib::ffi::{self, TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X};
 
 /// Load a font with mipmaps and anisotropic filtering.
 fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
@@ -499,8 +500,8 @@ use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
 use aberredengine::components::group::Group;
+use aberredengine::raylib::prelude::*;
 use std::sync::Arc;
-use raylib::prelude::*;
 
 ctx.commands.spawn((
     MapPosition::new(100.0, 200.0),
@@ -617,7 +618,7 @@ This replaces the older concrete Rust types such as `TweenPosition`, `TweenRotat
 ```rust
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use raylib::prelude::Vector2;
+use aberredengine::raylib::prelude::Vector2;
 
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
@@ -1034,8 +1035,8 @@ fn ball_brick_collision(
 **Constructor:**
 
 ```rust
+use aberredengine::raylib::prelude::*;
 use aberredengine::components::menu::{Menu, MenuActions, MenuAction};
-use raylib::prelude::*;
 
 let menu = Menu::new(
     &[("start", "Start Game"), ("options", "Options"), ("quit", "Quit")],
