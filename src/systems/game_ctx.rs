@@ -42,6 +42,7 @@ use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -98,4 +99,6 @@ pub struct GameCtx<'w, 's> {
     pub texture_store: Res<'w, TextureStore>,
     /// Read-only access to game configuration (render size, window, FPS, etc.).
     pub config: Res<'w, GameConfig>,
+    /// Mutable access to the post-process shader chain and uniforms.
+    pub post_process: ResMut<'w, PostProcessShader>,
 }

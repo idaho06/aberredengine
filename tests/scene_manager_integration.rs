@@ -5,6 +5,7 @@
 //! `EngineBuilder` fire as expected.
 
 use aberredengine::resources::gameconfig::GameConfig;
+use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
 use aberredengine::resources::scenemanager::SceneManager;
@@ -38,6 +39,7 @@ fn setup_world() -> World {
     world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(InputState::default());
     world.insert_resource(GameConfig::default());
+    world.init_resource::<PostProcessShader>();
     world
 }
 

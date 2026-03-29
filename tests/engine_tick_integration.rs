@@ -37,6 +37,7 @@ use aberredengine::resources::input::InputState;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::gameconfig::GameConfig;
+use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
@@ -80,6 +81,7 @@ fn make_world(delta: f32) -> World {
     world.init_resource::<Messages<AudioCmd>>();
     world.init_resource::<TextureStore>();
     world.insert_resource(GameConfig::default());
+    world.init_resource::<PostProcessShader>();
     world
 }
 
