@@ -41,6 +41,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
+use crate::resources::gameconfig::GameConfig;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -95,4 +96,6 @@ pub struct GameCtx<'w, 's> {
     pub world_time: Res<'w, WorldTime>,
     /// Read-only access to loaded textures.
     pub texture_store: Res<'w, TextureStore>,
+    /// Read-only access to game configuration (render size, window, FPS, etc.).
+    pub config: Res<'w, GameConfig>,
 }

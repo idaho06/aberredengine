@@ -6,6 +6,7 @@
 use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::menu::MenuSelectionEvent;
+use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
@@ -29,6 +30,7 @@ fn setup_world() -> World {
     world.insert_resource(SystemsStore::new());
     world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(TextureStore::default());
+    world.insert_resource(GameConfig::default());
     #[cfg(feature = "lua")]
     world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world

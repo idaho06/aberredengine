@@ -126,8 +126,9 @@ pub struct SceneDescriptor {
 /// 3. Clear tracked groups and group counts
 /// 4. Read `WorldSignals["scene"]` for the target scene name
 /// 5. Call `on_exit` on the previous scene (if any)
-/// 6. Update `SceneManager.active_scene`
-/// 7. Call `on_enter` on the new scene
+/// 6. Write previous scene name to `WorldSignals["previous_scene"]` (if any)
+/// 7. Update `SceneManager.active_scene`
+/// 8. Call `on_enter` on the new scene
 pub fn scene_switch_system(
     mut ctx: GameCtx,
     entities_to_clean: Query<Entity, Without<Persistent>>,
@@ -136,6 +137,8 @@ pub fn scene_switch_system(
     mut scene_manager: ResMut<SceneManager>,
 ) {
     info!("scene_switch_system: System called!");
+
+    let prev_scene = scene_manager.active_scene.clone();
 
     ctx.audio.write(AudioCmd::StopAllMusic);
 
@@ -158,8 +161,8 @@ pub fn scene_switch_system(
         .unwrap_or_else(|| "menu".to_string());
 
     // Call on_exit for the previous scene
-    if let Some(prev_name) = scene_manager.active_scene.clone()
-        && let Some(descriptor) = scene_manager.get(&prev_name)
+    if let Some(ref prev_name) = prev_scene
+        && let Some(descriptor) = scene_manager.get(prev_name)
         && let Some(on_exit) = descriptor.on_exit
     {
         on_exit(&mut ctx);
@@ -168,6 +171,9 @@ pub fn scene_switch_system(
     // Look up and call on_enter for the new scene
     if let Some(descriptor) = scene_manager.get(&scene_name) {
         let on_enter = descriptor.on_enter;
+        if let Some(ref prev) = prev_scene {
+            ctx.world_signals.set_string("previous_scene", prev.as_str());
+        }
         scene_manager.active_scene = Some(scene_name.clone());
         on_enter(&mut ctx);
         info!("scene_switch_system: Entered scene '{}'", scene_name);
