@@ -399,8 +399,8 @@ enum SourceBuffer {
 /// - Uses `Camera2D` for world rendering, then overlays UI/debug in screen space.
 /// - When `DebugMode` is present, draws additional information (entity counts,
 ///   camera parameters, and optional collider boxes/signals).
-/// - When `DebugMode` is present, draws additional information (entity counts,
-///   camera parameters, and optional collider boxes/signals).
+/// - When the active scene's `gui_callback` is set, opens an ImGui frame and
+///   calls it every frame, independent of debug mode.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
