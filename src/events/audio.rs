@@ -46,8 +46,6 @@
 //! For the concrete bridge and polling systems, see
 //! - [`crate::resources::audio`]: channel resources made available to systems
 //! - [`crate::systems::audio`]: audio thread implementation and event polling
-#![allow(dead_code, unused_variables)]
-
 use bevy_ecs::message::Message;
 
 /// Commands sent *to* the audio thread
@@ -89,6 +87,7 @@ pub enum AudioCmd {
 }
 
 /// Events sent *back* from the audio thread
+#[allow(dead_code)] // variants are forward-looking API; not all are consumed by game code yet
 #[derive(Message, Debug, Clone)]
 pub enum AudioMessage {
     /// Music with `id` successfully loaded.
