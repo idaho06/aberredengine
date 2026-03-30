@@ -260,6 +260,13 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                         error!(target: "audio", "fx play pitched failed id='{}' reason='not loaded'", id);
                     }
                 }
+                AudioCmd::StopAllFx => {
+                    debug!(target: "audio", "fx stop all");
+                    for alias in active_aliases.drain(..) {
+                        unsafe { ffi::StopSound(alias) };
+                        unsafe { ffi::UnloadSoundAlias(alias) };
+                    }
+                }
                 AudioCmd::UnloadFx { id } => {
                     // Individual unload is a no-op with SoundAlias approach
                     // Sounds are kept loaded for the lifetime of the scene

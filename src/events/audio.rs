@@ -78,6 +78,8 @@ pub enum AudioCmd {
     PlayFx { id: String },
     /// Play a previously loaded sound effect `id` with pitch override (1.0 is base level).
     PlayFxPitched { id: String, pitch: f32 },
+    /// Stop all currently playing sound effects without unloading them.
+    StopAllFx,
     /// Unload a previously loaded sound effect `id`.
     UnloadFx { id: String },
     /// Unload all sound effects.

@@ -19,22 +19,22 @@ mod entity_cmd;
 mod parse;
 mod spawn_cmd;
 
+pub(crate) use context::build_entity_context;
 pub use entity_cmd::process_entity_commands;
 pub use spawn_cmd::{process_clone_command, process_spawn_command};
-pub(crate) use context::build_entity_context;
 
+use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use bevy_ecs::hierarchy::ChildOf;
 use raylib::prelude::{Camera2D, Color, Vector2};
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::phase::Phase;
 use crate::components::luatimer::LuaTimer;
 use crate::components::mapposition::MapPosition;
+use crate::components::phase::Phase;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -133,7 +133,7 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
             audio_cmd_writer.write(AudioCmd::StopAllMusic);
         }
         AudioLuaCmd::StopAllSounds => {
-            audio_cmd_writer.write(AudioCmd::UnloadAllFx);
+            audio_cmd_writer.write(AudioCmd::StopAllFx);
         }
     }
 }
@@ -522,5 +522,37 @@ pub fn process_animation_command(
                 id, frame_count, fps
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::process_audio_command;
+    use crate::events::audio::AudioCmd;
+    use crate::resources::lua_runtime::AudioLuaCmd;
+    use bevy_ecs::message::Messages;
+    use bevy_ecs::prelude::{MessageReader, MessageWriter, World};
+    use bevy_ecs::system::SystemState;
+
+    #[test]
+    fn stop_all_sounds_maps_to_stop_all_fx() {
+        let mut world = World::new();
+        world.insert_resource(Messages::<AudioCmd>::default());
+
+        let mut system_state = SystemState::<MessageWriter<AudioCmd>>::new(&mut world);
+        {
+            let mut writer = system_state.get_mut(&mut world);
+            process_audio_command(&mut writer, AudioLuaCmd::StopAllSounds);
+        }
+        system_state.apply(&mut world);
+
+        world.resource_mut::<Messages<AudioCmd>>().update();
+
+        let mut reader_state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
+        let mut reader = reader_state.get_mut(&mut world);
+        let cmds: Vec<_> = reader.read().collect();
+
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], AudioCmd::StopAllFx));
     }
 }
