@@ -1,10 +1,39 @@
+//! Shared phase lifecycle runner used by both the Rust and Lua phase systems.
+//!
+//! [`run_phase_callbacks`] owns the backend-agnostic control flow for
+//! [`Phase<C>`](crate::components::phase::Phase) state machines. The concrete
+//! systems supply a [`PhaseRunner`] implementation that maps the three lifecycle
+//! stages to the appropriate backend: `RustPhaseRunner` calls Rust function
+//! pointers directly, while `LuaPhaseRunner` resolves named Lua callbacks and
+//! runs them through the scripting runtime.
+
 use bevy_ecs::prelude::*;
 
 use crate::components::phase::Phase;
 
+/// Backend-specific lifecycle dispatcher for the shared phase update loop.
+///
+/// `C` is the callback payload stored inside [`Phase<C>`]. In the Rust phase
+/// path this is [`PhaseCallbackFns`](crate::components::phase::PhaseCallbackFns),
+/// while the Lua phase path uses
+/// [`PhaseCallbacks`](crate::components::luaphase::PhaseCallbacks).
+///
+/// [`call_enter`](Self::call_enter), [`call_update`](Self::call_update), and
+/// [`call_exit`](Self::call_exit) map directly to the three phase lifecycle
+/// events. Returning `Some(next_phase)` from `call_enter` or `call_update`
+/// requests an immediate transition to `next_phase`; returning `None` leaves the
+/// entity in its current phase.
 pub(crate) trait PhaseRunner<C> {
+    /// Run the current phase's enter callback.
+    ///
+    /// Returning `Some(phase_name)` requests that the entity transition to that
+    /// phase as soon as callback-requested transitions are drained.
     fn call_enter(&mut self, entity: Entity, phase: &Phase<C>, callbacks: &C) -> Option<String>;
 
+    /// Run the current phase's per-frame update callback.
+    ///
+    /// Returning `Some(phase_name)` requests that the entity transition to that
+    /// phase as soon as callback-requested transitions are drained.
     fn call_update(
         &mut self,
         entity: Entity,
@@ -13,9 +42,24 @@ pub(crate) trait PhaseRunner<C> {
         delta: f32,
     ) -> Option<String>;
 
+    /// Run the previous phase's exit callback after a transition swap.
     fn call_exit(&mut self, entity: Entity, phase: &Phase<C>, callbacks: &C);
 }
 
+/// Run one frame of shared phase lifecycle processing for every [`Phase<C>`] entity.
+///
+/// For each entity this function:
+/// 1. Fires `on_enter` if `needs_enter_callback` is set.
+/// 2. Applies any already-queued `phase.next` transition, including `on_exit` for
+///    the old phase and `on_enter` for the new one.
+/// 3. Runs the current phase's `on_update` callback.
+///
+/// Any phase name returned by any of the above callbacks is collected into
+/// `callback_transitions` for deferred application via [`apply_callback_transitions`].
+///
+/// `entity_scratch` pre-collects entity IDs before the mutation-heavy loop so the
+/// query is not iterated while individual entities are being re-fetched and
+/// mutated.
 pub(crate) fn run_phase_callbacks<C, R>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     delta: f32,
@@ -29,6 +73,8 @@ pub(crate) fn run_phase_callbacks<C, R>(
     entity_scratch.extend(phase_query.iter().map(|(entity, _)| entity));
 
     for entity in entity_scratch.iter().copied() {
+        // Borrow isolation: each `get()` scope must end before a later `get_mut()`
+        // on the same query, so immutable reads are wrapped in short blocks.
         let needs_enter = {
             let Ok((_, phase)) = phase_query.get(entity) else {
                 continue;
@@ -115,6 +161,11 @@ pub(crate) fn run_phase_callbacks<C, R>(
     }
 }
 
+/// Store a callback-requested phase change in [`Phase::next`](crate::components::phase::Phase::next).
+///
+/// Callback returns are not applied inline inside [`run_phase_callbacks`]; they are
+/// queued first so the current entity-loop pass finishes before the transition is
+/// picked up by the next phase-processing step.
 pub(crate) fn queue_phase_transition<C>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     entity: Entity,
@@ -127,6 +178,11 @@ pub(crate) fn queue_phase_transition<C>(
     }
 }
 
+/// Drain callback-requested transitions after the entity loop completes.
+///
+/// Deferring this step avoids mutating phase state in the middle of
+/// [`run_phase_callbacks`], which would otherwise make callback-triggered
+/// transitions re-enter the lifecycle flow during the same pass.
 pub(crate) fn apply_callback_transitions<C>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     callback_transitions: &mut Vec<(Entity, String)>,
