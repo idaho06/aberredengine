@@ -53,8 +53,24 @@ pub enum AudioLuaCmd {
     PlaySoundPitched { id: String, pitch: f32 },
     /// Stop all music
     StopAllMusic,
+    /// Stop a specific music track
+    StopMusic { id: String },
+    /// Pause a specific music track
+    PauseMusic { id: String },
+    /// Resume a previously paused music track
+    ResumeMusic { id: String },
+    /// Set the volume of a specific music track (0.0 – 1.0)
+    SetMusicVolume { id: String, vol: f32 },
+    /// Unload a specific music track from memory
+    UnloadMusic { id: String },
+    /// Unload all music tracks from memory
+    UnloadAllMusic,
     /// Stop all sounds
     StopAllSounds,
+    /// Unload a specific sound effect from memory
+    UnloadSound { id: String },
+    /// Unload all sound effects from memory
+    UnloadAllSounds,
 }
 
 /// Commands to modify WorldSignals from Lua.

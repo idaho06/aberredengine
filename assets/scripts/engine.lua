@@ -327,6 +327,10 @@ function engine.spawn() end
 
 -- ==================== Audio Playback ====================
 
+---Pause a specific music track
+---@param id string
+function engine.pause_music(id) end
+
 ---Play music track
 ---@param id string
 ---@param looped boolean
@@ -341,11 +345,38 @@ function engine.play_sound(id) end
 ---@param pitch number
 function engine.play_sound_pitched(id, pitch) end
 
+---Resume a previously paused music track
+---@param id string
+function engine.resume_music(id) end
+
+---Set the volume of a music track (0.0 to 1.0)
+---@param id string
+---@param vol number
+function engine.set_music_volume(id, vol) end
+
 ---Stop all playing music
 function engine.stop_all_music() end
 
 ---Stop all playing sounds
 function engine.stop_all_sounds() end
+
+---Stop a specific music track
+---@param id string
+function engine.stop_music(id) end
+
+---Unload all music tracks from memory
+function engine.unload_all_music() end
+
+---Unload all sound effects from memory
+function engine.unload_all_sounds() end
+
+---Unload a specific music track from memory
+---@param id string
+function engine.unload_music(id) end
+
+---Unload a specific sound effect from memory
+---@param id string
+function engine.unload_sound(id) end
 
 -- ==================== World Signals ====================
 

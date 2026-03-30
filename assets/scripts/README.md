@@ -780,6 +780,71 @@ Stop all currently playing sound effects.
 engine.stop_all_sounds()
 ```
 
+### `engine.stop_music(id)`
+
+Stop a specific music track and reset its stream position.
+
+```lua
+engine.stop_music("menu")
+```
+
+### `engine.pause_music(id)`
+
+Pause a specific music track. Use `engine.resume_music()` to continue from the same position.
+
+```lua
+engine.pause_music("menu")
+```
+
+### `engine.resume_music(id)`
+
+Resume a previously paused music track.
+
+```lua
+engine.resume_music("menu")
+```
+
+### `engine.set_music_volume(id, vol)`
+
+Set the volume of a music track. `vol` is in the `[0.0, 1.0]` range.
+
+```lua
+engine.set_music_volume("menu", 0.5)    -- Half volume
+engine.set_music_volume("boss", 1.0)    -- Full volume
+```
+
+### `engine.unload_music(id)`
+
+Unload a specific music track from memory. Call this when the track is no longer needed to free resources.
+
+```lua
+engine.unload_music("intro")
+```
+
+### `engine.unload_all_music()`
+
+Unload all music tracks from memory.
+
+```lua
+engine.unload_all_music()
+```
+
+### `engine.unload_sound(id)`
+
+Unload a specific sound effect from memory.
+
+```lua
+engine.unload_sound("explosion")
+```
+
+### `engine.unload_all_sounds()`
+
+Unload all sound effects from memory.
+
+```lua
+engine.unload_all_sounds()
+```
+
 ---
 
 ## Entity Spawning

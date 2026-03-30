@@ -48,8 +48,32 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
         AudioLuaCmd::StopAllMusic => {
             audio_cmd_writer.write(AudioCmd::StopAllMusic);
         }
+        AudioLuaCmd::StopMusic { id } => {
+            audio_cmd_writer.write(AudioCmd::StopMusic { id });
+        }
+        AudioLuaCmd::PauseMusic { id } => {
+            audio_cmd_writer.write(AudioCmd::PauseMusic { id });
+        }
+        AudioLuaCmd::ResumeMusic { id } => {
+            audio_cmd_writer.write(AudioCmd::ResumeMusic { id });
+        }
+        AudioLuaCmd::SetMusicVolume { id, vol } => {
+            audio_cmd_writer.write(AudioCmd::VolumeMusic { id, vol });
+        }
+        AudioLuaCmd::UnloadMusic { id } => {
+            audio_cmd_writer.write(AudioCmd::UnloadMusic { id });
+        }
+        AudioLuaCmd::UnloadAllMusic => {
+            audio_cmd_writer.write(AudioCmd::UnloadAllMusic);
+        }
         AudioLuaCmd::StopAllSounds => {
             audio_cmd_writer.write(AudioCmd::StopAllFx);
+        }
+        AudioLuaCmd::UnloadSound { id } => {
+            audio_cmd_writer.write(AudioCmd::UnloadFx { id });
+        }
+        AudioLuaCmd::UnloadAllSounds => {
+            audio_cmd_writer.write(AudioCmd::UnloadAllFx);
         }
     }
 }
