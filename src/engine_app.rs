@@ -143,6 +143,7 @@ type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule)>;
 //
 // Each closure receives the schedule or world and can add systems with full
 // ordering constraints. The builder calls them after building the core schedule.
+#[must_use = "EngineBuilder does nothing until .run() is called"]
 pub struct EngineBuilder {
     config_path: PathBuf,
     title_override: Option<String>,
