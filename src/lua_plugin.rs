@@ -68,7 +68,7 @@ use log::{error, info};
 use raylib::ffi;
 use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
 #[derive(SystemParam)]
@@ -249,11 +249,9 @@ pub fn setup(
     commands.insert_resource(tilemaps_store);
 
     // Process animation registration commands from Lua
-    let mut anim_store = AnimationStore {
-        animations: FxHashMap::default(),
-    };
+    let mut anim_store = AnimationStore::default();
     for cmd in lua_runtime.drain_animation_commands() {
-        process_animation_command(&mut anim_store.animations, cmd);
+        process_animation_command(&mut anim_store, cmd);
     }
     commands.insert_resource(anim_store);
 

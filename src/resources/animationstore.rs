@@ -16,6 +16,13 @@ pub struct AnimationStore {
     pub animations: FxHashMap<String, AnimationResource>,
 }
 
+impl AnimationStore {
+    /// Insert or replace an animation definition with a specific key.
+    pub fn insert(&mut self, key: impl Into<String>, animation: AnimationResource) {
+        self.animations.insert(key.into(), animation);
+    }
+}
+
 /// Immutable data describing a sprite-sheet or positional animation.
 ///
 /// Fields are intentionally simple to keep the format engine-agnostic. The

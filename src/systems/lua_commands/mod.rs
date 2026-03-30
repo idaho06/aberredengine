@@ -44,7 +44,7 @@ use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 
 use crate::events::audio::AudioCmd;
-use crate::resources::animationstore::AnimationResource;
+use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
@@ -489,10 +489,7 @@ pub fn process_input_command(cmd: InputCmd, bindings: &mut InputBindings) {
 }
 
 /// Process a single animation registration command from Lua.
-pub fn process_animation_command(
-    anim_store: &mut rustc_hash::FxHashMap<String, AnimationResource>,
-    cmd: AnimationCmd,
-) {
+pub fn process_animation_command(anim_store: &mut AnimationStore, cmd: AnimationCmd) {
     match cmd {
         AnimationCmd::RegisterAnimation {
             id,
@@ -527,12 +524,14 @@ pub fn process_animation_command(
 
 #[cfg(test)]
 mod tests {
-    use super::process_audio_command;
+    use super::{process_animation_command, process_audio_command};
     use crate::events::audio::AudioCmd;
-    use crate::resources::lua_runtime::AudioLuaCmd;
+    use crate::resources::animationstore::AnimationStore;
+    use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd};
     use bevy_ecs::message::Messages;
     use bevy_ecs::prelude::{MessageReader, MessageWriter, World};
     use bevy_ecs::system::SystemState;
+    use raylib::prelude::Vector2;
 
     #[test]
     fn stop_all_sounds_maps_to_stop_all_fx() {
@@ -554,5 +553,38 @@ mod tests {
 
         assert_eq!(cmds.len(), 1);
         assert!(matches!(cmds[0], AudioCmd::StopAllFx));
+    }
+
+    #[test]
+    fn register_animation_uses_animationstore_abstraction() {
+        let mut anim_store = AnimationStore::default();
+
+        process_animation_command(
+            &mut anim_store,
+            AnimationCmd::RegisterAnimation {
+                id: "walk".to_string(),
+                tex_key: "player_walk".to_string(),
+                pos_x: 12.0,
+                pos_y: 24.0,
+                horizontal_displacement: 16.0,
+                vertical_displacement: 32.0,
+                frame_count: 6,
+                fps: 10.0,
+                looped: true,
+            },
+        );
+
+        let animation = anim_store
+            .animations
+            .get("walk")
+            .expect("animation should be registered in the store");
+
+        assert_eq!(animation.tex_key.as_ref(), "player_walk");
+        assert_eq!(animation.position, Vector2 { x: 12.0, y: 24.0 });
+        assert_eq!(animation.horizontal_displacement, 16.0);
+        assert_eq!(animation.vertical_displacement, 32.0);
+        assert_eq!(animation.frame_count, 6);
+        assert_eq!(animation.fps, 10.0);
+        assert!(animation.looped);
     }
 }
