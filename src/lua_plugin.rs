@@ -29,14 +29,8 @@
 //! [`CollisionRule`](crate::components::collision::CollisionRule) components define how
 //! entities interact: ball-wall bounce, ball-player reflection, ball-brick destruction.
 
-use std::sync::Arc;
-
-use crate::components::group::Group;
 use crate::components::luaphase::LuaPhase;
-use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
-use crate::components::sprite::Sprite;
-use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
@@ -120,71 +114,6 @@ fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Te
     let tilemap: Tilemap =
         serde_json::from_str(&json_string).expect("Failed to parse tilemap JSON");
     (texture, tilemap)
-}
-
-/// Spawn tiles from a Tilemap resource into the ECS world.
-fn spawn_tiles(
-    commands: &mut Commands,
-    tilemap_tex_key: impl Into<String>,
-    tex_width: i32, // We assume square tiles, so only width is needed
-    tilemap: &Tilemap,
-) {
-    let tilemap_tex_key: Arc<str> = Arc::from(tilemap_tex_key.into());
-
-    // texture size in pixels
-    let tex_w = tex_width as f32;
-
-    let tile_size = tilemap.tile_size as f32;
-
-    // how many tiles per row in the texture
-    let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
-
-    let layer_count = tilemap.layers.len() as f32;
-    // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
-    for (layer_index, layer) in tilemap.layers.iter().enumerate() {
-        let z = -(layer_count - (layer_index as f32));
-
-        for pos in layer.positions.iter() {
-            // world position = tile coords * tile_size
-            let wx = pos.x as f32 * tile_size;
-            let wy = pos.y as f32 * tile_size;
-
-            // compute sprite offset in the tileset texture based on id (left-to-right, top-to-bottom)
-            // id is assumed zero-based index
-            let id = pos.id;
-            let col = id % tiles_per_row;
-            let row = id / tiles_per_row;
-
-            let offset_x = col as f32 * tile_size;
-            let offset_y = row as f32 * tile_size;
-
-            // Sprite origin is the center of the sprite (in pixels)
-            let origin = Vector2 {
-                //x: tile_size * 0.5,
-                //y: tile_size * 0.5,
-                x: 0.0,
-                y: 0.0,
-            };
-
-            commands.spawn((
-                Group::new("tiles"),
-                MapPosition::new(wx, wy),
-                ZIndex(z),
-                Sprite {
-                    tex_key: tilemap_tex_key.clone(),
-                    width: tile_size,
-                    height: tile_size,
-                    offset: Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    origin,
-                    flip_h: false,
-                    flip_v: false,
-                },
-            ));
-        }
-    }
 }
 
 // This function is meant to load all resources
@@ -511,7 +440,7 @@ pub fn switch_scene(
     }
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
     for cmd in lua_runtime.drain_tilemap_commands() {
-        process_tilemap_command(&mut commands, cmd, &tex_store, &tilemaps_store, spawn_tiles);
+        process_tilemap_command(&mut commands, cmd, &tex_store, &tilemaps_store);
     }
 
     // Refresh the config cache after the drain may have applied GameConfigCmds.

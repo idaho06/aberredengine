@@ -174,7 +174,7 @@ pub struct RenderQueries<'w, 's> {
 
 /// Extra resources needed for the imgui debug panels.
 #[derive(SystemParam)]
-pub struct DebugResources<'w> {
+pub(crate) struct DebugResources<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
     pub input_state: Res<'w, InputState>,
     pub camera_follow: Res<'w, CameraFollowConfig>,
@@ -201,6 +201,7 @@ pub(super) enum SourceBuffer {
 ///   camera parameters, and optional collider boxes/signals).
 /// - When the active scene's `gui_callback` is set, opens an ImGui frame and
 ///   calls it every frame, independent of debug mode.
+#[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
