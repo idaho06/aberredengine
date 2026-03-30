@@ -622,6 +622,10 @@ impl EngineBuilder {
             let dt = world
                 .non_send_resource::<raylib::RaylibHandle>()
                 .get_frame_time();
+
+            // update_world_time is called directly (not via the schedule) because
+            // WorldTime::delta must be available to all systems in the update pass.
+            // Scheduling it would require ordering constraints on every delta-reading system.
             update_world_time(world, dt);
 
             update.run(world);
