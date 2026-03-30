@@ -570,15 +570,14 @@ impl EngineBuilder {
                     .after(phase_system),
             );
             update.add_systems(update_lua_timers);
-        }
-
-        #[cfg(feature = "lua")]
-        if !has_lua {
+        } else {
             update.add_systems(animation_controller.after(phase_system));
         }
 
         #[cfg(not(feature = "lua"))]
         {
+            // `has_lua` only exists to keep the build_schedule signature uniform
+            // across feature combinations.
             let _ = has_lua;
             update.add_systems(animation_controller.after(phase_system));
         }
@@ -758,6 +757,48 @@ mod tests {
         assert!(builder.enter_play_hook.is_some());
         assert!(builder.update_hook.is_some());
         assert!(builder.switch_scene_hook.is_some());
+    }
+
+    #[cfg(feature = "lua")]
+    #[test]
+    fn test_build_schedule_without_lua_runtime_omits_lua_only_systems() {
+        let mut world = World::new();
+        let schedule = EngineBuilder::build_schedule(None, &mut world, false, false);
+        let system_type_ids: Vec<_> = schedule
+            .systems()
+            .expect("build_schedule initializes the schedule")
+            .map(|(_, system)| system.type_id())
+            .collect();
+        let phase_system_type = IntoSystem::into_system(phase_system).type_id();
+        let animation_controller_type = IntoSystem::into_system(animation_controller).type_id();
+        let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).type_id();
+        let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).type_id();
+
+        let phase_index = system_type_ids
+            .iter()
+            .position(|type_id| *type_id == phase_system_type)
+            .expect("phase_system should be present");
+        let animation_controller_index = system_type_ids
+            .iter()
+            .position(|type_id| *type_id == animation_controller_type)
+            .expect("animation_controller should be present");
+
+        assert!(
+            animation_controller_index > phase_index,
+            "animation_controller should still run after phase_system"
+        );
+        assert!(
+            !system_type_ids
+                .iter()
+                .any(|type_id| *type_id == lua_phase_system_type),
+            "lua_phase_system should be absent when has_lua is false"
+        );
+        assert!(
+            !system_type_ids
+                .iter()
+                .any(|type_id| *type_id == update_lua_timers_type),
+            "update_lua_timers should be absent when has_lua is false"
+        );
     }
 
     #[test]
