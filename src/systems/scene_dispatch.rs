@@ -172,7 +172,8 @@ pub fn scene_switch_system(
     if let Some(descriptor) = scene_manager.get(&scene_name) {
         let on_enter = descriptor.on_enter;
         if let Some(ref prev) = prev_scene {
-            ctx.world_signals.set_string("previous_scene", prev.as_str());
+            ctx.world_signals
+                .set_string("previous_scene", prev.as_str());
         }
         scene_manager.active_scene = Some(scene_name.clone());
         on_enter(&mut ctx);

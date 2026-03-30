@@ -219,8 +219,9 @@ mod tests {
 
     #[test]
     fn test_tween_map_position_with_easing() {
-        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
-            .with_easing(Easing::QuadIn);
+        let tw: Tween<MapPosition> =
+            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
+                .with_easing(Easing::QuadIn);
 
         assert!(matches!(tw.easing, Easing::QuadIn));
     }
@@ -236,8 +237,8 @@ mod tests {
 
     #[test]
     fn test_tween_map_position_with_backwards() {
-        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 2.0)
-            .with_backwards();
+        let tw: Tween<MapPosition> =
+            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 2.0).with_backwards();
 
         assert!(approx_eq(tw.time, 2.0));
         assert!(!tw.forward);
@@ -245,10 +246,11 @@ mod tests {
 
     #[test]
     fn test_tween_map_position_builder_chaining() {
-        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
-            .with_easing(Easing::CubicOut)
-            .with_loop_mode(LoopMode::Loop)
-            .with_backwards();
+        let tw: Tween<MapPosition> =
+            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
+                .with_easing(Easing::CubicOut)
+                .with_loop_mode(LoopMode::Loop)
+                .with_backwards();
 
         assert!(matches!(tw.easing, Easing::CubicOut));
         assert!(matches!(tw.loop_mode, LoopMode::Loop));
@@ -322,16 +324,16 @@ mod tests {
 
     #[test]
     fn test_tween_scale_with_easing() {
-        let tw: Tween<Scale> = Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0)
-            .with_easing(Easing::CubicInOut);
+        let tw: Tween<Scale> =
+            Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0).with_easing(Easing::CubicInOut);
 
         assert!(matches!(tw.easing, Easing::CubicInOut));
     }
 
     #[test]
     fn test_tween_scale_with_loop_mode() {
-        let tw: Tween<Scale> = Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0)
-            .with_loop_mode(LoopMode::PingPong);
+        let tw: Tween<Scale> =
+            Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0).with_loop_mode(LoopMode::PingPong);
 
         assert!(matches!(tw.loop_mode, LoopMode::PingPong));
     }
@@ -418,17 +420,26 @@ mod tests {
 
     #[test]
     fn test_easing_from_str_linear() {
-        assert!(matches!("linear".parse::<Easing>().unwrap(), Easing::Linear));
+        assert!(matches!(
+            "linear".parse::<Easing>().unwrap(),
+            Easing::Linear
+        ));
     }
 
     #[test]
     fn test_easing_from_str_quad_in() {
-        assert!(matches!("quad_in".parse::<Easing>().unwrap(), Easing::QuadIn));
+        assert!(matches!(
+            "quad_in".parse::<Easing>().unwrap(),
+            Easing::QuadIn
+        ));
     }
 
     #[test]
     fn test_easing_from_str_quad_out() {
-        assert!(matches!("quad_out".parse::<Easing>().unwrap(), Easing::QuadOut));
+        assert!(matches!(
+            "quad_out".parse::<Easing>().unwrap(),
+            Easing::QuadOut
+        ));
     }
 
     #[test]
@@ -441,12 +452,18 @@ mod tests {
 
     #[test]
     fn test_easing_from_str_cubic_in() {
-        assert!(matches!("cubic_in".parse::<Easing>().unwrap(), Easing::CubicIn));
+        assert!(matches!(
+            "cubic_in".parse::<Easing>().unwrap(),
+            Easing::CubicIn
+        ));
     }
 
     #[test]
     fn test_easing_from_str_cubic_out() {
-        assert!(matches!("cubic_out".parse::<Easing>().unwrap(), Easing::CubicOut));
+        assert!(matches!(
+            "cubic_out".parse::<Easing>().unwrap(),
+            Easing::CubicOut
+        ));
     }
 
     #[test]
@@ -459,7 +476,10 @@ mod tests {
 
     #[test]
     fn test_easing_from_str_unknown_defaults_to_linear() {
-        assert!(matches!("unknown".parse::<Easing>().unwrap(), Easing::Linear));
+        assert!(matches!(
+            "unknown".parse::<Easing>().unwrap(),
+            Easing::Linear
+        ));
         assert!(matches!("".parse::<Easing>().unwrap(), Easing::Linear));
     }
 
@@ -467,12 +487,18 @@ mod tests {
 
     #[test]
     fn test_loop_mode_from_str_once() {
-        assert!(matches!("once".parse::<LoopMode>().unwrap(), LoopMode::Once));
+        assert!(matches!(
+            "once".parse::<LoopMode>().unwrap(),
+            LoopMode::Once
+        ));
     }
 
     #[test]
     fn test_loop_mode_from_str_loop() {
-        assert!(matches!("loop".parse::<LoopMode>().unwrap(), LoopMode::Loop));
+        assert!(matches!(
+            "loop".parse::<LoopMode>().unwrap(),
+            LoopMode::Loop
+        ));
     }
 
     #[test]
@@ -485,7 +511,10 @@ mod tests {
 
     #[test]
     fn test_loop_mode_from_str_unknown_defaults_to_once() {
-        assert!(matches!("unknown".parse::<LoopMode>().unwrap(), LoopMode::Once));
+        assert!(matches!(
+            "unknown".parse::<LoopMode>().unwrap(),
+            LoopMode::Once
+        ));
     }
 
     #[test]

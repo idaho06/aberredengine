@@ -1194,7 +1194,9 @@ fn system_param_optional_present() {
     });
 
     fn use_optional(mut res: OptionalResources) {
-        if let Some(config) = &res.config && config.debug_mode {
+        if let Some(config) = &res.config
+            && config.debug_mode
+        {
             res.counter.0 += 10;
         }
     }

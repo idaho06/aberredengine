@@ -4,8 +4,8 @@
 //! to process queued commands and update read-only caches.
 
 use super::commands::*;
-use super::spawn_data::*;
 use super::runtime::{LuaAppData, LuaRuntime, action_to_str};
+use super::spawn_data::*;
 use crate::resources::worldsignals::SignalSnapshot;
 use rustc_hash::FxHashSet;
 use std::sync::Arc;
@@ -146,7 +146,12 @@ impl LuaRuntime {
     pub fn drain_collision_entity_commands(&self) -> Vec<EntityCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_entity_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_entity_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -154,7 +159,12 @@ impl LuaRuntime {
     pub fn drain_collision_signal_commands(&self) -> Vec<SignalCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_signal_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_signal_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -162,7 +172,12 @@ impl LuaRuntime {
     pub fn drain_collision_audio_commands(&self) -> Vec<AudioLuaCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_audio_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_audio_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -170,7 +185,12 @@ impl LuaRuntime {
     pub fn drain_collision_spawn_commands(&self) -> Vec<SpawnCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_spawn_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_spawn_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -186,7 +206,12 @@ impl LuaRuntime {
     pub fn drain_collision_clone_commands(&self) -> Vec<CloneCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_clone_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_clone_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -216,7 +241,12 @@ impl LuaRuntime {
     pub fn drain_collision_phase_commands(&self) -> Vec<PhaseCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_phase_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_phase_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -224,7 +254,12 @@ impl LuaRuntime {
     pub fn drain_collision_camera_commands(&self) -> Vec<CameraCmd> {
         self.lua
             .app_data_ref::<LuaAppData>()
-            .map(|data| data.collision_camera_commands.borrow_mut().drain(..).collect())
+            .map(|data| {
+                data.collision_camera_commands
+                    .borrow_mut()
+                    .drain(..)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 

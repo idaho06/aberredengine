@@ -32,11 +32,11 @@ use aberredengine::events::collision::CollisionEvent;
 use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::events::timer::TimerEvent;
 use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
+use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
-use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
@@ -255,7 +255,9 @@ fn collision_pipeline_triggers_lua_side_effects() {
     world.spawn((CollisionRule::new(
         "player",
         "enemy",
-        LuaCollisionCallback { name: "on_player_enemy".into() },
+        LuaCollisionCallback {
+            name: "on_player_enemy".into(),
+        },
     ),));
 
     // Track if collision event was triggered
@@ -715,7 +717,10 @@ fn animation_controller_skips_tex_key_when_animation_not_in_store() {
     let anim = world.get::<Animation>(entity).unwrap();
     let sprite = world.get::<Sprite>(entity).unwrap();
 
-    assert_eq!(anim.animation_key, "run", "animation key should still switch");
+    assert_eq!(
+        anim.animation_key, "run",
+        "animation key should still switch"
+    );
     assert_eq!(
         sprite.tex_key.as_ref(),
         "sheet_idle",
@@ -897,7 +902,14 @@ fn tick_lua_phases(world: &mut World) {
 fn lua_timer_accumulates_time() {
     let mut world = make_world(0.3);
 
-    let entity = world.spawn((LuaTimer::new(1.0, LuaTimerCallback { name: "my_callback".to_string() }),)).id();
+    let entity = world
+        .spawn((LuaTimer::new(
+            1.0,
+            LuaTimerCallback {
+                name: "my_callback".to_string(),
+            },
+        ),))
+        .id();
 
     tick_lua_timers(&mut world);
 
@@ -910,7 +922,14 @@ fn lua_timer_accumulates_time() {
 fn lua_timer_fires_event_when_expired() {
     let mut world = make_world(1.0);
 
-    let entity = world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "on_timer".to_string() }),)).id();
+    let entity = world
+        .spawn((LuaTimer::new(
+            0.5,
+            LuaTimerCallback {
+                name: "on_timer".to_string(),
+            },
+        ),))
+        .id();
 
     // Track if event was triggered
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -935,7 +954,14 @@ fn lua_timer_fires_event_when_expired() {
 fn lua_timer_resets_after_firing() {
     let mut world = make_world(0.6);
 
-    let entity = world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "callback".to_string() }),)).id();
+    let entity = world
+        .spawn((LuaTimer::new(
+            0.5,
+            LuaTimerCallback {
+                name: "callback".to_string(),
+            },
+        ),))
+        .id();
 
     // Add dummy observer so events are processed
     world.add_observer(|_trigger: On<LuaTimerEvent>| {});
@@ -953,7 +979,12 @@ fn lua_timer_resets_after_firing() {
 fn lua_timer_does_not_fire_before_duration() {
     let mut world = make_world(0.3);
 
-    world.spawn((LuaTimer::new(1.0, LuaTimerCallback { name: "callback".to_string() }),));
+    world.spawn((LuaTimer::new(
+        1.0,
+        LuaTimerCallback {
+            name: "callback".to_string(),
+        },
+    ),));
 
     let fired = std::sync::Arc::new(std::sync::Mutex::new(false));
     let fired_clone = fired.clone();
@@ -975,7 +1006,12 @@ fn lua_timer_event_carries_correct_callback_name() {
     // flow correctly into LuaTimerEvent.callback.
     let mut world = make_world(1.0);
 
-    world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "my_func".to_string() }),));
+    world.spawn((LuaTimer::new(
+        0.5,
+        LuaTimerCallback {
+            name: "my_func".to_string(),
+        },
+    ),));
 
     let received_name = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let name_clone = received_name.clone();
@@ -997,10 +1033,20 @@ fn lua_timer_multiple_entities_fire_with_correct_names() {
     let mut world = make_world(1.0);
 
     let entity_a = world
-        .spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "func_a".to_string() }),))
+        .spawn((LuaTimer::new(
+            0.5,
+            LuaTimerCallback {
+                name: "func_a".to_string(),
+            },
+        ),))
         .id();
     let entity_b = world
-        .spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "func_b".to_string() }),))
+        .spawn((LuaTimer::new(
+            0.5,
+            LuaTimerCallback {
+                name: "func_b".to_string(),
+            },
+        ),))
         .id();
 
     let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(Entity, String)>::new()));
@@ -1031,8 +1077,14 @@ fn lua_timer_callback_name_preserved_after_reset() {
     // reset() only modifies elapsed — LuaTimerCallback.name must survive unchanged.
     let mut world = make_world(1.0);
 
-    let entity =
-        world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "persist_cb".to_string() }),)).id();
+    let entity = world
+        .spawn((LuaTimer::new(
+            0.5,
+            LuaTimerCallback {
+                name: "persist_cb".to_string(),
+            },
+        ),))
+        .id();
     world.add_observer(|_trigger: On<LuaTimerEvent>| {});
     world.flush();
 
@@ -1051,7 +1103,12 @@ fn lua_timer_fires_across_multiple_ticks() {
     let fired_clone = fired_count.clone();
 
     let mut world = make_world(0.3);
-    world.spawn((LuaTimer::new(0.8, LuaTimerCallback { name: "cb".to_string() }),));
+    world.spawn((LuaTimer::new(
+        0.8,
+        LuaTimerCallback {
+            name: "cb".to_string(),
+        },
+    ),));
 
     world.add_observer(move |_trigger: On<LuaTimerEvent>| {
         *fired_clone.lock().unwrap() += 1;
@@ -1165,7 +1222,10 @@ fn rust_timer_observer_calls_callback() {
     }
 
     let entity = world
-        .spawn((Timer::new(0.5, set_flag as TimerCallback), Signals::default()))
+        .spawn((
+            Timer::new(0.5, set_flag as TimerCallback),
+            Signals::default(),
+        ))
         .id();
 
     // Register the real timer_observer so the callback gets invoked
@@ -1241,13 +1301,18 @@ fn rust_timer_observer_receives_input_state() {
 
     fn check_input(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
         // Verify input is passed through — set a signal if action_1 is pressed
-        if input.action_1.active && let Ok(mut signals) = ctx.signals.get_mut(entity) {
+        if input.action_1.active
+            && let Ok(mut signals) = ctx.signals.get_mut(entity)
+        {
             signals.set_flag("input_received");
         }
     }
 
     let entity = world
-        .spawn((Timer::new(0.5, check_input as TimerCallback), Signals::default()))
+        .spawn((
+            Timer::new(0.5, check_input as TimerCallback),
+            Signals::default(),
+        ))
         .id();
 
     world.add_observer(timer_observer);
@@ -1322,7 +1387,10 @@ fn rust_timer_callback_receives_correct_entity() {
 
     let bystander = world.spawn(Signals::default()).id();
     let timer_entity = world
-        .spawn((Timer::new(0.5, mark_self as TimerCallback), Signals::default()))
+        .spawn((
+            Timer::new(0.5, mark_self as TimerCallback),
+            Signals::default(),
+        ))
         .id();
 
     world.add_observer(timer_observer);
@@ -1330,7 +1398,12 @@ fn rust_timer_callback_receives_correct_entity() {
 
     tick_timers(&mut world);
 
-    assert!(world.get::<Signals>(timer_entity).unwrap().has_flag("fired"));
+    assert!(
+        world
+            .get::<Signals>(timer_entity)
+            .unwrap()
+            .has_flag("fired")
+    );
     assert!(!world.get::<Signals>(bystander).unwrap().has_flag("fired"));
 }
 
@@ -2252,7 +2325,9 @@ fn lua_phase_on_exit_sees_post_swap_phase_state() {
 
     let world_signals = world.resource::<WorldSignals>();
     assert_eq!(
-        world_signals.get_string("exit_phase_seen").map(|s| s.as_str()),
+        world_signals
+            .get_string("exit_phase_seen")
+            .map(|s| s.as_str()),
         Some("attacking")
     );
     assert!(approx_eq(
@@ -2484,7 +2559,9 @@ fn phase_callback_receives_input_state() {
         input: &InputState,
         _dt: f32,
     ) -> Option<String> {
-        if input.action_1.active && let Ok(mut signals) = ctx.signals.get_mut(entity) {
+        if input.action_1.active
+            && let Ok(mut signals) = ctx.signals.get_mut(entity)
+        {
             signals.set_flag("input_received");
         }
         None
@@ -2545,7 +2622,11 @@ fn collision_rule_callback_fires_on_matching_groups() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
+    world.spawn((CollisionRule::new(
+        "ball",
+        "brick",
+        on_collision as CollisionCallback,
+    ),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2588,7 +2669,11 @@ fn collision_rule_callback_not_fired_on_non_matching_groups() {
         BoxCollider::new(10.0, 10.0),
     ));
     // Rule is for "ball" vs "brick", not "player" vs "enemy"
-    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
+    world.spawn((CollisionRule::new(
+        "ball",
+        "brick",
+        on_collision as CollisionCallback,
+    ),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2642,7 +2727,11 @@ fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
             Signals::default(),
         ))
         .id();
-    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
+    world.spawn((CollisionRule::new(
+        "ball",
+        "brick",
+        on_collision as CollisionCallback,
+    ),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2674,7 +2763,10 @@ fn collision_rule_sides_passed_to_callback() {
         use aberredengine::components::collision::BoxSide;
         let has_right_a = sides_a.iter().any(|s| matches!(s, BoxSide::Right));
         let has_left_b = sides_b.iter().any(|s| matches!(s, BoxSide::Left));
-        if has_right_a && has_left_b && let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+        if has_right_a
+            && has_left_b
+            && let Ok(mut signals) = ctx.signals.get_mut(ent_a)
+        {
             signals.set_flag("sides_correct");
         }
     }
@@ -2692,7 +2784,11 @@ fn collision_rule_sides_passed_to_callback() {
         MapPosition::new(8.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((CollisionRule::new("ball", "brick", on_collision as CollisionCallback),));
+    world.spawn((CollisionRule::new(
+        "ball",
+        "brick",
+        on_collision as CollisionCallback,
+    ),));
 
     world.add_observer(rust_collision_observer);
     world.flush();
@@ -2708,21 +2804,11 @@ fn collision_rule_sides_passed_to_callback() {
 // must produce identical match_and_order results for the same group inputs.
 // =============================================================================
 
-fn dummy_callback(
-    _a: Entity,
-    _b: Entity,
-    _sa: &BoxSides,
-    _sb: &BoxSides,
-    _ctx: &mut GameCtx,
-) {
-}
+fn dummy_callback(_a: Entity, _b: Entity, _sa: &BoxSides, _sb: &BoxSides, _ctx: &mut GameCtx) {}
 
 /// Build matching CollisionRule and LuaCollisionRule pairs with the same groups.
 #[cfg(feature = "lua")]
-fn make_matching_rules(
-    ga: &str,
-    gb: &str,
-) -> (CollisionRule, LuaCollisionRule) {
+fn make_matching_rules(ga: &str, gb: &str) -> (CollisionRule, LuaCollisionRule) {
     let rust_rule = CollisionRule::new(ga, gb, dummy_callback as CollisionCallback);
     let lua_rule = CollisionRule::new(ga, gb, LuaCollisionCallback { name: "cb".into() });
     (rust_rule, lua_rule)
@@ -2771,7 +2857,10 @@ fn collision_rule_and_lua_rule_both_return_none_for_non_matching_groups() {
         rust_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
         lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
     );
-    assert_eq!(lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"), None);
+    assert_eq!(
+        lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
+        None
+    );
 }
 
 // =============================================================================

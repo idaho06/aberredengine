@@ -49,7 +49,9 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::audio::{setup_audio, shutdown_audio};
+use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
@@ -62,12 +64,9 @@ use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::camera2d::Camera2DRes;
-use raylib::prelude::{Camera2D, Vector2};
 use crate::resources::shaderstore::ShaderStore;
-use crate::resources::texturestore::TextureStore;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -94,7 +93,9 @@ use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::particleemitter::particle_emitter_system;
 use crate::systems::phase::phase_system;
-use crate::systems::propagate_transforms::{cleanup_orphaned_global_transforms, propagate_transforms};
+use crate::systems::propagate_transforms::{
+    cleanup_orphaned_global_transforms, propagate_transforms,
+};
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
@@ -106,6 +107,7 @@ use crate::systems::time::update_world_time;
 use crate::systems::timer::{timer_observer, update_timers};
 use crate::systems::ttl::ttl_system;
 use crate::systems::tween::tween_system;
+use raylib::prelude::{Camera2D, Vector2};
 
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;

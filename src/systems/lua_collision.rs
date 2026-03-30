@@ -42,8 +42,8 @@ use bevy_ecs::system::SystemParam;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
-use crate::components::signals::Signals;
 use crate::components::luaphase::LuaPhase;
+use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
@@ -107,7 +107,8 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
             .map(|v| (v.x, v.y));
 
             let (vel_a, speed_sq_a) = params
-                .entity_cmds.rigid_bodies
+                .entity_cmds
+                .rigid_bodies
                 .get(ent_a)
                 .ok()
                 .map(|rb| {
@@ -118,7 +119,8 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 })
                 .unwrap_or((None, 0.0));
             let (vel_b, speed_sq_b) = params
-                .entity_cmds.rigid_bodies
+                .entity_cmds
+                .rigid_bodies
                 .get(ent_b)
                 .ok()
                 .map(|rb| {

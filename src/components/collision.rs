@@ -77,11 +77,7 @@ pub struct CollisionRule<C = CollisionCallback> {
 
 impl<C> CollisionRule<C> {
     /// Create a new collision rule for two groups with a callback payload.
-    pub fn new(
-        group_a: impl Into<String>,
-        group_b: impl Into<String>,
-        callback: C,
-    ) -> Self {
+    pub fn new(group_a: impl Into<String>, group_b: impl Into<String>, callback: C) -> Self {
         Self {
             group_a: group_a.into(),
             group_b: group_b.into(),

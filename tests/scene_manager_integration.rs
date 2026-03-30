@@ -5,9 +5,9 @@
 //! `EngineBuilder` fire as expected.
 
 use aberredengine::resources::gameconfig::GameConfig;
-use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
+use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
@@ -621,7 +621,12 @@ fn non_persistent_entity_registration_cleared_on_scene_switch() {
         let mut ws = world.resource_mut::<WorldSignals>();
         ws.set_entity("player", player);
     }
-    assert!(world.resource::<WorldSignals>().get_entity("player").is_some());
+    assert!(
+        world
+            .resource::<WorldSignals>()
+            .get_entity("player")
+            .is_some()
+    );
 
     // Switch scene
     {
@@ -632,7 +637,10 @@ fn non_persistent_entity_registration_cleared_on_scene_switch() {
     world.flush();
 
     assert!(
-        world.resource::<WorldSignals>().get_entity("player").is_none(),
+        world
+            .resource::<WorldSignals>()
+            .get_entity("player")
+            .is_none(),
         "Non-persistent entity registration should be cleared on scene switch"
     );
 }
@@ -760,8 +768,7 @@ fn gui_callback_stored_and_retrieved_via_scene_manager() {
     let desc = sm.get("editor").expect("scene must be present");
     let stored = desc.gui_callback.expect("gui_callback must be Some");
     assert_eq!(
-        stored as *const () as usize,
-        my_gui as *const () as usize,
+        stored as *const () as usize, my_gui as *const () as usize,
         "fn pointer must survive insertion/retrieval unchanged"
     );
 }
@@ -796,12 +803,19 @@ fn scene_with_gui_callback_enters_correctly() {
 
     // on_enter must have fired
     ENTER_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["menu"], "on_enter must fire for scene with gui_callback");
+        assert_eq!(
+            *v.borrow(),
+            vec!["menu"],
+            "on_enter must fire for scene with gui_callback"
+        );
     });
 
     // gui_callback must still be accessible on the active scene descriptor
     let sm = world.resource::<SceneManager>();
-    let active = sm.active_scene.as_deref().expect("active_scene must be set");
+    let active = sm
+        .active_scene
+        .as_deref()
+        .expect("active_scene must be set");
     let desc = sm.get(active).expect("descriptor must be present");
     assert!(
         desc.gui_callback.is_some(),

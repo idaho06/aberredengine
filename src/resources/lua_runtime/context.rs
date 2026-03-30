@@ -414,12 +414,18 @@ pub fn build_entity_context_pooled<'a>(
     });
 
     // Animation
-    set_opt!(tables.ctx, "animation", snapshot.animation.as_ref(), anim, {
-        tables.animation.set("key", anim.key)?;
-        tables.animation.set("frame_index", anim.frame_index)?;
-        tables.animation.set("elapsed", anim.elapsed)?;
-        tables.ctx.set("animation", tables.animation.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "animation",
+        snapshot.animation.as_ref(),
+        anim,
+        {
+            tables.animation.set("key", anim.key)?;
+            tables.animation.set("frame_index", anim.frame_index)?;
+            tables.animation.set("elapsed", anim.elapsed)?;
+            tables.ctx.set("animation", tables.animation.clone())?;
+        }
+    );
 
     // Signals (creates fresh inner tables for variable-length data)
     set_opt!(tables.ctx, "signals", snapshot.signals, signals, {

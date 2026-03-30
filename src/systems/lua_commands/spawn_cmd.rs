@@ -289,8 +289,14 @@ fn apply_animation_components(
     }
     if let Some(td) = tween_position {
         entity_commands.insert(super::build_tween(
-            MapPosition::from_vec(Vector2 { x: td.from_x, y: td.from_y }),
-            MapPosition::from_vec(Vector2 { x: td.to_x, y: td.to_y }),
+            MapPosition::from_vec(Vector2 {
+                x: td.from_x,
+                y: td.from_y,
+            }),
+            MapPosition::from_vec(Vector2 {
+                x: td.to_x,
+                y: td.to_y,
+            }),
             &td.config,
         ));
     }

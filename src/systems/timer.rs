@@ -65,7 +65,9 @@ pub fn update_timers(
     mut commands: Commands,
 ) {
     let delta = world_time.delta;
-    let mut runner = RustTimerRunner { commands: &mut commands };
+    let mut runner = RustTimerRunner {
+        commands: &mut commands,
+    };
     run_timer_update(delta, &mut query, &mut runner);
 }
 

@@ -499,8 +499,15 @@ mod tests {
         let persistent = FxHashSet::from_iter([entity_b]);
         ws.clear_non_persistent_entities(&persistent);
 
-        assert!(ws.get_entity("player").is_none(), "non-persistent registration should be removed");
-        assert_eq!(ws.get_entity("cursor"), Some(&entity_b), "persistent registration should be kept");
+        assert!(
+            ws.get_entity("player").is_none(),
+            "non-persistent registration should be removed"
+        );
+        assert_eq!(
+            ws.get_entity("cursor"),
+            Some(&entity_b),
+            "persistent registration should be kept"
+        );
     }
 
     #[test]

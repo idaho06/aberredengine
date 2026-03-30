@@ -244,6 +244,11 @@ impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
             return;
         };
 
-        entity.insert(compose_child_transform(&parent_gt, pos, local_rot, local_scale));
+        entity.insert(compose_child_transform(
+            &parent_gt,
+            pos,
+            local_rot,
+            local_scale,
+        ));
     }
 }
