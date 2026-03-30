@@ -6,6 +6,11 @@
 //!
 //! World-space rendering uses the shared [`Camera2DRes`] to transform between
 //! world and screen coordinates.
+//!
+//! When the active scene descriptor provides a [`GuiCallback`], an ImGui frame
+//! is opened every render pass and the callback is invoked. This path is
+//! independent of [`DebugMode`] and is intended for persistent game-developer UI
+//! (HUDs, in-game editors, tool windows).
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::ffi;
