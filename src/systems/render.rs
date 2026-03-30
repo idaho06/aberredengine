@@ -47,8 +47,8 @@ use log::{error, warn};
 // scope, shadowing the external `imgui` crate.  Use `::imgui` (absolute path)
 // to refer to the crate itself.  `Ui` is aliased to `ImguiUi` for clarity next
 // to raylib's own draw-handle types.
-use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 use crate::systems::scene_dispatch::GuiCallback;
+use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 
 type MapSpriteQueryData = (
     Entity,
@@ -377,7 +377,7 @@ pub struct RenderQueries<'w, 's> {
 pub struct DebugResources<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
     pub input_state: Res<'w, InputState>,
-    pub camera_follow: Option<Res<'w, CameraFollowConfig>>,
+    pub camera_follow: Res<'w, CameraFollowConfig>,
     pub scene_manager: Option<Res<'w, SceneManager>>,
     pub overlay_config: ResMut<'w, DebugOverlayConfig>,
 }
@@ -477,7 +477,9 @@ pub fn render_system(
 
             // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
             sprite_buffer.sort_unstable_by(|a, b| {
-                a.z_index.partial_cmp(&b.z_index).unwrap_or(std::cmp::Ordering::Equal)
+                a.z_index
+                    .partial_cmp(&b.z_index)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
             for item in sprite_buffer.iter() {
                 if let Some(tex) = textures.get(&item.sprite.tex_key) {
@@ -528,7 +530,10 @@ pub fn render_system(
                                     &item.resolved_pos,
                                     item.resolved_rot.as_ref(),
                                     item.resolved_scale.as_ref(),
-                                    Vector2 { x: item.sprite.width, y: item.sprite.height },
+                                    Vector2 {
+                                        x: item.sprite.width,
+                                        y: item.sprite.height,
+                                    },
                                     query_rigidbodies,
                                 );
 
@@ -624,7 +629,9 @@ pub fn render_system(
                 },
             ));
             text_buffer.sort_unstable_by(|a, b| {
-                a.z_index.partial_cmp(&b.z_index).unwrap_or(std::cmp::Ordering::Equal)
+                a.z_index
+                    .partial_cmp(&b.z_index)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
             for item in text_buffer.iter() {
                 if let Some(font) = fonts.get(&item.text.font) {
@@ -825,9 +832,18 @@ pub fn render_system(
 
     if needs_imgui {
         // Debug-only values — computed only when needed
-        let (fps, game_mouse_pos, mouse_world,
-             sprite_count, collider_count, position_count, rigidbody_count,
-             screen_sprite_count, screen_text_count, shader_count) = if debug_active {
+        let (
+            fps,
+            game_mouse_pos,
+            mouse_world,
+            sprite_count,
+            collider_count,
+            position_count,
+            rigidbody_count,
+            screen_sprite_count,
+            screen_text_count,
+            shader_count,
+        ) = if debug_active {
             let fps = rl.get_fps();
             let window_mouse_pos = rl.get_mouse_position();
             let game_mouse_pos = window_size.window_to_game_pos(
@@ -843,24 +859,32 @@ pub fn render_system(
             let screen_sprite_count = queries.screen_sprites.iter().count();
             let screen_text_count = queries.screen_texts.iter().count();
             let shader_count = shader_store.len();
-            (fps, game_mouse_pos, mouse_world,
-             sprite_count, collider_count, position_count, rigidbody_count,
-             screen_sprite_count, screen_text_count, shader_count)
+            (
+                fps,
+                game_mouse_pos,
+                mouse_world,
+                sprite_count,
+                collider_count,
+                position_count,
+                rigidbody_count,
+                screen_sprite_count,
+                screen_text_count,
+                shader_count,
+            )
         } else {
             // Dummy values — only reached when gui_callback is Some; debug_active is false
             // so the debug branch inside the closure will not execute them.
-            (0, Vector2::zero(), Vector2::zero(),
-             0, 0, 0, 0, 0, 0, 0)
+            (0, Vector2::zero(), Vector2::zero(), 0, 0, 0, 0, 0, 0, 0)
         };
 
         // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
-        let overlay_config   = &mut *debug_res.overlay_config;
-        let world_signals    = &mut *debug_res.world_signals;
-        let input_state      = &*debug_res.input_state;
-        let camera_follow    = debug_res.camera_follow.as_deref();
-        let scene_manager    = debug_res.scene_manager.as_deref();
-        let world_time       = &*res.world_time;
-        let config           = &*res.config;
+        let overlay_config = &mut *debug_res.overlay_config;
+        let world_signals = &mut *debug_res.world_signals;
+        let input_state = &*debug_res.input_state;
+        let camera_follow = &*debug_res.camera_follow;
+        let scene_manager = debug_res.scene_manager.as_deref();
+        let world_time = &*res.world_time;
+        let config = &*res.config;
 
         let closure = move |d: &RaylibDrawHandle<'_>| {
             use raylib::imgui::RayImGUITrait;
@@ -1070,7 +1094,7 @@ fn draw_imgui_debug(
     world_signals: &WorldSignals,
     input_state: &InputState,
     camera: &Camera2DRes,
-    camera_follow: Option<&CameraFollowConfig>,
+    camera_follow: &CameraFollowConfig,
     scene_manager: Option<&SceneManager>,
     textures: &TextureStore,
     fonts: &FontStore,
@@ -1163,11 +1187,7 @@ fn draw_ecs_panel(
         });
 }
 
-fn draw_camera_panel(
-    ui: &ImguiUi,
-    camera: &Camera2DRes,
-    camera_follow: Option<&CameraFollowConfig>,
-) {
+fn draw_camera_panel(ui: &ImguiUi, camera: &Camera2DRes, camera_follow: &CameraFollowConfig) {
     ui.window("Camera")
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
@@ -1182,14 +1202,12 @@ fn draw_camera_panel(
             ));
             ui.text(format!("Rotation: {:.2}°", cam.rotation));
             ui.text(format!("Zoom:     {:.3}", cam.zoom));
-            if let Some(cf) = camera_follow {
-                ui.separator();
-                ui.text(format!("Enabled:    {}", cf.enabled));
-                ui.text(format!("Mode:       {:?}", cf.mode));
-                ui.text(format!("Lerp speed: {:.2}", cf.lerp_speed));
-                ui.text(format!("Spring K:   {:.2}", cf.spring_stiffness));
-                ui.text(format!("Spring D:   {:.2}", cf.spring_damping));
-            }
+            ui.separator();
+            ui.text(format!("Enabled:    {}", camera_follow.enabled));
+            ui.text(format!("Mode:       {:?}", camera_follow.mode));
+            ui.text(format!("Lerp speed: {:.2}", camera_follow.lerp_speed));
+            ui.text(format!("Spring K:   {:.2}", camera_follow.spring_stiffness));
+            ui.text(format!("Spring D:   {:.2}", camera_follow.spring_damping));
         });
 }
 
@@ -1579,7 +1597,14 @@ fn blit_to_window<F: FnOnce(&RaylibDrawHandle<'_>)>(
 ) {
     let mut d = rl.begin_drawing(th);
     d.clear_background(Color::BLACK);
-    d.draw_texture_pro(tex, src, dest, Vector2 { x: 0.0, y: 0.0 }, 0.0, Color::WHITE);
+    d.draw_texture_pro(
+        tex,
+        src,
+        dest,
+        Vector2 { x: 0.0, y: 0.0 },
+        0.0,
+        Color::WHITE,
+    );
     if let Some(f) = post_blit {
         f(&d);
     }
