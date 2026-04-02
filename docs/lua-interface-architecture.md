@@ -254,7 +254,7 @@ This distinction matters because collision callbacks need immediate processing t
 | **Audio** | `AudioLuaCmd` | Play/stop music and sounds (with optional pitch) |
 | **Phase** | `PhaseCmd` | Trigger state machine transitions |
 | **Camera** | `CameraCmd` | Set 2D camera target/offset/rotation/zoom directly |
-| **CameraFollow** | `CameraFollowCmd` | Configure the camera follow system (mode, speed, bounds, deadzone) |
+| **CameraFollow** | `CameraFollowCmd` | Configure the camera follow system (mode, speed, zoom_lerp_speed, bounds, deadzone) |
 | **Asset** | `AssetCmd` | Load textures, fonts, music, sounds, tilemaps, shaders (setup only) |
 | **Group** | `GroupCmd` | Manage tracked entity groups |
 | **Tilemap** | `TilemapCmd` | Spawn tiles from tilemap data |
@@ -325,7 +325,7 @@ This section is meant to stay in sync with the actual implementation.
 - `camera_follow_enable`, `camera_follow_set_mode`, `camera_follow_set_deadzone`
 - `camera_follow_set_easing`, `camera_follow_set_speed`, `camera_follow_set_spring`
 - `camera_follow_set_offset`, `camera_follow_set_bounds`, `camera_follow_clear_bounds`
-- `camera_follow_reset_velocity`
+- `camera_follow_reset_velocity`, `camera_follow_set_zoom_speed`
 
 #### Game Config
 
@@ -366,7 +366,7 @@ This section is meant to stay in sync with the actual implementation.
 - `entity_shader_clear_uniform`, `entity_shader_clear_uniforms`
 - `entity_set_tint`, `entity_remove_tint`
 - `entity_set_parent`, `entity_remove_parent`
-- `entity_set_camera_target`, `entity_remove_camera_target`
+- `entity_set_camera_target`, `entity_set_camera_target_zoom`, `entity_remove_camera_target`
 
 #### Collision Context Functions
 
@@ -585,18 +585,27 @@ engine.camera_follow_set_mode("smooth_damp")
 engine.camera_follow_set_spring(80.0, 8.0) -- stiffness, damping
 ```
 
-**Marking an entity as the camera target:**
+**Marking an entity as the camera target (with optional zoom):**
 
 ```lua
--- Via builder
+-- Via builder: priority=10, zoom in to 2x when this target wins
 engine.spawn()
-    :with_camera_target(10) -- priority (highest wins)
+    :with_camera_target(10, 2.0)
     :build()
 
 -- At runtime
 engine.entity_set_camera_target(entity_id, 10)
+engine.entity_set_camera_target_zoom(entity_id, 2.0)  -- update zoom independently
 engine.entity_remove_camera_target(entity_id)
 ```
+
+**Zoom interpolation speed:**
+
+```lua
+engine.camera_follow_set_zoom_speed(5.0)  -- default; higher = faster zoom transition
+```
+
+The camera lerps `Camera2D.zoom` toward the winning target's `CameraTarget.zoom` every frame using `EaseOut`, at the rate set by `zoom_lerp_speed`. This is independent of the position follow mode.
 
 ### Command Enum
 
@@ -612,6 +621,7 @@ pub enum CameraFollowCmd {
     SetBounds { x: f32, y: f32, w: f32, h: f32 },
     ClearBounds,
     ResetVelocity,
+    SetZoomSpeed { speed: f32 },
 }
 ```
 

@@ -40,7 +40,7 @@ pub fn camera_follow_system(
     }
 
     // --- 1. Find highest-priority target ---
-    let Some((_entity, _target, pos, maybe_gt)) = targets.iter().max_by(|a, b| {
+    let Some((_entity, ct, pos, maybe_gt)) = targets.iter().max_by(|a, b| {
         a.1.priority.cmp(&b.1.priority).then_with(|| b.0.cmp(&a.0)) // lower Entity id wins ties
     }) else {
         return;
@@ -130,6 +130,12 @@ pub fn camera_follow_system(
 
     // --- 5. Commit ---
     camera.0.target = clamped;
+
+    // --- 6. Apply zoom ---
+    if (camera.0.zoom - ct.zoom).abs() > 1e-5 {
+        let zoom_alpha = lerp_alpha(EasingCurve::EaseOut, config.zoom_lerp_speed, dt);
+        camera.0.zoom = lerp_f32(camera.0.zoom, ct.zoom, zoom_alpha).max(f32::EPSILON);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +163,11 @@ fn lerp_alpha(easing: EasingCurve, speed: f32, dt: f32) -> f32 {
             t * t * (3.0 - 2.0 * t)
         }
     }
+}
+
+/// Scalar linear interpolation.
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
 
 /// Component-wise linear interpolation.

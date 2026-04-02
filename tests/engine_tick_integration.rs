@@ -37,6 +37,7 @@ use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
+use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
@@ -82,6 +83,7 @@ fn make_world(delta: f32) -> World {
     world.init_resource::<TextureStore>();
     world.insert_resource(GameConfig::default());
     world.init_resource::<PostProcessShader>();
+    world.insert_resource(CameraFollowConfig::default());
     world
 }
 

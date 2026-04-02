@@ -415,8 +415,8 @@ impl LuaRuntime {
             ),
             (
                 "with_camera_target",
-                "Mark entity as camera follow target (higher priority wins)",
-                &[("priority", "integer?")],
+                "Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).",
+                &[("priority", "integer?"), ("zoom", "number?")],
             ),
             (
                 "register_as",

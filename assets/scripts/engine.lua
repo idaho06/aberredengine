@@ -590,6 +590,11 @@ function engine.collision_entity_set_animation(entity_id, animation_key) end
 ---@param priority integer
 function engine.collision_entity_set_camera_target(entity_id, priority) end
 
+---Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)
+---@param entity_id integer
+---@param zoom number
+function engine.collision_entity_set_camera_target_zoom(entity_id, zoom) end
+
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
 ---@param name string
@@ -871,6 +876,11 @@ function engine.entity_set_animation(entity_id, animation_key) end
 ---@param priority integer
 function engine.entity_set_camera_target(entity_id, priority) end
 
+---Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)
+---@param entity_id integer
+---@param zoom number
+function engine.entity_set_camera_target_zoom(entity_id, zoom) end
+
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
 ---@param name string
@@ -1094,6 +1104,10 @@ function engine.camera_follow_set_speed(speed) end
 ---@param stiffness number
 ---@param damping number
 function engine.camera_follow_set_spring(stiffness, damping) end
+
+---Set zoom interpolation speed (higher = faster zoom transition toward CameraTarget zoom)
+---@param speed number
+function engine.camera_follow_set_zoom_speed(speed) end
 
 ---Set the 2D camera target, offset, rotation and zoom
 ---@param target_x number
@@ -1320,10 +1334,11 @@ function EntityBuilder:with_animation_controller(fallback_key) end
 ---@return EntityBuilder
 function EntityBuilder:with_animation_rule(condition_table, set_key) end
 
----Mark entity as camera follow target (higher priority wins)
+---Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
 ---@param priority integer|nil
+---@param zoom number|nil
 ---@return EntityBuilder
-function EntityBuilder:with_camera_target(priority) end
+function EntityBuilder:with_camera_target(priority, zoom) end
 
 ---Set box collider
 ---@param width number
@@ -1731,10 +1746,11 @@ function CollisionEntityBuilder:with_animation_controller(fallback_key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_animation_rule(condition_table, set_key) end
 
----Mark entity as camera follow target (higher priority wins)
+---Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
 ---@param priority integer|nil
+---@param zoom number|nil
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_camera_target(priority) end
+function CollisionEntityBuilder:with_camera_target(priority, zoom) end
 
 ---Set box collider
 ---@param width number

@@ -440,6 +440,9 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
         CameraFollowCmd::ResetVelocity => {
             config.velocity = Vector2 { x: 0.0, y: 0.0 };
         }
+        CameraFollowCmd::SetZoomSpeed { speed } => {
+            config.zoom_lerp_speed = speed;
+        }
     }
 }
 

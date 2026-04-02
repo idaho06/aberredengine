@@ -316,6 +316,11 @@ macro_rules! define_entity_cmds {
                 EntityCmd::SetCameraTarget { entity_id, priority },
                 desc = "Set CameraTarget component on an entity (higher priority wins)",
                 params = [("entity_id", "integer"), ("priority", "integer")]),
+            ("entity_set_camera_target_zoom",
+                |(entity_id, zoom)| (u64, f32),
+                EntityCmd::SetCameraTargetZoom { entity_id, zoom },
+                desc = "Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)",
+                params = [("entity_id", "integer"), ("zoom", "number")]),
             ("entity_remove_camera_target", |entity_id| u64,
                 EntityCmd::RemoveCameraTarget { entity_id },
                 desc = "Remove CameraTarget component from an entity",
@@ -1256,6 +1261,18 @@ impl LuaRuntime {
             desc = "Reset camera follow spring velocity to zero",
             cat = "camera",
             params = []
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "camera_follow_set_zoom_speed",
+            camera_follow_commands,
+            |speed| f32,
+            CameraFollowCmd::SetZoomSpeed { speed },
+            desc = "Set zoom interpolation speed (higher = faster zoom transition toward CameraTarget zoom)",
+            cat = "camera",
+            params = [("speed", "number")]
         );
         Ok(())
     }

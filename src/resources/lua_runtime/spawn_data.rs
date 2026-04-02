@@ -402,4 +402,6 @@ pub struct SpawnCmd {
     pub parent: Option<u64>,
     /// CameraTarget priority (marks entity as candidate for camera following)
     pub camera_target: Option<u8>,
+    /// Initial zoom for the CameraTarget (default 1.0 when None)
+    pub camera_target_zoom: Option<f32>,
 }

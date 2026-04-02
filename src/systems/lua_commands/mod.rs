@@ -38,6 +38,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
+use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::luatimer::LuaTimer;
@@ -80,6 +81,7 @@ pub struct EntityCmdQueries<'w, 's> {
     pub sprites: Query<'w, 's, &'static mut Sprite>,
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
+    pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
 }
 
 /// Bundled read-only queries for building entity context tables.

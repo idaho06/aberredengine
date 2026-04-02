@@ -84,6 +84,7 @@ pub(super) fn apply_components(
             parent: cmd.parent,
             stuckto: cmd.stuckto,
             camera_target: cmd.camera_target,
+            camera_target_zoom: cmd.camera_target_zoom,
         },
     );
     apply_physics_components(entity_commands, cmd.rigidbody, cmd.collider);
@@ -141,6 +142,7 @@ struct TransformComponents {
     parent: Option<u64>,
     stuckto: Option<StuckToData>,
     camera_target: Option<u8>,
+    camera_target_zoom: Option<f32>,
 }
 
 fn apply_transform_components(
@@ -183,7 +185,8 @@ fn apply_transform_components(
         entity_commands.insert(stuckto);
     }
     if let Some(priority) = transform.camera_target {
-        entity_commands.insert(CameraTarget { priority });
+        let zoom = transform.camera_target_zoom.unwrap_or(1.0);
+        entity_commands.insert(CameraTarget::new(priority).with_zoom(zoom));
     }
 }
 

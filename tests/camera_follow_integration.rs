@@ -542,8 +542,9 @@ fn bounds_clamp_respects_zoom() {
             height: 500.0,
         });
     }
-    // Target at origin
-    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::default()));
+    // Target at origin — zoom must match the initial camera zoom so the lerp
+    // starts already at destination and the bounds-clamp assertion still holds.
+    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::default().with_zoom(2.0)));
     world.flush();
 
     tick(&mut world);
@@ -573,4 +574,73 @@ fn no_bounds_allows_any_position() {
     let t = camera_target(&world);
     assert!(approx_eq(t.x, -99999.0), "x unclamped: {}", t.x);
     assert!(approx_eq(t.y, -99999.0), "y unclamped: {}", t.y);
+}
+
+// ---------------------------------------------------------------------------
+// Zoom
+// ---------------------------------------------------------------------------
+
+fn camera_zoom(world: &World) -> f32 {
+    world.resource::<Camera2DRes>().0.zoom
+}
+
+#[test]
+fn zoom_lerps_toward_target() {
+    let mut world = setup_world();
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.zoom_lerp_speed = 5.0;
+    }
+    // Camera starts at zoom 1.0 (from make_camera); target wants 3.0.
+    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::new(0).with_zoom(3.0)));
+    world.flush();
+
+    tick(&mut world);
+
+    let zoom = camera_zoom(&world);
+    assert!(zoom > 1.0 && zoom < 3.0, "zoom should be lerping toward 3.0, got {}", zoom);
+}
+
+#[test]
+fn zoom_of_winning_target_is_used() {
+    let mut world = setup_world();
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.zoom_lerp_speed = 1000.0; // effectively instant
+    }
+    world.spawn((MapPosition::new(100.0, 0.0), CameraTarget::new(1).with_zoom(2.0)));
+    world.spawn((MapPosition::new(200.0, 0.0), CameraTarget::new(10).with_zoom(4.0)));
+    world.flush();
+
+    for _ in 0..60 {
+        tick(&mut world);
+    }
+
+    let zoom = camera_zoom(&world);
+    assert!(
+        (zoom - 4.0).abs() < 0.01,
+        "expected zoom ~4.0 (priority 10 wins), got {}",
+        zoom
+    );
+}
+
+#[test]
+fn zoom_clamps_to_epsilon() {
+    let mut world = setup_world();
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.zoom_lerp_speed = 1000.0;
+    }
+    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::new(0).with_zoom(-5.0)));
+    world.flush();
+
+    for _ in 0..60 {
+        tick(&mut world);
+    }
+
+    let zoom = camera_zoom(&world);
+    assert!(zoom > 0.0, "zoom must stay positive, got {}", zoom);
 }

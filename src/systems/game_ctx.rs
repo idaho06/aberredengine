@@ -29,6 +29,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
+use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
@@ -41,6 +42,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
+use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::texturestore::TextureStore;
@@ -71,6 +73,8 @@ pub struct GameCtx<'w, 's> {
     pub animations: Query<'w, 's, &'static mut Animation>,
     /// Mutable access to per-entity shaders.
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
+    /// Mutable access to camera target markers (priority and zoom).
+    pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
     // Read-only queries
     /// Read-only access to entity groups.
     pub groups: Query<'w, 's, &'static Group>,
@@ -101,4 +105,6 @@ pub struct GameCtx<'w, 's> {
     pub config: Res<'w, GameConfig>,
     /// Mutable access to the post-process shader chain and uniforms.
     pub post_process: ResMut<'w, PostProcessShader>,
+    /// Mutable access to camera follow configuration (enabled, mode, zoom speed, bounds).
+    pub camera_follow: ResMut<'w, CameraFollowConfig>,
 }

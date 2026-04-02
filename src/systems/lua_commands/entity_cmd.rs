@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use log::warn;
+
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;
@@ -80,6 +82,7 @@ pub fn process_entity_commands(
             | EntityCmd::SetRotation { .. }
             | EntityCmd::SetScale { .. }
             | EntityCmd::SetCameraTarget { .. }
+            | EntityCmd::SetCameraTargetZoom { .. }
             | EntityCmd::RemoveCameraTarget { .. }) => {
                 process_transform_cmd(cmd, commands, queries)
             }
@@ -464,9 +467,26 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             entity_id,
             priority,
         } => {
+            let entity = Entity::from_bits(entity_id);
+            let existing_zoom = queries
+                .camera_targets
+                .get(entity)
+                .map(|ct| ct.zoom)
+                .unwrap_or(CameraTarget::default().zoom);
             commands
-                .entity(Entity::from_bits(entity_id))
-                .insert(CameraTarget { priority });
+                .entity(entity)
+                .insert(CameraTarget::new(priority).with_zoom(existing_zoom));
+        }
+        EntityCmd::SetCameraTargetZoom { entity_id, zoom } => {
+            let entity = Entity::from_bits(entity_id);
+            if let Ok(mut ct) = queries.camera_targets.get_mut(entity) {
+                ct.zoom = zoom.max(f32::EPSILON);
+            } else {
+                warn!(
+                    "SetCameraTargetZoom: entity {:?} has no CameraTarget component",
+                    entity
+                );
+            }
         }
         EntityCmd::RemoveCameraTarget { entity_id } => {
             commands

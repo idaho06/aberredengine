@@ -7,6 +7,7 @@
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
+use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::systemsstore::SystemsStore;
@@ -40,6 +41,7 @@ fn setup_world() -> World {
     world.insert_resource(InputState::default());
     world.insert_resource(GameConfig::default());
     world.init_resource::<PostProcessShader>();
+    world.insert_resource(CameraFollowConfig::default());
     world
 }
 

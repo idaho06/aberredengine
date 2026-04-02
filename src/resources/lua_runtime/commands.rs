@@ -289,6 +289,8 @@ pub enum EntityCmd {
     RemoveTint { entity_id: u64 },
     /// Set CameraTarget component on an entity
     SetCameraTarget { entity_id: u64, priority: u8 },
+    /// Update zoom on an existing CameraTarget component
+    SetCameraTargetZoom { entity_id: u64, zoom: f32 },
     /// Remove CameraTarget component from an entity
     RemoveCameraTarget { entity_id: u64 },
 }
@@ -349,6 +351,8 @@ pub enum CameraFollowCmd {
     ClearBounds,
     /// Reset spring velocity to zero
     ResetVelocity,
+    /// Set zoom interpolation speed
+    SetZoomSpeed { speed: f32 },
 }
 
 /// Commands for registering animations from Lua.
