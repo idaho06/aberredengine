@@ -344,6 +344,7 @@ Registers a Bevy ECS observer that fires when a specific event is triggered. The
 **Define a custom event:**
 
 ```rust
+use aberredengine::bevy_ecs;
 use aberredengine::bevy_ecs::prelude::Event;
 
 #[derive(Event)]
@@ -351,6 +352,8 @@ struct TilemapLoaded {
     pub path: String,
 }
 ```
+
+If you derive `Event` in a downstream game crate, bring the re-exported crate itself into scope as `bevy_ecs` first. The derive macro expands using a `bevy_ecs::...` path, so importing only items from `aberredengine::bevy_ecs::prelude` is not enough.
 
 **Define the observer function** — first parameter must be `On<E>`:
 
