@@ -35,11 +35,40 @@
 //!         .run();
 //! }
 //! ```
+//!
+//! **Multiple per-frame systems and custom observers:**
+//! ```rust,no_run,ignore
+//! use aberredengine::engine_app::EngineBuilder;
+//! use aberredengine::systems::scene_dispatch::SceneDescriptor;
+//!
+//! fn main() {
+//!     EngineBuilder::new()
+//!         .config("config.ini")
+//!         .on_setup(load_assets)
+//!         .add_system(tilemap_load_system)   // runs every frame while Playing
+//!         .add_system(tilemap_save_system)   // multiple systems allowed
+//!         .add_observer(on_tilemap_loaded)   // persistent observer for a custom event
+//!         .add_scene("intro", SceneDescriptor { /* … */ })
+//!         .add_scene("editor", SceneDescriptor { /* … */ })
+//!         .initial_scene("intro")
+//!         .run();
+//! }
+//! ```
+//!
+//! For scene-scoped (transient) observers — active only within one scene —
+//! spawn them from the scene's `on_enter` callback without [`Persistent`]:
+//! ```rust,no_run,ignore
+//! fn my_scene_enter(ctx: &mut GameCtx) {
+//!     // Cleaned up automatically by clean_all_entities on scene switch
+//!     ctx.commands.spawn(Observer::new(on_my_scene_event));
+//! }
+//! ```
 
 use std::path::PathBuf;
 
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::IntoObserverSystem;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
@@ -126,23 +155,20 @@ type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore)>;
 /// Deferred until `run()` when the schedule is being built.
 type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule)>;
 
+/// Closure that spawns an observer entity into the [`World`].
+/// Deferred until `run()` when the world exists.
+type ObserverRegistrar = Box<dyn FnOnce(&mut World)>;
+
 /// Builder for bootstrapping the engine.
 ///
 /// Handles world setup, window init, resources, system schedule, and main loop.
 /// The developer supplies only game-specific hooks: `setup`, `enter_play`,
 /// `update`, and `switch_scene`.
 ///
-// TODO: Future extension — allow arbitrary systems and observers via:
-//
-//   extra_systems:   Vec<Box<dyn FnOnce(&mut Schedule)>>,
-//   extra_observers: Vec<Box<dyn FnOnce(&mut World)>>,
-//
-// With builder methods:
-//   .add_system(|schedule| { schedule.add_systems(my_system.after(collision_detector)); })
-//   .add_observer(|world| { world.spawn((Observer::new(my_observer), Persistent)); })
-//
-// Each closure receives the schedule or world and can add systems with full
-// ordering constraints. The builder calls them after building the core schedule.
+/// In addition to the single-system hooks, the builder supports registering
+/// multiple per-frame systems ([`add_system`](Self::add_system),
+/// [`configure_schedule`](Self::configure_schedule)) and persistent observers
+/// ([`add_observer`](Self::add_observer)) for custom event handling.
 #[must_use = "EngineBuilder does nothing until .run() is called"]
 pub struct EngineBuilder {
     config_path: PathBuf,
@@ -153,6 +179,8 @@ pub struct EngineBuilder {
     switch_scene_hook: Option<HookRegistrar>,
     scenes: Vec<(String, SceneDescriptor)>,
     initial_scene: Option<String>,
+    extra_systems: Vec<UpdateRegistrar>,
+    extra_observers: Vec<ObserverRegistrar>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
 }
@@ -171,6 +199,8 @@ impl EngineBuilder {
             switch_scene_hook: None,
             scenes: Vec::new(),
             initial_scene: None,
+            extra_systems: Vec::new(),
+            extra_observers: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
         }
@@ -228,6 +258,89 @@ impl EngineBuilder {
     ) -> Self {
         self.switch_scene_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "switch_scene", system);
+        }));
+        self
+    }
+
+    /// Add a per-frame system to the schedule.
+    ///
+    /// The system is added with `.run_if(state_is_playing).after(check_pending_state)`,
+    /// matching the behaviour of [`.on_update()`](Self::on_update). Can be called
+    /// multiple times to register several systems.
+    ///
+    /// For custom ordering relative to other engine systems (e.g. `.after(movement)`)
+    /// or for systems with different run conditions, use
+    /// [`configure_schedule`](Self::configure_schedule) instead.
+    ///
+    /// # Scene-scoped (transient) observers
+    ///
+    /// If you need an observer that is only active within a specific scene, spawn
+    /// it from the scene's `on_enter` callback **without** the [`Persistent`] component:
+    ///
+    /// ```rust,ignore
+    /// fn my_scene_enter(ctx: &mut GameCtx) {
+    ///     // No Persistent → cleaned up on scene switch by clean_all_entities
+    ///     ctx.commands.spawn(Observer::new(on_my_event));
+    /// }
+    /// ```
+    pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
+        self.extra_systems.push(Box::new(move |schedule: &mut Schedule| {
+            schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
+        }));
+        self
+    }
+
+    /// Add systems to the per-frame schedule with full control over ordering and
+    /// run conditions.
+    ///
+    /// The closure receives a `&mut Schedule` and can call `schedule.add_systems(…)`
+    /// with any configuration. No automatic constraints are applied — the developer
+    /// is responsible for `.run_if()`, `.after()`, `.before()` etc.
+    ///
+    /// ```rust,ignore
+    /// .configure_schedule(|schedule| {
+    ///     schedule.add_systems(
+    ///         my_system
+    ///             .run_if(state_is_playing)
+    ///             .after(movement)
+    ///             .before(render_system),
+    ///     );
+    /// })
+    /// ```
+    pub fn configure_schedule(mut self, f: impl FnOnce(&mut Schedule) + 'static) -> Self {
+        self.extra_systems.push(Box::new(f));
+        self
+    }
+
+    /// Add a persistent observer for a custom (or engine) event.
+    ///
+    /// The observer is spawned with the [`Persistent`] component and therefore
+    /// survives scene transitions. The observer function's first parameter must
+    /// be `On<E>` where `E` is the event type.
+    ///
+    /// ```rust,ignore
+    /// #[derive(Event)]
+    /// struct TilemapLoaded { path: String }
+    ///
+    /// fn on_tilemap_loaded(trigger: On<TilemapLoaded>, mut ctx: GameCtx) {
+    ///     // react to the event …
+    /// }
+    ///
+    /// EngineBuilder::new()
+    ///     .add_observer(on_tilemap_loaded)
+    ///     // …
+    /// ```
+    ///
+    /// To trigger the event from a system or scene callback:
+    /// ```rust,ignore
+    /// commands.trigger(TilemapLoaded { path: "…".into() });
+    /// ```
+    pub fn add_observer<E: Event, B: Bundle, M>(
+        mut self,
+        observer: impl IntoObserverSystem<E, B, M>,
+    ) -> Self {
+        self.extra_observers.push(Box::new(move |world: &mut World| {
+            world.spawn((Observer::new(observer), Persistent));
         }));
         self
     }
@@ -304,12 +417,15 @@ impl EngineBuilder {
         let (rl, thread, render_target) = Self::setup_window(&config);
 
         let update_hook = self.update_hook.take();
+        let extra_systems = std::mem::take(&mut self.extra_systems);
+        let extra_observers = std::mem::take(&mut self.extra_observers);
 
         let mut world = self.setup_world(config, rl, thread, render_target);
         self.register_systems(&mut world, use_scene_manager);
-        Self::spawn_observers(&mut world, has_lua);
+        Self::spawn_observers(&mut world, has_lua, extra_observers);
 
-        let mut update = Self::build_schedule(update_hook, &mut world, has_lua, use_scene_manager);
+        let mut update =
+            Self::build_schedule(update_hook, extra_systems, &mut world, has_lua, use_scene_manager);
         Self::main_loop(&mut world, &mut update);
     }
 
@@ -488,7 +604,7 @@ impl EngineBuilder {
         world.trigger(GameStateChangedEvent {});
     }
 
-    fn spawn_observers(world: &mut World, has_lua: bool) {
+    fn spawn_observers(world: &mut World, has_lua: bool, extra_observers: Vec<ObserverRegistrar>) {
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_collision_observer), Persistent));
@@ -505,11 +621,18 @@ impl EngineBuilder {
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;
         world.spawn((Observer::new(timer_observer), Persistent));
+
+        // Spawn user-registered persistent observers
+        for registrar in extra_observers {
+            registrar(world);
+        }
+
         world.flush();
     }
 
     fn build_schedule(
         update_hook: Option<UpdateRegistrar>,
+        extra_systems: Vec<UpdateRegistrar>,
         world: &mut World,
         has_lua: bool,
         use_scene_manager: bool,
@@ -589,6 +712,11 @@ impl EngineBuilder {
 
         if let Some(update_hook) = update_hook {
             update_hook(&mut update);
+        }
+
+        // Apply user-registered extra systems (add_system / configure_schedule)
+        for extra in extra_systems {
+            extra(&mut update);
         }
 
         if use_scene_manager {
@@ -767,7 +895,7 @@ mod tests {
     #[test]
     fn test_build_schedule_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
-        let schedule = EngineBuilder::build_schedule(None, &mut world, false, false);
+        let schedule = EngineBuilder::build_schedule(None, Vec::new(), &mut world, false, false);
         let system_type_ids: Vec<_> = schedule
             .systems()
             .expect("build_schedule initializes the schedule")

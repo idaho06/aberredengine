@@ -260,12 +260,158 @@ Setup ──→ Playing ──→ Quitting
 | `.title(name)` | Window title (overrides config) |
 | `.on_setup(system)` | Asset loading hook (called during `Setup` state) |
 | `.on_enter_play(system)` | Called once when transitioning to `Playing` |
-| `.on_update(system)` | Runs every frame while `Playing` (after `check_pending_state`) |
+| `.on_update(system)` | Runs every frame while `Playing` (after `check_pending_state`) — single system only |
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
+| `.add_system(system)` | Add a per-frame system. Same auto-constraints as `.on_update()`. Can be called multiple times. |
+| `.configure_schedule(closure)` | Add systems with full ordering control — no auto-constraints applied. |
+| `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
 
 **Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()` or `.on_enter_play()` — the SceneManager owns those hooks. Use `.on_setup()` for asset loading in both approaches.
+
+### Custom systems and observers
+
+The three new builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks.
+
+#### `.add_system(system)` — multiple per-frame systems
+
+Registers a Bevy ECS system that runs every frame while `Playing`. Same automatic constraints as `.on_update()`: `run_if(state_is_playing).after(check_pending_state)`. Can be called multiple times.
+
+```rust
+EngineBuilder::new()
+    .config("config.ini")
+    .on_setup(load_assets)
+    .add_system(tilemap_load_system)   // runs every frame — checks a signal, then loads
+    .add_system(tilemap_save_system)   // independent second system
+    .add_scene("editor", /* … */)
+    .initial_scene("editor")
+    .run();
+```
+
+The system signature is a standard Bevy ECS system:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::systems::RaylibAccess;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::resources::texturestore::TextureStore;
+
+fn tilemap_load_system(
+    world_signals: ResMut<WorldSignals>,
+    mut tex_store: ResMut<TextureStore>,
+    mut raylib: RaylibAccess,
+    mut commands: Commands,
+) {
+    let Some(path) = world_signals.get_string("pending_load_path").cloned() else {
+        return; // nothing to do this frame
+    };
+    // load texture, spawn tile entities, etc.
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
+    // ...
+}
+```
+
+> **When to use `.add_system()` vs scene callbacks:** Scene callbacks (`on_enter`, `on_update`) receive `&mut GameCtx` and cannot access `RaylibAccess`. If a per-frame operation needs `RaylibAccess` (e.g., loading textures on demand), register it as a system with `.add_system()` instead. Use a `WorldSignals` flag to communicate the trigger from the scene callback.
+
+#### `.configure_schedule(closure)` — full ordering control
+
+For systems that need custom ordering relative to engine systems, or that must run outside the `Playing` state, pass a closure receiving `&mut Schedule`:
+
+```rust
+use aberredengine::systems::movement::movement;
+use aberredengine::systems::render::render_system;
+
+EngineBuilder::new()
+    .configure_schedule(|schedule| {
+        schedule.add_systems(
+            undo_system
+                .run_if(state_is_playing)
+                .after(movement)
+                .before(render_system),
+        );
+    })
+    // …
+    .run();
+```
+
+Engine system functions are `pub` and importable from `aberredengine::systems::*`. Use them directly as `.after()` / `.before()` arguments. No automatic `run_if` or `after` constraints are applied — you control everything.
+
+#### `.add_observer(observer_fn)` — persistent event observers
+
+Registers a Bevy ECS observer that fires when a specific event is triggered. The observer survives scene transitions (spawned with the `Persistent` component) — it is always active, not tied to a specific scene.
+
+**Define a custom event:**
+
+```rust
+use aberredengine::bevy_ecs::prelude::Event;
+
+#[derive(Event)]
+struct TilemapLoaded {
+    pub path: String,
+}
+```
+
+**Define the observer function** — first parameter must be `On<E>`:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::bevy_ecs::observer::On;
+
+fn on_tilemap_loaded(
+    trigger: On<TilemapLoaded>,
+    mut world_signals: ResMut<WorldSignals>,
+) {
+    let path = &trigger.event().path;
+    world_signals.set_string("last_loaded_tilemap", path.clone());
+    log::info!("Tilemap loaded: {}", path);
+}
+```
+
+**Register it with the builder:**
+
+```rust
+EngineBuilder::new()
+    .add_observer(on_tilemap_loaded)
+    // …
+    .run();
+```
+
+**Trigger the event from any system or scene callback:**
+
+```rust
+// From a Bevy ECS system:
+fn my_system(mut commands: Commands) {
+    commands.trigger(TilemapLoaded { path: "maps/level01.json".into() });
+}
+
+// From a scene callback (via GameCtx):
+fn my_enter(ctx: &mut GameCtx) {
+    ctx.commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
+}
+```
+
+> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `AudioCmd`, etc.
+
+#### Scene-scoped (transient) observers
+
+Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `on_enter` callback **without** the `Persistent` component:
+
+```rust
+use aberredengine::bevy_ecs::observer::Observer;
+
+fn editor_enter(ctx: &mut GameCtx) {
+    // This observer lives only until the next scene switch.
+    // clean_all_entities (called on scene transition) despawns it automatically.
+    ctx.commands.spawn(Observer::new(on_tile_selected));
+}
+
+fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
+    // only fires while the editor scene is active
+}
+```
+
+This is the standard pattern for scene-scoped behaviour in the engine — no special API needed.
 
 ---
 
