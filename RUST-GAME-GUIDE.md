@@ -567,6 +567,137 @@ anim_store.animations.insert("player_run".to_string(), AnimationResource {
 });
 ```
 
+### Tilemaps
+
+Tilemaps use the **Tilesetter 2.1.0** export format: a directory containing a `.png` tileset texture and a `.txt` JSON data file, both named after the directory.
+
+```
+assets/tilemaps/level01/
+├── level01.png    # tileset texture (atlas)
+└── level01.txt    # JSON: { tile_size, map_width, map_height, layers: [{ name, positions: [{ x, y, id }] }] }
+```
+
+**`TilemapStore` is not pre-inserted** for Rust-only games — you must insert it yourself. Request `ResMut<TilemapStore>` and `ResMut<TextureStore>` in your setup hook alongside `RaylibAccess`:
+
+```rust
+use aberredengine::systems::tilemap::load_tilemap;
+use aberredengine::resources::tilemapstore::TilemapStore;
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::systems::RaylibAccess;
+use aberredengine::bevy_ecs::prelude::*;
+
+fn setup(
+    mut commands: Commands,
+    mut tex_store: ResMut<TextureStore>,
+    mut tilemap_store: ResMut<TilemapStore>,
+    mut raylib: RaylibAccess,
+    // ... other params
+) {
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
+
+    // Load tileset texture + JSON data
+    let (tex, map) = load_tilemap(rl, th, "assets/tilemaps/level01");
+    tex_store.insert("level01", tex);
+    tilemap_store.insert("level01", map);
+}
+```
+
+`load_tilemap` derives both file paths from the last path segment: `<path>/<stem>.png` and `<path>/<stem>.txt`. It panics on IO or parse failure (setup-time, not hot path).
+
+You also need to **insert `TilemapStore` as a resource** before setup runs. Do this in your main:
+
+```rust
+EngineBuilder::new()
+    .config("config.ini")
+    .add_system(|world: &mut World| {
+        world.insert_resource(TilemapStore::new());
+    })
+    .on_setup(setup)
+    // ...
+```
+
+Or insert it directly before calling `.run()` — the cleanest option is using `.configure_schedule` to insert it as a startup resource, but in practice inserting it in `on_setup` via `Commands::insert_resource` also works:
+
+```rust
+fn setup(mut commands: Commands, mut raylib: RaylibAccess, /* ... */) {
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
+    let (tex, map) = load_tilemap(rl, th, "assets/tilemaps/level01");
+
+    let mut tex_store = TextureStore::new();
+    tex_store.insert("level01", tex);
+
+    let mut tilemap_store = TilemapStore::new();
+    tilemap_store.insert("level01", map);
+
+    commands.insert_resource(tex_store);
+    commands.insert_resource(tilemap_store);
+}
+```
+
+**Spawning tiles** is done from a scene's `on_enter` (or `on_enter_play`) callback using `spawn_tiles`. This is a two-phase operation:
+
+1. **Template phase** — one entity per atlas cell, with `Group("tiles-templates")` and `Sprite`. Templates carry no `MapPosition` so they are invisible. They stay alive in the world for potential future re-use.
+2. **Instance phase** — one entity per tile placement in the map layers, cloned from the matching template with `Group("tiles")`, `MapPosition`, and `ZIndex` added.
+
+```rust
+use aberredengine::systems::tilemap::spawn_tiles;
+use aberredengine::resources::tilemapstore::TilemapStore;
+use aberredengine::resources::texturestore::TextureStore;
+
+fn enter(ctx: &mut GameCtx) {
+    // Access stores through the world (or request them in a raw system)
+    // In a scene callback, use a Bevy system to pass TilemapStore and TextureStore:
+}
+```
+
+Because `GameCtx` does not expose `TilemapStore` or `TextureStore`, tile spawning in a scene callback requires a small helper system registered with `.add_system()`:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::resources::tilemapstore::TilemapStore;
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::systems::tilemap::spawn_tiles;
+
+fn spawn_tilemap_system(
+    signals: Res<WorldSignals>,
+    tilemaps: Res<TilemapStore>,
+    textures: Res<TextureStore>,
+    mut commands: Commands,
+) {
+    if !signals.has_flag("spawn_tilemap") {
+        return;
+    }
+    if let (Some(tilemap), Some(tex)) = (tilemaps.get("level01"), textures.get("level01")) {
+        spawn_tiles(&mut commands, "level01", tex.width, tex.height, tilemap);
+    }
+}
+```
+
+Trigger it from `on_enter`:
+
+```rust
+fn enter(ctx: &mut GameCtx) {
+    ctx.world_signals.set_flag("spawn_tilemap");
+    // ... spawn other entities
+}
+```
+
+Register both in your builder:
+
+```rust
+EngineBuilder::new()
+    .on_setup(setup)
+    .add_system(spawn_tilemap_system)  // consumes the flag and spawns tiles
+    .add_scene("level01", SceneDescriptor { on_enter: enter, .. })
+    .initial_scene("level01")
+    .run();
+```
+
+**Z-layering:** `spawn_tiles` assigns `ZIndex` values automatically based on layer order. The first layer gets the most negative Z (furthest back), and the last layer gets the least negative. Tile instances are in `Group("tiles")`; use `Group("tiles")` for group-based collision rules if needed.
+
+> **Note:** `load_tilemap` and `spawn_tiles` are always compiled regardless of the `lua` feature flag, making them available to Rust-only downstream crates.
+
 ### Camera
 
 `Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it:
@@ -1326,7 +1457,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `TextureStore` | `Res` / `ResMut` | Loaded textures by key |
 | `AnimationStore` | `Res` | Animation definitions |
 | `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
-| `TilemapStore` | `Res` | Loaded tilemap data (optional) |
+| `TilemapStore` | `Res` | Loaded tilemap data — **not pre-inserted**; insert manually in setup via `commands.insert_resource(TilemapStore::new())` |
 | `DebugMode` | marker resource | Presence enables debug overlays |
 | `FullScreen` | marker resource | Presence enables fullscreen |
 

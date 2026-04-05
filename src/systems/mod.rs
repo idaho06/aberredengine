@@ -75,6 +75,7 @@ pub mod rust_collision;
 pub mod scene_dispatch;
 pub mod signalbinding;
 pub mod stuckto;
+pub mod tilemap;
 pub mod time;
 pub mod timer;
 mod timer_core;

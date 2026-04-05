@@ -46,7 +46,7 @@ use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemapstore::{Tilemap, TilemapStore};
+use crate::resources::tilemapstore::TilemapStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
@@ -101,20 +101,6 @@ fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, 
     font
 }
 
-/// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
-fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Texture2D, Tilemap) {
-    let dirname = path.split('/').next_back().expect("Not a valid dir path.");
-    let json_path = format!("{}/{}.txt", path, dirname);
-    let png_path = format!("{}/{}.png", path, dirname);
-
-    let texture = rl
-        .load_texture(thread, &png_path)
-        .expect("Failed to load tilemap texture");
-    let json_string = std::fs::read_to_string(json_path).expect("Failed to load tilemap JSON");
-    let tilemap: Tilemap =
-        serde_json::from_str(&json_string).expect("Failed to parse tilemap JSON");
-    (texture, tilemap)
-}
 
 // This function is meant to load all resources
 pub fn setup(
@@ -170,7 +156,7 @@ pub fn setup(
             &mut shaders,
             &mut scripting.audio_cmd_writer,
             load_font_with_mipmaps,
-            load_tilemap,
+            crate::systems::tilemap::load_tilemap,
         );
     }
 

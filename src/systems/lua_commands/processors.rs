@@ -9,11 +9,7 @@ use bevy_ecs::prelude::*;
 use log::{error, info, warn};
 use raylib::prelude::{Camera2D, Color, Vector2};
 
-use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::phase::Phase;
-use crate::components::sprite::Sprite;
-use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
@@ -32,6 +28,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::phase_core::queue_phase_transition;
+use crate::systems::tilemap::spawn_tiles;
 
 /// Process a single audio command from Lua and write to the audio command channel.
 pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd: AudioLuaCmd) {
@@ -131,56 +128,6 @@ pub fn process_group_command(tracked_groups: &mut TrackedGroups, cmd: GroupCmd) 
     }
 }
 
-/// Spawn tiles from a Tilemap resource into the ECS world.
-fn spawn_tiles(
-    commands: &mut Commands,
-    tilemap_tex_key: impl Into<String>,
-    tex_width: i32,
-    tilemap: &Tilemap,
-) {
-    let tilemap_tex_key: Arc<str> = Arc::from(tilemap_tex_key.into());
-
-    let tex_w = tex_width as f32;
-    let tile_size = tilemap.tile_size as f32;
-    let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
-
-    let layer_count = tilemap.layers.len() as f32;
-    for (layer_index, layer) in tilemap.layers.iter().enumerate() {
-        let z = -(layer_count - (layer_index as f32));
-
-        for pos in &layer.positions {
-            let wx = pos.x as f32 * tile_size;
-            let wy = pos.y as f32 * tile_size;
-
-            let id = pos.id;
-            let col = id % tiles_per_row;
-            let row = id / tiles_per_row;
-
-            let offset_x = col as f32 * tile_size;
-            let offset_y = row as f32 * tile_size;
-            let origin = Vector2 { x: 0.0, y: 0.0 };
-
-            commands.spawn((
-                Group::new("tiles"),
-                MapPosition::new(wx, wy),
-                ZIndex(z),
-                Sprite {
-                    tex_key: tilemap_tex_key.clone(),
-                    width: tile_size,
-                    height: tile_size,
-                    offset: Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    origin,
-                    flip_h: false,
-                    flip_v: false,
-                },
-            ));
-        }
-    }
-}
-
 /// Process a single tilemap command from Lua and spawn tiles.
 pub fn process_tilemap_command(
     commands: &mut Commands,
@@ -193,8 +140,9 @@ pub fn process_tilemap_command(
             if let Some(tilemap_info) = tilemaps_store.get(&id) {
                 if let Some(tilemap_tex) = tex_store.get(&id) {
                     let tiles_width = tilemap_tex.width;
-                    spawn_tiles(commands, id.clone(), tiles_width, tilemap_info);
+                    let tiles_height = tilemap_tex.height;
                     info!("Spawned tiles for tilemap '{}'", id);
+                    spawn_tiles(commands, id, tiles_width, tiles_height, tilemap_info);
                 } else {
                     error!("Tilemap texture '{}' not found", id);
                 }
