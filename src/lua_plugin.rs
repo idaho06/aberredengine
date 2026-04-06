@@ -49,6 +49,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::TilemapStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::mapspawn::load_font_with_mipmaps;
 use crate::systems::lua_commands::{
     EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_camera_follow_command, process_clone_command,
@@ -59,8 +60,6 @@ use crate::systems::lua_commands::{
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{error, info};
-use raylib::ffi;
-use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
 use rustc_hash::FxHashSet;
 
@@ -89,17 +88,6 @@ pub struct EntityProcessing<'w, 's> {
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
 }
 
-/// Load a font with mipmaps and anisotropic filtering
-fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
-    let mut font = rl
-        .load_font_ex(th, path, size, None)
-        .unwrap_or_else(|_| panic!("Failed to load font '{}'", path));
-    unsafe {
-        ffi::GenTextureMipmaps(&mut font.texture);
-        ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
-    }
-    font
-}
 
 
 // This function is meant to load all resources

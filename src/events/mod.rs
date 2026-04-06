@@ -24,6 +24,7 @@ pub mod input;
 #[cfg(feature = "lua")]
 pub mod luatimer;
 pub mod menu;
+pub mod spawnmap;
 pub mod switchdebug;
 pub mod switchfullscreen;
 pub mod timer;

@@ -63,6 +63,7 @@ pub mod lua_commands;
 pub mod luaphase;
 #[cfg(feature = "lua")]
 pub mod luatimer;
+pub mod mapspawn;
 pub mod menu;
 pub mod mousecontroller;
 pub mod movement;

@@ -28,6 +28,7 @@
 //! - [`worldtime`] – simulation time and delta
 
 pub mod animationstore;
+pub mod mapdata;
 pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;

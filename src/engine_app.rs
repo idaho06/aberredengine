@@ -126,6 +126,7 @@ use crate::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use crate::systems::render::render_system;
+use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
     SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
@@ -621,6 +622,7 @@ impl EngineBuilder {
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;
         world.spawn((Observer::new(timer_observer), Persistent));
+        world.spawn((Observer::new(spawn_map_observer), Persistent));
 
         // Spawn user-registered persistent observers
         for registrar in extra_observers {
