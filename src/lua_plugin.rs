@@ -328,16 +328,14 @@ pub fn update(
     );
 
     // Check for quit flag (set by Lua)
-    if scene_state.world_signals.has_flag("quit_game") {
-        scene_state.world_signals.clear_flag("quit_game");
+    if scene_state.world_signals.take_flag("quit_game") {
         next_game_state.set(GameStates::Quitting);
         return;
     }
 
     // Check for scene switch flag (set by Lua)
-    if scene_state.world_signals.has_flag("switch_scene") {
+    if scene_state.world_signals.take_flag("switch_scene") {
         info!("Scene switch requested in world signals.");
-        scene_state.world_signals.clear_flag("switch_scene");
         let switch_scene_system = *scene_state
             .systems_store
             .get("switch_scene")

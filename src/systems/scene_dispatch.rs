@@ -220,8 +220,7 @@ pub fn scene_switch_poll(
     mut world_signals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
 ) {
-    if world_signals.has_flag("switch_scene") {
-        world_signals.clear_flag("switch_scene");
+    if world_signals.take_flag("switch_scene") {
         commands.run_system(
             *systems_store
                 .get("switch_scene")

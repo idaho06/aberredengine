@@ -223,6 +223,17 @@ impl WorldSignals {
     pub fn has_flag(&self, key: &str) -> bool {
         self.flags.contains(key)
     }
+    /// Remove a flag and return whether it was present.
+    ///
+    /// Equivalent to `has_flag` + `clear_flag` in a single hash-set lookup.
+    pub fn take_flag(&mut self, key: &str) -> bool {
+        if self.flags.remove(key) {
+            self.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
     /// Read-only view of all flags.
     // pub fn get_flags(&self) -> &FxHashSet<String> {
     //     &self.flags
@@ -459,6 +470,31 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.clear_flag("nope"); // should not panic
         assert!(!ws.has_flag("nope"));
+    }
+
+    #[test]
+    fn test_take_flag_present() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("fire");
+        assert!(ws.take_flag("fire"));
+        assert!(!ws.has_flag("fire"));
+    }
+
+    #[test]
+    fn test_take_flag_absent() {
+        let mut ws = WorldSignals::default();
+        assert!(!ws.take_flag("nope"));
+    }
+
+    #[test]
+    fn test_take_flag_marks_dirty_only_when_present() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("fire");
+        ws.snapshot(); // clear dirty
+        ws.take_flag("nope"); // absent — should not dirty
+        assert!(!ws.dirty);
+        ws.take_flag("fire"); // present — should dirty
+        assert!(ws.dirty);
     }
 
     // --- Entities ---
