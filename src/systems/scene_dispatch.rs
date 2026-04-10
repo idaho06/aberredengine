@@ -35,6 +35,7 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
@@ -54,9 +55,10 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
 /// Called every frame to draw the scene's ImGui GUI.
 ///
-/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets and a mutable
+/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a mutable
 /// reference to [`WorldSignals`] for reading current state and writing user
-/// actions back to game logic.
+/// actions back to game logic, and read-only access to the [`TextureStore`]
+/// for displaying texture previews.
 ///
 /// # Contract
 /// - Called from inside the render system's ImGui frame — after the game world
@@ -64,10 +66,11 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 /// - Called whether or not debug mode (F11) is active.
 /// - All interaction results must be communicated via `WorldSignals`.
 ///   Use the `"gui:"` prefix for all signal keys to avoid collisions.
+/// - `TextureStore` is read-only; mutations go through observer events.
 ///
 /// # Example
 /// ```rust,ignore
-/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals) {
+/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals, _textures: &TextureStore) {
 ///     if let Some(_mb) = ui.begin_main_menu_bar() {
 ///         if let Some(_file) = ui.begin_menu("File") {
 ///             if ui.menu_item("Save Map") {
@@ -77,7 +80,7 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 ///     }
 /// }
 /// ```
-pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals);
+pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore);
 
 // ---------------------------------------------------------------------------
 // SceneDescriptor
@@ -327,7 +330,7 @@ mod tests {
     #[test]
     fn gui_callback_some_stores_fn_pointer() {
         fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore) {}
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,
@@ -344,7 +347,7 @@ mod tests {
     #[test]
     fn gui_callback_clone_preserves_fn_pointer() {
         fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore) {}
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,

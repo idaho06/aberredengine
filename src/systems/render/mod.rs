@@ -723,7 +723,7 @@ pub fn render_system(
             }
 
             if let Some(cb) = gui_callback {
-                cb(&ui, world_signals);
+                cb(&ui, world_signals, textures);
             }
         };
         apply_postprocess_passes(
