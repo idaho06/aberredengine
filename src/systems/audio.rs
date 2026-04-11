@@ -317,7 +317,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 music.update_stream();
                 let len = music.get_time_length();
                 let played = music.get_time_played();
-                if played >= len - 0.01 && !looped.contains(id) {
+                if played >= len - 0.01 {
                     ended.push(id.clone());
                 }
             }
@@ -328,7 +328,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 if let Some(music) = musics.get(id) {
                     debug!(target: "audio", "restarting looped id='{}'", id);
                     music.stop_stream();
-                    //music.seek_stream(0.0);
+                    music.seek_stream(0.0);
                     music.play_stream();
                     let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id: id.clone() });
                 }

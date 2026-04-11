@@ -754,7 +754,7 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
 
 #[test]
 fn gui_callback_stored_and_retrieved_via_scene_manager() {
-    fn my_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals) {}
+    fn my_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals, _tex: &TextureStore) {}
 
     let mut sm = SceneManager::new();
     sm.insert(
@@ -782,7 +782,7 @@ fn gui_callback_stored_and_retrieved_via_scene_manager() {
 #[test]
 fn scene_with_gui_callback_enters_correctly() {
     clear_logs();
-    fn editor_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals) {}
+    fn editor_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals, _tex: &TextureStore) {}
 
     let mut world = setup_world();
 
