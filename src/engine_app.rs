@@ -922,15 +922,11 @@ mod tests {
             "animation_controller should still run after phase_system"
         );
         assert!(
-            !system_type_ids
-                .iter()
-                .any(|type_id| *type_id == lua_phase_system_type),
+            !system_type_ids.contains(&lua_phase_system_type),
             "lua_phase_system should be absent when has_lua is false"
         );
         assert!(
-            !system_type_ids
-                .iter()
-                .any(|type_id| *type_id == update_lua_timers_type),
+            !system_type_ids.contains(&update_lua_timers_type),
             "update_lua_timers should be absent when has_lua is false"
         );
     }
