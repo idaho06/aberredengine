@@ -556,6 +556,104 @@ fn bounds_clamp_respects_zoom() {
 }
 
 #[test]
+fn bounds_smaller_than_viewport_centers_camera() {
+    let mut world = setup_world();
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.bounds = Some(Rectangle {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+        });
+    }
+    world.spawn((MapPosition::new(-999.0, 999.0), CameraTarget::default()));
+    world.flush();
+
+    tick(&mut world);
+
+    let t = camera_target(&world);
+    assert!(approx_eq(t.x, 60.0), "x centered in narrow bounds: {}", t.x);
+    assert!(approx_eq(t.y, 60.0), "y centered in short bounds: {}", t.y);
+}
+
+#[test]
+fn bounds_smaller_than_viewport_only_on_x_centers_that_axis() {
+    let mut world = setup_world();
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.bounds = Some(Rectangle {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 400.0,
+        });
+    }
+    world.spawn((MapPosition::new(-999.0, -999.0), CameraTarget::default()));
+    world.flush();
+
+    tick(&mut world);
+
+    let t = camera_target(&world);
+    assert!(approx_eq(t.x, 60.0), "x centered in narrow bounds: {}", t.x);
+    assert!(approx_eq(t.y, 140.0), "y still clamps normally: {}", t.y);
+}
+
+#[test]
+fn zero_width_bounds_center_x() {
+    let mut world = setup_world();
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.bounds = Some(Rectangle {
+            x: 25.0,
+            y: 20.0,
+            width: 0.0,
+            height: 400.0,
+        });
+    }
+    world.spawn((MapPosition::new(999.0, -999.0), CameraTarget::default()));
+    world.flush();
+
+    tick(&mut world);
+
+    let t = camera_target(&world);
+    assert!(approx_eq(t.x, 25.0), "x centered in zero-width bounds: {}", t.x);
+    assert!(approx_eq(t.y, 140.0), "y still clamps normally: {}", t.y);
+}
+
+#[test]
+fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
+    let mut world = setup_world();
+    world.insert_resource(Camera2DRes(Camera2D {
+        target: Vector2 { x: 0.0, y: 0.0 },
+        offset: Vector2 { x: 160.0, y: 120.0 },
+        rotation: 0.0,
+        zoom: 0.1,
+    }));
+    {
+        let mut cfg = world.resource_mut::<CameraFollowConfig>();
+        cfg.mode = FollowMode::Instant;
+        cfg.bounds = Some(Rectangle {
+            x: 50.0,
+            y: 70.0,
+            width: 500.0,
+            height: 400.0,
+        });
+    }
+    world.spawn((MapPosition::new(9999.0, -9999.0), CameraTarget::default().with_zoom(0.1)));
+    world.flush();
+
+    tick(&mut world);
+
+    let t = camera_target(&world);
+    assert!(approx_eq(t.x, 300.0), "x centered when zoomed far out: {}", t.x);
+    assert!(approx_eq(t.y, 270.0), "y centered when zoomed far out: {}", t.y);
+}
+
+#[test]
 fn no_bounds_allows_any_position() {
     let mut world = setup_world();
     {
