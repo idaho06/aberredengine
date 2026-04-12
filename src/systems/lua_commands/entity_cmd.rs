@@ -51,9 +51,13 @@ pub fn process_entity_commands(
 
             cmd @ (EntityCmd::SignalSetFlag { .. }
             | EntityCmd::SignalClearFlag { .. }
+            | EntityCmd::SignalToggleFlag { .. }
             | EntityCmd::SignalSetScalar { .. }
+            | EntityCmd::SignalClearScalar { .. }
             | EntityCmd::SignalSetString { .. }
-            | EntityCmd::SignalSetInteger { .. }) => process_signal_cmd(cmd, queries),
+            | EntityCmd::SignalClearString { .. }
+            | EntityCmd::SignalSetInteger { .. }
+            | EntityCmd::SignalClearInteger { .. }) => process_signal_cmd(cmd, queries),
 
             cmd @ (EntityCmd::RestartAnimation { .. }
             | EntityCmd::SetAnimation { .. }
@@ -202,6 +206,12 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 signals.clear_flag(&flag);
             }
         }
+        EntityCmd::SignalToggleFlag { entity_id, flag } => {
+            let entity = Entity::from_bits(entity_id);
+            if let Ok(mut signals) = queries.signals.get_mut(entity) {
+                signals.toggle_flag(&flag);
+            }
+        }
         EntityCmd::SignalSetScalar {
             entity_id,
             key,
@@ -210,6 +220,12 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             let entity = Entity::from_bits(entity_id);
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_scalar(&key, value);
+            }
+        }
+        EntityCmd::SignalClearScalar { entity_id, key } => {
+            let entity = Entity::from_bits(entity_id);
+            if let Ok(mut signals) = queries.signals.get_mut(entity) {
+                signals.clear_scalar(&key);
             }
         }
         EntityCmd::SignalSetString {
@@ -222,6 +238,12 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 signals.set_string(&key, &value);
             }
         }
+        EntityCmd::SignalClearString { entity_id, key } => {
+            let entity = Entity::from_bits(entity_id);
+            if let Ok(mut signals) = queries.signals.get_mut(entity) {
+                signals.remove_string(&key);
+            }
+        }
         EntityCmd::SignalSetInteger {
             entity_id,
             key,
@@ -230,6 +252,12 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             let entity = Entity::from_bits(entity_id);
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_integer(&key, value);
+            }
+        }
+        EntityCmd::SignalClearInteger { entity_id, key } => {
+            let entity = Entity::from_bits(entity_id);
+            if let Ok(mut signals) = queries.signals.get_mut(entity) {
+                signals.clear_integer(&key);
             }
         }
         _ => unreachable!(),

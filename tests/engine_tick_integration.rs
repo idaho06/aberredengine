@@ -1665,9 +1665,11 @@ fn meta_functions_complete() {
             "play_music", "play_sound", "stop_all_music", "stop_all_sounds",
             -- signal reads
             "get_scalar", "get_integer", "get_string", "has_flag",
+            "get_scalars", "get_integers", "get_strings", "get_flags",
             "get_group_count", "get_entity",
             -- signal writes
             "set_scalar", "set_integer", "set_string", "set_flag", "clear_flag",
+            "toggle_flag",
             "clear_scalar", "clear_integer", "clear_string",
             "set_entity", "remove_entity",
             -- phase
@@ -1689,7 +1691,7 @@ fn meta_functions_complete() {
             "collision_spawn", "collision_clone",
             "collision_play_sound",
             "collision_set_scalar", "collision_set_integer", "collision_set_string",
-            "collision_set_flag", "collision_clear_flag",
+            "collision_set_flag", "collision_clear_flag", "collision_toggle_flag",
             "collision_clear_scalar", "collision_clear_integer", "collision_clear_string",
             "collision_phase_transition", "collision_set_camera",
         }
@@ -1707,15 +1709,17 @@ fn meta_functions_complete() {
         local entity_cmds = {
             "entity_despawn", "entity_menu_despawn", "entity_set_velocity",
             "entity_set_position", "entity_freeze", "entity_unfreeze",
-            "entity_signal_set_flag", "entity_signal_clear_flag",
+            "entity_signal_set_flag", "entity_signal_clear_flag", "entity_signal_toggle_flag",
             "entity_insert_lua_timer", "entity_remove_lua_timer",
             "entity_insert_ttl", "entity_set_rotation", "entity_set_scale",
             "entity_set_speed", "entity_set_friction", "entity_set_max_speed",
             "entity_insert_tween_position", "entity_insert_tween_rotation",
             "entity_insert_tween_scale", "entity_remove_tween_position",
             "entity_remove_tween_rotation", "entity_remove_tween_scale",
-            "entity_signal_set_scalar", "entity_signal_set_string",
-            "entity_signal_set_integer", "entity_add_force", "entity_remove_force",
+            "entity_signal_set_scalar", "entity_signal_clear_scalar",
+            "entity_signal_set_string", "entity_signal_clear_string",
+            "entity_signal_set_integer", "entity_signal_clear_integer",
+            "entity_add_force", "entity_remove_force",
             "entity_set_force_enabled", "entity_set_force_value",
             "release_stuckto", "entity_insert_stuckto",
             "entity_restart_animation", "entity_set_animation", "entity_set_sprite_flip",

@@ -401,6 +401,10 @@ function engine.clear_string(key) end
 ---@return integer|nil
 function engine.get_entity(key) end
 
+---Get all world signal flags as a snapshot array
+---@return table
+function engine.get_flags() end
+
 ---Get the count of entities in a tracked group
 ---@param group string
 ---@return integer|nil
@@ -411,15 +415,27 @@ function engine.get_group_count(group) end
 ---@return integer|nil
 function engine.get_integer(key) end
 
+---Get all world signal integers as a snapshot table
+---@return table
+function engine.get_integers() end
+
 ---Get a world signal scalar value
 ---@param key string
 ---@return number|nil
 function engine.get_scalar(key) end
 
+---Get all world signal scalars as a snapshot table
+---@return table
+function engine.get_scalars() end
+
 ---Get a world signal string value
 ---@param key string
 ---@return string|nil
 function engine.get_string(key) end
+
+---Get all world signal strings as a snapshot table
+---@return table
+function engine.get_strings() end
 
 ---Check if a world signal flag is set
 ---@param key string
@@ -453,6 +469,10 @@ function engine.set_scalar(key, value) end
 ---@param key string
 ---@param value string
 function engine.set_string(key, value) end
+
+---Toggle a world signal flag
+---@param key string
+function engine.toggle_flag(key) end
 
 -- ==================== Phase Control ====================
 
@@ -718,6 +738,21 @@ function engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w) en
 ---@param flag string
 function engine.collision_entity_signal_clear_flag(entity_id, flag) end
 
+---Clear an integer signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.collision_entity_signal_clear_integer(entity_id, key) end
+
+---Clear a scalar signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.collision_entity_signal_clear_scalar(entity_id, key) end
+
+---Clear a string signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.collision_entity_signal_clear_string(entity_id, key) end
+
 ---Set a flag on an entity's signals
 ---@param entity_id integer
 ---@param flag string
@@ -740,6 +775,11 @@ function engine.collision_entity_signal_set_scalar(entity_id, key, value) end
 ---@param key string
 ---@param value string
 function engine.collision_entity_signal_set_string(entity_id, key, value) end
+
+---Toggle a flag on an entity's signals
+---@param entity_id integer
+---@param flag string
+function engine.collision_entity_signal_toggle_flag(entity_id, flag) end
 
 ---Unfreeze entity
 ---@param entity_id integer
@@ -1004,6 +1044,21 @@ function engine.entity_shader_set_vec4(entity_id, name, x, y, z, w) end
 ---@param flag string
 function engine.entity_signal_clear_flag(entity_id, flag) end
 
+---Clear an integer signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.entity_signal_clear_integer(entity_id, key) end
+
+---Clear a scalar signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.entity_signal_clear_scalar(entity_id, key) end
+
+---Clear a string signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.entity_signal_clear_string(entity_id, key) end
+
 ---Set a flag on an entity's signals
 ---@param entity_id integer
 ---@param flag string
@@ -1026,6 +1081,11 @@ function engine.entity_signal_set_scalar(entity_id, key, value) end
 ---@param key string
 ---@param value string
 function engine.entity_signal_set_string(entity_id, key, value) end
+
+---Toggle a flag on an entity's signals
+---@param entity_id integer
+---@param flag string
+function engine.entity_signal_toggle_flag(entity_id, flag) end
 
 ---Unfreeze entity
 ---@param entity_id integer
@@ -1186,6 +1246,10 @@ function engine.collision_set_string(key, value) end
 ---Create a new entity builder (collision context)
 ---@return CollisionEntityBuilder
 function engine.collision_spawn() end
+
+---Toggle a world signal flag (collision context)
+---@param flag string
+function engine.collision_toggle_flag(flag) end
 
 -- ==================== Animation Registration ====================
 

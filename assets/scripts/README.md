@@ -2254,6 +2254,43 @@ if brick_count == 0 then
 end
 ```
 
+#### `engine.get_scalars()`
+
+Get all world scalar signals as a snapshot table.
+
+```lua
+local scalars = engine.get_scalars()
+local speed = scalars.ball_speed or 0.0
+```
+
+#### `engine.get_integers()`
+
+Get all world integer signals as a snapshot table.
+
+```lua
+local integers = engine.get_integers()
+local score = integers.score or 0
+```
+
+#### `engine.get_strings()`
+
+Get all world string signals as a snapshot table.
+
+```lua
+local strings = engine.get_strings()
+local scene = strings.scene or "unknown"
+```
+
+#### `engine.get_flags()`
+
+Get all world flags as a snapshot array of strings.
+
+```lua
+for _, flag in ipairs(engine.get_flags()) do
+    engine.log_info("Flag: " .. flag)
+end
+```
+
 ### Writing Signals
 
 #### `engine.set_scalar(key, value)`
@@ -2299,6 +2336,14 @@ Clear boolean flag (set to false).
 ```lua
 engine.clear_flag("switch_scene")
 engine.clear_flag("game_paused")
+```
+
+#### `engine.toggle_flag(key)`
+
+Toggle a boolean flag in world signals.
+
+```lua
+engine.toggle_flag("game_paused")
 ```
 
 #### `engine.clear_scalar(key)`
@@ -2576,6 +2621,14 @@ Clear flag on entity's Signals component.
 engine.entity_signal_clear_flag(player_id, "sticky")
 ```
 
+### `engine.entity_signal_toggle_flag(entity_id, flag)`
+
+Toggle a flag on entity's Signals component.
+
+```lua
+engine.entity_signal_toggle_flag(player_id, "shielded")
+```
+
 ### `engine.entity_signal_set_integer(entity_id, key, value)`
 
 Set integer signal on entity.
@@ -2583,6 +2636,14 @@ Set integer signal on entity.
 ```lua
 engine.entity_signal_set_integer(player_id, "hp", 3)
 engine.entity_signal_set_integer(enemy_id, "damage", 10)
+```
+
+### `engine.entity_signal_clear_integer(entity_id, key)`
+
+Clear an integer signal on entity.
+
+```lua
+engine.entity_signal_clear_integer(enemy_id, "damage")
 ```
 
 ### `engine.entity_signal_set_scalar(entity_id, key, value)`
@@ -2593,12 +2654,28 @@ Set floating-point signal on entity.
 engine.entity_signal_set_scalar(player_id, "speed", 150.5)
 ```
 
+### `engine.entity_signal_clear_scalar(entity_id, key)`
+
+Clear a floating-point signal on entity.
+
+```lua
+engine.entity_signal_clear_scalar(player_id, "speed")
+```
+
 ### `engine.entity_signal_set_string(entity_id, key, value)`
 
 Set string signal on entity.
 
 ```lua
 engine.entity_signal_set_string(player_id, "state", "running")
+```
+
+### `engine.entity_signal_clear_string(entity_id, key)`
+
+Clear a string signal on entity.
+
+```lua
+engine.entity_signal_clear_string(player_id, "state")
 ```
 
 ### `engine.entity_insert_lua_timer(entity_id, duration, callback)`
@@ -3144,6 +3221,14 @@ Clear global flag during collision.
 engine.collision_clear_flag("ball_hit_player")
 ```
 
+#### `engine.collision_toggle_flag(flag)`
+
+Toggle global flag during collision.
+
+```lua
+engine.collision_toggle_flag("ball_hit_player")
+```
+
 #### `engine.collision_set_scalar(key, value)`
 
 Set global scalar signal during collision.
@@ -3383,6 +3468,16 @@ function on_player_debuff_zone(ctx)
 end
 ```
 
+#### `engine.collision_entity_signal_toggle_flag(entity_id, flag)`
+
+Toggle a flag on an entity's Signals component during collision handling.
+
+```lua
+function on_player_switch_state(ctx)
+    engine.collision_entity_signal_toggle_flag(ctx.a.id, "powered_up")
+end
+```
+
 #### `engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
 
 Attach an entity to another entity during collision handling.
@@ -3538,6 +3633,16 @@ function on_player_speed_boost(ctx)
 end
 ```
 
+#### `engine.collision_entity_signal_clear_scalar(entity_id, key)`
+
+Clear a floating-point signal on an entity's Signals component during collision handling.
+
+```lua
+function on_player_speed_reset(ctx)
+    engine.collision_entity_signal_clear_scalar(ctx.a.id, "speed_multiplier")
+end
+```
+
 #### `engine.collision_entity_signal_set_string(entity_id, key, value)`
 
 Set a string signal on an entity's Signals component during collision handling.
@@ -3552,6 +3657,26 @@ Set a string signal on an entity's Signals component during collision handling.
 function on_player_color_change(ctx)
     local player_id = ctx.a.id
     engine.collision_entity_signal_set_string(player_id, "color", "red")
+end
+```
+
+#### `engine.collision_entity_signal_clear_string(entity_id, key)`
+
+Clear a string signal on an entity's Signals component during collision handling.
+
+```lua
+function on_player_color_reset(ctx)
+    engine.collision_entity_signal_clear_string(ctx.a.id, "color")
+end
+```
+
+#### `engine.collision_entity_signal_clear_integer(entity_id, key)`
+
+Clear an integer signal on an entity's Signals component during collision handling.
+
+```lua
+function on_player_reset_hits(ctx)
+    engine.collision_entity_signal_clear_integer(ctx.a.id, "combo_hits")
 end
 ```
 

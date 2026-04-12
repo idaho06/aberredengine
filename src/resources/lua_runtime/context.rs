@@ -250,7 +250,7 @@ pub fn build_entity_context<'a>(
 
         // Strings as key-value map
         let strings_table = lua.create_table()?;
-        for (key, value) in signals.strings.iter() {
+        for (key, value) in signals.get_strings() {
             strings_table.set(key.as_str(), value.as_str())?;
         }
         sig_table.set("strings", strings_table)?;
@@ -333,7 +333,7 @@ fn populate_entity_signals(
 
     // Create fresh strings map (variable keys)
     let strings_table = lua.create_table()?;
-    for (key, value) in &signals.strings {
+    for (key, value) in signals.get_strings() {
         strings_table.set(key.as_str(), value.as_str())?;
     }
     signals_table.set("strings", strings_table)?;

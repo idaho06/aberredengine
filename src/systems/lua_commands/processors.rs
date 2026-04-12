@@ -90,6 +90,9 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         SignalCmd::ClearFlag { key } => {
             world_signals.clear_flag(&key);
         }
+        SignalCmd::ToggleFlag { key } => {
+            world_signals.toggle_flag(&key);
+        }
         SignalCmd::SetString { key, value } => {
             world_signals.set_string(&key, &value);
         }
@@ -465,10 +468,11 @@ mod tests {
     use bevy_ecs::system::SystemState;
     use raylib::prelude::Vector2;
 
-    use super::{process_animation_command, process_audio_command};
+    use super::{process_animation_command, process_audio_command, process_signal_command};
     use crate::events::audio::AudioCmd;
     use crate::resources::animationstore::AnimationStore;
-    use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd};
+    use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd, SignalCmd};
+    use crate::resources::worldsignals::WorldSignals;
 
     #[test]
     fn stop_all_sounds_maps_to_stop_all_fx() {
@@ -523,5 +527,26 @@ mod tests {
         assert_eq!(animation.frame_count, 6);
         assert_eq!(animation.fps, 10.0);
         assert!(animation.looped);
+    }
+
+    #[test]
+    fn toggle_flag_updates_world_signals() {
+        let mut world_signals = WorldSignals::default();
+
+        process_signal_command(
+            &mut world_signals,
+            SignalCmd::ToggleFlag {
+                key: "paused".to_string(),
+            },
+        );
+        assert!(world_signals.has_flag("paused"));
+
+        process_signal_command(
+            &mut world_signals,
+            SignalCmd::ToggleFlag {
+                key: "paused".to_string(),
+            },
+        );
+        assert!(!world_signals.has_flag("paused"));
     }
 }

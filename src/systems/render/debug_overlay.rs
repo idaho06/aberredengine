@@ -148,21 +148,22 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             if ui.collapsing_header(
-                format!("Flags ({})", world_signals.flags.len()),
+                format!("Flags ({})", world_signals.get_flags().len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut flags: Vec<&str> = world_signals.flags.iter().map(|s| s.as_str()).collect();
+                let mut flags: Vec<&str> =
+                    world_signals.get_flags().iter().map(|s| s.as_str()).collect();
                 flags.sort_unstable();
                 for flag in flags {
                     ui.text(format!("  {}", flag));
                 }
             }
             if ui.collapsing_header(
-                format!("Scalars ({})", world_signals.scalars.len()),
+                format!("Scalars ({})", world_signals.get_scalars().len()),
                 TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, f32)> = world_signals
-                    .scalars
+                    .get_scalars()
                     .iter()
                     .map(|(k, v)| (k.as_str(), *v))
                     .collect();
@@ -172,11 +173,11 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
                 }
             }
             if ui.collapsing_header(
-                format!("Integers ({})", world_signals.integers.len()),
+                format!("Integers ({})", world_signals.get_integers().len()),
                 TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, i32)> = world_signals
-                    .integers
+                    .get_integers()
                     .iter()
                     .map(|(k, v)| (k.as_str(), *v))
                     .collect();
@@ -186,11 +187,11 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
                 }
             }
             if ui.collapsing_header(
-                format!("Strings ({})", world_signals.strings.len()),
+                format!("Strings ({})", world_signals.get_strings().len()),
                 TreeNodeFlags::empty(),
             ) {
                 let mut entries: Vec<(&str, &str)> = world_signals
-                    .strings
+                    .get_strings()
                     .iter()
                     .map(|(k, v)| (k.as_str(), v.as_str()))
                     .collect();

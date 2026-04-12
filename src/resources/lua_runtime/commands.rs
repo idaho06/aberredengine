@@ -81,6 +81,7 @@ pub enum SignalCmd {
     SetString { key: String, value: String },
     SetFlag { key: String },
     ClearFlag { key: String },
+    ToggleFlag { key: String },
     ClearScalar { key: String },
     ClearInteger { key: String },
     ClearString { key: String },
@@ -104,6 +105,8 @@ pub enum EntityCmd {
     SignalSetFlag { entity_id: u64, flag: String },
     /// Clear a flag on an entity's Signals component
     SignalClearFlag { entity_id: u64, flag: String },
+    /// Toggle a flag on an entity's Signals component
+    SignalToggleFlag { entity_id: u64, flag: String },
     /// Set entity velocity (RigidBody)
     SetVelocity { entity_id: u64, vx: f32, vy: f32 },
     /// Insert a StuckTo component
@@ -179,12 +182,16 @@ pub enum EntityCmd {
         key: String,
         value: f32,
     },
+    /// Clear a scalar signal on an entity's Signals component
+    SignalClearScalar { entity_id: u64, key: String },
     /// Set a string signal on an entity's Signals component
     SignalSetString {
         entity_id: u64,
         key: String,
         value: String,
     },
+    /// Clear a string signal on an entity's Signals component
+    SignalClearString { entity_id: u64, key: String },
     /// Add or update a named force on the entity's RigidBody
     AddForce {
         entity_id: u64,
@@ -235,6 +242,8 @@ pub enum EntityCmd {
         key: String,
         value: i32,
     },
+    /// Clear an integer signal on an entity's Signals component
+    SignalClearInteger { entity_id: u64, key: String },
     /// Insert a Ttl (time-to-live) component
     InsertTtl { entity_id: u64, seconds: f32 },
     /// Set or replace entity shader

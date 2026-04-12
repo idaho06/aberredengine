@@ -69,6 +69,10 @@ impl Signals {
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
         self.scalars.get(key).copied()
     }
+    /// Remove a scalar signal by key.
+    pub fn clear_scalar(&mut self, key: &str) -> Option<f32> {
+        self.scalars.remove(key)
+    }
     /// Read-only view of all scalar signals.
     pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
         &self.scalars
@@ -80,6 +84,10 @@ impl Signals {
     /// Get an integer signal by key.
     pub fn get_integer(&self, key: &str) -> Option<i32> {
         self.integers.get(key).copied()
+    }
+    /// Remove an integer signal by key.
+    pub fn clear_integer(&mut self, key: &str) -> Option<i32> {
+        self.integers.remove(key)
     }
     /// Read-only view of all integer signals.
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
@@ -102,6 +110,16 @@ impl Signals {
     pub fn has_flag(&self, key: &str) -> bool {
         self.flags.contains(key)
     }
+    /// Remove a flag and return whether it was present.
+    pub fn take_flag(&mut self, key: &str) -> bool {
+        self.flags.remove(key)
+    }
+    /// Toggle a flag: remove it if present, add it if absent.
+    pub fn toggle_flag(&mut self, key: &str) {
+        if !self.flags.remove(key) {
+            self.flags.insert(key.to_string());
+        }
+    }
     /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
@@ -113,6 +131,14 @@ impl Signals {
     /// Get a string signal by key.
     pub fn get_string(&self, key: &str) -> Option<&String> {
         self.strings.get(key)
+    }
+    /// Remove a string signal by key.
+    pub fn remove_string(&mut self, key: &str) -> Option<String> {
+        self.strings.remove(key)
+    }
+    /// Read-only view of all string signals.
+    pub fn get_strings(&self) -> &FxHashMap<String, String> {
+        &self.strings
     }
 }
 
@@ -151,6 +177,20 @@ mod tests {
     }
 
     #[test]
+    fn test_clear_scalar() {
+        let mut s = Signals::default();
+        s.set_scalar("hp", 100.0);
+        assert_eq!(s.clear_scalar("hp"), Some(100.0));
+        assert_eq!(s.get_scalar("hp"), None);
+    }
+
+    #[test]
+    fn test_clear_scalar_nonexistent() {
+        let mut s = Signals::default();
+        assert_eq!(s.clear_scalar("missing"), None);
+    }
+
+    #[test]
     fn test_set_and_get_integer() {
         let mut s = Signals::default();
         s.set_integer("coins", 5);
@@ -169,6 +209,20 @@ mod tests {
     fn test_integer_missing_returns_none() {
         let s = Signals::default();
         assert_eq!(s.get_integer("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_clear_integer() {
+        let mut s = Signals::default();
+        s.set_integer("coins", 5);
+        assert_eq!(s.clear_integer("coins"), Some(5));
+        assert_eq!(s.get_integer("coins"), None);
+    }
+
+    #[test]
+    fn test_clear_integer_nonexistent() {
+        let mut s = Signals::default();
+        assert_eq!(s.clear_integer("missing"), None);
     }
 
     #[test]
@@ -194,6 +248,43 @@ mod tests {
     }
 
     #[test]
+    fn test_take_flag_present() {
+        let mut s = Signals::default();
+        s.set_flag("is_running");
+        assert!(s.take_flag("is_running"));
+        assert!(!s.has_flag("is_running"));
+    }
+
+    #[test]
+    fn test_take_flag_absent() {
+        let mut s = Signals::default();
+        assert!(!s.take_flag("missing"));
+    }
+
+    #[test]
+    fn test_toggle_flag_absent_sets_it() {
+        let mut s = Signals::default();
+        s.toggle_flag("is_running");
+        assert!(s.has_flag("is_running"));
+    }
+
+    #[test]
+    fn test_toggle_flag_present_clears_it() {
+        let mut s = Signals::default();
+        s.set_flag("is_running");
+        s.toggle_flag("is_running");
+        assert!(!s.has_flag("is_running"));
+    }
+
+    #[test]
+    fn test_toggle_flag_twice_restores() {
+        let mut s = Signals::default();
+        s.toggle_flag("is_running");
+        s.toggle_flag("is_running");
+        assert!(!s.has_flag("is_running"));
+    }
+
+    #[test]
     fn test_set_and_get_string() {
         let mut s = Signals::default();
         s.set_string("name", "player");
@@ -212,6 +303,20 @@ mod tests {
     fn test_string_missing_returns_none() {
         let s = Signals::default();
         assert_eq!(s.get_string("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_remove_string() {
+        let mut s = Signals::default();
+        s.set_string("name", "player");
+        assert_eq!(s.remove_string("name"), Some("player".to_string()));
+        assert_eq!(s.get_string("name"), None);
+    }
+
+    #[test]
+    fn test_remove_string_nonexistent() {
+        let mut s = Signals::default();
+        assert_eq!(s.remove_string("missing"), None);
     }
 
     #[test]
@@ -241,6 +346,13 @@ mod tests {
         s.set_flag("x");
         s.set_flag("y");
         assert_eq!(s.get_flags().len(), 2);
+    }
+
+    #[test]
+    fn test_get_strings_view() {
+        let mut s = Signals::default();
+        s.set_string("name", "player");
+        assert_eq!(s.get_strings().len(), 1);
     }
 
     #[test]

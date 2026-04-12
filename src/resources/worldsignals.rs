@@ -111,10 +111,10 @@ impl WorldSignals {
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
         self.scalars.get(key).copied()
     }
-    // Read-only view of all scalar signals.
-    // pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
-    //     &self.scalars
-    // }
+    /// Read-only view of all scalar signals.
+    pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
+        &self.scalars
+    }
 
     /// Set an integer signal value.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
@@ -124,6 +124,10 @@ impl WorldSignals {
     /// Get an integer signal by key.
     pub fn get_integer(&self, key: &str) -> Option<i32> {
         self.integers.get(key).copied()
+    }
+    /// Read-only view of all integer signals.
+    pub fn get_integers(&self) -> &FxHashMap<String, i32> {
+        &self.integers
     }
     /// Get a group count by the name of the group.
     ///
@@ -204,10 +208,6 @@ impl WorldSignals {
         }
         result
     }
-    /// Read-only view of all integer signals.
-    // pub fn get_integers(&self) -> &FxHashMap<String, i32> {
-    //     &self.integers
-    // }
     /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
@@ -244,9 +244,13 @@ impl WorldSignals {
         self.mark_dirty();
     }
     /// Read-only view of all flags.
-    // pub fn get_flags(&self) -> &FxHashSet<String> {
-    //     &self.flags
-    // }
+    pub fn get_flags(&self) -> &FxHashSet<String> {
+        &self.flags
+    }
+    /// Read-only view of all string signals.
+    pub fn get_strings(&self) -> &FxHashMap<String, String> {
+        &self.strings
+    }
     /// Get an entity by key.
     pub fn get_entity(&self, key: &str) -> Option<&Entity> {
         self.entities.get(key)
@@ -383,6 +387,13 @@ mod tests {
     }
 
     #[test]
+    fn test_get_scalars_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("speed", 42.0);
+        assert_eq!(ws.get_scalars().len(), 1);
+    }
+
+    #[test]
     fn test_scalar_missing_returns_none() {
         let ws = WorldSignals::default();
         assert_eq!(ws.get_scalar("nope"), None);
@@ -413,6 +424,13 @@ mod tests {
     }
 
     #[test]
+    fn test_get_integers_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("score", 100);
+        assert_eq!(ws.get_integers().len(), 1);
+    }
+
+    #[test]
     fn test_integer_missing_returns_none() {
         let ws = WorldSignals::default();
         assert_eq!(ws.get_integer("nope"), None);
@@ -434,6 +452,13 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_string("scene", "menu");
         assert_eq!(ws.get_string("scene").map(|s| s.as_str()), Some("menu"));
+    }
+
+    #[test]
+    fn test_get_strings_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_string("scene", "menu");
+        assert_eq!(ws.get_strings().len(), 1);
     }
 
     #[test]
@@ -464,6 +489,13 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_flag("paused");
         assert!(ws.has_flag("paused"));
+    }
+
+    #[test]
+    fn test_get_flags_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("paused");
+        assert_eq!(ws.get_flags().len(), 1);
     }
 
     #[test]

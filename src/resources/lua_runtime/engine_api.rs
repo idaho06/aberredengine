@@ -109,6 +109,10 @@ macro_rules! define_entity_cmds {
                 |(entity_id, flag)| (u64, String), EntityCmd::SignalClearFlag { entity_id, flag },
                 desc = "Clear a flag on an entity's signals",
                 params = [("entity_id", "integer"), ("flag", "string")]),
+            ("entity_signal_toggle_flag",
+                |(entity_id, flag)| (u64, String), EntityCmd::SignalToggleFlag { entity_id, flag },
+                desc = "Toggle a flag on an entity's signals",
+                params = [("entity_id", "integer"), ("flag", "string")]),
             ("entity_set_velocity",
                 |(entity_id, vx, vy)| (u64, f32, f32), EntityCmd::SetVelocity { entity_id, vx, vy },
                 desc = "Set entity velocity",
@@ -202,11 +206,21 @@ macro_rules! define_entity_cmds {
                 EntityCmd::SignalSetScalar { entity_id, key, value },
                 desc = "Set a scalar signal on an entity",
                 params = [("entity_id", "integer"), ("key", "string"), ("value", "number")]),
+            ("entity_signal_clear_scalar",
+                |(entity_id, key)| (u64, String),
+                EntityCmd::SignalClearScalar { entity_id, key },
+                desc = "Clear a scalar signal on an entity",
+                params = [("entity_id", "integer"), ("key", "string")]),
             ("entity_signal_set_string",
                 |(entity_id, key, value)| (u64, String, String),
                 EntityCmd::SignalSetString { entity_id, key, value },
                 desc = "Set a string signal on an entity",
                 params = [("entity_id", "integer"), ("key", "string"), ("value", "string")]),
+            ("entity_signal_clear_string",
+                |(entity_id, key)| (u64, String),
+                EntityCmd::SignalClearString { entity_id, key },
+                desc = "Clear a string signal on an entity",
+                params = [("entity_id", "integer"), ("key", "string")]),
             ("entity_add_force",
                 |(entity_id, name, x, y, enabled)| (u64, String, f32, f32, bool),
                 EntityCmd::AddForce { entity_id, name, x, y, enabled },
@@ -258,6 +272,11 @@ macro_rules! define_entity_cmds {
                 EntityCmd::SignalSetInteger { entity_id, key, value },
                 desc = "Set an integer signal on an entity",
                 params = [("entity_id", "integer"), ("key", "string"), ("value", "integer")]),
+            ("entity_signal_clear_integer",
+                |(entity_id, key)| (u64, String),
+                EntityCmd::SignalClearInteger { entity_id, key },
+                desc = "Clear an integer signal on an entity",
+                params = [("entity_id", "integer"), ("key", "string")]),
             ("entity_set_shader",
                 |(entity_id, key)| (u64, String), EntityCmd::SetShader { entity_id, key },
                 desc = "Set per-entity shader by key",
@@ -814,6 +833,98 @@ impl LuaRuntime {
             Some("integer?"),
         )?;
 
+        engine.set(
+            "get_scalars",
+            self.lua.create_function(|lua, ()| {
+                let table = lua.create_table()?;
+                if let Some(data) = lua.app_data_ref::<LuaAppData>() {
+                    let snapshot = data.signal_snapshot.borrow();
+                    for (key, value) in &snapshot.scalars {
+                        table.set(key.as_str(), *value)?;
+                    }
+                }
+                Ok(table)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_scalars",
+            "Get all world signal scalars as a snapshot table",
+            "signal",
+            &[],
+            Some("table"),
+        )?;
+
+        engine.set(
+            "get_integers",
+            self.lua.create_function(|lua, ()| {
+                let table = lua.create_table()?;
+                if let Some(data) = lua.app_data_ref::<LuaAppData>() {
+                    let snapshot = data.signal_snapshot.borrow();
+                    for (key, value) in &snapshot.integers {
+                        table.set(key.as_str(), *value)?;
+                    }
+                }
+                Ok(table)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_integers",
+            "Get all world signal integers as a snapshot table",
+            "signal",
+            &[],
+            Some("table"),
+        )?;
+
+        engine.set(
+            "get_strings",
+            self.lua.create_function(|lua, ()| {
+                let table = lua.create_table()?;
+                if let Some(data) = lua.app_data_ref::<LuaAppData>() {
+                    let snapshot = data.signal_snapshot.borrow();
+                    for (key, value) in &snapshot.strings {
+                        table.set(key.as_str(), value.as_str())?;
+                    }
+                }
+                Ok(table)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_strings",
+            "Get all world signal strings as a snapshot table",
+            "signal",
+            &[],
+            Some("table"),
+        )?;
+
+        engine.set(
+            "get_flags",
+            self.lua.create_function(|lua, ()| {
+                let table = lua.create_table()?;
+                if let Some(data) = lua.app_data_ref::<LuaAppData>() {
+                    let snapshot = data.signal_snapshot.borrow();
+                    for (index, flag) in snapshot.flags.iter().enumerate() {
+                        table.set(index + 1, flag.as_str())?;
+                    }
+                }
+                Ok(table)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_flags",
+            "Get all world signal flags as a snapshot array",
+            "signal",
+            &[],
+            Some("table"),
+        )?;
+
         register_cmd!(
             engine,
             self.lua,
@@ -921,6 +1032,18 @@ impl LuaRuntime {
             |key| String,
             SignalCmd::ClearFlag { key },
             desc = "Clear a world signal flag",
+            cat = "signal",
+            params = [("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "toggle_flag",
+            signal_commands,
+            |key| String,
+            SignalCmd::ToggleFlag { key },
+            desc = "Toggle a world signal flag",
             cat = "signal",
             params = [("key", "string")]
         );
@@ -1372,6 +1495,18 @@ impl LuaRuntime {
             |flag| String,
             SignalCmd::ClearFlag { key: flag },
             desc = "Clear a world signal flag (collision context)",
+            cat = "collision",
+            params = [("flag", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_toggle_flag",
+            collision_signal_commands,
+            |flag| String,
+            SignalCmd::ToggleFlag { key: flag },
+            desc = "Toggle a world signal flag (collision context)",
             cat = "collision",
             params = [("flag", "string")]
         );
