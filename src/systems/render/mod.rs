@@ -13,7 +13,7 @@
 //! (HUDs, in-game editors, tool windows).
 
 mod debug_overlay;
-mod geometry;
+pub mod geometry;
 mod postprocess;
 mod sprite;
 mod text;

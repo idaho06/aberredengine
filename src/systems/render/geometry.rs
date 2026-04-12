@@ -12,11 +12,12 @@ use crate::components::sprite::Sprite;
 /// the texture so that local coordinate `(origin.x, origin.y)` maps to world
 /// position `(dest.x, dest.y)`. Without rotation the visual top-left is at
 /// `(dest.x - origin.x, dest.y - origin.y)`.
+/// Computed geometry for a sprite draw call, also used for world-space hit testing.
 #[cfg_attr(test, derive(Debug))]
-pub(super) struct SpriteRenderGeometry {
-    pub(super) dest: Rectangle,
-    pub(super) origin: Vector2,
-    pub(super) rotation: f32,
+pub struct SpriteRenderGeometry {
+    pub dest: Rectangle,
+    pub origin: Vector2,
+    pub rotation: f32,
 }
 
 #[cfg(test)]
@@ -51,7 +52,7 @@ impl SpriteRenderGeometry {
 /// Computes the destination rectangle, scaled origin, and rotation that Raylib's
 /// `draw_texture_pro` needs. Extracted from the render loop so it can be tested
 /// without a GPU context.
-pub(super) fn compute_sprite_geometry(
+pub fn compute_sprite_geometry(
     pos: &MapPosition,
     sprite: &Sprite,
     scale: Option<&Scale>,
@@ -208,7 +209,7 @@ pub(super) fn compute_sprite_cull_bounds(
 /// Resolve the effective world-space transform for an entity, preferring
 /// `GlobalTransform2D` (hierarchy) over the entity's own local components.
 #[inline]
-pub(super) fn resolve_world_transform(
+pub fn resolve_world_transform(
     pos: MapPosition,
     maybe_scale: Option<Scale>,
     maybe_rot: Option<Rotation>,
