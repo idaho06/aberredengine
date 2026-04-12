@@ -11,6 +11,7 @@ use aberredengine::resources::gamestate::{GameState, NextGameState};
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
+use aberredengine::resources::input_bindings::InputBindings;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
@@ -35,6 +36,7 @@ fn setup_world() -> World {
     world.insert_resource(GameConfig::default());
     world.init_resource::<PostProcessShader>();
     world.insert_resource(CameraFollowConfig::default());
+    world.insert_resource(InputBindings::default());
     #[cfg(feature = "lua")]
     world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world
