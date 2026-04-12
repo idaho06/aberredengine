@@ -234,6 +234,15 @@ impl WorldSignals {
             false
         }
     }
+    /// Toggle a flag: remove it if present, add it if absent.
+    ///
+    /// Always marks the snapshot dirty since the state always changes.
+    pub fn toggle_flag(&mut self, key: &str) {
+        if !self.flags.remove(key) {
+            self.flags.insert(key.to_string());
+        }
+        self.mark_dirty();
+    }
     /// Read-only view of all flags.
     // pub fn get_flags(&self) -> &FxHashSet<String> {
     //     &self.flags
@@ -494,6 +503,41 @@ mod tests {
         ws.take_flag("nope"); // absent — should not dirty
         assert!(!ws.dirty);
         ws.take_flag("fire"); // present — should dirty
+        assert!(ws.dirty);
+    }
+
+    #[test]
+    fn test_toggle_flag_absent_sets_it() {
+        let mut ws = WorldSignals::default();
+        ws.toggle_flag("x");
+        assert!(ws.has_flag("x"));
+    }
+
+    #[test]
+    fn test_toggle_flag_present_clears_it() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("x");
+        ws.toggle_flag("x");
+        assert!(!ws.has_flag("x"));
+    }
+
+    #[test]
+    fn test_toggle_flag_twice_restores() {
+        let mut ws = WorldSignals::default();
+        ws.toggle_flag("x");
+        ws.toggle_flag("x");
+        assert!(!ws.has_flag("x"));
+    }
+
+    #[test]
+    fn test_toggle_flag_marks_dirty() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("x");
+        ws.snapshot(); // clear dirty
+        ws.toggle_flag("x"); // present → remove
+        assert!(ws.dirty);
+        ws.snapshot(); // clear dirty
+        ws.toggle_flag("x"); // absent → insert
         assert!(ws.dirty);
     }
 
