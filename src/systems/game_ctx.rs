@@ -44,6 +44,7 @@ use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -107,4 +108,6 @@ pub struct GameCtx<'w, 's> {
     pub post_process: ResMut<'w, PostProcessShader>,
     /// Mutable access to camera follow configuration (enabled, mode, zoom speed, bounds).
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
+    /// Mutable access to input bindings (key/mouse → action mapping). Use to rebind actions per scene.
+    pub input_bindings: ResMut<'w, InputBindings>,
 }
