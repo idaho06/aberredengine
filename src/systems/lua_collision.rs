@@ -47,7 +47,7 @@ use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::lua_runtime::{LuaRuntime, populate_entity_signals};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::collision::{
@@ -272,43 +272,6 @@ mod tests {
     fn test_box_side_to_str_bottom() {
         assert_eq!(box_side_to_str(&BoxSide::Bottom), "bottom");
     }
-}
-
-/// Populate an entity's signal tables (creates fresh tables for variable-length data).
-fn populate_entity_signals(
-    lua: &mlua::Lua,
-    signals_table: &mlua::Table,
-    signals: &Signals,
-) -> mlua::Result<()> {
-    // Create fresh flags array (variable length)
-    let flags_table = lua.create_table()?;
-    for (i, flag) in signals.get_flags().iter().enumerate() {
-        flags_table.set(i + 1, flag.as_str())?;
-    }
-    signals_table.set("flags", flags_table)?;
-
-    // Create fresh integers map (variable keys)
-    let integers_table = lua.create_table()?;
-    for (key, value) in signals.get_integers() {
-        integers_table.set(key.as_str(), *value)?;
-    }
-    signals_table.set("integers", integers_table)?;
-
-    // Create fresh scalars map (variable keys)
-    let scalars_table = lua.create_table()?;
-    for (key, value) in signals.get_scalars() {
-        scalars_table.set(key.as_str(), *value)?;
-    }
-    signals_table.set("scalars", scalars_table)?;
-
-    // Create fresh strings map (variable keys)
-    let strings_table = lua.create_table()?;
-    for (key, value) in signals.get_strings() {
-        strings_table.set(key.as_str(), value.as_str())?;
-    }
-    signals_table.set("strings", strings_table)?;
-
-    Ok(())
 }
 
 /// Call a Lua collision callback with context data.

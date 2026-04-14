@@ -305,7 +305,7 @@ macro_rules! set_opt {
 }
 
 /// Populate entity signal tables (creates fresh tables for variable-length data).
-fn populate_entity_signals(
+pub(crate) fn populate_entity_signals(
     lua: &Lua,
     signals_table: &LuaTable,
     signals: &Signals,
@@ -451,4 +451,39 @@ pub fn build_entity_context_pooled<'a>(
     });
 
     Ok(tables.ctx.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn populate_entity_signals_replaces_variable_length_tables() {
+        let lua = Lua::new();
+        let signals_table = lua.create_table().unwrap();
+
+        let mut first = Signals::default();
+        first.set_flag("active");
+        first.set_integer("score", 7);
+        first.set_scalar("speed", 2.5);
+        first.set_string("state", "running");
+        populate_entity_signals(&lua, &signals_table, &first).unwrap();
+
+        let mut second = Signals::default();
+        second.set_flag("paused");
+        second.set_scalar("momentum", 1.25);
+        populate_entity_signals(&lua, &signals_table, &second).unwrap();
+
+        let flags: LuaTable = signals_table.get("flags").unwrap();
+        let integers: LuaTable = signals_table.get("integers").unwrap();
+        let scalars: LuaTable = signals_table.get("scalars").unwrap();
+        let strings: LuaTable = signals_table.get("strings").unwrap();
+
+        assert_eq!(flags.get::<String>(1).unwrap(), "paused");
+        assert!(flags.get::<Option<String>>(2).unwrap().is_none());
+        assert!(integers.get::<Option<i32>>("score").unwrap().is_none());
+        assert!(scalars.get::<Option<f32>>("speed").unwrap().is_none());
+        assert_eq!(scalars.get::<f32>("momentum").unwrap(), 1.25);
+        assert!(strings.get::<Option<String>>("state").unwrap().is_none());
+    }
 }

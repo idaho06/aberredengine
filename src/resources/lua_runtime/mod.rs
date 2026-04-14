@@ -50,6 +50,7 @@ pub use context::{
     AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
     SpriteSnapshot, build_entity_context_pooled,
 };
+pub(crate) use context::populate_entity_signals;
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
 pub use runtime::{LuaRuntime, action_from_str};
