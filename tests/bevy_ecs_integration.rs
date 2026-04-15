@@ -2101,3 +2101,46 @@ fn system_entity_can_have_additional_components() {
     world.run_system(system_id).unwrap();
     assert_eq!(world.resource::<Counter>().0, 2);
 }
+
+// =============================================================================
+// CATEGORY 12: clone_and_spawn deferred behavior
+// =============================================================================
+
+#[derive(Component, Debug, Clone, PartialEq)]
+struct NamedGroup(String);
+
+/// Verify that clone_and_spawn works when the source entity was spawned
+/// in the same command buffer (i.e. deferred spawn + deferred clone, same flush).
+#[test]
+fn clone_and_spawn_after_deferred_spawn_same_buffer() {
+    let mut world = World::new();
+
+    let mut sys_state: SystemState<Commands> = SystemState::new(&mut world);
+    {
+        let mut commands = sys_state.get_mut(&mut world);
+
+        // Spawn source with a component (deferred)
+        let mut source_ec = commands.spawn_empty();
+        let source = source_ec.id();
+        source_ec.insert(NamedGroup("template".to_string()));
+
+        // Clone it in the same command buffer
+        let mut source_ref = commands.entity(source);
+        let mut clone_ec = source_ref.clone_and_spawn();
+        clone_ec.insert(NamedGroup("copy".to_string()));
+    }
+
+    // Flush everything at once
+    sys_state.apply(&mut world);
+
+    let copy_count = world
+        .query::<&NamedGroup>()
+        .iter(&world)
+        .filter(|g| g.0 == "copy")
+        .count();
+
+    assert_eq!(
+        copy_count, 1,
+        "clone_and_spawn should produce one 'copy' entity after same-buffer spawn+clone"
+    );
+}

@@ -51,11 +51,10 @@ use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::mapspawn::load_font_with_mipmaps;
 use crate::systems::lua_commands::{
-    EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
-    process_camera_command, process_camera_follow_command, process_clone_command,
-    process_entity_commands, process_gameconfig_command, process_group_command,
-    process_input_command, process_phase_command, process_render_command, process_signal_command,
-    process_spawn_command, process_tilemap_command,
+    DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_animation_command,
+    process_asset_command, process_camera_follow_command, process_gameconfig_command,
+    process_group_command, process_input_command, process_phase_command, process_render_command,
+    process_signal_command, process_tilemap_command,
 };
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -221,31 +220,21 @@ fn drain_common_commands(
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     bindings: &mut InputBindings,
 ) {
-    for cmd in lua_runtime.drain_signal_commands() {
-        process_signal_command(&mut scene_state.world_signals, cmd);
-    }
-    process_entity_commands(
-        commands,
-        lua_runtime.drain_entity_commands(),
-        &mut entities.cmd_queries,
-        &scene_state.systems_store,
-        &scene_state.anim_store,
-    );
-    for cmd in lua_runtime.drain_spawn_commands() {
-        process_spawn_command(commands, cmd, &mut scene_state.world_signals);
-    }
-    for cmd in lua_runtime.drain_clone_commands() {
-        process_clone_command(commands, cmd, &mut scene_state.world_signals);
-    }
     for cmd in lua_runtime.drain_phase_commands() {
         process_phase_command(&mut entities.luaphase, cmd);
     }
-    for cmd in lua_runtime.drain_audio_commands() {
-        process_audio_command(audio_cmd_writer, cmd);
-    }
-    for cmd in lua_runtime.drain_camera_commands() {
-        process_camera_command(commands, cmd);
-    }
+
+    drain_and_process_effect_commands(
+        lua_runtime,
+        DrainScope::Regular,
+        commands,
+        &mut scene_state.world_signals,
+        &mut entities.cmd_queries,
+        audio_cmd_writer,
+        &scene_state.systems_store,
+        &scene_state.anim_store,
+    );
+
     for cmd in lua_runtime.drain_render_commands() {
         process_render_command(cmd, &mut scene_state.post_process);
     }

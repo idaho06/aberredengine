@@ -44,9 +44,8 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    ContextQueries, EntityCmdQueries, build_entity_context, process_audio_command,
-    process_camera_command, process_clone_command, process_entity_commands, process_phase_command,
-    process_signal_command, process_spawn_command,
+    ContextQueries, DrainScope, EntityCmdQueries, build_entity_context,
+    drain_and_process_effect_commands, process_phase_command,
 };
 use log::{error, warn};
 
@@ -185,42 +184,18 @@ pub fn lua_timer_observer(
         }
     }
 
-    // Process phase commands from Lua
     for cmd in lua_runtime.drain_phase_commands() {
         process_phase_command(&mut luaphase_query, cmd);
     }
 
-    // Process audio commands from Lua
-    for cmd in lua_runtime.drain_audio_commands() {
-        process_audio_command(&mut audio_cmd_writer, cmd);
-    }
-
-    // Process signal commands from Lua
-    for cmd in lua_runtime.drain_signal_commands() {
-        process_signal_command(&mut world_signals, cmd);
-    }
-
-    // Process spawn commands from Lua
-    for cmd in lua_runtime.drain_spawn_commands() {
-        process_spawn_command(&mut commands, cmd, &mut world_signals);
-    }
-
-    // Process clone commands from Lua
-    for cmd in lua_runtime.drain_clone_commands() {
-        process_clone_command(&mut commands, cmd, &mut world_signals);
-    }
-
-    // Process entity commands from Lua
-    process_entity_commands(
+    drain_and_process_effect_commands(
+        &lua_runtime,
+        DrainScope::Regular,
         &mut commands,
-        lua_runtime.drain_entity_commands(),
+        &mut world_signals,
         &mut cmd_queries,
+        &mut audio_cmd_writer,
         &systems_store,
         &animation_store,
     );
-
-    // Process camera commands from Lua
-    for cmd in lua_runtime.drain_camera_commands() {
-        process_camera_command(&mut commands, cmd);
-    }
 }

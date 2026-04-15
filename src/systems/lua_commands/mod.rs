@@ -51,7 +51,74 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
-use crate::resources::lua_runtime::TweenConfig;
+use crate::events::audio::AudioCmd;
+use crate::resources::animationstore::AnimationStore;
+use crate::resources::lua_runtime::{LuaRuntime, TweenConfig};
+use crate::resources::systemsstore::SystemsStore;
+use crate::resources::worldsignals::WorldSignals;
+
+/// Selects which set of command queues to drain from the Lua runtime.
+pub(crate) enum DrainScope {
+    /// Regular queues used by update, switch_scene, timer, and phase systems.
+    Regular,
+    /// Collision-scoped queues used by the collision observer.
+    Collision,
+}
+
+/// Drain and process the 6 effect queues shared by all Lua callback contexts.
+///
+/// Canonical order: `signal → entity → spawn → clone → audio → camera`
+///
+/// Phase is intentionally excluded so callers can preserve their required
+/// phase boundary (e.g. `apply_callback_transitions` in `lua_phase_system`)
+/// before invoking this helper.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn drain_and_process_effect_commands(
+    lua_runtime: &LuaRuntime,
+    scope: DrainScope,
+    commands: &mut Commands,
+    world_signals: &mut WorldSignals,
+    cmd_queries: &mut EntityCmdQueries,
+    audio: &mut MessageWriter<AudioCmd>,
+    systems_store: &SystemsStore,
+    animation_store: &AnimationStore,
+) {
+    let (signals, entities, spawns, clones, audios, cameras) = match scope {
+        DrainScope::Regular => (
+            lua_runtime.drain_signal_commands(),
+            lua_runtime.drain_entity_commands(),
+            lua_runtime.drain_spawn_commands(),
+            lua_runtime.drain_clone_commands(),
+            lua_runtime.drain_audio_commands(),
+            lua_runtime.drain_camera_commands(),
+        ),
+        DrainScope::Collision => (
+            lua_runtime.drain_collision_signal_commands(),
+            lua_runtime.drain_collision_entity_commands(),
+            lua_runtime.drain_collision_spawn_commands(),
+            lua_runtime.drain_collision_clone_commands(),
+            lua_runtime.drain_collision_audio_commands(),
+            lua_runtime.drain_collision_camera_commands(),
+        ),
+    };
+
+    for cmd in signals {
+        process_signal_command(world_signals, cmd);
+    }
+    process_entity_commands(commands, entities, cmd_queries, systems_store, animation_store);
+    for cmd in spawns {
+        process_spawn_command(commands, cmd, world_signals);
+    }
+    for cmd in clones {
+        process_clone_command(commands, cmd, world_signals);
+    }
+    for cmd in audios {
+        process_audio_command(audio, cmd);
+    }
+    for cmd in cameras {
+        process_camera_command(commands, cmd);
+    }
+}
 
 /// Build a configured `Tween<T>` from component values and shared config.
 pub(crate) fn build_tween<T: TweenValue>(from: T, to: T, config: &TweenConfig) -> Tween<T> {

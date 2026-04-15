@@ -54,8 +54,7 @@ use crate::systems::collision::{
     compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
 };
 use crate::systems::lua_commands::{
-    EntityCmdQueries, process_audio_command, process_camera_command, process_clone_command,
-    process_entity_commands, process_phase_command, process_signal_command, process_spawn_command,
+    DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_phase_command,
 };
 use log::error;
 
@@ -88,11 +87,9 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
         None => return,
     };
 
-    // Check Lua-based collision rules
     for lua_rule in params.lua_rules.iter() {
         if let Some((ent_a, ent_b)) = lua_rule.match_and_order(a, b, ga, gb) {
             let callback_name = lua_rule.callback.name.as_str();
-            // Resolve world positions via shared helper
             let pos_a = resolve_world_pos(
                 &params.entity_cmds.positions.as_readonly(),
                 &params.entity_cmds.global_transforms,
@@ -131,7 +128,6 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 })
                 .unwrap_or((None, 0.0));
 
-            // Get collider rects and sides via shared helpers
             let rect_a = resolve_collider_rect(
                 &params.entity_cmds.positions.as_readonly(),
                 &params.entity_cmds.global_transforms,
@@ -146,11 +142,8 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
             );
             let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 
-            // Get entity signals (integers and flags)
             let signals_a = params.entity_cmds.signals.get(ent_a).ok();
             let signals_b = params.entity_cmds.signals.get(ent_b).ok();
-
-            // Get group names
             let group_a = params.groups.get(ent_a).ok().map(|g| g.name().to_string());
             let group_b = params.groups.get(ent_b).ok().map(|g| g.name().to_string());
 
@@ -159,7 +152,6 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 .lua_runtime
                 .update_signal_cache(params.world_signals.snapshot());
 
-            // Build ctx table in Lua
             if let Err(e) = call_lua_collision_callback(
                 &params.lua_runtime,
                 callback_name,
@@ -184,44 +176,20 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 return;
             }
 
-            // Process collision commands after Lua callback returns
-            process_entity_commands(
-                &mut params.commands,
-                params.lua_runtime.drain_collision_entity_commands(),
-                &mut params.entity_cmds,
-                &params.systems_store,
-                &params.animation_store,
-            );
-
-            // Process collision signal commands
-            for cmd in params.lua_runtime.drain_collision_signal_commands() {
-                process_signal_command(&mut params.world_signals, cmd);
-            }
-
-            // Process collision audio commands
-            for cmd in params.lua_runtime.drain_collision_audio_commands() {
-                process_audio_command(&mut params.audio_cmds, cmd);
-            }
-
-            // Process collision spawn commands
-            for cmd in params.lua_runtime.drain_collision_spawn_commands() {
-                process_spawn_command(&mut params.commands, cmd, &mut params.world_signals);
-            }
-
-            // Process collision clone commands
-            for cmd in params.lua_runtime.drain_collision_clone_commands() {
-                process_clone_command(&mut params.commands, cmd, &mut params.world_signals);
-            }
-
-            // Process collision phase commands
             for cmd in params.lua_runtime.drain_collision_phase_commands() {
                 process_phase_command(&mut params.luaphase_query, cmd);
             }
 
-            // Process collision camera commands
-            for cmd in params.lua_runtime.drain_collision_camera_commands() {
-                process_camera_command(&mut params.commands, cmd);
-            }
+            drain_and_process_effect_commands(
+                &params.lua_runtime,
+                DrainScope::Collision,
+                &mut params.commands,
+                &mut params.world_signals,
+                &mut params.entity_cmds,
+                &mut params.audio_cmds,
+                &params.systems_store,
+                &params.animation_store,
+            );
 
             return;
         }
@@ -299,7 +267,6 @@ fn call_lua_collision_callback(
 ) -> mlua::Result<()> {
     let lua = lua_runtime.lua();
 
-    // Get pooled tables
     let tables = lua_runtime.get_collision_ctx_pool()?;
 
     // === Populate Entity A ===
@@ -307,7 +274,6 @@ fn call_lua_collision_callback(
     tables.entity_a.set("group", group_a.unwrap_or(""))?;
     tables.entity_a.set("speed_sq", speed_sq_a)?;
 
-    // Position A
     if let Some((x, y)) = pos_a {
         tables.pos_a.set("x", x)?;
         tables.pos_a.set("y", y)?;
@@ -316,7 +282,6 @@ fn call_lua_collision_callback(
         tables.entity_a.set("pos", mlua::Value::Nil)?;
     }
 
-    // Velocity A
     if let Some((vx, vy)) = vel_a {
         tables.vel_a.set("x", vx)?;
         tables.vel_a.set("y", vy)?;
@@ -325,7 +290,6 @@ fn call_lua_collision_callback(
         tables.entity_a.set("vel", mlua::Value::Nil)?;
     }
 
-    // Rect A
     if let Some((x, y, w, h)) = rect_a {
         tables.rect_a.set("x", x)?;
         tables.rect_a.set("y", y)?;
@@ -349,7 +313,6 @@ fn call_lua_collision_callback(
     tables.entity_b.set("group", group_b.unwrap_or(""))?;
     tables.entity_b.set("speed_sq", speed_sq_b)?;
 
-    // Position B
     if let Some((x, y)) = pos_b {
         tables.pos_b.set("x", x)?;
         tables.pos_b.set("y", y)?;
@@ -358,7 +321,6 @@ fn call_lua_collision_callback(
         tables.entity_b.set("pos", mlua::Value::Nil)?;
     }
 
-    // Velocity B
     if let Some((vx, vy)) = vel_b {
         tables.vel_b.set("x", vx)?;
         tables.vel_b.set("y", vy)?;
@@ -367,7 +329,6 @@ fn call_lua_collision_callback(
         tables.entity_b.set("vel", mlua::Value::Nil)?;
     }
 
-    // Rect B
     if let Some((x, y, w, h)) = rect_b {
         tables.rect_b.set("x", x)?;
         tables.rect_b.set("y", y)?;
@@ -397,7 +358,6 @@ fn call_lua_collision_callback(
         tables.sides_b.set(i + 1, box_side_to_str(side))?;
     }
 
-    // Call the Lua function with pooled context
     let func: mlua::Function = lua.globals().get(callback_name)?;
     func.call::<()>(tables.ctx)?;
 

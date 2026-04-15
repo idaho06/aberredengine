@@ -53,7 +53,7 @@ use aberredengine::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
-use aberredengine::systems::luatimer::update_lua_timers;
+use aberredengine::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use aberredengine::systems::movement::movement;
 use aberredengine::systems::rust_collision::rust_collision_observer;
 use aberredengine::systems::stuckto::stuck_to_entity_system;
@@ -3297,4 +3297,243 @@ fn animation_single_frame_per_row_wrapping() {
     );
 
     drain_textures(&mut world);
+}
+
+// =============================================================================
+// Command-drain ordering tests
+//
+// These tests lock in the canonical drain order introduced by the
+// drain_and_process_effect_commands refactor.  They must pass BEFORE the
+// refactor and continue to pass AFTER it.
+// =============================================================================
+
+/// Build a minimal world suitable for tests that exercise Lua callback side effects.
+#[cfg(feature = "lua")]
+fn make_lua_callback_world(delta: f32) -> World {
+    let mut world = make_world(delta);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(SystemsStore::new());
+    world.insert_resource(InputState::default());
+    world.insert_resource(AnimationStore {
+        animations: Default::default(),
+    });
+    let lua_runtime = LuaRuntime::new().expect("LuaRuntime::new");
+    world.insert_non_send_resource(lua_runtime);
+    world
+}
+
+/// Tick the lua timer update pass AND the observer in the same schedule so
+/// the LuaTimerEvent is both emitted and handled within one `run`.
+#[cfg(feature = "lua")]
+fn tick_lua_timers_with_observer(world: &mut World) {
+    world.add_observer(lua_timer_observer);
+    world.flush();
+    let mut schedule = Schedule::default();
+    schedule.add_systems(update_lua_timers);
+    schedule.run(world);
+}
+
+/// Test 1 — Regular path: spawn before clone (timer callback)
+///
+/// A timer callback registers a freshly spawned entity under a key, then
+/// clones it.  The clone must succeed, which requires spawn to be processed
+/// before clone inside the same drain pass.
+#[cfg(feature = "lua")]
+#[test]
+fn timer_callback_spawn_then_clone_same_drain() {
+    let mut world = make_lua_callback_world(1.0);
+
+    {
+        let rt = world.non_send_resource::<LuaRuntime>();
+        rt.lua()
+            .load(r#"
+                function spawn_and_clone_cb(ctx, input)
+                    engine.spawn():with_group("template"):register_as("tpl"):build()
+                    engine.clone("tpl"):with_group("copy"):build()
+                end
+            "#)
+            .exec()
+            .expect("lua load");
+    }
+
+    world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "spawn_and_clone_cb".into() }),));
+
+    tick_lua_timers_with_observer(&mut world);
+
+    let copy_count = world
+        .query::<&Group>()
+        .iter(&world)
+        .filter(|g| g.name() == "copy")
+        .count();
+    assert_eq!(copy_count, 1, "expected one cloned entity with group 'copy'");
+}
+
+/// Test 2 — Collision path: spawn before clone (collision callback)
+///
+/// A collision callback registers a freshly spawned entity then clones it.
+/// Both operations go through collision-scoped queues
+/// (collision_spawn / collision_clone).  The clone must succeed, which
+/// requires spawn to drain before clone.
+#[cfg(feature = "lua")]
+#[test]
+fn collision_callback_spawn_then_clone_same_drain() {
+    let mut world = make_lua_callback_world(0.0);
+
+    {
+        let rt = world.non_send_resource::<LuaRuntime>();
+        rt.lua()
+            .load(r#"
+                function on_coll_spawn_clone(ctx)
+                    engine.collision_spawn():with_group("proj"):register_as("proj_src"):build()
+                    engine.collision_clone("proj_src"):with_group("proj_copy"):build()
+                end
+            "#)
+            .exec()
+            .expect("lua load");
+    }
+
+    let _a = world.spawn((
+        Group::new("shooter"),
+        MapPosition::new(0.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    )).id();
+    let _b = world.spawn((
+        Group::new("target"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    )).id();
+    world.spawn(LuaCollisionRule::new(
+        "shooter",
+        "target",
+        LuaCollisionCallback { name: "on_coll_spawn_clone".into() },
+    ));
+
+    world.add_observer(lua_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let copy_count = world
+        .query::<&Group>()
+        .iter(&world)
+        .filter(|g| g.name() == "proj_copy")
+        .count();
+    assert_eq!(copy_count, 1, "expected one collision-cloned entity with group 'proj_copy'");
+}
+
+/// Test 3 — Lua phase: return-value transition takes precedence over
+/// engine.phase_transition() called in the same on_update.
+///
+/// If the on_update callback BOTH calls `engine.phase_transition(id, "via_cmd")`
+/// AND returns `"return_winner"`, the return value must win because
+/// apply_callback_transitions runs after the phase drain.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_phase_return_value_beats_phase_transition_cmd() {
+    let mut world = make_lua_callback_world(0.016);
+
+    {
+        let rt = world.non_send_resource::<LuaRuntime>();
+        rt.lua()
+            .load(r#"
+                function idle_update(ctx, input, dt)
+                    engine.phase_transition(ctx.id, "via_cmd")
+                    return "return_winner"
+                end
+            "#)
+            .exec()
+            .expect("lua load");
+    }
+
+    let mut phases = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbacks {
+        on_enter: None,
+        on_update: Some("idle_update".into()),
+        on_exit: None,
+    });
+    phases.insert("via_cmd".into(), PhaseCallbacks::default());
+    phases.insert("return_winner".into(), PhaseCallbacks::default());
+
+    let entity = world.spawn((LuaPhase::new("idle", phases),)).id();
+
+    // First tick: idle_update runs, queues both a PhaseCmd and a return transition.
+    tick_lua_phases(&mut world);
+
+    // The winning transition is stored in `next` after the first tick.
+    let phase = world.get::<LuaPhase>(entity).unwrap();
+    assert_eq!(
+        phase.next.as_deref(),
+        Some("return_winner"),
+        "return value should override the phase_transition() cmd"
+    );
+
+    // Second tick: the pending transition is applied.
+    tick_lua_phases(&mut world);
+
+    let phase = world.get::<LuaPhase>(entity).unwrap();
+    assert_eq!(phase.current, "return_winner");
+}
+
+/// Test 4 — Collision path: moving phase drain to front does not suppress
+/// other queues.
+///
+/// A collision callback queues a phase transition, a world-signal mutation,
+/// and a camera command.  All three must be observed after the observer runs.
+/// This guards against the collision drain reorder causing any queue to be
+/// silently dropped.
+#[cfg(feature = "lua")]
+#[test]
+fn collision_callback_phase_plus_signal_all_processed() {
+    let mut world = make_lua_callback_world(0.0);
+
+    {
+        let rt = world.non_send_resource::<LuaRuntime>();
+        rt.lua()
+            .load(r#"
+                function on_multi_effect(ctx)
+                    engine.collision_phase_transition(ctx.a.id, "hit")
+                    engine.collision_set_flag("was_hit")
+                end
+            "#)
+            .exec()
+            .expect("lua load");
+    }
+
+    let mut phases: rustc_hash::FxHashMap<String, PhaseCallbacks> = rustc_hash::FxHashMap::default();
+    phases.insert("idle".into(), PhaseCallbacks::default());
+    phases.insert("hit".into(), PhaseCallbacks::default());
+
+    let a = world.spawn((
+        Group::new("hero"),
+        MapPosition::new(0.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+        LuaPhase::new("idle", phases),
+    )).id();
+    world.spawn((
+        Group::new("hazard"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+    world.spawn(LuaCollisionRule::new(
+        "hero",
+        "hazard",
+        LuaCollisionCallback { name: "on_multi_effect".into() },
+    ));
+
+    world.add_observer(lua_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    // Phase transition queued
+    let phase = world.get::<LuaPhase>(a).unwrap();
+    assert_eq!(
+        phase.next.as_deref(),
+        Some("hit"),
+        "phase transition should be queued"
+    );
+
+    // World signal mutation applied
+    let signals = world.resource::<WorldSignals>();
+    assert!(signals.has_flag("was_hit"), "world signal flag should be set");
 }
