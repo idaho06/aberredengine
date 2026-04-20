@@ -1513,6 +1513,34 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `get_group_count` | `(&self, group_name: &str) -> Option<i32>` |
 | `clear_group_counts` | `(&mut self)` |
 
+**Typed payloads** (Rust-only, `Arc<dyn Any + Send + Sync>`; not exposed to Lua):
+
+| Method | Signature |
+|--------|-----------|
+| `set_payload` | `(&mut self, key: impl Into<String>, value: T) where T: Any + Send + Sync + 'static` |
+| `get_payload` | `(&self, key: &str) -> Option<&T>` |
+| `remove_payload` | `(&mut self, key: &str) -> bool` |
+| `take_payload` | `(&mut self, key: &str) -> Option<Arc<T>>` |
+
+Payloads carry rich Rust types that don't map to the scalar/integer/flag/entity primitives — for example, a completed pathfinding result (`Vec<Vector2>`), a multi-field dialogue state struct, or a boss-phase attack schedule. They are stored as type-erased `Arc<dyn Any>` and recovered via `downcast_ref`/`downcast`. `get_payload::<T>` returns `None` for both absent keys and type mismatches.
+
+> **Important:** Payloads have no automatic cleanup on scene transitions (unlike `entities`, which are cleaned by `clear_non_persistent_entities`). The system or callback that writes a payload is responsible for removing it — typically via `take_payload` in the consuming system. Forgetting this leaks the payload into the next scene.
+
+```rust
+// Pathfinding system writes a result payload
+fn pathfinding_system(mut signals: ResMut<WorldSignals>) {
+    let path = vec![Vector2::new(100.0, 200.0), Vector2::new(300.0, 200.0)];
+    signals.set_payload("nav:player_path", path);
+}
+
+// AI steering system consumes it
+fn steering_system(mut signals: ResMut<WorldSignals>) {
+    if let Some(path) = signals.take_payload::<Vec<Vector2>>("nav:player_path") {
+        // Arc<Vec<Vector2>> — use path, it's now removed from signals
+    }
+}
+```
+
 ### InputState key bindings
 
 Each digital field is a `BoolState { active, just_pressed, just_released }`. Hardware assignments live in `InputBindings`, not in `BoolState`. Analog fields are plain `f32`.
