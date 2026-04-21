@@ -363,45 +363,41 @@ pub fn menu_controller_observer(
         let old_selected_index = menu.selected_index;
 
         match event.action {
-            InputAction::SecondaryDirectionUp => {
-                if !menu.items.is_empty() {
-                    if menu.visible_count.is_some() {
-                        // Bounded navigation (no wrap-around when scrolling enabled)
-                        if menu.selected_index > 0 {
-                            menu.selected_index -= 1;
-                            // Scroll up if selection above visible window
-                            if menu.selected_index < menu.scroll_offset {
-                                menu.scroll_offset = menu.selected_index;
-                                needs_reposition = true;
-                            }
-                            changed_selection = true;
+            InputAction::SecondaryDirectionUp if !menu.items.is_empty() => {
+                if menu.visible_count.is_some() {
+                    // Bounded navigation (no wrap-around when scrolling enabled)
+                    if menu.selected_index > 0 {
+                        menu.selected_index -= 1;
+                        // Scroll up if selection above visible window
+                        if menu.selected_index < menu.scroll_offset {
+                            menu.scroll_offset = menu.selected_index;
+                            needs_reposition = true;
                         }
-                    } else {
-                        // Original wrap-around behavior
-                        menu.selected_index =
-                            (menu.selected_index + menu.items.len() - 1) % menu.items.len();
                         changed_selection = true;
                     }
+                } else {
+                    // Original wrap-around behavior
+                    menu.selected_index =
+                        (menu.selected_index + menu.items.len() - 1) % menu.items.len();
+                    changed_selection = true;
                 }
             }
-            InputAction::SecondaryDirectionDown => {
-                if !menu.items.is_empty() {
-                    if let Some(visible_count) = menu.visible_count {
-                        // Bounded navigation (no wrap-around when scrolling enabled)
-                        if menu.selected_index < menu.items.len() - 1 {
-                            menu.selected_index += 1;
-                            // Scroll down if selection below visible window
-                            if menu.selected_index >= menu.scroll_offset + visible_count {
-                                menu.scroll_offset = menu.selected_index - visible_count + 1;
-                                needs_reposition = true;
-                            }
-                            changed_selection = true;
+            InputAction::SecondaryDirectionDown if !menu.items.is_empty() => {
+                if let Some(visible_count) = menu.visible_count {
+                    // Bounded navigation (no wrap-around when scrolling enabled)
+                    if menu.selected_index < menu.items.len() - 1 {
+                        menu.selected_index += 1;
+                        // Scroll down if selection below visible window
+                        if menu.selected_index >= menu.scroll_offset + visible_count {
+                            menu.scroll_offset = menu.selected_index - visible_count + 1;
+                            needs_reposition = true;
                         }
-                    } else {
-                        // Original wrap-around behavior
-                        menu.selected_index = (menu.selected_index + 1) % menu.items.len();
                         changed_selection = true;
                     }
+                } else {
+                    // Original wrap-around behavior
+                    menu.selected_index = (menu.selected_index + 1) % menu.items.len();
+                    changed_selection = true;
                 }
             }
             InputAction::Action1 | InputAction::Action2 => {

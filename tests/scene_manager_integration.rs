@@ -12,6 +12,7 @@ use aberredengine::resources::input_bindings::InputBindings;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
@@ -32,6 +33,7 @@ use aberredengine::resources::gamestate::{GameState, NextGameState};
 fn setup_world() -> World {
     let mut world = World::new();
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(TrackedGroups::default());
     world.insert_resource(TextureStore::default());
@@ -756,7 +758,13 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
 
 #[test]
 fn gui_callback_stored_and_retrieved_via_scene_manager() {
-    fn my_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals, _tex: &TextureStore) {}
+    fn my_gui(
+        _ui: &::imgui::Ui,
+        _signals: &mut WorldSignals,
+        _tex: &TextureStore,
+        _app_state: &AppState,
+    ) {
+    }
 
     let mut sm = SceneManager::new();
     sm.insert(
@@ -784,7 +792,13 @@ fn gui_callback_stored_and_retrieved_via_scene_manager() {
 #[test]
 fn scene_with_gui_callback_enters_correctly() {
     clear_logs();
-    fn editor_gui(_ui: &::imgui::Ui, _signals: &mut WorldSignals, _tex: &TextureStore) {}
+    fn editor_gui(
+        _ui: &::imgui::Ui,
+        _signals: &mut WorldSignals,
+        _tex: &TextureStore,
+        _app_state: &AppState,
+    ) {
+    }
 
     let mut world = setup_world();
 

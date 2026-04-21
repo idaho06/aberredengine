@@ -12,7 +12,6 @@
 //! - Game state values (score, lives, high score)
 //! - Entity references for quick lookup (`"player"`, `"ball"`)
 //! - Group entity counts (published by [`update_group_counts_system`](crate::systems::group::update_group_counts_system))
-//! - Typed Rust-only payloads for complex cross-system data (see [`WorldSignals::set_payload`])
 //!
 //! # Integration with Other Systems
 //!
@@ -37,7 +36,6 @@
 
 use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::any::Any;
 use std::sync::Arc;
 
 /// Immutable snapshot of world signals for Lua read access.
@@ -84,8 +82,6 @@ pub struct WorldSignals {
     pub flags: FxHashSet<String>,
     /// Map of entities of interest for the current game state.
     pub entities: FxHashMap<String, Entity>,
-    /// Typed opaque payloads for complex cross-system data (not exposed to Lua).
-    pub payloads: FxHashMap<String, Arc<dyn Any + Send + Sync>>,
     /// Cached snapshot for Lua runtime (rebuilt when dirty).
     snapshot: Arc<SignalSnapshot>,
     /// Whether the snapshot needs to be rebuilt.
@@ -100,7 +96,6 @@ impl Default for WorldSignals {
             strings: FxHashMap::default(),
             flags: FxHashSet::default(),
             entities: FxHashMap::default(),
-            payloads: FxHashMap::default(),
             snapshot: Arc::new(SignalSnapshot::default()),
             dirty: false,
         }
@@ -274,32 +269,6 @@ impl WorldSignals {
         result
     }
 
-    /// Store a typed payload under a string key.
-    ///
-    /// Payloads are not included in the Lua [`SignalSnapshot`] — they are for Rust-only
-    /// cross-system communication (GUI callbacks, ECS observers, scene update functions).
-    pub fn set_payload<T: Any + Send + Sync + 'static>(&mut self, key: impl Into<String>, value: T) {
-        self.payloads.insert(key.into(), Arc::new(value));
-    }
-
-    /// Borrow a typed payload by key. Returns `None` if the key is absent or the stored
-    /// type does not match `T`.
-    pub fn get_payload<T: Any + 'static>(&self, key: &str) -> Option<&T> {
-        self.payloads.get(key)?.downcast_ref::<T>()
-    }
-
-    /// Remove a payload by key. Returns whether a payload was present.
-    pub fn remove_payload(&mut self, key: &str) -> bool {
-        self.payloads.remove(key).is_some()
-    }
-
-    /// Remove a payload and return it. Returns `None` if absent or if the stored type
-    /// does not match `T`. The returned `Arc<T>` gives the caller shared ownership.
-    pub fn take_payload<T: Any + Send + Sync + 'static>(&mut self, key: &str) -> Option<Arc<T>> {
-        let arc = self.payloads.remove(key)?;
-        arc.downcast::<T>().ok()
-    }
-
     /// Remove all entity registrations whose [`Entity`] is not in `persistent_entities`.
     ///
     /// Called during scene transitions to mirror the entity despawn logic:
@@ -405,7 +374,6 @@ mod tests {
         assert!(ws.strings.is_empty());
         assert!(ws.flags.is_empty());
         assert!(ws.entities.is_empty());
-        assert!(ws.payloads.is_empty());
         assert!(!ws.dirty);
     }
 
@@ -815,68 +783,4 @@ mod tests {
         assert_eq!(snap.entities.get("player"), Some(&entity.to_bits()));
     }
 
-    // --- Payloads ---
-
-    #[test]
-    fn test_set_get_payload_typed() {
-        let mut ws = WorldSignals::default();
-        ws.set_payload("count", 42u32);
-        assert_eq!(ws.get_payload::<u32>("count"), Some(&42));
-    }
-
-    #[test]
-    fn test_get_payload_wrong_type_returns_none() {
-        let mut ws = WorldSignals::default();
-        ws.set_payload("count", 42u32);
-        assert_eq!(ws.get_payload::<f32>("count"), None);
-    }
-
-    #[test]
-    fn test_get_payload_absent_returns_none() {
-        let ws = WorldSignals::default();
-        assert_eq!(ws.get_payload::<u32>("nope"), None);
-    }
-
-    #[test]
-    fn test_remove_payload() {
-        let mut ws = WorldSignals::default();
-        ws.set_payload("x", 1u32);
-        assert!(ws.remove_payload("x"));
-        assert!(!ws.remove_payload("x")); // already gone
-        assert_eq!(ws.get_payload::<u32>("x"), None);
-    }
-
-    #[test]
-    fn test_take_payload() {
-        let mut ws = WorldSignals::default();
-        ws.set_payload("msg", "hello".to_string());
-        let taken = ws.take_payload::<String>("msg");
-        assert!(taken.is_some());
-        assert_eq!(taken.unwrap().as_str(), "hello");
-        assert_eq!(ws.get_payload::<String>("msg"), None);
-    }
-
-    #[test]
-    fn test_take_payload_absent_returns_none() {
-        let mut ws = WorldSignals::default();
-        assert!(ws.take_payload::<u32>("nope").is_none());
-    }
-
-    #[test]
-    fn test_payload_does_not_mark_dirty() {
-        let mut ws = WorldSignals::default();
-        ws.set_payload("data", 99u32);
-        assert!(!ws.dirty);
-    }
-
-    #[test]
-    fn test_payload_excluded_from_snapshot() {
-        let mut ws = WorldSignals::default();
-        ws.set_integer("score", 10); // mark dirty via normal signal
-        let snap = ws.snapshot();
-        ws.set_payload("path", vec![1u32, 2, 3]); // payload should not trigger rebuild
-        let snap2 = ws.snapshot();
-        // Same Arc — snapshot was not rebuilt for the payload write
-        assert!(Arc::ptr_eq(&snap, &snap2));
-    }
 }

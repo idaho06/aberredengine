@@ -47,6 +47,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
@@ -96,6 +97,8 @@ pub struct GameCtx<'w, 's> {
     // Resources
     /// Mutable access to global world signals.
     pub world_signals: ResMut<'w, WorldSignals>,
+    /// Mutable access to the typed app-state store (see [`AppState`]).
+    pub app_state: ResMut<'w, AppState>,
     /// Writer for audio commands (play sounds/music).
     pub audio: MessageWriter<'w, AudioCmd>,
     /// Read-only access to world time (delta, elapsed, time_scale).

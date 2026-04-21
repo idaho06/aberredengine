@@ -32,6 +32,7 @@ use aberredengine::events::collision::CollisionEvent;
 use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::events::timer::TimerEvent;
 use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
+use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
@@ -80,6 +81,7 @@ fn make_world(delta: f32) -> World {
     world.insert_resource(AnimationStore {
         animations: Default::default(),
     });
+    world.insert_resource(AppState::default());
     world.init_resource::<Messages<AudioCmd>>();
     world.init_resource::<TextureStore>();
     world.insert_resource(GameConfig::default());
@@ -216,6 +218,7 @@ fn ttl_does_not_despawn_before_zero() {
 fn collision_pipeline_triggers_lua_side_effects() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(AnimationStore {
         animations: Default::default(),
@@ -398,6 +401,7 @@ fn tick_group_counts(world: &mut World) {
 fn group_counts_are_published_to_world_signals() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
 
     let mut tracked = TrackedGroups::default();
     tracked.add_group("enemy");
@@ -417,6 +421,7 @@ fn group_counts_are_published_to_world_signals() {
 fn group_counts_update_when_entities_despawn() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
 
     let mut tracked = TrackedGroups::default();
     tracked.add_group("ball");
@@ -451,6 +456,7 @@ fn group_counts_update_when_entities_despawn() {
 fn group_counts_zero_for_empty_tracked_groups() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
 
     let mut tracked = TrackedGroups::default();
     tracked.add_group("brick");
@@ -468,6 +474,7 @@ fn group_counts_zero_for_empty_tracked_groups() {
 fn group_counts_ignores_untracked_groups() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
 
     let mut tracked = TrackedGroups::default();
     tracked.add_group("player");
@@ -1217,6 +1224,7 @@ fn rust_timer_does_not_fire_before_duration() {
 fn rust_timer_observer_calls_callback() {
     let mut world = make_world(1.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     fn set_flag(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -1246,6 +1254,7 @@ fn rust_timer_observer_calls_callback() {
 fn rust_timer_observer_can_write_audio() {
     let mut world = make_world(1.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     fn play_sound(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -1276,6 +1285,7 @@ fn rust_timer_observer_can_write_audio() {
 fn rust_timer_observer_can_set_world_signal() {
     let mut world = make_world(1.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     fn set_signal(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -1297,6 +1307,7 @@ fn rust_timer_observer_can_set_world_signal() {
 fn rust_timer_observer_receives_input_state() {
     let mut world = make_world(1.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
 
     let mut input = InputState::default();
     input.action_1.active = true;
@@ -1381,6 +1392,7 @@ fn rust_timer_callback_receives_correct_entity() {
     // not another entity that happens to have Signals.
     let mut world = make_world(1.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     fn mark_self(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -2052,6 +2064,7 @@ fn tick_phases(world: &mut World) {
 fn make_phase_world(delta: f32) -> World {
     let mut world = make_world(delta);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
     world
 }
@@ -2289,6 +2302,7 @@ fn phase_on_exit_called_on_transition() {
 fn lua_phase_on_exit_sees_post_swap_phase_state() {
     let mut world = make_world(0.25);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(InputState::default());
     world.insert_resource(AnimationStore {
@@ -2603,6 +2617,7 @@ fn phase_callback_receives_input_state() {
 fn collision_rule_callback_fires_on_matching_groups() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     fn on_collision(
@@ -2649,6 +2664,7 @@ fn collision_rule_callback_fires_on_matching_groups() {
 fn collision_rule_callback_not_fired_on_non_matching_groups() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     fn on_collision(
@@ -2696,6 +2712,7 @@ fn collision_rule_callback_not_fired_on_non_matching_groups() {
 fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     // Callback expects entity_a to be "ball" (group_a of the rule).
@@ -2757,6 +2774,7 @@ fn collision_rule_entities_ordered_correctly_when_groups_swapped() {
 fn collision_rule_sides_passed_to_callback() {
     let mut world = make_world(0.0);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(InputState::default());
 
     // rect_a is at (0,0) 10x10, rect_b is at (8,0) 10x10
@@ -3312,6 +3330,7 @@ fn animation_single_frame_per_row_wrapping() {
 fn make_lua_callback_world(delta: f32) -> World {
     let mut world = make_world(delta);
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(InputState::default());
     world.insert_resource(AnimationStore {

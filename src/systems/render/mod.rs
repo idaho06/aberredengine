@@ -49,6 +49,7 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::scene_dispatch::GuiCallback;
@@ -176,6 +177,7 @@ pub struct RenderQueries<'w, 's> {
 #[derive(SystemParam)]
 pub(crate) struct DebugResources<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
+    pub app_state: Res<'w, AppState>,
     pub input_state: Res<'w, InputState>,
     pub camera_follow: Res<'w, CameraFollowConfig>,
     pub scene_manager: Option<Res<'w, SceneManager>>,
@@ -684,6 +686,7 @@ pub fn render_system(
         // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
         let overlay_config = &mut *debug_res.overlay_config;
         let world_signals = &mut *debug_res.world_signals;
+        let app_state = &*debug_res.app_state;
         let input_state = &*debug_res.input_state;
         let camera_follow = &*debug_res.camera_follow;
         let scene_manager = debug_res.scene_manager.as_deref();
@@ -723,7 +726,7 @@ pub fn render_system(
             }
 
             if let Some(cb) = gui_callback {
-                cb(&ui, world_signals, textures);
+                cb(&ui, world_signals, textures, app_state);
             }
         };
         apply_postprocess_passes(

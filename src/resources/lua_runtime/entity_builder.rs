@@ -941,10 +941,8 @@ impl LuaUserData for LuaEntityBuilder {
             // Parse shape (optional, defaults to point)
             if let Ok(shape_value) = table.get::<LuaValue>("shape") {
                 match shape_value {
-                    LuaValue::String(s) => {
-                        if s.to_string_lossy() == "point" {
-                            data.shape = ParticleEmitterShapeData::Point;
-                        }
+                    LuaValue::String(s) if s.to_string_lossy() == "point" => {
+                        data.shape = ParticleEmitterShapeData::Point;
                     }
                     LuaValue::Table(shape_table) => {
                         let kind: String = shape_table
@@ -1009,10 +1007,8 @@ impl LuaUserData for LuaEntityBuilder {
             // Parse ttl (optional)
             if let Ok(ttl_value) = table.get::<LuaValue>("ttl") {
                 match ttl_value {
-                    LuaValue::String(s) => {
-                        if s.to_string_lossy() == "none" {
-                            data.ttl = ParticleTtlData::None;
-                        }
+                    LuaValue::String(s) if s.to_string_lossy() == "none" => {
+                        data.ttl = ParticleTtlData::None;
                     }
                     LuaValue::Number(n) => {
                         data.ttl = ParticleTtlData::Fixed((n as f32).max(0.0));

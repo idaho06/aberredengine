@@ -97,6 +97,7 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
@@ -500,6 +501,7 @@ impl EngineBuilder {
         let mut world = World::new();
         world.insert_resource(WorldTime::default().with_time_scale(1.0));
         world.insert_resource(WorldSignals::default());
+        world.insert_resource(AppState::default());
         world.insert_resource(TrackedGroups::default());
         world.insert_resource(ScreenSize {
             w: render_width as i32,

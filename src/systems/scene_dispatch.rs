@@ -36,6 +36,7 @@ use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
@@ -57,30 +58,30 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 ///
 /// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a mutable
 /// reference to [`WorldSignals`] for reading current state and writing user
-/// actions back to game logic, and read-only access to the [`TextureStore`]
-/// for displaying texture previews.
+/// actions back to game logic, read-only access to the [`TextureStore`]
+/// for displaying texture previews, and read-only access to [`AppState`]
+/// for typed Rust objects published by ECS observers.
 ///
 /// # Contract
 /// - Called from inside the render system's ImGui frame — after the game world
 ///   is drawn, at window resolution (not render-target resolution).
 /// - Called whether or not debug mode (F11) is active.
-/// - All interaction results must be communicated via `WorldSignals`.
-///   Use the `"gui:"` prefix for all signal keys to avoid collisions.
+/// - Interaction results must be communicated via `WorldSignals` (action flags,
+///   pending edit values). `AppState` is read-only from the GUI's perspective.
 /// - `TextureStore` is read-only; mutations go through observer events.
 ///
 /// # Example
 /// ```rust,ignore
-/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals, _textures: &TextureStore) {
-///     if let Some(_mb) = ui.begin_main_menu_bar() {
-///         if let Some(_file) = ui.begin_menu("File") {
-///             if ui.menu_item("Save Map") {
-///                 signals.set_flag("gui:action:file:save");
-///             }
-///         }
+/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals, _textures: &TextureStore, app_state: &AppState) {
+///     if let Some(snap) = app_state.get::<MySnapshot>() {
+///         ui.text(format!("value: {}", snap.value));
+///     }
+///     if ui.button("Save") {
+///         signals.set_flag("gui:action:file:save");
 ///     }
 /// }
 /// ```
-pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore);
+pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore, &AppState);
 
 // ---------------------------------------------------------------------------
 // SceneDescriptor
@@ -330,7 +331,7 @@ mod tests {
     #[test]
     fn gui_callback_some_stores_fn_pointer() {
         fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore, _app_state: &AppState) {}
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,
@@ -347,7 +348,7 @@ mod tests {
     #[test]
     fn gui_callback_clone_preserves_fn_pointer() {
         fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore, _app_state: &AppState) {}
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,

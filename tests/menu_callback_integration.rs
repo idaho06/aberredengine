@@ -6,6 +6,7 @@
 use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::menu::MenuSelectionEvent;
+use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
 #[cfg(feature = "lua")]
@@ -27,6 +28,7 @@ use bevy_ecs::prelude::*;
 fn setup_world() -> World {
     let mut world = World::new();
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(WorldTime::default());
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());

@@ -7,6 +7,7 @@
 //!
 //! Overview
 //! - [`animationstore`] – definitions for sprite animations reused across entities
+//! - [`appstate`] – typed state store passed to `GuiCallback`; one slot per Rust type
 //! - [`audio`] – bridge and channels for the background audio thread
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
@@ -28,6 +29,7 @@
 //! - [`worldtime`] – simulation time and delta
 
 pub mod animationstore;
+pub mod appstate;
 pub mod mapdata;
 pub mod audio;
 pub mod camera2d;
