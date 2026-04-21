@@ -129,8 +129,10 @@ Scene callback signatures:
 
 ```rust
 use aberredengine::systems::GameCtx;
+use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::input::InputState;
-use aberredengine::systems::scene_dispatch::GuiCallback; // only needed if using gui_callback
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::worldsignals::WorldSignals;
 
 // Called once when the scene becomes active
 fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -142,8 +144,13 @@ fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic *
 fn exit(ctx: &mut GameCtx) { /* cleanup */ }
 
 // Called every frame to draw ImGui widgets — Rust-only, optional
-// Signature must match: fn(&aberredengine::imgui::Ui, &mut WorldSignals)
-fn my_gui(ui: &aberredengine::imgui::Ui, signals: &mut WorldSignals) { /* draw widgets, write signals */ }
+// Signature must match: fn(&aberredengine::imgui::Ui, &mut WorldSignals, &TextureStore, &AppState)
+fn my_gui(
+    ui: &aberredengine::imgui::Ui,
+    signals: &mut WorldSignals,
+    textures: &TextureStore,
+    app_state: &AppState,
+) { /* draw widgets, write signals, read typed state */ }
 ```
 
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
@@ -163,17 +170,39 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 `gui_callback` lets a scene draw an ImGui overlay every frame — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
 
-The callback receives a `&aberredengine::imgui::Ui` handle for drawing widgets and a `&mut WorldSignals` for bidirectional communication with the scene's `on_update`:
+The callback receives:
+
+- `&aberredengine::imgui::Ui` for drawing widgets
+- `&mut WorldSignals` for GUI -> game actions and transient GUI values
+- `&TextureStore` for texture previews
+- `&AppState` for richer Rust-only typed snapshots/view-models produced by systems or scene callbacks
+
+`AppState` is inserted automatically by the engine and stores one value per Rust type. Use newtypes when you need two values of the same underlying type.
 
 ```rust
 use aberredengine::imgui;
+use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 
-fn editor_gui(ui: &imgui::Ui, signals: &mut WorldSignals) {
-    // Read state written by on_update
-    let tool = signals.get_string("gui:state:active_tool")
-        .map(|s| s.as_str())
+#[derive(Clone)]
+struct EditorPanelState {
+    active_tool: String,
+}
+
+fn editor_gui(
+    ui: &imgui::Ui,
+    signals: &mut WorldSignals,
+    _textures: &TextureStore,
+    app_state: &AppState,
+) {
+    // Read typed state written by on_update or ECS systems
+    let tool = app_state
+        .get::<EditorPanelState>()
+        .map(|s| s.active_tool.as_str())
         .unwrap_or("select");
+
+    ui.text(format!("Active tool: {tool}"));
 
     if let Some(_mb) = ui.begin_main_menu_bar() {
         if let Some(_file) = ui.begin_menu("File") {
@@ -185,9 +214,11 @@ fn editor_gui(ui: &imgui::Ui, signals: &mut WorldSignals) {
 }
 
 fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
-    ctx.world_signals.set_string("gui:state:active_tool", "place");
+    ctx.app_state.insert(EditorPanelState {
+        active_tool: "place".to_string(),
+    });
 
-    if ctx.world_signals.flags.remove("gui:action:file:save") {
+    if ctx.world_signals.take_flag("gui:action:file:save") {
         // handle save
     }
 }
@@ -645,12 +676,12 @@ use aberredengine::resources::tilemapstore::TilemapStore;
 use aberredengine::resources::texturestore::TextureStore;
 
 fn enter(ctx: &mut GameCtx) {
-    // Access stores through the world (or request them in a raw system)
-    // In a scene callback, use a Bevy system to pass TilemapStore and TextureStore:
+    // `ctx.texture_store` is available here, but `TilemapStore` is not.
+    // A helper Bevy system is still the usual way to pass TilemapStore in:
 }
 ```
 
-Because `GameCtx` does not expose `TilemapStore` or `TextureStore`, tile spawning in a scene callback requires a small helper system registered with `.add_system()`:
+Because `GameCtx` does not expose `TilemapStore`, tile spawning in a scene callback still commonly uses a small helper system registered with `.add_system()`:
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
@@ -1063,7 +1094,7 @@ The `dt` parameter is `WorldTime.delta` — the unscaled time since the last fra
 
 The engine provides four major gameplay systems: **timers**, **phase state machines**, **collision rules**, and **menus**. Each follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides: commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, and texture_store. Callbacks have full ECS access.
+All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `texture_store`, `config`, `post_process`, `camera_follow`, and `input_bindings`. Callbacks have full ECS access.
 
 ### 7.1 Timers
 
@@ -1429,6 +1460,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 |----------|--------|---------|
 | `WorldTime` | `Res` | `elapsed`, `delta`, `time_scale`, `frame_count` |
 | `WorldSignals` | `ResMut` | Global cross-system communication (scalars, integers, strings, flags, entities) |
+| `AppState` | `ResMut` | Rust-only typed state store keyed by Rust type; useful for GUI/editor snapshots and view-models |
 | `TrackedGroups` | `ResMut` | Group names to count — engine publishes counts to `WorldSignals` each frame |
 | `ScreenSize` | `Res` | Internal render resolution (`w`, `h`) |
 | `WindowSize` | `Res` | OS window dimensions (`w`, `h`), has `calculate_letterbox()` and `window_to_game_pos()` |
@@ -1438,8 +1470,13 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions with `.set(GameStates::Playing)` |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
+| `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets) |
+| `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
 | `SceneManager` | `Res` | Scene registry (only present with `.add_scene()`) |
+| `TextureStore` | `Res` / `ResMut` | Loaded textures by key |
+| `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
+| `AnimationStore` | `Res` / `ResMut` | Animation definitions |
 
 ### Engine-inserted resources (NonSend)
 
@@ -1454,9 +1491,6 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 | Resource | Access | Purpose |
 |----------|--------|---------|
-| `TextureStore` | `Res` / `ResMut` | Loaded textures by key |
-| `AnimationStore` | `Res` | Animation definitions |
-| `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `TilemapStore` | `Res` | Loaded tilemap data — **not pre-inserted**; insert manually in setup via `commands.insert_resource(TilemapStore::new())` |
 | `DebugMode` | marker resource | Presence enables debug overlays |
 | `FullScreen` | marker resource | Presence enables fullscreen |
@@ -1513,30 +1547,50 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `get_group_count` | `(&self, group_name: &str) -> Option<i32>` |
 | `clear_group_counts` | `(&mut self)` |
 
-**Typed payloads** (Rust-only, `Arc<dyn Any + Send + Sync>`; not exposed to Lua):
+`WorldSignals` intentionally stays limited to those primitive/value-like channels. For richer Rust-only typed data, use `AppState` instead.
+
+### AppState API
+
+`AppState` is a Rust-only typed store keyed by `TypeId`. The engine inserts it automatically at startup. It stores one value per Rust type, so `insert::<T>` replaces any previous `T`.
 
 | Method | Signature |
 |--------|-----------|
-| `set_payload` | `(&mut self, key: impl Into<String>, value: T) where T: Any + Send + Sync + 'static` |
-| `get_payload` | `(&self, key: &str) -> Option<&T>` |
-| `remove_payload` | `(&mut self, key: &str) -> bool` |
-| `take_payload` | `(&mut self, key: &str) -> Option<Arc<T>>` |
+| `insert` | `(&mut self, value: T) where T: Any + Send + Sync + 'static` |
+| `get::<T>` | `(&self) -> Option<&T>` |
+| `get_mut::<T>` | `(&mut self) -> Option<&mut T>` |
+| `remove::<T>` | `(&mut self) -> Option<T>` |
+| `contains::<T>` | `(&self) -> bool` |
 
-Payloads carry rich Rust types that don't map to the scalar/integer/flag/entity primitives — for example, a completed pathfinding result (`Vec<Vector2>`), a multi-field dialogue state struct, or a boss-phase attack schedule. They are stored as type-erased `Arc<dyn Any>` and recovered via `downcast_ref`/`downcast`. `get_payload::<T>` returns `None` for both absent keys and type mismatches.
-
-> **Important:** Payloads have no automatic cleanup on scene transitions (unlike `entities`, which are cleaned by `clear_non_persistent_entities`). The system or callback that writes a payload is responsible for removing it — typically via `take_payload` in the consuming system. Forgetting this leaks the payload into the next scene.
+Use `AppState` for richer GUI/editor snapshots and view-models that do not belong in the Lua-visible signal bus. If you need two values of the same underlying type, wrap them in newtypes.
 
 ```rust
-// Pathfinding system writes a result payload
-fn pathfinding_system(mut signals: ResMut<WorldSignals>) {
-    let path = vec![Vector2::new(100.0, 200.0), Vector2::new(300.0, 200.0)];
-    signals.set_payload("nav:player_path", path);
+use aberredengine::imgui;
+use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::bevy_ecs::prelude::ResMut;
+
+#[derive(Clone)]
+struct InspectorSnapshot {
+    selected_name: String,
 }
 
-// AI steering system consumes it
-fn steering_system(mut signals: ResMut<WorldSignals>) {
-    if let Some(path) = signals.take_payload::<Vec<Vector2>>("nav:player_path") {
-        // Arc<Vec<Vector2>> — use path, it's now removed from signals
+// ECS system writes typed state
+fn inspector_system(mut app_state: ResMut<AppState>) {
+    app_state.insert(InspectorSnapshot {
+        selected_name: "Player".to_string(),
+    });
+}
+
+// GUI callback reads it
+fn inspector_gui(
+    ui: &imgui::Ui,
+    _signals: &mut WorldSignals,
+    _textures: &TextureStore,
+    app_state: &AppState,
+) {
+    if let Some(snapshot) = app_state.get::<InspectorSnapshot>() {
+        ui.text(format!("Selected: {}", snapshot.selected_name));
     }
 }
 ```
