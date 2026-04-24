@@ -30,7 +30,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Camera Control](#camera-control)
   - [Camera Follow System](#camera-follow-system)
 - [Group Tracking](#group-tracking)
-- [Tilemap Rendering](#tilemap-rendering)
+- [Tilemaps](#tilemaps)
 - [Post-Process Shaders](#post-process-shaders)
 - [Per-Entity Shaders](#per-entity-shaders)
 - [Tint Component](#tint-component)
@@ -251,9 +251,9 @@ Different callbacks process different types of engine commands. Here's what comm
 
 | Callback | Processed Commands | Use Cases |
 |----------|-------------------|-----------|
-| `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
+| `on_setup()` | Asset, Animation | Load textures, fonts, audio, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Tilemap, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
 | `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
@@ -673,14 +673,6 @@ Load a sound effect from disk.
 ```lua
 engine.load_sound("ping", "./assets/audio/ping.wav")
 engine.load_sound("ding", "./assets/audio/ding.wav")
-```
-
-### `engine.load_tilemap(id, path)`
-
-Load a tilemap from a directory. The loader expects the directory name to match both files inside it: `<dirname>.png` for the tileset texture and `<dirname>.txt` for the JSON tilemap data.
-
-```lua
-engine.load_tilemap("level01", "./assets/tilemaps/level01")
 ```
 
 ### `engine.load_shader(id, vs_path, fs_path)`
@@ -4382,17 +4374,31 @@ end
 
 ---
 
-## Tilemap Rendering
+## Tilemaps
 
-### `engine.spawn_tiles(id)`
+### `:with_tilemap(path)`
 
-Spawn tiles from a loaded tilemap.
+Spawn a tilemap by adding it to an entity with the builder. The engine automatically loads the PNG tileset and JSON layout from the given directory path (Tilesetter 2.1.0 format) and spawns all tile entities as children of the root entity. Moving, scaling, or rotating the root entity moves the entire tilemap.
+
+**Parameters:**
+
+- `path` — Path to the tilemap directory (e.g. `"./assets/tilemaps/level01"`). The directory must contain `<dirname>.png` and `<dirname>.txt`.
 
 ```lua
-engine.load_tilemap("level01", "./assets/tilemaps/level01")
--- ... later, after assets loaded ...
-engine.spawn_tiles("level01")
+-- Minimal: tiles appear at world origin
+engine.spawn()
+    :with_tilemap("./assets/tilemaps/level01")
+    :build()
+
+-- With explicit position and scale
+engine.spawn()
+    :with_tilemap("./assets/tilemaps/level01")
+    :with_position(0, 0)
+    :with_scale(2, 2)
+    :build()
 ```
+
+Tilemaps no longer require a pre-loading step — just spawn the entity with `:with_tilemap()` in your scene's `M.spawn()` function.
 
 ---
 

@@ -419,6 +419,11 @@ impl LuaRuntime {
                 &[("priority", "integer?"), ("zoom", "number?")],
             ),
             (
+                "with_tilemap",
+                "Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.",
+                &[("path", "string")],
+            ),
+            (
                 "register_as",
                 "Register entity in WorldSignals for later retrieval",
                 &[("key", "string")],
@@ -973,7 +978,6 @@ impl LuaRuntime {
                     "phase",
                     "entity",
                     "group",
-                    "tilemap",
                     "camera",
                     "collision",
                     "animation",

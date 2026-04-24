@@ -545,7 +545,9 @@ function M.spawn()
         :with_lua_collision_rule("ground", "player", "collision_ground_player")
         :build()
 
-    engine.spawn_tiles("sidescroller_level01_tilemap")
+    engine.spawn()
+        :with_tilemap("./assets/tilemaps/sidescroller_test01")
+        :build()
 
     engine.log_info("Sidescroller level01 scene entities queued!")
 end

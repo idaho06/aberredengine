@@ -622,7 +622,9 @@ function M.spawn()
     engine.track_group("brick")
 
     -- Spawn tilemap background
-    engine.spawn_tiles("arkanoid-level01")
+    engine.spawn()
+        :with_tilemap("./assets/tilemaps/arkanoid/level01")
+        :build()
 
     -- Spawn game entities
     spawn_walls()

@@ -98,9 +98,6 @@ local function load_arkanoid()
     engine.load_sound("arkanoid-ding", "./assets/audio/arkanoid/ding.wav")
     engine.load_sound("arkanoid-ping", "./assets/audio/arkanoid/ping.wav")
 
-    -- Tilemaps
-    engine.load_tilemap("arkanoid-level01", "./assets/tilemaps/arkanoid/level01")
-
     -- Animations
     engine.register_animation("arkanoid-vaus_glowing", "arkanoid-vaus_sheet", 0, 0, 96, 0, 16, 15, true)
     engine.register_animation("arkanoid-vaus_hit", "arkanoid-vaus_sheet", 0, 24, 96, 0, 6, 15, false)
@@ -209,7 +206,6 @@ local function load_sidescroller()
     engine.register_animation("sidescroller-char_red_ladder", "sidescroller-char_red_2_sheet",
         sprite_size * 0, sprite_size * 5, sprite_size, sprite_size, 8 + 2, 10, false)
 
-    engine.load_tilemap("sidescroller_level01_tilemap", "./assets/tilemaps/sidescroller_test01")
 end
 
 --- Load assets for the Bunnymark example

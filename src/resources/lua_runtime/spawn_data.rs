@@ -404,4 +404,6 @@ pub struct SpawnCmd {
     pub camera_target: Option<u8>,
     /// Initial zoom for the CameraTarget (default 1.0 when None)
     pub camera_target_zoom: Option<f32>,
+    /// TileMap path — spawns a tilemap root entity whose tiles become `ChildOf` children
+    pub tilemap_path: Option<String>,
 }

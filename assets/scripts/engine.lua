@@ -177,7 +177,7 @@ engine = {}
 ---@alias BoxSide "left" | "right" | "top" | "bottom"
 
 ---Function category
----@alias Category "base" | "asset" | "spawn" | "audio" | "signal" | "phase" | "entity" | "group" | "tilemap" | "camera" | "collision" | "animation" | "render"
+---@alias Category "base" | "asset" | "spawn" | "audio" | "signal" | "phase" | "entity" | "group" | "camera" | "collision" | "animation" | "render"
 
 ---Comparison operator for animation rules
 ---@alias ComparisonOp "lt" | "le" | "gt" | "ge" | "eq" | "ne"
@@ -308,11 +308,6 @@ function engine.load_sound(id, path) end
 ---@param id string
 ---@param path string
 function engine.load_texture(id, path) end
-
----Load a tilemap from file
----@param id string
----@param path string
-function engine.load_tilemap(id, path) end
 
 -- ==================== Entity Spawning ====================
 
@@ -1113,12 +1108,6 @@ function engine.track_group(name) end
 ---@param name string
 function engine.untrack_group(name) end
 
--- ==================== Tilemap ====================
-
----Spawn tilemap entities from a loaded tilemap
----@param id string
-function engine.spawn_tiles(id) end
-
 -- ==================== Camera ====================
 
 ---Clear camera follow bounds
@@ -1681,6 +1670,11 @@ function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@return EntityBuilder
 function EntityBuilder:with_text(content, font, font_size, r, g, b, a) end
 
+---Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.
+---@param path string
+---@return EntityBuilder
+function EntityBuilder:with_tilemap(path) end
+
 ---Set color tint (RGBA 0-255)
 ---@param r integer
 ---@param g integer
@@ -2092,6 +2086,11 @@ function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@param a integer
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_text(content, font, font_size, r, g, b, a) end
+
+---Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.
+---@param path string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tilemap(path) end
 
 ---Set color tint (RGBA 0-255)
 ---@param r integer

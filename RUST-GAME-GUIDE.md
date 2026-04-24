@@ -608,137 +608,14 @@ assets/tilemaps/level01/
 └── level01.txt    # JSON: { tile_size, map_width, map_height, layers: [{ name, positions: [{ x, y, id }] }] }
 ```
 
-**`TilemapStore` is not pre-inserted** for Rust-only games — you must insert it yourself. Request `ResMut<TilemapStore>` and `ResMut<TextureStore>` in your setup hook alongside `RaylibAccess`:
-
-```rust
-use aberredengine::systems::tilemap::load_tilemap;
-use aberredengine::resources::tilemapstore::TilemapStore;
-use aberredengine::resources::texturestore::TextureStore;
-use aberredengine::systems::RaylibAccess;
-use aberredengine::bevy_ecs::prelude::*;
-
-fn setup(
-    mut commands: Commands,
-    mut tex_store: ResMut<TextureStore>,
-    mut tilemap_store: ResMut<TilemapStore>,
-    mut raylib: RaylibAccess,
-    // ... other params
-) {
-    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-
-    // Load tileset texture + JSON data
-    let (tex, map) = load_tilemap(rl, th, "assets/tilemaps/level01");
-    tex_store.insert("level01", tex);
-    tilemap_store.insert("level01", map);
-}
-```
-
-`load_tilemap` derives both file paths from the last path segment: `<path>/<stem>.png` and `<path>/<stem>.txt`. It panics on IO or parse failure (setup-time, not hot path).
-
-You also need to **insert `TilemapStore` as a resource** before setup runs. Do this in your main:
-
-```rust
-EngineBuilder::new()
-    .config("config.ini")
-    .add_system(|world: &mut World| {
-        world.insert_resource(TilemapStore::new());
-    })
-    .on_setup(setup)
-    // ...
-```
-
-Or insert it directly before calling `.run()` — the cleanest option is using `.configure_schedule` to insert it as a startup resource, but in practice inserting it in `on_setup` via `Commands::insert_resource` also works:
-
-```rust
-fn setup(mut commands: Commands, mut raylib: RaylibAccess, /* ... */) {
-    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-    let (tex, map) = load_tilemap(rl, th, "assets/tilemaps/level01");
-
-    let mut tex_store = TextureStore::new();
-    tex_store.insert("level01", tex);
-
-    let mut tilemap_store = TilemapStore::new();
-    tilemap_store.insert("level01", map);
-
-    commands.insert_resource(tex_store);
-    commands.insert_resource(tilemap_store);
-}
-```
-
-**Spawning tiles** is done from a scene's `on_enter` (or `on_enter_play`) callback using `spawn_tiles`. This is a two-phase operation:
-
-1. **Template phase** — one entity per atlas cell, with `Group("tiles-templates")` and `Sprite`. Templates carry no `MapPosition` so they are invisible. They stay alive in the world for potential future re-use.
-2. **Instance phase** — one entity per tile placement in the map layers, cloned from the matching template with `Group("tiles")`, `MapPosition`, and `ZIndex` added.
-
-```rust
-use aberredengine::systems::tilemap::spawn_tiles;
-use aberredengine::resources::tilemapstore::TilemapStore;
-use aberredengine::resources::texturestore::TextureStore;
-
-fn enter(ctx: &mut GameCtx) {
-    // `ctx.texture_store` is available here, but `TilemapStore` is not.
-    // A helper Bevy system is still the usual way to pass TilemapStore in:
-}
-```
-
-Because `GameCtx` does not expose `TilemapStore`, tile spawning in a scene callback still commonly uses a small helper system registered with `.add_system()`:
-
-```rust
-use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::resources::tilemapstore::TilemapStore;
-use aberredengine::resources::texturestore::TextureStore;
-use aberredengine::systems::tilemap::spawn_tiles;
-
-fn spawn_tilemap_system(
-    signals: Res<WorldSignals>,
-    tilemaps: Res<TilemapStore>,
-    textures: Res<TextureStore>,
-    mut commands: Commands,
-) {
-    if !signals.has_flag("spawn_tilemap") {
-        return;
-    }
-    if let (Some(tilemap), Some(tex)) = (tilemaps.get("level01"), textures.get("level01")) {
-        spawn_tiles(&mut commands, "level01", tex.width, tex.height, tilemap, None);
-    }
-}
-```
-
-Trigger it from `on_enter`:
-
-```rust
-fn enter(ctx: &mut GameCtx) {
-    ctx.world_signals.set_flag("spawn_tilemap");
-    // ... spawn other entities
-}
-```
-
-Register both in your builder:
-
-```rust
-EngineBuilder::new()
-    .on_setup(setup)
-    .add_system(spawn_tilemap_system)  // consumes the flag and spawns tiles
-    .add_scene("level01", SceneDescriptor { on_enter: enter, .. })
-    .initial_scene("level01")
-    .run();
-```
-
-**Z-layering:** `spawn_tiles` assigns `ZIndex` values automatically based on layer order. The first layer gets the most negative Z (furthest back), and the last layer gets the least negative. Tile instances are in `Group("tiles")`; use `Group("tiles")` for group-based collision rules if needed.
-
-> **Note:** `load_tilemap` and `spawn_tiles` are always compiled regardless of the `lua` feature flag, making them available to Rust-only downstream crates.
-
-#### TileMap component (recommended for runtime spawning)
-
-For runtime tilemap spawning, prefer the `TileMap` component over the manual `load_tilemap` + `spawn_tiles` approach. Spawn any entity with a `TileMap` component and the engine automatically loads the tilemap from disk and creates all tile entities as `ChildOf` children of that entity:
+Spawn a tilemap by attaching the `TileMap` component to any entity. `tilemap_spawn_system` reacts to `Added<TileMap>`, loads the PNG + JSON from disk, and spawns all tile entities as `ChildOf` children of the root entity. The entire tilemap then moves, scales, and rotates as one unit:
 
 ```rust
 use aberredengine::components::tilemap::TileMap;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::scale::Scale;
 
-// Minimal — tiles appear at world origin
+// Minimal — tiles appear at world origin (default MapPosition inserted automatically)
 commands.spawn(TileMap::new("assets/tilemaps/level01"));
 
 // Positioned and scaled
@@ -749,14 +626,24 @@ commands.spawn((
 ));
 ```
 
-Because all tile entities are `ChildOf` the root, repositioning, scaling, or rotating the root entity moves the entire tilemap:
+Move the whole tilemap at runtime by updating the root entity's `MapPosition`:
 
 ```rust
-// Move the whole tilemap at runtime
 commands.entity(tilemap_root).insert(MapPosition::new(new_x, new_y));
 ```
 
-The system inserts a default `MapPosition::new(0.0, 0.0)` on the root if none is provided. The texture is deduplicated in `TextureStore` — two `TileMap` entities pointing to the same path share one texture. No `TilemapStore` is involved; the parsed map data is transient.
+From **Lua**, use the entity builder:
+
+```lua
+engine.spawn()
+    :with_tilemap("./assets/tilemaps/level01")
+    :with_position(0, 0)  -- optional, defaults to (0, 0)
+    :build()
+```
+
+The texture is stored in `TextureStore` keyed by path stem and deduplicated — two `TileMap` entities pointing to the same directory share one GPU texture. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative). Use `Group("tiles")` in collision rules to match tile entities.
+
+> **Note:** `load_tilemap` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
 ### Camera
 

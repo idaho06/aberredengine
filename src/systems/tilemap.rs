@@ -9,6 +9,7 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use log::warn;
 use raylib::prelude::{Texture2D, Vector2};
+use serde::{Deserialize, Serialize};
 
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
@@ -16,9 +17,37 @@ use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::zindex::ZIndex;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemapstore::Tilemap;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use crate::systems::RaylibAccess;
+
+/// Single tile placement within a layer.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Tileposition {
+    pub x: u32,
+    pub y: u32,
+    pub id: u32,
+}
+
+/// A named tile layer containing tile placements.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Tilelayer {
+    pub name: String,
+    pub positions: Vec<Tileposition>,
+}
+
+/// Tilemap metadata and layer data, as parsed from Tilesetter 2.1.0 JSON.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Tilemap {
+    pub tile_size: u32,
+    pub map_width: u32,
+    pub map_height: u32,
+    pub layers: Vec<Tilelayer>,
+}
+
+/// Returns the last `/`-separated segment of `path` (the directory stem).
+fn path_stem(path: &str) -> &str {
+    path.split('/').next_back().unwrap_or(path)
+}
 
 /// Load a tilemap from a directory produced by Tilesetter 2.1.0.
 ///
@@ -29,7 +58,7 @@ pub fn load_tilemap(
     thread: &raylib::RaylibThread,
     path: &str,
 ) -> (Texture2D, Tilemap) {
-    let dirname = path.split('/').next_back().expect("Not a valid dir path.");
+    let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
     let texture = rl
@@ -106,22 +135,18 @@ pub fn spawn_tiles(
             }
             let wx = pos.x as f32 * tile_size;
             let wy = pos.y as f32 * tile_size;
+            let clone_id = commands
+                .entity(templates[id])
+                .clone_and_spawn()
+                .insert(Group::new("tiles"))
+                .insert(MapPosition::new(wx, wy))
+                .insert(ZIndex(z))
+                .id();
             if let Some(p) = parent {
                 commands
-                    .entity(templates[id])
-                    .clone_and_spawn()
-                    .insert(Group::new("tiles"))
-                    .insert(MapPosition::new(wx, wy))
-                    .insert(ZIndex(z))
+                    .entity(clone_id)
                     .insert(ChildOf(p))
                     .queue(ComputeInitialGlobalTransform);
-            } else {
-                commands
-                    .entity(templates[id])
-                    .clone_and_spawn()
-                    .insert(Group::new("tiles"))
-                    .insert(MapPosition::new(wx, wy))
-                    .insert(ZIndex(z));
             }
         }
     }
@@ -141,7 +166,7 @@ pub fn tilemap_spawn_system(
 ) {
     for (entity, tilemap_comp, has_map_pos) in query.iter() {
         let path = &tilemap_comp.path;
-        let key: String = path.split('/').next_back().unwrap_or(path).to_owned();
+        let key: String = path_stem(path).to_owned();
 
         let (texture, tilemap_data) = load_tilemap(&mut raylib.rl, &raylib.th, path);
         let tex_w = texture.width;

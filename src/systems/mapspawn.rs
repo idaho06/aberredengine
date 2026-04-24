@@ -25,9 +25,8 @@ use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::fontstore::FontStore;
 use crate::resources::mapdata::{EntityDef, MapData};
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemapstore::TilemapStore;
+use crate::components::tilemap::TileMap;
 use crate::systems::RaylibAccess;
-use crate::systems::tilemap::{load_tilemap, spawn_tiles};
 
 /// Load all assets referenced by `map` into the engine stores, then spawn
 /// entities. Called by [`spawn_map_observer`]; can also be called directly.
@@ -35,7 +34,6 @@ pub fn spawn_map(
     commands: &mut Commands,
     raylib: &mut RaylibAccess,
     texture_store: &mut TextureStore,
-    tilemap_store: &mut TilemapStore,
     font_store: &mut FontStore,
     animation_store: &mut AnimationStore,
     map: &MapData,
@@ -54,12 +52,7 @@ pub fn spawn_map(
     }
 
     for entry in &map.tilemaps {
-        let (texture, tilemap) = load_tilemap(rl, th, &entry.path);
-        let w = texture.width;
-        let h = texture.height;
-        texture_store.insert(&entry.key, texture);
-        spawn_tiles(commands, &entry.key, w, h, &tilemap, None);
-        tilemap_store.insert(&entry.key, tilemap);
+        commands.spawn(TileMap::new(&entry.path));
     }
 
     for entry in &map.fonts {
@@ -126,7 +119,6 @@ pub fn spawn_map_observer(
     mut commands: Commands,
     mut raylib: RaylibAccess,
     mut texture_store: ResMut<TextureStore>,
-    mut tilemap_store: ResMut<TilemapStore>,
     mut font_store: NonSendMut<FontStore>,
     mut animation_store: ResMut<AnimationStore>,
 ) {
@@ -134,7 +126,6 @@ pub fn spawn_map_observer(
         &mut commands,
         &mut raylib,
         &mut texture_store,
-        &mut tilemap_store,
         &mut font_store,
         &mut animation_store,
         &trigger.event().map,

@@ -1091,6 +1091,12 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_tilemap(path) - Spawn tilemap root; tile entities become ChildOf children
+        methods.add_method_mut("with_tilemap", |_, this, path: String| {
+            this.cmd.tilemap_path = Some(path);
+            Ok(this.clone())
+        });
+
         // :with_camera_target(priority?, zoom?) - Mark entity as camera follow target.
         // priority defaults to 0; higher values take precedence.
         // zoom is the desired camera zoom when this target wins (default 1.0).

@@ -49,7 +49,6 @@ pub(super) struct LuaAppData {
     pub(super) phase_commands: RefCell<Vec<PhaseCmd>>,
     pub(super) entity_commands: RefCell<Vec<EntityCmd>>,
     pub(super) group_commands: RefCell<Vec<GroupCmd>>,
-    pub(super) tilemap_commands: RefCell<Vec<TilemapCmd>>,
     pub(super) camera_commands: RefCell<Vec<CameraCmd>>,
     pub(super) animation_commands: RefCell<Vec<AnimationCmd>>,
     pub(super) render_commands: RefCell<Vec<RenderCmd>>,
@@ -300,7 +299,6 @@ impl LuaRuntime {
             phase_commands: RefCell::new(Vec::new()),
             entity_commands: RefCell::new(Vec::new()),
             group_commands: RefCell::new(Vec::new()),
-            tilemap_commands: RefCell::new(Vec::new()),
             camera_commands: RefCell::new(Vec::new()),
             animation_commands: RefCell::new(Vec::new()),
             render_commands: RefCell::new(Vec::new()),
@@ -344,7 +342,6 @@ impl LuaRuntime {
         runtime.register_phase_api()?;
         runtime.register_entity_api()?;
         runtime.register_group_api()?;
-        runtime.register_tilemap_api()?;
         runtime.register_camera_api()?;
         runtime.register_camera_follow_api()?;
         runtime.register_collision_api()?;

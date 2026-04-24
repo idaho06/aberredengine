@@ -19,8 +19,6 @@ pub enum AssetCmd {
     Music { id: String, path: String },
     /// Load a sound effect from a file path
     Sound { id: String, path: String },
-    /// Load a tilemap from a directory path
-    Tilemap { id: String, path: String },
     /// Load a shader from vertex and/or fragment shader files
     Shader {
         id: String,
@@ -314,13 +312,6 @@ pub enum GroupCmd {
     UntrackGroup { name: String },
     /// Clear all tracked groups
     ClearTrackedGroups,
-}
-
-/// Commands for tilemap operations from Lua.
-#[derive(Debug, Clone)]
-pub enum TilemapCmd {
-    /// Spawn tiles from a loaded tilemap
-    SpawnTiles { id: String },
 }
 
 /// Commands for camera operations from Lua.

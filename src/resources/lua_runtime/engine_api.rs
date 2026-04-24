@@ -492,18 +492,6 @@ impl LuaRuntime {
             cat = "asset",
             params = [("id", "string"), ("path", "string")]
         );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "load_tilemap",
-            asset_commands,
-            |(id, path)| (String, String),
-            AssetCmd::Tilemap { id, path },
-            desc = "Load a tilemap from file",
-            cat = "asset",
-            params = [("id", "string"), ("path", "string")]
-        );
         Ok(())
     }
 
@@ -1199,25 +1187,6 @@ impl LuaRuntime {
             Some("boolean"),
         )?;
 
-        Ok(())
-    }
-
-    pub(super) fn register_tilemap_api(&self) -> LuaResult<()> {
-        let engine: LuaTable = self.lua.globals().get("engine")?;
-        let meta: LuaTable = engine.get("__meta")?;
-        let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "spawn_tiles",
-            tilemap_commands,
-            |id| String,
-            TilemapCmd::SpawnTiles { id },
-            desc = "Spawn tilemap entities from a loaded tilemap",
-            cat = "tilemap",
-            params = [("id", "string")]
-        );
         Ok(())
     }
 

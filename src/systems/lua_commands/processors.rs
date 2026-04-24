@@ -20,15 +20,13 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd, GameConfigCmd, GroupCmd,
-    InputCmd, PhaseCmd, RenderCmd, SignalCmd, TilemapCmd,
+    InputCmd, PhaseCmd, RenderCmd, SignalCmd,
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemapstore::{Tilemap, TilemapStore};
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::phase_core::queue_phase_transition;
-use crate::systems::tilemap::spawn_tiles;
 
 /// Process a single audio command from Lua and write to the audio command channel.
 pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd: AudioLuaCmd) {
@@ -131,31 +129,6 @@ pub fn process_group_command(tracked_groups: &mut TrackedGroups, cmd: GroupCmd) 
     }
 }
 
-/// Process a single tilemap command from Lua and spawn tiles.
-pub fn process_tilemap_command(
-    commands: &mut Commands,
-    cmd: TilemapCmd,
-    tex_store: &TextureStore,
-    tilemaps_store: &TilemapStore,
-) {
-    match cmd {
-        TilemapCmd::SpawnTiles { id } => {
-            if let Some(tilemap_info) = tilemaps_store.get(&id) {
-                if let Some(tilemap_tex) = tex_store.get(&id) {
-                    let tiles_width = tilemap_tex.width;
-                    let tiles_height = tilemap_tex.height;
-                    info!("Spawned tiles for tilemap '{}'", id);
-                    spawn_tiles(commands, id, tiles_width, tiles_height, tilemap_info, None);
-                } else {
-                    error!("Tilemap texture '{}' not found", id);
-                }
-            } else {
-                error!("Tilemap '{}' not found in store", id);
-            }
-        }
-    }
-}
-
 /// Process a single camera command from Lua and update the camera resource.
 pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
     match cmd {
@@ -200,17 +173,15 @@ where
 ///
 /// Designed for use during `on_setup` / scene initialization, not hot gameplay paths.
 #[allow(clippy::too_many_arguments)]
-pub fn process_asset_command<F1, F2>(
+pub fn process_asset_command<F1>(
     rl: &mut raylib::RaylibHandle,
     th: &raylib::RaylibThread,
     cmd: AssetCmd,
     tex_store: &mut TextureStore,
-    tilemaps_store: &mut TilemapStore,
     fonts: &mut FontStore,
     shader_store: &mut ShaderStore,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     load_font_fn: F1,
-    load_tilemap_fn: F2,
 ) where
     F1: FnOnce(
         &mut raylib::RaylibHandle,
@@ -218,11 +189,6 @@ pub fn process_asset_command<F1, F2>(
         &str,
         i32,
     ) -> raylib::prelude::Font,
-    F2: FnOnce(
-        &mut raylib::RaylibHandle,
-        &raylib::RaylibThread,
-        &str,
-    ) -> (raylib::prelude::Texture2D, Tilemap),
 {
     match cmd {
         AssetCmd::Texture { id, path } => match rl.load_texture(th, &path) {
@@ -246,16 +212,6 @@ pub fn process_asset_command<F1, F2>(
         AssetCmd::Sound { id, path } => {
             info!("Queuing sound '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
-        }
-        AssetCmd::Tilemap { id, path } => {
-            let (tilemap_tex, tilemap) = load_tilemap_fn(rl, th, &path);
-            let tiles_width = tilemap_tex.width;
-            info!(
-                "Loaded tilemap '{}' from '{}' ({}x{} texture, tile_size={})",
-                id, path, tiles_width, tilemap_tex.height, tilemap.tile_size
-            );
-            tex_store.insert(&id, tilemap_tex);
-            tilemaps_store.insert(&id, tilemap);
         }
         AssetCmd::Shader {
             id,

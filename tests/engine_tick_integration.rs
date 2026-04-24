@@ -1606,7 +1606,7 @@ fn meta_enums_table_is_populated() {
 
         -- Hard-code expected Category values
         local expected_cats = {"base", "asset", "spawn", "audio", "signal", "phase",
-                               "entity", "group", "tilemap", "camera", "collision",
+                               "entity", "group", "camera", "collision",
                                "animation", "render"}
         assert(#enums.Category.values == #expected_cats,
             "Category value count mismatch: expected " .. #expected_cats ..
@@ -1670,7 +1670,7 @@ fn meta_functions_complete() {
             -- base
             "log", "log_info", "log_warn", "log_error",
             -- asset
-            "load_texture", "load_font", "load_music", "load_sound", "load_tilemap",
+            "load_texture", "load_font", "load_music", "load_sound",
             -- spawn
             "spawn", "clone",
             -- audio
@@ -1688,8 +1688,6 @@ fn meta_functions_complete() {
             "phase_transition",
             -- group
             "track_group", "untrack_group", "clear_tracked_groups", "has_tracked_group",
-            -- tilemap
-            "spawn_tiles",
             -- camera
             "set_camera",
             -- render

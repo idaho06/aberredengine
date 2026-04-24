@@ -46,7 +46,7 @@ use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemapstore::TilemapStore;
+
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::mapspawn::load_font_with_mipmaps;
@@ -54,7 +54,7 @@ use crate::systems::lua_commands::{
     DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_animation_command,
     process_asset_command, process_camera_follow_command, process_gameconfig_command,
     process_group_command, process_input_command, process_phase_command, process_render_command,
-    process_signal_command, process_tilemap_command,
+    process_signal_command,
 };
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -129,7 +129,6 @@ pub fn setup(
 
     // Initialize stores
     let mut tex_store = TextureStore::new();
-    let mut tilemaps_store = TilemapStore::new();
 
     // Process asset commands queued by Lua
     for cmd in lua_runtime.drain_asset_commands() {
@@ -138,17 +137,14 @@ pub fn setup(
             th,
             cmd,
             &mut tex_store,
-            &mut tilemaps_store,
             &mut fonts,
             &mut shaders,
             &mut scripting.audio_cmd_writer,
             load_font_with_mipmaps,
-            crate::systems::tilemap::load_tilemap,
         );
     }
 
     commands.insert_resource(tex_store);
-    commands.insert_resource(tilemaps_store);
 
     // Process animation registration commands from Lua
     let mut anim_store = AnimationStore::default();
@@ -341,8 +337,6 @@ pub fn switch_scene(
     mut commands: Commands,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
-    tilemaps_store: Res<TilemapStore>,
-    tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
     persistent_entities: Query<Entity, With<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
@@ -367,8 +361,6 @@ pub fn switch_scene(
     scene_state
         .world_signals
         .clear_non_persistent_entities(&persistent_set);
-
-    // NOTE: tilemaps_store is NOT cleared - tilemaps are assets loaded during setup
 
     tracked_groups.clear();
     scene_state.world_signals.clear_group_counts();
@@ -395,14 +387,10 @@ pub fn switch_scene(
         &mut bindings,
     );
 
-    // Group tracking and tilemap spawning are scene-switch-only operations.
     for cmd in lua_runtime.drain_group_commands() {
         process_group_command(&mut tracked_groups, cmd);
     }
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
-    for cmd in lua_runtime.drain_tilemap_commands() {
-        process_tilemap_command(&mut commands, cmd, &tex_store, &tilemaps_store);
-    }
 
     // Refresh the config cache after the drain may have applied GameConfigCmds.
     lua_runtime.update_gameconfig_cache(&scene_state.config);

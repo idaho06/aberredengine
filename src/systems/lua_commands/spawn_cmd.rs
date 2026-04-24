@@ -15,6 +15,7 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
+use crate::components::tilemap::TileMap;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::mapposition::MapPosition;
@@ -72,6 +73,9 @@ pub(super) fn apply_components(
     }
     if let Some(seconds) = cmd.ttl {
         entity_commands.insert(Ttl::new(seconds));
+    }
+    if let Some(path) = cmd.tilemap_path {
+        entity_commands.insert(TileMap::new(path));
     }
 
     apply_transform_components(

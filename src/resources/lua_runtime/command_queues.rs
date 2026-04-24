@@ -65,11 +65,6 @@ impl LuaRuntime {
         self.drain_queue(|d| &d.group_commands)
     }
 
-    /// Drains all queued tilemap commands.
-    pub fn drain_tilemap_commands(&self) -> Vec<TilemapCmd> {
-        self.drain_queue(|d| &d.tilemap_commands)
-    }
-
     /// Drains all queued camera commands.
     pub fn drain_camera_commands(&self) -> Vec<CameraCmd> {
         self.drain_queue(|d| &d.camera_commands)
@@ -164,7 +159,6 @@ impl LuaRuntime {
             data.audio_commands.borrow_mut().clear();
             data.group_commands.borrow_mut().clear();
             data.camera_commands.borrow_mut().clear();
-            data.tilemap_commands.borrow_mut().clear();
             data.render_commands.borrow_mut().clear();
             data.animation_commands.borrow_mut().clear();
             data.gameconfig_commands.borrow_mut().clear();
