@@ -18,6 +18,8 @@ use raylib::prelude::*;
 
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
+use crate::components::rotation::Rotation;
+use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
@@ -49,10 +51,6 @@ pub fn spawn_map(
                 log::warn!("spawn_map: failed to load texture '{}': {e}", entry.path);
             }
         }
-    }
-
-    for entry in &map.tilemaps {
-        commands.spawn(TileMap::new(&entry.path));
     }
 
     for entry in &map.fonts {
@@ -109,6 +107,15 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) {
     }
     if let Some(z) = def.z_index {
         ec.insert(ZIndex(z));
+    }
+    if let Some(deg) = def.rotation_deg {
+        ec.insert(Rotation { degrees: deg });
+    }
+    if let Some([sx, sy]) = def.scale {
+        ec.insert(Scale::new(sx, sy));
+    }
+    if let Some(ref p) = def.tilemap_path {
+        ec.insert(TileMap::new(p));
     }
 }
 

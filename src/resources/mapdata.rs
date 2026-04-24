@@ -40,7 +40,6 @@ pub struct MapData {
     /// Human-readable display name (not used as a file path).
     pub name: String,
     pub textures: Vec<TextureEntry>,
-    pub tilemaps: Vec<TilemapEntry>,
     pub fonts: Vec<FontEntry>,
     pub animations: Vec<AnimationEntry>,
     pub entities: Vec<EntityDef>,
@@ -52,18 +51,6 @@ pub struct TextureEntry {
     /// Key used to look up the texture in `TextureStore`.
     pub key: String,
     /// Relative path to the image file.
-    pub path: String,
-}
-
-/// A tilemap asset to load into [`crate::resources::tilemapstore::TilemapStore`].
-///
-/// The path must point to a directory containing `<stem>.png` and `<stem>.txt`
-/// (same contract as [`crate::systems::tilemap::load_tilemap`]).
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TilemapEntry {
-    /// Key used to look up the tilemap in `TilemapStore`.
-    pub key: String,
-    /// Directory path. Must contain `<stem>.png` and `<stem>.txt`.
     pub path: String,
 }
 
@@ -105,12 +92,24 @@ pub struct AnimationEntry {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct EntityDef {
     /// World-space position `[x, y]` (maps to [`crate::components::mapposition::MapPosition`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sprite: Option<SpriteEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// Render order (maps to [`crate::components::zindex::ZIndex`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub z_index: Option<f32>,
-    // Extend here: collider, animation, tint, ttl, etc.
+    /// Rotation in degrees (maps to [`crate::components::rotation::Rotation`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation_deg: Option<f32>,
+    /// Scale `[x, y]` (maps to [`crate::components::scale::Scale`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<[f32; 2]>,
+    /// If set, spawns a [`crate::components::tilemap::TileMap`] component with this directory path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tilemap_path: Option<String>,
 }
 
 /// Sprite rendering data for an entity placement.
@@ -159,10 +158,6 @@ mod tests {
                 key: "player".into(),
                 path: "assets/textures/player.png".into(),
             }],
-            tilemaps: vec![TilemapEntry {
-                key: "level01".into(),
-                path: "assets/tilemaps/level01".into(),
-            }],
             fonts: vec![FontEntry {
                 key: "arcade".into(),
                 path: "assets/fonts/Arcade.ttf".into(),
@@ -191,6 +186,9 @@ mod tests {
                 }),
                 group: Some("player".into()),
                 z_index: Some(1.0),
+                rotation_deg: None,
+                scale: None,
+                tilemap_path: None,
             }],
         }
     }
