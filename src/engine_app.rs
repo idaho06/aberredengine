@@ -113,6 +113,7 @@ use crate::systems::gamestate::{
     check_pending_state, clean_all_entities, quit_game, state_is_playing,
 };
 use crate::systems::gridlayout::gridlayout_spawn_system;
+use crate::systems::tilemap::tilemap_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
@@ -645,6 +646,7 @@ impl EngineBuilder {
         update.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
         update.add_systems(menu_spawn_system);
         update.add_systems(gridlayout_spawn_system);
+        update.add_systems(tilemap_spawn_system);
         update.add_systems(update_input_state);
         update.add_systems(check_pending_state);
         update.add_systems(update_group_counts_system);

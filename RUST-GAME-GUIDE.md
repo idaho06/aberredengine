@@ -700,7 +700,7 @@ fn spawn_tilemap_system(
         return;
     }
     if let (Some(tilemap), Some(tex)) = (tilemaps.get("level01"), textures.get("level01")) {
-        spawn_tiles(&mut commands, "level01", tex.width, tex.height, tilemap);
+        spawn_tiles(&mut commands, "level01", tex.width, tex.height, tilemap, None);
     }
 }
 ```
@@ -728,6 +728,35 @@ EngineBuilder::new()
 **Z-layering:** `spawn_tiles` assigns `ZIndex` values automatically based on layer order. The first layer gets the most negative Z (furthest back), and the last layer gets the least negative. Tile instances are in `Group("tiles")`; use `Group("tiles")` for group-based collision rules if needed.
 
 > **Note:** `load_tilemap` and `spawn_tiles` are always compiled regardless of the `lua` feature flag, making them available to Rust-only downstream crates.
+
+#### TileMap component (recommended for runtime spawning)
+
+For runtime tilemap spawning, prefer the `TileMap` component over the manual `load_tilemap` + `spawn_tiles` approach. Spawn any entity with a `TileMap` component and the engine automatically loads the tilemap from disk and creates all tile entities as `ChildOf` children of that entity:
+
+```rust
+use aberredengine::components::tilemap::TileMap;
+use aberredengine::components::mapposition::MapPosition;
+use aberredengine::components::scale::Scale;
+
+// Minimal — tiles appear at world origin
+commands.spawn(TileMap::new("assets/tilemaps/level01"));
+
+// Positioned and scaled
+commands.spawn((
+    TileMap::new("assets/tilemaps/level01"),
+    MapPosition::new(100.0, 200.0),
+    Scale { x: 2.0, y: 2.0 },
+));
+```
+
+Because all tile entities are `ChildOf` the root, repositioning, scaling, or rotating the root entity moves the entire tilemap:
+
+```rust
+// Move the whole tilemap at runtime
+commands.entity(tilemap_root).insert(MapPosition::new(new_x, new_y));
+```
+
+The system inserts a default `MapPosition::new(0.0, 0.0)` on the root if none is provided. The texture is deduplicated in `TextureStore` — two `TileMap` entities pointing to the same path share one texture. No `TilemapStore` is involved; the parsed map data is transient.
 
 ### Camera
 

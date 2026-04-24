@@ -58,7 +58,7 @@ pub fn spawn_map(
         let w = texture.width;
         let h = texture.height;
         texture_store.insert(&entry.key, texture);
-        spawn_tiles(commands, &entry.key, w, h, &tilemap);
+        spawn_tiles(commands, &entry.key, w, h, &tilemap, None);
         tilemap_store.insert(&entry.key, tilemap);
     }
 

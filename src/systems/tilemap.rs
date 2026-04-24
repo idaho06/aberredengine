@@ -5,23 +5,28 @@
 
 use std::sync::Arc;
 
+use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use log::warn;
-use raylib::prelude::{RaylibHandle, RaylibThread, Texture2D, Vector2};
+use raylib::prelude::{Texture2D, Vector2};
 
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::sprite::Sprite;
+use crate::components::tilemap::TileMap;
 use crate::components::zindex::ZIndex;
+use crate::resources::texturestore::TextureStore;
 use crate::resources::tilemapstore::Tilemap;
+use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
+use crate::systems::RaylibAccess;
 
 /// Load a tilemap from a directory produced by Tilesetter 2.1.0.
 ///
 /// `path` is a directory; the last path segment is used as the stem for
 /// `<stem>.png` (texture) and `<stem>.txt` (JSON data).
 pub fn load_tilemap(
-    rl: &mut RaylibHandle,
-    thread: &RaylibThread,
+    rl: &mut raylib::RaylibHandle,
+    thread: &raylib::RaylibThread,
     path: &str,
 ) -> (Texture2D, Tilemap) {
     let dirname = path.split('/').next_back().expect("Not a valid dir path.");
@@ -43,13 +48,16 @@ pub fn load_tilemap(
 /// Templates are kept alive in the world (no `MapPosition`, so they are not rendered).
 ///
 /// Phase 2 — clone the matching template for each tile placement and insert
-/// `Group("tiles")`, `MapPosition`, and `ZIndex`.
+/// `Group("tiles")`, `MapPosition`, and `ZIndex`. When `parent` is `Some`,
+/// each tile clone also gets `ChildOf(parent)` and `ComputeInitialGlobalTransform`
+/// is queued so children render at the correct world position on the first frame.
 pub fn spawn_tiles(
     commands: &mut Commands,
     tilemap_tex_key: impl Into<String>,
     tex_width: i32,
     tex_height: i32,
     tilemap: &Tilemap,
+    parent: Option<Entity>,
 ) {
     let tilemap_tex_key: Arc<str> = Arc::from(tilemap_tex_key.into());
     let tile_size = tilemap.tile_size as f32;
@@ -98,12 +106,54 @@ pub fn spawn_tiles(
             }
             let wx = pos.x as f32 * tile_size;
             let wy = pos.y as f32 * tile_size;
-            commands
-                .entity(templates[id])
-                .clone_and_spawn()
-                .insert(Group::new("tiles"))
-                .insert(MapPosition::new(wx, wy))
-                .insert(ZIndex(z));
+            if let Some(p) = parent {
+                commands
+                    .entity(templates[id])
+                    .clone_and_spawn()
+                    .insert(Group::new("tiles"))
+                    .insert(MapPosition::new(wx, wy))
+                    .insert(ZIndex(z))
+                    .insert(ChildOf(p))
+                    .queue(ComputeInitialGlobalTransform);
+            } else {
+                commands
+                    .entity(templates[id])
+                    .clone_and_spawn()
+                    .insert(Group::new("tiles"))
+                    .insert(MapPosition::new(wx, wy))
+                    .insert(ZIndex(z));
+            }
         }
+    }
+}
+
+/// Watches for newly added [`TileMap`] components, loads the tilemap from disk,
+/// stores the texture in [`TextureStore`], and spawns tile entities as `ChildOf`
+/// children of the root entity.
+///
+/// If the root entity has no [`MapPosition`], a default `(0, 0)` one is inserted
+/// so that [`crate::systems::propagate_transforms`] can compute child transforms.
+pub fn tilemap_spawn_system(
+    mut commands: Commands,
+    query: Query<(Entity, &TileMap, Has<MapPosition>), Added<TileMap>>,
+    mut raylib: RaylibAccess,
+    mut texture_store: ResMut<TextureStore>,
+) {
+    for (entity, tilemap_comp, has_map_pos) in query.iter() {
+        let path = &tilemap_comp.path;
+        let key: String = path.split('/').next_back().unwrap_or(path).to_owned();
+
+        let (texture, tilemap_data) = load_tilemap(&mut raylib.rl, &raylib.th, path);
+        let tex_w = texture.width;
+        let tex_h = texture.height;
+        if texture_store.get(&key).is_none() {
+            texture_store.insert(&key, texture);
+        }
+
+        if !has_map_pos {
+            commands.entity(entity).insert(MapPosition::new(0.0, 0.0));
+        }
+
+        spawn_tiles(&mut commands, &key, tex_w, tex_h, &tilemap_data, Some(entity));
     }
 }

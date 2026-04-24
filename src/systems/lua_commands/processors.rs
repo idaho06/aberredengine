@@ -145,7 +145,7 @@ pub fn process_tilemap_command(
                     let tiles_width = tilemap_tex.width;
                     let tiles_height = tilemap_tex.height;
                     info!("Spawned tiles for tilemap '{}'", id);
-                    spawn_tiles(commands, id, tiles_width, tiles_height, tilemap_info);
+                    spawn_tiles(commands, id, tiles_width, tiles_height, tilemap_info, None);
                 } else {
                     error!("Tilemap texture '{}' not found", id);
                 }
