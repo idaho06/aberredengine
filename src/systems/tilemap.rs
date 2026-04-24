@@ -9,7 +9,7 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use log::warn;
 use raylib::prelude::{Texture2D, Vector2};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
@@ -20,28 +20,31 @@ use crate::resources::texturestore::TextureStore;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use crate::systems::RaylibAccess;
 
+pub const TILES_GROUP: &str = "tiles";
+pub const TILES_TEMPLATES_GROUP: &str = "tiles-templates";
+
 /// Single tile placement within a layer.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Tileposition {
+#[derive(Debug, Deserialize)]
+pub struct TilePosition {
     pub x: u32,
     pub y: u32,
     pub id: u32,
 }
 
 /// A named tile layer containing tile placements.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Tilelayer {
+#[derive(Debug, Deserialize)]
+pub struct TileLayer {
     pub name: String,
-    pub positions: Vec<Tileposition>,
+    pub positions: Vec<TilePosition>,
 }
 
 /// Tilemap metadata and layer data, as parsed from Tilesetter 2.1.0 JSON.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct Tilemap {
     pub tile_size: u32,
     pub map_width: u32,
     pub map_height: u32,
-    pub layers: Vec<Tilelayer>,
+    pub layers: Vec<TileLayer>,
 }
 
 /// Returns the last `/`-separated segment of `path` (the directory stem).
@@ -101,7 +104,7 @@ pub fn spawn_tiles(
             let row = id / tiles_per_row;
             commands
                 .spawn((
-                    Group::new("tiles-templates"),
+                    Group::new(TILES_TEMPLATES_GROUP),
                     Sprite {
                         tex_key: tilemap_tex_key.clone(),
                         width: tile_size,
@@ -138,7 +141,7 @@ pub fn spawn_tiles(
             let clone_id = commands
                 .entity(templates[id])
                 .clone_and_spawn()
-                .insert(Group::new("tiles"))
+                .insert(Group::new(TILES_GROUP))
                 .insert(MapPosition::new(wx, wy))
                 .insert(ZIndex(z))
                 .id();

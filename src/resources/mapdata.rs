@@ -186,9 +186,7 @@ mod tests {
                 }),
                 group: Some("player".into()),
                 z_index: Some(1.0),
-                rotation_deg: None,
-                scale: None,
-                tilemap_path: None,
+                ..Default::default()
             }],
         }
     }
