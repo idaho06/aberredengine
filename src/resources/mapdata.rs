@@ -110,6 +110,12 @@ pub struct EntityDef {
     /// If set, spawns a [`crate::components::tilemap::TileMap`] component with this directory path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tilemap_path: Option<String>,
+    /// If set, registers the spawned entity in `WorldSignals.entities` under this key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registered_as: Option<String>,
+    /// Color tint `[r, g, b, a]` in 0–255 (maps to [`crate::components::tint::Tint`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<[u8; 4]>,
 }
 
 /// Sprite rendering data for an entity placement.

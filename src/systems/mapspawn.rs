@@ -21,12 +21,14 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
+use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::fontstore::FontStore;
 use crate::resources::mapdata::{EntityDef, MapData};
 use crate::resources::texturestore::TextureStore;
+use crate::resources::worldsignals::WorldSignals;
 use crate::components::tilemap::TileMap;
 use crate::systems::RaylibAccess;
 
@@ -39,6 +41,7 @@ pub fn spawn_map(
     font_store: &mut FontStore,
     animation_store: &mut AnimationStore,
     map: &MapData,
+    world_signals: &mut WorldSignals,
 ) {
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
 
@@ -75,11 +78,14 @@ pub fn spawn_map(
     }
 
     for def in &map.entities {
-        spawn_entity(commands, def);
+        let entity = spawn_entity(commands, def);
+        if let Some(ref key) = def.registered_as {
+            world_signals.set_entity(key.clone(), entity);
+        }
     }
 }
 
-fn spawn_entity(commands: &mut Commands, def: &EntityDef) {
+fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     let mut ec = commands.spawn_empty();
 
     if let Some([x, y]) = def.position {
@@ -117,6 +123,10 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) {
     if let Some(ref p) = def.tilemap_path {
         ec.insert(TileMap::new(p));
     }
+    if let Some([r, g, b, a]) = def.tint {
+        ec.insert(Tint::new(r, g, b, a));
+    }
+    ec.id()
 }
 
 /// Bevy observer registered by the engine. Fires on
@@ -128,6 +138,7 @@ pub fn spawn_map_observer(
     mut texture_store: ResMut<TextureStore>,
     mut font_store: NonSendMut<FontStore>,
     mut animation_store: ResMut<AnimationStore>,
+    mut world_signals: ResMut<WorldSignals>,
 ) {
     spawn_map(
         &mut commands,
@@ -136,6 +147,7 @@ pub fn spawn_map_observer(
         &mut font_store,
         &mut animation_store,
         &trigger.event().map,
+        &mut world_signals,
     );
 }
 
