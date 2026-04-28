@@ -198,7 +198,7 @@ end
 
 --- Get started phase: spawn the ball stuck to the player paddle
 local function scene_get_started_enter(ctx, input)
-    engine.log_info("Entering get_started phase - spawning ball")
+    engine.log_debug("Entering get_started phase - spawning ball")
 
     engine.play_music("arkanoid-player_ready", false)
 
@@ -237,7 +237,7 @@ local function scene_get_started_enter(ctx, input)
         })
         :build()
 
-    engine.log_info("Ball spawned with StuckTo!")
+    engine.log_debug("Ball spawned with StuckTo!")
 end
 
 --- Get started phase update: transition to playing
@@ -249,7 +249,7 @@ end
 
 --- Ball stuck to player: re-attach after collision bounce-back
 local function ball_stuck_enter(ctx, input)
-    engine.log_info("Ball stuck to player - attaching...")
+    engine.log_debug("Ball stuck to player - attaching...")
 
     local player_id = engine.get_entity("player")
     if not player_id then
@@ -268,14 +268,14 @@ end
 --- Ball stuck update: release after 2 seconds
 local function ball_stuck_update(ctx, input, dt)
     if ctx.time_in_phase >= 2.0 then
-        engine.log_info("Releasing ball!")
+        engine.log_debug("Releasing ball!")
         return "moving"
     end
 end
 
 --- Ball moving: release from paddle
 local function ball_moving_enter(ctx, input)
-    engine.log_info("Ball released and moving!")
+    engine.log_debug("Ball released and moving!")
     engine.release_stuckto(ctx.id)
 end
 
@@ -283,7 +283,7 @@ end
 
 --- Player sticky phase: set flag so ball sticks on collision
 local function player_sticky_enter(ctx, input)
-    engine.log_info("Player entering sticky phase")
+    engine.log_debug("Player entering sticky phase")
     engine.entity_signal_set_flag(ctx.id, "sticky")
     engine.entity_set_animation(ctx.id, "arkanoid-vaus_glowing")
 end
@@ -291,21 +291,21 @@ end
 --- Player sticky update: expire after 3 seconds
 local function player_sticky_update(ctx, input, dt)
     if ctx.time_in_phase >= 3.0 then
-        engine.log_info("Sticky powerup expired!")
+        engine.log_debug("Sticky powerup expired!")
         return "glowing"
     end
 end
 
 --- Player glowing phase: clear sticky, keep glowing animation
 local function player_glowing_enter(ctx, input)
-    engine.log_info("Player entering glowing phase")
+    engine.log_debug("Player entering glowing phase")
     engine.entity_signal_clear_flag(ctx.id, "sticky")
     engine.entity_set_animation(ctx.id, "arkanoid-vaus_glowing")
 end
 
 --- Player hit phase: play hit animation
 local function player_hit_enter(ctx, input)
-    engine.log_info("Player entering hit phase")
+    engine.log_debug("Player entering hit phase")
     engine.entity_set_animation(ctx.id, "arkanoid-vaus_hit")
 end
 
@@ -326,13 +326,13 @@ local function scene_playing_update(ctx, input, dt)
 
     local brick_count = engine.get_group_count("brick")
     if brick_count ~= nil and brick_count == 0 then
-        engine.log_info("All bricks destroyed - level cleared!")
+        engine.log_debug("All bricks destroyed - level cleared!")
         return "level_cleared"
     end
 
     local ball_count = engine.get_group_count("ball")
     if ball_count ~= nil and ball_count == 0 then
-        engine.log_info("No balls remaining - lose life!")
+        engine.log_debug("No balls remaining - lose life!")
         return "lose_life"
     end
 end
@@ -342,7 +342,7 @@ local function scene_lose_life_update(ctx, input, dt)
     local lives = engine.get_integer("lives") or 0
     lives = lives - 1
     engine.set_integer("lives", lives)
-    engine.log_info(string.format("Lost a life! Remaining lives: %d", lives))
+    engine.log_debug(string.format("Lost a life! Remaining lives: %d", lives))
 
     if lives < 1 then
         return "game_over"
@@ -353,7 +353,7 @@ end
 
 --- Game over phase enter: spawn text
 local function scene_game_over_enter(ctx, input)
-    engine.log_info("Game Over!")
+    engine.log_debug("Game Over!")
 
     engine.spawn()
         :with_group("game_over_text")
@@ -366,16 +366,16 @@ end
 --- Game over phase update: return to menu after 3 seconds
 local function scene_game_over_update(ctx, input, dt)
     if ctx.time_in_phase >= 3.0 then
-        engine.log_info("Game over - returning to menu")
-        engine.log_info(string.format("Total ball bounces: %d", ball_bounces))
-        engine.log_info(string.format("Total player hits: %d", player_hits))
+        engine.log_debug("Game over - returning to menu")
+        engine.log_debug(string.format("Total ball bounces: %d", ball_bounces))
+        engine.log_debug(string.format("Total player hits: %d", player_hits))
         engine.change_scene("menu")
     end
 end
 
 --- Level cleared phase enter: play music, spawn text
 local function scene_level_cleared_enter(ctx, input)
-    engine.log_info("Level Cleared!")
+    engine.log_debug("Level Cleared!")
 
     engine.play_music("arkanoid-success", false)
 
@@ -390,9 +390,9 @@ end
 --- Level cleared phase update: return to menu after 4 seconds
 local function scene_level_cleared_update(ctx, input, dt)
     if ctx.time_in_phase >= 4.0 then
-        engine.log_info("Level cleared - returning to menu")
-        engine.log_info(string.format("Total ball bounces: %d", ball_bounces))
-        engine.log_info(string.format("Total player hits: %d", player_hits))
+        engine.log_debug("Level cleared - returning to menu")
+        engine.log_debug(string.format("Total ball bounces: %d", ball_bounces))
+        engine.log_debug(string.format("Total player hits: %d", player_hits))
         engine.change_scene("menu")
     end
 end
@@ -467,7 +467,7 @@ local function spawn_collision_rules()
         :with_group("collision_rules")
         :with_lua_collision_rule("ball", "oob_wall", "on_ball_oob")
         :build()
-    engine.log_info("Collision rules spawned!")
+    engine.log_debug("Collision rules spawned!")
 end
 
 --- Spawn invisible wall colliders
@@ -520,7 +520,7 @@ local function spawn_walls()
         )
         :build()
 
-    engine.log_info("Walls spawned!")
+    engine.log_debug("Walls spawned!")
 end
 
 --- Spawn the player paddle (Vaus)
@@ -556,7 +556,7 @@ local function spawn_player()
         :register_as("player")
         :build()
 
-    engine.log_info("Player paddle spawned!")
+    engine.log_debug("Player paddle spawned!")
 end
 
 --- Spawn UI score texts
@@ -584,7 +584,7 @@ local function spawn_ui_texts()
         :with_signal_binding("high_score")
         :build()
 
-    engine.log_info("UI texts spawned!")
+    engine.log_debug("UI texts spawned!")
 end
 
 --- Spawn bricks via grid layout
@@ -592,12 +592,12 @@ local function spawn_bricks()
     engine.spawn()
         :with_grid_layout("./assets/levels/arkanoid/level01.json", "brick", 5)
         :build()
-    engine.log_info("Bricks grid layout spawned!")
+    engine.log_debug("Bricks grid layout spawned!")
 end
 
 --- Spawn all entities for the Arkanoid level.
 function M.spawn()
-    engine.log_info("Spawning Arkanoid level01 scene entities...")
+    engine.log_debug("Spawning Arkanoid level01 scene entities...")
 
     -- Set render resolution for Arkanoid (672x768)
     engine.set_render_size(672, 768)
@@ -664,7 +664,7 @@ function M.spawn()
         })
         :build()
 
-    engine.log_info("Arkanoid level01 scene entities queued!")
+    engine.log_debug("Arkanoid level01 scene entities queued!")
 end
 
 return M

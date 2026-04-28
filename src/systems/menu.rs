@@ -33,7 +33,7 @@ use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
 use log::error;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use raylib::prelude::Vector2;
 
 /// Spawns entities for newly added [`Menu`] components.
@@ -698,7 +698,7 @@ fn dispatch_menu_action(
     );
     match menu_actions.get(&event.item_id) {
         MenuAction::SetScene(scene_name) => {
-            info!(
+            debug!(
                 "menu_selection_observer: SetScene action found, scene_name={}",
                 scene_name
             );

@@ -58,7 +58,7 @@ use crate::systems::lua_commands::{
 };
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use log::{error, info};
+use log::{debug, error, info};
 use raylib::prelude::*;
 use rustc_hash::FxHashSet;
 
@@ -172,7 +172,7 @@ pub fn enter_play(
     if lua_runtime.has_function("on_enter_play") {
         match lua_runtime.call_function::<_, String>("on_enter_play", ()) {
             Ok(result) => {
-                info!("Lua on_enter_play returned: {}", result);
+                debug!("Lua on_enter_play returned: {}", result);
             }
             Err(e) => {
                 error!("Error calling on_enter_play: {}", e);
@@ -320,7 +320,7 @@ pub fn update(
 
     // Check for scene switch flag (set by Lua)
     if scene_state.world_signals.take_flag("switch_scene") {
-        info!("Scene switch requested in world signals.");
+        debug!("Scene switch requested in world signals.");
         let switch_scene_system = *scene_state
             .systems_store
             .get("switch_scene")
@@ -344,7 +344,7 @@ pub fn switch_scene(
     mut bindings: ResMut<InputBindings>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
-    info!("switch_scene: System called!");
+    debug!("switch_scene: System called!");
 
     // Clear all command queues FIRST to discard any stale commands from the previous scene
     // that might reference entities about to be despawned. This prevents panics when

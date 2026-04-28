@@ -18,7 +18,7 @@ end
 --- @param ctx EntityContext Entity context table
 --- @param input InputSnapshot Input state table
 local function on_create_tentacles_enter(ctx, input)
-    engine.log_info("Kraken mouth entered create_tentacles phase!")
+    engine.log_debug("Kraken mouth entered create_tentacles phase!")
     -- Spawn tentacles here, or start a timer to spawn them after a delay.
     local distance = 110
     for i = 1, 8 do
@@ -94,7 +94,7 @@ M._callbacks = {
 
 --- Spawn all entities for the kraken intro scene.
 function M.spawn()
-    engine.log_info("Spawning kraken intro scene...")
+    engine.log_debug("Spawning kraken intro scene...")
 
     -- Set render resolution (same as menu)
     engine.set_render_size(640, 360)
@@ -132,7 +132,7 @@ function M.spawn()
         :register_as("mouth")
         :build()
 
-    engine.log_info("Kraken intro scene entities queued!")
+    engine.log_debug("Kraken intro scene entities queued!")
 end
 
 return M

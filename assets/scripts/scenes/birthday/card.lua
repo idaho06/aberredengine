@@ -46,7 +46,7 @@ local function card_fade_in_on_update(ctx, input, dt)
 end
 
 local function card_hold_on_enter(ctx, input)
-    engine.log_info("Card scene hold phase entered.")
+    engine.log_debug("Card scene hold phase entered.")
 end
 
 local function card_hold_on_update(ctx, input, dt)
@@ -102,7 +102,7 @@ end
 
 local function card_fade_out_on_exit(ctx)
     engine.change_scene("menu")
-    engine.log_info("Card scene fade-out complete. Returning to menu.")
+    engine.log_debug("Card scene fade-out complete. Returning to menu.")
 end
 
 --- Called each frame when birthday_card scene is active.
@@ -129,7 +129,7 @@ M._callbacks = {
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
 
 function M.spawn()
-    engine.log_info("Spawning birthday card scene entities...")
+    engine.log_debug("Spawning birthday card scene entities...")
 
     -- Set render resolution for Birthday Card
     engine.set_render_size(618, 864)
@@ -243,7 +243,7 @@ function M.spawn()
         :register_as("card_controller")
         :build()
 
-    engine.log_info("Birthday card scene entities queued!")
+    engine.log_debug("Birthday card scene entities queued!")
 end
 
 return M

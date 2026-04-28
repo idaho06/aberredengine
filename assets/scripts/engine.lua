@@ -279,6 +279,10 @@ function engine.log_error(message) end
 ---@param message string
 function engine.log_info(message) end
 
+---Debug level logging
+---@param message string
+function engine.log_debug(message) end
+
 ---Warning level logging
 ---@param message string
 function engine.log_warn(message) end

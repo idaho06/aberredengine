@@ -9,7 +9,7 @@ local M = {}
 --- Callback function for showcase menu selection.
 --- @param ctx table Context with menu_id (u64), item_id (string), item_index (integer)
 local function on_showcase_menu_select(ctx)
-    engine.log_info("Menu selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
+    engine.log_debug("Menu selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
 
     if ctx.item_id == "asteroids" then
         engine.change_scene("asteroids_level01")
@@ -50,7 +50,7 @@ M._callbacks = {
 
 --- Spawn all entities for the showcase menu scene.
 function M.spawn()
-    engine.log_info("Spawning showcase menu scene...")
+    engine.log_debug("Spawning showcase menu scene...")
 
     -- Set render resolution for menu
     engine.set_render_size(640, 360)
@@ -151,7 +151,7 @@ function M.spawn()
     -- No post-processing on menu
     engine.post_process_shader(nil)
 
-    engine.log_info("Showcase menu scene entities queued!")
+    engine.log_debug("Showcase menu scene entities queued!")
 end
 
 return M

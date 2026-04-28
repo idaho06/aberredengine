@@ -5,7 +5,7 @@
 use super::commands::*;
 use super::entity_builder::LuaEntityBuilder;
 use super::runtime::{LuaAppData, LuaRuntime};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use mlua::prelude::*;
 
 /// Pushes function metadata to `engine.__meta.functions[name]`.
@@ -36,6 +36,28 @@ fn push_fn_meta(
     }
     meta_fns.set(name, tbl)?;
     Ok(())
+}
+
+/// Registers one of the `engine.log_*` functions.
+macro_rules! register_log_fn {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $name:expr, $log_macro:ident, $desc:expr) => {
+        $engine.set(
+            $name,
+            $lua.create_function(|_, msg: String| {
+                $log_macro!(target: "lua", "{}", msg);
+                Ok(())
+            })?,
+        )?;
+        push_fn_meta(
+            &$lua,
+            &$meta_fns,
+            $name,
+            $desc,
+            "base",
+            &[("message", "string")],
+            None,
+        )?;
+    };
 }
 
 /// Registers a Lua function that pushes a command to a queue in `LuaAppData`.
@@ -367,73 +389,11 @@ impl LuaRuntime {
         meta.set("callbacks", &meta_callbacks)?;
         engine.set("__meta", meta)?;
 
-        engine.set(
-            "log",
-            self.lua.create_function(|_, msg: String| {
-                info!(target: "lua", "{}", msg);
-                Ok(())
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "log",
-            "General purpose logging",
-            "base",
-            &[("message", "string")],
-            None,
-        )?;
-
-        engine.set(
-            "log_info",
-            self.lua.create_function(|_, msg: String| {
-                info!(target: "lua", "{}", msg);
-                Ok(())
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "log_info",
-            "Info level logging",
-            "base",
-            &[("message", "string")],
-            None,
-        )?;
-
-        engine.set(
-            "log_warn",
-            self.lua.create_function(|_, msg: String| {
-                warn!(target: "lua", "{}", msg);
-                Ok(())
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "log_warn",
-            "Warning level logging",
-            "base",
-            &[("message", "string")],
-            None,
-        )?;
-
-        engine.set(
-            "log_error",
-            self.lua.create_function(|_, msg: String| {
-                error!(target: "lua", "{}", msg);
-                Ok(())
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "log_error",
-            "Error level logging",
-            "base",
-            &[("message", "string")],
-            None,
-        )?;
+        register_log_fn!(engine, self.lua, meta_fns, "log",       info,  "General purpose logging");
+        register_log_fn!(engine, self.lua, meta_fns, "log_info",  info,  "Info level logging");
+        register_log_fn!(engine, self.lua, meta_fns, "log_warn",  warn,  "Warning level logging");
+        register_log_fn!(engine, self.lua, meta_fns, "log_error", error, "Error level logging");
+        register_log_fn!(engine, self.lua, meta_fns, "log_debug", debug, "Debug level logging");
 
         self.lua.globals().set("engine", engine)?;
 

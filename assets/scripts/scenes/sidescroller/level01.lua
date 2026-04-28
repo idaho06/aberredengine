@@ -10,9 +10,9 @@ local jump_speed = -100
 local debug_log = true
 
 -- ─── Helper functions (local) ─────────────────────────────────────────────────
-local function log_info(message)
+local function log_debug(message)
     if debug_log then
-        engine.log_info(message)
+        engine.log_debug(message)
     end
 end
 
@@ -49,7 +49,7 @@ local function on_update_sidescroller_level01(input, dt)
         engine.entity_signal_clear_flag(player_id, "touching_ceiling")
         -- engine.entity_signal_set_flag(player_id, "falling")
         -- engine.entity_set_force_enabled(player_id, "gravity", true)
-        log_info("Cleared player on_ground signal at end of frame.")
+        log_debug("Cleared player on_ground signal at end of frame.")
     end
 end
 
@@ -57,7 +57,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_running_on_enter(ctx, input)
-    log_info("Player started running!")
+    log_debug("Player started running!")
     engine.entity_signal_set_flag(ctx.id, "running")
     -- Check facing direction and set velocity accordingly
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -107,7 +107,7 @@ end
 --- Called when exiting the running phase.
 --- @param ctx EntityContext Entity state
 local function player_running_on_exit(ctx)
-    log_info("Player stopped running.")
+    log_debug("Player stopped running.")
     engine.entity_signal_clear_flag(ctx.id, "running")
 end
 
@@ -115,7 +115,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_walking_on_enter(ctx, input)
-    log_info("Player started walking!")
+    log_debug("Player started walking!")
     engine.entity_signal_set_flag(ctx.id, "walking")
     update_facing_direction(ctx.id, input)
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -166,7 +166,7 @@ end
 --- Called when exiting the walking phase.
 --- @param ctx EntityContext Entity state
 local function player_walking_on_exit(ctx)
-    log_info("Player stopped walking.")
+    log_debug("Player stopped walking.")
     engine.entity_signal_clear_flag(ctx.id, "walking")
 end
 
@@ -174,7 +174,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_falling_on_enter(ctx, input)
-    log_info("Player started falling!")
+    log_debug("Player started falling!")
     engine.entity_signal_set_flag(ctx.id, "falling")
 end
 
@@ -201,7 +201,7 @@ end
 --- Called when exiting the falling phase.
 --- @param ctx EntityContext Entity state
 local function player_falling_on_exit(ctx)
-    log_info("Player stopped falling.")
+    log_debug("Player stopped falling.")
     engine.entity_signal_clear_flag(ctx.id, "falling")
 end
 
@@ -209,7 +209,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_jumping_on_enter(ctx, input)
-    log_info("Player started jumping!")
+    log_debug("Player started jumping!")
     engine.entity_signal_set_flag(ctx.id, "jumping")
 end
 
@@ -239,7 +239,7 @@ end
 --- Called when exiting the jumping phase.
 --- @param ctx EntityContext Entity state
 local function player_jumping_on_exit(ctx)
-    log_info("Player stopped jumping.")
+    log_debug("Player stopped jumping.")
     engine.entity_signal_clear_flag(ctx.id, "jumping")
 end
 
@@ -247,7 +247,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_idle_on_enter(ctx, input)
-    log_info("Player is idle.")
+    log_debug("Player is idle.")
     -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
     -- remove horizontal movement when entering idle
     engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
@@ -259,11 +259,11 @@ end
 --- @param dt number Delta time in seconds
 local function player_idle_on_update(ctx, input, dt)
     -- check for presence of "on_ground" signal, if not present, transition to falling
-    -- engine.log_info(utils.dump_value(ctx, 4))
+    -- engine.log_debug(utils.dump_value(ctx, 4))
     local flags = ctx.signals.flags
-    -- engine.log_info(utils.dump_value(flags, 4))
+    -- engine.log_debug(utils.dump_value(flags, 4))
     if not utils.has_flag(flags, "on_ground") and ctx.vel.y >= 0 then
-        engine.log_info("Player update: walked off ledge, transitioning to falling.")
+        engine.log_debug("Player update: walked off ledge, transitioning to falling.")
         return "falling"
     end
 
@@ -293,7 +293,7 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_attack_on_enter(ctx, input)
-    log_info("Player is attacking!")
+    log_debug("Player is attacking!")
     engine.entity_signal_set_flag(ctx.id, "attack")
     -- engine.entity_freeze(ctx.id)
     -- engine.entity_restart_animation(ctx.id)
@@ -329,7 +329,7 @@ end
 --- Called when exiting the attack phase.
 --- @param ctx EntityContext Entity state
 local function player_attack_on_exit(ctx)
-    log_info("Player finished attacking.")
+    log_debug("Player finished attacking.")
     engine.entity_signal_clear_flag(ctx.id, "attack")
     -- engine.entity_unfreeze(ctx.id)
     -- Despawn the hitbox child
@@ -345,7 +345,7 @@ end
 local function collision_ground_player(ctx)
     -- entity ctx.a is ground, entity ctx.b is player
     -- check that the player side colliding with the ground is the bottom
-    -- engine.log_info(utils.dump_value(ctx, 4))
+    -- engine.log_debug(utils.dump_value(ctx, 4))
 
     -- look for "bottom" in ctx.sides.b
     local player_on_ground = false
@@ -380,7 +380,7 @@ local function collision_ground_player(ctx)
         if ctx.b.pos.y >= ctx.a.rect.y + ctx.a.rect.h / 4 then
             -- only set "touching_wall" flag if player is above the midpoint of the ground, to prevent sticking when landing on the ground while moving into a walls
             engine.collision_entity_signal_set_flag(ctx.b.id, "touching_wall")
-            engine.log_info("collision: setting player `touching_wall` signal")
+            engine.log_debug("collision: setting player `touching_wall` signal")
         end
     end
 
@@ -390,7 +390,7 @@ local function collision_ground_player(ctx)
         engine.collision_entity_signal_clear_flag(ctx.b.id, "jumping")
         -- engine.entity_signal_set_flag(ctx.b.id, "on_ground")
         -- engine.entity_signal_clear_flag(ctx.b.id, "falling")
-        log_info("collision: setting player `on_ground` signal")
+        log_debug("collision: setting player `on_ground` signal")
         -- engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", false)
         -- reset vertical velocity to 0 to prevent sliding down slopes
         local vel = ctx.b.vel
@@ -401,7 +401,7 @@ local function collision_ground_player(ctx)
         engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, ground_rect.y)
     else
         engine.collision_entity_signal_clear_flag(ctx.b.id, "on_ground")
-        log_info("collision: removing player `on_ground` signal")
+        log_debug("collision: removing player `on_ground` signal")
         engine.collision_entity_signal_set_flag(ctx.b.id, "falling")
         engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", true)
     end
@@ -437,10 +437,10 @@ M._callbacks = {
 
 --- Spawn all entities for the sidescroller level01 scene.
 function M.spawn()
-    engine.log_info("Spawning sidescroller level01 scene...")
+    engine.log_debug("Spawning sidescroller level01 scene...")
 
     -- debug_log = true
-    log_info("Debug logging enabled for sidescroller level01.")
+    log_debug("Debug logging enabled for sidescroller level01.")
 
     -- Set render resolution
     engine.set_render_size(640, 360)
@@ -549,7 +549,7 @@ function M.spawn()
         :with_tilemap("./assets/tilemaps/sidescroller_test01")
         :build()
 
-    engine.log_info("Sidescroller level01 scene entities queued!")
+    engine.log_debug("Sidescroller level01 scene entities queued!")
 end
 
 return M

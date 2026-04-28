@@ -26,7 +26,7 @@
 
 use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
-use log::{error, info};
+use log::{debug, error, info};
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::Persistent;
@@ -140,7 +140,7 @@ pub fn scene_switch_system(
     mut tracked_groups: ResMut<TrackedGroups>,
     mut scene_manager: ResMut<SceneManager>,
 ) {
-    info!("scene_switch_system: System called!");
+    debug!("scene_switch_system: System called!");
 
     let prev_scene = scene_manager.active_scene.clone();
 

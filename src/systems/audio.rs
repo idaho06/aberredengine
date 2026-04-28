@@ -120,7 +120,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 AudioCmd::LoadMusic { id, path } => match audio.new_music(&path) {
                     Ok(music) => {
                         // log then insert/send
-                        info!(target: "audio", "loaded id='{}' path='{}'", id, path);
+                        debug!(target: "audio", "loaded id='{}' path='{}'", id, path);
                         musics.insert(id.clone(), music);
                         let _ = tx_evt.send(AudioMessage::MusicLoaded { id });
                     }
@@ -234,7 +234,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                             error: "failed to load".to_string(),
                         });
                     } else {
-                        info!(target: "audio", "fx loaded id='{}' path='{}'", id, path);
+                        debug!(target: "audio", "fx loaded id='{}' path='{}'", id, path);
                         sounds.insert(id.clone(), sound);
                         let _ = tx_evt.send(AudioMessage::FxLoaded { id });
                     }

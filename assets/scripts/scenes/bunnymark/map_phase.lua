@@ -112,10 +112,10 @@ M._callbacks = {
 -- ─── Spawn ────────────────────────────────────────────────────────────────────
 
 function M.spawn()
-    engine.log_info("Spawning Bunnymark MapPosition+Phase...")
+    engine.log_debug("Spawning Bunnymark MapPosition+Phase...")
     C.setup()
     C.spawn_hud("MAP+PHASE")
-    engine.log_info("Bunnymark MapPosition+Phase ready!")
+    engine.log_debug("Bunnymark MapPosition+Phase ready!")
 end
 
 return M

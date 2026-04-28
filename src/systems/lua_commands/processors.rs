@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use log::{error, info, warn};
+use log::{debug, error, warn};
 use raylib::prelude::{Camera2D, Color, Vector2};
 
 use crate::components::phase::Phase;
@@ -193,7 +193,7 @@ pub fn process_asset_command<F1>(
     match cmd {
         AssetCmd::Texture { id, path } => match rl.load_texture(th, &path) {
             Ok(tex) => {
-                info!("Loaded texture '{}' from '{}'", id, path);
+                debug!("Loaded texture '{}' from '{}'", id, path);
                 tex_store.insert(&id, tex);
             }
             Err(e) => {
@@ -202,15 +202,15 @@ pub fn process_asset_command<F1>(
         },
         AssetCmd::Font { id, path, size } => {
             let font = load_font_fn(rl, th, &path, size);
-            info!("Loaded font '{}' from '{}'", id, path);
+            debug!("Loaded font '{}' from '{}'", id, path);
             fonts.add(&id, font);
         }
         AssetCmd::Music { id, path } => {
-            info!("Queuing music '{}' from '{}'", id, path);
+            debug!("Queuing music '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
         }
         AssetCmd::Sound { id, path } => {
-            info!("Queuing sound '{}' from '{}'", id, path);
+            debug!("Queuing sound '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
         }
         AssetCmd::Shader {
@@ -222,7 +222,7 @@ pub fn process_asset_command<F1>(
             let fs_path_c = fs_path.as_deref();
             let shader = rl.load_shader(th, vs_path_c, fs_path_c);
             if shader.is_shader_valid() {
-                info!(
+                debug!(
                     "Loaded shader '{}' (vs: {:?}, fs: {:?})",
                     id, vs_path, fs_path
                 );
@@ -244,10 +244,10 @@ pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShad
             post_process.set_shader_chain(ids.clone());
             match &ids {
                 Some(list) if !list.is_empty() => {
-                    info!("Post-process shader chain: [{}]", list.join(", "));
+                    debug!("Post-process shader chain: [{}]", list.join(", "));
                 }
                 _ => {
-                    info!("Post-process shader disabled");
+                    debug!("Post-process shader disabled");
                 }
             }
         }
@@ -409,7 +409,7 @@ pub fn process_animation_command(anim_store: &mut AnimationStore, cmd: Animation
                     looped,
                 },
             );
-            info!(
+            debug!(
                 "Registered animation '{}' ({} frames, {} fps)",
                 id, frame_count, fps
             );

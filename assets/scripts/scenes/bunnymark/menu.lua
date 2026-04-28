@@ -8,7 +8,7 @@ local M = {}
 --- Called when a menu item is selected.
 --- @param ctx table  { menu_id, item_id, item_index }
 local function on_bunnymark_menu_select(ctx)
-    engine.log_info("Bunnymark menu: " .. ctx.item_id)
+    engine.log_debug("Bunnymark menu: " .. ctx.item_id)
     if ctx.item_id == "map_loop" then
         engine.change_scene("bunnymark_map_loop")
     elseif ctx.item_id == "screen_loop" then
@@ -38,7 +38,7 @@ M._callbacks = {
 -- ─── Spawn ────────────────────────────────────────────────────────────────────
 
 function M.spawn()
-    engine.log_info("Spawning Bunnymark sub-menu...")
+    engine.log_debug("Spawning Bunnymark sub-menu...")
 
     engine.set_render_size(800, 450)
     engine.set_vsync(true)
@@ -89,7 +89,7 @@ function M.spawn()
         :with_menu_callback("on_bunnymark_menu_select")
         :build()
 
-    engine.log_info("Bunnymark sub-menu entities queued!")
+    engine.log_debug("Bunnymark sub-menu entities queued!")
 end
 
 return M

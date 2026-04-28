@@ -95,10 +95,10 @@ M._callbacks = {
 -- ─── Spawn ────────────────────────────────────────────────────────────────────
 
 function M.spawn()
-    engine.log_info("Spawning Bunnymark ScreenPosition+Loop...")
+    engine.log_debug("Spawning Bunnymark ScreenPosition+Loop...")
     C.setup()
     C.spawn_hud("SCRN+LOOP")
-    engine.log_info("Bunnymark ScreenPosition+Loop ready!")
+    engine.log_debug("Bunnymark ScreenPosition+Loop ready!")
 end
 
 return M

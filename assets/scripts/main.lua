@@ -138,15 +138,15 @@ local game = {
 --- Called during Setup state to load all assets.
 --- This is called before entering the Playing state.
 function on_setup()
-    engine.log_info("on_setup() called from Lua!")
+    engine.log_debug("on_setup() called from Lua!")
     setup.load_assets()
 end
 
 --- Called when the game enters the Playing state.
 --- Use this to initialize game-specific Lua state.
 function on_enter_play()
-    engine.log_info("on_enter_play() called from Lua!")
-    engine.log_info("Game: " .. game.title .. " v" .. game.version)
+    engine.log_debug("on_enter_play() called from Lua!")
+    engine.log_debug("Game: " .. game.title .. " v" .. game.version)
 
     -- Initialize world signals
     engine.set_integer("score", 0)
