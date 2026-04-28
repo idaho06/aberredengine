@@ -105,14 +105,18 @@ pub fn apply_gameconfig_changes(
         */
         // TODO: This currently does not handle switching to fullscreen mode. Raylib bug??
 
-        // Apply vsync setting
-        unsafe {
-            if config.vsync {
-                ffi::SetWindowState(ffi::ConfigFlags::FLAG_VSYNC_HINT as u32);
-                debug!("VSync enabled");
-            } else {
-                ffi::ClearWindowState(ffi::ConfigFlags::FLAG_VSYNC_HINT as u32);
-                debug!("VSync disabled");
+        // Apply vsync setting only if it differs from the current window state
+        let vsync_flag = ffi::ConfigFlags::FLAG_VSYNC_HINT as u32;
+        let vsync_active = unsafe { ffi::IsWindowState(vsync_flag) };
+        if config.vsync != vsync_active {
+            unsafe {
+                if config.vsync {
+                    ffi::SetWindowState(vsync_flag);
+                    debug!("VSync enabled");
+                } else {
+                    ffi::ClearWindowState(vsync_flag);
+                    debug!("VSync disabled");
+                }
             }
         }
 
