@@ -90,6 +90,11 @@ impl LuaRuntime {
         self.drain_queue(|d| &d.camera_follow_commands)
     }
 
+    /// Drains all queued map load commands.
+    pub fn drain_map_commands(&self) -> Vec<MapLuaCmd> {
+        self.drain_queue(|d| &d.map_commands)
+    }
+
     /// Drains all queued input rebinding commands.
     pub fn drain_input_commands(&self) -> Vec<InputCmd> {
         self.drain_queue(|d| &d.input_commands)
@@ -164,6 +169,7 @@ impl LuaRuntime {
             data.gameconfig_commands.borrow_mut().clear();
             data.camera_follow_commands.borrow_mut().clear();
             data.input_commands.borrow_mut().clear();
+            data.map_commands.borrow_mut().clear();
             // Collision-scoped queues
             data.collision_entity_commands.borrow_mut().clear();
             data.collision_signal_commands.borrow_mut().clear();

@@ -26,11 +26,13 @@ use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::fontstore::FontStore;
-use crate::resources::mapdata::{EntityDef, MapData};
+use crate::resources::mapdata::{EntityDef, MapData, load_map};
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::components::tilemap::TileMap;
 use crate::systems::RaylibAccess;
+#[cfg(feature = "lua")]
+use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 
 /// Load all assets referenced by `map` into the engine stores, then spawn
 /// entities. Called by [`spawn_map_observer`]; can also be called directly.
@@ -149,6 +151,27 @@ pub fn spawn_map_observer(
         &trigger.event().map,
         &mut world_signals,
     );
+}
+
+/// Drains `engine.load_map()` commands queued by Lua and fires
+/// [`SpawnMapRequested`] for each, letting [`spawn_map_observer`] handle the
+/// Raylib-dependent asset loading and entity spawning.
+///
+/// Registered by [`crate::engine_app::EngineBuilder::with_lua`] and runs
+/// every frame during the Playing state, after `lua_plugin::update`.
+#[cfg(feature = "lua")]
+pub fn process_lua_map_commands(
+    mut commands: Commands,
+    lua: NonSend<LuaRuntime>,
+) {
+    for cmd in lua.drain_map_commands() {
+        match cmd {
+            MapLuaCmd::LoadMap { path } => match load_map(&path) {
+                Ok(map) => commands.trigger(SpawnMapRequested { map }),
+                Err(e) => log::error!("engine.load_map: failed to read '{path}': {e}"),
+            },
+        }
+    }
 }
 
 /// Load a font with mipmaps and anisotropic filtering.

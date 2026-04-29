@@ -2044,4 +2044,26 @@ impl LuaRuntime {
 
         Ok(())
     }
+
+    /// Registers `engine.load_map(path)` in the Lua `engine` table.
+    pub(super) fn register_map_api(&self) -> LuaResult<()> {
+        let engine: LuaTable = self.lua.globals().get("engine")?;
+        let meta: LuaTable = engine.get("__meta")?;
+        let meta_fns: LuaTable = meta.get("functions")?;
+
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "load_map",
+            map_commands,
+            |path| String,
+            MapLuaCmd::LoadMap { path },
+            desc = "Load a map JSON file and spawn all its assets and entities",
+            cat = "asset",
+            params = [("path", "string")]
+        );
+
+        Ok(())
+    }
 }

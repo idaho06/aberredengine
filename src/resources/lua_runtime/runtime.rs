@@ -79,6 +79,8 @@ pub(super) struct LuaAppData {
     pub(super) input_commands: RefCell<Vec<InputCmd>>,
     /// Cached input bindings snapshot (read-only for Lua: action_name → key_name)
     pub(super) bindings_snapshot: RefCell<std::collections::HashMap<String, String>>,
+    /// Map load command queue (drained by `process_lua_map_commands` system)
+    pub(super) map_commands: RefCell<Vec<MapLuaCmd>>,
 }
 
 /// Registry keys for pooled collision context tables.
@@ -317,6 +319,7 @@ impl LuaRuntime {
             gameconfig_snapshot: RefCell::new(GameConfigSnapshot::default()),
             input_commands: RefCell::new(Vec::new()),
             bindings_snapshot: RefCell::new(std::collections::HashMap::new()),
+            map_commands: RefCell::new(Vec::new()),
         });
 
         // Create collision context pool for table reuse
@@ -349,6 +352,7 @@ impl LuaRuntime {
         runtime.register_render_api()?;
         runtime.register_gameconfig_api()?;
         runtime.register_input_api()?;
+        runtime.register_map_api()?;
         runtime.register_builder_meta()?;
         runtime.register_types_meta()?;
         runtime.register_enums_meta()?;

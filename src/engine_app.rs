@@ -149,6 +149,8 @@ use crate::systems::lua_collision::lua_collision_observer;
 use crate::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
+#[cfg(feature = "lua")]
+use crate::systems::mapspawn::process_lua_map_commands;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
@@ -699,6 +701,7 @@ impl EngineBuilder {
                     .after(phase_system),
             );
             update.add_systems(update_lua_timers);
+            update.add_systems(process_lua_map_commands.after(crate::lua_plugin::update));
         } else {
             update.add_systems(animation_controller.after(phase_system));
         }

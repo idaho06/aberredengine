@@ -413,3 +413,10 @@ pub enum InputCmd {
     /// Add an extra binding for an action without removing the existing ones.
     AddBinding { action: String, key: String },
 }
+
+/// Commands for loading a map file and spawning its contents from Lua.
+#[derive(Debug, Clone)]
+pub enum MapLuaCmd {
+    /// Read a `MapData` JSON file from `path` and trigger [`SpawnMapRequested`].
+    LoadMap { path: String },
+}

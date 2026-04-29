@@ -271,6 +271,10 @@ function engine.change_scene(scene_name) end
 ---@param message string
 function engine.log(message) end
 
+---Debug level logging
+---@param message string
+function engine.log_debug(message) end
+
 ---Error level logging
 ---@param message string
 function engine.log_error(message) end
@@ -278,10 +282,6 @@ function engine.log_error(message) end
 ---Info level logging
 ---@param message string
 function engine.log_info(message) end
-
----Debug level logging
----@param message string
-function engine.log_debug(message) end
 
 ---Warning level logging
 ---@param message string
@@ -297,6 +297,10 @@ function engine.quit() end
 ---@param path string
 ---@param size integer
 function engine.load_font(id, path, size) end
+
+---Load a map JSON file and spawn all its assets and entities
+---@param path string
+function engine.load_map(path) end
 
 ---Load music from file
 ---@param id string

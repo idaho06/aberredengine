@@ -10,6 +10,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Input System](#input-system)
   - [Input Rebinding](#input-rebinding)
 - [Asset Loading](#asset-loading)
+- [Map Loading](#map-loading)
 - [Audio Playback](#audio-playback)
 - [Entity Spawning](#entity-spawning)
   - [Core Components](#core-components)
@@ -723,6 +724,41 @@ engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 0, 6, 15, false)
 -- Multi-row animation: 56x56 frames wrapping across rows of a sprite sheet
 engine.register_animation("char_run", "char_sheet", 0, 0, 56, 56, 12, 10, true)
 ```
+
+---
+
+## Map Loading
+
+`engine.load_map(path)` reads a `MapData` JSON file (as saved by the editor) and spawns all of
+its assets and entities in the engine. It can be called from `M.spawn()`, `on_enter_play()`, or
+any per-frame callback — anywhere that runs during the **Playing state**.
+
+**It cannot be called from `on_setup()`**, which runs in the Setup state before the map-processing
+system is active.
+
+### `engine.load_map(path)`
+
+Load a map JSON file and spawn all its assets and entities.
+
+```lua
+function M.spawn()
+    engine.load_map("./assets/maps/level01.map")
+end
+```
+
+**What it does:**
+
+1. Reads and deserialises the JSON file synchronously (file I/O happens in the same frame).
+2. Queues a `SpawnMapRequested` event, which the engine processes immediately to load textures,
+   fonts, and animations from the map's asset lists, then spawns all entities as ECS components.
+3. Entities with a `registered_as` name in the map file are accessible via `engine.get_entity(key)`
+   starting from the **next frame**.
+4. Entities with a `group` name are visible via the group-tracking system.
+
+**Error handling:** if the file cannot be read or parsed, an error is logged and nothing is spawned.
+
+**Calling from `M.spawn()`** (the typical pattern) is equivalent to calling it from inside
+`on_switch_scene()` — the entities are ready in the first `on_update_<scene>` frame.
 
 ---
 
