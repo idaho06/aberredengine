@@ -13,6 +13,7 @@ use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
@@ -762,6 +763,7 @@ fn gui_callback_stored_and_retrieved_via_scene_manager() {
         _ui: &::imgui::Ui,
         _signals: &mut WorldSignals,
         _tex: &TextureStore,
+        _fonts: &FontStore,
         _app_state: &AppState,
     ) {
     }
@@ -796,6 +798,7 @@ fn scene_with_gui_callback_enters_correctly() {
         _ui: &::imgui::Ui,
         _signals: &mut WorldSignals,
         _tex: &TextureStore,
+        _fonts: &FontStore,
         _app_state: &AppState,
     ) {
     }

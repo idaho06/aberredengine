@@ -26,7 +26,9 @@ use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::fontstore::FontStore;
-use crate::resources::mapdata::{EntityDef, MapData, load_map};
+use crate::resources::mapdata::{EntityDef, MapData};
+#[cfg(feature = "lua")]
+use crate::resources::mapdata::load_map;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::components::tilemap::TileMap;
@@ -59,6 +61,9 @@ pub fn spawn_map(
     }
 
     for entry in &map.fonts {
+        if font_store.meta.contains_key(&entry.key) {
+            continue;
+        }
         let font = load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32);
         font_store.add(&entry.key, font);
     }
@@ -180,7 +185,7 @@ pub fn process_lua_map_commands(
 /// behaviour for missing assets in setup / load phases).
 ///
 /// `pub(crate)` so that `lua_plugin` can reuse this rather than duplicating it.
-pub(crate) fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
+pub fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
     let mut font = rl
         .load_font_ex(th, path, size, None)
         .unwrap_or_else(|_| panic!("spawn_map: failed to load font '{path}'"));

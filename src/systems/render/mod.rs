@@ -726,7 +726,7 @@ pub fn render_system(
             }
 
             if let Some(cb) = gui_callback {
-                cb(&ui, world_signals, textures, app_state);
+                cb(&ui, world_signals, textures, fonts, app_state);
             }
         };
         apply_postprocess_passes(
