@@ -146,6 +146,8 @@ use crate::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
 use crate::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
+use crate::systems::lua_setup_entity::lua_setup_entity_system;
+#[cfg(feature = "lua")]
 use crate::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
@@ -702,6 +704,12 @@ impl EngineBuilder {
             );
             update.add_systems(update_lua_timers);
             update.add_systems(process_lua_map_commands.after(crate::lua_plugin::update));
+            update.add_systems(
+                lua_setup_entity_system
+                    .run_if(state_is_playing)
+                    .after(check_pending_state)
+                    .before(animation_controller),
+            );
         } else {
             update.add_systems(animation_controller.after(phase_system));
         }

@@ -19,6 +19,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Menu Components](#menu-components)
   - [Animation Components](#animation-components)
   - [Phase Component](#phase-component)
+  - [LuaSetup Component](#luasetup-component)
   - [Attachment Components](#attachment-components)
   - [Parent-Child Hierarchy](#parent-child-hierarchy)
   - [Camera Target Component](#camera-target-component)
@@ -202,6 +203,7 @@ return M
    - Phase callbacks (names in `:with_phase()` — `on_enter`, `on_update`, `on_exit`)
    - Timer callbacks (names in `:with_lua_timer()`)
    - Menu callbacks (names in `:with_menu_callback()`)
+   - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
 
 2. **The KEY must exactly match the string passed to the engine.**
    If you register `:with_lua_collision_rule("ball", "brick", "on_ball_brick")`,
@@ -258,6 +260,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
+| LuaSetup callbacks | Signal, Entity, Spawn, Clone, Audio, Camera | One-shot entity initialisation — add phases, animations, collision rules, etc. |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
@@ -269,6 +272,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
+| LuaSetup callbacks | Signal → Entity → Spawn → Clone → Audio → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Clone → Phase → Camera |
 
 **Important: Collision Callbacks Use Separate Queues**
@@ -2185,6 +2189,71 @@ Register collision callback between two groups.
 ```lua
 :with_lua_collision_rule("ball", "player", "on_ball_player")
 ```
+
+#### `:with_lua_setup(callback)`
+
+Attach a one-shot setup callback to an entity. The named Lua function is called **once**, the frame after the entity is spawned, with the entity context as its only argument. This is the preferred way to configure entities that come from map files without cluttering scene update callbacks.
+
+**Parameters:**
+
+- `callback` - Lua function name to call when the entity is first detected
+
+**Callback Signature:**
+
+```lua
+function callback_name(ctx)
+    -- ctx: standard EntityContext table (id, pos, group, signals, ...)
+    -- No input table — this is initialisation, not per-frame logic.
+    -- Use engine.entity_* calls to add components to the entity.
+end
+```
+
+**Example — spawn builder:**
+
+```lua
+engine.spawn()
+    :with_position(200, 300)
+    :with_group("enemy")
+    :with_sprite("enemy_idle", 32, 32, 16, 16)
+    :with_lua_setup("enemy_setup")
+    :build()
+
+local function enemy_setup(ctx)
+    engine.entity_insert_lua_phase(ctx.id, {
+        initial = "patrol",
+        phases = {
+            patrol = { on_update = "enemy_patrol_update" },
+            alert  = { on_enter = "enemy_alert_enter", on_update = "enemy_alert_update" },
+        }
+    })
+    engine.entity_insert_lua_timer(ctx.id, 3.0, "enemy_shoot")
+end
+```
+
+**Example — map file:**
+
+```json
+{
+  "entities": [
+    { "position": [200, 300], "group": "enemy", "lua_setup": "enemy_setup" }
+  ]
+}
+```
+
+**Gotchas:**
+
+- The callback fires the **frame after** spawn — all components from the same spawn call are visible in `ctx`.
+- Any entities spawned inside the callback (via `engine.spawn()`) won't be visible until the **following** frame.
+- Do **not** store references to `ctx` or its sub-tables between frames.
+- If the named function does not exist, a warning is logged and the entity is silently skipped — no panic.
+- Because `Added<LuaSetup>` is the trigger, cloned entities also receive the setup call automatically.
+- The callback must be in `M._callbacks` like any other engine-resolved function.
+
+### LuaSetup Component
+
+See [`:with_lua_setup(callback)`](#with_lua_setupcallback) above. `LuaSetup` is the underlying component; the spawn builder method and the map file `"lua_setup"` field both insert it.
+
+---
 
 #### `:with_grid_layout(path, group, zindex)`
 
@@ -5114,6 +5183,16 @@ end
 7. **Load assets in `on_setup()`** - Assets must be queued before entering Playing state.
 
 8. **Scene scripts are lazy-loaded** - Only loaded when `on_switch_scene()` requires them.
+
+9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach phases, timers, and collision rules inside a setup callback instead of branching on entity group in `on_update`. The callback fires once per entity (including clones), keeping scene update logic clean.
+
+   ```lua
+   -- In the map JSON: { "group": "turret", "lua_setup": "turret_setup" }
+   local function turret_setup(ctx)
+       engine.entity_insert_lua_phase(ctx.id, { initial = "idle", phases = { ... } })
+   end
+   M._callbacks = { turret_setup = turret_setup }
+   ```
 
 ---
 

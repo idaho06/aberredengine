@@ -116,6 +116,26 @@ pub struct EntityDef {
     /// Color tint `[r, g, b, a]` in 0–255 (maps to [`crate::components::tint::Tint`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<[u8; 4]>,
+    /// *(feature = "lua")* Lua function to call once when this entity is first seen by the engine
+    /// (maps to [`crate::components::luasetup::LuaSetup`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lua_setup: Option<String>,
+    /// Text rendering data (maps to [`crate::components::dynamictext::DynamicText`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dynamic_text: Option<DynamicTextEntry>,
+}
+
+/// Dynamic text rendering data for an entity placement.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct DynamicTextEntry {
+    /// Initial string content.
+    pub text: String,
+    /// Key into `FontStore`.
+    pub font_key: String,
+    /// Font size in pixels.
+    pub font_size: f32,
+    /// Base color `[r, g, b, a]` in 0-255.
+    pub color: [u8; 4],
 }
 
 /// Sprite rendering data for an entity placement.
@@ -192,6 +212,15 @@ mod tests {
                 }),
                 group: Some("player".into()),
                 z_index: Some(1.0),
+                ..Default::default()
+            }, EntityDef {
+                position: Some([140.0, 220.0]),
+                dynamic_text: Some(DynamicTextEntry {
+                    text: "Hello".into(),
+                    font_key: "arcade".into(),
+                    font_size: 24.0,
+                    color: [255, 255, 255, 255],
+                }),
                 ..Default::default()
             }],
         }

@@ -406,4 +406,6 @@ pub struct SpawnCmd {
     pub camera_target_zoom: Option<f32>,
     /// TileMap path — spawns a tilemap root entity whose tiles become `ChildOf` children
     pub tilemap_path: Option<String>,
+    /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`
+    pub lua_setup: Option<String>,
 }

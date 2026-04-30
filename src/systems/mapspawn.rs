@@ -21,6 +21,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
+use crate::components::dynamictext::DynamicText;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
@@ -33,6 +34,8 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::components::tilemap::TileMap;
 use crate::systems::RaylibAccess;
+#[cfg(feature = "lua")]
+use crate::components::luasetup::LuaSetup;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 
@@ -115,6 +118,14 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
             flip_v: s.flip_v,
         });
     }
+    if let Some(ref text) = def.dynamic_text {
+        ec.insert(DynamicText::new(
+            text.text.as_str(),
+            text.font_key.as_str(),
+            text.font_size,
+            Color::new(text.color[0], text.color[1], text.color[2], text.color[3]),
+        ));
+    }
     if let Some(ref g) = def.group {
         ec.insert(Group::new(g));
     }
@@ -132,6 +143,10 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     }
     if let Some([r, g, b, a]) = def.tint {
         ec.insert(Tint::new(r, g, b, a));
+    }
+    #[cfg(feature = "lua")]
+    if let Some(ref callback) = def.lua_setup {
+        ec.insert(LuaSetup::new(callback.clone()));
     }
     ec.id()
 }

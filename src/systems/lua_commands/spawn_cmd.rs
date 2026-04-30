@@ -17,6 +17,7 @@ use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
 use crate::components::tilemap::TileMap;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
+use crate::components::luasetup::LuaSetup;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
@@ -118,9 +119,12 @@ pub(super) fn apply_components(
     );
     apply_behavior_components(
         entity_commands,
-        cmd.phase_data,
-        cmd.lua_timer,
-        cmd.lua_collision_rule,
+        BehaviorComponents {
+            phase_data: cmd.phase_data,
+            lua_timer: cmd.lua_timer,
+            lua_collision_rule: cmd.lua_collision_rule,
+            lua_setup: cmd.lua_setup,
+        },
     );
     apply_ui_components(
         entity_commands,
@@ -362,12 +366,20 @@ fn apply_signal_components(
     }
 }
 
-fn apply_behavior_components(
-    entity_commands: &mut EntityCommands,
+struct BehaviorComponents {
     phase_data: Option<PhaseData>,
     lua_timer: Option<(f32, String)>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
-) {
+    lua_setup: Option<String>,
+}
+
+fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
+    let BehaviorComponents {
+        phase_data,
+        lua_timer,
+        lua_collision_rule,
+        lua_setup,
+    } = b;
     if let Some(phase_data) = phase_data {
         let phases = phase_data
             .phases
@@ -398,6 +410,9 @@ fn apply_behavior_components(
                 name: rule_data.callback,
             },
         ));
+    }
+    if let Some(callback) = lua_setup {
+        entity_commands.insert(LuaSetup::new(callback));
     }
 }
 

@@ -18,6 +18,7 @@
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
 //! - [`luaphase`] – *(feature = "lua")* Lua-based state machine with enter/update/exit callbacks
+//! - [`luasetup`] – *(feature = "lua")* one-shot entity setup callback fired on `Added<LuaSetup>`
 //! - [`phase`] – Rust-based state machine with enter/update/exit function-pointer callbacks
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
@@ -47,6 +48,8 @@ pub mod inputcontrolled;
 pub mod luacollision;
 #[cfg(feature = "lua")]
 pub mod luaphase;
+#[cfg(feature = "lua")]
+pub mod luasetup;
 #[cfg(feature = "lua")]
 pub mod luatimer;
 pub mod mapposition;

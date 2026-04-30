@@ -19,6 +19,7 @@
 //! - [`menu`] – menu spawning, input handling, and selection
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
+//! - [`lua_setup_entity`] – *(feature = "lua")* one-shot entity setup callback on `Added<LuaSetup>`
 //! - [`luaphase`] – *(feature = "lua")* process Lua phase state machine transitions and callbacks
 //! - [`phase`] – process Rust phase state machine transitions and callbacks
 //! - [`rust_collision`] – Rust-native collision observer and callback dispatch
@@ -59,6 +60,8 @@ pub mod inputsimplecontroller;
 pub mod lua_collision;
 #[cfg(feature = "lua")]
 pub mod lua_commands;
+#[cfg(feature = "lua")]
+pub mod lua_setup_entity;
 #[cfg(feature = "lua")]
 pub mod luaphase;
 #[cfg(feature = "lua")]

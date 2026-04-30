@@ -1443,6 +1443,11 @@ function EntityBuilder:with_group(name) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
 
+---Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_setup(callback) end
+
 ---Add a Lua timer callback
 ---@param duration number
 ---@param callback string
@@ -1859,6 +1864,11 @@ function CollisionEntityBuilder:with_group(name) end
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+
+---Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_setup(callback) end
 
 ---Add a Lua timer callback
 ---@param duration number

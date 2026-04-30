@@ -424,6 +424,11 @@ impl LuaRuntime {
                 &[("path", "string")],
             ),
             (
+                "with_lua_setup",
+                "Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.",
+                &[("callback", "string")],
+            ),
+            (
                 "register_as",
                 "Register entity in WorldSignals for later retrieval",
                 &[("key", "string")],

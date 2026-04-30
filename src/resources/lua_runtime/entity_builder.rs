@@ -1097,6 +1097,12 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_lua_setup(callback) - Attach a one-shot Lua setup callback
+        methods.add_method_mut("with_lua_setup", |_, this, callback: String| {
+            this.cmd.lua_setup = Some(callback);
+            Ok(this.clone())
+        });
+
         // :with_camera_target(priority?, zoom?) - Mark entity as camera follow target.
         // priority defaults to 0; higher values take precedence.
         // zoom is the desired camera zoom when this target wins (default 1.0).
