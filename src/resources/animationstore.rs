@@ -32,7 +32,7 @@ impl AnimationStore {
 pub struct AnimationResource {
     /// Texture key in [`crate::resources::texturestore::TextureStore`].
     pub tex_key: Arc<str>,
-    /// Base screen/world position where the animation is anchored.
+    /// Pixel origin within the texture where frame 0 starts (texture-space, not world/screen).
     pub position: Vector2,
     /// Per-frame horizontal displacement (also the frame width, as frames are packed with no gaps).
     pub horizontal_displacement: f32,
