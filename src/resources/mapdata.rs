@@ -123,6 +123,9 @@ pub struct EntityDef {
     /// Text rendering data (maps to [`crate::components::dynamictext::DynamicText`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_text: Option<DynamicTextEntry>,
+    /// Animation key in [`crate::resources::animationstore::AnimationStore`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animation_key: Option<String>,
 }
 
 /// Dynamic text rendering data for an entity placement.

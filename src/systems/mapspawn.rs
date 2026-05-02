@@ -16,6 +16,7 @@ use raylib::ffi;
 use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
 
+use crate::components::animation::Animation;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
@@ -147,6 +148,13 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     #[cfg(feature = "lua")]
     if let Some(ref callback) = def.lua_setup {
         ec.insert(LuaSetup::new(callback.clone()));
+    }
+    if let Some(ref key) = def.animation_key {
+        ec.insert(Animation {
+            animation_key: key.clone(),
+            frame_index: 0,
+            elapsed_time: 0.0,
+        });
     }
     ec.id()
 }
