@@ -54,7 +54,7 @@ Setting `default-features = false` disables the `lua` feature flag. This removes
 ```
 my_game/
 ├── Cargo.toml
-├── config.ini                 # Engine configuration (optional, defaults apply)
+├── config.ini                 # Engine configuration (required at startup; missing keys use defaults)
 ├── src/
 │   ├── main.rs                # EngineBuilder entry point
 │   └── scenes/
@@ -70,7 +70,7 @@ my_game/
 
 ### config.ini
 
-The engine reads `config.ini` at startup for window and rendering settings. If the file is missing or a value is absent, safe defaults are used.
+The engine reads `config.ini` at startup for window and rendering settings. The file must exist at startup, but individual missing or invalid keys fall back to safe defaults.
 
 ```ini
 [render]
@@ -102,23 +102,25 @@ use aberredengine::systems::scene_dispatch::SceneDescriptor;
 
 mod scenes;
 
-fn main() {
+fn main() -> Result<(), String> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")
         .on_setup(scenes::load_assets)
         .add_scene("menu", SceneDescriptor {
-            on_enter:  scenes::menu::enter,
-            on_update: Some(scenes::menu::update),
-            on_exit:   None,
+            on_enter:     scenes::menu::enter,
+            on_update:    Some(scenes::menu::update),
+            on_exit:      None,
+            gui_callback: None,
         })
         .add_scene("level01", SceneDescriptor {
-            on_enter:  scenes::level01::enter,
-            on_update: Some(scenes::level01::update),
-            on_exit:   Some(scenes::level01::exit),
+            on_enter:     scenes::level01::enter,
+            on_update:    Some(scenes::level01::update),
+            on_exit:      Some(scenes::level01::exit),
+            gui_callback: None,
         })
         .initial_scene("menu")
-        .run();
+        .try_run()
 }
 
 ```
@@ -127,7 +129,10 @@ Scene callback signatures:
 
 ```rust
 use aberredengine::systems::GameCtx;
+use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::input::InputState;
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::worldsignals::WorldSignals;
 
 // Called once when the scene becomes active
 fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -137,6 +142,15 @@ fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic *
 
 // Called once when leaving the scene (before entities are despawned)
 fn exit(ctx: &mut GameCtx) { /* cleanup */ }
+
+// Called every frame to draw ImGui widgets — Rust-only, optional
+// Signature must match: fn(&aberredengine::imgui::Ui, &mut WorldSignals, &TextureStore, &AppState)
+fn my_gui(
+    ui: &aberredengine::imgui::Ui,
+    signals: &mut WorldSignals,
+    textures: &TextureStore,
+    app_state: &AppState,
+) { /* draw widgets, write signals, read typed state */ }
 ```
 
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
@@ -152,6 +166,77 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 > **Tip:** Scene transitions can be triggered from callbacks by setting the `"switch_scene"` flag on `WorldSignals` — the engine polls this automatically. For menu-driven transitions, `MenuAction::SetScene` handles the switch internally. See [Section 6.2](#62-triggering-scene-transitions) for details.
 
+### ImGui GUI callback (Rust-only)
+
+`gui_callback` lets a scene draw an ImGui overlay every frame — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
+
+The callback receives:
+
+- `&aberredengine::imgui::Ui` for drawing widgets
+- `&mut WorldSignals` for GUI -> game actions and transient GUI values
+- `&TextureStore` for texture previews
+- `&AppState` for richer Rust-only typed snapshots/view-models produced by systems or scene callbacks
+
+`AppState` is inserted automatically by the engine and stores one value per Rust type. Use newtypes when you need two values of the same underlying type.
+
+```rust
+use aberredengine::imgui;
+use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::worldsignals::WorldSignals;
+
+#[derive(Clone)]
+struct EditorPanelState {
+    active_tool: String,
+}
+
+fn editor_gui(
+    ui: &imgui::Ui,
+    signals: &mut WorldSignals,
+    _textures: &TextureStore,
+    app_state: &AppState,
+) {
+    // Read typed state written by on_update or ECS systems
+    let tool = app_state
+        .get::<EditorPanelState>()
+        .map(|s| s.active_tool.as_str())
+        .unwrap_or("select");
+
+    ui.text(format!("Active tool: {tool}"));
+
+    if let Some(_mb) = ui.begin_main_menu_bar() {
+        if let Some(_file) = ui.begin_menu("File") {
+            if ui.menu_item("Save") {
+                signals.set_flag("gui:action:file:save"); // consumed by on_update next frame
+            }
+        }
+    }
+}
+
+fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+    ctx.app_state.insert(EditorPanelState {
+        active_tool: "place".to_string(),
+    });
+
+    if ctx.world_signals.take_flag("gui:action:file:save") {
+        // handle save
+    }
+}
+```
+
+Register it on the descriptor:
+
+```rust
+.add_scene("editor", SceneDescriptor {
+    on_enter:     editor_enter,
+    on_update:    Some(editor_update),
+    on_exit:      None,
+    gui_callback: Some(editor_gui),
+})
+```
+
+> **Convention:** prefix all GUI signal keys with `"gui:"` to avoid collisions with game signals. Use `"gui:action:<verb>"` for flags set by the GUI and consumed by `on_update`, and `"gui:state:<name>"` for values set by `on_update` and read by the GUI.
+
 ### Approach B — Raw hooks (single-scene or full manual control)
 
 For single-scene games or when you need full control over scene transitions, use the four hook methods directly:
@@ -159,7 +244,7 @@ For single-scene games or when you need full control over scene transitions, use
 ```rust
 use aberredengine::engine_app::EngineBuilder;
 
-fn main() {
+fn main() -> Result<(), String> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")
@@ -167,16 +252,22 @@ fn main() {
         .on_enter_play(my_enter_play)
         .on_update(my_update)
         .on_switch_scene(my_switch_scene)
-        .run();
+        .try_run()
 }
 ```
+
+### Startup error handling
+
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), String>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and missing required built-in system registrations.
+
+`EngineBuilder::run()` is still available as a convenience wrapper, but it only logs startup failures internally and does not return them to your `main` function.
 
 Each hook is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
 
 ```rust
+use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::input::InputState;
-use bevy_ecs::prelude::*;
 
 fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
     if input.action_1.just_pressed {
@@ -206,12 +297,166 @@ Setup ──→ Playing ──→ Quitting
 | `.title(name)` | Window title (overrides config) |
 | `.on_setup(system)` | Asset loading hook (called during `Setup` state) |
 | `.on_enter_play(system)` | Called once when transitioning to `Playing` |
-| `.on_update(system)` | Runs every frame while `Playing` (after `check_pending_state`) |
+| `.on_update(system)` | Runs every frame while `Playing` (after `check_pending_state`) — single system only |
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
+| `.add_system(system)` | Add a per-frame system. Same auto-constraints as `.on_update()`. Can be called multiple times. |
+| `.configure_schedule(closure)` | Add systems with full ordering control — no auto-constraints applied. |
+| `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
+| `.try_run()` | Start the engine and return `Result<(), String>` on startup failure. Recommended for Rust `main`. |
+| `.run()` | Convenience wrapper around `.try_run()` that logs startup failures and returns `()`. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()` or `.on_enter_play()` — the SceneManager owns those hooks. Use `.on_setup()` for asset loading in both approaches.
+**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()` or `.on_enter_play()` — the SceneManager owns those hooks. Use `.on_setup()` for asset loading in both approaches. With `.try_run()`, these conflicts are returned as startup errors instead of panicking.
+
+### Custom systems and observers
+
+The three new builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks.
+
+#### `.add_system(system)` — multiple per-frame systems
+
+Registers a Bevy ECS system that runs every frame while `Playing`. Same automatic constraints as `.on_update()`: `run_if(state_is_playing).after(check_pending_state)`. Can be called multiple times.
+
+```rust
+EngineBuilder::new()
+    .config("config.ini")
+    .on_setup(load_assets)
+    .add_system(tilemap_load_system)   // runs every frame — checks a signal, then loads
+    .add_system(tilemap_save_system)   // independent second system
+    .add_scene("editor", /* … */)
+    .initial_scene("editor")
+    .try_run()
+    .expect("engine startup failed");
+```
+
+The system signature is a standard Bevy ECS system:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::systems::RaylibAccess;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::resources::texturestore::TextureStore;
+
+fn tilemap_load_system(
+    world_signals: ResMut<WorldSignals>,
+    mut tex_store: ResMut<TextureStore>,
+    mut raylib: RaylibAccess,
+    mut commands: Commands,
+) {
+    let Some(path) = world_signals.get_string("pending_load_path").cloned() else {
+        return; // nothing to do this frame
+    };
+    // load texture, spawn tile entities, etc.
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
+    // ...
+}
+```
+
+> **When to use `.add_system()` vs scene callbacks:** Scene callbacks (`on_enter`, `on_update`) receive `&mut GameCtx` and cannot access `RaylibAccess`. If a per-frame operation needs `RaylibAccess` (e.g., loading textures on demand), register it as a system with `.add_system()` instead. Use a `WorldSignals` flag to communicate the trigger from the scene callback.
+
+#### `.configure_schedule(closure)` — full ordering control
+
+For systems that need custom ordering relative to engine systems, or that must run outside the `Playing` state, pass a closure receiving `&mut Schedule`:
+
+```rust
+use aberredengine::systems::movement::movement;
+use aberredengine::systems::render::render_system;
+
+EngineBuilder::new()
+    .configure_schedule(|schedule| {
+        schedule.add_systems(
+            undo_system
+                .run_if(state_is_playing)
+                .after(movement)
+                .before(render_system),
+        );
+    })
+    // …
+    .try_run()
+    .expect("engine startup failed");
+```
+
+Engine system functions are `pub` and importable from `aberredengine::systems::*`. Use them directly as `.after()` / `.before()` arguments. No automatic `run_if` or `after` constraints are applied — you control everything.
+
+#### `.add_observer(observer_fn)` — persistent event observers
+
+Registers a Bevy ECS observer that fires when a specific event is triggered. The observer survives scene transitions (spawned with the `Persistent` component) — it is always active, not tied to a specific scene.
+
+**Define a custom event:**
+
+```rust
+use aberredengine::bevy_ecs;
+use aberredengine::bevy_ecs::prelude::Event;
+
+#[derive(Event)]
+struct TilemapLoaded {
+    pub path: String,
+}
+```
+
+If you derive `Event` in a downstream game crate, bring the re-exported crate itself into scope as `bevy_ecs` first. The derive macro expands using a `bevy_ecs::...` path, so importing only items from `aberredengine::bevy_ecs::prelude` is not enough.
+
+**Define the observer function** — first parameter must be `On<E>`:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::bevy_ecs::observer::On;
+
+fn on_tilemap_loaded(
+    trigger: On<TilemapLoaded>,
+    mut world_signals: ResMut<WorldSignals>,
+) {
+    let path = &trigger.event().path;
+    world_signals.set_string("last_loaded_tilemap", path.clone());
+    log::info!("Tilemap loaded: {}", path);
+}
+```
+
+**Register it with the builder:**
+
+```rust
+EngineBuilder::new()
+    .add_observer(on_tilemap_loaded)
+    // …
+    .try_run()
+    .expect("engine startup failed");
+```
+
+**Trigger the event from any system or scene callback:**
+
+```rust
+// From a Bevy ECS system:
+fn my_system(mut commands: Commands) {
+    commands.trigger(TilemapLoaded { path: "maps/level01.json".into() });
+}
+
+// From a scene callback (via GameCtx):
+fn my_enter(ctx: &mut GameCtx) {
+    ctx.commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
+}
+```
+
+> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `AudioCmd`, etc.
+
+#### Scene-scoped (transient) observers
+
+Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `on_enter` callback **without** the `Persistent` component:
+
+```rust
+use aberredengine::bevy_ecs::observer::Observer;
+
+fn editor_enter(ctx: &mut GameCtx) {
+    // This observer lives only until the next scene switch.
+    // clean_all_entities (called on scene transition) despawns it automatically.
+    ctx.commands.spawn(Observer::new(on_tile_selected));
+}
+
+fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
+    // only fires while the editor scene is active
+}
+```
+
+This is the standard pattern for scene-scoped behaviour in the engine — no special API needed.
 
 ---
 
@@ -225,16 +470,15 @@ use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::shaderstore::ShaderStore;
 use aberredengine::resources::animationstore::{AnimationStore, AnimationResource};
-use aberredengine::resources::camera2d::Camera2DRes;
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::raylib::prelude::*;
 use aberredengine::events::audio::AudioCmd;
-use bevy_ecs::prelude::*;
-use raylib::prelude::*;
-use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 fn setup(
-    mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
+    mut tex_store: ResMut<TextureStore>,
+    mut anim_store: ResMut<AnimationStore>,
     mut raylib: RaylibAccess,
     mut fonts: NonSendMut<FontStore>,
     mut shaders: NonSendMut<ShaderStore>,
@@ -253,15 +497,15 @@ fn setup(
 |----------|------------------------|-------|
 | `FontStore` | Yes | No (`NonSendMut`) |
 | `ShaderStore` | Yes | No (`NonSendMut`) |
-| `TextureStore` | **No** — you create and insert it | Yes (`Res`/`ResMut`) |
-| `AnimationStore` | **No** — you create and insert it | Yes |
-| `Camera2DRes` | **No** — you create and insert it | Yes |
+| `TextureStore` | Yes — request via `ResMut<TextureStore>` | Yes (`Res`/`ResMut`) |
+| `AnimationStore` | Yes — request via `ResMut<AnimationStore>` | Yes |
+| `Camera2DRes` | Yes — pre-set to center offset; override via `ResMut<Camera2DRes>` | Yes |
 
 ### Textures
 
-```rust
-let mut tex_store = TextureStore::new();
+`TextureStore` is pre-inserted by the engine. Request it as `ResMut<TextureStore>` and call `.insert()` to populate it:
 
+```rust
 let tex = rl.load_texture(th, "assets/textures/player.png")
     .expect("Failed to load player texture");
 tex_store.insert("player", tex);
@@ -269,36 +513,35 @@ tex_store.insert("player", tex);
 let bg = rl.load_texture(th, "assets/textures/background.png")
     .expect("Failed to load background texture");
 tex_store.insert("background", bg);
-
-commands.insert_resource(tex_store);
 ```
 
-`TextureStore` is a simple `FxHashMap<String, Texture2D>` wrapper. Keys are arbitrary strings you'll reference later in `Sprite` components.
+Keys are arbitrary strings you'll reference later in `Sprite` components.
 
 ### Fonts
 
 Fonts require `NonSendMut<FontStore>` (already pre-inserted). After loading, you **must** generate mipmaps and set anisotropic filtering to avoid blurry text at non-native sizes.
 
 ```rust
-use raylib::ffi::{self, TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X};
+use aberredengine::raylib::ffi::{self, TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X};
 
 /// Load a font with mipmaps and anisotropic filtering.
-fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
+fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Result<Font, String> {
     let mut font = rl
         .load_font_ex(th, path, size, None)
-        .unwrap_or_else(|_| panic!("Failed to load font '{}'", path));
+        .map_err(|err| format!("Failed to load font '{}': {err}", path))?;
     unsafe {
         ffi::GenTextureMipmaps(&mut font.texture);
         ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
     }
-    font
+    Ok(font)
 }
 ```
 
 Then in setup:
 
 ```rust
-let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32);
+let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32)
+    .expect("Failed to load arcade font");
 fonts.add("arcade", font);
 ```
 
@@ -343,13 +586,9 @@ The first argument to `load_shader` is the vertex shader (`None` uses the defaul
 
 ### Animations
 
-Animations are pure data — no Raylib calls needed. Create an `AnimationStore` and populate it with `AnimationResource` entries:
+Animations are pure data — no Raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
 
 ```rust
-let mut anim_store = AnimationStore {
-    animations: FxHashMap::default(),
-};
-
 anim_store.animations.insert("player_idle".to_string(), AnimationResource {
     tex_key: Arc::from("player"),              // must match a TextureStore key
     position: Vector2 { x: 0.0, y: 0.0},      // base offset in spritesheet
@@ -369,16 +608,61 @@ anim_store.animations.insert("player_run".to_string(), AnimationResource {
     fps: 12.0,
     looped: true,
 });
-
-commands.insert_resource(anim_store);
 ```
+
+### Tilemaps
+
+Tilemaps use the **Tilesetter 2.1.0** export format: a directory containing a `.png` tileset texture and a `.txt` JSON data file, both named after the directory.
+
+```
+assets/tilemaps/level01/
+├── level01.png    # tileset texture (atlas)
+└── level01.txt    # JSON: { tile_size, map_width, map_height, layers: [{ name, positions: [{ x, y, id }] }] }
+```
+
+Spawn a tilemap by attaching the `TileMap` component to any entity. `tilemap_spawn_system` reacts to `Added<TileMap>`, loads the PNG + JSON from disk, and spawns all tile entities as `ChildOf` children of the root entity. The entire tilemap then moves, scales, and rotates as one unit:
+
+```rust
+use aberredengine::components::tilemap::TileMap;
+use aberredengine::components::mapposition::MapPosition;
+use aberredengine::components::scale::Scale;
+
+// Minimal — tiles appear at world origin (default MapPosition inserted automatically)
+commands.spawn(TileMap::new("assets/tilemaps/level01"));
+
+// Positioned and scaled
+commands.spawn((
+    TileMap::new("assets/tilemaps/level01"),
+    MapPosition::new(100.0, 200.0),
+    Scale { x: 2.0, y: 2.0 },
+));
+```
+
+Move the whole tilemap at runtime by updating the root entity's `MapPosition`:
+
+```rust
+commands.entity(tilemap_root).insert(MapPosition::new(new_x, new_y));
+```
+
+From **Lua**, use the entity builder:
+
+```lua
+engine.spawn()
+    :with_tilemap("./assets/tilemaps/level01")
+    :with_position(0, 0)  -- optional, defaults to (0, 0)
+    :build()
+```
+
+The texture is stored in `TextureStore` keyed by path stem and deduplicated — two `TileMap` entities pointing to the same directory share one GPU texture. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative). Use `Group("tiles")` in collision rules to match tile entities.
+
+> **Note:** `load_tilemap` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
 ### Camera
 
-Create and insert a `Camera2DRes` to set the initial camera position:
+`Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it:
 
 ```rust
-commands.insert_resource(Camera2DRes(Camera2D {
+camera.0 = Camera2D {
     target: Vector2 { x: 0.0, y: 0.0 },
     offset: Vector2 {
         x: rl.get_screen_width() as f32 * 0.5,
@@ -386,17 +670,18 @@ commands.insert_resource(Camera2DRes(Camera2D {
     },
     rotation: 0.0,
     zoom: 1.0,
-}));
+};
 ```
 
-The `offset` is typically half the render resolution to center the camera. `target` is the world position the camera looks at.
+`offset` is the screen point the camera looks through. `target` is the world position it looks at.
 
 ### Complete setup example
 
 ```rust
 fn setup(
-    mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
+    mut tex_store: ResMut<TextureStore>,
+    mut anim_store: ResMut<AnimationStore>,
     mut raylib: RaylibAccess,
     mut fonts: NonSendMut<FontStore>,
     mut shaders: NonSendMut<ShaderStore>,
@@ -404,25 +689,13 @@ fn setup(
 ) {
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
 
-    // Camera
-    commands.insert_resource(Camera2DRes(Camera2D {
-        target: Vector2 { x: 0.0, y: 0.0 },
-        offset: Vector2 {
-            x: rl.get_screen_width() as f32 * 0.5,
-            y: rl.get_screen_height() as f32 * 0.5,
-        },
-        rotation: 0.0,
-        zoom: 1.0,
-    }));
-
-    // Textures
-    let mut tex_store = TextureStore::new();
+    // Textures (TextureStore is pre-inserted — just populate it)
     let player_tex = rl.load_texture(th, "assets/textures/player.png").unwrap();
     tex_store.insert("player", player_tex);
-    commands.insert_resource(tex_store);
 
     // Fonts
-    let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32);
+    let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32)
+        .expect("Failed to load arcade font");
     fonts.add("arcade", font);
 
     // Audio
@@ -436,8 +709,7 @@ fn setup(
         }
     }
 
-    // Animations
-    let mut anim_store = AnimationStore { animations: FxHashMap::default() };
+    // Animations (AnimationStore is pre-inserted — just populate it)
     anim_store.animations.insert("player_idle".into(), AnimationResource {
         tex_key: Arc::from("player"),
         position: Vector2 { x: 0.0, y: 0.0 },
@@ -447,9 +719,8 @@ fn setup(
         fps: 8.0,
         looped: true,
     });
-    commands.insert_resource(anim_store);
 
-    // Transition to Playing state
+    // Transition to Playing state — required, or the game stays in Setup forever
     next_state.set(GameStates::Playing);
 }
 ```
@@ -469,8 +740,8 @@ use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
 use aberredengine::components::group::Group;
+use aberredengine::raylib::prelude::*;
 use std::sync::Arc;
-use raylib::prelude::*;
 
 ctx.commands.spawn((
     MapPosition::new(100.0, 200.0),
@@ -587,7 +858,7 @@ This replaces the older concrete Rust types such as `TweenPosition`, `TweenRotat
 ```rust
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use raylib::prelude::Vector2;
+use aberredengine::raylib::prelude::Vector2;
 
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
@@ -752,7 +1023,7 @@ The `dt` parameter is `WorldTime.delta` — the unscaled time since the last fra
 
 The engine provides four major gameplay systems: **timers**, **phase state machines**, **collision rules**, and **menus**. Each follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides: commands, positions, rigid_bodies, signals, animations, shaders, groups, screen_positions, box_colliders, global_transforms, stuckto, rotations, scales, sprites, world_signals, audio, world_time, and texture_store. Callbacks have full ECS access.
+All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `texture_store`, `config`, `post_process`, `camera_follow`, and `input_bindings`. Callbacks have full ECS access.
 
 ### 7.1 Timers
 
@@ -1004,8 +1275,8 @@ fn ball_brick_collision(
 **Constructor:**
 
 ```rust
+use aberredengine::raylib::prelude::*;
 use aberredengine::components::menu::{Menu, MenuActions, MenuAction};
-use raylib::prelude::*;
 
 let menu = Menu::new(
     &[("start", "Start Game"), ("options", "Options"), ("quit", "Quit")],
@@ -1118,6 +1389,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 |----------|--------|---------|
 | `WorldTime` | `Res` | `elapsed`, `delta`, `time_scale`, `frame_count` |
 | `WorldSignals` | `ResMut` | Global cross-system communication (scalars, integers, strings, flags, entities) |
+| `AppState` | `ResMut` | Rust-only typed state store keyed by Rust type; useful for GUI/editor snapshots and view-models |
 | `TrackedGroups` | `ResMut` | Group names to count — engine publishes counts to `WorldSignals` each frame |
 | `ScreenSize` | `Res` | Internal render resolution (`w`, `h`) |
 | `WindowSize` | `Res` | OS window dimensions (`w`, `h`), has `calculate_letterbox()` and `window_to_game_pos()` |
@@ -1127,8 +1399,13 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions with `.set(GameStates::Playing)` |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
+| `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets) |
+| `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
 | `SceneManager` | `Res` | Scene registry (only present with `.add_scene()`) |
+| `TextureStore` | `Res` / `ResMut` | Loaded textures by key |
+| `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
+| `AnimationStore` | `Res` / `ResMut` | Animation definitions |
 
 ### Engine-inserted resources (NonSend)
 
@@ -1143,10 +1420,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 | Resource | Access | Purpose |
 |----------|--------|---------|
-| `TextureStore` | `Res` / `ResMut` | Loaded textures by key |
-| `AnimationStore` | `Res` | Animation definitions |
-| `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
-| `TilemapStore` | `Res` | Loaded tilemap data (optional) |
+| `TilemapStore` | `Res` | Loaded tilemap data — **not pre-inserted**; insert manually in setup via `commands.insert_resource(TilemapStore::new())` |
 | `DebugMode` | marker resource | Presence enables debug overlays |
 | `FullScreen` | marker resource | Presence enables fullscreen |
 
@@ -1201,6 +1475,54 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `set_group_count` | `(&mut self, group_name: &str, count: i32)` |
 | `get_group_count` | `(&self, group_name: &str) -> Option<i32>` |
 | `clear_group_counts` | `(&mut self)` |
+
+`WorldSignals` intentionally stays limited to those primitive/value-like channels. For richer Rust-only typed data, use `AppState` instead.
+
+### AppState API
+
+`AppState` is a Rust-only typed store keyed by `TypeId`. The engine inserts it automatically at startup. It stores one value per Rust type, so `insert::<T>` replaces any previous `T`.
+
+| Method | Signature |
+|--------|-----------|
+| `insert` | `(&mut self, value: T) where T: Any + Send + Sync + 'static` |
+| `get::<T>` | `(&self) -> Option<&T>` |
+| `get_mut::<T>` | `(&mut self) -> Option<&mut T>` |
+| `remove::<T>` | `(&mut self) -> Option<T>` |
+| `contains::<T>` | `(&self) -> bool` |
+
+Use `AppState` for richer GUI/editor snapshots and view-models that do not belong in the Lua-visible signal bus. If you need two values of the same underlying type, wrap them in newtypes.
+
+```rust
+use aberredengine::imgui;
+use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::bevy_ecs::prelude::ResMut;
+
+#[derive(Clone)]
+struct InspectorSnapshot {
+    selected_name: String,
+}
+
+// ECS system writes typed state
+fn inspector_system(mut app_state: ResMut<AppState>) {
+    app_state.insert(InspectorSnapshot {
+        selected_name: "Player".to_string(),
+    });
+}
+
+// GUI callback reads it
+fn inspector_gui(
+    ui: &imgui::Ui,
+    _signals: &mut WorldSignals,
+    _textures: &TextureStore,
+    app_state: &AppState,
+) {
+    if let Some(snapshot) = app_state.get::<InspectorSnapshot>() {
+        ui.text(format!("Selected: {}", snapshot.selected_name));
+    }
+}
+```
 
 ### InputState key bindings
 
@@ -1279,11 +1601,14 @@ Section 2 showed the basics. This is the complete reference.
 
 ### Parsing behavior
 
-- **Missing file** → safe defaults used, no error
-- **Missing key** → default for that key
-- **Invalid value** → silently ignored, default used
+- **Missing file** -> startup error from `EngineBuilder::try_run()`
+- **Unreadable or malformed INI** -> startup error from `EngineBuilder::try_run()`
+- **Missing key** -> default for that key
+- **Invalid value** -> silently ignored, default used for that key
 - **Booleans** — case-insensitive: `true`/`false`, `yes`/`no`, `on`/`off`
 - **`background_color`** — comma-separated `R,G,B` integers (e.g., `80,80,80`)
+
+If you want the engine defaults with no custom settings, commit an otherwise empty `config.ini` file and only add keys you want to override.
 
 ### Runtime modification
 

@@ -33,7 +33,7 @@ use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
 use log::error;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use raylib::prelude::Vector2;
 
 /// Spawns entities for newly added [`Menu`] components.
@@ -101,13 +101,15 @@ pub fn menu_spawn_system(
                 );
             } else {
                 // Static text sprite
-                let font_handle = font_store.get(&font_string).unwrap_or_else(|| {
-                    panic!(
-                        "menu_spawn_system: Font {} not found in FontStore",
+                let Some(font_handle) = font_store.get(&font_string) else {
+                    warn!(
+                        "menu_spawn_system: skipping menu item '{}' because font '{}' is missing",
+                        menu_item.id,
                         font_string
-                    )
-                });
-                let texture_handle = load_texture_from_text(
+                    );
+                    continue;
+                };
+                let Some(texture_handle) = load_texture_from_text(
                     &mut rl,
                     &th,
                     font_handle,
@@ -115,8 +117,13 @@ pub fn menu_spawn_system(
                     font_size,
                     1.0,
                     normal_color,
-                )
-                .expect("Failed to create texture from text");
+                ) else {
+                    warn!(
+                        "menu_spawn_system: skipping menu item '{}' because text texture creation failed",
+                        menu_item.id
+                    );
+                    continue;
+                };
                 let width = texture_handle.width as f32;
                 let height = texture_handle.height as f32;
                 let key = format!("menu_{}", menu_item.id);
@@ -363,45 +370,41 @@ pub fn menu_controller_observer(
         let old_selected_index = menu.selected_index;
 
         match event.action {
-            InputAction::SecondaryDirectionUp => {
-                if !menu.items.is_empty() {
-                    if menu.visible_count.is_some() {
-                        // Bounded navigation (no wrap-around when scrolling enabled)
-                        if menu.selected_index > 0 {
-                            menu.selected_index -= 1;
-                            // Scroll up if selection above visible window
-                            if menu.selected_index < menu.scroll_offset {
-                                menu.scroll_offset = menu.selected_index;
-                                needs_reposition = true;
-                            }
-                            changed_selection = true;
+            InputAction::SecondaryDirectionUp if !menu.items.is_empty() => {
+                if menu.visible_count.is_some() {
+                    // Bounded navigation (no wrap-around when scrolling enabled)
+                    if menu.selected_index > 0 {
+                        menu.selected_index -= 1;
+                        // Scroll up if selection above visible window
+                        if menu.selected_index < menu.scroll_offset {
+                            menu.scroll_offset = menu.selected_index;
+                            needs_reposition = true;
                         }
-                    } else {
-                        // Original wrap-around behavior
-                        menu.selected_index =
-                            (menu.selected_index + menu.items.len() - 1) % menu.items.len();
                         changed_selection = true;
                     }
+                } else {
+                    // Original wrap-around behavior
+                    menu.selected_index =
+                        (menu.selected_index + menu.items.len() - 1) % menu.items.len();
+                    changed_selection = true;
                 }
             }
-            InputAction::SecondaryDirectionDown => {
-                if !menu.items.is_empty() {
-                    if let Some(visible_count) = menu.visible_count {
-                        // Bounded navigation (no wrap-around when scrolling enabled)
-                        if menu.selected_index < menu.items.len() - 1 {
-                            menu.selected_index += 1;
-                            // Scroll down if selection below visible window
-                            if menu.selected_index >= menu.scroll_offset + visible_count {
-                                menu.scroll_offset = menu.selected_index - visible_count + 1;
-                                needs_reposition = true;
-                            }
-                            changed_selection = true;
+            InputAction::SecondaryDirectionDown if !menu.items.is_empty() => {
+                if let Some(visible_count) = menu.visible_count {
+                    // Bounded navigation (no wrap-around when scrolling enabled)
+                    if menu.selected_index < menu.items.len() - 1 {
+                        menu.selected_index += 1;
+                        // Scroll down if selection below visible window
+                        if menu.selected_index >= menu.scroll_offset + visible_count {
+                            menu.scroll_offset = menu.selected_index - visible_count + 1;
+                            needs_reposition = true;
                         }
-                    } else {
-                        // Original wrap-around behavior
-                        menu.selected_index = (menu.selected_index + 1) % menu.items.len();
                         changed_selection = true;
                     }
+                } else {
+                    // Original wrap-around behavior
+                    menu.selected_index = (menu.selected_index + 1) % menu.items.len();
+                    changed_selection = true;
                 }
             }
             InputAction::Action1 | InputAction::Action2 => {
@@ -702,7 +705,7 @@ fn dispatch_menu_action(
     );
     match menu_actions.get(&event.item_id) {
         MenuAction::SetScene(scene_name) => {
-            info!(
+            debug!(
                 "menu_selection_observer: SetScene action found, scene_name={}",
                 scene_name
             );

@@ -35,11 +35,40 @@
 //!         .run();
 //! }
 //! ```
+//!
+//! **Multiple per-frame systems and custom observers:**
+//! ```rust,no_run,ignore
+//! use aberredengine::engine_app::EngineBuilder;
+//! use aberredengine::systems::scene_dispatch::SceneDescriptor;
+//!
+//! fn main() {
+//!     EngineBuilder::new()
+//!         .config("config.ini")
+//!         .on_setup(load_assets)
+//!         .add_system(tilemap_load_system)   // runs every frame while Playing
+//!         .add_system(tilemap_save_system)   // multiple systems allowed
+//!         .add_observer(on_tilemap_loaded)   // persistent observer for a custom event
+//!         .add_scene("intro", SceneDescriptor { /* … */ })
+//!         .add_scene("editor", SceneDescriptor { /* … */ })
+//!         .initial_scene("intro")
+//!         .run();
+//! }
+//! ```
+//!
+//! For scene-scoped (transient) observers — active only within one scene —
+//! spawn them from the scene's `on_enter` callback without [`Persistent`]:
+//! ```rust,no_run,ignore
+//! fn my_scene_enter(ctx: &mut GameCtx) {
+//!     // Cleaned up automatically by clean_all_entities on scene switch
+//!     ctx.commands.spawn(Observer::new(on_my_scene_event));
+//! }
+//! ```
 
 use std::path::PathBuf;
 
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::IntoObserverSystem;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
@@ -49,7 +78,9 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
+use crate::resources::animationstore::AnimationStore;
 use crate::resources::audio::{setup_audio, shutdown_audio};
+use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
@@ -64,7 +95,9 @@ use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
@@ -80,6 +113,7 @@ use crate::systems::gamestate::{
     check_pending_state, clean_all_entities, quit_game, state_is_playing,
 };
 use crate::systems::gridlayout::gridlayout_spawn_system;
+use crate::systems::tilemap::tilemap_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
@@ -90,8 +124,11 @@ use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::particleemitter::particle_emitter_system;
 use crate::systems::phase::phase_system;
-use crate::systems::propagate_transforms::{cleanup_orphaned_global_transforms, propagate_transforms};
+use crate::systems::propagate_transforms::{
+    cleanup_orphaned_global_transforms, propagate_transforms,
+};
 use crate::systems::render::render_system;
+use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
     SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
@@ -102,15 +139,20 @@ use crate::systems::time::update_world_time;
 use crate::systems::timer::{timer_observer, update_timers};
 use crate::systems::ttl::ttl_system;
 use crate::systems::tween::tween_system;
+use raylib::prelude::{Camera2D, Vector2};
 
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
 use crate::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
+use crate::systems::lua_setup_entity::lua_setup_entity_system;
+#[cfg(feature = "lua")]
 use crate::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
+#[cfg(feature = "lua")]
+use crate::systems::mapspawn::process_lua_map_commands;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
@@ -120,23 +162,21 @@ type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore)>;
 /// Deferred until `run()` when the schedule is being built.
 type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule)>;
 
+/// Closure that spawns an observer entity into the [`World`].
+/// Deferred until `run()` when the world exists.
+type ObserverRegistrar = Box<dyn FnOnce(&mut World)>;
+
 /// Builder for bootstrapping the engine.
 ///
 /// Handles world setup, window init, resources, system schedule, and main loop.
 /// The developer supplies only game-specific hooks: `setup`, `enter_play`,
 /// `update`, and `switch_scene`.
 ///
-// TODO: Future extension — allow arbitrary systems and observers via:
-//
-//   extra_systems:   Vec<Box<dyn FnOnce(&mut Schedule)>>,
-//   extra_observers: Vec<Box<dyn FnOnce(&mut World)>>,
-//
-// With builder methods:
-//   .add_system(|schedule| { schedule.add_systems(my_system.after(collision_detector)); })
-//   .add_observer(|world| { world.spawn((Observer::new(my_observer), Persistent)); })
-//
-// Each closure receives the schedule or world and can add systems with full
-// ordering constraints. The builder calls them after building the core schedule.
+/// In addition to the single-system hooks, the builder supports registering
+/// multiple per-frame systems ([`add_system`](Self::add_system),
+/// [`configure_schedule`](Self::configure_schedule)) and persistent observers
+/// ([`add_observer`](Self::add_observer)) for custom event handling.
+#[must_use = "EngineBuilder does nothing until .run() is called"]
 pub struct EngineBuilder {
     config_path: PathBuf,
     title_override: Option<String>,
@@ -146,6 +186,8 @@ pub struct EngineBuilder {
     switch_scene_hook: Option<HookRegistrar>,
     scenes: Vec<(String, SceneDescriptor)>,
     initial_scene: Option<String>,
+    extra_systems: Vec<UpdateRegistrar>,
+    extra_observers: Vec<ObserverRegistrar>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
 }
@@ -164,6 +206,8 @@ impl EngineBuilder {
             switch_scene_hook: None,
             scenes: Vec::new(),
             initial_scene: None,
+            extra_systems: Vec::new(),
+            extra_observers: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
         }
@@ -221,6 +265,89 @@ impl EngineBuilder {
     ) -> Self {
         self.switch_scene_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "switch_scene", system);
+        }));
+        self
+    }
+
+    /// Add a per-frame system to the schedule.
+    ///
+    /// The system is added with `.run_if(state_is_playing).after(check_pending_state)`,
+    /// matching the behaviour of [`.on_update()`](Self::on_update). Can be called
+    /// multiple times to register several systems.
+    ///
+    /// For custom ordering relative to other engine systems (e.g. `.after(movement)`)
+    /// or for systems with different run conditions, use
+    /// [`configure_schedule`](Self::configure_schedule) instead.
+    ///
+    /// # Scene-scoped (transient) observers
+    ///
+    /// If you need an observer that is only active within a specific scene, spawn
+    /// it from the scene's `on_enter` callback **without** the [`Persistent`] component:
+    ///
+    /// ```rust,ignore
+    /// fn my_scene_enter(ctx: &mut GameCtx) {
+    ///     // No Persistent → cleaned up on scene switch by clean_all_entities
+    ///     ctx.commands.spawn(Observer::new(on_my_event));
+    /// }
+    /// ```
+    pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
+        self.extra_systems.push(Box::new(move |schedule: &mut Schedule| {
+            schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
+        }));
+        self
+    }
+
+    /// Add systems to the per-frame schedule with full control over ordering and
+    /// run conditions.
+    ///
+    /// The closure receives a `&mut Schedule` and can call `schedule.add_systems(…)`
+    /// with any configuration. No automatic constraints are applied — the developer
+    /// is responsible for `.run_if()`, `.after()`, `.before()` etc.
+    ///
+    /// ```rust,ignore
+    /// .configure_schedule(|schedule| {
+    ///     schedule.add_systems(
+    ///         my_system
+    ///             .run_if(state_is_playing)
+    ///             .after(movement)
+    ///             .before(render_system),
+    ///     );
+    /// })
+    /// ```
+    pub fn configure_schedule(mut self, f: impl FnOnce(&mut Schedule) + 'static) -> Self {
+        self.extra_systems.push(Box::new(f));
+        self
+    }
+
+    /// Add a persistent observer for a custom (or engine) event.
+    ///
+    /// The observer is spawned with the [`Persistent`] component and therefore
+    /// survives scene transitions. The observer function's first parameter must
+    /// be `On<E>` where `E` is the event type.
+    ///
+    /// ```rust,ignore
+    /// #[derive(Event)]
+    /// struct TilemapLoaded { path: String }
+    ///
+    /// fn on_tilemap_loaded(trigger: On<TilemapLoaded>, mut ctx: GameCtx) {
+    ///     // react to the event …
+    /// }
+    ///
+    /// EngineBuilder::new()
+    ///     .add_observer(on_tilemap_loaded)
+    ///     // …
+    /// ```
+    ///
+    /// To trigger the event from a system or scene callback:
+    /// ```rust,ignore
+    /// commands.trigger(TilemapLoaded { path: "…".into() });
+    /// ```
+    pub fn add_observer<E: Event, B: Bundle, M>(
+        mut self,
+        observer: impl IntoObserverSystem<E, B, M>,
+    ) -> Self {
+        self.extra_observers.push(Box::new(move |world: &mut World| {
+            world.spawn((Observer::new(observer), Persistent));
         }));
         self
     }
@@ -283,7 +410,19 @@ impl EngineBuilder {
     /// Build the engine and run the main loop.
     ///
     /// This consumes the builder and does not return until the game exits.
-    pub fn run(mut self) {
+    /// Startup failures are logged and abort engine initialization without
+    /// entering the main loop.
+    pub fn run(self) {
+        if let Err(err) = self.try_run() {
+            log::error!("Failed to start engine: {err}");
+        }
+    }
+
+    /// Build the engine and run the main loop.
+    ///
+    /// This variant returns startup errors to the caller instead of logging
+    /// them internally.
+    pub fn try_run(mut self) -> Result<(), String> {
         log::info!("Hello, world! This is the Aberred Engine!");
 
         let use_scene_manager = !self.scenes.is_empty();
@@ -292,59 +431,71 @@ impl EngineBuilder {
         #[cfg(not(feature = "lua"))]
         let has_lua = false;
 
-        self.validate_builder(use_scene_manager);
-        let config = self.load_config();
-        let (rl, thread, render_target) = Self::setup_window(&config);
+        self.validate_builder(use_scene_manager)?;
+        let config = self.load_config()?;
+        let (rl, thread, render_target) = Self::setup_window(&config)?;
 
         let update_hook = self.update_hook.take();
+        let extra_systems = std::mem::take(&mut self.extra_systems);
+        let extra_observers = std::mem::take(&mut self.extra_observers);
 
-        let mut world = self.setup_world(config, rl, thread, render_target);
-        self.register_systems(&mut world, use_scene_manager);
-        Self::spawn_observers(&mut world, has_lua);
+        let mut world = self.setup_world(config, rl, thread, render_target)?;
+        self.register_systems(&mut world, use_scene_manager)?;
+        Self::spawn_observers(&mut world, has_lua, extra_observers);
 
-        let mut update = Self::build_schedule(update_hook, &mut world, has_lua, use_scene_manager);
+        let mut update =
+            Self::build_schedule(update_hook, extra_systems, &mut world, has_lua, use_scene_manager)?;
         Self::main_loop(&mut world, &mut update);
+
+        Ok(())
     }
 
-    fn validate_builder(&self, use_scene_manager: bool) {
+    fn validate_builder(&self, use_scene_manager: bool) -> Result<(), String> {
         if use_scene_manager {
             if self.switch_scene_hook.is_some() {
-                panic!(
+                return Err(
                     "EngineBuilder conflict: .add_scene() and .on_switch_scene() cannot be used \
                      together. Use .add_scene() for SceneManager-based games, or \
-                     .on_switch_scene() for full manual control — not both."
+                     .on_switch_scene() for full manual control -- not both."
+                        .to_string(),
                 );
             }
             if self.enter_play_hook.is_some() {
-                panic!(
+                return Err(
                     "EngineBuilder conflict: .add_scene() and .on_enter_play() cannot be used \
                      together. SceneManager owns the enter_play hook. Use .on_setup() for \
                      asset loading instead."
+                        .to_string(),
                 );
             }
             if self.initial_scene.is_none() {
-                panic!(
+                return Err(
                     "EngineBuilder: .add_scene() requires .initial_scene(\"name\") to specify \
                      which scene to enter first."
+                        .to_string(),
                 );
             }
         }
+
+        Ok(())
     }
 
-    fn load_config(&self) -> GameConfig {
+    fn load_config(&self) -> Result<GameConfig, String> {
         let mut config = GameConfig::with_path(&self.config_path);
-        config.load_from_file().ok(); // ignore errors, use defaults
+        config
+            .load_from_file()
+            .map_err(|err| format!("Failed to load config '{}': {err}", self.config_path.display()))?;
 
         if let Some(title) = &self.title_override {
             config.window_title = title.clone();
         }
 
-        config
+        Ok(config)
     }
 
     fn setup_window(
         config: &GameConfig,
-    ) -> (raylib::RaylibHandle, raylib::RaylibThread, RenderTarget) {
+    ) -> Result<(raylib::RaylibHandle, raylib::RaylibThread, RenderTarget), String> {
         let (mut rl, thread) = raylib::init()
             .size(config.window_width as i32, config.window_height as i32)
             .resizable()
@@ -356,9 +507,9 @@ impl EngineBuilder {
 
         let render_target =
             RenderTarget::new(&mut rl, &thread, config.render_width, config.render_height)
-                .expect("Failed to create render target");
+                .map_err(|err| format!("Failed to create render target: {err}"))?;
 
-        (rl, thread, render_target)
+        Ok((rl, thread, render_target))
     }
 
     fn setup_world(
@@ -367,7 +518,7 @@ impl EngineBuilder {
         rl: raylib::RaylibHandle,
         thread: raylib::RaylibThread,
         render_target: RenderTarget,
-    ) -> World {
+    ) -> Result<World, String> {
         let render_width = config.render_width;
         let render_height = config.render_height;
         let window_width = rl.get_screen_width();
@@ -376,6 +527,7 @@ impl EngineBuilder {
         let mut world = World::new();
         world.insert_resource(WorldTime::default().with_time_scale(1.0));
         world.insert_resource(WorldSignals::default());
+        world.insert_resource(AppState::default());
         world.insert_resource(TrackedGroups::default());
         world.insert_resource(ScreenSize {
             w: render_width as i32,
@@ -396,13 +548,25 @@ impl EngineBuilder {
         world.insert_resource(NextGameState::new());
         world.insert_non_send_resource(FontStore::new());
         world.insert_non_send_resource(ShaderStore::new());
+        world.insert_resource(TextureStore::new());
+        world.insert_resource(Camera2DRes(Camera2D {
+            target: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vector2 {
+                x: render_width as f32 * 0.5,
+                y: render_height as f32 * 0.5,
+            },
+            rotation: 0.0,
+            zoom: 1.0,
+        }));
+        world.insert_resource(AnimationStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DebugOverlayConfig::default());
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {
-            let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
+            let lua_runtime = LuaRuntime::new()
+                .map_err(|err| format!("Failed to create Lua runtime: {err}"))?;
             if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
                 log::error!("Failed to load Lua script: {}", e);
             }
@@ -413,11 +577,42 @@ impl EngineBuilder {
         world.insert_non_send_resource(thread);
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
-        world
+        Ok(world)
     }
 
-    fn register_systems(self, world: &mut World, use_scene_manager: bool) {
+    fn validate_required_systems(
+        systems_store: &SystemsStore,
+        requires_switch_scene: bool,
+    ) -> Result<(), String> {
+        let mut missing = Vec::new();
+
+        for name in ["setup", "enter_play", "quit_game"] {
+            if systems_store.get(name).is_none() {
+                missing.push(name);
+            }
+        }
+
+        if requires_switch_scene && systems_store.get("switch_scene").is_none() {
+            missing.push("switch_scene");
+        }
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "EngineBuilder missing required system registrations: {}",
+                missing.join(", ")
+            ))
+        }
+    }
+
+    fn register_systems(self, world: &mut World, use_scene_manager: bool) -> Result<(), String> {
         let mut systems_store = SystemsStore::new();
+        #[cfg(feature = "lua")]
+        let requires_switch_scene =
+            use_scene_manager || self.switch_scene_hook.is_some() || self.lua_script.is_some();
+        #[cfg(not(feature = "lua"))]
+        let requires_switch_scene = use_scene_manager || self.switch_scene_hook.is_some();
 
         if let Some(hook) = self.setup_hook {
             hook(world, &mut systems_store);
@@ -460,6 +655,8 @@ impl EngineBuilder {
             .insert(Persistent);
         systems_store.insert_entity_system("menu_despawn", menu_despawn_system_id);
 
+        Self::validate_required_systems(&systems_store, requires_switch_scene)?;
+
         world.insert_resource(systems_store);
         world.flush();
 
@@ -468,9 +665,11 @@ impl EngineBuilder {
             next_state.set(GameStates::Setup);
         }
         world.trigger(GameStateChangedEvent {});
+
+        Ok(())
     }
 
-    fn spawn_observers(world: &mut World, has_lua: bool) {
+    fn spawn_observers(world: &mut World, has_lua: bool, extra_observers: Vec<ObserverRegistrar>) {
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_collision_observer), Persistent));
@@ -487,19 +686,28 @@ impl EngineBuilder {
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;
         world.spawn((Observer::new(timer_observer), Persistent));
+        world.spawn((Observer::new(spawn_map_observer), Persistent));
+
+        // Spawn user-registered persistent observers
+        for registrar in extra_observers {
+            registrar(world);
+        }
+
         world.flush();
     }
 
     fn build_schedule(
         update_hook: Option<UpdateRegistrar>,
+        extra_systems: Vec<UpdateRegistrar>,
         world: &mut World,
         has_lua: bool,
         use_scene_manager: bool,
-    ) -> Schedule {
+    ) -> Result<Schedule, String> {
         let mut update = Schedule::default();
         update.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
         update.add_systems(menu_spawn_system);
         update.add_systems(gridlayout_spawn_system);
+        update.add_systems(tilemap_spawn_system);
         update.add_systems(update_input_state);
         update.add_systems(check_pending_state);
         update.add_systems(update_group_counts_system);
@@ -552,15 +760,21 @@ impl EngineBuilder {
                     .after(phase_system),
             );
             update.add_systems(update_lua_timers);
-        }
-
-        #[cfg(feature = "lua")]
-        if !has_lua {
+            update.add_systems(process_lua_map_commands.after(crate::lua_plugin::update));
+            update.add_systems(
+                lua_setup_entity_system
+                    .run_if(state_is_playing)
+                    .after(check_pending_state)
+                    .before(animation_controller),
+            );
+        } else {
             update.add_systems(animation_controller.after(phase_system));
         }
 
         #[cfg(not(feature = "lua"))]
         {
+            // `has_lua` only exists to keep the build_schedule signature uniform
+            // across feature combinations.
             let _ = has_lua;
             update.add_systems(animation_controller.after(phase_system));
         }
@@ -572,6 +786,11 @@ impl EngineBuilder {
 
         if let Some(update_hook) = update_hook {
             update_hook(&mut update);
+        }
+
+        // Apply user-registered extra systems (add_system / configure_schedule)
+        for extra in extra_systems {
+            extra(&mut update);
         }
 
         if use_scene_manager {
@@ -591,9 +810,9 @@ impl EngineBuilder {
 
         update
             .initialize(world)
-            .expect("Failed to initialize schedule");
+            .map_err(|err| format!("Failed to initialize schedule: {err}"))?;
 
-        update
+        Ok(update)
     }
 
     fn main_loop(world: &mut World, update: &mut Schedule) {
@@ -605,6 +824,10 @@ impl EngineBuilder {
             let dt = world
                 .non_send_resource::<raylib::RaylibHandle>()
                 .get_frame_time();
+
+            // update_world_time is called directly (not via the schedule) because
+            // WorldTime::delta must be available to all systems in the update pass.
+            // Scheduling it would require ordering constraints on every delta-reading system.
             update_world_time(world, dt);
 
             update.run(world);
@@ -742,6 +965,45 @@ mod tests {
         assert!(builder.switch_scene_hook.is_some());
     }
 
+    #[cfg(feature = "lua")]
+    #[test]
+    fn test_build_schedule_without_lua_runtime_omits_lua_only_systems() {
+        let mut world = World::new();
+        let schedule = EngineBuilder::build_schedule(None, Vec::new(), &mut world, false, false)
+            .expect("build_schedule should succeed without Lua runtime");
+        let system_type_ids: Vec<_> = schedule
+            .systems()
+            .expect("build_schedule initializes the schedule")
+            .map(|(_, system)| system.type_id())
+            .collect();
+        let phase_system_type = IntoSystem::into_system(phase_system).type_id();
+        let animation_controller_type = IntoSystem::into_system(animation_controller).type_id();
+        let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).type_id();
+        let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).type_id();
+
+        let phase_index = system_type_ids
+            .iter()
+            .position(|type_id| *type_id == phase_system_type)
+            .expect("phase_system should be present");
+        let animation_controller_index = system_type_ids
+            .iter()
+            .position(|type_id| *type_id == animation_controller_type)
+            .expect("animation_controller should be present");
+
+        assert!(
+            animation_controller_index > phase_index,
+            "animation_controller should still run after phase_system"
+        );
+        assert!(
+            !system_type_ids.contains(&lua_phase_system_type),
+            "lua_phase_system should be absent when has_lua is false"
+        );
+        assert!(
+            !system_type_ids.contains(&update_lua_timers_type),
+            "update_lua_timers should be absent when has_lua is false"
+        );
+    }
+
     #[test]
     fn test_builder_chaining() {
         let builder = EngineBuilder::new()
@@ -780,6 +1042,7 @@ mod tests {
             on_enter: dummy_scene_enter,
             on_update: Some(dummy_scene_update),
             on_exit: None,
+            gui_callback: None,
         }
     }
 
@@ -802,30 +1065,48 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "EngineBuilder conflict: .add_scene() and .on_switch_scene()")]
     fn test_add_scene_conflicts_with_on_switch_scene() {
-        EngineBuilder::new()
+        let err = EngineBuilder::new()
             .add_scene("menu", make_descriptor())
             .initial_scene("menu")
             .on_switch_scene(dummy_switch_scene)
-            .run();
+            .try_run()
+            .expect_err("conflicting scene/switch_scene hooks should fail preflight");
+
+        assert!(err.contains("EngineBuilder conflict: .add_scene() and .on_switch_scene()"));
     }
 
     #[test]
-    #[should_panic(expected = "EngineBuilder conflict: .add_scene() and .on_enter_play()")]
     fn test_add_scene_conflicts_with_on_enter_play() {
-        EngineBuilder::new()
+        let err = EngineBuilder::new()
             .add_scene("menu", make_descriptor())
             .initial_scene("menu")
             .on_enter_play(dummy_enter_play)
-            .run();
+            .try_run()
+            .expect_err("conflicting scene/enter_play hooks should fail preflight");
+
+        assert!(err.contains("EngineBuilder conflict: .add_scene() and .on_enter_play()"));
     }
 
     #[test]
-    #[should_panic(expected = ".add_scene() requires .initial_scene")]
     fn test_add_scene_requires_initial_scene() {
-        EngineBuilder::new()
+        let err = EngineBuilder::new()
             .add_scene("menu", make_descriptor())
-            .run();
+            .try_run()
+            .expect_err("missing initial_scene should fail preflight");
+
+        assert!(err.contains(".add_scene() requires .initial_scene"));
+    }
+
+    #[test]
+    fn test_validate_required_systems_reports_missing_entries() {
+        let systems_store = SystemsStore::new();
+        let err = EngineBuilder::validate_required_systems(&systems_store, true)
+            .expect_err("missing required systems should fail validation");
+
+        assert!(err.contains("setup"));
+        assert!(err.contains("enter_play"));
+        assert!(err.contains("quit_game"));
+        assert!(err.contains("switch_scene"));
     }
 }

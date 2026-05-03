@@ -29,6 +29,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
+use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
@@ -41,7 +42,12 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
+use crate::resources::camerafollowconfig::CameraFollowConfig;
+use crate::resources::gameconfig::GameConfig;
+use crate::resources::input_bindings::InputBindings;
+use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::texturestore::TextureStore;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
@@ -69,6 +75,8 @@ pub struct GameCtx<'w, 's> {
     pub animations: Query<'w, 's, &'static mut Animation>,
     /// Mutable access to per-entity shaders.
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
+    /// Mutable access to camera target markers (priority and zoom).
+    pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
     // Read-only queries
     /// Read-only access to entity groups.
     pub groups: Query<'w, 's, &'static Group>,
@@ -89,10 +97,20 @@ pub struct GameCtx<'w, 's> {
     // Resources
     /// Mutable access to global world signals.
     pub world_signals: ResMut<'w, WorldSignals>,
+    /// Mutable access to the typed app-state store (see [`AppState`]).
+    pub app_state: ResMut<'w, AppState>,
     /// Writer for audio commands (play sounds/music).
     pub audio: MessageWriter<'w, AudioCmd>,
     /// Read-only access to world time (delta, elapsed, time_scale).
     pub world_time: Res<'w, WorldTime>,
     /// Read-only access to loaded textures.
     pub texture_store: Res<'w, TextureStore>,
+    /// Read-only access to game configuration (render size, window, FPS, etc.).
+    pub config: Res<'w, GameConfig>,
+    /// Mutable access to the post-process shader chain and uniforms.
+    pub post_process: ResMut<'w, PostProcessShader>,
+    /// Mutable access to camera follow configuration (enabled, mode, zoom speed, bounds).
+    pub camera_follow: ResMut<'w, CameraFollowConfig>,
+    /// Mutable access to input bindings (key/mouse → action mapping). Use to rebind actions per scene.
+    pub input_bindings: ResMut<'w, InputBindings>,
 }

@@ -6,9 +6,14 @@
 use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::menu::MenuSelectionEvent;
+use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
+use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
+use aberredengine::resources::input_bindings::InputBindings;
+use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
@@ -23,12 +28,17 @@ use bevy_ecs::prelude::*;
 fn setup_world() -> World {
     let mut world = World::new();
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
     world.insert_resource(WorldTime::default());
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(TextureStore::default());
+    world.insert_resource(GameConfig::default());
+    world.init_resource::<PostProcessShader>();
+    world.insert_resource(CameraFollowConfig::default());
+    world.insert_resource(InputBindings::default());
     #[cfg(feature = "lua")]
     world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world

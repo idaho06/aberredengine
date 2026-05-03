@@ -90,10 +90,7 @@ mod tests {
         let rule = make_rule("ball", "brick", "on_collision");
         let ent_a = Entity::from_bits(1);
         let ent_b = Entity::from_bits(2);
-        assert_eq!(
-            rule.match_and_order(ent_a, ent_b, "player", "enemy"),
-            None
-        );
+        assert_eq!(rule.match_and_order(ent_a, ent_b, "player", "enemy"), None);
     }
 
     #[test]
@@ -101,10 +98,7 @@ mod tests {
         let rule = make_rule("ball", "brick", "on_collision");
         let ent_a = Entity::from_bits(1);
         let ent_b = Entity::from_bits(2);
-        assert_eq!(
-            rule.match_and_order(ent_a, ent_b, "ball", "enemy"),
-            None
-        );
+        assert_eq!(rule.match_and_order(ent_a, ent_b, "ball", "enemy"), None);
     }
 
     #[test]

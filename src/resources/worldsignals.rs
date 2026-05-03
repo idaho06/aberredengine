@@ -111,10 +111,10 @@ impl WorldSignals {
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
         self.scalars.get(key).copied()
     }
-    // Read-only view of all scalar signals.
-    // pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
-    //     &self.scalars
-    // }
+    /// Read-only view of all scalar signals.
+    pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
+        &self.scalars
+    }
 
     /// Set an integer signal value.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
@@ -124,6 +124,10 @@ impl WorldSignals {
     /// Get an integer signal by key.
     pub fn get_integer(&self, key: &str) -> Option<i32> {
         self.integers.get(key).copied()
+    }
+    /// Read-only view of all integer signals.
+    pub fn get_integers(&self) -> &FxHashMap<String, i32> {
+        &self.integers
     }
     /// Get a group count by the name of the group.
     ///
@@ -204,10 +208,6 @@ impl WorldSignals {
         }
         result
     }
-    /// Read-only view of all integer signals.
-    // pub fn get_integers(&self) -> &FxHashMap<String, i32> {
-    //     &self.integers
-    // }
     /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
@@ -223,10 +223,34 @@ impl WorldSignals {
     pub fn has_flag(&self, key: &str) -> bool {
         self.flags.contains(key)
     }
+    /// Remove a flag and return whether it was present.
+    ///
+    /// Equivalent to `has_flag` + `clear_flag` in a single hash-set lookup.
+    pub fn take_flag(&mut self, key: &str) -> bool {
+        if self.flags.remove(key) {
+            self.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
+    /// Toggle a flag: remove it if present, add it if absent.
+    ///
+    /// Always marks the snapshot dirty since the state always changes.
+    pub fn toggle_flag(&mut self, key: &str) {
+        if !self.flags.remove(key) {
+            self.flags.insert(key.to_string());
+        }
+        self.mark_dirty();
+    }
     /// Read-only view of all flags.
-    // pub fn get_flags(&self) -> &FxHashSet<String> {
-    //     &self.flags
-    // }
+    pub fn get_flags(&self) -> &FxHashSet<String> {
+        &self.flags
+    }
+    /// Read-only view of all string signals.
+    pub fn get_strings(&self) -> &FxHashMap<String, String> {
+        &self.strings
+    }
     /// Get an entity by key.
     pub fn get_entity(&self, key: &str) -> Option<&Entity> {
         self.entities.get(key)
@@ -363,6 +387,13 @@ mod tests {
     }
 
     #[test]
+    fn test_get_scalars_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("speed", 42.0);
+        assert_eq!(ws.get_scalars().len(), 1);
+    }
+
+    #[test]
     fn test_scalar_missing_returns_none() {
         let ws = WorldSignals::default();
         assert_eq!(ws.get_scalar("nope"), None);
@@ -393,6 +424,13 @@ mod tests {
     }
 
     #[test]
+    fn test_get_integers_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("score", 100);
+        assert_eq!(ws.get_integers().len(), 1);
+    }
+
+    #[test]
     fn test_integer_missing_returns_none() {
         let ws = WorldSignals::default();
         assert_eq!(ws.get_integer("nope"), None);
@@ -414,6 +452,13 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_string("scene", "menu");
         assert_eq!(ws.get_string("scene").map(|s| s.as_str()), Some("menu"));
+    }
+
+    #[test]
+    fn test_get_strings_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_string("scene", "menu");
+        assert_eq!(ws.get_strings().len(), 1);
     }
 
     #[test]
@@ -447,6 +492,13 @@ mod tests {
     }
 
     #[test]
+    fn test_get_flags_view() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("paused");
+        assert_eq!(ws.get_flags().len(), 1);
+    }
+
+    #[test]
     fn test_clear_flag() {
         let mut ws = WorldSignals::default();
         ws.set_flag("paused");
@@ -459,6 +511,66 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.clear_flag("nope"); // should not panic
         assert!(!ws.has_flag("nope"));
+    }
+
+    #[test]
+    fn test_take_flag_present() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("fire");
+        assert!(ws.take_flag("fire"));
+        assert!(!ws.has_flag("fire"));
+    }
+
+    #[test]
+    fn test_take_flag_absent() {
+        let mut ws = WorldSignals::default();
+        assert!(!ws.take_flag("nope"));
+    }
+
+    #[test]
+    fn test_take_flag_marks_dirty_only_when_present() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("fire");
+        ws.snapshot(); // clear dirty
+        ws.take_flag("nope"); // absent — should not dirty
+        assert!(!ws.dirty);
+        ws.take_flag("fire"); // present — should dirty
+        assert!(ws.dirty);
+    }
+
+    #[test]
+    fn test_toggle_flag_absent_sets_it() {
+        let mut ws = WorldSignals::default();
+        ws.toggle_flag("x");
+        assert!(ws.has_flag("x"));
+    }
+
+    #[test]
+    fn test_toggle_flag_present_clears_it() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("x");
+        ws.toggle_flag("x");
+        assert!(!ws.has_flag("x"));
+    }
+
+    #[test]
+    fn test_toggle_flag_twice_restores() {
+        let mut ws = WorldSignals::default();
+        ws.toggle_flag("x");
+        ws.toggle_flag("x");
+        assert!(!ws.has_flag("x"));
+    }
+
+    #[test]
+    fn test_toggle_flag_marks_dirty() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("x");
+        ws.snapshot(); // clear dirty
+        ws.toggle_flag("x"); // present → remove
+        assert!(ws.dirty);
+        ws.snapshot(); // clear dirty
+        ws.toggle_flag("x"); // absent → insert
+        assert!(ws.dirty);
     }
 
     // --- Entities ---
@@ -499,8 +611,15 @@ mod tests {
         let persistent = FxHashSet::from_iter([entity_b]);
         ws.clear_non_persistent_entities(&persistent);
 
-        assert!(ws.get_entity("player").is_none(), "non-persistent registration should be removed");
-        assert_eq!(ws.get_entity("cursor"), Some(&entity_b), "persistent registration should be kept");
+        assert!(
+            ws.get_entity("player").is_none(),
+            "non-persistent registration should be removed"
+        );
+        assert_eq!(
+            ws.get_entity("cursor"),
+            Some(&entity_b),
+            "persistent registration should be kept"
+        );
     }
 
     #[test]
@@ -663,4 +782,5 @@ mod tests {
         let snap = ws.snapshot();
         assert_eq!(snap.entities.get("player"), Some(&entity.to_bits()));
     }
+
 }

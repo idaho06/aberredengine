@@ -15,7 +15,9 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
+use crate::components::tilemap::TileMap;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
+use crate::components::luasetup::LuaSetup;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
@@ -73,6 +75,9 @@ pub(super) fn apply_components(
     if let Some(seconds) = cmd.ttl {
         entity_commands.insert(Ttl::new(seconds));
     }
+    if let Some(path) = cmd.tilemap_path {
+        entity_commands.insert(TileMap::new(path));
+    }
 
     apply_transform_components(
         entity_commands,
@@ -84,6 +89,7 @@ pub(super) fn apply_components(
             parent: cmd.parent,
             stuckto: cmd.stuckto,
             camera_target: cmd.camera_target,
+            camera_target_zoom: cmd.camera_target_zoom,
         },
     );
     apply_physics_components(entity_commands, cmd.rigidbody, cmd.collider);
@@ -113,9 +119,12 @@ pub(super) fn apply_components(
     );
     apply_behavior_components(
         entity_commands,
-        cmd.phase_data,
-        cmd.lua_timer,
-        cmd.lua_collision_rule,
+        BehaviorComponents {
+            phase_data: cmd.phase_data,
+            lua_timer: cmd.lua_timer,
+            lua_collision_rule: cmd.lua_collision_rule,
+            lua_setup: cmd.lua_setup,
+        },
     );
     apply_ui_components(
         entity_commands,
@@ -141,6 +150,7 @@ struct TransformComponents {
     parent: Option<u64>,
     stuckto: Option<StuckToData>,
     camera_target: Option<u8>,
+    camera_target_zoom: Option<f32>,
 }
 
 fn apply_transform_components(
@@ -183,7 +193,8 @@ fn apply_transform_components(
         entity_commands.insert(stuckto);
     }
     if let Some(priority) = transform.camera_target {
-        entity_commands.insert(CameraTarget { priority });
+        let zoom = transform.camera_target_zoom.unwrap_or(1.0);
+        entity_commands.insert(CameraTarget::new(priority).with_zoom(zoom));
     }
 }
 
@@ -289,8 +300,14 @@ fn apply_animation_components(
     }
     if let Some(td) = tween_position {
         entity_commands.insert(super::build_tween(
-            MapPosition::from_vec(Vector2 { x: td.from_x, y: td.from_y }),
-            MapPosition::from_vec(Vector2 { x: td.to_x, y: td.to_y }),
+            MapPosition::from_vec(Vector2 {
+                x: td.from_x,
+                y: td.from_y,
+            }),
+            MapPosition::from_vec(Vector2 {
+                x: td.to_x,
+                y: td.to_y,
+            }),
             &td.config,
         ));
     }
@@ -349,12 +366,20 @@ fn apply_signal_components(
     }
 }
 
-fn apply_behavior_components(
-    entity_commands: &mut EntityCommands,
+struct BehaviorComponents {
     phase_data: Option<PhaseData>,
     lua_timer: Option<(f32, String)>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
-) {
+    lua_setup: Option<String>,
+}
+
+fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
+    let BehaviorComponents {
+        phase_data,
+        lua_timer,
+        lua_collision_rule,
+        lua_setup,
+    } = b;
     if let Some(phase_data) = phase_data {
         let phases = phase_data
             .phases
@@ -385,6 +410,9 @@ fn apply_behavior_components(
                 name: rule_data.callback,
             },
         ));
+    }
+    if let Some(callback) = lua_setup {
+        entity_commands.insert(LuaSetup::new(callback));
     }
 }
 

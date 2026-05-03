@@ -67,6 +67,10 @@ pub struct CameraFollowConfig {
     pub spring_stiffness: f32,
     /// Damping factor for [`FollowMode::SmoothDamp`]. Higher = less bounce.
     pub spring_damping: f32,
+    /// Speed of the smooth zoom interpolation toward the winning [`CameraTarget`](crate::components::cameratarget::CameraTarget)'s
+    /// zoom. Uses `EaseOut` always, independent of the position [`FollowMode`].
+    /// Higher values = faster zoom transition. Default is `5.0`.
+    pub zoom_lerp_speed: f32,
     /// Fixed offset added to the target position (in world units).
     pub offset: Vector2,
     /// Optional world-space bounding rectangle. When set, the camera position
@@ -88,6 +92,7 @@ impl Default for CameraFollowConfig {
             lerp_speed: 5.0,
             spring_stiffness: 10.0,
             spring_damping: 5.0,
+            zoom_lerp_speed: 5.0,
             offset: Vector2 { x: 0.0, y: 0.0 },
             bounds: None,
             velocity: Vector2 { x: 0.0, y: 0.0 },

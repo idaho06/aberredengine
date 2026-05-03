@@ -3,7 +3,7 @@
 //! Converts the Lua-side `AnimationConditionData` representation into the
 //! engine's native `Condition` type used by `AnimationController`.
 
-use crate::components::animation::{Condition, CmpOp};
+use crate::components::animation::{CmpOp, Condition};
 use crate::resources::lua_runtime::AnimationConditionData;
 
 /// Convert a comparison-operator string from Lua into `CmpOp`. Defaults to `Eq`.

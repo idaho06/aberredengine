@@ -19,6 +19,7 @@
 //! - [`menu`] – menu spawning, input handling, and selection
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
+//! - [`lua_setup_entity`] – *(feature = "lua")* one-shot entity setup callback on `Added<LuaSetup>`
 //! - [`luaphase`] – *(feature = "lua")* process Lua phase state machine transitions and callbacks
 //! - [`phase`] – process Rust phase state machine transitions and callbacks
 //! - [`rust_collision`] – Rust-native collision observer and callback dispatch
@@ -60,9 +61,12 @@ pub mod lua_collision;
 #[cfg(feature = "lua")]
 pub mod lua_commands;
 #[cfg(feature = "lua")]
+pub mod lua_setup_entity;
+#[cfg(feature = "lua")]
 pub mod luaphase;
 #[cfg(feature = "lua")]
 pub mod luatimer;
+pub mod mapspawn;
 pub mod menu;
 pub mod mousecontroller;
 pub mod movement;
@@ -75,6 +79,7 @@ pub mod rust_collision;
 pub mod scene_dispatch;
 pub mod signalbinding;
 pub mod stuckto;
+pub mod tilemap;
 pub mod time;
 pub mod timer;
 mod timer_core;

@@ -87,23 +87,14 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
     match state {
         GameStates::None => debug!("Entered None state"),
         GameStates::Setup => {
-            let setup_system_id = systems_store
-                .get("setup")
-                .expect("Setup system not found in SystemsStore");
-            commands.run_system(*setup_system_id);
+            commands.run_system(*systems_store.get("setup").expect("'setup' system not registered; validate_required_systems should have caught this"));
         }
         GameStates::Playing => {
-            let enter_play_system_id = systems_store
-                .get("enter_play")
-                .expect("EnterPlay system not found in SystemsStore");
-            commands.run_system(*enter_play_system_id);
+            commands.run_system(*systems_store.get("enter_play").expect("'enter_play' system not registered; validate_required_systems should have caught this"));
         }
         // GameStates::Paused => eprintln!("Entered Paused state"),
         GameStates::Quitting => {
-            let quit_game_system_id = systems_store
-                .get("quit_game")
-                .expect("QuitGame system not found in SystemsStore");
-            commands.run_system(*quit_game_system_id);
+            commands.run_system(*systems_store.get("quit_game").expect("'quit_game' system not registered; validate_required_systems should have caught this"));
         }
     }
 }

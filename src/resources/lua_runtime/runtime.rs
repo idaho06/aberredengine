@@ -49,7 +49,6 @@ pub(super) struct LuaAppData {
     pub(super) phase_commands: RefCell<Vec<PhaseCmd>>,
     pub(super) entity_commands: RefCell<Vec<EntityCmd>>,
     pub(super) group_commands: RefCell<Vec<GroupCmd>>,
-    pub(super) tilemap_commands: RefCell<Vec<TilemapCmd>>,
     pub(super) camera_commands: RefCell<Vec<CameraCmd>>,
     pub(super) animation_commands: RefCell<Vec<AnimationCmd>>,
     pub(super) render_commands: RefCell<Vec<RenderCmd>>,
@@ -80,6 +79,8 @@ pub(super) struct LuaAppData {
     pub(super) input_commands: RefCell<Vec<InputCmd>>,
     /// Cached input bindings snapshot (read-only for Lua: action_name → key_name)
     pub(super) bindings_snapshot: RefCell<std::collections::HashMap<String, String>>,
+    /// Map load command queue (drained by `process_lua_map_commands` system)
+    pub(super) map_commands: RefCell<Vec<MapLuaCmd>>,
 }
 
 /// Registry keys for pooled collision context tables.
@@ -300,7 +301,6 @@ impl LuaRuntime {
             phase_commands: RefCell::new(Vec::new()),
             entity_commands: RefCell::new(Vec::new()),
             group_commands: RefCell::new(Vec::new()),
-            tilemap_commands: RefCell::new(Vec::new()),
             camera_commands: RefCell::new(Vec::new()),
             animation_commands: RefCell::new(Vec::new()),
             render_commands: RefCell::new(Vec::new()),
@@ -319,6 +319,7 @@ impl LuaRuntime {
             gameconfig_snapshot: RefCell::new(GameConfigSnapshot::default()),
             input_commands: RefCell::new(Vec::new()),
             bindings_snapshot: RefCell::new(std::collections::HashMap::new()),
+            map_commands: RefCell::new(Vec::new()),
         });
 
         // Create collision context pool for table reuse
@@ -344,7 +345,6 @@ impl LuaRuntime {
         runtime.register_phase_api()?;
         runtime.register_entity_api()?;
         runtime.register_group_api()?;
-        runtime.register_tilemap_api()?;
         runtime.register_camera_api()?;
         runtime.register_camera_follow_api()?;
         runtime.register_collision_api()?;
@@ -352,6 +352,7 @@ impl LuaRuntime {
         runtime.register_render_api()?;
         runtime.register_gameconfig_api()?;
         runtime.register_input_api()?;
+        runtime.register_map_api()?;
         runtime.register_builder_meta()?;
         runtime.register_types_meta()?;
         runtime.register_enums_meta()?;

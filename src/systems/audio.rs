@@ -120,7 +120,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 AudioCmd::LoadMusic { id, path } => match audio.new_music(&path) {
                     Ok(music) => {
                         // log then insert/send
-                        info!(target: "audio", "loaded id='{}' path='{}'", id, path);
+                        debug!(target: "audio", "loaded id='{}' path='{}'", id, path);
                         musics.insert(id.clone(), music);
                         let _ = tx_evt.send(AudioMessage::MusicLoaded { id });
                     }
@@ -234,7 +234,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                             error: "failed to load".to_string(),
                         });
                     } else {
-                        info!(target: "audio", "fx loaded id='{}' path='{}'", id, path);
+                        debug!(target: "audio", "fx loaded id='{}' path='{}'", id, path);
                         sounds.insert(id.clone(), sound);
                         let _ = tx_evt.send(AudioMessage::FxLoaded { id });
                     }
@@ -258,6 +258,13 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                         active_aliases.push(alias);
                     } else {
                         error!(target: "audio", "fx play pitched failed id='{}' reason='not loaded'", id);
+                    }
+                }
+                AudioCmd::StopAllFx => {
+                    debug!(target: "audio", "fx stop all");
+                    for alias in active_aliases.drain(..) {
+                        unsafe { ffi::StopSound(alias) };
+                        unsafe { ffi::UnloadSoundAlias(alias) };
                     }
                 }
                 AudioCmd::UnloadFx { id } => {
@@ -310,7 +317,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 music.update_stream();
                 let len = music.get_time_length();
                 let played = music.get_time_played();
-                if played >= len - 0.01 && !looped.contains(id) {
+                if played >= len - 0.01 {
                     ended.push(id.clone());
                 }
             }
@@ -321,7 +328,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 if let Some(music) = musics.get(id) {
                     debug!(target: "audio", "restarting looped id='{}'", id);
                     music.stop_stream();
-                    //music.seek_stream(0.0);
+                    music.seek_stream(0.0);
                     music.play_stream();
                     let _ = tx_evt.send(AudioMessage::MusicPlayStarted { id: id.clone() });
                 }

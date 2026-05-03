@@ -92,9 +92,13 @@ fn main() {
     // Run the engine with the Lua plugin
     #[cfg(feature = "lua")]
     {
-        EngineBuilder::new()
+        if let Err(err) = EngineBuilder::new()
             .with_lua("./assets/scripts/main.lua")
-            .run();
+            .try_run()
+        {
+            error!("Error starting engine: {err}");
+            std::process::exit(1);
+        }
     }
 
     // Pure-Rust path — replace with your own scene setup.
@@ -109,6 +113,9 @@ fn main() {
     //       .run();
     #[cfg(not(feature = "lua"))]
     {
-        EngineBuilder::new().run();
+        if let Err(err) = EngineBuilder::new().try_run() {
+            eprintln!("Error starting engine: {err}");
+            std::process::exit(1);
+        }
     }
 }

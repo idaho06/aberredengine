@@ -21,7 +21,7 @@
 
 use bevy_ecs::prelude::*;
 use configparser::ini::Ini;
-use log::info;
+use log::{debug, info};
 use raylib::prelude::Color;
 use std::path::PathBuf;
 
@@ -194,7 +194,7 @@ impl GameConfig {
             .write(&self.config_path)
             .map_err(|e| format!("Failed to save config file: {}", e))?;
 
-        info!("Saved config to {:?}", self.config_path);
+        debug!("Saved config to {:?}", self.config_path);
 
         Ok(())
     }

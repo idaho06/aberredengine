@@ -504,7 +504,8 @@ mod tests {
     fn test_tween_system_applies_backwards_start_state() {
         let (target, tween) = run_tween_once(
             Rotation { degrees: 10.0 },
-            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0).with_backwards(),
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
+                .with_backwards(),
             0.0,
         );
 

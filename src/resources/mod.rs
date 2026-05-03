@@ -7,6 +7,7 @@
 //!
 //! Overview
 //! - [`animationstore`] – definitions for sprite animations reused across entities
+//! - [`appstate`] – typed state store passed to `GuiCallback`; one slot per Rust type
 //! - [`audio`] – bridge and channels for the background audio thread
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
@@ -22,12 +23,13 @@
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturestore`] – loaded textures keyed by string IDs
-//! - [`tilemapstore`] – loaded tile maps and layers
 //! - [`windowsize`] – actual window dimensions for letterbox calculations
 //! - [`worldsignals`] – global signal storage for cross-system communication
 //! - [`worldtime`] – simulation time and delta
 
 pub mod animationstore;
+pub mod appstate;
+pub mod mapdata;
 pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
@@ -49,7 +51,6 @@ pub mod screensize;
 pub mod shaderstore;
 pub mod systemsstore;
 pub mod texturestore;
-pub mod tilemapstore;
 pub mod uniformvalue;
 pub mod windowsize;
 pub mod worldsignals;

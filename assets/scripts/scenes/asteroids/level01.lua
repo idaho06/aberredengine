@@ -42,7 +42,7 @@ local function spawn_big_asteroids()
             })
             :build()
     end
-    engine.log_info("Asteroids spawned!")
+    engine.log_debug("Asteroids spawned!")
 end
 
 local function spawn_medium_asteroids(x, y)
@@ -128,20 +128,20 @@ end
 -- }
 
 local function on_asteroid_ship_collision(ctx)
-    engine.log_info("Collision: Ship (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
+    engine.log_debug("Collision: Ship (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
     -- For now, just log the collision. In a real game, we might reduce ship health, destroy asteroid, etc.
 end
 
 local function on_asteroid_laser_collision(ctx)
-    engine.log_info("Collision: Laser (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
+    engine.log_debug("Collision: Laser (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
     -- entities are ordered by group name, so ctx.a is always asteroid, ctx.b is always laser
     -- Reduce asteroid HP
     local hp = ctx.a.signals.integers.hp or 0
     hp = hp - 1
     engine.entity_signal_set_integer(ctx.a.id, "hp", hp)
-    engine.log_info("Asteroid HP reduced to " .. tostring(hp))
+    engine.log_debug("Asteroid HP reduced to " .. tostring(hp))
     if hp <= 0 then
-        engine.log_info("Asteroid destroyed!")
+        engine.log_debug("Asteroid destroyed!")
         -- Change asteroid phase to exploding
         engine.phase_transition(ctx.a.id, "exploding")
     end
@@ -173,7 +173,7 @@ end
 -- =================== ASTEROID PHASE CALLBACKS AND HELPERS ====================
 
 local function asteroid_phase_drifting_enter(ctx, input)
-    engine.log_info("Asteroid drifting enter: ID " .. tostring(ctx.id))
+    engine.log_debug("Asteroid drifting enter: ID " .. tostring(ctx.id))
     -- Set random rotation speed
     local rotation_speed = math.random(-30.0, 30.0) -- degrees per second
     engine.entity_signal_set_scalar(ctx.id, "rotation_speed", rotation_speed)
@@ -187,7 +187,7 @@ local function asteroid_phase_drifting_update(ctx, input, dt)
 end
 
 local function asteroid_phase_exploding_enter(ctx, input)
-    engine.log_info("Asteroid exploding enter: ID " .. tostring(ctx.id))
+    engine.log_debug("Asteroid exploding enter: ID " .. tostring(ctx.id))
     -- Get type of asteroid by signal "asteroid_type" (big = 3, medium = 2, small = 1)
     local asteroid_type = ctx.signals.integers.asteroid_type or 3
     if asteroid_type == 3 then
@@ -281,7 +281,7 @@ end
 --- @param ctx EntityContext Entity context table
 --- @param input InputSnapshot Input state table
 local function ship_phase_idle_enter(ctx, input)
-    engine.log_info("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
+    engine.log_debug("Ship entered idle phase. Previous phase: " .. tostring(ctx.previous_phase))
     engine.entity_set_animation(ctx.id, "asteroids-ship_idle")
     engine.entity_set_force_enabled(ctx.id, "propulsion", false)
 end
@@ -304,7 +304,7 @@ end
 --- @param ctx EntityContext Entity context table
 --- @param input InputSnapshot Input state table
 local function ship_phase_propulsion_enter(ctx, input)
-    engine.log_info("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
+    engine.log_debug("Ship entered propulsion phase. Previous phase: " .. tostring(ctx.previous_phase))
     engine.entity_set_animation(ctx.id, "asteroids-ship_propulsion")
     engine.entity_set_force_enabled(ctx.id, "propulsion", true)
 end
@@ -327,7 +327,7 @@ end
 -- ==================== SCENE GAME STATE CALLBACKS ====================
 
 local function scene_init_enter(ctx, input)
-    engine.log_info("scene_init_enter: Entering init phase")
+    engine.log_debug("scene_init_enter: Entering init phase")
     return "get_started"
 end
 
@@ -335,7 +335,7 @@ end
 --- @param ctx EntityContext Entity context table
 --- @param input InputSnapshot Input state table
 local function scene_get_started_enter(ctx, input)
-    engine.log_info("Entering get_started phase")
+    engine.log_debug("Entering get_started phase")
 end
 
 --- Called each frame in "get_started" phase
@@ -464,7 +464,7 @@ local function spawn_ship()
         :register_as("ship")
         :build()
 
-    engine.log_info("Ship spawned!")
+    engine.log_debug("Ship spawned!")
 end
 
 --- Spawn the tiled space background
@@ -498,7 +498,7 @@ local function spawn_template_laser()
         :register_as("laser_template")
         :build()
 
-    engine.log_info("Laser template spawned!")
+    engine.log_debug("Laser template spawned!")
 end
 
 local function spawn_template_explosions()
@@ -568,7 +568,7 @@ local function spawn_template_explosions()
         :register_as("explosion_small_emitter")
         :build()
 
-    engine.log_info("Explosion templates spawned!")
+    engine.log_debug("Explosion templates spawned!")
 end
 
 local function spawn_collision_rules()
@@ -580,12 +580,12 @@ local function spawn_collision_rules()
         :with_lua_collision_rule("asteroids", "lasers", "on_asteroid_laser_collision")
         :with_group("collision_rules")
         :build()
-    engine.log_info("Collision rules spawned!")
+    engine.log_debug("Collision rules spawned!")
 end
 
 --- Spawn all entities for the Asteroids level.
 function M.spawn()
-    engine.log_info("Spawning Asteroids level01 scene entities...")
+    engine.log_debug("Spawning Asteroids level01 scene entities...")
 
     -- Set render resolution for Asteroids
     engine.set_render_size(640, 360)
@@ -642,7 +642,7 @@ function M.spawn()
     engine.post_process_set_float("uResDivisor", 1.5)
     engine.post_process_set_int("uMaskStyle", 1)
 
-    engine.log_info("Asteroids level01 scene entities queued!")
+    engine.log_debug("Asteroids level01 scene entities queued!")
 end
 
 return M

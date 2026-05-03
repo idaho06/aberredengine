@@ -941,10 +941,8 @@ impl LuaUserData for LuaEntityBuilder {
             // Parse shape (optional, defaults to point)
             if let Ok(shape_value) = table.get::<LuaValue>("shape") {
                 match shape_value {
-                    LuaValue::String(s) => {
-                        if s.to_string_lossy() == "point" {
-                            data.shape = ParticleEmitterShapeData::Point;
-                        }
+                    LuaValue::String(s) if s.to_string_lossy() == "point" => {
+                        data.shape = ParticleEmitterShapeData::Point;
                     }
                     LuaValue::Table(shape_table) => {
                         let kind: String = shape_table
@@ -1009,10 +1007,8 @@ impl LuaUserData for LuaEntityBuilder {
             // Parse ttl (optional)
             if let Ok(ttl_value) = table.get::<LuaValue>("ttl") {
                 match ttl_value {
-                    LuaValue::String(s) => {
-                        if s.to_string_lossy() == "none" {
-                            data.ttl = ParticleTtlData::None;
-                        }
+                    LuaValue::String(s) if s.to_string_lossy() == "none" => {
+                        data.ttl = ParticleTtlData::None;
                     }
                     LuaValue::Number(n) => {
                         data.ttl = ParticleTtlData::Fixed((n as f32).max(0.0));
@@ -1095,12 +1091,29 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
-        // :with_camera_target(priority?) - Mark entity as camera follow target
-        // priority defaults to 0; higher values take precedence
-        methods.add_method_mut("with_camera_target", |_, this, priority: Option<u8>| {
-            this.cmd.camera_target = Some(priority.unwrap_or(0));
+        // :with_tilemap(path) - Spawn tilemap root; tile entities become ChildOf children
+        methods.add_method_mut("with_tilemap", |_, this, path: String| {
+            this.cmd.tilemap_path = Some(path);
             Ok(this.clone())
         });
+
+        // :with_lua_setup(callback) - Attach a one-shot Lua setup callback
+        methods.add_method_mut("with_lua_setup", |_, this, callback: String| {
+            this.cmd.lua_setup = Some(callback);
+            Ok(this.clone())
+        });
+
+        // :with_camera_target(priority?, zoom?) - Mark entity as camera follow target.
+        // priority defaults to 0; higher values take precedence.
+        // zoom is the desired camera zoom when this target wins (default 1.0).
+        methods.add_method_mut(
+            "with_camera_target",
+            |_, this, (priority, zoom): (Option<u8>, Option<f32>)| {
+                this.cmd.camera_target = Some(priority.unwrap_or(0));
+                this.cmd.camera_target_zoom = zoom;
+                Ok(this.clone())
+            },
+        );
 
         // :build() - Queue the entity for spawning or cloning
         methods.add_method("build", |lua, this, ()| {

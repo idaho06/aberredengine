@@ -11,9 +11,16 @@ use raylib::prelude::Vector2;
 use rustc_hash::FxHashMap;
 
 /// Central registry of reusable animation definitions keyed by string IDs.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct AnimationStore {
     pub animations: FxHashMap<String, AnimationResource>,
+}
+
+impl AnimationStore {
+    /// Insert or replace an animation definition with a specific key.
+    pub fn insert(&mut self, key: impl Into<String>, animation: AnimationResource) {
+        self.animations.insert(key.into(), animation);
+    }
 }
 
 /// Immutable data describing a sprite-sheet or positional animation.
@@ -25,7 +32,7 @@ pub struct AnimationStore {
 pub struct AnimationResource {
     /// Texture key in [`crate::resources::texturestore::TextureStore`].
     pub tex_key: Arc<str>,
-    /// Base screen/world position where the animation is anchored.
+    /// Pixel origin within the texture where frame 0 starts (texture-space, not world/screen).
     pub position: Vector2,
     /// Per-frame horizontal displacement (also the frame width, as frames are packed with no gaps).
     pub horizontal_displacement: f32,

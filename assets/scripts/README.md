@@ -10,6 +10,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Input System](#input-system)
   - [Input Rebinding](#input-rebinding)
 - [Asset Loading](#asset-loading)
+- [Map Loading](#map-loading)
 - [Audio Playback](#audio-playback)
 - [Entity Spawning](#entity-spawning)
   - [Core Components](#core-components)
@@ -18,6 +19,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Menu Components](#menu-components)
   - [Animation Components](#animation-components)
   - [Phase Component](#phase-component)
+  - [LuaSetup Component](#luasetup-component)
   - [Attachment Components](#attachment-components)
   - [Parent-Child Hierarchy](#parent-child-hierarchy)
   - [Camera Target Component](#camera-target-component)
@@ -30,7 +32,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Camera Control](#camera-control)
   - [Camera Follow System](#camera-follow-system)
 - [Group Tracking](#group-tracking)
-- [Tilemap Rendering](#tilemap-rendering)
+- [Tilemaps](#tilemaps)
 - [Post-Process Shaders](#post-process-shaders)
 - [Per-Entity Shaders](#per-entity-shaders)
 - [Tint Component](#tint-component)
@@ -201,6 +203,7 @@ return M
    - Phase callbacks (names in `:with_phase()` — `on_enter`, `on_update`, `on_exit`)
    - Timer callbacks (names in `:with_lua_timer()`)
    - Menu callbacks (names in `:with_menu_callback()`)
+   - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
 
 2. **The KEY must exactly match the string passed to the engine.**
    If you register `:with_lua_collision_rule("ball", "brick", "on_ball_brick")`,
@@ -251,12 +254,13 @@ Different callbacks process different types of engine commands. Here's what comm
 
 | Callback | Processed Commands | Use Cases |
 |----------|-------------------|-----------|
-| `on_setup()` | Asset, Animation | Load textures, fonts, audio, tilemaps, shaders; register animations |
+| `on_setup()` | Asset, Animation | Load textures, fonts, audio, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Tilemap, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
 | `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
+| LuaSetup callbacks | Signal, Entity, Spawn, Clone, Audio, Camera | One-shot entity initialisation — add phases, animations, collision rules, etc. |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
@@ -268,6 +272,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
+| LuaSetup callbacks | Signal → Entity → Spawn → Clone → Audio → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Clone → Phase → Camera |
 
 **Important: Collision Callbacks Use Separate Queues**
@@ -675,14 +680,6 @@ engine.load_sound("ping", "./assets/audio/ping.wav")
 engine.load_sound("ding", "./assets/audio/ding.wav")
 ```
 
-### `engine.load_tilemap(id, path)`
-
-Load a tilemap from a directory. The loader expects the directory name to match both files inside it: `<dirname>.png` for the tileset texture and `<dirname>.txt` for the JSON tilemap data.
-
-```lua
-engine.load_tilemap("level01", "./assets/tilemaps/level01")
-```
-
 ### `engine.load_shader(id, vs_path, fs_path)`
 
 Load a shader for post-processing or per-entity effects. At least one of `vs_path` or `fs_path` must be provided (the other can be `nil` to use the default).
@@ -734,6 +731,41 @@ engine.register_animation("char_run", "char_sheet", 0, 0, 56, 56, 12, 10, true)
 
 ---
 
+## Map Loading
+
+`engine.load_map(path)` reads a `MapData` JSON file (as saved by the editor) and spawns all of
+its assets and entities in the engine. It can be called from `M.spawn()`, `on_enter_play()`, or
+any per-frame callback — anywhere that runs during the **Playing state**.
+
+**It cannot be called from `on_setup()`**, which runs in the Setup state before the map-processing
+system is active.
+
+### `engine.load_map(path)`
+
+Load a map JSON file and spawn all its assets and entities.
+
+```lua
+function M.spawn()
+    engine.load_map("./assets/maps/level01.map")
+end
+```
+
+**What it does:**
+
+1. Reads and deserialises the JSON file synchronously (file I/O happens in the same frame).
+2. Queues a `SpawnMapRequested` event, which the engine processes immediately to load textures,
+   fonts, and animations from the map's asset lists, then spawns all entities as ECS components.
+3. Entities with a `registered_as` name in the map file are accessible via `engine.get_entity(key)`
+   starting from the **next frame**.
+4. Entities with a `group` name are visible via the group-tracking system.
+
+**Error handling:** if the file cannot be read or parsed, an error is logged and nothing is spawned.
+
+**Calling from `M.spawn()`** (the typical pattern) is equivalent to calling it from inside
+`on_switch_scene()` — the entities are ready in the first `on_update_<scene>` frame.
+
+---
+
 ## Audio Playback
 
 ### `engine.play_music(id, looped)`
@@ -778,6 +810,71 @@ Stop all currently playing sound effects.
 
 ```lua
 engine.stop_all_sounds()
+```
+
+### `engine.stop_music(id)`
+
+Stop a specific music track and reset its stream position.
+
+```lua
+engine.stop_music("menu")
+```
+
+### `engine.pause_music(id)`
+
+Pause a specific music track. Use `engine.resume_music()` to continue from the same position.
+
+```lua
+engine.pause_music("menu")
+```
+
+### `engine.resume_music(id)`
+
+Resume a previously paused music track.
+
+```lua
+engine.resume_music("menu")
+```
+
+### `engine.set_music_volume(id, vol)`
+
+Set the volume of a music track. `vol` is in the `[0.0, 1.0]` range.
+
+```lua
+engine.set_music_volume("menu", 0.5)    -- Half volume
+engine.set_music_volume("boss", 1.0)    -- Full volume
+```
+
+### `engine.unload_music(id)`
+
+Unload a specific music track from memory. Call this when the track is no longer needed to free resources.
+
+```lua
+engine.unload_music("intro")
+```
+
+### `engine.unload_all_music()`
+
+Unload all music tracks from memory.
+
+```lua
+engine.unload_all_music()
+```
+
+### `engine.unload_sound(id)`
+
+Unload a specific sound effect from memory.
+
+```lua
+engine.unload_sound("explosion")
+```
+
+### `engine.unload_all_sounds()`
+
+Unload all sound effects from memory.
+
+```lua
+engine.unload_all_sounds()
 ```
 
 ---
@@ -1782,16 +1879,17 @@ As the planet rotates via its tween, the satellite orbits at 80px radius. No man
 
 ### Camera Target Component
 
-#### `:with_camera_target(priority?)`
+#### `:with_camera_target(priority?, zoom?)`
 
-Mark an entity as a candidate for the camera follow system. The camera-follow system automatically tracks the entity with the highest `priority` value. Ties are broken by entity ID.
+Mark an entity as a candidate for the camera follow system. The camera-follow system automatically tracks the entity with the highest `priority` value. Ties are broken by entity ID. When this target wins, the camera smoothly zooms to the specified `zoom` level.
 
 **Parameters:**
 
 - `priority` (integer, optional) - Selection priority. Higher values win. Defaults to `0`.
+- `zoom` (number, optional) - Desired camera zoom when this entity is the winning target. Smoothly lerped each frame via `zoom_lerp_speed`. Defaults to `1.0`.
 
 ```lua
--- Default priority (0)
+-- Default priority and zoom
 engine.spawn()
     :with_group("player")
     :with_position(100, 100)
@@ -1799,12 +1897,12 @@ engine.spawn()
     :with_camera_target()
     :build()
 
--- Explicit priority (higher priority takes precedence)
+-- Explicit priority and zoom (boss zooms camera in to 2x)
 engine.spawn()
     :with_group("boss")
     :with_position(500, 500)
     :with_sprite("boss", 128, 128, 64, 64)
-    :with_camera_target(5)
+    :with_camera_target(5, 2.0)
     :build()
 ```
 
@@ -2092,6 +2190,71 @@ Register collision callback between two groups.
 :with_lua_collision_rule("ball", "player", "on_ball_player")
 ```
 
+#### `:with_lua_setup(callback)`
+
+Attach a one-shot setup callback to an entity. The named Lua function is called **once**, the frame after the entity is spawned, with the entity context as its only argument. This is the preferred way to configure entities that come from map files without cluttering scene update callbacks.
+
+**Parameters:**
+
+- `callback` - Lua function name to call when the entity is first detected
+
+**Callback Signature:**
+
+```lua
+function callback_name(ctx)
+    -- ctx: standard EntityContext table (id, pos, group, signals, ...)
+    -- No input table — this is initialisation, not per-frame logic.
+    -- Use engine.entity_* calls to add components to the entity.
+end
+```
+
+**Example — spawn builder:**
+
+```lua
+engine.spawn()
+    :with_position(200, 300)
+    :with_group("enemy")
+    :with_sprite("enemy_idle", 32, 32, 16, 16)
+    :with_lua_setup("enemy_setup")
+    :build()
+
+local function enemy_setup(ctx)
+    engine.entity_insert_lua_phase(ctx.id, {
+        initial = "patrol",
+        phases = {
+            patrol = { on_update = "enemy_patrol_update" },
+            alert  = { on_enter = "enemy_alert_enter", on_update = "enemy_alert_update" },
+        }
+    })
+    engine.entity_insert_lua_timer(ctx.id, 3.0, "enemy_shoot")
+end
+```
+
+**Example — map file:**
+
+```json
+{
+  "entities": [
+    { "position": [200, 300], "group": "enemy", "lua_setup": "enemy_setup" }
+  ]
+}
+```
+
+**Gotchas:**
+
+- The callback fires the **frame after** spawn — all components from the same spawn call are visible in `ctx`.
+- Any entities spawned inside the callback (via `engine.spawn()`) won't be visible until the **following** frame.
+- Do **not** store references to `ctx` or its sub-tables between frames.
+- If the named function does not exist, a warning is logged and the entity is silently skipped — no panic.
+- Because `Added<LuaSetup>` is the trigger, cloned entities also receive the setup call automatically.
+- The callback must be in `M._callbacks` like any other engine-resolved function.
+
+### LuaSetup Component
+
+See [`:with_lua_setup(callback)`](#with_lua_setupcallback) above. `LuaSetup` is the underlying component; the spawn builder method and the map file `"lua_setup"` field both insert it.
+
+---
+
 #### `:with_grid_layout(path, group, zindex)`
 
 Spawn entities from JSON grid layout file.
@@ -2188,6 +2351,43 @@ if brick_count == 0 then
 end
 ```
 
+#### `engine.get_scalars()`
+
+Get all world scalar signals as a snapshot table.
+
+```lua
+local scalars = engine.get_scalars()
+local speed = scalars.ball_speed or 0.0
+```
+
+#### `engine.get_integers()`
+
+Get all world integer signals as a snapshot table.
+
+```lua
+local integers = engine.get_integers()
+local score = integers.score or 0
+```
+
+#### `engine.get_strings()`
+
+Get all world string signals as a snapshot table.
+
+```lua
+local strings = engine.get_strings()
+local scene = strings.scene or "unknown"
+```
+
+#### `engine.get_flags()`
+
+Get all world flags as a snapshot array of strings.
+
+```lua
+for _, flag in ipairs(engine.get_flags()) do
+    engine.log_info("Flag: " .. flag)
+end
+```
+
 ### Writing Signals
 
 #### `engine.set_scalar(key, value)`
@@ -2233,6 +2433,14 @@ Clear boolean flag (set to false).
 ```lua
 engine.clear_flag("switch_scene")
 engine.clear_flag("game_paused")
+```
+
+#### `engine.toggle_flag(key)`
+
+Toggle a boolean flag in world signals.
+
+```lua
+engine.toggle_flag("game_paused")
 ```
 
 #### `engine.clear_scalar(key)`
@@ -2418,6 +2626,23 @@ local boss_id = engine.get_entity("boss")
 engine.entity_set_camera_target(boss_id, 10)
 ```
 
+### `engine.entity_set_camera_target_zoom(entity_id, zoom)`
+
+Update the desired zoom on an existing `CameraTarget` component at runtime. The camera will smoothly lerp toward this zoom level while the entity remains the winning target.
+
+**Parameters:**
+
+- `entity_id` - The entity with a `CameraTarget` component
+- `zoom` (number) - Desired camera zoom. Must be positive (clamped to a small positive value internally).
+
+```lua
+-- Zoom in when the player enters a tight corridor
+engine.entity_set_camera_target_zoom(player_id, 2.0)
+
+-- Zoom back out
+engine.entity_set_camera_target_zoom(player_id, 1.0)
+```
+
 ### `engine.entity_remove_camera_target(entity_id)`
 
 Remove the `CameraTarget` component from an entity. The camera follow system will stop tracking this entity and switch to the next highest-priority target (if any).
@@ -2434,6 +2659,7 @@ engine.entity_remove_camera_target(boss_id)
 Available collision variants:
 
 - `engine.collision_entity_set_camera_target(entity_id, priority)`
+- `engine.collision_entity_set_camera_target_zoom(entity_id, zoom)`
 - `engine.collision_entity_remove_camera_target(entity_id)`
 
 ### `engine.entity_menu_despawn(entity_id)`
@@ -2492,6 +2718,14 @@ Clear flag on entity's Signals component.
 engine.entity_signal_clear_flag(player_id, "sticky")
 ```
 
+### `engine.entity_signal_toggle_flag(entity_id, flag)`
+
+Toggle a flag on entity's Signals component.
+
+```lua
+engine.entity_signal_toggle_flag(player_id, "shielded")
+```
+
 ### `engine.entity_signal_set_integer(entity_id, key, value)`
 
 Set integer signal on entity.
@@ -2499,6 +2733,14 @@ Set integer signal on entity.
 ```lua
 engine.entity_signal_set_integer(player_id, "hp", 3)
 engine.entity_signal_set_integer(enemy_id, "damage", 10)
+```
+
+### `engine.entity_signal_clear_integer(entity_id, key)`
+
+Clear an integer signal on entity.
+
+```lua
+engine.entity_signal_clear_integer(enemy_id, "damage")
 ```
 
 ### `engine.entity_signal_set_scalar(entity_id, key, value)`
@@ -2509,12 +2751,28 @@ Set floating-point signal on entity.
 engine.entity_signal_set_scalar(player_id, "speed", 150.5)
 ```
 
+### `engine.entity_signal_clear_scalar(entity_id, key)`
+
+Clear a floating-point signal on entity.
+
+```lua
+engine.entity_signal_clear_scalar(player_id, "speed")
+```
+
 ### `engine.entity_signal_set_string(entity_id, key, value)`
 
 Set string signal on entity.
 
 ```lua
 engine.entity_signal_set_string(player_id, "state", "running")
+```
+
+### `engine.entity_signal_clear_string(entity_id, key)`
+
+Clear a string signal on entity.
+
+```lua
+engine.entity_signal_clear_string(player_id, "state")
 ```
 
 ### `engine.entity_insert_lua_timer(entity_id, duration, callback)`
@@ -3060,6 +3318,14 @@ Clear global flag during collision.
 engine.collision_clear_flag("ball_hit_player")
 ```
 
+#### `engine.collision_toggle_flag(flag)`
+
+Toggle global flag during collision.
+
+```lua
+engine.collision_toggle_flag("ball_hit_player")
+```
+
 #### `engine.collision_set_scalar(key, value)`
 
 Set global scalar signal during collision.
@@ -3299,6 +3565,16 @@ function on_player_debuff_zone(ctx)
 end
 ```
 
+#### `engine.collision_entity_signal_toggle_flag(entity_id, flag)`
+
+Toggle a flag on an entity's Signals component during collision handling.
+
+```lua
+function on_player_switch_state(ctx)
+    engine.collision_entity_signal_toggle_flag(ctx.a.id, "powered_up")
+end
+```
+
 #### `engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
 
 Attach an entity to another entity during collision handling.
@@ -3454,6 +3730,16 @@ function on_player_speed_boost(ctx)
 end
 ```
 
+#### `engine.collision_entity_signal_clear_scalar(entity_id, key)`
+
+Clear a floating-point signal on an entity's Signals component during collision handling.
+
+```lua
+function on_player_speed_reset(ctx)
+    engine.collision_entity_signal_clear_scalar(ctx.a.id, "speed_multiplier")
+end
+```
+
 #### `engine.collision_entity_signal_set_string(entity_id, key, value)`
 
 Set a string signal on an entity's Signals component during collision handling.
@@ -3468,6 +3754,26 @@ Set a string signal on an entity's Signals component during collision handling.
 function on_player_color_change(ctx)
     local player_id = ctx.a.id
     engine.collision_entity_signal_set_string(player_id, "color", "red")
+end
+```
+
+#### `engine.collision_entity_signal_clear_string(entity_id, key)`
+
+Clear a string signal on an entity's Signals component during collision handling.
+
+```lua
+function on_player_color_reset(ctx)
+    engine.collision_entity_signal_clear_string(ctx.a.id, "color")
+end
+```
+
+#### `engine.collision_entity_signal_clear_integer(entity_id, key)`
+
+Clear an integer signal on an entity's Signals component during collision handling.
+
+```lua
+function on_player_reset_hits(ctx)
+    engine.collision_entity_signal_clear_integer(ctx.a.id, "combo_hits")
 end
 ```
 
@@ -4035,6 +4341,22 @@ engine.entity_set_camera_target(new_target_id, 0)
 engine.camera_follow_reset_velocity()
 ```
 
+#### `engine.camera_follow_set_zoom_speed(speed)`
+
+Set the speed at which the camera zoom interpolates toward the winning `CameraTarget`'s `zoom` value. Uses `EaseOut` easing, independent of the position follow mode.
+
+**Parameters:**
+
+- `speed` (number) - Interpolation speed. Higher values produce faster zoom transitions. Default is `5.0`.
+
+```lua
+engine.camera_follow_set_zoom_speed(2.0)   -- Slow, cinematic zoom
+engine.camera_follow_set_zoom_speed(5.0)   -- Default
+engine.camera_follow_set_zoom_speed(20.0)  -- Near-instant zoom
+```
+
+The zoom value is sourced from the winning `CameraTarget`'s `zoom` field (set via `:with_camera_target(priority, zoom)` at spawn, or updated at runtime via `engine.entity_set_camera_target_zoom(entity_id, zoom)`).
+
 #### Complete Example: Asteroids with Look-Ahead Camera
 
 ```lua
@@ -4157,17 +4479,31 @@ end
 
 ---
 
-## Tilemap Rendering
+## Tilemaps
 
-### `engine.spawn_tiles(id)`
+### `:with_tilemap(path)`
 
-Spawn tiles from a loaded tilemap.
+Spawn a tilemap by adding it to an entity with the builder. The engine automatically loads the PNG tileset and JSON layout from the given directory path (Tilesetter 2.1.0 format) and spawns all tile entities as children of the root entity. Moving, scaling, or rotating the root entity moves the entire tilemap.
+
+**Parameters:**
+
+- `path` — Path to the tilemap directory (e.g. `"./assets/tilemaps/level01"`). The directory must contain `<dirname>.png` and `<dirname>.txt`.
 
 ```lua
-engine.load_tilemap("level01", "./assets/tilemaps/level01")
--- ... later, after assets loaded ...
-engine.spawn_tiles("level01")
+-- Minimal: tiles appear at world origin
+engine.spawn()
+    :with_tilemap("./assets/tilemaps/level01")
+    :build()
+
+-- With explicit position and scale
+engine.spawn()
+    :with_tilemap("./assets/tilemaps/level01")
+    :with_position(0, 0)
+    :with_scale(2, 2)
+    :build()
 ```
+
+Tilemaps no longer require a pre-loading step — just spawn the entity with `:with_tilemap()` in your scene's `M.spawn()` function.
 
 ---
 
@@ -4847,6 +5183,16 @@ end
 7. **Load assets in `on_setup()`** - Assets must be queued before entering Playing state.
 
 8. **Scene scripts are lazy-loaded** - Only loaded when `on_switch_scene()` requires them.
+
+9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach phases, timers, and collision rules inside a setup callback instead of branching on entity group in `on_update`. The callback fires once per entity (including clones), keeping scene update logic clean.
+
+   ```lua
+   -- In the map JSON: { "group": "turret", "lua_setup": "turret_setup" }
+   local function turret_setup(ctx)
+       engine.entity_insert_lua_phase(ctx.id, { initial = "idle", phases = { ... } })
+   end
+   M._callbacks = { turret_setup = turret_setup }
+   ```
 
 ---
 

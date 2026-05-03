@@ -13,8 +13,14 @@ use std::ffi::CString;
 
 #[derive(Resource)]
 /// Map of texture keys to loaded textures.
+///
+/// The `paths` map stores the source file path (relative to the working
+/// directory) for each editor-managed texture. Engine-internal textures
+/// (loaded by mapspawn, Lua, etc.) are never added to `paths`; absence of an
+/// entry means the texture was not loaded from a user-visible file.
 pub struct TextureStore {
     pub map: FxHashMap<String, Texture2D>,
+    pub paths: FxHashMap<String, String>,
 }
 
 impl Default for TextureStore {
@@ -27,6 +33,7 @@ impl TextureStore {
     pub fn new() -> Self {
         TextureStore {
             map: FxHashMap::default(),
+            paths: FxHashMap::default(),
         }
     }
     /// Get a texture by its key.

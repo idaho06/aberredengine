@@ -13,7 +13,7 @@ use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
 use bevy_ecs::prelude::*;
-use log::{error, info};
+use log::{debug, error};
 use raylib::ffi;
 //use std::time::Duration;
 
@@ -58,7 +58,7 @@ pub fn apply_gameconfig_changes(
         if render_target.game_width != config.render_width
             || render_target.game_height != config.render_height
         {
-            info!(
+            debug!(
                 "Resizing render target: {}x{} -> {}x{}",
                 render_target.game_width,
                 render_target.game_height,
@@ -79,7 +79,7 @@ pub fn apply_gameconfig_changes(
         let is_fullscreen = fullscreen.is_some();
         if config.fullscreen != is_fullscreen {
             // Config and window state don't match - fire event to toggle
-            info!(
+            debug!(
                 "Fullscreen mismatch: config={}, window={} - triggering toggle",
                 config.fullscreen, is_fullscreen
             );
@@ -105,21 +105,25 @@ pub fn apply_gameconfig_changes(
         */
         // TODO: This currently does not handle switching to fullscreen mode. Raylib bug??
 
-        // Apply vsync setting
-        unsafe {
-            if config.vsync {
-                ffi::SetWindowState(ffi::ConfigFlags::FLAG_VSYNC_HINT as u32);
-                info!("VSync enabled");
-            } else {
-                ffi::ClearWindowState(ffi::ConfigFlags::FLAG_VSYNC_HINT as u32);
-                info!("VSync disabled");
+        // Apply vsync setting only if it differs from the current window state
+        let vsync_flag = ffi::ConfigFlags::FLAG_VSYNC_HINT as u32;
+        let vsync_active = unsafe { ffi::IsWindowState(vsync_flag) };
+        if config.vsync != vsync_active {
+            unsafe {
+                if config.vsync {
+                    ffi::SetWindowState(vsync_flag);
+                    debug!("VSync enabled");
+                } else {
+                    ffi::ClearWindowState(vsync_flag);
+                    debug!("VSync disabled");
+                }
             }
         }
 
         // Apply target FPS
         rl.set_target_fps(config.target_fps);
 
-        info!("GameConfig changes applied.");
+        debug!("GameConfig changes applied.");
     }
     // clean up change detection flag
     // config.bypass_change_detection();

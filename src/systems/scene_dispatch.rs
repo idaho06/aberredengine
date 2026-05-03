@@ -24,8 +24,9 @@
 //! - [`crate::resources::scenemanager::SceneManager`] — the registry resource
 //! - [`crate::engine_app::EngineBuilder::add_scene`] — builder method for registration
 
+use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
-use log::{error, info};
+use log::{debug, error, info};
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::Persistent;
@@ -34,6 +35,9 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::texturestore::TextureStore;
+use crate::resources::fontstore::FontStore;
+use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
@@ -51,6 +55,36 @@ pub type SceneUpdateFn = for<'w, 's> fn(&mut GameCtx<'w, 's>, f32, &InputState);
 /// Called when leaving a scene (cleanup before despawn).
 pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
+/// Called every frame to draw the scene's ImGui GUI.
+///
+/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a mutable
+/// reference to [`WorldSignals`] for reading current state and writing user
+/// actions back to game logic, read-only access to the [`TextureStore`]
+/// for displaying texture previews, read-only access to the [`FontStore`]
+/// for displaying font previews, and read-only access to [`AppState`]
+/// for typed Rust objects published by ECS observers.
+///
+/// # Contract
+/// - Called from inside the render system's ImGui frame — after the game world
+///   is drawn, at window resolution (not render-target resolution).
+/// - Called whether or not debug mode (F11) is active.
+/// - Interaction results must be communicated via `WorldSignals` (action flags,
+///   pending edit values). `AppState` is read-only from the GUI's perspective.
+/// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.
+///
+/// # Example
+/// ```rust,ignore
+/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals, _textures: &TextureStore, _fonts: &FontStore, app_state: &AppState) {
+///     if let Some(snap) = app_state.get::<MySnapshot>() {
+///         ui.text(format!("value: {}", snap.value));
+///     }
+///     if ui.button("Save") {
+///         signals.set_flag("gui:action:file:save");
+///     }
+/// }
+/// ```
+pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore, &FontStore, &AppState);
+
 // ---------------------------------------------------------------------------
 // SceneDescriptor
 // ---------------------------------------------------------------------------
@@ -63,9 +97,10 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 ///
 /// ```ignore
 /// SceneDescriptor {
-///     on_enter:  menu::setup,
-///     on_update: Some(menu::update),
-///     on_exit:   None,
+///     on_enter:     menu::setup,
+///     on_update:    Some(menu::update),
+///     on_exit:      None,
+///     gui_callback: None,
 /// }
 /// ```
 #[derive(Clone)]
@@ -76,6 +111,10 @@ pub struct SceneDescriptor {
     pub on_update: Option<SceneUpdateFn>,
     /// Called once when leaving the scene (optional).
     pub on_exit: Option<SceneExitFn>,
+    /// Called every frame to draw ImGui GUI widgets (optional). Rust-only.
+    ///
+    /// See [`GuiCallback`] for the full contract.
+    pub gui_callback: Option<GuiCallback>,
 }
 
 // ---------------------------------------------------------------------------
@@ -93,8 +132,9 @@ pub struct SceneDescriptor {
 /// 3. Clear tracked groups and group counts
 /// 4. Read `WorldSignals["scene"]` for the target scene name
 /// 5. Call `on_exit` on the previous scene (if any)
-/// 6. Update `SceneManager.active_scene`
-/// 7. Call `on_enter` on the new scene
+/// 6. Write previous scene name to `WorldSignals["previous_scene"]` (if any)
+/// 7. Update `SceneManager.active_scene`
+/// 8. Call `on_enter` on the new scene
 pub fn scene_switch_system(
     mut ctx: GameCtx,
     entities_to_clean: Query<Entity, Without<Persistent>>,
@@ -102,7 +142,9 @@ pub fn scene_switch_system(
     mut tracked_groups: ResMut<TrackedGroups>,
     mut scene_manager: ResMut<SceneManager>,
 ) {
-    info!("scene_switch_system: System called!");
+    debug!("scene_switch_system: System called!");
+
+    let prev_scene = scene_manager.active_scene.clone();
 
     ctx.audio.write(AudioCmd::StopAllMusic);
 
@@ -125,8 +167,8 @@ pub fn scene_switch_system(
         .unwrap_or_else(|| "menu".to_string());
 
     // Call on_exit for the previous scene
-    if let Some(prev_name) = scene_manager.active_scene.clone()
-        && let Some(descriptor) = scene_manager.get(&prev_name)
+    if let Some(ref prev_name) = prev_scene
+        && let Some(descriptor) = scene_manager.get(prev_name)
         && let Some(on_exit) = descriptor.on_exit
     {
         on_exit(&mut ctx);
@@ -135,6 +177,10 @@ pub fn scene_switch_system(
     // Look up and call on_enter for the new scene
     if let Some(descriptor) = scene_manager.get(&scene_name) {
         let on_enter = descriptor.on_enter;
+        if let Some(ref prev) = prev_scene {
+            ctx.world_signals
+                .set_string("previous_scene", prev.as_str());
+        }
         scene_manager.active_scene = Some(scene_name.clone());
         on_enter(&mut ctx);
         info!("scene_switch_system: Entered scene '{}'", scene_name);
@@ -180,13 +226,8 @@ pub fn scene_switch_poll(
     mut world_signals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
 ) {
-    if world_signals.has_flag("switch_scene") {
-        world_signals.clear_flag("switch_scene");
-        commands.run_system(
-            *systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found"),
-        );
+    if world_signals.take_flag("switch_scene") {
+        commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
 }
 
@@ -204,19 +245,12 @@ pub fn scene_enter_play(
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
-    let initial = scene_manager
-        .initial_scene
-        .as_ref()
-        .expect("SceneManager.initial_scene must be set")
-        .clone();
+    let initial = scene_manager.initial_scene.as_ref().cloned()
+        .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
 
     world_signals.set_string("scene", initial);
 
-    commands.run_system(
-        *systems_store
-            .get("switch_scene")
-            .expect("switch_scene system not found"),
-    );
+    commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +269,7 @@ mod tests {
             on_enter: dummy_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         };
         assert!(desc.on_update.is_none());
         assert!(desc.on_exit.is_none());
@@ -249,6 +284,7 @@ mod tests {
             on_enter: enter,
             on_update: Some(update),
             on_exit: Some(exit),
+            gui_callback: None,
         };
         assert!(desc.on_update.is_some());
         assert!(desc.on_exit.is_some());
@@ -261,12 +297,59 @@ mod tests {
             on_enter: enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         };
         let cloned = desc.clone();
         // fn pointers are Copy — both point to the same function
         assert_eq!(
             desc.on_enter as *const () as usize,
             cloned.on_enter as *const () as usize
+        );
+    }
+
+    #[test]
+    fn gui_callback_none_by_default_intent() {
+        fn enter(_ctx: &mut GameCtx) {}
+        let desc = SceneDescriptor {
+            on_enter: enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: None,
+        };
+        assert!(desc.gui_callback.is_none());
+    }
+
+    #[test]
+    fn gui_callback_some_stores_fn_pointer() {
+        fn enter(_ctx: &mut GameCtx) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore, _fonts: &FontStore, _app_state: &AppState) {}
+        let desc = SceneDescriptor {
+            on_enter: enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: Some(my_gui),
+        };
+        assert!(desc.gui_callback.is_some());
+        assert_eq!(
+            desc.gui_callback.unwrap() as *const () as usize,
+            my_gui as *const () as usize
+        );
+    }
+
+    #[test]
+    fn gui_callback_clone_preserves_fn_pointer() {
+        fn enter(_ctx: &mut GameCtx) {}
+        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore, _fonts: &FontStore, _app_state: &AppState) {}
+        let desc = SceneDescriptor {
+            on_enter: enter,
+            on_update: None,
+            on_exit: None,
+            gui_callback: Some(my_gui),
+        };
+        let cloned = desc.clone();
+        assert_eq!(
+            desc.gui_callback.unwrap() as *const () as usize,
+            cloned.gui_callback.unwrap() as *const () as usize
         );
     }
 }

@@ -177,7 +177,7 @@ engine = {}
 ---@alias BoxSide "left" | "right" | "top" | "bottom"
 
 ---Function category
----@alias Category "base" | "asset" | "spawn" | "audio" | "signal" | "phase" | "entity" | "group" | "tilemap" | "camera" | "collision" | "animation" | "render"
+---@alias Category "base" | "asset" | "spawn" | "audio" | "signal" | "phase" | "entity" | "group" | "camera" | "collision" | "animation" | "render"
 
 ---Comparison operator for animation rules
 ---@alias ComparisonOp "lt" | "le" | "gt" | "ge" | "eq" | "ne"
@@ -271,6 +271,10 @@ function engine.change_scene(scene_name) end
 ---@param message string
 function engine.log(message) end
 
+---Debug level logging
+---@param message string
+function engine.log_debug(message) end
+
 ---Error level logging
 ---@param message string
 function engine.log_error(message) end
@@ -294,6 +298,10 @@ function engine.quit() end
 ---@param size integer
 function engine.load_font(id, path, size) end
 
+---Load a map JSON file and spawn all its assets and entities
+---@param path string
+function engine.load_map(path) end
+
 ---Load music from file
 ---@param id string
 ---@param path string
@@ -309,11 +317,6 @@ function engine.load_sound(id, path) end
 ---@param path string
 function engine.load_texture(id, path) end
 
----Load a tilemap from file
----@param id string
----@param path string
-function engine.load_tilemap(id, path) end
-
 -- ==================== Entity Spawning ====================
 
 ---Clone a registered entity with optional overrides
@@ -326,6 +329,10 @@ function engine.clone(source_key) end
 function engine.spawn() end
 
 -- ==================== Audio Playback ====================
+
+---Pause a specific music track
+---@param id string
+function engine.pause_music(id) end
 
 ---Play music track
 ---@param id string
@@ -341,11 +348,38 @@ function engine.play_sound(id) end
 ---@param pitch number
 function engine.play_sound_pitched(id, pitch) end
 
+---Resume a previously paused music track
+---@param id string
+function engine.resume_music(id) end
+
+---Set the volume of a music track (0.0 to 1.0)
+---@param id string
+---@param vol number
+function engine.set_music_volume(id, vol) end
+
 ---Stop all playing music
 function engine.stop_all_music() end
 
 ---Stop all playing sounds
 function engine.stop_all_sounds() end
+
+---Stop a specific music track
+---@param id string
+function engine.stop_music(id) end
+
+---Unload all music tracks from memory
+function engine.unload_all_music() end
+
+---Unload all sound effects from memory
+function engine.unload_all_sounds() end
+
+---Unload a specific music track from memory
+---@param id string
+function engine.unload_music(id) end
+
+---Unload a specific sound effect from memory
+---@param id string
+function engine.unload_sound(id) end
 
 -- ==================== World Signals ====================
 
@@ -370,6 +404,10 @@ function engine.clear_string(key) end
 ---@return integer|nil
 function engine.get_entity(key) end
 
+---Get all world signal flags as a snapshot array
+---@return table
+function engine.get_flags() end
+
 ---Get the count of entities in a tracked group
 ---@param group string
 ---@return integer|nil
@@ -380,15 +418,27 @@ function engine.get_group_count(group) end
 ---@return integer|nil
 function engine.get_integer(key) end
 
+---Get all world signal integers as a snapshot table
+---@return table
+function engine.get_integers() end
+
 ---Get a world signal scalar value
 ---@param key string
 ---@return number|nil
 function engine.get_scalar(key) end
 
+---Get all world signal scalars as a snapshot table
+---@return table
+function engine.get_scalars() end
+
 ---Get a world signal string value
 ---@param key string
 ---@return string|nil
 function engine.get_string(key) end
+
+---Get all world signal strings as a snapshot table
+---@return table
+function engine.get_strings() end
 
 ---Check if a world signal flag is set
 ---@param key string
@@ -422,6 +472,10 @@ function engine.set_scalar(key, value) end
 ---@param key string
 ---@param value string
 function engine.set_string(key, value) end
+
+---Toggle a world signal flag
+---@param key string
+function engine.toggle_flag(key) end
 
 -- ==================== Phase Control ====================
 
@@ -559,6 +613,11 @@ function engine.collision_entity_set_animation(entity_id, animation_key) end
 ---@param priority integer
 function engine.collision_entity_set_camera_target(entity_id, priority) end
 
+---Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)
+---@param entity_id integer
+---@param zoom number
+function engine.collision_entity_set_camera_target_zoom(entity_id, zoom) end
+
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
 ---@param name string
@@ -682,6 +741,21 @@ function engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w) en
 ---@param flag string
 function engine.collision_entity_signal_clear_flag(entity_id, flag) end
 
+---Clear an integer signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.collision_entity_signal_clear_integer(entity_id, key) end
+
+---Clear a scalar signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.collision_entity_signal_clear_scalar(entity_id, key) end
+
+---Clear a string signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.collision_entity_signal_clear_string(entity_id, key) end
+
 ---Set a flag on an entity's signals
 ---@param entity_id integer
 ---@param flag string
@@ -704,6 +778,11 @@ function engine.collision_entity_signal_set_scalar(entity_id, key, value) end
 ---@param key string
 ---@param value string
 function engine.collision_entity_signal_set_string(entity_id, key, value) end
+
+---Toggle a flag on an entity's signals
+---@param entity_id integer
+---@param flag string
+function engine.collision_entity_signal_toggle_flag(entity_id, flag) end
 
 ---Unfreeze entity
 ---@param entity_id integer
@@ -840,6 +919,11 @@ function engine.entity_set_animation(entity_id, animation_key) end
 ---@param priority integer
 function engine.entity_set_camera_target(entity_id, priority) end
 
+---Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)
+---@param entity_id integer
+---@param zoom number
+function engine.entity_set_camera_target_zoom(entity_id, zoom) end
+
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
 ---@param name string
@@ -963,6 +1047,21 @@ function engine.entity_shader_set_vec4(entity_id, name, x, y, z, w) end
 ---@param flag string
 function engine.entity_signal_clear_flag(entity_id, flag) end
 
+---Clear an integer signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.entity_signal_clear_integer(entity_id, key) end
+
+---Clear a scalar signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.entity_signal_clear_scalar(entity_id, key) end
+
+---Clear a string signal on an entity
+---@param entity_id integer
+---@param key string
+function engine.entity_signal_clear_string(entity_id, key) end
+
 ---Set a flag on an entity's signals
 ---@param entity_id integer
 ---@param flag string
@@ -985,6 +1084,11 @@ function engine.entity_signal_set_scalar(entity_id, key, value) end
 ---@param key string
 ---@param value string
 function engine.entity_signal_set_string(entity_id, key, value) end
+
+---Toggle a flag on an entity's signals
+---@param entity_id integer
+---@param flag string
+function engine.entity_signal_toggle_flag(entity_id, flag) end
 
 ---Unfreeze entity
 ---@param entity_id integer
@@ -1011,12 +1115,6 @@ function engine.track_group(name) end
 ---Stop tracking a named entity group
 ---@param name string
 function engine.untrack_group(name) end
-
--- ==================== Tilemap ====================
-
----Spawn tilemap entities from a loaded tilemap
----@param id string
-function engine.spawn_tiles(id) end
 
 -- ==================== Camera ====================
 
@@ -1063,6 +1161,10 @@ function engine.camera_follow_set_speed(speed) end
 ---@param stiffness number
 ---@param damping number
 function engine.camera_follow_set_spring(stiffness, damping) end
+
+---Set zoom interpolation speed (higher = faster zoom transition toward CameraTarget zoom)
+---@param speed number
+function engine.camera_follow_set_zoom_speed(speed) end
 
 ---Set the 2D camera target, offset, rotation and zoom
 ---@param target_x number
@@ -1141,6 +1243,10 @@ function engine.collision_set_string(key, value) end
 ---Create a new entity builder (collision context)
 ---@return CollisionEntityBuilder
 function engine.collision_spawn() end
+
+---Toggle a world signal flag (collision context)
+---@param flag string
+function engine.collision_toggle_flag(flag) end
 
 -- ==================== Animation Registration ====================
 
@@ -1289,10 +1395,11 @@ function EntityBuilder:with_animation_controller(fallback_key) end
 ---@return EntityBuilder
 function EntityBuilder:with_animation_rule(condition_table, set_key) end
 
----Mark entity as camera follow target (higher priority wins)
+---Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
 ---@param priority integer|nil
+---@param zoom number|nil
 ---@return EntityBuilder
-function EntityBuilder:with_camera_target(priority) end
+function EntityBuilder:with_camera_target(priority, zoom) end
 
 ---Set box collider
 ---@param width number
@@ -1335,6 +1442,11 @@ function EntityBuilder:with_group(name) end
 ---@param callback string
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+
+---Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_setup(callback) end
 
 ---Add a Lua timer callback
 ---@param duration number
@@ -1571,6 +1683,11 @@ function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@return EntityBuilder
 function EntityBuilder:with_text(content, font, font_size, r, g, b, a) end
 
+---Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.
+---@param path string
+---@return EntityBuilder
+function EntityBuilder:with_tilemap(path) end
+
 ---Set color tint (RGBA 0-255)
 ---@param r integer
 ---@param g integer
@@ -1700,10 +1817,11 @@ function CollisionEntityBuilder:with_animation_controller(fallback_key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_animation_rule(condition_table, set_key) end
 
----Mark entity as camera follow target (higher priority wins)
+---Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
 ---@param priority integer|nil
+---@param zoom number|nil
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_camera_target(priority) end
+function CollisionEntityBuilder:with_camera_target(priority, zoom) end
 
 ---Set box collider
 ---@param width number
@@ -1746,6 +1864,11 @@ function CollisionEntityBuilder:with_group(name) end
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+
+---Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_setup(callback) end
 
 ---Add a Lua timer callback
 ---@param duration number
@@ -1981,6 +2104,11 @@ function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
 ---@param a integer
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_text(content, font, font_size, r, g, b, a) end
+
+---Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.
+---@param path string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tilemap(path) end
 
 ---Set color tint (RGBA 0-255)
 ---@param r integer

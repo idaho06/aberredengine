@@ -29,14 +29,8 @@
 //! [`CollisionRule`](crate::components::collision::CollisionRule) components define how
 //! entities interact: ball-wall bounce, ball-player reflection, ball-brick destruction.
 
-use std::sync::Arc;
-
-use crate::components::group::Group;
 use crate::components::luaphase::LuaPhase;
-use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
-use crate::components::sprite::Sprite;
-use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
@@ -52,23 +46,21 @@ use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::tilemapstore::{Tilemap, TilemapStore};
+
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use crate::systems::mapspawn::load_font_with_mipmaps;
 use crate::systems::lua_commands::{
-    EntityCmdQueries, process_animation_command, process_asset_command, process_audio_command,
-    process_camera_command, process_camera_follow_command, process_clone_command,
-    process_entity_commands, process_gameconfig_command, process_group_command,
-    process_input_command, process_phase_command, process_render_command, process_signal_command,
-    process_spawn_command, process_tilemap_command,
+    DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_animation_command,
+    process_asset_command, process_camera_follow_command, process_gameconfig_command,
+    process_group_command, process_input_command, process_phase_command, process_render_command,
+    process_signal_command,
 };
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use log::{error, info};
-use raylib::ffi;
-use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
+use log::{debug, error, info};
 use raylib::prelude::*;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
 #[derive(SystemParam)]
@@ -95,97 +87,7 @@ pub struct EntityProcessing<'w, 's> {
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
 }
 
-/// Load a font with mipmaps and anisotropic filtering
-fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
-    let mut font = rl
-        .load_font_ex(th, path, size, None)
-        .unwrap_or_else(|_| panic!("Failed to load font '{}'", path));
-    unsafe {
-        ffi::GenTextureMipmaps(&mut font.texture);
-        ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
-    }
-    font
-}
 
-/// Helper function to load a png and a json describing a tilemap. The json comes from Tilesetter 2.1.0
-fn load_tilemap(rl: &mut RaylibHandle, thread: &RaylibThread, path: &str) -> (Texture2D, Tilemap) {
-    let dirname = path.split('/').next_back().expect("Not a valid dir path.");
-    let json_path = format!("{}/{}.txt", path, dirname);
-    let png_path = format!("{}/{}.png", path, dirname);
-
-    let texture = rl
-        .load_texture(thread, &png_path)
-        .expect("Failed to load tilemap texture");
-    let json_string = std::fs::read_to_string(json_path).expect("Failed to load tilemap JSON");
-    let tilemap: Tilemap =
-        serde_json::from_str(&json_string).expect("Failed to parse tilemap JSON");
-    (texture, tilemap)
-}
-
-/// Spawn tiles from a Tilemap resource into the ECS world.
-fn spawn_tiles(
-    commands: &mut Commands,
-    tilemap_tex_key: impl Into<String>,
-    tex_width: i32, // We assume square tiles, so only width is needed
-    tilemap: &Tilemap,
-) {
-    let tilemap_tex_key: Arc<str> = Arc::from(tilemap_tex_key.into());
-
-    // texture size in pixels
-    let tex_w = tex_width as f32;
-
-    let tile_size = tilemap.tile_size as f32;
-
-    // how many tiles per row in the texture
-    let tiles_per_row = ((tex_w / tile_size).floor() as u32).max(1);
-
-    let layer_count = tilemap.layers.len() as f32;
-    // iterate layers and spawn tiles; ZIndex: if N layers, first is -N, last is -1
-    for (layer_index, layer) in tilemap.layers.iter().enumerate() {
-        let z = -(layer_count - (layer_index as f32));
-
-        for pos in layer.positions.iter() {
-            // world position = tile coords * tile_size
-            let wx = pos.x as f32 * tile_size;
-            let wy = pos.y as f32 * tile_size;
-
-            // compute sprite offset in the tileset texture based on id (left-to-right, top-to-bottom)
-            // id is assumed zero-based index
-            let id = pos.id;
-            let col = id % tiles_per_row;
-            let row = id / tiles_per_row;
-
-            let offset_x = col as f32 * tile_size;
-            let offset_y = row as f32 * tile_size;
-
-            // Sprite origin is the center of the sprite (in pixels)
-            let origin = Vector2 {
-                //x: tile_size * 0.5,
-                //y: tile_size * 0.5,
-                x: 0.0,
-                y: 0.0,
-            };
-
-            commands.spawn((
-                Group::new("tiles"),
-                MapPosition::new(wx, wy),
-                ZIndex(z),
-                Sprite {
-                    tex_key: tilemap_tex_key.clone(),
-                    width: tile_size,
-                    height: tile_size,
-                    offset: Vector2 {
-                        x: offset_x,
-                        y: offset_y,
-                    },
-                    origin,
-                    flip_h: false,
-                    flip_v: false,
-                },
-            ));
-        }
-    }
-}
 
 // This function is meant to load all resources
 pub fn setup(
@@ -227,7 +129,6 @@ pub fn setup(
 
     // Initialize stores
     let mut tex_store = TextureStore::new();
-    let mut tilemaps_store = TilemapStore::new();
 
     // Process asset commands queued by Lua
     for cmd in lua_runtime.drain_asset_commands() {
@@ -236,24 +137,19 @@ pub fn setup(
             th,
             cmd,
             &mut tex_store,
-            &mut tilemaps_store,
             &mut fonts,
             &mut shaders,
             &mut scripting.audio_cmd_writer,
             load_font_with_mipmaps,
-            load_tilemap,
         );
     }
 
     commands.insert_resource(tex_store);
-    commands.insert_resource(tilemaps_store);
 
     // Process animation registration commands from Lua
-    let mut anim_store = AnimationStore {
-        animations: FxHashMap::default(),
-    };
+    let mut anim_store = AnimationStore::default();
     for cmd in lua_runtime.drain_animation_commands() {
-        process_animation_command(&mut anim_store.animations, cmd);
+        process_animation_command(&mut anim_store, cmd);
     }
     commands.insert_resource(anim_store);
 
@@ -276,7 +172,7 @@ pub fn enter_play(
     if lua_runtime.has_function("on_enter_play") {
         match lua_runtime.call_function::<_, String>("on_enter_play", ()) {
             Ok(result) => {
-                info!("Lua on_enter_play returned: {}", result);
+                debug!("Lua on_enter_play returned: {}", result);
             }
             Err(e) => {
                 error!("Error calling on_enter_play: {}", e);
@@ -300,11 +196,7 @@ pub fn enter_play(
     // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
 
     // Finally, run the switch_scene system to spawn initial scene entities
-    commands.run_system(
-        *systems_store
-            .get("switch_scene")
-            .expect("switch_scene system not found"),
-    );
+    commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
 }
 
 /// Drains and processes the 11 command queues that are common to both [`update`] and
@@ -320,31 +212,21 @@ fn drain_common_commands(
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     bindings: &mut InputBindings,
 ) {
-    for cmd in lua_runtime.drain_signal_commands() {
-        process_signal_command(&mut scene_state.world_signals, cmd);
-    }
-    process_entity_commands(
-        commands,
-        lua_runtime.drain_entity_commands(),
-        &mut entities.cmd_queries,
-        &scene_state.systems_store,
-        &scene_state.anim_store,
-    );
-    for cmd in lua_runtime.drain_spawn_commands() {
-        process_spawn_command(commands, cmd, &mut scene_state.world_signals);
-    }
-    for cmd in lua_runtime.drain_clone_commands() {
-        process_clone_command(commands, cmd, &mut scene_state.world_signals);
-    }
     for cmd in lua_runtime.drain_phase_commands() {
         process_phase_command(&mut entities.luaphase, cmd);
     }
-    for cmd in lua_runtime.drain_audio_commands() {
-        process_audio_command(audio_cmd_writer, cmd);
-    }
-    for cmd in lua_runtime.drain_camera_commands() {
-        process_camera_command(commands, cmd);
-    }
+
+    drain_and_process_effect_commands(
+        lua_runtime,
+        DrainScope::Regular,
+        commands,
+        &mut scene_state.world_signals,
+        &mut entities.cmd_queries,
+        audio_cmd_writer,
+        &scene_state.systems_store,
+        &scene_state.anim_store,
+    );
+
     for cmd in lua_runtime.drain_render_commands() {
         process_render_command(cmd, &mut scene_state.post_process);
     }
@@ -427,21 +309,15 @@ pub fn update(
     );
 
     // Check for quit flag (set by Lua)
-    if scene_state.world_signals.has_flag("quit_game") {
-        scene_state.world_signals.clear_flag("quit_game");
+    if scene_state.world_signals.take_flag("quit_game") {
         next_game_state.set(GameStates::Quitting);
         return;
     }
 
     // Check for scene switch flag (set by Lua)
-    if scene_state.world_signals.has_flag("switch_scene") {
-        info!("Scene switch requested in world signals.");
-        scene_state.world_signals.clear_flag("switch_scene");
-        let switch_scene_system = *scene_state
-            .systems_store
-            .get("switch_scene")
-            .expect("switch_scene system not found");
-        commands.run_system(switch_scene_system);
+    if scene_state.world_signals.take_flag("switch_scene") {
+        debug!("Scene switch requested in world signals.");
+        commands.run_system(*scene_state.systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
 }
 
@@ -453,8 +329,6 @@ pub fn switch_scene(
     mut commands: Commands,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
-    tilemaps_store: Res<TilemapStore>,
-    tex_store: Res<TextureStore>,
     entities_to_clean: Query<Entity, Without<Persistent>>,
     persistent_entities: Query<Entity, With<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
@@ -462,7 +336,7 @@ pub fn switch_scene(
     mut bindings: ResMut<InputBindings>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
-    info!("switch_scene: System called!");
+    debug!("switch_scene: System called!");
 
     // Clear all command queues FIRST to discard any stale commands from the previous scene
     // that might reference entities about to be despawned. This prevents panics when
@@ -479,8 +353,6 @@ pub fn switch_scene(
     scene_state
         .world_signals
         .clear_non_persistent_entities(&persistent_set);
-
-    // NOTE: tilemaps_store is NOT cleared - tilemaps are assets loaded during setup
 
     tracked_groups.clear();
     scene_state.world_signals.clear_group_counts();
@@ -507,14 +379,10 @@ pub fn switch_scene(
         &mut bindings,
     );
 
-    // Group tracking and tilemap spawning are scene-switch-only operations.
     for cmd in lua_runtime.drain_group_commands() {
         process_group_command(&mut tracked_groups, cmd);
     }
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
-    for cmd in lua_runtime.drain_tilemap_commands() {
-        process_tilemap_command(&mut commands, cmd, &tex_store, &tilemaps_store, spawn_tiles);
-    }
 
     // Refresh the config cache after the drain may have applied GameConfigCmds.
     lua_runtime.update_gameconfig_cache(&scene_state.config);

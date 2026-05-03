@@ -40,7 +40,7 @@ pub fn camera_follow_system(
     }
 
     // --- 1. Find highest-priority target ---
-    let Some((_entity, _target, pos, maybe_gt)) = targets.iter().max_by(|a, b| {
+    let Some((_entity, ct, pos, maybe_gt)) = targets.iter().max_by(|a, b| {
         a.1.priority.cmp(&b.1.priority).then_with(|| b.0.cmp(&a.0)) // lower Entity id wins ties
     }) else {
         return;
@@ -117,12 +117,8 @@ pub fn camera_follow_system(
         let half_vh = (screensize.h as f32 / 2.0) / zoom;
 
         Vector2 {
-            x: new_target
-                .x
-                .clamp(bounds.x + half_vw, bounds.x + bounds.width - half_vw),
-            y: new_target
-                .y
-                .clamp(bounds.y + half_vh, bounds.y + bounds.height - half_vh),
+            x: clamp_axis_to_bounds(new_target.x, bounds.x, bounds.width, half_vw),
+            y: clamp_axis_to_bounds(new_target.y, bounds.y, bounds.height, half_vh),
         }
     } else {
         new_target
@@ -130,6 +126,12 @@ pub fn camera_follow_system(
 
     // --- 5. Commit ---
     camera.0.target = clamped;
+
+    // --- 6. Apply zoom ---
+    if (camera.0.zoom - ct.zoom).abs() > 1e-5 {
+        let zoom_alpha = lerp_alpha(EasingCurve::EaseOut, config.zoom_lerp_speed, dt);
+        camera.0.zoom = lerp_f32(camera.0.zoom, ct.zoom, zoom_alpha).max(f32::EPSILON);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +159,19 @@ fn lerp_alpha(easing: EasingCurve, speed: f32, dt: f32) -> f32 {
             t * t * (3.0 - 2.0 * t)
         }
     }
+}
+
+/// Scalar linear interpolation.
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Clamp a camera axis to bounds without ever inverting the clamp range.
+fn clamp_axis_to_bounds(target: f32, origin: f32, size: f32, half_viewport: f32) -> f32 {
+    let midpoint = origin + size * 0.5;
+    let min = (origin + half_viewport).min(midpoint);
+    let max = (origin + size - half_viewport).max(midpoint);
+    target.clamp(min, max)
 }
 
 /// Component-wise linear interpolation.

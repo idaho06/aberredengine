@@ -4,8 +4,8 @@
 //! by Rust systems. Commands are processed after Lua callbacks return.
 
 // Re-export UniformValue from its canonical location for internal convenience.
-pub use crate::resources::uniformvalue::UniformValue;
 pub use super::spawn_data::TweenConfig;
+pub use crate::resources::uniformvalue::UniformValue;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.
@@ -19,8 +19,6 @@ pub enum AssetCmd {
     Music { id: String, path: String },
     /// Load a sound effect from a file path
     Sound { id: String, path: String },
-    /// Load a tilemap from a directory path
-    Tilemap { id: String, path: String },
     /// Load a shader from vertex and/or fragment shader files
     Shader {
         id: String,
@@ -53,8 +51,24 @@ pub enum AudioLuaCmd {
     PlaySoundPitched { id: String, pitch: f32 },
     /// Stop all music
     StopAllMusic,
+    /// Stop a specific music track
+    StopMusic { id: String },
+    /// Pause a specific music track
+    PauseMusic { id: String },
+    /// Resume a previously paused music track
+    ResumeMusic { id: String },
+    /// Set the volume of a specific music track (0.0 – 1.0)
+    SetMusicVolume { id: String, vol: f32 },
+    /// Unload a specific music track from memory
+    UnloadMusic { id: String },
+    /// Unload all music tracks from memory
+    UnloadAllMusic,
     /// Stop all sounds
     StopAllSounds,
+    /// Unload a specific sound effect from memory
+    UnloadSound { id: String },
+    /// Unload all sound effects from memory
+    UnloadAllSounds,
 }
 
 /// Commands to modify WorldSignals from Lua.
@@ -65,6 +79,7 @@ pub enum SignalCmd {
     SetString { key: String, value: String },
     SetFlag { key: String },
     ClearFlag { key: String },
+    ToggleFlag { key: String },
     ClearScalar { key: String },
     ClearInteger { key: String },
     ClearString { key: String },
@@ -88,6 +103,8 @@ pub enum EntityCmd {
     SignalSetFlag { entity_id: u64, flag: String },
     /// Clear a flag on an entity's Signals component
     SignalClearFlag { entity_id: u64, flag: String },
+    /// Toggle a flag on an entity's Signals component
+    SignalToggleFlag { entity_id: u64, flag: String },
     /// Set entity velocity (RigidBody)
     SetVelocity { entity_id: u64, vx: f32, vy: f32 },
     /// Insert a StuckTo component
@@ -163,12 +180,16 @@ pub enum EntityCmd {
         key: String,
         value: f32,
     },
+    /// Clear a scalar signal on an entity's Signals component
+    SignalClearScalar { entity_id: u64, key: String },
     /// Set a string signal on an entity's Signals component
     SignalSetString {
         entity_id: u64,
         key: String,
         value: String,
     },
+    /// Clear a string signal on an entity's Signals component
+    SignalClearString { entity_id: u64, key: String },
     /// Add or update a named force on the entity's RigidBody
     AddForce {
         entity_id: u64,
@@ -219,6 +240,8 @@ pub enum EntityCmd {
         key: String,
         value: i32,
     },
+    /// Clear an integer signal on an entity's Signals component
+    SignalClearInteger { entity_id: u64, key: String },
     /// Insert a Ttl (time-to-live) component
     InsertTtl { entity_id: u64, seconds: f32 },
     /// Set or replace entity shader
@@ -273,6 +296,8 @@ pub enum EntityCmd {
     RemoveTint { entity_id: u64 },
     /// Set CameraTarget component on an entity
     SetCameraTarget { entity_id: u64, priority: u8 },
+    /// Update zoom on an existing CameraTarget component
+    SetCameraTargetZoom { entity_id: u64, zoom: f32 },
     /// Remove CameraTarget component from an entity
     RemoveCameraTarget { entity_id: u64 },
 }
@@ -287,13 +312,6 @@ pub enum GroupCmd {
     UntrackGroup { name: String },
     /// Clear all tracked groups
     ClearTrackedGroups,
-}
-
-/// Commands for tilemap operations from Lua.
-#[derive(Debug, Clone)]
-pub enum TilemapCmd {
-    /// Spawn tiles from a loaded tilemap
-    SpawnTiles { id: String },
 }
 
 /// Commands for camera operations from Lua.
@@ -333,6 +351,8 @@ pub enum CameraFollowCmd {
     ClearBounds,
     /// Reset spring velocity to zero
     ResetVelocity,
+    /// Set zoom interpolation speed
+    SetZoomSpeed { speed: f32 },
 }
 
 /// Commands for registering animations from Lua.
@@ -392,4 +412,11 @@ pub enum InputCmd {
     Rebind { action: String, key: String },
     /// Add an extra binding for an action without removing the existing ones.
     AddBinding { action: String, key: String },
+}
+
+/// Commands for loading a map file and spawning its contents from Lua.
+#[derive(Debug, Clone)]
+pub enum MapLuaCmd {
+    /// Read a `MapData` JSON file from `path` and trigger [`SpawnMapRequested`].
+    LoadMap { path: String },
 }

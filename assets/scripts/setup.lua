@@ -9,7 +9,7 @@ local M = {}
 
 --- Load assets shared across all examples (fonts, cursor, shaders, etc.)
 local function load_common()
-    engine.log_info("Loading common assets...")
+    engine.log_debug("Loading common assets...")
 
     -- Fonts
     engine.load_font("arcade", "./assets/fonts/Arcade_Cabinet.ttf", 128)
@@ -34,7 +34,7 @@ end
 
 --- Load assets for the Asteroids example
 local function load_asteroids()
-    engine.log_info("Loading Asteroids assets...")
+    engine.log_debug("Loading Asteroids assets...")
 
     -- Textures
     engine.load_texture("asteroids-ship_sheet", "./assets/textures/asteroids/ship.png")
@@ -72,7 +72,7 @@ end
 
 --- Load assets for the Arkanoid example
 local function load_arkanoid()
-    engine.log_info("Loading Arkanoid assets...")
+    engine.log_debug("Loading Arkanoid assets...")
 
     -- Textures
     engine.load_texture("arkanoid-title", "./assets/textures/arkanoid/title.png")
@@ -98,9 +98,6 @@ local function load_arkanoid()
     engine.load_sound("arkanoid-ding", "./assets/audio/arkanoid/ding.wav")
     engine.load_sound("arkanoid-ping", "./assets/audio/arkanoid/ping.wav")
 
-    -- Tilemaps
-    engine.load_tilemap("arkanoid-level01", "./assets/tilemaps/arkanoid/level01")
-
     -- Animations
     engine.register_animation("arkanoid-vaus_glowing", "arkanoid-vaus_sheet", 0, 0, 96, 0, 16, 15, true)
     engine.register_animation("arkanoid-vaus_hit", "arkanoid-vaus_sheet", 0, 24, 96, 0, 6, 15, false)
@@ -108,7 +105,7 @@ end
 
 --- Load assets for the Birthday Card example
 local function load_birthday()
-    engine.log_info("Loading Birthday Card assets...")
+    engine.log_debug("Loading Birthday Card assets...")
 
     -- Fonts
     engine.load_font("birthday-love", "./assets/fonts/birthday/Endless_Love.ttf", 120)
@@ -144,7 +141,7 @@ end
 
 --- Load assets for the Kraken example
 local function load_kraken()
-    engine.log_info("Loading Kraken assets...")
+    engine.log_debug("Loading Kraken assets...")
 
     -- Textures
     engine.load_texture("kraken-mouth", "./assets/textures/kraken/mouth.png")
@@ -153,7 +150,7 @@ end
 
 --- Load assets for the Sidescroller example
 local function load_sidescroller()
-    engine.log_info("Loading Sidescroller assets...")
+    engine.log_debug("Loading Sidescroller assets...")
     -- Textures
     engine.load_texture("sidescroller-char_red_1_sheet", "./assets/textures/sidescroller/char_red_1.png")
     engine.load_texture("sidescroller-char_red_2_sheet", "./assets/textures/sidescroller/char_red_2.png")
@@ -209,19 +206,18 @@ local function load_sidescroller()
     engine.register_animation("sidescroller-char_red_ladder", "sidescroller-char_red_2_sheet",
         sprite_size * 0, sprite_size * 5, sprite_size, sprite_size, 8 + 2, 10, false)
 
-    engine.load_tilemap("sidescroller_level01_tilemap", "./assets/tilemaps/sidescroller_test01")
 end
 
 --- Load assets for the Bunnymark example
 local function load_bunnymark()
-    engine.log_info("Loading Bunnymark assets...")
+    engine.log_debug("Loading Bunnymark assets...")
     engine.load_texture("bunnymark-raybunny", "./assets/textures/bunnymark/raybunny.png")
 end
 
 --- Called during the Setup game state to load all assets.
 --- Assets are queued here and processed by the Rust engine.
 function M.load_assets()
-    engine.log_info("Loading assets from Lua...")
+    engine.log_debug("Loading assets from Lua...")
 
     load_common()
     load_asteroids()
@@ -231,7 +227,7 @@ function M.load_assets()
     load_sidescroller()
     load_bunnymark()
 
-    engine.log_info("All assets queued for loading!")
+    engine.log_debug("All assets queued for loading!")
 end
 
 return M

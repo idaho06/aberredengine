@@ -90,6 +90,7 @@ mod tests {
             on_enter: dummy_enter,
             on_update: None,
             on_exit: None,
+            gui_callback: None,
         }
     }
 
@@ -132,6 +133,7 @@ mod tests {
                 on_enter: other_enter,
                 on_update: None,
                 on_exit: None,
+                gui_callback: None,
             },
         );
         assert_eq!(sm.len(), 1);

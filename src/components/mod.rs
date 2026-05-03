@@ -18,6 +18,7 @@
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
 //! - [`luaphase`] – *(feature = "lua")* Lua-based state machine with enter/update/exit callbacks
+//! - [`luasetup`] – *(feature = "lua")* one-shot entity setup callback fired on `Added<LuaSetup>`
 //! - [`phase`] – Rust-based state machine with enter/update/exit function-pointer callbacks
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
@@ -27,6 +28,7 @@
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component
 //! - [`stuckto`] – attaches an entity's position to another entity
+//! - [`tilemap`] – tilemap root entity; spawns tile children from a directory path
 //! - [`tint`] – color tint for rendering sprites and text
 //! - [`luatimer`] – *(feature = "lua")* Lua callback timer for delayed actions
 //! - [`tween`] – animated interpolation of position, rotation, and scale
@@ -47,6 +49,8 @@ pub mod luacollision;
 #[cfg(feature = "lua")]
 pub mod luaphase;
 #[cfg(feature = "lua")]
+pub mod luasetup;
+#[cfg(feature = "lua")]
 pub mod luatimer;
 pub mod mapposition;
 pub mod menu;
@@ -61,6 +65,7 @@ pub mod signalbinding;
 pub mod signals;
 pub mod sprite;
 pub mod stuckto;
+pub mod tilemap;
 pub mod timer;
 pub mod tint;
 pub mod ttl;
