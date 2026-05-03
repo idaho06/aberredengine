@@ -101,13 +101,15 @@ pub fn menu_spawn_system(
                 );
             } else {
                 // Static text sprite
-                let font_handle = font_store.get(&font_string).unwrap_or_else(|| {
-                    panic!(
-                        "menu_spawn_system: Font {} not found in FontStore",
+                let Some(font_handle) = font_store.get(&font_string) else {
+                    warn!(
+                        "menu_spawn_system: skipping menu item '{}' because font '{}' is missing",
+                        menu_item.id,
                         font_string
-                    )
-                });
-                let texture_handle = load_texture_from_text(
+                    );
+                    continue;
+                };
+                let Some(texture_handle) = load_texture_from_text(
                     &mut rl,
                     &th,
                     font_handle,
@@ -115,8 +117,13 @@ pub fn menu_spawn_system(
                     font_size,
                     1.0,
                     normal_color,
-                )
-                .expect("Failed to create texture from text");
+                ) else {
+                    warn!(
+                        "menu_spawn_system: skipping menu item '{}' because text texture creation failed",
+                        menu_item.id
+                    );
+                    continue;
+                };
                 let width = texture_handle.width as f32;
                 let height = texture_handle.height as f32;
                 let key = format!("menu_{}", menu_item.id);

@@ -410,7 +410,19 @@ impl EngineBuilder {
     /// Build the engine and run the main loop.
     ///
     /// This consumes the builder and does not return until the game exits.
-    pub fn run(mut self) {
+    /// Startup failures are logged and abort engine initialization without
+    /// entering the main loop.
+    pub fn run(self) {
+        if let Err(err) = self.try_run() {
+            log::error!("Failed to start engine: {err}");
+        }
+    }
+
+    /// Build the engine and run the main loop.
+    ///
+    /// This variant returns startup errors to the caller instead of logging
+    /// them internally.
+    pub fn try_run(mut self) -> Result<(), String> {
         log::info!("Hello, world! This is the Aberred Engine!");
 
         let use_scene_manager = !self.scenes.is_empty();
@@ -419,62 +431,71 @@ impl EngineBuilder {
         #[cfg(not(feature = "lua"))]
         let has_lua = false;
 
-        self.validate_builder(use_scene_manager);
-        let config = self.load_config();
-        let (rl, thread, render_target) = Self::setup_window(&config);
+        self.validate_builder(use_scene_manager)?;
+        let config = self.load_config()?;
+        let (rl, thread, render_target) = Self::setup_window(&config)?;
 
         let update_hook = self.update_hook.take();
         let extra_systems = std::mem::take(&mut self.extra_systems);
         let extra_observers = std::mem::take(&mut self.extra_observers);
 
-        let mut world = self.setup_world(config, rl, thread, render_target);
-        self.register_systems(&mut world, use_scene_manager);
+        let mut world = self.setup_world(config, rl, thread, render_target)?;
+        self.register_systems(&mut world, use_scene_manager)?;
         Self::spawn_observers(&mut world, has_lua, extra_observers);
 
         let mut update =
-            Self::build_schedule(update_hook, extra_systems, &mut world, has_lua, use_scene_manager);
+            Self::build_schedule(update_hook, extra_systems, &mut world, has_lua, use_scene_manager)?;
         Self::main_loop(&mut world, &mut update);
+
+        Ok(())
     }
 
-    fn validate_builder(&self, use_scene_manager: bool) {
+    fn validate_builder(&self, use_scene_manager: bool) -> Result<(), String> {
         if use_scene_manager {
             if self.switch_scene_hook.is_some() {
-                panic!(
+                return Err(
                     "EngineBuilder conflict: .add_scene() and .on_switch_scene() cannot be used \
                      together. Use .add_scene() for SceneManager-based games, or \
-                     .on_switch_scene() for full manual control — not both."
+                     .on_switch_scene() for full manual control -- not both."
+                        .to_string(),
                 );
             }
             if self.enter_play_hook.is_some() {
-                panic!(
+                return Err(
                     "EngineBuilder conflict: .add_scene() and .on_enter_play() cannot be used \
                      together. SceneManager owns the enter_play hook. Use .on_setup() for \
                      asset loading instead."
+                        .to_string(),
                 );
             }
             if self.initial_scene.is_none() {
-                panic!(
+                return Err(
                     "EngineBuilder: .add_scene() requires .initial_scene(\"name\") to specify \
                      which scene to enter first."
+                        .to_string(),
                 );
             }
         }
+
+        Ok(())
     }
 
-    fn load_config(&self) -> GameConfig {
+    fn load_config(&self) -> Result<GameConfig, String> {
         let mut config = GameConfig::with_path(&self.config_path);
-        config.load_from_file().ok(); // ignore errors, use defaults
+        config
+            .load_from_file()
+            .map_err(|err| format!("Failed to load config '{}': {err}", self.config_path.display()))?;
 
         if let Some(title) = &self.title_override {
             config.window_title = title.clone();
         }
 
-        config
+        Ok(config)
     }
 
     fn setup_window(
         config: &GameConfig,
-    ) -> (raylib::RaylibHandle, raylib::RaylibThread, RenderTarget) {
+    ) -> Result<(raylib::RaylibHandle, raylib::RaylibThread, RenderTarget), String> {
         let (mut rl, thread) = raylib::init()
             .size(config.window_width as i32, config.window_height as i32)
             .resizable()
@@ -486,9 +507,9 @@ impl EngineBuilder {
 
         let render_target =
             RenderTarget::new(&mut rl, &thread, config.render_width, config.render_height)
-                .expect("Failed to create render target");
+                .map_err(|err| format!("Failed to create render target: {err}"))?;
 
-        (rl, thread, render_target)
+        Ok((rl, thread, render_target))
     }
 
     fn setup_world(
@@ -497,7 +518,7 @@ impl EngineBuilder {
         rl: raylib::RaylibHandle,
         thread: raylib::RaylibThread,
         render_target: RenderTarget,
-    ) -> World {
+    ) -> Result<World, String> {
         let render_width = config.render_width;
         let render_height = config.render_height;
         let window_width = rl.get_screen_width();
@@ -544,7 +565,8 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {
-            let lua_runtime = LuaRuntime::new().expect("Failed to create Lua runtime");
+            let lua_runtime = LuaRuntime::new()
+                .map_err(|err| format!("Failed to create Lua runtime: {err}"))?;
             if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
                 log::error!("Failed to load Lua script: {}", e);
             }
@@ -555,11 +577,42 @@ impl EngineBuilder {
         world.insert_non_send_resource(thread);
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
-        world
+        Ok(world)
     }
 
-    fn register_systems(self, world: &mut World, use_scene_manager: bool) {
+    fn validate_required_systems(
+        systems_store: &SystemsStore,
+        requires_switch_scene: bool,
+    ) -> Result<(), String> {
+        let mut missing = Vec::new();
+
+        for name in ["setup", "enter_play", "quit_game"] {
+            if systems_store.get(name).is_none() {
+                missing.push(name);
+            }
+        }
+
+        if requires_switch_scene && systems_store.get("switch_scene").is_none() {
+            missing.push("switch_scene");
+        }
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "EngineBuilder missing required system registrations: {}",
+                missing.join(", ")
+            ))
+        }
+    }
+
+    fn register_systems(self, world: &mut World, use_scene_manager: bool) -> Result<(), String> {
         let mut systems_store = SystemsStore::new();
+        #[cfg(feature = "lua")]
+        let requires_switch_scene =
+            use_scene_manager || self.switch_scene_hook.is_some() || self.lua_script.is_some();
+        #[cfg(not(feature = "lua"))]
+        let requires_switch_scene = use_scene_manager || self.switch_scene_hook.is_some();
 
         if let Some(hook) = self.setup_hook {
             hook(world, &mut systems_store);
@@ -602,6 +655,8 @@ impl EngineBuilder {
             .insert(Persistent);
         systems_store.insert_entity_system("menu_despawn", menu_despawn_system_id);
 
+        Self::validate_required_systems(&systems_store, requires_switch_scene)?;
+
         world.insert_resource(systems_store);
         world.flush();
 
@@ -610,6 +665,8 @@ impl EngineBuilder {
             next_state.set(GameStates::Setup);
         }
         world.trigger(GameStateChangedEvent {});
+
+        Ok(())
     }
 
     fn spawn_observers(world: &mut World, has_lua: bool, extra_observers: Vec<ObserverRegistrar>) {
@@ -645,7 +702,7 @@ impl EngineBuilder {
         world: &mut World,
         has_lua: bool,
         use_scene_manager: bool,
-    ) -> Schedule {
+    ) -> Result<Schedule, String> {
         let mut update = Schedule::default();
         update.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
         update.add_systems(menu_spawn_system);
@@ -753,9 +810,9 @@ impl EngineBuilder {
 
         update
             .initialize(world)
-            .expect("Failed to initialize schedule");
+            .map_err(|err| format!("Failed to initialize schedule: {err}"))?;
 
-        update
+        Ok(update)
     }
 
     fn main_loop(world: &mut World, update: &mut Schedule) {
@@ -912,7 +969,8 @@ mod tests {
     #[test]
     fn test_build_schedule_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
-        let schedule = EngineBuilder::build_schedule(None, Vec::new(), &mut world, false, false);
+        let schedule = EngineBuilder::build_schedule(None, Vec::new(), &mut world, false, false)
+            .expect("build_schedule should succeed without Lua runtime");
         let system_type_ids: Vec<_> = schedule
             .systems()
             .expect("build_schedule initializes the schedule")
@@ -1007,30 +1065,48 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "EngineBuilder conflict: .add_scene() and .on_switch_scene()")]
     fn test_add_scene_conflicts_with_on_switch_scene() {
-        EngineBuilder::new()
+        let err = EngineBuilder::new()
             .add_scene("menu", make_descriptor())
             .initial_scene("menu")
             .on_switch_scene(dummy_switch_scene)
-            .run();
+            .try_run()
+            .expect_err("conflicting scene/switch_scene hooks should fail preflight");
+
+        assert!(err.contains("EngineBuilder conflict: .add_scene() and .on_switch_scene()"));
     }
 
     #[test]
-    #[should_panic(expected = "EngineBuilder conflict: .add_scene() and .on_enter_play()")]
     fn test_add_scene_conflicts_with_on_enter_play() {
-        EngineBuilder::new()
+        let err = EngineBuilder::new()
             .add_scene("menu", make_descriptor())
             .initial_scene("menu")
             .on_enter_play(dummy_enter_play)
-            .run();
+            .try_run()
+            .expect_err("conflicting scene/enter_play hooks should fail preflight");
+
+        assert!(err.contains("EngineBuilder conflict: .add_scene() and .on_enter_play()"));
     }
 
     #[test]
-    #[should_panic(expected = ".add_scene() requires .initial_scene")]
     fn test_add_scene_requires_initial_scene() {
-        EngineBuilder::new()
+        let err = EngineBuilder::new()
             .add_scene("menu", make_descriptor())
-            .run();
+            .try_run()
+            .expect_err("missing initial_scene should fail preflight");
+
+        assert!(err.contains(".add_scene() requires .initial_scene"));
+    }
+
+    #[test]
+    fn test_validate_required_systems_reports_missing_entries() {
+        let systems_store = SystemsStore::new();
+        let err = EngineBuilder::validate_required_systems(&systems_store, true)
+            .expect_err("missing required systems should fail validation");
+
+        assert!(err.contains("setup"));
+        assert!(err.contains("enter_play"));
+        assert!(err.contains("quit_game"));
+        assert!(err.contains("switch_scene"));
     }
 }

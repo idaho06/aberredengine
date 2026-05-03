@@ -54,7 +54,7 @@ Setting `default-features = false` disables the `lua` feature flag. This removes
 ```
 my_game/
 ├── Cargo.toml
-├── config.ini                 # Engine configuration (optional, defaults apply)
+├── config.ini                 # Engine configuration (required at startup; missing keys use defaults)
 ├── src/
 │   ├── main.rs                # EngineBuilder entry point
 │   └── scenes/
@@ -70,7 +70,7 @@ my_game/
 
 ### config.ini
 
-The engine reads `config.ini` at startup for window and rendering settings. If the file is missing or a value is absent, safe defaults are used.
+The engine reads `config.ini` at startup for window and rendering settings. The file must exist at startup, but individual missing or invalid keys fall back to safe defaults.
 
 ```ini
 [render]
@@ -102,7 +102,7 @@ use aberredengine::systems::scene_dispatch::SceneDescriptor;
 
 mod scenes;
 
-fn main() {
+fn main() -> Result<(), String> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")
@@ -120,7 +120,7 @@ fn main() {
             gui_callback: None,
         })
         .initial_scene("menu")
-        .run();
+        .try_run()
 }
 
 ```
@@ -244,7 +244,7 @@ For single-scene games or when you need full control over scene transitions, use
 ```rust
 use aberredengine::engine_app::EngineBuilder;
 
-fn main() {
+fn main() -> Result<(), String> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")
@@ -252,9 +252,15 @@ fn main() {
         .on_enter_play(my_enter_play)
         .on_update(my_update)
         .on_switch_scene(my_switch_scene)
-        .run();
+        .try_run()
 }
 ```
+
+### Startup error handling
+
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), String>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and missing required built-in system registrations.
+
+`EngineBuilder::run()` is still available as a convenience wrapper, but it only logs startup failures internally and does not return them to your `main` function.
 
 Each hook is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
 
@@ -298,8 +304,10 @@ Setup ──→ Playing ──→ Quitting
 | `.add_system(system)` | Add a per-frame system. Same auto-constraints as `.on_update()`. Can be called multiple times. |
 | `.configure_schedule(closure)` | Add systems with full ordering control — no auto-constraints applied. |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
+| `.try_run()` | Start the engine and return `Result<(), String>` on startup failure. Recommended for Rust `main`. |
+| `.run()` | Convenience wrapper around `.try_run()` that logs startup failures and returns `()`. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()` or `.on_enter_play()` — the SceneManager owns those hooks. Use `.on_setup()` for asset loading in both approaches.
+**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()` or `.on_enter_play()` — the SceneManager owns those hooks. Use `.on_setup()` for asset loading in both approaches. With `.try_run()`, these conflicts are returned as startup errors instead of panicking.
 
 ### Custom systems and observers
 
@@ -317,7 +325,8 @@ EngineBuilder::new()
     .add_system(tilemap_save_system)   // independent second system
     .add_scene("editor", /* … */)
     .initial_scene("editor")
-    .run();
+    .try_run()
+    .expect("engine startup failed");
 ```
 
 The system signature is a standard Bevy ECS system:
@@ -363,7 +372,8 @@ EngineBuilder::new()
         );
     })
     // …
-    .run();
+    .try_run()
+    .expect("engine startup failed");
 ```
 
 Engine system functions are `pub` and importable from `aberredengine::systems::*`. Use them directly as `.after()` / `.before()` arguments. No automatic `run_if` or `after` constraints are applied — you control everything.
@@ -408,7 +418,8 @@ fn on_tilemap_loaded(
 EngineBuilder::new()
     .add_observer(on_tilemap_loaded)
     // …
-    .run();
+    .try_run()
+    .expect("engine startup failed");
 ```
 
 **Trigger the event from any system or scene callback:**
@@ -514,22 +525,23 @@ Fonts require `NonSendMut<FontStore>` (already pre-inserted). After loading, you
 use aberredengine::raylib::ffi::{self, TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X};
 
 /// Load a font with mipmaps and anisotropic filtering.
-fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
+fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Result<Font, String> {
     let mut font = rl
         .load_font_ex(th, path, size, None)
-        .unwrap_or_else(|_| panic!("Failed to load font '{}'", path));
+        .map_err(|err| format!("Failed to load font '{}': {err}", path))?;
     unsafe {
         ffi::GenTextureMipmaps(&mut font.texture);
         ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
     }
-    font
+    Ok(font)
 }
 ```
 
 Then in setup:
 
 ```rust
-let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32);
+let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32)
+    .expect("Failed to load arcade font");
 fonts.add("arcade", font);
 ```
 
@@ -682,7 +694,8 @@ fn setup(
     tex_store.insert("player", player_tex);
 
     // Fonts
-    let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32);
+    let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32)
+        .expect("Failed to load arcade font");
     fonts.add("arcade", font);
 
     // Audio
@@ -1588,11 +1601,14 @@ Section 2 showed the basics. This is the complete reference.
 
 ### Parsing behavior
 
-- **Missing file** → safe defaults used, no error
-- **Missing key** → default for that key
-- **Invalid value** → silently ignored, default used
+- **Missing file** -> startup error from `EngineBuilder::try_run()`
+- **Unreadable or malformed INI** -> startup error from `EngineBuilder::try_run()`
+- **Missing key** -> default for that key
+- **Invalid value** -> silently ignored, default used for that key
 - **Booleans** — case-insensitive: `true`/`false`, `yes`/`no`, `on`/`off`
 - **`background_color`** — comma-separated `R,G,B` integers (e.g., `80,80,80`)
+
+If you want the engine defaults with no custom settings, commit an otherwise empty `config.ini` file and only add keys you want to override.
 
 ### Runtime modification
 

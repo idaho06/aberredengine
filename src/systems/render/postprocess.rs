@@ -71,11 +71,22 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
         let mut valid_passes = 0;
         let mut final_blit_done = false;
 
+        let Some(ping_tex) = render_target.ping.as_ref() else {
+            error!("Post-process ping buffer missing after initialization; falling back to direct blit");
+            blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
+            return;
+        };
+        let Some(pong_tex) = render_target.pong.as_ref() else {
+            error!("Post-process pong buffer missing after initialization; falling back to direct blit");
+            blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
+            return;
+        };
+
         // Get raw pointers to independently borrow texture, ping, and pong
         // SAFETY: These fields are independent and don't alias
         let main_tex_ptr = &render_target.texture as *const RenderTexture2D;
-        let ping_tex_ptr = render_target.ping.as_ref().unwrap() as *const RenderTexture2D;
-        let pong_tex_ptr = render_target.pong.as_ref().unwrap() as *const RenderTexture2D;
+        let ping_tex_ptr = ping_tex as *const RenderTexture2D;
+        let pong_tex_ptr = pong_tex as *const RenderTexture2D;
 
         for (i, shader_key) in shader_chain.iter().enumerate() {
             let is_last_pass = i == shader_chain.len() - 1;
@@ -152,7 +163,11 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                     matches!(source_buffer, SourceBuffer::Main | SourceBuffer::Pong);
 
                 if write_to_ping {
-                    let dest_tex = render_target.ping.as_mut().unwrap();
+                    let Some(dest_tex) = render_target.ping.as_mut() else {
+                        error!("Post-process ping buffer missing during render pass; falling back to direct blit");
+                        blit_to_window(rl, th, source_tex, src, dest, post_blit.take());
+                        return;
+                    };
                     let mut d = rl.begin_texture_mode(th, dest_tex);
                     d.clear_background(Color::BLACK);
 
@@ -169,7 +184,11 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                     }
                     source_buffer = SourceBuffer::Ping;
                 } else {
-                    let dest_tex = render_target.pong.as_mut().unwrap();
+                    let Some(dest_tex) = render_target.pong.as_mut() else {
+                        error!("Post-process pong buffer missing during render pass; falling back to direct blit");
+                        blit_to_window(rl, th, source_tex, src, dest, post_blit.take());
+                        return;
+                    };
                     let mut d = rl.begin_texture_mode(th, dest_tex);
                     d.clear_background(Color::BLACK);
 

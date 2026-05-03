@@ -227,11 +227,7 @@ pub fn scene_switch_poll(
     systems_store: Res<SystemsStore>,
 ) {
     if world_signals.take_flag("switch_scene") {
-        commands.run_system(
-            *systems_store
-                .get("switch_scene")
-                .expect("switch_scene system not found"),
-        );
+        commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
 }
 
@@ -249,19 +245,12 @@ pub fn scene_enter_play(
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
-    let initial = scene_manager
-        .initial_scene
-        .as_ref()
-        .expect("SceneManager.initial_scene must be set")
-        .clone();
+    let initial = scene_manager.initial_scene.as_ref().cloned()
+        .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
 
     world_signals.set_string("scene", initial);
 
-    commands.run_system(
-        *systems_store
-            .get("switch_scene")
-            .expect("switch_scene system not found"),
-    );
+    commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
 }
 
 // ---------------------------------------------------------------------------

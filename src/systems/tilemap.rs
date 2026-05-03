@@ -60,18 +60,20 @@ pub fn load_tilemap(
     rl: &mut raylib::RaylibHandle,
     thread: &raylib::RaylibThread,
     path: &str,
-) -> (Texture2D, Tilemap) {
+) -> Result<(Texture2D, Tilemap), String> {
     let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
     let texture = rl
         .load_texture(thread, &png_path)
-        .expect("Failed to load tilemap texture");
-    let json_string =
-        std::fs::read_to_string(json_path).expect("Failed to load tilemap JSON");
+        .map_err(|err| format!("Failed to load tilemap texture '{}': {err}", png_path))?;
+    let json_string = std::fs::read_to_string(&json_path)
+        .map_err(|err| format!("Failed to load tilemap JSON '{}': {err}", json_path))?;
     let tilemap: Tilemap =
-        serde_json::from_str(&json_string).expect("Failed to parse tilemap JSON");
-    (texture, tilemap)
+        serde_json::from_str(&json_string).map_err(|err| {
+            format!("Failed to parse tilemap JSON '{}': {err}", json_path)
+        })?;
+    Ok((texture, tilemap))
 }
 
 /// Spawn tile entities from a loaded tilemap.
@@ -171,7 +173,18 @@ pub fn tilemap_spawn_system(
         let path = &tilemap_comp.path;
         let key: String = path_stem(path).to_owned();
 
-        let (texture, tilemap_data) = load_tilemap(&mut raylib.rl, &raylib.th, path);
+        let (texture, tilemap_data) = match load_tilemap(&mut raylib.rl, &raylib.th, path) {
+            Ok(loaded) => loaded,
+            Err(err) => {
+                warn!(
+                    "tilemap_spawn_system: failed to load tilemap for entity {:?} from '{}': {}",
+                    entity,
+                    path,
+                    err
+                );
+                continue;
+            }
+        };
         let tex_w = texture.width;
         let tex_h = texture.height;
         if texture_store.get(&key).is_none() {

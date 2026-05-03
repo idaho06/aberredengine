@@ -188,7 +188,7 @@ pub fn process_asset_command<F1>(
         &raylib::RaylibThread,
         &str,
         i32,
-    ) -> raylib::prelude::Font,
+    ) -> Result<raylib::prelude::Font, String>,
 {
     match cmd {
         AssetCmd::Texture { id, path } => match rl.load_texture(th, &path) {
@@ -201,9 +201,15 @@ pub fn process_asset_command<F1>(
             }
         },
         AssetCmd::Font { id, path, size } => {
-            let font = load_font_fn(rl, th, &path, size);
-            debug!("Loaded font '{}' from '{}'", id, path);
-            fonts.add(&id, font);
+            match load_font_fn(rl, th, &path, size) {
+                Ok(font) => {
+                    debug!("Loaded font '{}' from '{}'", id, path);
+                    fonts.add(&id, font);
+                }
+                Err(err) => {
+                    error!("Failed to load font '{}' from '{}': {}", id, path, err);
+                }
+            }
         }
         AssetCmd::Music { id, path } => {
             debug!("Queuing music '{}' from '{}'", id, path);

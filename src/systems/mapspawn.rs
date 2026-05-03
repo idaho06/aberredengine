@@ -68,8 +68,18 @@ pub fn spawn_map(
         if font_store.meta.contains_key(&entry.key) {
             continue;
         }
-        let font = load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32);
-        font_store.add(&entry.key, font);
+        match load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32) {
+            Ok(font) => {
+                font_store.add(&entry.key, font);
+            }
+            Err(err) => {
+                log::warn!(
+                    "spawn_map: failed to load font '{}' (key='{}'): {err}",
+                    entry.path,
+                    entry.key
+                );
+            }
+        }
     }
 
     for entry in &map.animations {
@@ -204,17 +214,19 @@ pub fn process_lua_map_commands(
 
 /// Load a font with mipmaps and anisotropic filtering.
 ///
-/// Panics if the font file cannot be opened (consistent with the engine's
-/// behaviour for missing assets in setup / load phases).
-///
 /// `pub(crate)` so that `lua_plugin` can reuse this rather than duplicating it.
-pub fn load_font_with_mipmaps(rl: &mut RaylibHandle, th: &RaylibThread, path: &str, size: i32) -> Font {
+pub fn load_font_with_mipmaps(
+    rl: &mut RaylibHandle,
+    th: &RaylibThread,
+    path: &str,
+    size: i32,
+) -> Result<Font, String> {
     let mut font = rl
         .load_font_ex(th, path, size, None)
-        .unwrap_or_else(|_| panic!("spawn_map: failed to load font '{path}'"));
+        .map_err(|err| format!("Failed to load font '{path}': {err}"))?;
     unsafe {
         ffi::GenTextureMipmaps(&mut font.texture);
         ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
     }
-    font
+    Ok(font)
 }
