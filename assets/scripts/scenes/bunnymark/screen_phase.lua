@@ -114,6 +114,7 @@ M._callbacks = {
 
 function M.spawn()
     engine.log_debug("Spawning Bunnymark ScreenPosition+Phase...")
+    engine.stop_all_music()
     C.setup()
     C.spawn_hud("SCRN+PHASE")
     engine.log_debug("Bunnymark ScreenPosition+Phase ready!")

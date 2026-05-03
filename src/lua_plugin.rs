@@ -343,7 +343,6 @@ pub fn switch_scene(
     // entity commands are applied after their target entities have been despawned.
     lua_runtime.clear_all_commands();
 
-    scripting.audio_cmd_writer.write(AudioCmd::StopAllMusic);
     for entity in entities_to_clean.iter() {
         commands.entity(entity).despawn();
     }

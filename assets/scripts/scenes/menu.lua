@@ -51,6 +51,7 @@ M._callbacks = {
 --- Spawn all entities for the showcase menu scene.
 function M.spawn()
     engine.log_debug("Spawning showcase menu scene...")
+    engine.stop_all_music()
 
     -- Set render resolution for menu
     engine.set_render_size(640, 360)

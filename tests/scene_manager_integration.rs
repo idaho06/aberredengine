@@ -22,8 +22,10 @@ use aberredengine::systems::scene_dispatch::{
     GuiCallback, SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system,
     scene_update_system,
 };
+use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
+use bevy_ecs::system::SystemState;
 
 use aberredengine::components::persistent::Persistent;
 use aberredengine::events::audio::AudioCmd;
@@ -754,7 +756,57 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 14: gui_callback fn pointer roundtrips through SceneManager unchanged
+// Test 14: Scene switching does not emit automatic StopAllMusic
+// ---------------------------------------------------------------------------
+
+#[test]
+fn scene_switch_does_not_emit_stop_all_music() {
+    let mut world = setup_world();
+
+    let mut sm = SceneManager::new();
+    sm.active_scene = Some("menu".to_string());
+    sm.insert(
+        "menu",
+        SceneDescriptor {
+            on_enter: menu_enter,
+            on_update: None,
+            on_exit: Some(menu_exit),
+            gui_callback: None,
+        },
+    );
+    sm.insert(
+        "level1",
+        SceneDescriptor {
+            on_enter: level1_enter,
+            on_update: Some(level1_update),
+            on_exit: None,
+            gui_callback: None,
+        },
+    );
+    world.insert_resource(sm);
+    register_switch_system(&mut world);
+
+    {
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_string("scene", "level1".to_string());
+    }
+    world.run_system_once(scene_switch_system).unwrap();
+    world.flush();
+
+    world.resource_mut::<Messages<AudioCmd>>().update();
+    let mut reader_state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
+    let mut reader = reader_state.get_mut(&mut world);
+    let cmds: Vec<_> = reader.read().collect();
+
+    assert!(
+        cmds.iter()
+            .all(|cmd| !matches!(cmd, AudioCmd::StopAllMusic)),
+        "Scene switching should not stop all music automatically"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 15: gui_callback fn pointer roundtrips through SceneManager unchanged
 // ---------------------------------------------------------------------------
 
 #[test]

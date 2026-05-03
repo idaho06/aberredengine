@@ -586,6 +586,7 @@ end
 --- Spawn all entities for the Asteroids level.
 function M.spawn()
     engine.log_debug("Spawning Asteroids level01 scene entities...")
+    engine.stop_all_music()
 
     -- Set render resolution for Asteroids
     engine.set_render_size(640, 360)

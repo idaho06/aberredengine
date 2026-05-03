@@ -221,6 +221,7 @@ M._callbacks = {
 
 function M.spawn()
     engine.log_debug("Spawning birthday intro scene entities...")
+    engine.stop_all_music()
 
     -- Set render resolution for Birthday Card
     engine.set_render_size(618, 864)

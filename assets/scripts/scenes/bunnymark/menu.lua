@@ -39,6 +39,7 @@ M._callbacks = {
 
 function M.spawn()
     engine.log_debug("Spawning Bunnymark sub-menu...")
+    engine.stop_all_music()
 
     engine.set_render_size(800, 450)
     engine.set_vsync(true)

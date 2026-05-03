@@ -438,6 +438,7 @@ M._callbacks = {
 --- Spawn all entities for the sidescroller level01 scene.
 function M.spawn()
     engine.log_debug("Spawning sidescroller level01 scene...")
+    engine.stop_all_music()
 
     -- debug_log = true
     log_debug("Debug logging enabled for sidescroller level01.")

@@ -95,6 +95,7 @@ M._callbacks = {
 --- Spawn all entities for the kraken intro scene.
 function M.spawn()
     engine.log_debug("Spawning kraken intro scene...")
+    engine.stop_all_music()
 
     -- Set render resolution (same as menu)
     engine.set_render_size(640, 360)

@@ -30,7 +30,6 @@ use log::{debug, error, info};
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::Persistent;
-use crate::events::audio::AudioCmd;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
@@ -127,14 +126,13 @@ pub struct SceneDescriptor {
 /// the developer uses [`EngineBuilder::add_scene`](crate::engine_app::EngineBuilder::add_scene).
 ///
 /// Flow:
-/// 1. Stop all music
-/// 2. Despawn all non-[`Persistent`] entities
-/// 3. Clear tracked groups and group counts
-/// 4. Read `WorldSignals["scene"]` for the target scene name
-/// 5. Call `on_exit` on the previous scene (if any)
-/// 6. Write previous scene name to `WorldSignals["previous_scene"]` (if any)
-/// 7. Update `SceneManager.active_scene`
-/// 8. Call `on_enter` on the new scene
+/// 1. Despawn all non-[`Persistent`] entities
+/// 2. Clear tracked groups and group counts
+/// 3. Read `WorldSignals["scene"]` for the target scene name
+/// 4. Call `on_exit` on the previous scene (if any)
+/// 5. Write previous scene name to `WorldSignals["previous_scene"]` (if any)
+/// 6. Update `SceneManager.active_scene`
+/// 7. Call `on_enter` on the new scene
 pub fn scene_switch_system(
     mut ctx: GameCtx,
     entities_to_clean: Query<Entity, Without<Persistent>>,
@@ -145,8 +143,6 @@ pub fn scene_switch_system(
     debug!("scene_switch_system: System called!");
 
     let prev_scene = scene_manager.active_scene.clone();
-
-    ctx.audio.write(AudioCmd::StopAllMusic);
 
     for entity in entities_to_clean.iter() {
         ctx.commands.entity(entity).despawn();

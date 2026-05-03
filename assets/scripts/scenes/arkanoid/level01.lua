@@ -598,6 +598,7 @@ end
 --- Spawn all entities for the Arkanoid level.
 function M.spawn()
     engine.log_debug("Spawning Arkanoid level01 scene entities...")
+    engine.stop_all_music()
 
     -- Set render resolution for Arkanoid (672x768)
     engine.set_render_size(672, 768)
