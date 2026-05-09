@@ -17,8 +17,8 @@ use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::zindex::ZIndex;
 use crate::resources::texturestore::TextureStore;
-use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use crate::systems::RaylibAccess;
+use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
 pub const TILES_GROUP: &str = "tiles";
 pub const TILES_TEMPLATES_GROUP: &str = "tiles-templates";
@@ -69,10 +69,8 @@ pub fn load_tilemap(
         .map_err(|err| format!("Failed to load tilemap texture '{}': {err}", png_path))?;
     let json_string = std::fs::read_to_string(&json_path)
         .map_err(|err| format!("Failed to load tilemap JSON '{}': {err}", json_path))?;
-    let tilemap: Tilemap =
-        serde_json::from_str(&json_string).map_err(|err| {
-            format!("Failed to parse tilemap JSON '{}': {err}", json_path)
-        })?;
+    let tilemap: Tilemap = serde_json::from_str(&json_string)
+        .map_err(|err| format!("Failed to parse tilemap JSON '{}': {err}", json_path))?;
     Ok((texture, tilemap))
 }
 
@@ -178,9 +176,7 @@ pub fn tilemap_spawn_system(
             Err(err) => {
                 warn!(
                     "tilemap_spawn_system: failed to load tilemap for entity {:?} from '{}': {}",
-                    entity,
-                    path,
-                    err
+                    entity, path, err
                 );
                 continue;
             }
@@ -195,6 +191,13 @@ pub fn tilemap_spawn_system(
             commands.entity(entity).insert(MapPosition::new(0.0, 0.0));
         }
 
-        spawn_tiles(&mut commands, &key, tex_w, tex_h, &tilemap_data, Some(entity));
+        spawn_tiles(
+            &mut commands,
+            &key,
+            tex_w,
+            tex_h,
+            &tilemap_data,
+            Some(entity),
+        );
     }
 }

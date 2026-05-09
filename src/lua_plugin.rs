@@ -49,13 +49,13 @@ use crate::resources::texturestore::TextureStore;
 
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use crate::systems::mapspawn::load_font_with_mipmaps;
 use crate::systems::lua_commands::{
     DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_animation_command,
     process_asset_command, process_camera_follow_command, process_gameconfig_command,
     process_group_command, process_input_command, process_phase_command, process_render_command,
     process_signal_command,
 };
+use crate::systems::mapspawn::load_font_with_mipmaps;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
@@ -86,8 +86,6 @@ pub struct EntityProcessing<'w, 's> {
     pub cmd_queries: EntityCmdQueries<'w, 's>,
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
 }
-
-
 
 // This function is meant to load all resources
 pub fn setup(
@@ -196,7 +194,9 @@ pub fn enter_play(
     // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
 
     // Finally, run the switch_scene system to spawn initial scene entities
-    commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
+    commands.run_system(*systems_store.get("switch_scene").expect(
+        "'switch_scene' system not registered; validate_required_systems should have caught this",
+    ));
 }
 
 /// Drains and processes the 11 command queues that are common to both [`update`] and

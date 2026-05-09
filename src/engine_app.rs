@@ -69,6 +69,7 @@ use std::path::PathBuf;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
+use raylib::ffi::TraceLogLevel;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
@@ -79,6 +80,7 @@ use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::animationstore::AnimationStore;
+use crate::resources::appstate::AppState;
 use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
@@ -87,6 +89,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
+use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -97,7 +100,6 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
-use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::animation::animation;
@@ -113,11 +115,11 @@ use crate::systems::gamestate::{
     check_pending_state, clean_all_entities, quit_game, state_is_playing,
 };
 use crate::systems::gridlayout::gridlayout_spawn_system;
-use crate::systems::tilemap::tilemap_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
 use crate::systems::mousecontroller::mouse_controller;
@@ -128,13 +130,13 @@ use crate::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use crate::systems::render::render_system;
-use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{
     SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
 };
 use crate::systems::signalbinding::update_world_signals_binding_system;
 use crate::systems::stuckto::stuck_to_entity_system;
+use crate::systems::tilemap::tilemap_spawn_system;
 use crate::systems::time::update_world_time;
 use crate::systems::timer::{timer_observer, update_timers};
 use crate::systems::ttl::ttl_system;
@@ -291,9 +293,10 @@ impl EngineBuilder {
     /// }
     /// ```
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.extra_systems.push(Box::new(move |schedule: &mut Schedule| {
-            schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
-        }));
+        self.extra_systems
+            .push(Box::new(move |schedule: &mut Schedule| {
+                schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
+            }));
         self
     }
 
@@ -346,9 +349,10 @@ impl EngineBuilder {
         mut self,
         observer: impl IntoObserverSystem<E, B, M>,
     ) -> Self {
-        self.extra_observers.push(Box::new(move |world: &mut World| {
-            world.spawn((Observer::new(observer), Persistent));
-        }));
+        self.extra_observers
+            .push(Box::new(move |world: &mut World| {
+                world.spawn((Observer::new(observer), Persistent));
+            }));
         self
     }
 
@@ -443,8 +447,13 @@ impl EngineBuilder {
         self.register_systems(&mut world, use_scene_manager)?;
         Self::spawn_observers(&mut world, has_lua, extra_observers);
 
-        let mut update =
-            Self::build_schedule(update_hook, extra_systems, &mut world, has_lua, use_scene_manager)?;
+        let mut update = Self::build_schedule(
+            update_hook,
+            extra_systems,
+            &mut world,
+            has_lua,
+            use_scene_manager,
+        )?;
         Self::main_loop(&mut world, &mut update);
 
         Ok(())
@@ -482,9 +491,12 @@ impl EngineBuilder {
 
     fn load_config(&self) -> Result<GameConfig, String> {
         let mut config = GameConfig::with_path(&self.config_path);
-        config
-            .load_from_file()
-            .map_err(|err| format!("Failed to load config '{}': {err}", self.config_path.display()))?;
+        config.load_from_file().map_err(|err| {
+            format!(
+                "Failed to load config '{}': {err}",
+                self.config_path.display()
+            )
+        })?;
 
         if let Some(title) = &self.title_override {
             config.window_title = title.clone();
@@ -500,7 +512,9 @@ impl EngineBuilder {
             .size(config.window_width as i32, config.window_height as i32)
             .resizable()
             .title(&config.window_title)
-            .imgui_theme(raylib::imgui::ImGuiTheme::Dark)
+            .log_level(TraceLogLevel::LOG_WARNING)
+            .highdpi()
+            .msaa_4x()
             .build();
         rl.set_target_fps(config.target_fps);
         rl.set_exit_key(None);
@@ -547,6 +561,9 @@ impl EngineBuilder {
         world.insert_resource(GameState::new());
         world.insert_resource(NextGameState::new());
         world.insert_non_send_resource(FontStore::new());
+        let imgui_bridge = ImguiBridge::new_dark()
+            .map_err(|err| format!("Failed to initialize imgui bridge: {err}"))?;
+        world.insert_non_send_resource(imgui_bridge);
         world.insert_non_send_resource(ShaderStore::new());
         world.insert_resource(TextureStore::new());
         world.insert_resource(Camera2DRes(Camera2D {
@@ -565,8 +582,8 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {
-            let lua_runtime = LuaRuntime::new()
-                .map_err(|err| format!("Failed to create Lua runtime: {err}"))?;
+            let lua_runtime =
+                LuaRuntime::new().map_err(|err| format!("Failed to create Lua runtime: {err}"))?;
             if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
                 log::error!("Failed to load Lua script: {}", e);
             }

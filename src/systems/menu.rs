@@ -104,8 +104,7 @@ pub fn menu_spawn_system(
                 let Some(font_handle) = font_store.get(&font_string) else {
                     warn!(
                         "menu_spawn_system: skipping menu item '{}' because font '{}' is missing",
-                        menu_item.id,
-                        font_string
+                        menu_item.id, font_string
                     );
                     continue;
                 };

@@ -17,28 +17,28 @@ use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
 
 use crate::components::animation::Animation;
+use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
+#[cfg(feature = "lua")]
+use crate::components::luasetup::LuaSetup;
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
-use crate::components::dynamictext::DynamicText;
+use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::fontstore::FontStore;
-use crate::resources::mapdata::{EntityDef, MapData};
-#[cfg(feature = "lua")]
-use crate::resources::mapdata::load_map;
-use crate::resources::texturestore::TextureStore;
-use crate::resources::worldsignals::WorldSignals;
-use crate::components::tilemap::TileMap;
-use crate::systems::RaylibAccess;
-#[cfg(feature = "lua")]
-use crate::components::luasetup::LuaSetup;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
+#[cfg(feature = "lua")]
+use crate::resources::mapdata::load_map;
+use crate::resources::mapdata::{EntityDef, MapData};
+use crate::resources::texturestore::TextureStore;
+use crate::resources::worldsignals::WorldSignals;
+use crate::systems::RaylibAccess;
 
 /// Load all assets referenced by `map` into the engine stores, then spawn
 /// entities. Called by [`spawn_map_observer`]; can also be called directly.
@@ -70,7 +70,12 @@ pub fn spawn_map(
         }
         match load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32) {
             Ok(font) => {
-                font_store.add(&entry.key, font);
+                font_store.add_with_meta(
+                    &entry.key,
+                    font,
+                    entry.path.clone(),
+                    entry.font_size,
+                );
             }
             Err(err) => {
                 log::warn!(
@@ -198,10 +203,7 @@ pub fn spawn_map_observer(
 /// Registered by [`crate::engine_app::EngineBuilder::with_lua`] and runs
 /// every frame during the Playing state, after `lua_plugin::update`.
 #[cfg(feature = "lua")]
-pub fn process_lua_map_commands(
-    mut commands: Commands,
-    lua: NonSend<LuaRuntime>,
-) {
+pub fn process_lua_map_commands(mut commands: Commands, lua: NonSend<LuaRuntime>) {
     for cmd in lua.drain_map_commands() {
         match cmd {
             MapLuaCmd::LoadMap { path } => match load_map(&path) {

@@ -27,8 +27,8 @@ pub use entity_cmd::process_entity_commands;
 pub use processors::{
     process_animation_command, process_asset_command, process_audio_command,
     process_camera_command, process_camera_follow_command, process_gameconfig_command,
-    process_group_command, process_input_command, process_phase_command,
-    process_render_command, process_signal_command,
+    process_group_command, process_input_command, process_phase_command, process_render_command,
+    process_signal_command,
 };
 pub use spawn_cmd::{process_clone_command, process_spawn_command};
 
@@ -105,7 +105,13 @@ pub(crate) fn drain_and_process_effect_commands(
     for cmd in signals {
         process_signal_command(world_signals, cmd);
     }
-    process_entity_commands(commands, entities, cmd_queries, systems_store, animation_store);
+    process_entity_commands(
+        commands,
+        entities,
+        cmd_queries,
+        systems_store,
+        animation_store,
+    );
     for cmd in spawns {
         process_spawn_command(commands, cmd, world_signals);
     }

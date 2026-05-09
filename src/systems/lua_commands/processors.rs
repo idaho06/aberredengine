@@ -200,17 +200,15 @@ pub fn process_asset_command<F1>(
                 error!("Failed to load texture '{}': {}", path, e);
             }
         },
-        AssetCmd::Font { id, path, size } => {
-            match load_font_fn(rl, th, &path, size) {
-                Ok(font) => {
-                    debug!("Loaded font '{}' from '{}'", id, path);
-                    fonts.add(&id, font);
-                }
-                Err(err) => {
-                    error!("Failed to load font '{}' from '{}': {}", id, path, err);
-                }
+        AssetCmd::Font { id, path, size } => match load_font_fn(rl, th, &path, size) {
+            Ok(font) => {
+                debug!("Loaded font '{}' from '{}'", id, path);
+                fonts.add(&id, font);
             }
-        }
+            Err(err) => {
+                error!("Failed to load font '{}' from '{}': {}", id, path, err);
+            }
+        },
         AssetCmd::Music { id, path } => {
             debug!("Queuing music '{}' from '{}'", id, path);
             audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });

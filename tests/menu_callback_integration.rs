@@ -7,12 +7,12 @@ use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCal
 use aberredengine::events::audio::AudioCmd;
 use aberredengine::events::menu::MenuSelectionEvent;
 use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
+use aberredengine::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
-use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::resources::input_bindings::InputBindings;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturestore::TextureStore;

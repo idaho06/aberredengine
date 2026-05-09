@@ -42,12 +42,12 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::events::audio::AudioCmd;
+use crate::resources::appstate::AppState;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
