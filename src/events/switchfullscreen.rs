@@ -9,7 +9,7 @@ use crate::resources::fullscreen::FullScreen;
 use crate::resources::gameconfig::GameConfig;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
-use log::{debug, error, info};
+use log::{debug, info};
 
 /// Event triggered to toggle fullscreen mode.
 ///
@@ -33,30 +33,13 @@ pub fn switch_fullscreen_observer(
     debug!("SwitchFullScreenEvent triggered");
     if fullscreen.is_some() {
         commands.remove_resource::<FullScreen>();
-
-        if rl.is_window_fullscreen() {
-            rl.toggle_borderless_windowed();
-            let (w, h) = config.window_size();
-            rl.set_window_size(w as i32, h as i32);
-
-            if !rl.is_window_fullscreen() {
-                info!("Full screen disabled");
-            } else {
-                error!("Failed to disable full screen");
-            }
-        }
+        rl.toggle_borderless_windowed();
+        let (w, h) = config.window_size();
+        rl.set_window_size(w as i32, h as i32);
+        info!("Full screen disabled");
     } else {
-        info!("Entering full screen mode");
         commands.insert_resource(FullScreen {});
-
-        if !rl.is_window_fullscreen() {
-            rl.toggle_borderless_windowed();
-
-            if rl.is_window_fullscreen() {
-                info!("Full screen enabled");
-            } else {
-                error!("Failed to enable full screen");
-            }
-        }
+        rl.toggle_borderless_windowed();
+        info!("Full screen enabled");
     }
 }
