@@ -10,7 +10,7 @@ Built with:
 
 - **Rust** (edition 2024)
 - **bevy_ecs** (0.18) for ECS
-- **raylib** (5.5.1) for windowing, rendering, input, and audio integration
+- **raylib** (6.0.0) for windowing, rendering, input, and audio integration
 - **mlua** (0.11, LuaJIT) for optional Lua scripting
 
 ## What it includes

@@ -389,11 +389,46 @@ impl LuaRuntime {
         meta.set("callbacks", &meta_callbacks)?;
         engine.set("__meta", meta)?;
 
-        register_log_fn!(engine, self.lua, meta_fns, "log",       info,  "General purpose logging");
-        register_log_fn!(engine, self.lua, meta_fns, "log_info",  info,  "Info level logging");
-        register_log_fn!(engine, self.lua, meta_fns, "log_warn",  warn,  "Warning level logging");
-        register_log_fn!(engine, self.lua, meta_fns, "log_error", error, "Error level logging");
-        register_log_fn!(engine, self.lua, meta_fns, "log_debug", debug, "Debug level logging");
+        register_log_fn!(
+            engine,
+            self.lua,
+            meta_fns,
+            "log",
+            info,
+            "General purpose logging"
+        );
+        register_log_fn!(
+            engine,
+            self.lua,
+            meta_fns,
+            "log_info",
+            info,
+            "Info level logging"
+        );
+        register_log_fn!(
+            engine,
+            self.lua,
+            meta_fns,
+            "log_warn",
+            warn,
+            "Warning level logging"
+        );
+        register_log_fn!(
+            engine,
+            self.lua,
+            meta_fns,
+            "log_error",
+            error,
+            "Error level logging"
+        );
+        register_log_fn!(
+            engine,
+            self.lua,
+            meta_fns,
+            "log_debug",
+            debug,
+            "Debug level logging"
+        );
 
         self.lua.globals().set("engine", engine)?;
 

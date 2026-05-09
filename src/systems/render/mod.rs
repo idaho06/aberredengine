@@ -35,12 +35,14 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
+use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
@@ -49,7 +51,6 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
-use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::scene_dispatch::GuiCallback;
@@ -207,6 +208,7 @@ pub(super) enum SourceBuffer {
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
+    mut imgui_bridge: NonSendMut<ImguiBridge>,
     mut shader_store: NonSendMut<ShaderStore>,
     res: RenderResources,
     queries: RenderQueries,
@@ -693,41 +695,40 @@ pub fn render_system(
         let world_time = &*res.world_time;
         let config = &*res.config;
 
-        let closure = move |d: &RaylibDrawHandle<'_>| {
-            use raylib::imgui::RayImGUITrait;
-            let Some(ui) = d.begin_imgui() else { return };
+        let closure = move |_d: &RaylibDrawHandle<'_>| {
+            imgui_bridge.render(|ui| {
+                if debug_active {
+                    draw_imgui_debug(
+                        ui,
+                        overlay_config,
+                        world_signals,
+                        input_state,
+                        camera,
+                        camera_follow,
+                        scene_manager,
+                        textures,
+                        fonts,
+                        shader_count,
+                        screensize,
+                        window_size,
+                        world_time,
+                        config,
+                        fps,
+                        sprite_count,
+                        collider_count,
+                        position_count,
+                        rigidbody_count,
+                        screen_sprite_count,
+                        screen_text_count,
+                        game_mouse_pos,
+                        mouse_world,
+                    );
+                }
 
-            if debug_active {
-                draw_imgui_debug(
-                    &ui,
-                    overlay_config,
-                    world_signals,
-                    input_state,
-                    camera,
-                    camera_follow,
-                    scene_manager,
-                    textures,
-                    fonts,
-                    shader_count,
-                    screensize,
-                    window_size,
-                    world_time,
-                    config,
-                    fps,
-                    sprite_count,
-                    collider_count,
-                    position_count,
-                    rigidbody_count,
-                    screen_sprite_count,
-                    screen_text_count,
-                    game_mouse_pos,
-                    mouse_world,
-                );
-            }
-
-            if let Some(cb) = gui_callback {
-                cb(&ui, world_signals, textures, fonts, app_state);
-            }
+                if let Some(cb) = gui_callback {
+                    cb(ui, world_signals, textures, fonts, app_state);
+                }
+            });
         };
         apply_postprocess_passes(
             rl,

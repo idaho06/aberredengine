@@ -782,5 +782,4 @@ mod tests {
         let snap = ws.snapshot();
         assert_eq!(snap.entities.get("player"), Some(&entity.to_bits()));
     }
-
 }

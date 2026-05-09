@@ -4,7 +4,7 @@ This guide explains how to build a 2D game in pure Rust using the Aberred Engine
 
 ## 1. What the Engine Provides
 
-Aberred Engine is a 2D game engine built on **Bevy ECS 0.18** and **Raylib 5.5.1**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
+Aberred Engine is a 2D game engine built on **Bevy ECS 0.18** and **Raylib 6.0.0**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
 
 Built-in systems:
 

@@ -72,12 +72,16 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
         let mut final_blit_done = false;
 
         let Some(ping_tex) = render_target.ping.as_ref() else {
-            error!("Post-process ping buffer missing after initialization; falling back to direct blit");
+            error!(
+                "Post-process ping buffer missing after initialization; falling back to direct blit"
+            );
             blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
             return;
         };
         let Some(pong_tex) = render_target.pong.as_ref() else {
-            error!("Post-process pong buffer missing after initialization; falling back to direct blit");
+            error!(
+                "Post-process pong buffer missing after initialization; falling back to direct blit"
+            );
             blit_to_window(rl, th, &render_target.texture, src, dest, post_blit.take());
             return;
         };
@@ -164,7 +168,9 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
 
                 if write_to_ping {
                     let Some(dest_tex) = render_target.ping.as_mut() else {
-                        error!("Post-process ping buffer missing during render pass; falling back to direct blit");
+                        error!(
+                            "Post-process ping buffer missing during render pass; falling back to direct blit"
+                        );
                         blit_to_window(rl, th, source_tex, src, dest, post_blit.take());
                         return;
                     };
@@ -185,7 +191,9 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                     source_buffer = SourceBuffer::Ping;
                 } else {
                     let Some(dest_tex) = render_target.pong.as_mut() else {
-                        error!("Post-process pong buffer missing during render pass; falling back to direct blit");
+                        error!(
+                            "Post-process pong buffer missing during render pass; falling back to direct blit"
+                        );
                         blit_to_window(rl, th, source_tex, src, dest, post_blit.take());
                         return;
                     };

@@ -14,17 +14,17 @@ mlua = { version = "0.11", features = ["vendored", "luajit", "serialize"], optio
 arrayvec = "0.7"
 smallvec = "1.15"
 configparser = "3"
-fastrand = "2.3"
+fastrand = "2.4"
 log = "0.4"
 env_logger = "0.11"
 clap = { version = "4", features = ["derive"] }
 imgui = "0.12"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-raylib = { package = "sola-raylib", version = "5.5.3", features = ["wayland","noscreenshot","imgui"] }
+raylib = { package = "sola-raylib", version = "6.1", features = ["wayland", "noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-raylib = { package = "sola-raylib", version = "5.5.3", features = ["noscreenshot","imgui"] }
+raylib = { package = "sola-raylib", version = "6.1", features = ["noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 embed-resource = "3"

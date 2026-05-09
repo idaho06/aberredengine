@@ -30,13 +30,13 @@ use log::{debug, error, info};
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::Persistent;
+use crate::resources::appstate::AppState;
+use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::fontstore::FontStore;
-use crate::resources::appstate::AppState;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
@@ -241,12 +241,17 @@ pub fn scene_enter_play(
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
-    let initial = scene_manager.initial_scene.as_ref().cloned()
+    let initial = scene_manager
+        .initial_scene
+        .as_ref()
+        .cloned()
         .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
 
     world_signals.set_string("scene", initial);
 
-    commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
+    commands.run_system(*systems_store.get("switch_scene").expect(
+        "'switch_scene' system not registered; validate_required_systems should have caught this",
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +323,14 @@ mod tests {
     #[test]
     fn gui_callback_some_stores_fn_pointer() {
         fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore, _fonts: &FontStore, _app_state: &AppState) {}
+        fn my_gui(
+            _ui: &ImguiUi,
+            _signals: &mut WorldSignals,
+            _textures: &TextureStore,
+            _fonts: &FontStore,
+            _app_state: &AppState,
+        ) {
+        }
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,
@@ -335,7 +347,14 @@ mod tests {
     #[test]
     fn gui_callback_clone_preserves_fn_pointer() {
         fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(_ui: &ImguiUi, _signals: &mut WorldSignals, _textures: &TextureStore, _fonts: &FontStore, _app_state: &AppState) {}
+        fn my_gui(
+            _ui: &ImguiUi,
+            _signals: &mut WorldSignals,
+            _textures: &TextureStore,
+            _fonts: &FontStore,
+            _app_state: &AppState,
+        ) {
+        }
         let desc = SceneDescriptor {
             on_enter: enter,
             on_update: None,

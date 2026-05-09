@@ -17,6 +17,7 @@
 //! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
 //! - [`group`] – set of group names tracked for entity counting
+//! - [`imgui_bridge`] – internal Dear ImGui backend that replaces raylib's removed feature
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
@@ -29,7 +30,6 @@
 
 pub mod animationstore;
 pub mod appstate;
-pub mod mapdata;
 pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
@@ -40,10 +40,12 @@ pub mod fullscreen;
 pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
+pub mod imgui_bridge;
 pub mod input;
 pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
+pub mod mapdata;
 pub mod postprocessshader;
 pub mod rendertarget;
 pub mod scenemanager;

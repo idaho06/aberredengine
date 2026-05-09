@@ -151,8 +151,11 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
                 format!("Flags ({})", world_signals.get_flags().len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut flags: Vec<&str> =
-                    world_signals.get_flags().iter().map(|s| s.as_str()).collect();
+                let mut flags: Vec<&str> = world_signals
+                    .get_flags()
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
                 flags.sort_unstable();
                 for flag in flags {
                     ui.text(format!("  {}", flag));

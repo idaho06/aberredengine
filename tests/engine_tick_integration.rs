@@ -33,13 +33,13 @@ use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::events::timer::TimerEvent;
 use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
 use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
 use aberredengine::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
-use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
@@ -3363,17 +3363,24 @@ fn timer_callback_spawn_then_clone_same_drain() {
     {
         let rt = world.non_send_resource::<LuaRuntime>();
         rt.lua()
-            .load(r#"
+            .load(
+                r#"
                 function spawn_and_clone_cb(ctx, input)
                     engine.spawn():with_group("template"):register_as("tpl"):build()
                     engine.clone("tpl"):with_group("copy"):build()
                 end
-            "#)
+            "#,
+            )
             .exec()
             .expect("lua load");
     }
 
-    world.spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "spawn_and_clone_cb".into() }),));
+    world.spawn((LuaTimer::new(
+        0.5,
+        LuaTimerCallback {
+            name: "spawn_and_clone_cb".into(),
+        },
+    ),));
 
     tick_lua_timers_with_observer(&mut world);
 
@@ -3382,7 +3389,10 @@ fn timer_callback_spawn_then_clone_same_drain() {
         .iter(&world)
         .filter(|g| g.name() == "copy")
         .count();
-    assert_eq!(copy_count, 1, "expected one cloned entity with group 'copy'");
+    assert_eq!(
+        copy_count, 1,
+        "expected one cloned entity with group 'copy'"
+    );
 }
 
 /// Test 2 — Collision path: spawn before clone (collision callback)
@@ -3399,30 +3409,38 @@ fn collision_callback_spawn_then_clone_same_drain() {
     {
         let rt = world.non_send_resource::<LuaRuntime>();
         rt.lua()
-            .load(r#"
+            .load(
+                r#"
                 function on_coll_spawn_clone(ctx)
                     engine.collision_spawn():with_group("proj"):register_as("proj_src"):build()
                     engine.collision_clone("proj_src"):with_group("proj_copy"):build()
                 end
-            "#)
+            "#,
+            )
             .exec()
             .expect("lua load");
     }
 
-    let _a = world.spawn((
-        Group::new("shooter"),
-        MapPosition::new(0.0, 0.0),
-        BoxCollider::new(10.0, 10.0),
-    )).id();
-    let _b = world.spawn((
-        Group::new("target"),
-        MapPosition::new(5.0, 0.0),
-        BoxCollider::new(10.0, 10.0),
-    )).id();
+    let _a = world
+        .spawn((
+            Group::new("shooter"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+        ))
+        .id();
+    let _b = world
+        .spawn((
+            Group::new("target"),
+            MapPosition::new(5.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+        ))
+        .id();
     world.spawn(LuaCollisionRule::new(
         "shooter",
         "target",
-        LuaCollisionCallback { name: "on_coll_spawn_clone".into() },
+        LuaCollisionCallback {
+            name: "on_coll_spawn_clone".into(),
+        },
     ));
 
     world.add_observer(lua_collision_observer);
@@ -3435,7 +3453,10 @@ fn collision_callback_spawn_then_clone_same_drain() {
         .iter(&world)
         .filter(|g| g.name() == "proj_copy")
         .count();
-    assert_eq!(copy_count, 1, "expected one collision-cloned entity with group 'proj_copy'");
+    assert_eq!(
+        copy_count, 1,
+        "expected one collision-cloned entity with group 'proj_copy'"
+    );
 }
 
 /// Test 3 — Lua phase: return-value transition takes precedence over
@@ -3452,22 +3473,27 @@ fn lua_phase_return_value_beats_phase_transition_cmd() {
     {
         let rt = world.non_send_resource::<LuaRuntime>();
         rt.lua()
-            .load(r#"
+            .load(
+                r#"
                 function idle_update(ctx, input, dt)
                     engine.phase_transition(ctx.id, "via_cmd")
                     return "return_winner"
                 end
-            "#)
+            "#,
+            )
             .exec()
             .expect("lua load");
     }
 
     let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbacks {
-        on_enter: None,
-        on_update: Some("idle_update".into()),
-        on_exit: None,
-    });
+    phases.insert(
+        "idle".into(),
+        PhaseCallbacks {
+            on_enter: None,
+            on_update: Some("idle_update".into()),
+            on_exit: None,
+        },
+    );
     phases.insert("via_cmd".into(), PhaseCallbacks::default());
     phases.insert("return_winner".into(), PhaseCallbacks::default());
 
@@ -3506,26 +3532,31 @@ fn collision_callback_phase_plus_signal_all_processed() {
     {
         let rt = world.non_send_resource::<LuaRuntime>();
         rt.lua()
-            .load(r#"
+            .load(
+                r#"
                 function on_multi_effect(ctx)
                     engine.collision_phase_transition(ctx.a.id, "hit")
                     engine.collision_set_flag("was_hit")
                 end
-            "#)
+            "#,
+            )
             .exec()
             .expect("lua load");
     }
 
-    let mut phases: rustc_hash::FxHashMap<String, PhaseCallbacks> = rustc_hash::FxHashMap::default();
+    let mut phases: rustc_hash::FxHashMap<String, PhaseCallbacks> =
+        rustc_hash::FxHashMap::default();
     phases.insert("idle".into(), PhaseCallbacks::default());
     phases.insert("hit".into(), PhaseCallbacks::default());
 
-    let a = world.spawn((
-        Group::new("hero"),
-        MapPosition::new(0.0, 0.0),
-        BoxCollider::new(10.0, 10.0),
-        LuaPhase::new("idle", phases),
-    )).id();
+    let a = world
+        .spawn((
+            Group::new("hero"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            LuaPhase::new("idle", phases),
+        ))
+        .id();
     world.spawn((
         Group::new("hazard"),
         MapPosition::new(5.0, 0.0),
@@ -3534,7 +3565,9 @@ fn collision_callback_phase_plus_signal_all_processed() {
     world.spawn(LuaCollisionRule::new(
         "hero",
         "hazard",
-        LuaCollisionCallback { name: "on_multi_effect".into() },
+        LuaCollisionCallback {
+            name: "on_multi_effect".into(),
+        },
     ));
 
     world.add_observer(lua_collision_observer);
@@ -3552,5 +3585,8 @@ fn collision_callback_phase_plus_signal_all_processed() {
 
     // World signal mutation applied
     let signals = world.resource::<WorldSignals>();
-    assert!(signals.has_flag("was_hit"), "world signal flag should be set");
+    assert!(
+        signals.has_flag("was_hit"),
+        "world signal flag should be set"
+    );
 }

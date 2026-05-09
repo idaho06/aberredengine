@@ -202,30 +202,33 @@ mod tests {
                 fps: 12.0,
                 looping: true,
             }],
-            entities: vec![EntityDef {
-                position: Some([100.0, 200.0]),
-                sprite: Some(SpriteEntry {
-                    texture_key: "player".into(),
-                    width: 16.0,
-                    height: 16.0,
-                    offset: Some([0.0, 0.0]),
-                    origin: None,
-                    flip_h: false,
-                    flip_v: false,
-                }),
-                group: Some("player".into()),
-                z_index: Some(1.0),
-                ..Default::default()
-            }, EntityDef {
-                position: Some([140.0, 220.0]),
-                dynamic_text: Some(DynamicTextEntry {
-                    text: "Hello".into(),
-                    font_key: "arcade".into(),
-                    font_size: 24.0,
-                    color: [255, 255, 255, 255],
-                }),
-                ..Default::default()
-            }],
+            entities: vec![
+                EntityDef {
+                    position: Some([100.0, 200.0]),
+                    sprite: Some(SpriteEntry {
+                        texture_key: "player".into(),
+                        width: 16.0,
+                        height: 16.0,
+                        offset: Some([0.0, 0.0]),
+                        origin: None,
+                        flip_h: false,
+                        flip_v: false,
+                    }),
+                    group: Some("player".into()),
+                    z_index: Some(1.0),
+                    ..Default::default()
+                },
+                EntityDef {
+                    position: Some([140.0, 220.0]),
+                    dynamic_text: Some(DynamicTextEntry {
+                        text: "Hello".into(),
+                        font_key: "arcade".into(),
+                        font_size: 24.0,
+                        color: [255, 255, 255, 255],
+                    }),
+                    ..Default::default()
+                },
+            ],
         }
     }
 

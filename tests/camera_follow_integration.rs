@@ -544,7 +544,10 @@ fn bounds_clamp_respects_zoom() {
     }
     // Target at origin — zoom must match the initial camera zoom so the lerp
     // starts already at destination and the bounds-clamp assertion still holds.
-    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::default().with_zoom(2.0)));
+    world.spawn((
+        MapPosition::new(0.0, 0.0),
+        CameraTarget::default().with_zoom(2.0),
+    ));
     world.flush();
 
     tick(&mut world);
@@ -620,7 +623,11 @@ fn zero_width_bounds_center_x() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq(t.x, 25.0), "x centered in zero-width bounds: {}", t.x);
+    assert!(
+        approx_eq(t.x, 25.0),
+        "x centered in zero-width bounds: {}",
+        t.x
+    );
     assert!(approx_eq(t.y, 140.0), "y still clamps normally: {}", t.y);
 }
 
@@ -643,14 +650,25 @@ fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
             height: 400.0,
         });
     }
-    world.spawn((MapPosition::new(9999.0, -9999.0), CameraTarget::default().with_zoom(0.1)));
+    world.spawn((
+        MapPosition::new(9999.0, -9999.0),
+        CameraTarget::default().with_zoom(0.1),
+    ));
     world.flush();
 
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq(t.x, 300.0), "x centered when zoomed far out: {}", t.x);
-    assert!(approx_eq(t.y, 270.0), "y centered when zoomed far out: {}", t.y);
+    assert!(
+        approx_eq(t.x, 300.0),
+        "x centered when zoomed far out: {}",
+        t.x
+    );
+    assert!(
+        approx_eq(t.y, 270.0),
+        "y centered when zoomed far out: {}",
+        t.y
+    );
 }
 
 #[test]
@@ -691,13 +709,20 @@ fn zoom_lerps_toward_target() {
         cfg.zoom_lerp_speed = 5.0;
     }
     // Camera starts at zoom 1.0 (from make_camera); target wants 3.0.
-    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::new(0).with_zoom(3.0)));
+    world.spawn((
+        MapPosition::new(0.0, 0.0),
+        CameraTarget::new(0).with_zoom(3.0),
+    ));
     world.flush();
 
     tick(&mut world);
 
     let zoom = camera_zoom(&world);
-    assert!(zoom > 1.0 && zoom < 3.0, "zoom should be lerping toward 3.0, got {}", zoom);
+    assert!(
+        zoom > 1.0 && zoom < 3.0,
+        "zoom should be lerping toward 3.0, got {}",
+        zoom
+    );
 }
 
 #[test]
@@ -708,8 +733,14 @@ fn zoom_of_winning_target_is_used() {
         cfg.mode = FollowMode::Instant;
         cfg.zoom_lerp_speed = 1000.0; // effectively instant
     }
-    world.spawn((MapPosition::new(100.0, 0.0), CameraTarget::new(1).with_zoom(2.0)));
-    world.spawn((MapPosition::new(200.0, 0.0), CameraTarget::new(10).with_zoom(4.0)));
+    world.spawn((
+        MapPosition::new(100.0, 0.0),
+        CameraTarget::new(1).with_zoom(2.0),
+    ));
+    world.spawn((
+        MapPosition::new(200.0, 0.0),
+        CameraTarget::new(10).with_zoom(4.0),
+    ));
     world.flush();
 
     for _ in 0..60 {
@@ -732,7 +763,10 @@ fn zoom_clamps_to_epsilon() {
         cfg.mode = FollowMode::Instant;
         cfg.zoom_lerp_speed = 1000.0;
     }
-    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::new(0).with_zoom(-5.0)));
+    world.spawn((
+        MapPosition::new(0.0, 0.0),
+        CameraTarget::new(0).with_zoom(-5.0),
+    ));
     world.flush();
 
     for _ in 0..60 {

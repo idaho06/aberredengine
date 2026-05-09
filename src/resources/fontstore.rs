@@ -49,7 +49,13 @@ impl FontStore {
     }
 
     /// Add a font with editor metadata (path and font size).
-    pub fn add_with_meta(&mut self, id: impl Into<String>, font: Font, path: String, font_size: f32) {
+    pub fn add_with_meta(
+        &mut self,
+        id: impl Into<String>,
+        font: Font,
+        path: String,
+        font_size: f32,
+    ) {
         let key = id.into();
         self.fonts.insert(key.clone(), font);
         self.meta.insert(key, FontMeta { path, font_size });

@@ -87,7 +87,9 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
     match state {
         GameStates::None => debug!("Entered None state"),
         GameStates::Setup => {
-            commands.run_system(*systems_store.get("setup").expect("'setup' system not registered; validate_required_systems should have caught this"));
+            commands.run_system(*systems_store.get("setup").expect(
+                "'setup' system not registered; validate_required_systems should have caught this",
+            ));
         }
         GameStates::Playing => {
             commands.run_system(*systems_store.get("enter_play").expect("'enter_play' system not registered; validate_required_systems should have caught this"));
