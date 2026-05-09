@@ -505,14 +505,44 @@ impl EngineBuilder {
         Ok(config)
     }
 
+    fn raylib_log_level_from_env() -> TraceLogLevel {
+        std::env::var("RUST_LOG")
+            .ok()
+            .as_deref()
+            .map(Self::raylib_log_level_from_rust_log)
+            .unwrap_or(TraceLogLevel::LOG_INFO)
+    }
+
+    fn raylib_log_level_from_rust_log(rust_log: &str) -> TraceLogLevel {
+        let default_directive = rust_log
+            .split(',')
+            .map(str::trim)
+            .find(|directive| !directive.is_empty() && !directive.contains('='));
+
+        let level = default_directive
+            .and_then(|directive| directive.split('/').next())
+            .map(|directive| directive.trim().to_ascii_lowercase());
+
+        match level.as_deref() {
+            Some("trace") => TraceLogLevel::LOG_TRACE,
+            Some("debug") => TraceLogLevel::LOG_DEBUG,
+            Some("info") => TraceLogLevel::LOG_INFO,
+            Some("warn") | Some("warning") => TraceLogLevel::LOG_WARNING,
+            Some("error") => TraceLogLevel::LOG_ERROR,
+            Some("off") => TraceLogLevel::LOG_NONE,
+            _ => TraceLogLevel::LOG_INFO,
+        }
+    }
+
     fn setup_window(
         config: &GameConfig,
     ) -> Result<(raylib::RaylibHandle, raylib::RaylibThread, RenderTarget), String> {
+        let raylib_log_level = Self::raylib_log_level_from_env();
         let (mut rl, thread) = raylib::init()
             .size(config.window_width as i32, config.window_height as i32)
             .resizable()
             .title(&config.window_title)
-            .log_level(TraceLogLevel::LOG_WARNING)
+            .log_level(raylib_log_level)
             .highdpi()
             .msaa_4x()
             .build();
@@ -911,6 +941,66 @@ mod tests {
     fn test_builder_title() {
         let builder = EngineBuilder::new().title("My Game");
         assert_eq!(builder.title_override, Some("My Game".to_string()));
+    }
+
+    #[test]
+    fn test_raylib_log_level_from_rust_log_defaults_to_info() {
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log(""),
+            TraceLogLevel::LOG_INFO
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("mycrate=debug"),
+            TraceLogLevel::LOG_INFO
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("nope"),
+            TraceLogLevel::LOG_INFO
+        );
+    }
+
+    #[test]
+    fn test_raylib_log_level_from_rust_log_maps_supported_levels() {
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("trace"),
+            TraceLogLevel::LOG_TRACE
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("debug"),
+            TraceLogLevel::LOG_DEBUG
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("info"),
+            TraceLogLevel::LOG_INFO
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("warning"),
+            TraceLogLevel::LOG_WARNING
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("error"),
+            TraceLogLevel::LOG_ERROR
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("off"),
+            TraceLogLevel::LOG_NONE
+        );
+    }
+
+    #[test]
+    fn test_raylib_log_level_from_rust_log_uses_global_directive_only() {
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("warn,mycrate=debug"),
+            TraceLogLevel::LOG_WARNING
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("mycrate=debug,trace"),
+            TraceLogLevel::LOG_TRACE
+        );
+        assert_eq!(
+            EngineBuilder::raylib_log_level_from_rust_log("info/foo,mycrate=debug"),
+            TraceLogLevel::LOG_INFO
+        );
     }
 
     #[test]
