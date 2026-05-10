@@ -31,6 +31,28 @@ local function update_facing_direction(id, input)
     end
 end
 
+--- Sets horizontal velocity unless the wall on that side is blocking.
+--- Negative vx checks touching_wall_left; positive vx checks touching_wall_right.
+--- @param ctx EntityContext
+--- @param vx number
+--- @param vy number
+local function set_hvel(ctx, vx, vy)
+    local wall = vx < 0 and "touching_wall_left" or "touching_wall_right"
+    if not utils.has_flag(ctx.signals.flags, wall) then
+        engine.entity_set_velocity(ctx.id, vx, vy)
+    end
+end
+
+--- Applies wall-stop: sets signal, snaps x position, zeroes x velocity.
+--- @param ctx CollisionContext
+--- @param flag string
+--- @param snap_x number
+local function apply_wall_stop(ctx, flag, snap_x)
+    engine.collision_entity_signal_set_flag(ctx.b.id, flag)
+    engine.collision_entity_set_position(ctx.b.id, snap_x, ctx.b.pos.y)
+    engine.collision_entity_set_velocity(ctx.b.id, 0, ctx.b.vel.y)
+end
+
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
 --- Called each frame when sidescroller level01 scene is active.
@@ -41,11 +63,12 @@ local function on_update_sidescroller_level01(input, dt)
     if input.digital.back.just_pressed then
         engine.change_scene("menu")
     end
-    -- reset the player "on_ground" signal at the start of each frame, it will be set again by the collision callback if we are still on the ground
+    -- cleared each frame; collision callbacks re-set these if contact persists
     local player_id = engine.get_entity("player")
     if player_id then
         engine.entity_signal_clear_flag(player_id, "on_ground")
-        engine.entity_signal_clear_flag(player_id, "touching_wall")
+        engine.entity_signal_clear_flag(player_id, "touching_wall_left")
+        engine.entity_signal_clear_flag(player_id, "touching_wall_right")
         engine.entity_signal_clear_flag(player_id, "touching_ceiling")
         -- engine.entity_signal_set_flag(player_id, "falling")
         -- engine.entity_set_force_enabled(player_id, "gravity", true)
@@ -59,11 +82,10 @@ end
 local function player_running_on_enter(ctx, input)
     log_debug("Player started running!")
     engine.entity_signal_set_flag(ctx.id, "running")
-    -- Check facing direction and set velocity accordingly
     if input.digital.left.pressed and not input.digital.right.pressed then
-        engine.entity_set_velocity(ctx.id, -running_speed, 0)
+        set_hvel(ctx, -running_speed, 0)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
-        engine.entity_set_velocity(ctx.id, running_speed, 0)
+        set_hvel(ctx, running_speed, 0)
     end
 end
 
@@ -94,12 +116,11 @@ local function player_running_on_update(ctx, input, dt)
             return "walking"
         end
         if input.digital.left.pressed and not input.digital.right.pressed then
-            engine.entity_set_velocity(ctx.id, -running_speed, 0)
+            set_hvel(ctx, -running_speed, 0)
         elseif input.digital.right.pressed and not input.digital.left.pressed then
-            engine.entity_set_velocity(ctx.id, running_speed, 0)
+            set_hvel(ctx, running_speed, 0)
         end
     else
-        -- Transition to idle
         return "idle"
     end
 end
@@ -119,9 +140,9 @@ local function player_walking_on_enter(ctx, input)
     engine.entity_signal_set_flag(ctx.id, "walking")
     update_facing_direction(ctx.id, input)
     if input.digital.left.pressed and not input.digital.right.pressed then
-        engine.entity_set_velocity(ctx.id, -walking_speed, 0)
+        set_hvel(ctx, -walking_speed, 0)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
-        engine.entity_set_velocity(ctx.id, walking_speed, 0)
+        set_hvel(ctx, walking_speed, 0)
     end
 end
 
@@ -155,11 +176,10 @@ local function player_walking_on_update(ctx, input, dt)
         return "running"
     end
 
-    -- Keep walking at walking speed
     if input.digital.left.pressed then
-        engine.entity_set_velocity(ctx.id, -walking_speed, 0)
+        set_hvel(ctx, -walking_speed, 0)
     else
-        engine.entity_set_velocity(ctx.id, walking_speed, 0)
+        set_hvel(ctx, walking_speed, 0)
     end
 end
 
@@ -186,13 +206,12 @@ local function player_falling_on_update(ctx, input, dt)
     if utils.has_flag(ctx.signals.flags, "on_ground") then
         return "idle"
     end
-    -- Allow horizontal steering at running speed; preserve vertical velocity so gravity accumulates
     if input.digital.left.pressed and not input.digital.right.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, -running_speed, ctx.vel.y)
+        set_hvel(ctx, -running_speed, ctx.vel.y)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, running_speed, ctx.vel.y)
+        set_hvel(ctx, running_speed, ctx.vel.y)
     elseif not input.digital.right.pressed and not input.digital.left.pressed then
         engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
     end
@@ -224,13 +243,12 @@ local function player_jumping_on_update(ctx, input, dt)
     if ctx.vel.y > 0 then
         return "falling"
     end
-    -- Allow horizontal steering while rising
     if input.digital.left.pressed and not input.digital.right.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, -running_speed, ctx.vel.y)
+        set_hvel(ctx, -running_speed, ctx.vel.y)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
         update_facing_direction(ctx.id, input)
-        engine.entity_set_velocity(ctx.id, running_speed, ctx.vel.y)
+        set_hvel(ctx, running_speed, ctx.vel.y)
     elseif not input.digital.right.pressed and not input.digital.left.pressed then
         engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
     end
@@ -249,7 +267,6 @@ end
 local function player_idle_on_enter(ctx, input)
     log_debug("Player is idle.")
     -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
-    -- remove horizontal movement when entering idle
     engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
 end
 
@@ -340,10 +357,10 @@ local function player_attack_on_exit(ctx)
     end
 end
 
---- Collision ground/player callback.
+--- Collision solid/player callback.
 --- @param ctx CollisionContext
-local function collision_ground_player(ctx)
-    -- entity ctx.a is ground, entity ctx.b is player
+local function collision_solid_player(ctx)
+    -- entity ctx.a is solid, entity ctx.b is player
     -- check that the player side colliding with the ground is the bottom
     -- engine.log_debug(utils.dump_value(ctx, 4))
 
@@ -376,11 +393,16 @@ local function collision_ground_player(ctx)
         engine.collision_entity_set_velocity(ctx.b.id, ctx.b.vel.x, math.min(ctx.b.vel.y, 0))
     end
 
-    if player_touching_wall_left or player_touching_wall_right then
-        if ctx.b.pos.y >= ctx.a.rect.y + ctx.a.rect.h / 4 then
-            -- only set "touching_wall" flag if player is above the midpoint of the ground, to prevent sticking when landing on the ground while moving into a walls
-            engine.collision_entity_signal_set_flag(ctx.b.id, "touching_wall")
-            engine.log_debug("collision: setting player `touching_wall` signal")
+    if (player_touching_wall_left or player_touching_wall_right) and not player_on_ground then
+        if player_touching_wall_left then
+            local snap_x = ctx.b.pos.x + (ctx.a.rect.x + ctx.a.rect.w - ctx.b.rect.x)
+            apply_wall_stop(ctx, "touching_wall_left", snap_x)
+            log_debug("collision: wall stop LEFT")
+        end
+        if player_touching_wall_right then
+            local snap_x = ctx.b.pos.x - (ctx.b.rect.x + ctx.b.rect.w - ctx.a.rect.x)
+            apply_wall_stop(ctx, "touching_wall_right", snap_x)
+            log_debug("collision: wall stop RIGHT")
         end
     end
 
@@ -397,13 +419,8 @@ local function collision_ground_player(ctx)
         engine.collision_entity_set_velocity(ctx.b.id, vel.x, 0)
         -- reset vertical position to be exactly on top of the ground to prevent sinking due to gravity
         -- local player_pos = ctx.b.pos
-        local ground_rect = ctx.a.rect
-        engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, ground_rect.y)
-    else
-        engine.collision_entity_signal_clear_flag(ctx.b.id, "on_ground")
-        log_debug("collision: removing player `on_ground` signal")
-        engine.collision_entity_signal_set_flag(ctx.b.id, "falling")
-        engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", true)
+        local solid_rect = ctx.a.rect
+        engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, solid_rect.y)
     end
 end
 
@@ -430,7 +447,7 @@ M._callbacks = {
     player_attack_on_enter = player_attack_on_enter,
     player_attack_on_update = player_attack_on_update,
     player_attack_on_exit = player_attack_on_exit,
-    collision_ground_player = collision_ground_player,
+    collision_solid_player = collision_solid_player,
 }
 
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -528,22 +545,29 @@ function M.spawn()
         :register_as("player")
         :build()
 
-    -- Spawn ground platforms
+    -- Spawn solid platforms
     engine.spawn()
         :with_collider(360, 32, 0, 0)
         :with_position(-320, 20)
-        :with_group("ground")
+        :with_group("solid")
         :build()
     engine.spawn()
         :with_collider(360, 32, 0, 0)
         :with_position(0, 20 + 32)
-        :with_group("ground")
+        :with_group("solid")
         :build()
 
-    -- Spawn collision rules for ground-player
+    -- Test wall on the right side
+    engine.spawn()
+        :with_collider(16, 300, 0, 0)
+        :with_position(120, -150)
+        :with_group("solid")
+        :build()
+
+    -- Spawn collision rules for solid-player
     engine.spawn()
         :with_group("collision_rules")
-        :with_lua_collision_rule("ground", "player", "collision_ground_player")
+        :with_lua_collision_rule("solid", "player", "collision_solid_player")
         :build()
 
     engine.spawn()
