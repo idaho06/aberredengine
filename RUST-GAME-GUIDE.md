@@ -4,7 +4,7 @@ This guide explains how to build a 2D game in pure Rust using the Aberred Engine
 
 ## 1. What the Engine Provides
 
-Aberred Engine is a 2D game engine built on **Bevy ECS 0.18** and **Raylib 6.0.0**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
+Aberred Engine is a 2D game engine built on **Bevy ECS 0.18** and **sola-raylib 6.1**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
 
 Built-in systems:
 
@@ -130,6 +130,7 @@ Scene callback signatures:
 ```rust
 use aberredengine::systems::GameCtx;
 use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::input::InputState;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
@@ -144,11 +145,12 @@ fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic *
 fn exit(ctx: &mut GameCtx) { /* cleanup */ }
 
 // Called every frame to draw ImGui widgets — Rust-only, optional
-// Signature must match: fn(&aberredengine::imgui::Ui, &mut WorldSignals, &TextureStore, &AppState)
+// Signature must match: fn(&aberredengine::imgui::Ui, &mut WorldSignals, &TextureStore, &FontStore, &AppState)
 fn my_gui(
     ui: &aberredengine::imgui::Ui,
     signals: &mut WorldSignals,
     textures: &TextureStore,
+    fonts: &FontStore,
     app_state: &AppState,
 ) { /* draw widgets, write signals, read typed state */ }
 ```
@@ -175,6 +177,7 @@ The callback receives:
 - `&aberredengine::imgui::Ui` for drawing widgets
 - `&mut WorldSignals` for GUI -> game actions and transient GUI values
 - `&TextureStore` for texture previews
+- `&FontStore` for font access (e.g. measuring text)
 - `&AppState` for richer Rust-only typed snapshots/view-models produced by systems or scene callbacks
 
 `AppState` is inserted automatically by the engine and stores one value per Rust type. Use newtypes when you need two values of the same underlying type.
@@ -182,6 +185,7 @@ The callback receives:
 ```rust
 use aberredengine::imgui;
 use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 
@@ -194,6 +198,7 @@ fn editor_gui(
     ui: &imgui::Ui,
     signals: &mut WorldSignals,
     _textures: &TextureStore,
+    _fonts: &FontStore,
     app_state: &AppState,
 ) {
     // Read typed state written by on_update or ECS systems
@@ -1420,7 +1425,6 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 | Resource | Access | Purpose |
 |----------|--------|---------|
-| `TilemapStore` | `Res` | Loaded tilemap data — **not pre-inserted**; insert manually in setup via `commands.insert_resource(TilemapStore::new())` |
 | `DebugMode` | marker resource | Presence enables debug overlays |
 | `FullScreen` | marker resource | Presence enables fullscreen |
 
@@ -1495,6 +1499,7 @@ Use `AppState` for richer GUI/editor snapshots and view-models that do not belon
 ```rust
 use aberredengine::imgui;
 use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::bevy_ecs::prelude::ResMut;
@@ -1516,6 +1521,7 @@ fn inspector_gui(
     ui: &imgui::Ui,
     _signals: &mut WorldSignals,
     _textures: &TextureStore,
+    _fonts: &FontStore,
     app_state: &AppState,
 ) {
     if let Some(snapshot) = app_state.get::<InspectorSnapshot>() {

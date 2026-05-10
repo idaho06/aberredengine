@@ -1362,12 +1362,12 @@ engine.spawn()
     :build()
 
 -- Callback function (global)
-function on_main_menu_select(ctx)
-    engine.log_info("Selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
+function on_main_menu_select(menu_id, item_id, item_index)
+    engine.log_info("Selected: " .. item_id .. " (index " .. item_index .. ")")
 
-    if ctx.item_id == "start_game" then
+    if item_id == "start_game" then
         engine.change_scene("level01")
-    elseif ctx.item_id == "exit" then
+    elseif item_id == "exit" then
         engine.quit()
     end
 end
@@ -2215,17 +2215,17 @@ engine.spawn()
     :with_position(200, 300)
     :with_group("enemy")
     :with_sprite("enemy_idle", 32, 32, 16, 16)
-    :with_lua_setup("enemy_setup")
-    :build()
-
-local function enemy_setup(ctx)
-    engine.entity_insert_lua_phase(ctx.id, {
+    :with_phase({
         initial = "patrol",
         phases = {
             patrol = { on_update = "enemy_patrol_update" },
             alert  = { on_enter = "enemy_alert_enter", on_update = "enemy_alert_update" },
         }
     })
+    :with_lua_setup("enemy_setup")
+    :build()
+
+local function enemy_setup(ctx)
     engine.entity_insert_lua_timer(ctx.id, 3.0, "enemy_shoot")
 end
 ```
@@ -5132,12 +5132,12 @@ engine.log_info("Background: " .. bg.r .. "," .. bg.g .. "," .. bg.b)
 ### Example: Options Menu Toggle
 
 ```lua
-function on_main_menu_select(ctx)
-    if ctx.item_id == "toggle_fullscreen" then
+function on_main_menu_select(menu_id, item_id, item_index)
+    if item_id == "toggle_fullscreen" then
         engine.set_fullscreen(not engine.get_fullscreen())
-    elseif ctx.item_id == "toggle_vsync" then
+    elseif item_id == "toggle_vsync" then
         engine.set_vsync(not engine.get_vsync())
-    elseif ctx.item_id == "toggle_resolution" then
+    elseif item_id == "toggle_resolution" then
         local size = engine.get_render_size()
         if size.width == 640 then
             engine.set_render_size(1280, 720)
@@ -5184,12 +5184,20 @@ end
 
 8. **Scene scripts are lazy-loaded** - Only loaded when `on_switch_scene()` requires them.
 
-9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach phases, timers, and collision rules inside a setup callback instead of branching on entity group in `on_update`. The callback fires once per entity (including clones), keeping scene update logic clean.
+9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach timers and collision rules inside a setup callback instead of branching on entity group in `on_update`. Phases must be attached at spawn time via `:with_phase()` in the spawn builder — they cannot be added at runtime. The callback fires once per entity (including clones), keeping scene update logic clean.
 
    ```lua
    -- In the map JSON: { "group": "turret", "lua_setup": "turret_setup" }
+   -- Phases go in the spawn builder; timers and runtime init go in the setup callback:
+   engine.spawn()
+       :with_group("turret")
+       :with_phase({ initial = "idle", phases = { ... } })
+       :with_lua_setup("turret_setup")
+       :build()
+
    local function turret_setup(ctx)
-       engine.entity_insert_lua_phase(ctx.id, { initial = "idle", phases = { ... } })
+       -- One-shot per-entity init (e.g. timers, signals)
+       engine.entity_insert_lua_timer(ctx.id, 5.0, "turret_shoot")
    end
    M._callbacks = { turret_setup = turret_setup }
    ```
