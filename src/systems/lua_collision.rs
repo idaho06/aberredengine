@@ -215,31 +215,61 @@ fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str
     }
 }
 
-#[cfg(test)]
-#[allow(clippy::items_after_test_module)]
-mod tests {
-    use super::*;
-    use crate::components::collision::BoxSide;
+/// Populate one side of a pooled collision context table for a single entity.
+#[allow(clippy::too_many_arguments)]
+fn populate_collision_entity(
+    lua: &mlua::Lua,
+    entity_table: &mlua::Table,
+    pos_table: &mlua::Table,
+    vel_table: &mlua::Table,
+    rect_table: &mlua::Table,
+    signals_table: &mlua::Table,
+    id: u64,
+    group: Option<&str>,
+    speed_sq: f32,
+    pos: Option<(f32, f32)>,
+    vel: Option<(f32, f32)>,
+    rect: Option<(f32, f32, f32, f32)>,
+    signals: Option<&Signals>,
+) -> mlua::Result<()> {
+    entity_table.set("id", id)?;
+    entity_table.set("group", group.unwrap_or(""))?;
+    entity_table.set("speed_sq", speed_sq)?;
 
-    #[test]
-    fn test_box_side_to_str_left() {
-        assert_eq!(box_side_to_str(&BoxSide::Left), "left");
+    if let Some((x, y)) = pos {
+        pos_table.set("x", x)?;
+        pos_table.set("y", y)?;
+        entity_table.set("pos", pos_table.clone())?;
+    } else {
+        entity_table.set("pos", mlua::Value::Nil)?;
     }
 
-    #[test]
-    fn test_box_side_to_str_right() {
-        assert_eq!(box_side_to_str(&BoxSide::Right), "right");
+    if let Some((vx, vy)) = vel {
+        vel_table.set("x", vx)?;
+        vel_table.set("y", vy)?;
+        entity_table.set("vel", vel_table.clone())?;
+    } else {
+        entity_table.set("vel", mlua::Value::Nil)?;
     }
 
-    #[test]
-    fn test_box_side_to_str_top() {
-        assert_eq!(box_side_to_str(&BoxSide::Top), "top");
+    if let Some((x, y, w, h)) = rect {
+        rect_table.set("x", x)?;
+        rect_table.set("y", y)?;
+        rect_table.set("w", w)?;
+        rect_table.set("h", h)?;
+        entity_table.set("rect", rect_table.clone())?;
+    } else {
+        entity_table.set("rect", mlua::Value::Nil)?;
     }
 
-    #[test]
-    fn test_box_side_to_str_bottom() {
-        assert_eq!(box_side_to_str(&BoxSide::Bottom), "bottom");
+    if let Some(s) = signals {
+        populate_entity_signals(lua, signals_table, s)?;
+        entity_table.set("signals", signals_table.clone())?;
+    } else {
+        entity_table.set("signals", mlua::Value::Nil)?;
     }
+
+    Ok(())
 }
 
 /// Call a Lua collision callback with context data.
@@ -266,88 +296,40 @@ fn call_lua_collision_callback(
     group_b: Option<&str>,
 ) -> mlua::Result<()> {
     let lua = lua_runtime.lua();
-
     let tables = lua_runtime.get_collision_ctx_pool()?;
 
-    // === Populate Entity A ===
-    tables.entity_a.set("id", entity_a_id)?;
-    tables.entity_a.set("group", group_a.unwrap_or(""))?;
-    tables.entity_a.set("speed_sq", speed_sq_a)?;
+    populate_collision_entity(
+        lua,
+        &tables.entity_a,
+        &tables.pos_a,
+        &tables.vel_a,
+        &tables.rect_a,
+        &tables.signals_a,
+        entity_a_id,
+        group_a,
+        speed_sq_a,
+        pos_a,
+        vel_a,
+        rect_a,
+        signals_a,
+    )?;
 
-    if let Some((x, y)) = pos_a {
-        tables.pos_a.set("x", x)?;
-        tables.pos_a.set("y", y)?;
-        tables.entity_a.set("pos", tables.pos_a.clone())?;
-    } else {
-        tables.entity_a.set("pos", mlua::Value::Nil)?;
-    }
+    populate_collision_entity(
+        lua,
+        &tables.entity_b,
+        &tables.pos_b,
+        &tables.vel_b,
+        &tables.rect_b,
+        &tables.signals_b,
+        entity_b_id,
+        group_b,
+        speed_sq_b,
+        pos_b,
+        vel_b,
+        rect_b,
+        signals_b,
+    )?;
 
-    if let Some((vx, vy)) = vel_a {
-        tables.vel_a.set("x", vx)?;
-        tables.vel_a.set("y", vy)?;
-        tables.entity_a.set("vel", tables.vel_a.clone())?;
-    } else {
-        tables.entity_a.set("vel", mlua::Value::Nil)?;
-    }
-
-    if let Some((x, y, w, h)) = rect_a {
-        tables.rect_a.set("x", x)?;
-        tables.rect_a.set("y", y)?;
-        tables.rect_a.set("w", w)?;
-        tables.rect_a.set("h", h)?;
-        tables.entity_a.set("rect", tables.rect_a.clone())?;
-    } else {
-        tables.entity_a.set("rect", mlua::Value::Nil)?;
-    }
-
-    // Signals A (creates fresh tables for variable-length data)
-    if let Some(signals) = signals_a {
-        populate_entity_signals(lua, &tables.signals_a, signals)?;
-        tables.entity_a.set("signals", tables.signals_a.clone())?;
-    } else {
-        tables.entity_a.set("signals", mlua::Value::Nil)?;
-    }
-
-    // === Populate Entity B ===
-    tables.entity_b.set("id", entity_b_id)?;
-    tables.entity_b.set("group", group_b.unwrap_or(""))?;
-    tables.entity_b.set("speed_sq", speed_sq_b)?;
-
-    if let Some((x, y)) = pos_b {
-        tables.pos_b.set("x", x)?;
-        tables.pos_b.set("y", y)?;
-        tables.entity_b.set("pos", tables.pos_b.clone())?;
-    } else {
-        tables.entity_b.set("pos", mlua::Value::Nil)?;
-    }
-
-    if let Some((vx, vy)) = vel_b {
-        tables.vel_b.set("x", vx)?;
-        tables.vel_b.set("y", vy)?;
-        tables.entity_b.set("vel", tables.vel_b.clone())?;
-    } else {
-        tables.entity_b.set("vel", mlua::Value::Nil)?;
-    }
-
-    if let Some((x, y, w, h)) = rect_b {
-        tables.rect_b.set("x", x)?;
-        tables.rect_b.set("y", y)?;
-        tables.rect_b.set("w", w)?;
-        tables.rect_b.set("h", h)?;
-        tables.entity_b.set("rect", tables.rect_b.clone())?;
-    } else {
-        tables.entity_b.set("rect", mlua::Value::Nil)?;
-    }
-
-    // Signals B (creates fresh tables for variable-length data)
-    if let Some(signals) = signals_b {
-        populate_entity_signals(lua, &tables.signals_b, signals)?;
-        tables.entity_b.set("signals", tables.signals_b.clone())?;
-    } else {
-        tables.entity_b.set("signals", mlua::Value::Nil)?;
-    }
-
-    // === Populate Sides (clear and repopulate pooled arrays) ===
     clear_lua_array(&tables.sides_a)?;
     for (i, side) in sides_a.iter().enumerate() {
         tables.sides_a.set(i + 1, box_side_to_str(side))?;
@@ -362,4 +344,30 @@ fn call_lua_collision_callback(
     func.call::<()>(tables.ctx)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::collision::BoxSide;
+
+    #[test]
+    fn test_box_side_to_str_left() {
+        assert_eq!(box_side_to_str(&BoxSide::Left), "left");
+    }
+
+    #[test]
+    fn test_box_side_to_str_right() {
+        assert_eq!(box_side_to_str(&BoxSide::Right), "right");
+    }
+
+    #[test]
+    fn test_box_side_to_str_top() {
+        assert_eq!(box_side_to_str(&BoxSide::Top), "top");
+    }
+
+    #[test]
+    fn test_box_side_to_str_bottom() {
+        assert_eq!(box_side_to_str(&BoxSide::Bottom), "bottom");
+    }
 }

@@ -1,33 +1,17 @@
-//! Game-specific logic and scene management.
-//!
-//! This module contains the game's setup, update loop, and scene switching
-//! logic. It demonstrates how to use the engine's components and systems
-//! to build an Arkanoid-style game.
+//! Lua-driven game lifecycle: asset loading, scene management, and per-frame update.
 //!
 //! # Key Functions
 //!
-//! - [`setup`] – loads resources (textures, fonts, audio) during `Setup` state
-//! - [`enter_play`] – initializes world signals and observers when entering `Playing` state
-//! - [`switch_scene`] – handles scene transitions (menu, level01, etc.)
-//! - [`update`] – per-frame game logic for each scene
+//! - [`setup`] – calls `on_setup` in Lua to queue asset loads, then drains them into stores
+//! - [`enter_play`] – calls `on_enter_play`, processes initial signals/groups, triggers first scene switch
+//! - [`switch_scene`] – despawns non-persistent entities, calls `on_switch_scene`, drains all command queues
+//! - [`update`] – calls `on_update_<scene>` each frame, drains command queues, handles quit/scene-switch flags
 //!
-//! # Scene Architecture
+//! # SystemParam Bundles
 //!
-//! Scenes are managed via the `"scene"` string in [`WorldSignals`](crate::resources::worldsignals::WorldSignals).
-//! Setting the `"switch_scene"` flag triggers [`switch_scene`] to despawn non-persistent
-//! entities and spawn the new scene's entities.
-//!
-//! # Phase Callbacks
-//!
-//! The `level01` scene uses [`Phase`](crate::components::phase::Phase) with callbacks:
-//! - `init` → `get_started` → `playing` → `lose_life`/`level_cleared`/`game_over`
-//!
-//! These callbacks manage ball spawning, life tracking, and win/lose conditions.
-//!
-//! # Collision Callbacks
-//!
-//! [`CollisionRule`](crate::components::collision::CollisionRule) components define how
-//! entities interact: ball-wall bounce, ball-player reflection, ball-brick destruction.
+//! - [`ScriptingContext`] – `LuaRuntime` + audio command writer
+//! - [`GameSceneState`] – world signals, post-process, config, camera follow, stores
+//! - [`EntityProcessing`] – entity command queries + LuaPhase query
 
 use crate::components::luaphase::LuaPhase;
 use crate::components::persistent::Persistent;
