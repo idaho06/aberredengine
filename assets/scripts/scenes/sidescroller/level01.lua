@@ -21,10 +21,12 @@ end
 --- @param input InputSnapshot
 local function update_facing_direction(id, input)
     if input.digital.left.pressed and not input.digital.right.pressed then
+        log_debug(string.format("update_facing_direction id=%d -> LEFT", id))
         engine.entity_signal_clear_flag(id, "facing_right")
         engine.entity_signal_set_flag(id, "facing_left")
         engine.entity_set_sprite_flip(id, true, false)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
+        log_debug(string.format("update_facing_direction id=%d -> RIGHT", id))
         engine.entity_signal_clear_flag(id, "facing_left")
         engine.entity_signal_set_flag(id, "facing_right")
         engine.entity_set_sprite_flip(id, false, false)
@@ -38,7 +40,10 @@ end
 --- @param vy number
 local function set_hvel(ctx, vx, vy)
     local wall = vx < 0 and "touching_wall_left" or "touching_wall_right"
-    if not utils.has_flag(ctx.signals.flags, wall) then
+    local blocked = utils.has_flag(ctx.signals.flags, wall)
+    log_debug(string.format("set_hvel id=%d vx=%.1f vy=%.1f wall=%s blocked=%s",
+        ctx.id, vx, vy, wall, tostring(blocked)))
+    if not blocked then
         engine.entity_set_velocity(ctx.id, vx, vy)
     end
 end
@@ -48,6 +53,8 @@ end
 --- @param flag string
 --- @param snap_x number
 local function apply_wall_stop(ctx, flag, snap_x)
+    log_debug(string.format("apply_wall_stop flag=%s snap_x=%.1f cur_x=%.1f vel_x=%.1f vel_y=%.1f",
+        flag, snap_x, ctx.b.pos.x, ctx.b.vel.x, ctx.b.vel.y))
     engine.collision_entity_signal_set_flag(ctx.b.id, flag)
     engine.collision_entity_set_position(ctx.b.id, snap_x, ctx.b.pos.y)
     engine.collision_entity_set_velocity(ctx.b.id, 0, ctx.b.vel.y)
@@ -72,7 +79,9 @@ local function on_update_sidescroller_level01(input, dt)
         engine.entity_signal_clear_flag(player_id, "touching_ceiling")
         -- engine.entity_signal_set_flag(player_id, "falling")
         -- engine.entity_set_force_enabled(player_id, "gravity", true)
-        log_debug("Cleared player on_ground signal at end of frame.")
+        log_debug(string.format(
+            "on_update: cleared flags for player_id=%d | back.just_pressed=%s dt=%.4f",
+            player_id, tostring(input.digital.back.just_pressed), dt))
     end
 end
 
@@ -80,7 +89,11 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_running_on_enter(ctx, input)
-    log_debug("Player started running!")
+    log_debug(string.format(
+        "player_running_on_enter id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) prev=%s left=%s right=%s",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y,
+        tostring(ctx.previous_phase),
+        tostring(input.digital.left.pressed), tostring(input.digital.right.pressed)))
     engine.entity_signal_set_flag(ctx.id, "running")
     if input.digital.left.pressed and not input.digital.right.pressed then
         set_hvel(ctx, -running_speed, 0)
@@ -94,16 +107,26 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_running_on_update(ctx, input, dt)
+    local on_ground = utils.has_flag(ctx.signals.flags, "on_ground")
+    log_debug(string.format(
+        "player_running_on_update id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) on_ground=%s left=%s right=%s action_1=%s action_2=%s action_3=%s dt=%.4f",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(on_ground),
+        tostring(input.digital.left.pressed), tostring(input.digital.right.pressed),
+        tostring(input.digital.action_1.just_pressed), tostring(input.digital.action_2.just_pressed),
+        tostring(input.digital.action_3.pressed), dt))
     -- Transition to falling if we walked off a ledge
-    if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
+    if not on_ground and ctx.vel.y >= 0 then
+        log_debug("player_running_on_update: walked off ledge -> falling")
         return "falling"
     end
     -- Check for attack input
     if input.digital.action_1.just_pressed then
+        log_debug("player_running_on_update: action_1 -> attack")
         return "attack"
     end
     -- Check for jump input
     if input.digital.action_2.just_pressed and not input.digital.down.pressed then
+        log_debug(string.format("player_running_on_update: jump impulse vel_y=%.1f -> jumping", jump_speed))
         engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
         return "jumping"
     end
@@ -113,6 +136,7 @@ local function player_running_on_update(ctx, input, dt)
         update_facing_direction(ctx.id, input)
         local has_single_direction = not (input.digital.left.pressed and input.digital.right.pressed)
         if has_single_direction and input.digital.action_3.pressed then
+            log_debug("player_running_on_update: action_3 held -> walking")
             return "walking"
         end
         if input.digital.left.pressed and not input.digital.right.pressed then
@@ -121,6 +145,7 @@ local function player_running_on_update(ctx, input, dt)
             set_hvel(ctx, running_speed, 0)
         end
     else
+        log_debug("player_running_on_update: no direction -> idle")
         return "idle"
     end
 end
@@ -128,7 +153,8 @@ end
 --- Called when exiting the running phase.
 --- @param ctx EntityContext Entity state
 local function player_running_on_exit(ctx)
-    log_debug("Player stopped running.")
+    log_debug(string.format("player_running_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
     engine.entity_signal_clear_flag(ctx.id, "running")
 end
 
@@ -136,7 +162,11 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_walking_on_enter(ctx, input)
-    log_debug("Player started walking!")
+    log_debug(string.format(
+        "player_walking_on_enter id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) prev=%s left=%s right=%s",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y,
+        tostring(ctx.previous_phase),
+        tostring(input.digital.left.pressed), tostring(input.digital.right.pressed)))
     engine.entity_signal_set_flag(ctx.id, "walking")
     update_facing_direction(ctx.id, input)
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -151,28 +181,37 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_walking_on_update(ctx, input, dt)
-    if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
+    local on_ground = utils.has_flag(ctx.signals.flags, "on_ground")
+    local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
+        and not (input.digital.left.pressed and input.digital.right.pressed)
+    log_debug(string.format(
+        "player_walking_on_update id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) on_ground=%s has_direction=%s action_3=%s action_1=%s action_2=%s dt=%.4f",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(on_ground),
+        tostring(has_direction), tostring(input.digital.action_3.pressed),
+        tostring(input.digital.action_1.just_pressed), tostring(input.digital.action_2.just_pressed), dt))
+    if not on_ground and ctx.vel.y >= 0 then
+        log_debug("player_walking_on_update: off ledge -> falling")
         return "falling"
     end
     if input.digital.action_1.just_pressed then
+        log_debug("player_walking_on_update: action_1 -> attack")
         return "attack"
     end
     if input.digital.action_2.just_pressed then
+        log_debug(string.format("player_walking_on_update: jump impulse vel_y=%.1f -> jumping", jump_speed))
         engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
         return "jumping"
     end
 
-    local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
-        and not (input.digital.left.pressed and input.digital.right.pressed)
-
     if not has_direction then
+        log_debug("player_walking_on_update: no direction -> idle")
         return "idle"
     end
 
     update_facing_direction(ctx.id, input)
 
     if not input.digital.action_3.pressed then
-        -- action_3 released while still moving — switch to running
+        log_debug("player_walking_on_update: action_3 released -> running")
         return "running"
     end
 
@@ -186,7 +225,8 @@ end
 --- Called when exiting the walking phase.
 --- @param ctx EntityContext Entity state
 local function player_walking_on_exit(ctx)
-    log_debug("Player stopped walking.")
+    log_debug(string.format("player_walking_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
     engine.entity_signal_clear_flag(ctx.id, "walking")
 end
 
@@ -194,7 +234,9 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_falling_on_enter(ctx, input)
-    log_debug("Player started falling!")
+    log_debug(string.format(
+        "player_falling_on_enter id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) prev=%s",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(ctx.previous_phase)))
     engine.entity_signal_set_flag(ctx.id, "falling")
 end
 
@@ -203,7 +245,13 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_falling_on_update(ctx, input, dt)
-    if utils.has_flag(ctx.signals.flags, "on_ground") then
+    local on_ground = utils.has_flag(ctx.signals.flags, "on_ground")
+    log_debug(string.format(
+        "player_falling_on_update id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) on_ground=%s left=%s right=%s dt=%.4f",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(on_ground),
+        tostring(input.digital.left.pressed), tostring(input.digital.right.pressed), dt))
+    if on_ground then
+        log_debug("player_falling_on_update: on_ground -> idle")
         return "idle"
     end
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -213,6 +261,7 @@ local function player_falling_on_update(ctx, input, dt)
         update_facing_direction(ctx.id, input)
         set_hvel(ctx, running_speed, ctx.vel.y)
     elseif not input.digital.right.pressed and not input.digital.left.pressed then
+        log_debug(string.format("player_falling_on_update: no direction, zeroing vx (vy=%.1f)", ctx.vel.y))
         engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
     end
 end
@@ -220,7 +269,8 @@ end
 --- Called when exiting the falling phase.
 --- @param ctx EntityContext Entity state
 local function player_falling_on_exit(ctx)
-    log_debug("Player stopped falling.")
+    log_debug(string.format("player_falling_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
     engine.entity_signal_clear_flag(ctx.id, "falling")
 end
 
@@ -228,7 +278,9 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_jumping_on_enter(ctx, input)
-    log_debug("Player started jumping!")
+    log_debug(string.format(
+        "player_jumping_on_enter id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) prev=%s",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(ctx.previous_phase)))
     engine.entity_signal_set_flag(ctx.id, "jumping")
 end
 
@@ -237,10 +289,17 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_jumping_on_update(ctx, input, dt)
-    if utils.has_flag(ctx.signals.flags, "on_ground") then
+    local on_ground = utils.has_flag(ctx.signals.flags, "on_ground")
+    log_debug(string.format(
+        "player_jumping_on_update id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) on_ground=%s left=%s right=%s dt=%.4f",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(on_ground),
+        tostring(input.digital.left.pressed), tostring(input.digital.right.pressed), dt))
+    if on_ground then
+        log_debug("player_jumping_on_update: on_ground -> idle")
         return "idle"
     end
     if ctx.vel.y > 0 then
+        log_debug(string.format("player_jumping_on_update: apex passed vel_y=%.1f -> falling", ctx.vel.y))
         return "falling"
     end
     if input.digital.left.pressed and not input.digital.right.pressed then
@@ -250,6 +309,7 @@ local function player_jumping_on_update(ctx, input, dt)
         update_facing_direction(ctx.id, input)
         set_hvel(ctx, running_speed, ctx.vel.y)
     elseif not input.digital.right.pressed and not input.digital.left.pressed then
+        log_debug(string.format("player_jumping_on_update: no direction, zeroing vx (vy=%.1f)", ctx.vel.y))
         engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
     end
 end
@@ -257,7 +317,8 @@ end
 --- Called when exiting the jumping phase.
 --- @param ctx EntityContext Entity state
 local function player_jumping_on_exit(ctx)
-    log_debug("Player stopped jumping.")
+    log_debug(string.format("player_jumping_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
     engine.entity_signal_clear_flag(ctx.id, "jumping")
 end
 
@@ -265,7 +326,9 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_idle_on_enter(ctx, input)
-    log_debug("Player is idle.")
+    log_debug(string.format(
+        "player_idle_on_enter id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) prev=%s",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(ctx.previous_phase)))
     -- engine.entity_set_animation(ctx.id, "sidescroller-char_red_idle")
     engine.entity_set_velocity(ctx.id, 0, ctx.vel.y)
 end
@@ -275,32 +338,38 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_idle_on_update(ctx, input, dt)
-    -- check for presence of "on_ground" signal, if not present, transition to falling
-    -- engine.log_debug(utils.dump_value(ctx, 4))
     local flags = ctx.signals.flags
-    -- engine.log_debug(utils.dump_value(flags, 4))
-    if not utils.has_flag(flags, "on_ground") and ctx.vel.y >= 0 then
-        engine.log_debug("Player update: walked off ledge, transitioning to falling.")
+    local on_ground = utils.has_flag(flags, "on_ground")
+    local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
+        and not (input.digital.left.pressed and input.digital.right.pressed)
+    log_debug(string.format(
+        "player_idle_on_update id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) on_ground=%s has_direction=%s action_1=%s action_2=%s action_3=%s dt=%.4f",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(on_ground),
+        tostring(has_direction), tostring(input.digital.action_1.just_pressed),
+        tostring(input.digital.action_2.just_pressed), tostring(input.digital.action_3.pressed), dt))
+    if not on_ground and ctx.vel.y >= 0 then
+        log_debug("player_idle_on_update: off ledge -> falling")
         return "falling"
     end
 
     if input.digital.action_1.just_pressed then
+        log_debug("player_idle_on_update: action_1 -> attack")
         return "attack"
     end
 
     if input.digital.action_2.just_pressed then
+        log_debug(string.format("player_idle_on_update: jump impulse vel_y=%.1f -> jumping", jump_speed))
         engine.entity_set_velocity(ctx.id, ctx.vel.x, jump_speed)
         return "jumping"
     end
 
-    local has_direction = (input.digital.left.pressed or input.digital.right.pressed)
-        and not (input.digital.left.pressed and input.digital.right.pressed)
-
     if has_direction then
         update_facing_direction(ctx.id, input)
         if input.digital.action_3.pressed then
+            log_debug("player_idle_on_update: direction + action_3 -> walking")
             return "walking"
         else
+            log_debug("player_idle_on_update: direction -> running")
             return "running"
         end
     end
@@ -310,16 +379,22 @@ end
 --- @param ctx EntityContext Entity state
 --- @param input InputSnapshot Input state table
 local function player_attack_on_enter(ctx, input)
-    log_debug("Player is attacking!")
+    local facing_left = utils.has_flag(ctx.signals.flags, "facing_left")
+    local facing_right = utils.has_flag(ctx.signals.flags, "facing_right")
+    log_debug(string.format(
+        "player_attack_on_enter id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) prev=%s facing_left=%s facing_right=%s",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y, tostring(ctx.previous_phase),
+        tostring(facing_left), tostring(facing_right)))
     engine.entity_signal_set_flag(ctx.id, "attack")
     -- engine.entity_freeze(ctx.id)
     -- engine.entity_restart_animation(ctx.id)
     engine.entity_set_velocity(ctx.id, 0, 0)
     -- Spawn hitbox child entity in front of the player
     local offset_x = 20
-    if utils.has_flag(ctx.signals.flags, "facing_left") then
+    if facing_left then
         offset_x = -20
     end
+    log_debug(string.format("player_attack_on_enter: hitbox offset_x=%d", offset_x))
     engine.spawn()
         :with_position(offset_x, 0)
         :with_collider(14, 30, 7, 30)
@@ -334,10 +409,18 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function player_attack_on_update(ctx, input, dt)
-    if not utils.has_flag(ctx.signals.flags, "on_ground") and ctx.vel.y >= 0 then
+    local on_ground = utils.has_flag(ctx.signals.flags, "on_ground")
+    local anim_ended = utils.has_flag(ctx.signals.flags, "animation_ended")
+    log_debug(string.format(
+        "player_attack_on_update id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f) on_ground=%s anim_ended=%s dt=%.4f",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y,
+        tostring(on_ground), tostring(anim_ended), dt))
+    if not on_ground and ctx.vel.y >= 0 then
+        log_debug("player_attack_on_update: off ground during attack -> falling")
         return "falling"
     end
-    if utils.has_flag(ctx.signals.flags, "animation_ended") then
+    if anim_ended then
+        log_debug("player_attack_on_update: animation_ended -> idle")
         engine.entity_signal_clear_flag(ctx.id, "animation_ended")
         return "idle"
     end
@@ -346,14 +429,18 @@ end
 --- Called when exiting the attack phase.
 --- @param ctx EntityContext Entity state
 local function player_attack_on_exit(ctx)
-    log_debug("Player finished attacking.")
+    log_debug(string.format("player_attack_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
+        ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
     engine.entity_signal_clear_flag(ctx.id, "attack")
     -- engine.entity_unfreeze(ctx.id)
     -- Despawn the hitbox child
     local hitbox_id = engine.get_entity("attack_hitbox")
     if hitbox_id then
+        log_debug(string.format("player_attack_on_exit: despawning hitbox_id=%d", hitbox_id))
         engine.entity_despawn(hitbox_id)
         engine.remove_entity("attack_hitbox")
+    else
+        log_debug("player_attack_on_exit: attack_hitbox not found (already despawned?)")
     end
 end
 
@@ -361,26 +448,27 @@ end
 --- @param ctx CollisionContext
 local function collision_solid_player(ctx)
     -- entity ctx.a is solid, entity ctx.b is player
-    -- check that the player side colliding with the ground is the bottom
-    -- engine.log_debug(utils.dump_value(ctx, 4))
+    local sides_a = table.concat(ctx.sides.a, ",")
+    local sides_b = table.concat(ctx.sides.b, ",")
+    log_debug(string.format(
+        "collision_solid_player solid_id=%d pos_a=(%.1f,%.1f) rect_a=(%.1f,%.1f,%.1f,%.1f) sides_a=[%s] | player_id=%d pos_b=(%.1f,%.1f) vel_b=(%.1f,%.1f) rect_b=(%.1f,%.1f,%.1f,%.1f) sides_b=[%s]",
+        ctx.a.id, ctx.a.pos.x, ctx.a.pos.y, ctx.a.rect.x, ctx.a.rect.y, ctx.a.rect.w, ctx.a.rect.h, sides_a,
+        ctx.b.id, ctx.b.pos.x, ctx.b.pos.y, ctx.b.vel.x, ctx.b.vel.y,
+        ctx.b.rect.x, ctx.b.rect.y, ctx.b.rect.w, ctx.b.rect.h, sides_b))
 
-    -- look for "bottom" in ctx.sides.b
     local player_on_ground = false
     local player_touching_ceiling = false
     local player_touching_wall_left = false
     local player_touching_wall_right = false
 
-    -- if player is touching the ground with their bottom side, and the ground is touching the player with its top side, then we are on the ground
     if utils.has_flag(ctx.sides.b, "bottom") and utils.has_flag(ctx.sides.a, "top") then
         player_on_ground = true
     end
 
-    -- if player is touching the ground with their top side, and the ground is touching the player with its bottom side, then we are touching the ceiling
     if utils.has_flag(ctx.sides.b, "top") and utils.has_flag(ctx.sides.a, "bottom") then
         player_touching_ceiling = true
     end
 
-    -- if player is touching the ground with their left side, and the ground is touching the player with its right side, then we are touching a wall on the left
     if utils.has_flag(ctx.sides.b, "left") and utils.has_flag(ctx.sides.a, "right") then
         player_touching_wall_left = true
     end
@@ -389,38 +477,41 @@ local function collision_solid_player(ctx)
         player_touching_wall_right = true
     end
 
+    log_debug(string.format(
+        "collision_solid_player detected: on_ground=%s ceiling=%s wall_left=%s wall_right=%s",
+        tostring(player_on_ground), tostring(player_touching_ceiling),
+        tostring(player_touching_wall_left), tostring(player_touching_wall_right)))
+
     if player_touching_ceiling then
-        engine.collision_entity_set_velocity(ctx.b.id, ctx.b.vel.x, math.min(ctx.b.vel.y, 0))
+        local clamped_vy = math.min(ctx.b.vel.y, 0)
+        log_debug(string.format("collision_solid_player: ceiling clamp vel_y %.1f -> %.1f",
+            ctx.b.vel.y, clamped_vy))
+        engine.collision_entity_set_velocity(ctx.b.id, ctx.b.vel.x, clamped_vy)
     end
 
     if (player_touching_wall_left or player_touching_wall_right) and not player_on_ground then
         if player_touching_wall_left then
             local snap_x = ctx.b.pos.x + (ctx.a.rect.x + ctx.a.rect.w - ctx.b.rect.x)
             apply_wall_stop(ctx, "touching_wall_left", snap_x)
-            log_debug("collision: wall stop LEFT")
         end
         if player_touching_wall_right then
             local snap_x = ctx.b.pos.x - (ctx.b.rect.x + ctx.b.rect.w - ctx.a.rect.x)
             apply_wall_stop(ctx, "touching_wall_right", snap_x)
-            log_debug("collision: wall stop RIGHT")
         end
     end
 
     if player_on_ground then
+        local solid_rect = ctx.a.rect
+        local snap_y = solid_rect.y
+        log_debug(string.format(
+            "collision_solid_player: ground snap pos_y %.1f -> %.1f vel_y %.1f -> 0",
+            ctx.b.pos.y, snap_y, ctx.b.vel.y))
         engine.collision_entity_signal_set_flag(ctx.b.id, "on_ground")
         engine.collision_entity_signal_clear_flag(ctx.b.id, "falling")
         engine.collision_entity_signal_clear_flag(ctx.b.id, "jumping")
-        -- engine.entity_signal_set_flag(ctx.b.id, "on_ground")
-        -- engine.entity_signal_clear_flag(ctx.b.id, "falling")
-        log_debug("collision: setting player `on_ground` signal")
-        -- engine.collision_entity_set_force_enabled(ctx.b.id, "gravity", false)
-        -- reset vertical velocity to 0 to prevent sliding down slopes
         local vel = ctx.b.vel
         engine.collision_entity_set_velocity(ctx.b.id, vel.x, 0)
-        -- reset vertical position to be exactly on top of the ground to prevent sinking due to gravity
-        -- local player_pos = ctx.b.pos
-        local solid_rect = ctx.a.rect
-        engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, solid_rect.y)
+        engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, snap_y)
     end
 end
 
