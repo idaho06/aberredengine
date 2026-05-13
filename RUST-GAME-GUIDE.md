@@ -16,7 +16,7 @@ Built-in systems:
 - **Menus** — scrollable interactive menus with selection callbacks
 - **Animation** — frame-based sprite animation with controller rules
 - **Particles** — emitter system with templates, shapes, arcs, speed ranges
-- **Scene management** — named scenes with enter/update/exit callbacks, auto-despawn
+- **Scene management** — named scenes with enter/update/exit, GUI, and world-draw callbacks plus auto-despawn
 - **Tweens** — position, rotation, and scale interpolation with easing and loop modes
 - **Timers** — repeating countdown timers with function-pointer callbacks
 - **Phase state machines** — per-entity state machines with enter/update/exit callbacks
@@ -94,7 +94,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 ### Approach A — SceneManager (recommended for multi-scene games)
 
-Register named scenes with enter/update/exit callbacks. The engine handles despawning non-persistent entities on scene transitions and dispatching to the correct scene's callbacks.
+Register named scenes with enter/update/exit callbacks plus optional GUI and world-space draw callbacks. The engine handles despawning non-persistent entities on scene transitions and dispatching to the correct scene's callbacks.
 
 ```rust
 use aberredengine::engine_app::EngineBuilder;
@@ -112,12 +112,14 @@ fn main() -> Result<(), String> {
             on_update:    Some(scenes::menu::update),
             on_exit:      None,
             gui_callback: None,
+            world_draw_callback: None,
         })
         .add_scene("level01", SceneDescriptor {
             on_enter:     scenes::level01::enter,
             on_update:    Some(scenes::level01::update),
             on_exit:      Some(scenes::level01::exit),
             gui_callback: None,
+            world_draw_callback: None,
         })
         .initial_scene("menu")
         .try_run()
@@ -129,11 +131,14 @@ Scene callback signatures:
 
 ```rust
 use aberredengine::systems::GameCtx;
+use aberredengine::systems::scene_dispatch::WorldDraw;
 use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::fontstore::FontStore;
 use aberredengine::resources::input::InputState;
+use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
+use raylib::prelude::Camera2D;
 
 // Called once when the scene becomes active
 fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -153,6 +158,16 @@ fn my_gui(
     fonts: &FontStore,
     app_state: &AppState,
 ) { /* draw widgets, write signals, read typed state */ }
+
+// Called every frame inside begin_mode2D in world space — Rust-only, optional
+// Signature must match: fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &WorldSignals)
+fn my_world_draw(
+    draw: &mut dyn WorldDraw,
+    camera: &Camera2D,
+    screen: &ScreenSize,
+    app_state: &AppState,
+    world_signals: &WorldSignals,
+) { /* draw world overlays, read camera/screen/app state */ }
 ```
 
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
@@ -237,10 +252,58 @@ Register it on the descriptor:
     on_update:    Some(editor_update),
     on_exit:      None,
     gui_callback: Some(editor_gui),
+    world_draw_callback: None,
 })
 ```
 
 > **Convention:** prefix all GUI signal keys with `"gui:"` to avoid collisions with game signals. Use `"gui:action:<verb>"` for flags set by the GUI and consumed by `on_update`, and `"gui:state:<name>"` for values set by `on_update` and read by the GUI.
+
+### World-space draw callback (Rust-only)
+
+`world_draw_callback` lets a scene draw world-space overlays every frame inside the render pass's `begin_mode2D` block. Use it for things like debug paths, editor gizmos, selection boxes, or navigation links that should follow the active camera transform.
+
+The callback receives:
+
+- `&mut dyn WorldDraw` with a minimal object-safe drawing API
+- `&Camera2D` for the active render camera
+- `&ScreenSize` for the internal game resolution
+- `&AppState` for typed Rust-only snapshots
+- `&WorldSignals` for read-only signal access
+
+```rust
+use aberredengine::resources::appstate::AppState;
+use aberredengine::resources::screensize::ScreenSize;
+use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::systems::scene_dispatch::WorldDraw;
+use raylib::prelude::{Camera2D, Color, Vector2};
+
+fn editor_world_draw(
+    draw: &mut dyn WorldDraw,
+    _camera: &Camera2D,
+    _screen: &ScreenSize,
+    _app_state: &AppState,
+    _signals: &WorldSignals,
+) {
+    draw.draw_line_v(
+        Vector2::new(-32.0, 0.0),
+        Vector2::new(32.0, 0.0),
+        Color::GREEN,
+    );
+    draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
+}
+```
+
+Register it on the descriptor:
+
+```rust
+.add_scene("editor", SceneDescriptor {
+    on_enter:            editor_enter,
+    on_update:           Some(editor_update),
+    on_exit:             None,
+    gui_callback:        Some(editor_gui),
+    world_draw_callback: Some(editor_world_draw),
+})
+```
 
 ### Approach B — Raw hooks (single-scene or full manual control)
 
@@ -940,15 +1003,16 @@ Section 3 introduced `SceneManager` at the API level. This section covers intern
 
 ### 6.1 What happens during a scene switch
 
-When the `scene_switch_system` runs (`src/systems/scene_dispatch.rs:157-214`), it performs these steps in order:
+When the `scene_switch_system` runs, it performs these steps in order:
 
-1. **Stop all music** — sends `AudioCmd::StopAllMusic` to the audio thread
-2. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
+1. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
+2. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
 3. **Clear group tracking** — `TrackedGroups::clear()` and `WorldSignals` group counts are wiped
 4. **Read target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset)
 5. **Call `on_exit` on previous scene** — if there was an active scene with an `on_exit` callback, it fires
-6. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
-7. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
+6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
+7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
+8. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
 
 ### 6.2 Triggering scene transitions
 
@@ -1010,7 +1074,7 @@ Key behaviors:
 
 ### 6.5 Per-frame scene updates
 
-The `scene_update_system` (`src/systems/scene_dispatch.rs:220-236`) runs every frame while a scene is active. It looks up the active scene in `SceneManager`, and if it has an `on_update` callback, calls it:
+The `scene_update_system` runs every frame while a scene is active. It looks up the active scene in `SceneManager`, and if it has an `on_update` callback, calls it:
 
 ```rust
 fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) {

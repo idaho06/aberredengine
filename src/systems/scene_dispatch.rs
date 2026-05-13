@@ -27,6 +27,7 @@
 use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
+use raylib::prelude::{Camera2D, Color, Vector2};
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::Persistent;
@@ -34,6 +35,7 @@ use crate::resources::appstate::AppState;
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::screensize::ScreenSize;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
@@ -82,7 +84,28 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 ///     }
 /// }
 /// ```
+/// Minimal world-space drawing interface for `WorldDrawCallback`.
+/// Uses concrete types only so the callback stays object-safe.
+pub trait WorldDraw {
+    fn draw_line_v(&mut self, start: Vector2, end: Vector2, color: Color);
+    fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color);
+}
+
+impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
+    fn draw_line_v(&mut self, start: Vector2, end: Vector2, color: Color) {
+        raylib::prelude::RaylibDraw::draw_line_v(self, start, end, color);
+    }
+
+    fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
+        raylib::prelude::RaylibDraw::draw_line(self, x1, y1, x2, y2, color);
+    }
+}
+
 pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore, &FontStore, &AppState);
+
+/// Called every frame inside `begin_mode2D` in camera-transformed world space.
+pub type WorldDrawCallback =
+    fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &WorldSignals);
 
 // ---------------------------------------------------------------------------
 // SceneDescriptor
@@ -100,6 +123,7 @@ pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore, &FontStore
 ///     on_update:    Some(menu::update),
 ///     on_exit:      None,
 ///     gui_callback: None,
+///     world_draw_callback: None,
 /// }
 /// ```
 #[derive(Clone)]
@@ -114,6 +138,8 @@ pub struct SceneDescriptor {
     ///
     /// See [`GuiCallback`] for the full contract.
     pub gui_callback: Option<GuiCallback>,
+    /// Called every frame inside `begin_mode2D` to draw world-space overlays.
+    pub world_draw_callback: Option<WorldDrawCallback>,
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +297,11 @@ mod tests {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         };
         assert!(desc.on_update.is_none());
         assert!(desc.on_exit.is_none());
+        assert!(desc.world_draw_callback.is_none());
     }
 
     #[test]
@@ -286,6 +314,7 @@ mod tests {
             on_update: Some(update),
             on_exit: Some(exit),
             gui_callback: None,
+            world_draw_callback: None,
         };
         assert!(desc.on_update.is_some());
         assert!(desc.on_exit.is_some());
@@ -299,6 +328,7 @@ mod tests {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         };
         let cloned = desc.clone();
         // fn pointers are Copy — both point to the same function
@@ -316,6 +346,7 @@ mod tests {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         };
         assert!(desc.gui_callback.is_none());
     }
@@ -336,6 +367,7 @@ mod tests {
             on_update: None,
             on_exit: None,
             gui_callback: Some(my_gui),
+            world_draw_callback: None,
         };
         assert!(desc.gui_callback.is_some());
         assert_eq!(
@@ -360,6 +392,7 @@ mod tests {
             on_update: None,
             on_exit: None,
             gui_callback: Some(my_gui),
+            world_draw_callback: None,
         };
         let cloned = desc.clone();
         assert_eq!(

@@ -127,6 +127,7 @@ fn initial_scene_on_enter_called() {
             on_update: Some(menu_update),
             on_exit: Some(menu_exit),
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -167,6 +168,7 @@ fn exit_called_before_enter_on_switch() {
             on_update: None,
             on_exit: Some(menu_exit),
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     sm.insert(
@@ -176,6 +178,7 @@ fn exit_called_before_enter_on_switch() {
             on_update: Some(level1_update),
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -229,6 +232,7 @@ fn on_update_called_with_dt() {
             on_update: Some(menu_update),
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -266,6 +270,7 @@ fn no_update_callback_does_not_panic() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -292,6 +297,7 @@ fn no_exit_callback_does_not_panic_on_switch() {
             on_update: None,
             on_exit: None, // no exit callback
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     sm.insert(
@@ -301,6 +307,7 @@ fn no_exit_callback_does_not_panic_on_switch() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -348,6 +355,7 @@ fn unknown_scene_name_does_not_panic() {
             on_update: None,
             on_exit: Some(menu_exit),
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -392,6 +400,7 @@ fn non_persistent_entities_despawned() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -449,6 +458,7 @@ fn active_scene_tracked_through_multiple_switches() {
             on_update: None,
             on_exit: Some(menu_exit),
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     sm.insert(
@@ -458,6 +468,7 @@ fn active_scene_tracked_through_multiple_switches() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -524,6 +535,7 @@ fn scene_switch_poll_triggers_transition() {
             on_update: Some(menu_update),
             on_exit: Some(menu_exit),
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     sm.insert(
@@ -533,6 +545,7 @@ fn scene_switch_poll_triggers_transition() {
             on_update: Some(level1_update),
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -585,6 +598,7 @@ fn scene_switch_poll_noop_without_flag() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -619,6 +633,7 @@ fn non_persistent_entity_registration_cleared_on_scene_switch() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -671,6 +686,7 @@ fn persistent_entity_registration_survives_scene_switch() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -715,6 +731,7 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -772,6 +789,7 @@ fn scene_switch_does_not_emit_stop_all_music() {
             on_update: None,
             on_exit: Some(menu_exit),
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     sm.insert(
@@ -781,6 +799,7 @@ fn scene_switch_does_not_emit_stop_all_music() {
             on_update: Some(level1_update),
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);
@@ -828,6 +847,7 @@ fn gui_callback_stored_and_retrieved_via_scene_manager() {
             on_update: None,
             on_exit: None,
             gui_callback: Some(my_gui as GuiCallback),
+            world_draw_callback: None,
         },
     );
 
@@ -866,6 +886,7 @@ fn scene_with_gui_callback_enters_correctly() {
             on_update: None,
             on_exit: None,
             gui_callback: Some(editor_gui as GuiCallback),
+            world_draw_callback: None,
         },
     );
     world.insert_resource(sm);

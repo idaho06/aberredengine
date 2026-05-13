@@ -615,6 +615,17 @@ pub fn render_system(
                     }
                 }
             }
+
+            if let Some(cb) = debug_res
+                .scene_manager
+                .as_deref()
+                .and_then(|sm| sm.active_scene.as_deref().and_then(|name| sm.get(name)))
+                .and_then(|desc| desc.world_draw_callback)
+            {
+                let app_state = &*debug_res.app_state;
+                let world_signals = &*debug_res.world_signals;
+                cb(&mut d2, &camera.0, &res.screensize, app_state, world_signals);
+            }
         }
 
         // Draw in screen coordinates (UI layer) - still on the render target

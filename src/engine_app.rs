@@ -1150,6 +1150,7 @@ mod tests {
             on_update: Some(dummy_scene_update),
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         }
     }
 

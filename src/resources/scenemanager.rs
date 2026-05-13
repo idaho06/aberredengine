@@ -91,6 +91,7 @@ mod tests {
             on_update: None,
             on_exit: None,
             gui_callback: None,
+            world_draw_callback: None,
         }
     }
 
@@ -134,6 +135,7 @@ mod tests {
                 on_update: None,
                 on_exit: None,
                 gui_callback: None,
+                world_draw_callback: None,
             },
         );
         assert_eq!(sm.len(), 1);
