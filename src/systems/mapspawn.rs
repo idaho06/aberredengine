@@ -70,12 +70,7 @@ pub fn spawn_map(
         }
         match load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32) {
             Ok(font) => {
-                font_store.add_with_meta(
-                    &entry.key,
-                    font,
-                    entry.path.clone(),
-                    entry.font_size,
-                );
+                font_store.add_with_meta(&entry.key, font, entry.path.clone(), entry.font_size);
             }
             Err(err) => {
                 log::warn!(

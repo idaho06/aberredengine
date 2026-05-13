@@ -624,7 +624,13 @@ pub fn render_system(
             {
                 let app_state = &*debug_res.app_state;
                 let world_signals = &*debug_res.world_signals;
-                cb(&mut d2, &camera.0, &res.screensize, app_state, world_signals);
+                cb(
+                    &mut d2,
+                    &camera.0,
+                    &res.screensize,
+                    app_state,
+                    world_signals,
+                );
             }
         }
 

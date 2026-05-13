@@ -371,8 +371,7 @@ impl ImguiBridge {
             return;
         }
         let draw_cursor = io.mouse_draw_cursor;
-        if desired_cursor == self.current_mouse_cursor
-            && draw_cursor == self.prev_mouse_draw_cursor
+        if desired_cursor == self.current_mouse_cursor && draw_cursor == self.prev_mouse_draw_cursor
         {
             return;
         }
@@ -395,7 +394,6 @@ impl ImguiBridge {
             }
         }
     }
-
 }
 
 fn render_draw_data(

@@ -35,8 +35,8 @@ use crate::resources::appstate::AppState;
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
-use crate::resources::screensize::ScreenSize;
 use crate::resources::scenemanager::SceneManager;
+use crate::resources::screensize::ScreenSize;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -88,12 +88,36 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 /// Uses concrete types only so the callback stays object-safe.
 pub trait WorldDraw {
     fn draw_line_v(&mut self, start: Vector2, end: Vector2, color: Color);
+    fn draw_line_ex(&mut self, start_pos: Vector2, end_pos: Vector2, thick: f32, color: Color);
+    fn draw_line_dashed(
+        &mut self,
+        start_pos: Vector2,
+        end_pos: Vector2,
+        dash_size: i32,
+        space_size: i32,
+        color: Color,
+    );
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color);
 }
 
 impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
     fn draw_line_v(&mut self, start: Vector2, end: Vector2, color: Color) {
         raylib::prelude::RaylibDraw::draw_line_v(self, start, end, color);
+    }
+
+    fn draw_line_ex(&mut self, start_pos: Vector2, end_pos: Vector2, thick: f32, color: Color) {
+        raylib::prelude::RaylibDraw::draw_line_ex(self, start_pos, end_pos, thick, color);
+    }
+
+    fn draw_line_dashed(
+        &mut self,
+        start_pos: Vector2,
+        end_pos: Vector2,
+        dash_size: i32,
+        space_size: i32,
+        color: Color,
+    ) {
+        raylib::prelude::RaylibDraw::draw_line_dashed(self, start_pos, end_pos, dash_size, space_size, color);
     }
 
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
