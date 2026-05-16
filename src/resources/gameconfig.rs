@@ -108,8 +108,23 @@ impl GameConfig {
         config
             .load(&self.config_path)
             .map_err(|e| format!("Failed to load config file: {}", e))?;
+        self.apply_ini(&config);
+        Ok(())
+    }
 
-        // [render] section
+    /// Load configuration from an INI string.
+    ///
+    /// Missing values retain their current (default) values.
+    pub fn load_from_str(&mut self, content: &str) -> Result<(), String> {
+        let mut config = Ini::new();
+        config
+            .read(content.to_owned())
+            .map_err(|e| format!("Failed to parse config: {}", e))?;
+        self.apply_ini(&config);
+        Ok(())
+    }
+
+    fn apply_ini(&mut self, config: &Ini) {
         if let Some(width) = config.getuint("render", "width").ok().flatten() {
             self.render_width = width as u32;
         }
@@ -128,8 +143,6 @@ impl GameConfig {
                 self.background_color = Color::new(r, g, b, 255);
             }
         }
-
-        // [window] section
         if let Some(width) = config.getuint("window", "width").ok().flatten() {
             self.window_width = width as u32;
         }
@@ -148,7 +161,6 @@ impl GameConfig {
         if let Some(title) = config.get("window", "title") {
             self.window_title = title;
         }
-
         info!(
             "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}",
             self.render_width,
@@ -160,8 +172,6 @@ impl GameConfig {
             self.fullscreen,
             self.window_title
         );
-
-        Ok(())
     }
 
     /// Save configuration to the INI file.
@@ -320,6 +330,26 @@ mod tests {
     fn test_load_from_file_nonexistent() {
         let config_result = GameConfig::with_path("/tmp/nonexistent_aberred.ini").load_from_file();
         assert!(config_result.is_err());
+    }
+
+    #[test]
+    fn test_load_from_str() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[render]\nwidth = 800\nheight = 600\n")
+            .unwrap();
+        assert_eq!(config.render_width, 800);
+        assert_eq!(config.render_height, 600);
+        // unset values retain defaults
+        assert_eq!(config.target_fps, DEFAULT_TARGET_FPS);
+    }
+
+    #[test]
+    fn test_load_from_str_single_section() {
+        let mut config = GameConfig::new();
+        assert!(config.load_from_str("[window]\ntarget_fps = 45\n").is_ok());
+        assert_eq!(config.target_fps, 45);
+        assert_eq!(config.render_width, DEFAULT_RENDER_WIDTH);
     }
 
     #[test]

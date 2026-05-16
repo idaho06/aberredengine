@@ -181,6 +181,7 @@ type ObserverRegistrar = Box<dyn FnOnce(&mut World)>;
 #[must_use = "EngineBuilder does nothing until .run() is called"]
 pub struct EngineBuilder {
     config_path: PathBuf,
+    config_str: Option<&'static str>,
     title_override: Option<String>,
     setup_hook: Option<HookRegistrar>,
     enter_play_hook: Option<HookRegistrar>,
@@ -201,6 +202,7 @@ impl EngineBuilder {
     pub fn new() -> Self {
         Self {
             config_path: PathBuf::from("config.ini"),
+            config_str: None,
             title_override: None,
             setup_hook: None,
             enter_play_hook: None,
@@ -218,6 +220,15 @@ impl EngineBuilder {
     /// Set a custom path for the config file (default: `"config.ini"`).
     pub fn config(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_path = path.into();
+        self
+    }
+
+    /// Supply config as an inline string instead of reading from a file.
+    ///
+    /// Takes priority over [`.config()`](Self::config) if both are called.
+    /// Intended for use with `include_str!` to embed `config.ini` at compile time.
+    pub fn config_str(mut self, content: &'static str) -> Self {
+        self.config_str = Some(content);
         self
     }
 
@@ -491,17 +502,21 @@ impl EngineBuilder {
 
     fn load_config(&self) -> Result<GameConfig, String> {
         let mut config = GameConfig::with_path(&self.config_path);
-        config.load_from_file().map_err(|err| {
-            format!(
-                "Failed to load config '{}': {err}",
-                self.config_path.display()
-            )
-        })?;
-
+        if let Some(content) = &self.config_str {
+            config.load_from_str(content).map_err(|err| {
+                format!("Failed to parse embedded config: {err}")
+            })?;
+        } else {
+            config.load_from_file().map_err(|err| {
+                format!(
+                    "Failed to load config '{}': {err}",
+                    self.config_path.display()
+                )
+            })?;
+        }
         if let Some(title) = &self.title_override {
             config.window_title = title.clone();
         }
-
         Ok(config)
     }
 
