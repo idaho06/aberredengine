@@ -17,6 +17,7 @@ use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
 
 use crate::components::animation::Animation;
+use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 #[cfg(feature = "lua")]
@@ -108,6 +109,7 @@ pub fn spawn_map(
 
 fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     let mut ec = commands.spawn_empty();
+    let entity = ec.id();
 
     if let Some([x, y]) = def.position {
         ec.insert(MapPosition::new(x, y));
@@ -128,6 +130,41 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
             flip_h: s.flip_h,
             flip_v: s.flip_v,
         });
+    }
+    if let Some(ref collider) = def.collider {
+        let offset_x = collider.offset.map(|o| o[0]).unwrap_or(0.0);
+        let offset_y = collider.offset.map(|o| o[1]).unwrap_or(0.0);
+        let origin_x = collider.origin.map(|o| o[0]).unwrap_or(0.0);
+        let origin_y = collider.origin.map(|o| o[1]).unwrap_or(0.0);
+        log::debug!(
+            "spawn_entity: inserting BoxCollider on entity {} size=({:.3}, {:.3}) offset=({:.3}, {:.3}) origin=({:.3}, {:.3}) group={:?} registered_as={:?}",
+            entity.to_bits(),
+            collider.size[0],
+            collider.size[1],
+            offset_x,
+            offset_y,
+            origin_x,
+            origin_y,
+            def.group.as_deref(),
+            def.registered_as.as_deref(),
+        );
+        ec.insert(
+            BoxCollider::new(collider.size[0], collider.size[1])
+                .with_offset(Vector2::new(offset_x, offset_y))
+                .with_origin(Vector2::new(origin_x, origin_y)),
+        );
+        if def.position.is_none() {
+            log::warn!(
+                "spawn_entity: entity {} has BoxCollider but no position — excluded from collision detection (collision_detector requires MapPosition)",
+                entity.to_bits(),
+            );
+        }
+        if def.group.is_none() {
+            log::warn!(
+                "spawn_entity: entity {} has BoxCollider but no group — collision callbacks will never fire (resolve_groups returns None without a Group component)",
+                entity.to_bits(),
+            );
+        }
     }
     if let Some(ref text) = def.dynamic_text {
         ec.insert(DynamicText::new(
@@ -166,7 +203,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
             elapsed_time: 0.0,
         });
     }
-    ec.id()
+    entity
 }
 
 /// Bevy observer registered by the engine. Fires on
@@ -226,4 +263,43 @@ pub fn load_font_with_mipmaps(
         ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
     }
     Ok(font)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_ecs::world::CommandQueue;
+    use crate::resources::mapdata::BoxColliderEntry;
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < f32::EPSILON
+    }
+
+    #[test]
+    fn spawn_entity_inserts_box_collider_from_mapdata() {
+        let mut world = World::new();
+        let mut queue = CommandQueue::default();
+        let entity = {
+            let mut commands = Commands::new(&mut queue, &world);
+            let entity_def = EntityDef {
+                position: Some([10.0, 20.0]),
+                collider: Some(BoxColliderEntry {
+                    size: [32.0, 48.0],
+                    offset: Some([3.0, 4.0]),
+                    origin: Some([5.0, 6.0]),
+                }),
+                ..Default::default()
+            };
+            spawn_entity(&mut commands, &entity_def)
+        };
+        queue.apply(&mut world);
+
+        let collider = world.get::<BoxCollider>(entity).unwrap();
+        assert!(approx_eq(collider.size.x, 32.0));
+        assert!(approx_eq(collider.size.y, 48.0));
+        assert!(approx_eq(collider.offset.x, 3.0));
+        assert!(approx_eq(collider.offset.y, 4.0));
+        assert!(approx_eq(collider.origin.x, 5.0));
+        assert!(approx_eq(collider.origin.y, 6.0));
+    }
 }

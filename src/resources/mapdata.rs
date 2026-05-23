@@ -97,6 +97,8 @@ pub struct EntityDef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sprite: Option<SpriteEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collider: Option<BoxColliderEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// Render order (maps to [`crate::components::zindex::ZIndex`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -160,6 +162,19 @@ pub struct SpriteEntry {
     pub flip_h: bool,
     #[serde(default)]
     pub flip_v: bool,
+}
+
+/// Box collider data for an entity placement.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct BoxColliderEntry {
+    /// Size `[width, height]` in world units.
+    pub size: [f32; 2],
+    /// Offset `[x, y]` from the entity pivot.
+    /// `None` means `(0.0, 0.0)`.
+    pub offset: Option<[f32; 2]>,
+    /// Pivot origin `[x, y]` relative to the collider top-left.
+    /// `None` means `(0.0, 0.0)`.
+    pub origin: Option<[f32; 2]>,
 }
 
 /// Load a [`MapData`] from a JSON file at `path`.
@@ -228,6 +243,17 @@ mod tests {
                     }),
                     ..Default::default()
                 },
+                EntityDef {
+                    position: Some([180.0, 260.0]),
+                    collider: Some(BoxColliderEntry {
+                        size: [32.0, 48.0],
+                        offset: Some([3.0, 4.0]),
+                        origin: Some([5.0, 6.0]),
+                    }),
+                    group: Some("colliders".into()),
+                    registered_as: Some("test_collider".into()),
+                    ..Default::default()
+                },
             ],
         }
     }
@@ -263,5 +289,16 @@ mod tests {
         let json = serde_json::to_string_pretty(&original).unwrap();
         let loaded: MapData = serde_json::from_str(&json).unwrap();
         assert_eq!(original, loaded);
+    }
+
+    #[test]
+    fn collider_field_is_optional_in_json() {
+        let json = r#"{
+            "position": [10.0, 20.0],
+            "group": "colliders"
+        }"#;
+        let entity: EntityDef = serde_json::from_str(json).unwrap();
+        assert_eq!(entity.position, Some([10.0, 20.0]));
+        assert!(entity.collider.is_none());
     }
 }
