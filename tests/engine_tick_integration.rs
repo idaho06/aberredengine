@@ -2988,6 +2988,7 @@ fn animation_horizontal_only_no_wrapping() {
                 animation_key: "walk".to_string(),
                 frame_index: 0,
                 elapsed_time: 0.0,
+                finished: false,
             },
             make_sprite("sheet"),
             MapPosition {
@@ -3046,6 +3047,7 @@ fn animation_wraps_rows_with_vertical_displacement() {
                 animation_key: "big".to_string(),
                 frame_index: 0,
                 elapsed_time: 0.0,
+                finished: false,
             },
             make_sprite("sheet"),
             MapPosition {
@@ -3150,6 +3152,7 @@ fn animation_wraps_with_partial_first_row() {
                 animation_key: "partial".to_string(),
                 frame_index: 0,
                 elapsed_time: 0.0,
+                finished: false,
             },
             make_sprite("sheet"),
             MapPosition {
@@ -3230,6 +3233,7 @@ fn animation_vdisp_no_texture_falls_back_to_horizontal() {
                 animation_key: "missing_tex".to_string(),
                 frame_index: 0,
                 elapsed_time: 0.0,
+                finished: false,
             },
             make_sprite("nonexistent"),
             MapPosition {
@@ -3276,6 +3280,7 @@ fn animation_single_frame_per_row_wrapping() {
                 animation_key: "column".to_string(),
                 frame_index: 0,
                 elapsed_time: 0.0,
+                finished: false,
             },
             make_sprite("sheet"),
             MapPosition {

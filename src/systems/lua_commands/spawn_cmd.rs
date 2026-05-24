@@ -124,6 +124,7 @@ pub(super) fn apply_components(
             lua_timer: cmd.lua_timer,
             lua_collision_rule: cmd.lua_collision_rule,
             lua_setup: cmd.lua_setup,
+            lua_on_animation_end: cmd.lua_on_animation_end,
         },
     );
     apply_ui_components(
@@ -371,6 +372,7 @@ struct BehaviorComponents {
     lua_timer: Option<(f32, String)>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
     lua_setup: Option<String>,
+    lua_on_animation_end: Option<String>,
 }
 
 fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
@@ -379,6 +381,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         lua_timer,
         lua_collision_rule,
         lua_setup,
+        lua_on_animation_end,
     } = b;
     if let Some(phase_data) = phase_data {
         let phases = phase_data
@@ -413,6 +416,10 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     }
     if let Some(callback) = lua_setup {
         entity_commands.insert(LuaSetup::new(callback));
+    }
+    if let Some(callback) = lua_on_animation_end {
+        use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
+        entity_commands.insert(LuaOnAnimationEnd::new(callback));
     }
 }
 
@@ -576,8 +583,7 @@ struct ResetAnimationCommand;
 impl bevy_ecs::system::EntityCommand for ResetAnimationCommand {
     fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
         if let Some(mut animation) = entity.get_mut::<Animation>() {
-            animation.frame_index = 0;
-            animation.elapsed_time = 0.0;
+            animation.reset();
         }
     }
 }

@@ -275,6 +275,7 @@ fn process_animation_cmd(
             if let Ok(mut animation) = queries.animation.get_mut(entity) {
                 animation.frame_index = 0;
                 animation.elapsed_time = 0.0;
+                animation.finished = false;
             }
         }
         EntityCmd::SetAnimation {
@@ -286,6 +287,7 @@ fn process_animation_cmd(
                 animation.animation_key = animation_key.clone();
                 animation.frame_index = 0;
                 animation.elapsed_time = 0.0;
+                animation.finished = false;
             }
             // Also update the sprite's texture to match the new animation
             if let Some(anim_res) = anim_store.animations.get(&animation_key)

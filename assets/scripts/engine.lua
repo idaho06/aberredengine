@@ -1530,6 +1530,11 @@ function EntityBuilder:with_menu_visible_count(count) end
 ---@return EntityBuilder
 function EntityBuilder:with_mouse_controlled(follow_x, follow_y) end
 
+---Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.
+---@param fn_name string
+---@return EntityBuilder
+function EntityBuilder:with_on_animation_end(fn_name) end
+
 ---Set parent entity for transform hierarchy
 ---@param parent_id integer
 ---@return EntityBuilder
@@ -1951,6 +1956,11 @@ function CollisionEntityBuilder:with_menu_visible_count(count) end
 ---@param follow_y boolean
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_mouse_controlled(follow_x, follow_y) end
+
+---Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.
+---@param fn_name string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_on_animation_end(fn_name) end
 
 ---Set parent entity for transform hierarchy
 ---@param parent_id integer

@@ -196,11 +196,17 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     if let Some(ref callback) = def.lua_setup {
         ec.insert(LuaSetup::new(callback.clone()));
     }
+    #[cfg(feature = "lua")]
+    if let Some(ref callback) = def.on_animation_end {
+        use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
+        ec.insert(LuaOnAnimationEnd::new(callback.clone()));
+    }
     if let Some(ref key) = def.animation_key {
         ec.insert(Animation {
             animation_key: key.clone(),
             frame_index: 0,
             elapsed_time: 0.0,
+            finished: false,
         });
     }
     entity

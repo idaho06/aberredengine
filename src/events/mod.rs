@@ -17,6 +17,7 @@
 //!
 //! See each submodule for concrete event data, semantics, and example usage.
 
+pub mod animation;
 pub mod audio;
 pub mod collision;
 pub mod gamestate;

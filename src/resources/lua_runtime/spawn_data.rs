@@ -408,4 +408,6 @@ pub struct SpawnCmd {
     pub tilemap_path: Option<String>,
     /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`
     pub lua_setup: Option<String>,
+    /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes
+    pub lua_on_animation_end: Option<String>,
 }

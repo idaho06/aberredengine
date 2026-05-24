@@ -1103,6 +1103,12 @@ impl LuaUserData for LuaEntityBuilder {
             Ok(this.clone())
         });
 
+        // :with_on_animation_end(callback) - Call fn(ctx, input) once when the non-looped animation finishes
+        methods.add_method_mut("with_on_animation_end", |_, this, callback: String| {
+            this.cmd.lua_on_animation_end = Some(callback);
+            Ok(this.clone())
+        });
+
         // :with_camera_target(priority?, zoom?) - Mark entity as camera follow target.
         // priority defaults to 0; higher values take precedence.
         // zoom is the desired camera zoom when this target wins (default 1.0).

@@ -146,6 +146,8 @@ use raylib::prelude::{Camera2D, Vector2};
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
+use crate::systems::lua_animation_finished::lua_animation_finished_observer;
+#[cfg(feature = "lua")]
 use crate::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
 use crate::systems::lua_setup_entity::lua_setup_entity_system;
@@ -744,6 +746,7 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
+            world.spawn((Observer::new(lua_animation_finished_observer), Persistent));
         }
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;

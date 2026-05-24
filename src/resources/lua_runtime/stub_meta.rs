@@ -429,6 +429,11 @@ impl LuaRuntime {
                 &[("callback", "string")],
             ),
             (
+                "with_on_animation_end",
+                "Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.",
+                &[("fn_name", "string")],
+            ),
+            (
                 "register_as",
                 "Register entity in WorldSignals for later retrieval",
                 &[("key", "string")],

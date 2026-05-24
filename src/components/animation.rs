@@ -44,6 +44,12 @@ pub struct Animation {
     pub frame_index: usize,
     /// Time in seconds accumulated in the current frame or animation.
     pub elapsed_time: f32,
+    /// Set to `true` once a non-looped animation reaches its last frame.
+    /// Prevents [`AnimationFinishedEvent`](crate::events::animation::AnimationFinishedEvent)
+    /// from firing again on subsequent frames. Reset to `false` when the
+    /// animation key or frame_index is reset.
+    #[serde(default)]
+    pub finished: bool,
 }
 impl Animation {
     /// Create a new [`Animation`] starting from frame 0 and 0 elapsed time.
@@ -55,12 +61,14 @@ impl Animation {
             animation_key: animation_key.into(),
             frame_index: 0,
             elapsed_time: 0.0,
+            finished: false,
         }
     }
     /// Reset the animation to frame 0 and zero elapsed time.
     pub fn reset(&mut self) {
         self.frame_index = 0;
         self.elapsed_time = 0.0;
+        self.finished = false;
     }
 }
 

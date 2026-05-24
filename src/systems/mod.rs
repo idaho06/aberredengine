@@ -57,6 +57,8 @@ pub mod input;
 pub mod inputaccelerationcontroller;
 pub mod inputsimplecontroller;
 #[cfg(feature = "lua")]
+pub mod lua_animation_finished;
+#[cfg(feature = "lua")]
 pub mod lua_collision;
 #[cfg(feature = "lua")]
 pub mod lua_commands;

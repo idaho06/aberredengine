@@ -122,6 +122,10 @@ pub struct EntityDef {
     /// (maps to [`crate::components::luasetup::LuaSetup`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lua_setup: Option<String>,
+    /// *(feature = "lua")* Lua function to call once when the entity's non-looped animation first finishes
+    /// (maps to [`crate::components::lua_on_animation_end::LuaOnAnimationEnd`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_animation_end: Option<String>,
     /// Text rendering data (maps to [`crate::components::dynamictext::DynamicText`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_text: Option<DynamicTextEntry>,
@@ -224,7 +228,7 @@ mod tests {
                         texture_key: "player".into(),
                         width: 16.0,
                         height: 16.0,
-                        offset: Some([0.0, 0.0]),
+                        offset: None,
                         origin: None,
                         flip_h: false,
                         flip_v: false,

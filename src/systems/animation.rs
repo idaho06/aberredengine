@@ -25,6 +25,7 @@ use crate::components::animation::{Animation, AnimationController, CmpOp, Condit
 use crate::components::mapposition::MapPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::events::animation::AnimationFinishedEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldtime::WorldTime;
@@ -38,14 +39,28 @@ use crate::resources::worldtime::WorldTime;
 /// - Optionally writes signal flags/scalars for transitions.
 /// - When `vertical_displacement > 0`, wraps frames to the next row when
 ///   the computed x offset exceeds the texture width.
+/// - Triggers [`AnimationFinishedEvent`](crate::events::animation::AnimationFinishedEvent)
+///   exactly once on the frame a non-looped animation first reaches its last frame.
 pub fn animation(
-    mut query: Query<(&mut Animation, &mut Sprite, Option<&mut Signals>), With<MapPosition>>,
+    mut query: Query<(Entity, &mut Animation, &mut Sprite, Option<&mut Signals>), With<MapPosition>>,
     animation_store: Res<AnimationStore>,
     texture_store: Res<TextureStore>,
     time: Res<WorldTime>,
+    mut commands: Commands,
 ) {
-    for (mut anim_comp, mut sprite, mut maybe_signals) in query.iter_mut() {
+    for (entity, mut anim_comp, mut sprite, mut maybe_signals) in query.iter_mut() {
         if let Some(animation) = animation_store.animations.get(&anim_comp.animation_key) {
+            if animation.frame_count == 0 {
+                continue;
+            }
+            if !anim_comp.finished && anim_comp.frame_index == 0
+                && let Some(signals) = maybe_signals.as_mut()
+            {
+                signals.clear_flag("animation_ended");
+            }
+            if anim_comp.finished {
+                continue;
+            }
             anim_comp.elapsed_time += time.delta;
 
             let frame_duration = 1.0 / animation.fps;
@@ -61,8 +76,10 @@ pub fn animation(
                         if let Some(signals) = maybe_signals.as_mut() {
                             signals.set_flag("animation_ended");
                         }
-                        // TODO: Trigger animation end event
-                        break;
+                        if !anim_comp.finished {
+                            anim_comp.finished = true;
+                            commands.trigger(AnimationFinishedEvent { entity });
+                        }
                     }
                 } else if let Some(signals) = maybe_signals.as_mut() {
                     signals.clear_flag("animation_ended");
@@ -816,6 +833,271 @@ mod tests {
         assert_offset(compute_frame_offset(3, pos, 64.0, 64.0, tw), 64.0, 164.0);
         assert_offset(compute_frame_offset(4, pos, 64.0, 64.0, tw), 0.0, 228.0);
     }
+
+    // --- animation system: AnimationFinishedEvent fires exactly once ---
+
+    #[test]
+    fn animation_finished_event_fires_exactly_once() {
+        use crate::events::animation::AnimationFinishedEvent;
+        use crate::resources::animationstore::AnimationResource;
+        use std::sync::Arc;
+
+        #[derive(Resource, Default)]
+        struct EventCount(u32);
+
+        let mut world = World::new();
+        world.insert_resource(WorldTime { delta: 0.11, ..WorldTime::default() });
+        world.insert_resource(TextureStore::default());
+        world.insert_resource(EventCount::default());
+
+        let mut anim_store = AnimationStore::default();
+        // Single-frame non-looped animation: the very first tick tries to advance
+        // from frame 0 to frame 1, which exceeds frame_count (1), so the finish
+        // branch fires immediately and the event is triggered.
+        anim_store.animations.insert(
+            "die".to_string(),
+            AnimationResource {
+                tex_key: Arc::from("t"),
+                position: Vector2 { x: 0.0, y: 0.0 },
+                horizontal_displacement: 32.0,
+                vertical_displacement: 0.0,
+                frame_count: 1,
+                fps: 10.0,
+                looped: false,
+            },
+        );
+        world.insert_resource(anim_store);
+
+        // Observer that counts how many times AnimationFinishedEvent fires.
+        // world.flush() is required after spawning observers so their hooks register
+        // before the schedule runs — same pattern used in engine_app::spawn_observers.
+        world.spawn(Observer::new(
+            |_trigger: On<AnimationFinishedEvent>, mut count: ResMut<EventCount>| {
+                count.0 += 1;
+            },
+        ));
+        world.flush();
+
+        let make_sprite = || Sprite {
+            tex_key: Arc::from("t"),
+            width: 32.0,
+            height: 32.0,
+            offset: Vector2 { x: 0.0, y: 0.0 },
+            origin: Vector2 { x: 0.0, y: 0.0 },
+            flip_h: false,
+            flip_v: false,
+        };
+
+        // Start at frame 0; delta=0.11 > frame_duration=0.1 so each tick advances a frame.
+        // After tick 1: frame 0 → 1 (= frame_count-1, first finish) → event fires.
+        // After tick 2: already at last frame → event must NOT fire again.
+        let probe_entity = world
+            .spawn((
+                Animation { animation_key: "die".to_string(), frame_index: 0, elapsed_time: 0.0, finished: false },
+                make_sprite(),
+                MapPosition { pos: Vector2 { x: 0.0, y: 0.0 } },
+            ))
+            .id();
+
+        // Sanity-check: world.trigger fires the observer immediately (proves observer is registered).
+        world.trigger(AnimationFinishedEvent { entity: probe_entity });
+        assert_eq!(
+            world.resource::<EventCount>().0, 1,
+            "world.trigger should fire the observer immediately",
+        );
+        world.resource_mut::<EventCount>().0 = 0; // reset for the real test
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(animation);
+
+        schedule.run(&mut world);
+        assert_eq!(
+            world.resource::<EventCount>().0, 1,
+            "AnimationFinishedEvent should fire exactly once on the frame the animation finishes",
+        );
+
+        schedule.run(&mut world);
+        assert_eq!(
+            world.resource::<EventCount>().0, 1,
+            "AnimationFinishedEvent must not fire again on subsequent frames at the last frame",
+        );
+    }
+
+    // --- animation system: break bug (Finding 1) ---
+
+    #[test]
+    fn animation_break_starves_entities_after_finished_nonlooped() {
+        use crate::resources::animationstore::AnimationResource;
+        use std::sync::Arc;
+
+        // delta > frame_duration (0.1s at 10 fps) so every entity advances this tick.
+        let mut world = World::new();
+        world.insert_resource(WorldTime { delta: 0.11, ..WorldTime::default() });
+        world.insert_resource(TextureStore::default());
+
+        let mut anim_store = AnimationStore::default();
+        anim_store.animations.insert(
+            "death".to_string(),
+            AnimationResource {
+                tex_key: Arc::from("t"),
+                position: Vector2 { x: 0.0, y: 0.0 },
+                horizontal_displacement: 32.0,
+                vertical_displacement: 0.0,
+                frame_count: 4,
+                fps: 10.0,
+                looped: false,
+            },
+        );
+        anim_store.animations.insert(
+            "idle".to_string(),
+            AnimationResource {
+                tex_key: Arc::from("t"),
+                position: Vector2 { x: 0.0, y: 0.0 },
+                horizontal_displacement: 32.0,
+                vertical_displacement: 0.0,
+                frame_count: 4,
+                fps: 10.0,
+                looped: true,
+            },
+        );
+        world.insert_resource(anim_store);
+
+        let make_sprite = || Sprite {
+            tex_key: Arc::from("t"),
+            width: 32.0,
+            height: 32.0,
+            offset: Vector2 { x: 0.0, y: 0.0 },
+            origin: Vector2 { x: 0.0, y: 0.0 },
+            flip_h: false,
+            flip_v: false,
+        };
+        let make_pos = || MapPosition { pos: Vector2 { x: 0.0, y: 0.0 } };
+
+        // Entity A: non-looped "death" already at its last valid frame (index 3).
+        // The tick will try to advance to 4, clamp back to 3, and — with the bug — break
+        // out of the entire query loop before entity B is ever processed.
+        let _entity_a = world
+            .spawn((
+                Animation {
+                    animation_key: "death".to_string(),
+                    frame_index: 3,
+                    elapsed_time: 0.0,
+                    finished: false,
+                },
+                make_sprite(),
+                make_pos(),
+            ))
+            .id();
+
+        // Entity B: looped "idle" at frame 0. Should advance to frame 1 this tick, but
+        // won't if the break in entity A's branch exits the loop early.
+        let entity_b = world
+            .spawn((
+                Animation {
+                    animation_key: "idle".to_string(),
+                    frame_index: 0,
+                    elapsed_time: 0.0,
+                    finished: false,
+                },
+                make_sprite(),
+                make_pos(),
+            ))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(animation);
+        schedule.run(&mut world);
+
+        let b_frame = world.entity(entity_b).get::<Animation>().unwrap().frame_index;
+        assert_eq!(
+            b_frame, 1,
+            "entity B should advance from frame 0 to 1, but got {} — break in \
+             non-looped branch exits the outer loop early (Finding 1)",
+            b_frame,
+        );
+    }
+
+    // --- stale "animation_ended" signal cleared on restart ---
+
+    #[test]
+    fn animation_stale_signal_cleared_after_restart() {
+        use crate::resources::animationstore::AnimationResource;
+        use crate::components::signals::Signals;
+        use std::sync::Arc;
+
+        let mut world = World::new();
+        world.insert_resource(WorldTime { delta: 0.11, ..WorldTime::default() });
+        world.insert_resource(TextureStore::default());
+
+        let mut anim_store = AnimationStore::default();
+        // 4-frame animation: ticks 1–4 advance frames; tick 4 hits overflow and finishes.
+        // After finished=true, tick 5 is skipped entirely (new guard). Restart resets
+        // frame_index=0/finished=false; tick 6 clears the stale flag via the frame_index==0
+        // branch, then advances normally without re-entering the overflow branch.
+        anim_store.animations.insert(
+            "die".to_string(),
+            AnimationResource {
+                tex_key: Arc::from("t"),
+                position: Vector2 { x: 0.0, y: 0.0 },
+                horizontal_displacement: 32.0,
+                vertical_displacement: 0.0,
+                frame_count: 4,
+                fps: 10.0,
+                looped: false,
+            },
+        );
+        world.insert_resource(anim_store);
+
+        let make_sprite = || Sprite {
+            tex_key: Arc::from("t"),
+            width: 32.0,
+            height: 32.0,
+            offset: Vector2 { x: 0.0, y: 0.0 },
+            origin: Vector2 { x: 0.0, y: 0.0 },
+            flip_h: false,
+            flip_v: false,
+        };
+
+        let entity = world
+            .spawn((
+                Animation { animation_key: "die".to_string(), frame_index: 0, elapsed_time: 0.0, finished: false },
+                make_sprite(),
+                MapPosition { pos: Vector2 { x: 0.0, y: 0.0 } },
+                Signals::default(),
+            ))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(animation);
+
+        // Ticks 1–4: advance through the 4-frame animation to completion.
+        for _ in 0..4 {
+            schedule.run(&mut world);
+        }
+        assert!(
+            world.entity(entity).get::<Signals>().unwrap().has_flag("animation_ended"),
+            "animation_ended should be set after non-looped animation finishes",
+        );
+        assert!(world.entity(entity).get::<Animation>().unwrap().finished);
+
+        // Tick 5: finished=true → animation system skips entirely. Flag stays set.
+        schedule.run(&mut world);
+        assert!(
+            world.entity(entity).get::<Signals>().unwrap().has_flag("animation_ended"),
+            "animation_ended should still be set on subsequent ticks (finished guard, no processing)",
+        );
+
+        // Simulate RestartAnimation: reset via Animation::reset()
+        world.entity_mut(entity).get_mut::<Animation>().unwrap().reset();
+
+        // Tick 6: frame_index==0 && !finished → clear stale flag; then advance to frame 1
+        // (no overflow), so clear is not re-set.
+        schedule.run(&mut world);
+        assert!(
+            !world.entity(entity).get::<Signals>().unwrap().has_flag("animation_ended"),
+            "animation_ended should be cleared on first tick after restart",
+        );
+    }
 }
 
 /// Select the active animation track according to controller rules.
@@ -843,6 +1125,7 @@ pub fn animation_controller(
             animation.animation_key = owned.clone();
             animation.frame_index = 0;
             animation.elapsed_time = 0.0;
+            animation.finished = false;
             controller.current_key = owned.clone();
             // Sync Sprite.tex_key to the new animation's texture (mirrors SetAnimation EntityCmd)
             if let Some(anim_res) = animation_store.animations.get(owned.as_str())
