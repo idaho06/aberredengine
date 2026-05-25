@@ -72,6 +72,14 @@ my_game/
 
 The engine reads `config.ini` at startup for window and rendering settings. The file must exist at startup, but individual missing or invalid keys fall back to safe defaults.
 
+> **Alternative:** Use `EngineBuilder::config_str(content)` to supply the INI content as a `&'static str` instead of a file. This is useful for tests or games that embed their configuration. When `.config_str()` is called, the file at `.config()` path is not read.
+
+```rust
+EngineBuilder::new()
+    .config_str("[render]\nwidth = 320\nheight = 180\n[window]\nwidth = 960\nheight = 540\n")
+    // …
+```
+
 ```ini
 [render]
 width = 640                    ; Internal render resolution width
@@ -362,6 +370,7 @@ Setup ──→ Playing ──→ Quitting
 | Method | Description |
 |--------|-------------|
 | `.config(path)` | Path to `config.ini` (default: `"config.ini"`) |
+| `.config_str(content)` | Load INI config from an embedded `&'static str` instead of a file. Takes precedence over `.config(path)`. Useful for tests or games that ship with bundled defaults. |
 | `.title(name)` | Window title (overrides config) |
 | `.on_setup(system)` | Asset loading hook (called during `Setup` state) |
 | `.on_enter_play(system)` | Called once when transitioning to `Playing` |
@@ -903,6 +912,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Timer` | `Timer::new(duration_secs, callback as TimerCallback)` — **must cast** |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::new("group_a", "group_b", callback as CollisionCallback)` — **must cast** |
+| `LuaOnAnimationEnd` | `LuaOnAnimationEnd::new("fn_name")` — `[feature=lua]`; fires once when non-looped animation finishes; Rust counterpart is `AnimationFinishedEvent` |
 | `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
 | `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
 | `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
@@ -1446,6 +1456,43 @@ fn enter(ctx: &mut GameCtx) {
 }
 ```
 
+### 7.5 Animation Finished Event
+
+**Source:** `src/events/animation.rs`, `src/systems/lua_animation_finished.rs`
+
+`AnimationFinishedEvent` is triggered **once** by the animation system on the frame a non-looped animation first reaches its final frame. Looped animations never trigger it. It is not re-triggered on subsequent frames even though the entity stays on the last frame.
+
+**Event struct:**
+
+```rust
+pub struct AnimationFinishedEvent {
+    pub entity: Entity,
+}
+```
+
+**Observing from Rust** — register a persistent observer with `EngineBuilder::add_observer`:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::bevy_ecs::observer::On;
+use aberredengine::events::animation::AnimationFinishedEvent;
+
+fn on_anim_done(
+    trigger: On<AnimationFinishedEvent>,
+    mut commands: Commands,
+) {
+    // Despawn the entity whose animation just finished
+    commands.entity(trigger.event().entity).despawn();
+}
+
+// Register in main:
+EngineBuilder::new()
+    .add_observer(on_anim_done)
+    // …
+```
+
+**Lua consumers:** attach `LuaOnAnimationEnd::new("fn_name")` to the entity (or use `:with_on_animation_end("fn_name")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
+
 ---
 
 ## 8. Engine Resources Quick Reference
@@ -1671,6 +1718,7 @@ Section 2 showed the basics. This is the complete reference.
 
 ### Parsing behavior
 
+- **`config_str()`** — alternative to a file: pass INI content as a `&'static str`. The file path is ignored when this is set.
 - **Missing file** -> startup error from `EngineBuilder::try_run()`
 - **Unreadable or malformed INI** -> startup error from `EngineBuilder::try_run()`
 - **Missing key** -> default for that key

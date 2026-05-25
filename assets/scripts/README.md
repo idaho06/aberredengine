@@ -18,6 +18,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Text Components](#text-components)
   - [Menu Components](#menu-components)
   - [Animation Components](#animation-components)
+  - [OnAnimationEnd Component](#onanimationend-component)
   - [Phase Component](#phase-component)
   - [LuaSetup Component](#luasetup-component)
   - [Attachment Components](#attachment-components)
@@ -204,6 +205,7 @@ return M
    - Timer callbacks (names in `:with_lua_timer()`)
    - Menu callbacks (names in `:with_menu_callback()`)
    - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
+   - OnAnimationEnd callbacks (names in `:with_on_animation_end()` or map file `"on_animation_end"` field)
 
 2. **The KEY must exactly match the string passed to the engine.**
    If you register `:with_lua_collision_rule("ball", "brick", "on_ball_brick")`,
@@ -261,6 +263,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
 | LuaSetup callbacks | Signal, Entity, Spawn, Clone, Audio, Camera | One-shot entity initialisation — add phases, animations, collision rules, etc. |
+| `on_animation_end` callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Fired once when a non-looped animation first reaches its last frame |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
@@ -272,6 +275,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
+| `on_animation_end` callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
 | LuaSetup callbacks | Signal → Entity → Spawn → Clone → Audio → Camera |
 | Collision callbacks | Entity → Signal → Audio → Spawn → Clone → Phase → Camera |
 
@@ -544,6 +548,7 @@ end
 | Phase on_update | ✓ | `callback(ctx, input, dt)` |
 | Phase on_exit | ✗ | `callback(ctx)` |
 | Timer | ✓ | `callback(ctx, input)` |
+| OnAnimationEnd | ✓ | `callback(ctx, input)` |
 | Collision | ✗ | `callback(ctx)` |
 
 **Note:** Phase and timer callbacks now receive an `EntityContext` (`ctx`) object instead of just `entity_id`. The context contains all entity component data. See [Phase Component](#phase-component) for details. Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
@@ -758,6 +763,41 @@ end
 3. Entities with a `registered_as` name in the map file are accessible via `engine.get_entity(key)`
    starting from the **next frame**.
 4. Entities with a `group` name are visible via the group-tracking system.
+
+**Supported `EntityDef` fields** (all optional):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `position` | `[x, y]` | World-space position |
+| `sprite` | object | Texture key, width, height, offset, origin, flip_h, flip_v |
+| `collider` | `{ "size": [w, h], "offset": [x, y]?, "origin": [x, y]? }` | Box collider |
+| `group` | string | Collision/query group name |
+| `z_index` | number | Render order |
+| `rotation_deg` | number | Initial rotation in degrees |
+| `scale` | `[x, y]` | Initial scale |
+| `tilemap_path` | string | Path for `TileMap` component |
+| `registered_as` | string | Register entity in WorldSignals under this key |
+| `tint` | `[r, g, b, a]` | Color tint (0–255 per channel) |
+| `lua_setup` | string | One-shot Lua setup callback (see [LuaSetup Component](#luasetup-component)) |
+| `on_animation_end` | string | Lua callback fired once when non-looped animation finishes (see [OnAnimationEnd Component](#onanimationend-component)) |
+| `dynamic_text` | object | `{ text, font_key, font_size, color: [r,g,b,a] }` |
+| `animation_key` | string | Initial animation key |
+
+**Example with collider and animation end:**
+
+```json
+{
+  "entities": [
+    {
+      "position": [200, 300],
+      "group": "enemy",
+      "animation_key": "enemy_death",
+      "collider": { "size": [32, 48] },
+      "on_animation_end": "on_enemy_death_done"
+    }
+  ]
+}
+```
 
 **Error handling:** if the file cannot be read or parsed, an error is logged and nothing is spawned.
 
@@ -1509,6 +1549,50 @@ Add rule to AnimationController (requires `:with_animation_controller()`).
     "visible_anim"
 )
 ```
+
+---
+
+### OnAnimationEnd Component
+
+#### `:with_on_animation_end(fn_name)`
+
+Attach a Lua callback to be called **once** when the entity's non-looped animation first reaches its last frame. Looped animations never trigger it.
+
+**Parameters:**
+
+- `fn_name` - Name of the Lua function to call
+
+**Callback Signature:**
+
+```lua
+function callback_name(ctx, input)
+    -- ctx: standard EntityContext table
+    -- input: input state table
+    -- Fires exactly once per animation completion, not on every frame the entity stays on the last frame
+end
+```
+
+**Example — despawn on death animation end:**
+
+```lua
+engine.spawn()
+    :with_group("enemy")
+    :with_position(200, 300)
+    :with_animation("enemy_death")   -- non-looped animation
+    :with_on_animation_end("on_enemy_death_done")
+    :build()
+
+local function on_enemy_death_done(ctx, input)
+    engine.entity_despawn(ctx.id)
+end
+```
+
+**Gotchas:**
+
+- Only fires for **non-looped** animations. If the animation loops, the callback is never called.
+- Fires exactly once — not on every frame the entity remains on the last frame.
+- The callback must be in `M._callbacks` like any other engine-resolved function.
+- Also settable via the map file `"on_animation_end"` field (see [Map Loading](#map-loading)).
 
 ---
 
