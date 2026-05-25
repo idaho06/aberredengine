@@ -36,7 +36,10 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 #[cfg(feature = "lua")]
 use crate::resources::mapdata::load_map;
-use crate::resources::mapdata::{EntityDef, MapData};
+use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+use crate::resources::mapdata::{
+    EntityDef, MapData, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
+};
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::RaylibAccess;
@@ -99,10 +102,24 @@ pub fn spawn_map(
         animation_store.insert(&entry.key, anim);
     }
 
-    for def in &map.entities {
-        let entity = spawn_entity(commands, def);
-        if let Some(ref key) = def.registered_as {
-            world_signals.set_entity(key.clone(), entity);
+    // Pass 1: spawn all entities and register WorldSignals keys so that
+    // ParticleEmitter template resolution in pass 2 can find all entities.
+    let spawned: Vec<(Entity, &EntityDef)> = map
+        .entities
+        .iter()
+        .map(|def| {
+            let entity = spawn_entity(commands, def);
+            if let Some(ref key) = def.registered_as {
+                world_signals.set_entity(key.clone(), entity);
+            }
+            (entity, def)
+        })
+        .collect();
+
+    // Pass 2: insert ParticleEmitter components with resolved template keys.
+    for (entity, def) in &spawned {
+        if let Some(ref entry) = def.particle_emitter {
+            insert_particle_emitter(commands.entity(*entity), world_signals, entry);
         }
     }
 }
@@ -210,6 +227,67 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
         });
     }
     entity
+}
+
+/// Insert a [`ParticleEmitter`] component by resolving template keys from
+/// `WorldSignals`. Called during pass 2 of [`spawn_map`].
+fn insert_particle_emitter(
+    mut entity_commands: EntityCommands<'_>,
+    world_signals: &WorldSignals,
+    entry: &crate::resources::mapdata::ParticleEmitterEntry,
+) {
+    let templates: Vec<Entity> = entry
+        .template_keys
+        .iter()
+        .filter_map(|k| {
+            let e = world_signals.get_entity(k).copied();
+            if e.is_none() {
+                log::warn!(
+                    "insert_particle_emitter: template key '{}' not found in WorldSignals; ignoring",
+                    k
+                );
+            }
+            e
+        })
+        .collect();
+
+    if templates.is_empty() && !entry.template_keys.is_empty() {
+        log::warn!("insert_particle_emitter: no templates resolved — emitter will not emit");
+    }
+
+    let shape = match &entry.shape {
+        ParticleEmitterShapeEntry::Point => EmitterShape::Point,
+        ParticleEmitterShapeEntry::Rect { width, height } => {
+            EmitterShape::Rect { width: *width, height: *height }
+        }
+    };
+
+    let ttl = match &entry.ttl {
+        ParticleEmitterTtlEntry::None => TtlSpec::None,
+        ParticleEmitterTtlEntry::Fixed { value: v } => TtlSpec::Fixed(*v),
+        ParticleEmitterTtlEntry::Range { min, max } => TtlSpec::Range { min: *min, max: *max },
+    };
+
+    let [a, b] = entry.arc_degrees;
+    let arc_degrees = (a.min(b), a.max(b));
+
+    let [a, b] = entry.speed_range;
+    let speed_range = (a.min(b), a.max(b));
+
+    let [x, y] = entry.offset.unwrap_or([0.0, 0.0]);
+
+    entity_commands.insert(ParticleEmitter {
+        templates,
+        shape,
+        offset: raylib::math::Vector2 { x, y },
+        particles_per_emission: entry.particles_per_emission,
+        emissions_per_second: entry.emissions_per_second,
+        emissions_remaining: entry.emissions_remaining,
+        arc_degrees,
+        speed_range,
+        ttl,
+        time_since_emit: 0.0,
+    });
 }
 
 /// Bevy observer registered by the engine. Fires on

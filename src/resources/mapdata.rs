@@ -132,6 +132,9 @@ pub struct EntityDef {
     /// Animation key in [`crate::resources::animationstore::AnimationStore`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animation_key: Option<String>,
+    /// Particle emitter component data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub particle_emitter: Option<ParticleEmitterEntry>,
 }
 
 /// Dynamic text rendering data for an entity placement.
@@ -179,6 +182,47 @@ pub struct BoxColliderEntry {
     /// Pivot origin `[x, y]` relative to the collider top-left.
     /// `None` means `(0.0, 0.0)`.
     pub origin: Option<[f32; 2]>,
+}
+
+/// Emitter shape for a [`ParticleEmitterEntry`].
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ParticleEmitterShapeEntry {
+    #[default]
+    Point,
+    Rect { width: f32, height: f32 },
+}
+
+/// TTL spec for a [`ParticleEmitterEntry`].
+///
+/// Uses `tag + content` (adjacently-tagged) serde so that `Fixed { value }` round-trips
+/// correctly. Internally-tagged enums cannot serialize newtype variants over primitives.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum ParticleEmitterTtlEntry {
+    #[default]
+    None,
+    Fixed { value: f32 },
+    Range { min: f32, max: f32 },
+}
+
+/// Particle emitter data for an entity placement.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ParticleEmitterEntry {
+    pub template_keys: Vec<String>,
+    pub shape: ParticleEmitterShapeEntry,
+    /// Offset from entity pivot. `None` means `[0, 0]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<[f32; 2]>,
+    pub particles_per_emission: u32,
+    pub emissions_per_second: f32,
+    /// `u32::MAX` means unlimited.
+    pub emissions_remaining: u32,
+    /// `[min_deg, max_deg]` arc for particle launch direction.
+    pub arc_degrees: [f32; 2],
+    /// `[min, max]` speed range.
+    pub speed_range: [f32; 2],
+    pub ttl: ParticleEmitterTtlEntry,
 }
 
 /// Load a [`MapData`] from a JSON file at `path`.
