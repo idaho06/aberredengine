@@ -10,6 +10,7 @@
 //! - [`cameratarget`] – marks an entity as a candidate for camera following
 //! - [`collision`] – collision callback rules and context for collision observers
 //! - [`dynamictext`] – text component for rendering variable strings
+//! - [`emittedparticle`] – marker for entities spawned by a particle emitter
 //! - [`entityshader`] – per-entity shader for custom rendering effects
 //! - [`gridlayout`] – data-driven grid spawner for tile-based layouts
 //! - [`group`] – tag component for grouping entities by name
@@ -39,6 +40,7 @@ pub mod boxcollider;
 pub mod cameratarget;
 pub mod collision;
 pub mod dynamictext;
+pub mod emittedparticle;
 pub mod entityshader;
 pub mod globaltransform2d;
 pub mod gridlayout;

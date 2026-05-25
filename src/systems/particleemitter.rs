@@ -24,6 +24,7 @@ use fastrand::Rng;
 use raylib::prelude::Vector2;
 
 // use crate::components::animation::Animation;
+use crate::components::emittedparticle::EmittedParticle;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
@@ -42,6 +43,7 @@ use crate::resources::worldtime::WorldTime;
 /// Should run **before** `movement` so particles move on their spawn frame.
 pub fn particle_emitter_system(
     mut emitter_query: Query<(
+        Entity,
         &MapPosition,
         &mut ParticleEmitter,
         Option<&GlobalTransform2D>,
@@ -57,7 +59,7 @@ pub fn particle_emitter_system(
         return;
     }
 
-    for (owner_pos, mut emitter, maybe_gt) in emitter_query.iter_mut() {
+    for (emitter_entity, owner_pos, mut emitter, maybe_gt) in emitter_query.iter_mut() {
         // Skip if no templates, no emissions remaining, or rate is zero/negative
         if emitter.templates.is_empty()
             || emitter.emissions_remaining == 0
@@ -76,6 +78,7 @@ pub fn particle_emitter_system(
         while emitter.time_since_emit >= period && emitter.emissions_remaining > 0 {
             emit_particles(
                 &mut commands,
+                emitter_entity,
                 &emit_pos,
                 &emitter,
                 &rigidbody_query,
@@ -102,6 +105,7 @@ fn random_f32_range(rng: &mut Rng, min: f32, max: f32) -> f32 {
 /// Emit particles for a single emission event.
 fn emit_particles(
     commands: &mut Commands,
+    emitter_entity: Entity,
     owner_pos: &MapPosition,
     emitter: &ParticleEmitter,
     rigidbody_query: &Query<&RigidBody>,
@@ -184,6 +188,7 @@ fn emit_particles(
             .insert(MapPosition::new(spawn_pos.x, spawn_pos.y))
             .insert(Rotation { degrees: angle_deg })
             .insert(rb)
+            .insert(EmittedParticle(emitter_entity))
             .insert_if(Ttl::new(ttl_value.unwrap_or(0.0)), || ttl_value.is_some());
     }
 }
