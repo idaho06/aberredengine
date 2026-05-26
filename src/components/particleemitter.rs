@@ -98,6 +98,7 @@ pub enum TtlSpec {
 /// - `particles_per_emission` - Particles spawned per emission event
 /// - `emissions_per_second` - Emission frequency (0 or negative = disabled)
 /// - `emissions_remaining` - Emissions left before stopping (0 = stopped)
+/// - `initial_emissions_remaining` - Configured value; never modified at runtime
 /// - `arc_degrees` - Direction range in degrees (0° = up, normalized min/max)
 /// - `speed_range` - Speed range for particles (normalized min/max)
 /// - `ttl` - TTL configuration for spawned particles
@@ -116,6 +117,9 @@ pub struct ParticleEmitter {
     pub emissions_per_second: f32,
     /// Remaining emission events. When 0, emitter stops.
     pub emissions_remaining: u32,
+    /// Original configured value. Set on creation/update; never decremented by the engine.
+    /// Used by the editor to save the correct value regardless of runtime emissions.
+    pub initial_emissions_remaining: u32,
     /// Direction arc in degrees. 0° points up. Stored as (min, max).
     pub arc_degrees: (f32, f32),
     /// Speed range for particles. Stored as (min, max).
@@ -135,6 +139,7 @@ impl Default for ParticleEmitter {
             particles_per_emission: 1,
             emissions_per_second: 10.0,
             emissions_remaining: 100,
+            initial_emissions_remaining: 100,
             arc_degrees: (0.0, 360.0),
             speed_range: (50.0, 100.0),
             ttl: TtlSpec::None,

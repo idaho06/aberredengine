@@ -56,6 +56,11 @@ pub struct DynamicText {
     pub font_size: f32,
     /// Color of the text.
     pub color: raylib::prelude::Color,
+    /// Original configured text. Set on creation/update; never modified at runtime.
+    /// Used by the editor to save the correct value regardless of runtime mutations.
+    pub initial_text: Arc<str>,
+    /// Original configured color. Set on creation/update; never modified at runtime.
+    pub initial_color: raylib::prelude::Color,
     /// Size of the text bounding box
     size: Vector2,
 }
@@ -72,8 +77,11 @@ impl DynamicText {
         font_size: f32,
         color: raylib::prelude::Color,
     ) -> Self {
+        let text: Arc<str> = Arc::from(content.into());
         Self {
-            text: Arc::from(content.into()),
+            initial_text: Arc::clone(&text),
+            initial_color: color,
+            text,
             font: Arc::from(font.into()),
             font_size,
             color,

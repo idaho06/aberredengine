@@ -569,6 +569,7 @@ fn apply_particle_emitter(
         particles_per_emission: emitter_data.particles_per_emission,
         emissions_per_second: emitter_data.emissions_per_second,
         emissions_remaining: emitter_data.emissions_remaining,
+        initial_emissions_remaining: emitter_data.emissions_remaining,
         arc_degrees,
         speed_range,
         ttl,

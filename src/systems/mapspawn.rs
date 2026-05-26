@@ -283,6 +283,7 @@ fn insert_particle_emitter(
         particles_per_emission: entry.particles_per_emission,
         emissions_per_second: entry.emissions_per_second,
         emissions_remaining: entry.emissions_remaining,
+        initial_emissions_remaining: entry.emissions_remaining,
         arc_degrees,
         speed_range,
         ttl,
