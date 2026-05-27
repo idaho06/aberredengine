@@ -39,6 +39,15 @@ use serde::{Deserialize, Serialize};
 pub struct MapData {
     /// Human-readable display name (not used as a file path).
     pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub author: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub version: String,
+    /// RGB clear color override. `None` means use the engine default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<[u8; 3]>,
     pub textures: Vec<TextureEntry>,
     pub fonts: Vec<FontEntry>,
     pub animations: Vec<AnimationEntry>,
@@ -303,6 +312,7 @@ mod tests {
                     ..Default::default()
                 },
             ],
+            ..Default::default()
         }
     }
 
