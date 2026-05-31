@@ -14,12 +14,12 @@ use crate::components::luaphase::LuaPhase;
 use crate::components::luasetup::LuaSetup;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
-    ContextQueries, DrainScope, EntityCmdQueries, build_entity_context,
-    drain_and_process_effect_commands, process_phase_command,
+    ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
+    drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
 
 /// Call the named Lua setup function for every newly added [`LuaSetup`] entity.
@@ -38,6 +38,8 @@ pub fn lua_setup_entity_system(
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     systems_store: Res<SystemsStore>,
     animation_store: Res<AnimationStore>,
+    mut phase_buf: Local<Vec<PhaseCmd>>,
+    mut effect_bufs: Local<EffectCmdBufs>,
 ) {
     if query.is_empty() {
         return;
@@ -88,13 +90,12 @@ pub fn lua_setup_entity_system(
         }
     }
 
-    for cmd in lua_runtime.drain_phase_commands() {
-        process_phase_command(&mut luaphase_query, cmd);
-    }
+    drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);
 
     drain_and_process_effect_commands(
         &lua_runtime,
         DrainScope::Regular,
+        &mut effect_bufs,
         &mut commands,
         &mut world_signals,
         &mut cmd_queries,

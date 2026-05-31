@@ -25,7 +25,10 @@ use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
-use crate::resources::lua_runtime::{InputSnapshot, LuaRuntime};
+use crate::resources::lua_runtime::{
+    CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, InputSnapshot, LuaRuntime, PhaseCmd,
+    RenderCmd,
+};
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
@@ -34,10 +37,10 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_animation_command,
-    process_asset_command, process_camera_follow_command, process_gameconfig_command,
-    process_group_command, process_input_command, process_phase_command, process_render_command,
-    process_signal_command,
+    DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
+    drain_and_process_phase_commands, process_animation_command, process_asset_command,
+    process_camera_follow_command, process_gameconfig_command, process_group_command,
+    process_input_command, process_render_command, process_signal_command,
 };
 use crate::systems::mapspawn::load_font_with_mipmaps;
 use bevy_ecs::prelude::*;
@@ -69,6 +72,20 @@ pub struct GameSceneState<'w> {
 pub struct EntityProcessing<'w, 's> {
     pub cmd_queries: EntityCmdQueries<'w, 's>,
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
+}
+
+/// Persistent per-frame buffers for the command queues drained by [`drain_common_commands`].
+///
+/// Hold one of these in a `Local<CommonCmdBufs>` on each Bevy system that calls
+/// `drain_common_commands`. The Vecs retain heap capacity across frames.
+#[derive(Default)]
+pub(crate) struct CommonCmdBufs {
+    phase: Vec<PhaseCmd>,
+    effects: EffectCmdBufs,
+    render: Vec<RenderCmd>,
+    gameconfig: Vec<GameConfigCmd>,
+    camera_follow: Vec<CameraFollowCmd>,
+    input: Vec<InputCmd>,
 }
 
 // This function is meant to load all resources
@@ -112,8 +129,10 @@ pub fn setup(
     // Initialize stores
     let mut tex_store = TextureStore::new();
 
-    // Process asset commands queued by Lua
-    for cmd in lua_runtime.drain_asset_commands() {
+    // Process asset commands queued by Lua (setup runs once; no persistent buffer needed)
+    let mut asset_buf = Vec::new();
+    lua_runtime.drain_asset_commands_into(&mut asset_buf);
+    for cmd in asset_buf {
         process_asset_command(
             rl,
             th,
@@ -130,7 +149,9 @@ pub fn setup(
 
     // Process animation registration commands from Lua
     let mut anim_store = AnimationStore::default();
-    for cmd in lua_runtime.drain_animation_commands() {
+    let mut anim_buf = Vec::new();
+    lua_runtime.drain_animation_commands_into(&mut anim_buf);
+    for cmd in anim_buf {
         process_animation_command(&mut anim_store, cmd);
     }
     commands.insert_resource(anim_store);
@@ -162,13 +183,16 @@ pub fn enter_play(
         }
     }
 
-    // Process signal commands queued by Lua (initializes world signals)
-    for cmd in lua_runtime.drain_signal_commands() {
+    // enter_play runs once; stack-local buffers are sufficient
+    let mut signal_buf = Vec::new();
+    lua_runtime.drain_signal_commands_into(&mut signal_buf);
+    for cmd in signal_buf {
         process_signal_command(&mut worldsignals, cmd);
     }
 
-    // Process group commands from Lua (configures which groups to track globally)
-    for cmd in lua_runtime.drain_group_commands() {
+    let mut group_buf = Vec::new();
+    lua_runtime.drain_group_commands_into(&mut group_buf);
+    for cmd in group_buf {
         process_group_command(&mut tracked_groups, cmd);
     }
 
@@ -195,14 +219,14 @@ fn drain_common_commands(
     scene_state: &mut GameSceneState,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     bindings: &mut InputBindings,
+    bufs: &mut CommonCmdBufs,
 ) {
-    for cmd in lua_runtime.drain_phase_commands() {
-        process_phase_command(&mut entities.luaphase, cmd);
-    }
+    drain_and_process_phase_commands(lua_runtime, &mut bufs.phase, &mut entities.luaphase);
 
     drain_and_process_effect_commands(
         lua_runtime,
         DrainScope::Regular,
+        &mut bufs.effects,
         commands,
         &mut scene_state.world_signals,
         &mut entities.cmd_queries,
@@ -211,16 +235,23 @@ fn drain_common_commands(
         &scene_state.anim_store,
     );
 
-    for cmd in lua_runtime.drain_render_commands() {
+    lua_runtime.drain_render_commands_into(&mut bufs.render);
+    for cmd in bufs.render.drain(..) {
         process_render_command(cmd, &mut scene_state.post_process);
     }
-    for cmd in lua_runtime.drain_gameconfig_commands() {
+
+    lua_runtime.drain_gameconfig_commands_into(&mut bufs.gameconfig);
+    for cmd in bufs.gameconfig.drain(..) {
         process_gameconfig_command(cmd, &mut scene_state.config);
     }
-    for cmd in lua_runtime.drain_camera_follow_commands() {
+
+    lua_runtime.drain_camera_follow_commands_into(&mut bufs.camera_follow);
+    for cmd in bufs.camera_follow.drain(..) {
         process_camera_follow_command(cmd, &mut scene_state.camera_follow);
     }
-    for cmd in lua_runtime.drain_input_commands() {
+
+    lua_runtime.drain_input_commands_into(&mut bufs.input);
+    for cmd in bufs.input.drain(..) {
         process_input_command(cmd, bindings);
     }
 }
@@ -232,7 +263,7 @@ fn drain_common_commands(
 /// - Lua can queue signal commands (set_flag, set_string, etc.)
 /// - Processes signal commands from Lua
 /// - Reacts to flags set by Lua: "switch_scene", "quit_game"
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
@@ -242,6 +273,7 @@ pub fn update(
     mut scene_state: GameSceneState,
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
+    mut common_bufs: Local<CommonCmdBufs>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
@@ -290,6 +322,7 @@ pub fn update(
         &mut scene_state,
         &mut scripting.audio_cmd_writer,
         &mut bindings,
+        &mut common_bufs,
     );
 
     // Check for quit flag (set by Lua)
@@ -308,7 +341,7 @@ pub fn update(
 pub use crate::systems::gamestate::clean_all_entities;
 /// Processes scene switching: despawns old entities, calls Lua callbacks,
 /// and processes all queued commands for the new scene.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn switch_scene(
     mut commands: Commands,
     mut scripting: ScriptingContext,
@@ -318,6 +351,8 @@ pub fn switch_scene(
     mut tracked_groups: ResMut<TrackedGroups>,
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
+    mut common_bufs: Local<CommonCmdBufs>,
+    mut group_buf: Local<Vec<GroupCmd>>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     debug!("switch_scene: System called!");
@@ -360,9 +395,12 @@ pub fn switch_scene(
         &mut scene_state,
         &mut scripting.audio_cmd_writer,
         &mut bindings,
+        &mut common_bufs,
     );
 
-    for cmd in lua_runtime.drain_group_commands() {
+    group_buf.clear();
+    lua_runtime.drain_group_commands_into(&mut group_buf);
+    for cmd in group_buf.drain(..) {
         process_group_command(&mut tracked_groups, cmd);
     }
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);

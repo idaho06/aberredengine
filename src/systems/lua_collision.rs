@@ -47,14 +47,15 @@ use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::lua_runtime::{LuaRuntime, populate_entity_signals};
+use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd, populate_entity_signals};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::collision::{
     compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
 };
 use crate::systems::lua_commands::{
-    DrainScope, EntityCmdQueries, drain_and_process_effect_commands, process_phase_command,
+    DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
+    process_phase_command,
 };
 use log::error;
 
@@ -74,7 +75,12 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub animation_store: Res<'w, AnimationStore>,
 }
 
-pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollisionObserverParams) {
+pub fn lua_collision_observer(
+    trigger: On<CollisionEvent>,
+    mut params: LuaCollisionObserverParams,
+    mut phase_buf: Local<Vec<PhaseCmd>>,
+    mut effect_bufs: Local<EffectCmdBufs>,
+) {
     if params.lua_rules.is_empty() {
         return;
     }
@@ -176,13 +182,15 @@ pub fn lua_collision_observer(trigger: On<CollisionEvent>, mut params: LuaCollis
                 return;
             }
 
-            for cmd in params.lua_runtime.drain_collision_phase_commands() {
+            params.lua_runtime.drain_collision_phase_commands_into(&mut phase_buf);
+            for cmd in phase_buf.drain(..) {
                 process_phase_command(&mut params.luaphase_query, cmd);
             }
 
             drain_and_process_effect_commands(
                 &params.lua_runtime,
                 DrainScope::Collision,
+                &mut effect_bufs,
                 &mut params.commands,
                 &mut params.world_signals,
                 &mut params.entity_cmds,

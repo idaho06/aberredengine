@@ -320,8 +320,13 @@ pub fn spawn_map_observer(
 /// Registered by [`crate::engine_app::EngineBuilder::with_lua`] and runs
 /// every frame during the Playing state, after `lua_plugin::update`.
 #[cfg(feature = "lua")]
-pub fn process_lua_map_commands(mut commands: Commands, lua: NonSend<LuaRuntime>) {
-    for cmd in lua.drain_map_commands() {
+pub fn process_lua_map_commands(
+    mut commands: Commands,
+    lua: NonSend<LuaRuntime>,
+    mut buf: Local<Vec<MapLuaCmd>>,
+) {
+    lua.drain_map_commands_into(&mut buf);
+    for cmd in buf.drain(..) {
         match cmd {
             MapLuaCmd::LoadMap { path } => match load_map(&path) {
                 Ok(map) => commands.trigger(SpawnMapRequested { map }),

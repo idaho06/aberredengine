@@ -53,9 +53,29 @@ use crate::components::stuckto::StuckTo;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::lua_runtime::{LuaRuntime, TweenConfig};
+use crate::components::luaphase::LuaPhase;
+use crate::resources::lua_runtime::{
+    AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
+    TweenConfig,
+};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
+
+/// Persistent per-frame buffers for the 6 effect command queues drained by
+/// [`drain_and_process_effect_commands`].
+///
+/// Hold one of these in a `Local<EffectCmdBufs>` on each Bevy system that
+/// calls the helper. The Vecs retain their heap capacity across frames so
+/// no allocation occurs after the first warm-up frame.
+#[derive(Default)]
+pub struct EffectCmdBufs {
+    pub(crate) signals: Vec<SignalCmd>,
+    pub(crate) entities: Vec<EntityCmd>,
+    pub(crate) spawns: Vec<SpawnCmd>,
+    pub(crate) clones: Vec<CloneCmd>,
+    pub(crate) audios: Vec<AudioLuaCmd>,
+    pub(crate) cameras: Vec<CameraCmd>,
+}
 
 /// Selects which set of command queues to drain from the Lua runtime.
 pub(crate) enum DrainScope {
@@ -72,10 +92,14 @@ pub(crate) enum DrainScope {
 /// Phase is intentionally excluded so callers can preserve their required
 /// phase boundary (e.g. `apply_callback_transitions` in `lua_phase_system`)
 /// before invoking this helper.
+///
+/// `bufs` must be a caller-owned [`EffectCmdBufs`] (typically `Local<EffectCmdBufs>`).
+/// The Vecs retain capacity across frames to avoid repeated allocation.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn drain_and_process_effect_commands(
     lua_runtime: &LuaRuntime,
     scope: DrainScope,
+    bufs: &mut EffectCmdBufs,
     commands: &mut Commands,
     world_signals: &mut WorldSignals,
     cmd_queries: &mut EntityCmdQueries,
@@ -83,46 +107,58 @@ pub(crate) fn drain_and_process_effect_commands(
     systems_store: &SystemsStore,
     animation_store: &AnimationStore,
 ) {
-    let (signals, entities, spawns, clones, audios, cameras) = match scope {
-        DrainScope::Regular => (
-            lua_runtime.drain_signal_commands(),
-            lua_runtime.drain_entity_commands(),
-            lua_runtime.drain_spawn_commands(),
-            lua_runtime.drain_clone_commands(),
-            lua_runtime.drain_audio_commands(),
-            lua_runtime.drain_camera_commands(),
-        ),
-        DrainScope::Collision => (
-            lua_runtime.drain_collision_signal_commands(),
-            lua_runtime.drain_collision_entity_commands(),
-            lua_runtime.drain_collision_spawn_commands(),
-            lua_runtime.drain_collision_clone_commands(),
-            lua_runtime.drain_collision_audio_commands(),
-            lua_runtime.drain_collision_camera_commands(),
-        ),
-    };
+    match scope {
+        DrainScope::Regular => {
+            lua_runtime.drain_signal_commands_into(&mut bufs.signals);
+            lua_runtime.drain_entity_commands_into(&mut bufs.entities);
+            lua_runtime.drain_spawn_commands_into(&mut bufs.spawns);
+            lua_runtime.drain_clone_commands_into(&mut bufs.clones);
+            lua_runtime.drain_audio_commands_into(&mut bufs.audios);
+            lua_runtime.drain_camera_commands_into(&mut bufs.cameras);
+        }
+        DrainScope::Collision => {
+            lua_runtime.drain_collision_signal_commands_into(&mut bufs.signals);
+            lua_runtime.drain_collision_entity_commands_into(&mut bufs.entities);
+            lua_runtime.drain_collision_spawn_commands_into(&mut bufs.spawns);
+            lua_runtime.drain_collision_clone_commands_into(&mut bufs.clones);
+            lua_runtime.drain_collision_audio_commands_into(&mut bufs.audios);
+            lua_runtime.drain_collision_camera_commands_into(&mut bufs.cameras);
+        }
+    }
 
-    for cmd in signals {
+    for cmd in bufs.signals.drain(..) {
         process_signal_command(world_signals, cmd);
     }
     process_entity_commands(
         commands,
-        entities,
+        bufs.entities.drain(..),
         cmd_queries,
         systems_store,
         animation_store,
     );
-    for cmd in spawns {
+    for cmd in bufs.spawns.drain(..) {
         process_spawn_command(commands, cmd, world_signals);
     }
-    for cmd in clones {
+    for cmd in bufs.clones.drain(..) {
         process_clone_command(commands, cmd, world_signals);
     }
-    for cmd in audios {
+    for cmd in bufs.audios.drain(..) {
         process_audio_command(audio, cmd);
     }
-    for cmd in cameras {
+    for cmd in bufs.cameras.drain(..) {
         process_camera_command(commands, cmd);
+    }
+}
+
+/// Drains the phase command queue and processes each command.
+pub(crate) fn drain_and_process_phase_commands(
+    lua_runtime: &LuaRuntime,
+    buf: &mut Vec<PhaseCmd>,
+    query: &mut Query<(Entity, &mut LuaPhase)>,
+) {
+    lua_runtime.drain_phase_commands_into(buf);
+    for cmd in buf.drain(..) {
+        process_phase_command(query, cmd);
     }
 }
 

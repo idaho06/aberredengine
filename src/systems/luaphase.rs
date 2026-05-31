@@ -41,13 +41,13 @@ use crate::components::luaphase::LuaPhase;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime};
+use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    ContextQueries, DrainScope, EntityCmdQueries, build_entity_context,
-    drain_and_process_effect_commands, process_phase_command,
+    ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
+    drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
 use crate::systems::phase_core::{PhaseRunner, apply_callback_transitions, run_phase_callbacks};
 use log::{error, warn};
@@ -296,9 +296,11 @@ pub fn lua_phase_system(
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     systems_store: Res<SystemsStore>,
     animation_store: Res<AnimationStore>,
-    // Local resource to avoid per-frame allocation for callback return transitions
+    // Local resources to avoid per-frame allocation
     mut callback_transitions: Local<Vec<(Entity, String)>>,
     mut phase_entities: Local<Vec<Entity>>,
+    mut phase_buf: Local<Vec<PhaseCmd>>,
+    mut effect_bufs: Local<EffectCmdBufs>,
 ) {
     // Clear previous frame's transitions (reuses allocated capacity)
     callback_transitions.clear();
@@ -333,9 +335,7 @@ pub fn lua_phase_system(
         &mut runner,
     );
 
-    for cmd in lua_runtime.drain_phase_commands() {
-        process_phase_command(&mut query, cmd);
-    }
+    drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut query);
 
     // Apply return value transitions after phase drain — return values take
     // precedence over engine.phase_transition() calls in the same callback.
@@ -344,6 +344,7 @@ pub fn lua_phase_system(
     drain_and_process_effect_commands(
         &lua_runtime,
         DrainScope::Regular,
+        &mut effect_bufs,
         &mut commands,
         &mut world_signals,
         &mut cmd_queries,

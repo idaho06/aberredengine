@@ -16,132 +16,116 @@ impl LuaRuntime {
     // Private helper
     // -------------------------------------------------------------------------
 
-    /// Drains a single command queue identified by the field accessor closure.
+    /// Drains a single command queue into the caller-owned `out` buffer.
     ///
-    /// This centralizes the `app_data_ref` access pattern shared by all drain methods.
-    fn drain_queue<T>(&self, get: impl Fn(&LuaAppData) -> &RefCell<Vec<T>>) -> Vec<T> {
-        self.lua
-            .app_data_ref::<LuaAppData>()
-            .map(|data| get(&data).borrow_mut().drain(..).collect())
-            .unwrap_or_default()
+    /// Uses `std::mem::swap` to exchange the internal pointer/length/capacity
+    /// triples at word level — zero element copies. After the call, `out` holds
+    /// the queue's previous content and the queue holds `out`'s previous (empty)
+    /// buffer, retaining capacity for next frame's pushes.
+    fn drain_queue_into<T>(
+        &self,
+        get: impl Fn(&LuaAppData) -> &RefCell<Vec<T>>,
+        out: &mut Vec<T>,
+    ) {
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            std::mem::swap(out, &mut *get(&data).borrow_mut());
+        }
     }
 
     // -------------------------------------------------------------------------
     // Regular drain methods
     // -------------------------------------------------------------------------
 
-    /// Drains all queued asset commands.
-    pub fn drain_asset_commands(&self) -> Vec<AssetCmd> {
-        self.drain_queue(|d| &d.asset_commands)
+    pub fn drain_asset_commands_into(&self, out: &mut Vec<AssetCmd>) {
+        self.drain_queue_into(|d| &d.asset_commands, out);
     }
 
-    /// Drains all queued spawn commands.
-    pub fn drain_spawn_commands(&self) -> Vec<SpawnCmd> {
-        self.drain_queue(|d| &d.spawn_commands)
+    pub fn drain_spawn_commands_into(&self, out: &mut Vec<SpawnCmd>) {
+        self.drain_queue_into(|d| &d.spawn_commands, out);
     }
 
-    /// Drains all queued audio commands.
-    pub fn drain_audio_commands(&self) -> Vec<AudioLuaCmd> {
-        self.drain_queue(|d| &d.audio_commands)
+    pub fn drain_audio_commands_into(&self, out: &mut Vec<AudioLuaCmd>) {
+        self.drain_queue_into(|d| &d.audio_commands, out);
     }
 
-    /// Drains all queued signal commands.
-    pub fn drain_signal_commands(&self) -> Vec<SignalCmd> {
-        self.drain_queue(|d| &d.signal_commands)
+    pub fn drain_signal_commands_into(&self, out: &mut Vec<SignalCmd>) {
+        self.drain_queue_into(|d| &d.signal_commands, out);
     }
 
-    /// Drains all queued phase commands.
-    pub fn drain_phase_commands(&self) -> Vec<PhaseCmd> {
-        self.drain_queue(|d| &d.phase_commands)
+    pub fn drain_phase_commands_into(&self, out: &mut Vec<PhaseCmd>) {
+        self.drain_queue_into(|d| &d.phase_commands, out);
     }
 
-    /// Drains all queued entity commands.
-    pub fn drain_entity_commands(&self) -> Vec<EntityCmd> {
-        self.drain_queue(|d| &d.entity_commands)
+    pub fn drain_entity_commands_into(&self, out: &mut Vec<EntityCmd>) {
+        self.drain_queue_into(|d| &d.entity_commands, out);
     }
 
-    /// Drains all queued group commands.
-    pub fn drain_group_commands(&self) -> Vec<GroupCmd> {
-        self.drain_queue(|d| &d.group_commands)
+    pub fn drain_group_commands_into(&self, out: &mut Vec<GroupCmd>) {
+        self.drain_queue_into(|d| &d.group_commands, out);
     }
 
-    /// Drains all queued camera commands.
-    pub fn drain_camera_commands(&self) -> Vec<CameraCmd> {
-        self.drain_queue(|d| &d.camera_commands)
+    pub fn drain_camera_commands_into(&self, out: &mut Vec<CameraCmd>) {
+        self.drain_queue_into(|d| &d.camera_commands, out);
     }
 
-    /// Drains all queued animation commands.
-    pub fn drain_animation_commands(&self) -> Vec<AnimationCmd> {
-        self.drain_queue(|d| &d.animation_commands)
+    pub fn drain_animation_commands_into(&self, out: &mut Vec<AnimationCmd>) {
+        self.drain_queue_into(|d| &d.animation_commands, out);
     }
 
-    /// Drains all queued render commands.
-    pub fn drain_render_commands(&self) -> Vec<RenderCmd> {
-        self.drain_queue(|d| &d.render_commands)
+    pub fn drain_render_commands_into(&self, out: &mut Vec<RenderCmd>) {
+        self.drain_queue_into(|d| &d.render_commands, out);
     }
 
-    /// Drains all queued game config commands.
-    pub fn drain_gameconfig_commands(&self) -> Vec<GameConfigCmd> {
-        self.drain_queue(|d| &d.gameconfig_commands)
+    pub fn drain_gameconfig_commands_into(&self, out: &mut Vec<GameConfigCmd>) {
+        self.drain_queue_into(|d| &d.gameconfig_commands, out);
     }
 
-    /// Drains all queued camera follow commands.
-    pub fn drain_camera_follow_commands(&self) -> Vec<CameraFollowCmd> {
-        self.drain_queue(|d| &d.camera_follow_commands)
+    pub fn drain_camera_follow_commands_into(&self, out: &mut Vec<CameraFollowCmd>) {
+        self.drain_queue_into(|d| &d.camera_follow_commands, out);
     }
 
-    /// Drains all queued map load commands.
-    pub fn drain_map_commands(&self) -> Vec<MapLuaCmd> {
-        self.drain_queue(|d| &d.map_commands)
+    pub fn drain_map_commands_into(&self, out: &mut Vec<MapLuaCmd>) {
+        self.drain_queue_into(|d| &d.map_commands, out);
     }
 
-    /// Drains all queued input rebinding commands.
-    pub fn drain_input_commands(&self) -> Vec<InputCmd> {
-        self.drain_queue(|d| &d.input_commands)
+    pub fn drain_input_commands_into(&self, out: &mut Vec<InputCmd>) {
+        self.drain_queue_into(|d| &d.input_commands, out);
     }
 
-    /// Drains all queued clone commands.
-    pub fn drain_clone_commands(&self) -> Vec<CloneCmd> {
-        self.drain_queue(|d| &d.clone_commands)
+    pub fn drain_clone_commands_into(&self, out: &mut Vec<CloneCmd>) {
+        self.drain_queue_into(|d| &d.clone_commands, out);
     }
 
     // -------------------------------------------------------------------------
     // Collision drain methods
     // -------------------------------------------------------------------------
 
-    /// Drains all queued collision entity commands.
-    pub fn drain_collision_entity_commands(&self) -> Vec<EntityCmd> {
-        self.drain_queue(|d| &d.collision_entity_commands)
+    pub fn drain_collision_entity_commands_into(&self, out: &mut Vec<EntityCmd>) {
+        self.drain_queue_into(|d| &d.collision_entity_commands, out);
     }
 
-    /// Drains all queued collision signal commands.
-    pub fn drain_collision_signal_commands(&self) -> Vec<SignalCmd> {
-        self.drain_queue(|d| &d.collision_signal_commands)
+    pub fn drain_collision_signal_commands_into(&self, out: &mut Vec<SignalCmd>) {
+        self.drain_queue_into(|d| &d.collision_signal_commands, out);
     }
 
-    /// Drains all queued collision audio commands.
-    pub fn drain_collision_audio_commands(&self) -> Vec<AudioLuaCmd> {
-        self.drain_queue(|d| &d.collision_audio_commands)
+    pub fn drain_collision_audio_commands_into(&self, out: &mut Vec<AudioLuaCmd>) {
+        self.drain_queue_into(|d| &d.collision_audio_commands, out);
     }
 
-    /// Drains all queued collision spawn commands.
-    pub fn drain_collision_spawn_commands(&self) -> Vec<SpawnCmd> {
-        self.drain_queue(|d| &d.collision_spawn_commands)
+    pub fn drain_collision_spawn_commands_into(&self, out: &mut Vec<SpawnCmd>) {
+        self.drain_queue_into(|d| &d.collision_spawn_commands, out);
     }
 
-    /// Drains all queued collision clone commands.
-    pub fn drain_collision_clone_commands(&self) -> Vec<CloneCmd> {
-        self.drain_queue(|d| &d.collision_clone_commands)
+    pub fn drain_collision_clone_commands_into(&self, out: &mut Vec<CloneCmd>) {
+        self.drain_queue_into(|d| &d.collision_clone_commands, out);
     }
 
-    /// Drains all queued collision phase commands.
-    pub fn drain_collision_phase_commands(&self) -> Vec<PhaseCmd> {
-        self.drain_queue(|d| &d.collision_phase_commands)
+    pub fn drain_collision_phase_commands_into(&self, out: &mut Vec<PhaseCmd>) {
+        self.drain_queue_into(|d| &d.collision_phase_commands, out);
     }
 
-    /// Drains all queued collision camera commands.
-    pub fn drain_collision_camera_commands(&self) -> Vec<CameraCmd> {
-        self.drain_queue(|d| &d.collision_camera_commands)
+    pub fn drain_collision_camera_commands_into(&self, out: &mut Vec<CameraCmd>) {
+        self.drain_queue_into(|d| &d.collision_camera_commands, out);
     }
 
     // -------------------------------------------------------------------------

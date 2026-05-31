@@ -39,13 +39,13 @@ use crate::events::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime};
+use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    ContextQueries, DrainScope, EntityCmdQueries, build_entity_context,
-    drain_and_process_effect_commands, process_phase_command,
+    ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
+    drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
 use log::{error, warn};
 
@@ -137,6 +137,8 @@ pub fn lua_timer_observer(
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     systems_store: Res<SystemsStore>,
     animation_store: Res<AnimationStore>,
+    mut phase_buf: Local<Vec<PhaseCmd>>,
+    mut effect_bufs: Local<EffectCmdBufs>,
 ) {
     let event = trigger.event();
     let entity = event.entity;
@@ -184,13 +186,12 @@ pub fn lua_timer_observer(
         }
     }
 
-    for cmd in lua_runtime.drain_phase_commands() {
-        process_phase_command(&mut luaphase_query, cmd);
-    }
+    drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);
 
     drain_and_process_effect_commands(
         &lua_runtime,
         DrainScope::Regular,
+        &mut effect_bufs,
         &mut commands,
         &mut world_signals,
         &mut cmd_queries,
