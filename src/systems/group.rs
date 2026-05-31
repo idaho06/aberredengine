@@ -60,19 +60,28 @@ pub fn update_group_counts_system(
     query_group: Query<&Group>,
     mut world_signals: ResMut<WorldSignals>,
     tracked_groups: Res<TrackedGroups>,
+    mut counts: Local<FxHashMap<String, i32>>,
 ) {
-    // Count entities for each group in the query
-    let mut counts: FxHashMap<&str, i32> = FxHashMap::default();
-    for group in query_group.iter() {
-        if tracked_groups.has_group(group.name()) {
-            *counts.entry(group.name()).or_insert(0) += 1;
+    // Rebuild map (allocates String keys) only when tracked groups change.
+    // In steady state this branch is never taken.
+    if tracked_groups.is_changed() || counts.is_empty() {
+        counts.clear();
+        for name in tracked_groups.iter() {
+            counts.insert(name.clone(), 0);
+        }
+    } else {
+        for v in counts.values_mut() {
+            *v = 0;
         }
     }
 
-    // Update world signals for all tracked groups (including zeros for despawned groups)
-    // set_group_count only marks dirty if value changed, and uses stack allocation
-    for group_name in tracked_groups.iter() {
-        let count = counts.get(group_name.as_str()).copied().unwrap_or(0);
-        world_signals.set_group_count(group_name, count);
+    for group in query_group.iter() {
+        if let Some(c) = counts.get_mut(group.name()) {
+            *c += 1;
+        }
+    }
+
+    for (name, count) in counts.iter() {
+        world_signals.set_group_count(name, *count);
     }
 }
