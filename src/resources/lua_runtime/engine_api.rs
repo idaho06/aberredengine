@@ -822,7 +822,7 @@ impl LuaRuntime {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
-                    for (key, value) in &snapshot.scalars {
+                    for (key, value) in snapshot.scalars.iter() {
                         table.set(key.as_str(), *value)?;
                     }
                 }
@@ -845,7 +845,7 @@ impl LuaRuntime {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
-                    for (key, value) in &snapshot.integers {
+                    for (key, value) in snapshot.integers.iter() {
                         table.set(key.as_str(), *value)?;
                     }
                 }
@@ -868,7 +868,7 @@ impl LuaRuntime {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
-                    for (key, value) in &snapshot.strings {
+                    for (key, value) in snapshot.strings.iter() {
                         table.set(key.as_str(), value.as_str())?;
                     }
                 }

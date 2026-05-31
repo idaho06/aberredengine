@@ -43,20 +43,24 @@ use std::sync::Arc;
 /// This struct is wrapped in `Arc` for cheap sharing with the Lua runtime.
 /// Instead of cloning all signal maps on every Lua callback, we create
 /// a snapshot once when signals change and share it via Arc.
+///
+/// Each domain field is itself an `Arc`, so rebuilding the outer snapshot
+/// after a partial update (e.g. only integers changed) costs only Arc
+/// refcount bumps for the unchanged domains.
 #[derive(Debug, Clone, Default)]
 pub struct SignalSnapshot {
     /// Floating-point numeric signals.
-    pub scalars: FxHashMap<String, f32>,
+    pub scalars: Arc<FxHashMap<String, f32>>,
     /// Integer numeric signals.
-    pub integers: FxHashMap<String, i32>,
+    pub integers: Arc<FxHashMap<String, i32>>,
     /// String signals.
-    pub strings: FxHashMap<String, String>,
+    pub strings: Arc<FxHashMap<String, String>>,
     /// Presence-only boolean flags.
-    pub flags: FxHashSet<String>,
+    pub flags: Arc<FxHashSet<String>>,
     /// Group entity counts (derived from integers with "group_count:" prefix).
-    pub group_counts: FxHashMap<String, u32>,
+    pub group_counts: Arc<FxHashMap<String, u32>>,
     /// Entity IDs as u64 (from Entity::to_bits()).
-    pub entities: FxHashMap<String, u64>,
+    pub entities: Arc<FxHashMap<String, u64>>,
 }
 
 /// Global signal storage for cross-system communication.
@@ -67,9 +71,9 @@ pub struct SignalSnapshot {
 /// # Snapshot System
 ///
 /// For efficient sharing with the Lua runtime, `WorldSignals` maintains a
-/// cached [`SignalSnapshot`] wrapped in `Arc`. When signals are modified,
-/// the `dirty` flag is set. Call [`snapshot()`](Self::snapshot) to get an
-/// up-to-date Arc that can be cheaply cloned and shared with Lua callbacks.
+/// cached [`SignalSnapshot`] wrapped in `Arc`. Per-domain dirty flags track
+/// which signal domains have changed. Call [`snapshot()`](Self::snapshot) to
+/// get an up-to-date Arc; only dirty domains are re-cloned each call.
 #[derive(Debug, Clone, Resource)]
 pub struct WorldSignals {
     /// Floating-point numeric signals addressed by string keys.
@@ -82,10 +86,27 @@ pub struct WorldSignals {
     pub flags: FxHashSet<String>,
     /// Map of entities of interest for the current game state.
     pub entities: FxHashMap<String, Entity>,
-    /// Cached snapshot for Lua runtime (rebuilt when dirty).
+    /// Group counts maintained in parallel with the `"group_count:"` integer entries.
+    group_counts: FxHashMap<String, u32>,
+
+    /// Per-domain cached Arcs for the snapshot.
+    scalars_arc: Arc<FxHashMap<String, f32>>,
+    integers_arc: Arc<FxHashMap<String, i32>>,
+    strings_arc: Arc<FxHashMap<String, String>>,
+    flags_arc: Arc<FxHashSet<String>>,
+    group_counts_arc: Arc<FxHashMap<String, u32>>,
+    entities_arc: Arc<FxHashMap<String, u64>>,
+
+    /// Per-domain dirty bits; set when the corresponding live map changes.
+    scalars_dirty: bool,
+    integers_dirty: bool,
+    strings_dirty: bool,
+    flags_dirty: bool,
+    group_counts_dirty: bool,
+    entities_dirty: bool,
+
+    /// Assembled snapshot (rebuilt when any domain is dirty).
     snapshot: Arc<SignalSnapshot>,
-    /// Whether the snapshot needs to be rebuilt.
-    dirty: bool,
 }
 
 impl Default for WorldSignals {
@@ -96,8 +117,23 @@ impl Default for WorldSignals {
             strings: FxHashMap::default(),
             flags: FxHashSet::default(),
             entities: FxHashMap::default(),
+            group_counts: FxHashMap::default(),
+
+            scalars_arc: Arc::new(FxHashMap::default()),
+            integers_arc: Arc::new(FxHashMap::default()),
+            strings_arc: Arc::new(FxHashMap::default()),
+            flags_arc: Arc::new(FxHashSet::default()),
+            group_counts_arc: Arc::new(FxHashMap::default()),
+            entities_arc: Arc::new(FxHashMap::default()),
+
+            scalars_dirty: false,
+            integers_dirty: false,
+            strings_dirty: false,
+            flags_dirty: false,
+            group_counts_dirty: false,
+            entities_dirty: false,
+
             snapshot: Arc::new(SignalSnapshot::default()),
-            dirty: false,
         }
     }
 }
@@ -105,7 +141,7 @@ impl WorldSignals {
     /// Set a floating-point signal value.
     pub fn set_scalar(&mut self, key: impl Into<String>, value: f32) {
         self.scalars.insert(key.into(), value);
-        self.mark_dirty();
+        self.scalars_dirty = true;
     }
     /// Get a floating-point signal by key.
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
@@ -115,11 +151,15 @@ impl WorldSignals {
     pub fn get_scalars(&self) -> &FxHashMap<String, f32> {
         &self.scalars
     }
-
     /// Set an integer signal value.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
-        self.integers.insert(key.into(), value);
-        self.mark_dirty();
+        let key = key.into();
+        if let Some(group_name) = key.strip_prefix("group_count:") {
+            self.group_counts.insert(group_name.to_string(), value as u32);
+            self.group_counts_dirty = true;
+        }
+        self.integers.insert(key, value);
+        self.integers_dirty = true;
     }
     /// Get an integer signal by key.
     pub fn get_integer(&self, key: &str) -> Option<i32> {
@@ -129,10 +169,7 @@ impl WorldSignals {
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers
     }
-    /// Get a group count by the name of the group.
-    ///
-    /// Uses a stack buffer to avoid heap allocation. Group names must not
-    /// exceed 51 characters (64 - 13 for "group_count:" prefix).
+    /// Get a group count by group name. Returns `None` if not tracked.
     pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
         use std::fmt::Write;
         let mut buf = arrayvec::ArrayString::<64>::new();
@@ -152,22 +189,31 @@ impl WorldSignals {
         let current = self.integers.get(buf.as_str()).copied();
         if current != Some(count) {
             self.integers.insert(buf.to_string(), count);
-            self.mark_dirty();
+            self.group_counts.insert(group_name.to_string(), count as u32);
+            self.integers_dirty = true;
+            self.group_counts_dirty = true;
         }
     }
     /// Remove all integer signals whose keys start with a given prefix.
     pub fn clear_integer_prefix(&mut self, prefix: &str) {
-        let keys_to_remove: Vec<String> = self
+        // Collect group names to remove before mutating integers (borrow-checker split).
+        // Only the suffix strings are collected, not the full keys.
+        let group_names: Vec<String> = self
             .integers
             .keys()
             .filter(|k| k.starts_with(prefix))
-            .cloned()
+            .filter_map(|k| k.strip_prefix("group_count:").map(str::to_string))
             .collect();
-        if !keys_to_remove.is_empty() {
-            for key in keys_to_remove {
-                self.integers.remove(&key);
+        let before = self.integers.len();
+        self.integers.retain(|k, _| !k.starts_with(prefix));
+        if self.integers.len() != before {
+            self.integers_dirty = true;
+            for name in &group_names {
+                self.group_counts.remove(name.as_str());
             }
-            self.mark_dirty();
+            if !group_names.is_empty() {
+                self.group_counts_dirty = true;
+            }
         }
     }
     /// Remove integer signals for group counting.
@@ -177,7 +223,7 @@ impl WorldSignals {
     /// Set a string signal value.
     pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.strings.insert(key.into(), value.into());
-        self.mark_dirty();
+        self.strings_dirty = true;
     }
     /// Get a string signal by key.
     /// It's recommended to clone the String if you need ownership.
@@ -188,7 +234,7 @@ impl WorldSignals {
     pub fn remove_string(&mut self, key: &str) -> Option<String> {
         let result = self.strings.remove(key);
         if result.is_some() {
-            self.mark_dirty();
+            self.strings_dirty = true;
         }
         result
     }
@@ -196,7 +242,7 @@ impl WorldSignals {
     pub fn clear_scalar(&mut self, key: &str) -> Option<f32> {
         let result = self.scalars.remove(key);
         if result.is_some() {
-            self.mark_dirty();
+            self.scalars_dirty = true;
         }
         result
     }
@@ -204,19 +250,23 @@ impl WorldSignals {
     pub fn clear_integer(&mut self, key: &str) -> Option<i32> {
         let result = self.integers.remove(key);
         if result.is_some() {
-            self.mark_dirty();
+            self.integers_dirty = true;
+            if let Some(group_name) = key.strip_prefix("group_count:") {
+                self.group_counts.remove(group_name);
+                self.group_counts_dirty = true;
+            }
         }
         result
     }
     /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
-        self.mark_dirty();
+        self.flags_dirty = true;
     }
     /// Remove a flag (make it false/absent).
     pub fn clear_flag(&mut self, key: &str) {
         if self.flags.remove(key) {
-            self.mark_dirty();
+            self.flags_dirty = true;
         }
     }
     /// Check whether a flag is present/true.
@@ -228,7 +278,7 @@ impl WorldSignals {
     /// Equivalent to `has_flag` + `clear_flag` in a single hash-set lookup.
     pub fn take_flag(&mut self, key: &str) -> bool {
         if self.flags.remove(key) {
-            self.mark_dirty();
+            self.flags_dirty = true;
             true
         } else {
             false
@@ -241,7 +291,7 @@ impl WorldSignals {
         if !self.flags.remove(key) {
             self.flags.insert(key.to_string());
         }
-        self.mark_dirty();
+        self.flags_dirty = true;
     }
     /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
@@ -258,13 +308,13 @@ impl WorldSignals {
     /// Set an entity by key.
     pub fn set_entity(&mut self, key: impl Into<String>, entity: Entity) {
         self.entities.insert(key.into(), entity);
-        self.mark_dirty();
+        self.entities_dirty = true;
     }
     /// Remove an entity by key. Returns the removed entity if it existed.
     pub fn remove_entity(&mut self, key: &str) -> Option<Entity> {
         let result = self.entities.remove(key);
         if result.is_some() {
-            self.mark_dirty();
+            self.entities_dirty = true;
         }
         result
     }
@@ -279,78 +329,85 @@ impl WorldSignals {
         self.entities
             .retain(|_, entity| persistent_entities.contains(entity));
         if self.entities.len() != before {
-            self.mark_dirty();
+            self.entities_dirty = true;
         }
     }
-
-    // Read-only view of all scalar signals (for caching).
-    // pub fn scalars(&self) -> &FxHashMap<String, f32> {
-    //     &self.scalars
-    // }
-
-    // Read-only view of all integer signals (for caching).
-    // pub fn integers(&self) -> &FxHashMap<String, i32> {
-    //     &self.integers
-    // }
-
-    // Read-only view of all string signals (for caching).
-    // pub fn strings(&self) -> &FxHashMap<String, String> {
-    //     &self.strings
-    // }
-
-    // Read-only view of all flags (for caching).
-    // pub fn flags(&self) -> &FxHashSet<String> {
-    //     &self.flags
-    // }
 
     /// Get a map of group counts (for caching).
     /// Returns a map from group name to count.
     pub fn group_counts(&self) -> FxHashMap<String, u32> {
-        self.integers
-            .iter()
-            .filter_map(|(k, v)| {
-                k.strip_prefix("group_count:")
-                    .map(|group| (group.to_string(), *v as u32))
-            })
-            .collect()
+        self.group_counts.clone()
     }
 
-    /// Mark signals as modified, requiring a snapshot rebuild.
-    ///
-    /// Called internally by all mutation methods.
+    /// Returns true if any signal domain has been modified since the last snapshot.
     #[inline]
-    fn mark_dirty(&mut self) {
-        self.dirty = true;
+    pub fn is_dirty(&self) -> bool {
+        self.scalars_dirty
+            || self.integers_dirty
+            || self.strings_dirty
+            || self.flags_dirty
+            || self.group_counts_dirty
+            || self.entities_dirty
     }
 
     /// Get or create an up-to-date snapshot for sharing with Lua.
     ///
-    /// If signals have been modified since the last snapshot, this rebuilds
-    /// the snapshot by cloning all signal maps. Otherwise, it returns
-    /// a cheap `Arc::clone` of the existing snapshot.
+    /// Only dirty signal domains are re-cloned; clean domains reuse their
+    /// cached `Arc`. The outer `SignalSnapshot` is rebuilt whenever any
+    /// domain changed (cost: six `Arc::clone` calls).
     ///
     /// # Performance
     ///
-    /// - If clean: O(1) - just increments Arc refcount
-    /// - If dirty: O(n) - clones all maps once
-    ///
-    /// This amortizes the cost of cloning across multiple Lua callbacks
-    /// that run between signal modifications.
+    /// - If clean: O(1) — one `Arc::clone`
+    /// - If dirty: O(n) for each modified domain only; unchanged domains are O(1)
     pub fn snapshot(&mut self) -> Arc<SignalSnapshot> {
-        if self.dirty {
-            self.snapshot = Arc::new(SignalSnapshot {
-                scalars: self.scalars.clone(),
-                integers: self.integers.clone(),
-                strings: self.strings.clone(),
-                flags: self.flags.clone(),
-                group_counts: self.group_counts(),
-                entities: self
-                    .entities
+        let mut any_dirty = false;
+
+        if self.scalars_dirty {
+            self.scalars_arc = Arc::new(self.scalars.clone());
+            self.scalars_dirty = false;
+            any_dirty = true;
+        }
+        if self.integers_dirty {
+            self.integers_arc = Arc::new(self.integers.clone());
+            self.integers_dirty = false;
+            any_dirty = true;
+        }
+        if self.group_counts_dirty {
+            self.group_counts_arc = Arc::new(self.group_counts.clone());
+            self.group_counts_dirty = false;
+            any_dirty = true;
+        }
+        if self.strings_dirty {
+            self.strings_arc = Arc::new(self.strings.clone());
+            self.strings_dirty = false;
+            any_dirty = true;
+        }
+        if self.flags_dirty {
+            self.flags_arc = Arc::new(self.flags.clone());
+            self.flags_dirty = false;
+            any_dirty = true;
+        }
+        if self.entities_dirty {
+            self.entities_arc = Arc::new(
+                self.entities
                     .iter()
                     .map(|(k, v)| (k.clone(), v.to_bits()))
                     .collect(),
+            );
+            self.entities_dirty = false;
+            any_dirty = true;
+        }
+
+        if any_dirty {
+            self.snapshot = Arc::new(SignalSnapshot {
+                scalars: Arc::clone(&self.scalars_arc),
+                integers: Arc::clone(&self.integers_arc),
+                strings: Arc::clone(&self.strings_arc),
+                flags: Arc::clone(&self.flags_arc),
+                group_counts: Arc::clone(&self.group_counts_arc),
+                entities: Arc::clone(&self.entities_arc),
             });
-            self.dirty = false;
         }
         Arc::clone(&self.snapshot)
     }
@@ -374,7 +431,7 @@ mod tests {
         assert!(ws.strings.is_empty());
         assert!(ws.flags.is_empty());
         assert!(ws.entities.is_empty());
-        assert!(!ws.dirty);
+        assert!(!ws.is_dirty());
     }
 
     // --- Scalars ---
@@ -533,9 +590,9 @@ mod tests {
         ws.set_flag("fire");
         ws.snapshot(); // clear dirty
         ws.take_flag("nope"); // absent — should not dirty
-        assert!(!ws.dirty);
+        assert!(!ws.flags_dirty);
         ws.take_flag("fire"); // present — should dirty
-        assert!(ws.dirty);
+        assert!(ws.flags_dirty);
     }
 
     #[test]
@@ -567,10 +624,10 @@ mod tests {
         ws.set_flag("x");
         ws.snapshot(); // clear dirty
         ws.toggle_flag("x"); // present → remove
-        assert!(ws.dirty);
+        assert!(ws.flags_dirty);
         ws.snapshot(); // clear dirty
         ws.toggle_flag("x"); // absent → insert
-        assert!(ws.dirty);
+        assert!(ws.flags_dirty);
     }
 
     // --- Entities ---
@@ -655,16 +712,16 @@ mod tests {
         let entity_a = Entity::from_bits(1);
         ws.set_entity("player", entity_a);
         ws.snapshot(); // clear dirty flag
-        assert!(!ws.dirty);
+        assert!(!ws.entities_dirty);
 
         // Nothing removed — should stay clean
         let persistent = FxHashSet::from_iter([entity_a]);
         ws.clear_non_persistent_entities(&persistent);
-        assert!(!ws.dirty, "should not mark dirty when nothing was removed");
+        assert!(!ws.entities_dirty, "should not mark dirty when nothing was removed");
 
         // Remove entity — should mark dirty
         ws.clear_non_persistent_entities(&FxHashSet::default());
-        assert!(ws.dirty, "should mark dirty when an entry was removed");
+        assert!(ws.entities_dirty, "should mark dirty when an entry was removed");
     }
 
     // --- Group counts ---
@@ -683,7 +740,7 @@ mod tests {
         // Clear dirty flag via snapshot
         ws.snapshot();
         ws.set_group_count("enemy", 5); // same value, should not mark dirty
-        assert!(!ws.dirty);
+        assert!(!ws.is_dirty());
     }
 
     #[test]
@@ -692,7 +749,7 @@ mod tests {
         ws.set_group_count("enemy", 5);
         ws.snapshot();
         ws.set_group_count("enemy", 6);
-        assert!(ws.dirty);
+        assert!(ws.is_dirty());
     }
 
     #[test]
@@ -781,5 +838,52 @@ mod tests {
         ws.set_entity("player", entity);
         let snap = ws.snapshot();
         assert_eq!(snap.entities.get("player"), Some(&entity.to_bits()));
+    }
+
+    #[test]
+    fn test_snapshot_unchanged_domain_arc_reused() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("x", 1.0);
+        ws.set_integer("n", 1);
+        let snap1 = ws.snapshot();
+
+        // Only scalars change — integers arc should be pointer-equal
+        ws.set_scalar("x", 2.0);
+        let snap2 = ws.snapshot();
+
+        assert!(
+            Arc::ptr_eq(&snap1.integers, &snap2.integers),
+            "integers arc should be reused when only scalars changed"
+        );
+        assert!(
+            !Arc::ptr_eq(&snap1.scalars, &snap2.scalars),
+            "scalars arc should be rebuilt"
+        );
+    }
+
+    #[test]
+    fn test_clear_integer_syncs_group_counts() {
+        let mut ws = WorldSignals::default();
+        ws.set_group_count("enemy", 5);
+        ws.clear_integer("group_count:enemy");
+        assert_eq!(ws.get_group_count("enemy"), None);
+        let snap = ws.snapshot();
+        assert_eq!(
+            snap.group_counts.get("enemy"),
+            None,
+            "clear_integer on a group_count key must remove it from the snapshot"
+        );
+    }
+
+    #[test]
+    fn test_set_integer_syncs_group_counts() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("group_count:enemy", 7);
+        let snap = ws.snapshot();
+        assert_eq!(
+            snap.group_counts.get("enemy"),
+            Some(&7u32),
+            "set_integer on a group_count key must be visible in the snapshot"
+        );
     }
 }
