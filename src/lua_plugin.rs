@@ -274,15 +274,22 @@ pub fn update(
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
     mut common_bufs: Local<CommonCmdBufs>,
+    mut cached_callback: Local<String>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
 
-    let scene = scene_state
+    let scene_str = scene_state
         .world_signals
         .get_string("scene")
-        .cloned()
-        .unwrap_or("menu".to_string());
+        .map(|s| s.as_str())
+        .unwrap_or("menu");
+
+    if cached_callback.get("on_update_".len()..).unwrap_or("") != scene_str {
+        cached_callback.clear();
+        cached_callback.push_str("on_update_");
+        cached_callback.push_str(scene_str);
+    }
 
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
@@ -302,16 +309,15 @@ pub fn update(
     };
 
     // Call scene-specific update callback with (input, dt)
-    let callback_name = format!("on_update_{}", scene);
-    match lua_runtime.get_function(&callback_name) {
+    match lua_runtime.get_function(cached_callback.as_str()) {
         Ok(Some(func)) => {
             if let Err(e) = func.call::<()>((input_table, delta_sec)) {
-                error!("Error calling {}: {}", callback_name, e);
+                error!("Error calling {}: {}", cached_callback.as_str(), e);
             }
         }
         Ok(None) => {}
         Err(e) => {
-            error!("Error resolving {}: {}", callback_name, e);
+            error!("Error resolving {}: {}", cached_callback.as_str(), e);
         }
     }
 
