@@ -167,7 +167,10 @@ function on_switch_scene(scene_name)
     -- 1. Remove previous scene's callbacks from _G
     clear_callbacks()
 
-    -- 2. Load the scene module
+    -- 2. Free memory from previous scene before loading the next
+    collectgarbage("collect")
+
+    -- 3. Load the scene module
     local scene = get_scene(scene_name)
     if scene then
         -- 3. Inject new scene's callbacks into _G
@@ -180,5 +183,9 @@ function on_switch_scene(scene_name)
         engine.log_error("No scene module for '" .. scene_name .. "'")
     end
 end
+
+-- Tune GC: defer automatic collections to avoid mid-gameplay stutter
+collectgarbage("setpause", 2000)   -- Default is 100, higher means less frequent collections
+collectgarbage("setstepmul", 500)  -- Default is 200
 
 engine.log("main.lua loaded successfully!")

@@ -520,6 +520,28 @@ impl LuaRuntime {
                 ],
             ),
             (
+                "CameraState",
+                "Camera state returned by engine.get_camera()",
+                &[
+                    ("target_x", "number", false, Some("Camera target world X")),
+                    ("target_y", "number", false, Some("Camera target world Y")),
+                    ("offset_x", "number", false, Some("Camera screen offset X")),
+                    ("offset_y", "number", false, Some("Camera screen offset Y")),
+                    ("rotation", "number", false, Some("Camera rotation in degrees")),
+                    ("zoom", "number", false, Some("Camera zoom factor")),
+                ],
+            ),
+            (
+                "CameraViewRect",
+                "Visible world-space rectangle returned by engine.get_camera_view_rect(). Assumes zero rotation.",
+                &[
+                    ("x", "number", false, Some("Left edge in world space")),
+                    ("y", "number", false, Some("Top edge in world space")),
+                    ("w", "number", false, Some("Width in world units")),
+                    ("h", "number", false, Some("Height in world units")),
+                ],
+            ),
+            (
                 "SpriteInfo",
                 "Sprite state snapshot",
                 &[

@@ -415,7 +415,9 @@ impl EngineBuilder {
                 lua_plugin::update
                     .run_if(state_is_playing)
                     .after(check_pending_state)
-                    .after(lua_phase_system),
+                    .after(lua_phase_system)
+                    .after(camera_follow_system) // ensures Lua reads current-frame camera state
+                    .before(render_system), // explicit: perturbing the topo-sort makes this necessary
             );
         }));
         self.switch_scene_hook = Some(Box::new(|world, store| {
@@ -825,7 +827,11 @@ impl EngineBuilder {
                     .after(phase_system),
             );
             update.add_systems(update_lua_timers);
-            update.add_systems(process_lua_map_commands.after(crate::lua_plugin::update));
+            update.add_systems(
+                process_lua_map_commands
+                    .after(crate::lua_plugin::update)
+                    .before(render_system),
+            );
             update.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)

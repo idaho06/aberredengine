@@ -198,6 +198,35 @@ impl LuaRuntime {
         }
     }
 
+    /// Updates the cached camera state snapshot that Lua reads via `engine.get_camera()` and
+    /// `engine.get_camera_view_rect()`.
+    ///
+    /// Call this before invoking any Lua callback that may read camera state.
+    ///
+    /// Note: if a script calls both `get_camera()` and `engine.set_camera()` in the same
+    /// callback, `get_camera()` returns the pre-override values because camera write commands
+    /// are queued and applied in `process_lua_map_commands`, which runs after `lua_plugin::update`.
+    pub fn update_camera_cache(
+        &self,
+        camera: &crate::resources::camera2d::Camera2DRes,
+        screen: &crate::resources::screensize::ScreenSize,
+    ) {
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            let rect = camera.world_visible_rect(screen);
+            let mut snap = data.camera_snapshot.borrow_mut();
+            snap.target_x = camera.0.target.x;
+            snap.target_y = camera.0.target.y;
+            snap.offset_x = camera.0.offset.x;
+            snap.offset_y = camera.0.offset.y;
+            snap.rotation = camera.0.rotation;
+            snap.zoom = camera.0.zoom;
+            snap.view_x = rect.x;
+            snap.view_y = rect.y;
+            snap.view_w = rect.width;
+            snap.view_h = rect.height;
+        }
+    }
+
     /// Updates the cached game configuration snapshot that Lua can read.
     pub fn update_gameconfig_cache(&self, config: &crate::resources::gameconfig::GameConfig) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {

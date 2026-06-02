@@ -154,6 +154,11 @@ local function load_sidescroller()
     -- Textures
     engine.load_texture("sidescroller-char_red_1_sheet", "./assets/textures/sidescroller/char_red_1.png")
     engine.load_texture("sidescroller-char_red_2_sheet", "./assets/textures/sidescroller/char_red_2.png")
+    engine.load_texture("sidescroller01", "./assets/textures/sidescroller/sidescroller01.png")
+    engine.load_texture("shop_animation", "./assets/textures/sidescroller/shop_anim.png")
+    engine.load_texture("back_layer01", "./assets/textures/sidescroller/background_layer_1.png")
+    engine.load_texture("back_layer02", "./assets/textures/sidescroller/background_layer_2.png")
+    engine.load_texture("back_layer03", "./assets/textures/sidescroller/background_layer_3.png")
 
     -- Animations
     local sprite_size = 56

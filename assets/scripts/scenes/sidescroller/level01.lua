@@ -70,6 +70,16 @@ local function on_update_sidescroller_level01(input, dt)
     if input.digital.back.just_pressed then
         engine.change_scene("menu")
     end
+
+    -- Pin background layers to the camera view each frame
+    local rect = engine.get_camera_view_rect()
+    local bg1 = engine.get_entity("bg_layer01")
+    if bg1 then engine.entity_set_position(bg1, rect.x, rect.y) end
+    local bg2 = engine.get_entity("bg_layer02")
+    if bg2 then engine.entity_set_position(bg2, rect.x, rect.y) end
+    local bg3 = engine.get_entity("bg_layer03")
+    if bg3 then engine.entity_set_position(bg3, rect.x, rect.y) end
+
     -- cleared each frame; collision callbacks re-set these if contact persists
     local player_id = engine.get_entity("player")
     if player_id then
@@ -552,10 +562,17 @@ function M.spawn()
     log_debug("Debug logging enabled for sidescroller level01.")
 
     -- Set render resolution
-    engine.set_render_size(640, 360)
+    engine.set_render_size(320, 180)
 
     -- Set camera
-    engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.5) -- target to 0,0, centered, no rotation, default zoom
+    engine.set_camera(0, 0, 320 / 2, 180 / 2, 0.0, 1.0) -- target to 0,0, centered, no rotation, default zoom
+    engine.camera_follow_enable(true)
+    engine.camera_follow_set_mode("lerp")
+    engine.camera_follow_set_easing("linear")
+    engine.camera_follow_set_speed(6.0)
+    engine.camera_follow_set_offset(0, -48)
+    engine.set_vsync(true)
+    engine.set_target_fps(120)
 
     -- Set background color
     engine.set_background_color(20, 20, 30)
@@ -634,36 +651,37 @@ function M.spawn()
             type = "has_flag", key = "running"
         }, "sidescroller-char_red_run")
         :register_as("player")
-        :build()
-
-    -- Spawn solid platforms
-    engine.spawn()
-        :with_collider(360, 32, 0, 0)
-        :with_position(-320, 20)
-        :with_group("solid")
-        :build()
-    engine.spawn()
-        :with_collider(360, 32, 0, 0)
-        :with_position(0, 20 + 32)
-        :with_group("solid")
-        :build()
-
-    -- Test wall on the right side
-    engine.spawn()
-        :with_collider(16, 300, 0, 0)
-        :with_position(120, -150)
-        :with_group("solid")
+        :with_camera_target()
         :build()
 
     -- Spawn collision rules for solid-player
     engine.spawn()
         :with_group("collision_rules")
-        :with_lua_collision_rule("solid", "player", "collision_solid_player")
+        :with_lua_collision_rule("solids", "player", "collision_solid_player")
         :build()
 
+    -- Spawn background layers (below all world geometry)
+    -- Positioned each frame in on_update via get_camera_view_rect()
     engine.spawn()
-        :with_tilemap("./assets/tilemaps/sidescroller_test01")
+        :with_sprite("back_layer01", 320, 180, 0, 0)
+        :with_position(0, 0)
+        :with_zindex(-100)
+        :register_as("bg_layer01")
         :build()
+    engine.spawn()
+        :with_sprite("back_layer02", 320, 180, 0, 0)
+        :with_position(0, 0)
+        :with_zindex(-99)
+        :register_as("bg_layer02")
+        :build()
+    engine.spawn()
+        :with_sprite("back_layer03", 320, 180, 0, 0)
+        :with_position(0, 0)
+        :with_zindex(-98)
+        :register_as("bg_layer03")
+        :build()
+
+    engine.load_map("./assets/tilemaps/sidescroller_test01/sidescroller01_assets.map")
 
     engine.log_debug("Sidescroller level01 scene entities queued!")
 end

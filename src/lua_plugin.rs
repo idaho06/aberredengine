@@ -19,6 +19,7 @@ use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
+use crate::resources::screensize::ScreenSize;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
@@ -267,6 +268,8 @@ fn drain_common_commands(
 pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
+    camera: Res<Camera2DRes>,
+    screen: Res<ScreenSize>,
     mut commands: Commands,
     mut next_game_state: ResMut<NextGameState>,
     mut scripting: ScriptingContext,
@@ -295,6 +298,7 @@ pub fn update(
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
     lua_runtime.update_gameconfig_cache(&scene_state.config);
+    lua_runtime.update_camera_cache(&camera, &screen);
     if bindings.take_dirty() {
         lua_runtime.update_bindings_cache(&bindings);
     }

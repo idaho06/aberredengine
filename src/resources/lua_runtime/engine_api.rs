@@ -1217,6 +1217,71 @@ impl LuaRuntime {
                 ("zoom", "number")
             ]
         );
+
+        engine.set(
+            "get_camera",
+            self.lua.create_function(|lua, ()| {
+                let (target_x, target_y, offset_x, offset_y, rotation, zoom) = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| {
+                        let snap = data.camera_snapshot.borrow();
+                        (snap.target_x, snap.target_y, snap.offset_x, snap.offset_y, snap.rotation, snap.zoom)
+                    })
+                    .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0, 1.0));
+                let tbl = lua.create_table()?;
+                tbl.set("target_x", target_x)?;
+                tbl.set("target_y", target_y)?;
+                tbl.set("offset_x", offset_x)?;
+                tbl.set("offset_y", offset_y)?;
+                tbl.set("rotation", rotation)?;
+                tbl.set("zoom", zoom)?;
+                Ok(tbl)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_camera",
+            "Get the current 2D camera state (target, offset, rotation, zoom). \
+             Returns values from the start of this frame after camera_follow_system has run. \
+             If called in the same callback as set_camera(), returns pre-override values. \
+             Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene.",
+            "camera",
+            &[],
+            Some("table"),
+        )?;
+
+        engine.set(
+            "get_camera_view_rect",
+            self.lua.create_function(|lua, ()| {
+                let (x, y, w, h) = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| {
+                        let snap = data.camera_snapshot.borrow();
+                        (snap.view_x, snap.view_y, snap.view_w, snap.view_h)
+                    })
+                    .unwrap_or((0.0, 0.0, 0.0, 0.0));
+                let tbl = lua.create_table()?;
+                tbl.set("x", x)?;
+                tbl.set("y", y)?;
+                tbl.set("w", w)?;
+                tbl.set("h", h)?;
+                Ok(tbl)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_camera_view_rect",
+            "Get the visible world-space rectangle for the current camera: top-left corner (x, y) \
+             plus visible dimensions (w, h) in world units. \
+             Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned \
+             approximation only.",
+            "camera",
+            &[],
+            Some("table"),
+        )?;
+
         Ok(())
     }
 
@@ -1929,8 +1994,8 @@ impl LuaRuntime {
             "set_render_size",
             self.lua
                 .create_function(|lua, (width, height): (u32, u32)| {
-                    let width = width.clamp(320, 7680);
-                    let height = height.clamp(200, 4320);
+                    let width = width.clamp(120, 7680);
+                    let height = height.clamp(120, 4320);
                     lua.app_data_ref::<LuaAppData>()
                         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
                         .gameconfig_commands
@@ -1943,7 +2008,7 @@ impl LuaRuntime {
             &self.lua,
             &meta_fns,
             "set_render_size",
-            "Set internal render resolution (min 320x200, max 7680x4320)",
+            "Set internal render resolution (min 120x120, max 7680x4320)",
             "render",
             &[("width", "integer"), ("height", "integer")],
             None,

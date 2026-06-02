@@ -12,6 +12,41 @@ use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+/// Cached camera state snapshot for Lua to read via `engine.get_camera()` / `engine.get_camera_view_rect()`.
+///
+/// Updated before calling Lua callbacks via `update_camera_cache()`.
+/// Only populated during `lua_plugin::update`; during `on_setup` and `on_switch_scene`
+/// the snapshot holds `Default` values (zoom=1.0, everything else 0).
+pub(super) struct CameraSnapshot {
+    pub target_x: f32,
+    pub target_y: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub rotation: f32,
+    pub zoom: f32,
+    pub view_x: f32,
+    pub view_y: f32,
+    pub view_w: f32,
+    pub view_h: f32,
+}
+
+impl Default for CameraSnapshot {
+    fn default() -> Self {
+        Self {
+            target_x: 0.0,
+            target_y: 0.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            rotation: 0.0,
+            zoom: 1.0,
+            view_x: 0.0,
+            view_y: 0.0,
+            view_w: 0.0,
+            view_h: 0.0,
+        }
+    }
+}
+
 /// Cached game configuration snapshot for Lua to read.
 pub(super) struct GameConfigSnapshot {
     pub fullscreen: bool,
@@ -81,6 +116,9 @@ pub(super) struct LuaAppData {
     pub(super) bindings_snapshot: RefCell<std::collections::HashMap<String, String>>,
     /// Map load command queue (drained by `process_lua_map_commands` system)
     pub(super) map_commands: RefCell<Vec<MapLuaCmd>>,
+    /// Cached camera state snapshot (read-only for Lua).
+    /// Updated before calling Lua callbacks via `update_camera_cache()`.
+    pub(super) camera_snapshot: RefCell<CameraSnapshot>,
 }
 
 /// Registry keys for pooled collision context tables.
@@ -320,6 +358,7 @@ impl LuaRuntime {
             input_commands: RefCell::new(Vec::new()),
             bindings_snapshot: RefCell::new(std::collections::HashMap::new()),
             map_commands: RefCell::new(Vec::new()),
+            camera_snapshot: RefCell::new(CameraSnapshot::default()),
         });
 
         // Create collision context pool for table reuse

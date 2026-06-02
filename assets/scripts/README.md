@@ -4227,6 +4227,58 @@ end
 
 ## Camera Control
 
+### `engine.get_camera() → CameraState`
+
+Returns the current camera state as a table. Values reflect the camera position for the **current frame** after the camera follow system has already run, so they are safe to use for positioning world-space entities without lag.
+
+**Returns:** `{ target_x, target_y, offset_x, offset_y, rotation, zoom }`
+
+```lua
+local cam = engine.get_camera()
+engine.log("camera at: " .. cam.target_x .. ", " .. cam.target_y .. "  zoom: " .. cam.zoom)
+```
+
+**Limitations:**
+- Only populated during `on_update_<scene>` callbacks. Returns defaults (`zoom=1.0`, all else `0`) when called from `on_setup` or `on_switch_scene`.
+- If you call both `get_camera()` and `set_camera()` in the same callback, `get_camera()` returns the pre-override value because camera write commands are applied after Lua has run.
+
+---
+
+### `engine.get_camera_view_rect() → CameraViewRect`
+
+Returns the visible world-space rectangle for the current camera state. This is the most convenient way to position entities that should appear fixed on screen (backgrounds, parallax layers).
+
+**Returns:** `{ x, y, w, h }` where `(x, y)` is the top-left world corner and `(w, h)` are the visible dimensions in world units.
+
+**Assumes zero camera rotation.** Under non-zero rotation the result is an axis-aligned approximation only.
+
+```lua
+-- Pin a background sprite to the visible world area (appears fixed on screen,
+-- but still participates in world-space Z-ordering):
+function on_update_play(input, dt)
+    local rect = engine.get_camera_view_rect()
+    engine.entity_set_position(bg_id, rect.x, rect.y)
+end
+
+-- Parallax layer that moves at 30% of camera speed:
+function on_update_play(input, dt)
+    local cam = engine.get_camera()
+    engine.entity_set_position(layer_id, cam.target_x * 0.3, cam.target_y * 0.3)
+end
+```
+
+**Note:** `get_camera_view_rect()` is equivalent to computing the view bounds manually:
+```lua
+local cam = engine.get_camera()
+local zoom = cam.zoom
+local x = cam.target_x - cam.offset_x / zoom
+local y = cam.target_y - cam.offset_y / zoom
+local w = render_width / zoom
+local h = render_height / zoom
+```
+
+---
+
 ### `engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom)`
 
 Manually configure the 2D camera. This sets the camera directly and is useful for static cameras, initial camera setup, or when you don't need automatic following.
