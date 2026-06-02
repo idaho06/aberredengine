@@ -893,7 +893,6 @@ impl EngineBuilder {
         while !world
             .non_send_resource::<raylib::RaylibHandle>()
             .window_should_close()
-            && !world.resource::<WorldSignals>().has_flag("quit_game")
         {
             let dt = world
                 .non_send_resource::<raylib::RaylibHandle>()

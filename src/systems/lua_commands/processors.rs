@@ -224,18 +224,26 @@ pub fn process_asset_command<F1>(
         } => {
             let vs_path_c = vs_path.as_deref();
             let fs_path_c = fs_path.as_deref();
-            let shader = rl.load_shader(th, vs_path_c, fs_path_c);
-            if shader.is_shader_valid() {
-                debug!(
-                    "Loaded shader '{}' (vs: {:?}, fs: {:?})",
-                    id, vs_path, fs_path
-                );
-                shader_store.add(&id, shader);
-            } else {
-                error!(
-                    "Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
-                    id, vs_path, fs_path
-                );
+            match rl.load_shader(th, vs_path_c, fs_path_c) {
+                Ok(shader) if shader.is_shader_valid() => {
+                    debug!(
+                        "Loaded shader '{}' (vs: {:?}, fs: {:?})",
+                        id, vs_path, fs_path
+                    );
+                    shader_store.add(&id, shader);
+                }
+                Ok(_) => {
+                    error!(
+                        "Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
+                        id, vs_path, fs_path
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Shader '{}' failed to load: {e} (vs: {:?}, fs: {:?})",
+                        id, vs_path, fs_path
+                    );
+                }
             }
         }
     }

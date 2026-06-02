@@ -7,7 +7,7 @@ local M = {}
 local running_speed = 80
 local walking_speed = 40
 local jump_speed = -100
-local debug_log = true
+local debug_log = false
 
 local bg_shader_key = "parallax_scroll"
 local bg_scroll_divisors = {
@@ -593,8 +593,8 @@ function M.spawn()
     engine.camera_follow_set_easing("linear")
     engine.camera_follow_set_speed(6.0)
     engine.camera_follow_set_offset(0, -48)
-    engine.set_vsync(true)
-    engine.set_target_fps(120)
+    engine.set_vsync(false)
+    engine.set_target_fps(60)
 
     -- Set background color
     engine.set_background_color(20, 20, 30)

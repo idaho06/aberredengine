@@ -15,6 +15,7 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGame
 use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::*;
 use log::info;
+use raylib::RaylibHandle;
 
 /// If a state transition is pending, trigger a `GameStateChangedEvent`.
 pub fn check_pending_state(
@@ -34,10 +35,11 @@ pub fn state_is_playing(state: Res<GameState>) -> bool {
     matches!(state.get(), GameStates::Playing)
 }
 
-/// Set the `quit_game` world signal flag, causing the main loop to exit.
-pub fn quit_game(mut world_signals: ResMut<WorldSignals>) {
+/// Signal application exit via raylib and set the `quit_game` world signal flag.
+pub fn quit_game(mut world_signals: ResMut<WorldSignals>, mut rl: NonSendMut<RaylibHandle>) {
     info!("Quitting game...");
     world_signals.set_flag("quit_game");
+    rl.request_quit();
 }
 
 /// Despawn all entities that are not marked [`Persistent`].
