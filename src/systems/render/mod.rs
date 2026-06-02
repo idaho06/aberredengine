@@ -215,6 +215,7 @@ pub fn render_system(
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
 ) {
+    crate::tracy::tracy_span!("render_system");
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
     let query_map_sprites = &queries.map_sprites;
     let query_colliders = &queries.colliders;
@@ -236,11 +237,13 @@ pub fn render_system(
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
+        crate::tracy::tracy_span!("render/to_texture");
         let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
         d.clear_background(res.config.background_color);
 
         {
             // Draw in world coordinates using Camera2D.
+            crate::tracy::tracy_span!("render/world_space");
             let mut d2 = d.begin_mode2D(camera.0);
 
             let (view_min, view_max) = compute_view_bounds(
@@ -250,6 +253,8 @@ pub fn render_system(
                 |pos, cam| d2.get_screen_to_world2D(pos, cam),
             );
 
+            {
+            crate::tracy::tracy_span!("render/build_sprite_buffer");
             sprite_buffer.clear();
             sprite_buffer.extend(query_map_sprites.iter().filter_map(
                 |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt)| {
@@ -289,6 +294,9 @@ pub fn render_system(
                     .partial_cmp(&b.z_index)
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
+            } // build_sprite_buffer
+            {
+            crate::tracy::tracy_span!("render/draw_world_sprites");
             for item in sprite_buffer.iter() {
                 if let Some(tex) = textures.get(&item.sprite.tex_key) {
                     let mut src = Rectangle {
@@ -407,7 +415,10 @@ pub fn render_system(
                     }
                 }
             }
+            } // draw_world_sprites
 
+            {
+            crate::tracy::tracy_span!("render/build_text_buffer");
             text_buffer.clear();
             text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
                 |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
@@ -441,6 +452,9 @@ pub fn render_system(
                     .partial_cmp(&b.z_index)
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
+            } // build_text_buffer
+            {
+            crate::tracy::tracy_span!("render/draw_world_texts");
             for item in text_buffer.iter() {
                 if let Some(font) = fonts.get(&item.text.font) {
                     let final_color = item
@@ -542,6 +556,7 @@ pub fn render_system(
                     }
                 }
             }
+            } // draw_world_texts
 
             if maybe_debug.is_some() {
                 if debug_res.overlay_config.show_collider_boxes {
@@ -638,11 +653,15 @@ pub fn render_system(
         let debug = maybe_debug.is_some();
         let debug_sprites = debug && debug_res.overlay_config.show_sprite_bounds;
         let debug_texts = debug && debug_res.overlay_config.show_text_bounds;
+        {
+        crate::tracy::tracy_span!("render/screen_space");
         draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug_sprites);
         draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug_texts);
+        }
     }
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
+    crate::tracy::tracy_span!("render/postprocess");
     let debug_active = maybe_debug.is_some();
 
     // Extract gui_callback from the active scene (fn pointer is Copy — no borrow held).

@@ -49,6 +49,7 @@ use std::ffi::CString;
 ///
 /// It does not mutate world state beyond writing messages.
 pub fn poll_audio_messages(bridge: Res<AudioBridge>, mut writer: MessageWriter<AudioMessage>) {
+    crate::tracy::tracy_span!("poll_audio_messages");
     writer.write_batch(bridge.rx_msg.try_iter());
 }
 
@@ -66,6 +67,7 @@ pub fn forward_audio_cmds(
     bridge: Res<AudioBridge>,
     mut reader: bevy_ecs::prelude::MessageReader<AudioCmd>,
 ) {
+    crate::tracy::tracy_span!("forward_audio_cmds");
     for cmd in reader.read() {
         // Forward clone to crossbeam channel; ignore send error on shutdown
         let _ = bridge.tx_cmd.send(cmd.clone());

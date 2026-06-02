@@ -276,6 +276,7 @@ pub fn update(
     mut common_bufs: Local<CommonCmdBufs>,
     mut cached_callback: Local<String>,
 ) {
+    crate::tracy::tracy_span!("lua_update");
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
 
@@ -285,7 +286,7 @@ pub fn update(
         .map(|s| s.as_str())
         .unwrap_or("menu");
 
-    if cached_callback.get("on_update_".len()..).unwrap_or("") != scene_str {
+    if cached_callback.get("on_update_".len()..) != Some(scene_str) {
         cached_callback.clear();
         cached_callback.push_str("on_update_");
         cached_callback.push_str(scene_str);

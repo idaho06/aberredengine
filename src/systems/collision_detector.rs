@@ -34,6 +34,7 @@ pub fn collision_detector(
     )>,
     mut commands: Commands,
 ) {
+    crate::tracy::tracy_span!("collision_detector");
     let mut combos = query.iter_combinations_mut();
     while let Some(
         [

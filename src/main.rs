@@ -7,6 +7,11 @@
 // Do not create console on Windows
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+#[cfg(feature = "tracy")]
+#[global_allocator]
+static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+
 use aberredengine::engine_app::EngineBuilder;
 use clap::Parser;
 #[cfg(feature = "lua")]

@@ -302,6 +302,7 @@ pub fn lua_phase_system(
     mut phase_buf: Local<Vec<PhaseCmd>>,
     mut effect_bufs: Local<EffectCmdBufs>,
 ) {
+    crate::tracy::tracy_span!("lua_phase");
     // Clear previous frame's transitions (reuses allocated capacity)
     callback_transitions.clear();
     phase_entities.clear();

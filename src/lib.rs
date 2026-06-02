@@ -10,6 +10,7 @@ pub use raylib;
 
 pub mod components;
 pub mod engine_app;
+pub(crate) mod tracy;
 pub mod events;
 #[cfg(feature = "lua")]
 pub mod lua_plugin;

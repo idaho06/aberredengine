@@ -881,6 +881,9 @@ impl EngineBuilder {
     }
 
     fn main_loop(world: &mut World, update: &mut Schedule) {
+        #[cfg(feature = "tracy")]
+        let _tracy = tracy_client::Client::start();
+
         while !world
             .non_send_resource::<raylib::RaylibHandle>()
             .window_should_close()
@@ -895,9 +898,13 @@ impl EngineBuilder {
             // Scheduling it would require ordering constraints on every delta-reading system.
             update_world_time(world, dt);
 
-            update.run(world);
+            {
+                crate::tracy::tracy_span!("schedule_run");
+                update.run(world);
+            }
 
             world.clear_trackers();
+            crate::tracy::tracy_frame_mark!();
 
             let (new_w, new_h) = {
                 let rl = world.non_send_resource::<raylib::RaylibHandle>();

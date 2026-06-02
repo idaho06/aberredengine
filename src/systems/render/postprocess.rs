@@ -143,21 +143,29 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
             if is_last_pass {
                 // Draw to window
                 let mut d = rl.begin_drawing(th);
-                d.clear_background(Color::BLACK);
+                {
+                    crate::tracy::tracy_span!("render/draw_commands");
+                    d.clear_background(Color::BLACK);
 
-                if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
-                    let mut d_shader = d.begin_shader_mode(&mut entry.shader);
-                    d_shader.draw_texture_pro(
-                        source_tex,
-                        src,
-                        dest,
-                        Vector2 { x: 0.0, y: 0.0 },
-                        0.0,
-                        Color::WHITE,
-                    );
+                    if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
+                        let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+                        d_shader.draw_texture_pro(
+                            source_tex,
+                            src,
+                            dest,
+                            Vector2 { x: 0.0, y: 0.0 },
+                            0.0,
+                            Color::WHITE,
+                        );
+                    }
+                    if let Some(f) = post_blit.take() {
+                        f(&d);
+                    }
                 }
-                if let Some(f) = post_blit.take() {
-                    f(&d);
+                {
+                    // Drop the drawing handle here: EndDrawing() → SwapBuffers → vsync wait.
+                    crate::tracy::tracy_span!("render/present_vsync");
+                    drop(d);
                 }
                 final_blit_done = true;
             } else {
@@ -253,17 +261,25 @@ pub(super) fn blit_to_window<F: FnOnce(&RaylibDrawHandle<'_>)>(
     post_blit: Option<F>,
 ) {
     let mut d = rl.begin_drawing(th);
-    d.clear_background(Color::BLACK);
-    d.draw_texture_pro(
-        tex,
-        src,
-        dest,
-        Vector2 { x: 0.0, y: 0.0 },
-        0.0,
-        Color::WHITE,
-    );
-    if let Some(f) = post_blit {
-        f(&d);
+    {
+        crate::tracy::tracy_span!("render/draw_commands");
+        d.clear_background(Color::BLACK);
+        d.draw_texture_pro(
+            tex,
+            src,
+            dest,
+            Vector2 { x: 0.0, y: 0.0 },
+            0.0,
+            Color::WHITE,
+        );
+        if let Some(f) = post_blit {
+            f(&d);
+        }
+    }
+    {
+        // Drop the drawing handle here: EndDrawing() → SwapBuffers → vsync wait.
+        crate::tracy::tracy_span!("render/present_vsync");
+        drop(d);
     }
 }
 

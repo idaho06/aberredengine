@@ -11,6 +11,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crossbeam-channel = "0.5"
 mlua = { version = "0.11", features = ["vendored", "luajit", "serialize"], optional = true }
+tracy-client = { version = "0.18.4", features = ["enable"], optional = true }
 arrayvec = "0.7"
 smallvec = "1.15"
 configparser = "3"
@@ -40,7 +41,15 @@ strip = "debuginfo"
 # RUSTFLAGS="-C target-cpu=native" cargo build --release
 # Build without Lua support:
 # cargo build --no-default-features
+# Profile with Tracy (start the Tracy GUI first, then connect):
+# cargo build --profile release-tracy --features tracy
+
+[profile.release-tracy]
+inherits = "release"
+strip    = "none"
+debug    = 1
 
 [features]
 default = ["lua"]
-lua = ["dep:mlua"]
+lua   = ["dep:mlua"]
+tracy = ["dep:tracy-client"]  # profiling — never in default
