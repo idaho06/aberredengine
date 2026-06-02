@@ -30,6 +30,7 @@ local function load_common()
     engine.load_shader("crt", nil, "./assets/shaders/crt2.fs")
     engine.load_shader("blink", nil, "./assets/shaders/blink.fs")
     engine.load_shader("fade", nil, "./assets/shaders/fade.fs")
+    engine.load_shader("parallax_scroll", nil, "./assets/shaders/parallax_scroll.fs")
 end
 
 --- Load assets for the Asteroids example

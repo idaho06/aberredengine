@@ -9,11 +9,36 @@ local walking_speed = 40
 local jump_speed = -100
 local debug_log = true
 
+local bg_shader_key = "parallax_scroll"
+local bg_scroll_divisors = {
+    bg_layer01 = 6.0,
+    bg_layer02 = 3.0,
+    bg_layer03 = 1.0,
+}
+
 -- ─── Helper functions (local) ─────────────────────────────────────────────────
 local function log_debug(message)
     if debug_log then
         engine.log_debug(message)
     end
+end
+
+--- Pins a background layer to the camera and scrolls its texture in pixel space.
+--- @param entity_key string
+--- @param rect table
+local function update_parallax_background(entity_key, rect)
+    local bg_id = engine.get_entity(entity_key)
+    if not bg_id then
+        return
+    end
+
+    engine.entity_set_position(bg_id, rect.x, rect.y)
+    engine.entity_shader_set_vec2(
+        bg_id,
+        "uScrollPx",
+        rect.x / bg_scroll_divisors[entity_key],
+        0.0
+    )
 end
 
 --- Updates the player's facing direction based on input.
@@ -73,12 +98,9 @@ local function on_update_sidescroller_level01(input, dt)
 
     -- Pin background layers to the camera view each frame
     local rect = engine.get_camera_view_rect()
-    local bg1 = engine.get_entity("bg_layer01")
-    if bg1 then engine.entity_set_position(bg1, rect.x, rect.y) end
-    local bg2 = engine.get_entity("bg_layer02")
-    if bg2 then engine.entity_set_position(bg2, rect.x, rect.y) end
-    local bg3 = engine.get_entity("bg_layer03")
-    if bg3 then engine.entity_set_position(bg3, rect.x, rect.y) end
+    update_parallax_background("bg_layer01", rect)
+    update_parallax_background("bg_layer02", rect)
+    update_parallax_background("bg_layer03", rect)
 
     -- cleared each frame; collision callbacks re-set these if contact persists
     local player_id = engine.get_entity("player")
@@ -664,18 +686,27 @@ function M.spawn()
     -- Positioned each frame in on_update via get_camera_view_rect()
     engine.spawn()
         :with_sprite("back_layer01", 320, 180, 0, 0)
+        :with_shader(bg_shader_key, {
+            uScrollPx = { 0.0, 0.0 }
+        })
         :with_position(0, 0)
         :with_zindex(-100)
         :register_as("bg_layer01")
         :build()
     engine.spawn()
         :with_sprite("back_layer02", 320, 180, 0, 0)
+        :with_shader(bg_shader_key, {
+            uScrollPx = { 0.0, 0.0 }
+        })
         :with_position(0, 0)
         :with_zindex(-99)
         :register_as("bg_layer02")
         :build()
     engine.spawn()
         :with_sprite("back_layer03", 320, 180, 0, 0)
+        :with_shader(bg_shader_key, {
+            uScrollPx = { 0.0, 0.0 }
+        })
         :with_position(0, 0)
         :with_zindex(-98)
         :register_as("bg_layer03")
