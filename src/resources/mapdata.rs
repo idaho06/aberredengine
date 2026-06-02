@@ -199,7 +199,10 @@ pub struct BoxColliderEntry {
 pub enum ParticleEmitterShapeEntry {
     #[default]
     Point,
-    Rect { width: f32, height: f32 },
+    Rect {
+        width: f32,
+        height: f32,
+    },
 }
 
 /// TTL spec for a [`ParticleEmitterEntry`].
@@ -211,8 +214,13 @@ pub enum ParticleEmitterShapeEntry {
 pub enum ParticleEmitterTtlEntry {
     #[default]
     None,
-    Fixed { value: f32 },
-    Range { min: f32, max: f32 },
+    Fixed {
+        value: f32,
+    },
+    Range {
+        min: f32,
+        max: f32,
+    },
 }
 
 /// Particle emitter data for an entity placement.

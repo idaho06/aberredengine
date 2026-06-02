@@ -505,9 +505,9 @@ impl EngineBuilder {
     fn load_config(&self) -> Result<GameConfig, String> {
         let mut config = GameConfig::with_path(&self.config_path);
         if let Some(content) = &self.config_str {
-            config.load_from_str(content).map_err(|err| {
-                format!("Failed to parse embedded config: {err}")
-            })?;
+            config
+                .load_from_str(content)
+                .map_err(|err| format!("Failed to parse embedded config: {err}"))?;
         } else {
             config.load_from_file().map_err(|err| {
                 format!(

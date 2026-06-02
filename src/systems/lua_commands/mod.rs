@@ -41,6 +41,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -53,7 +54,6 @@ use crate::components::stuckto::StuckTo;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
-use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
     TweenConfig,

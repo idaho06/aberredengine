@@ -155,7 +155,8 @@ impl WorldSignals {
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         let key = key.into();
         if let Some(group_name) = key.strip_prefix("group_count:") {
-            self.group_counts.insert(group_name.to_string(), value as u32);
+            self.group_counts
+                .insert(group_name.to_string(), value as u32);
             self.group_counts_dirty = true;
         }
         self.integers.insert(key, value);
@@ -189,7 +190,8 @@ impl WorldSignals {
         let current = self.integers.get(buf.as_str()).copied();
         if current != Some(count) {
             self.integers.insert(buf.to_string(), count);
-            self.group_counts.insert(group_name.to_string(), count as u32);
+            self.group_counts
+                .insert(group_name.to_string(), count as u32);
             self.integers_dirty = true;
             self.group_counts_dirty = true;
         }
@@ -717,11 +719,17 @@ mod tests {
         // Nothing removed — should stay clean
         let persistent = FxHashSet::from_iter([entity_a]);
         ws.clear_non_persistent_entities(&persistent);
-        assert!(!ws.entities_dirty, "should not mark dirty when nothing was removed");
+        assert!(
+            !ws.entities_dirty,
+            "should not mark dirty when nothing was removed"
+        );
 
         // Remove entity — should mark dirty
         ws.clear_non_persistent_entities(&FxHashSet::default());
-        assert!(ws.entities_dirty, "should mark dirty when an entry was removed");
+        assert!(
+            ws.entities_dirty,
+            "should mark dirty when an entry was removed"
+        );
     }
 
     // --- Group counts ---

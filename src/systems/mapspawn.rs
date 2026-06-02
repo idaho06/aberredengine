@@ -23,6 +23,7 @@ use crate::components::group::Group;
 #[cfg(feature = "lua")]
 use crate::components::luasetup::LuaSetup;
 use crate::components::mapposition::MapPosition;
+use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
@@ -36,7 +37,6 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 #[cfg(feature = "lua")]
 use crate::resources::mapdata::load_map;
-use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::resources::mapdata::{
     EntityDef, MapData, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
 };
@@ -257,15 +257,19 @@ fn insert_particle_emitter(
 
     let shape = match &entry.shape {
         ParticleEmitterShapeEntry::Point => EmitterShape::Point,
-        ParticleEmitterShapeEntry::Rect { width, height } => {
-            EmitterShape::Rect { width: *width, height: *height }
-        }
+        ParticleEmitterShapeEntry::Rect { width, height } => EmitterShape::Rect {
+            width: *width,
+            height: *height,
+        },
     };
 
     let ttl = match &entry.ttl {
         ParticleEmitterTtlEntry::None => TtlSpec::None,
         ParticleEmitterTtlEntry::Fixed { value: v } => TtlSpec::Fixed(*v),
-        ParticleEmitterTtlEntry::Range { min, max } => TtlSpec::Range { min: *min, max: *max },
+        ParticleEmitterTtlEntry::Range { min, max } => TtlSpec::Range {
+            min: *min,
+            max: *max,
+        },
     };
 
     let [a, b] = entry.arc_degrees;
@@ -358,8 +362,8 @@ pub fn load_font_with_mipmaps(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_ecs::world::CommandQueue;
     use crate::resources::mapdata::BoxColliderEntry;
+    use bevy_ecs::world::CommandQueue;
 
     fn approx_eq(a: f32, b: f32) -> bool {
         (a - b).abs() < f32::EPSILON

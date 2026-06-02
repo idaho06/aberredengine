@@ -22,11 +22,7 @@ impl LuaRuntime {
     /// triples at word level — zero element copies. After the call, `out` holds
     /// the queue's previous content and the queue holds `out`'s previous (empty)
     /// buffer, retaining capacity for next frame's pushes.
-    fn drain_queue_into<T>(
-        &self,
-        get: impl Fn(&LuaAppData) -> &RefCell<Vec<T>>,
-        out: &mut Vec<T>,
-    ) {
+    fn drain_queue_into<T>(&self, get: impl Fn(&LuaAppData) -> &RefCell<Vec<T>>, out: &mut Vec<T>) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             std::mem::swap(out, &mut *get(&data).borrow_mut());
         }

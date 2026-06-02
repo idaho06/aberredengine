@@ -117,7 +117,9 @@ impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
         space_size: i32,
         color: Color,
     ) {
-        raylib::prelude::RaylibDraw::draw_line_dashed(self, start_pos, end_pos, dash_size, space_size, color);
+        raylib::prelude::RaylibDraw::draw_line_dashed(
+            self, start_pos, end_pos, dash_size, space_size, color,
+        );
     }
 
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {

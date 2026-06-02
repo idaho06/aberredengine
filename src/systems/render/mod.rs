@@ -254,127 +254,151 @@ pub fn render_system(
             );
 
             {
-            crate::tracy::tracy_span!("render/build_sprite_buffer");
-            sprite_buffer.clear();
-            sprite_buffer.extend(query_map_sprites.iter().filter_map(
-                |(entity, s, p, z, maybe_scale, maybe_rot, maybe_shader, maybe_tint, maybe_gt)| {
-                    let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
-                        *p,
-                        maybe_scale.copied(),
-                        maybe_rot.copied(),
-                        maybe_gt.copied(),
-                    );
-                    let (min, max) = compute_sprite_cull_bounds(
-                        &resolved_pos,
-                        s,
-                        resolved_scale.as_ref(),
-                        resolved_rot.as_ref(),
-                    );
-
-                    let overlap = !(max.x < view_min.x
-                        || min.x > view_max.x
-                        || max.y < view_min.y
-                        || min.y > view_max.y);
-                    overlap.then_some(SpriteBufferItem {
+                crate::tracy::tracy_span!("render/build_sprite_buffer");
+                sprite_buffer.clear();
+                sprite_buffer.extend(query_map_sprites.iter().filter_map(
+                    |(
                         entity,
-                        sprite: s.clone(),
-                        z_index: *z,
-                        resolved_pos,
-                        resolved_scale,
-                        resolved_rot,
-                        maybe_shader: maybe_shader.cloned(),
-                        maybe_tint: maybe_tint.copied(),
-                    })
-                },
-            ));
+                        s,
+                        p,
+                        z,
+                        maybe_scale,
+                        maybe_rot,
+                        maybe_shader,
+                        maybe_tint,
+                        maybe_gt,
+                    )| {
+                        let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
+                            *p,
+                            maybe_scale.copied(),
+                            maybe_rot.copied(),
+                            maybe_gt.copied(),
+                        );
+                        let (min, max) = compute_sprite_cull_bounds(
+                            &resolved_pos,
+                            s,
+                            resolved_scale.as_ref(),
+                            resolved_rot.as_ref(),
+                        );
 
-            // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
-            sprite_buffer.sort_unstable_by(|a, b| {
-                a.z_index
-                    .partial_cmp(&b.z_index)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
+                        let overlap = !(max.x < view_min.x
+                            || min.x > view_max.x
+                            || max.y < view_min.y
+                            || min.y > view_max.y);
+                        overlap.then_some(SpriteBufferItem {
+                            entity,
+                            sprite: s.clone(),
+                            z_index: *z,
+                            resolved_pos,
+                            resolved_scale,
+                            resolved_rot,
+                            maybe_shader: maybe_shader.cloned(),
+                            maybe_tint: maybe_tint.copied(),
+                        })
+                    },
+                ));
+
+                // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
+                sprite_buffer.sort_unstable_by(|a, b| {
+                    a.z_index
+                        .partial_cmp(&b.z_index)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             } // build_sprite_buffer
             {
-            crate::tracy::tracy_span!("render/draw_world_sprites");
-            for item in sprite_buffer.iter() {
-                if let Some(tex) = textures.get(&item.sprite.tex_key) {
-                    let mut src = Rectangle {
-                        x: item.sprite.offset.x,
-                        y: item.sprite.offset.y,
-                        width: item.sprite.width,
-                        height: item.sprite.height,
-                    };
-                    if item.sprite.flip_h {
-                        src.width = -src.width;
-                    }
-                    if item.sprite.flip_v {
-                        src.height = -src.height;
-                    }
+                crate::tracy::tracy_span!("render/draw_world_sprites");
+                for item in sprite_buffer.iter() {
+                    if let Some(tex) = textures.get(&item.sprite.tex_key) {
+                        let mut src = Rectangle {
+                            x: item.sprite.offset.x,
+                            y: item.sprite.offset.y,
+                            width: item.sprite.width,
+                            height: item.sprite.height,
+                        };
+                        if item.sprite.flip_h {
+                            src.width = -src.width;
+                        }
+                        if item.sprite.flip_v {
+                            src.height = -src.height;
+                        }
 
-                    let geom = compute_sprite_geometry(
-                        &item.resolved_pos,
-                        &item.sprite,
-                        item.resolved_scale.as_ref(),
-                        item.resolved_rot.as_ref(),
-                    );
-                    let dest = geom.dest;
-                    let origin_scaled = geom.origin;
-                    let rotation = geom.rotation;
+                        let geom = compute_sprite_geometry(
+                            &item.resolved_pos,
+                            &item.sprite,
+                            item.resolved_scale.as_ref(),
+                            item.resolved_rot.as_ref(),
+                        );
+                        let dest = geom.dest;
+                        let origin_scaled = geom.origin;
+                        let rotation = geom.rotation;
 
-                    let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                        let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
 
-                    // Apply entity shader if present
-                    if let Some(entity_shader) = &item.maybe_shader {
-                        if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
-                            if entry.shader.is_shader_valid() {
-                                // Set standard uniforms
-                                set_standard_uniforms(
-                                    &mut entry.shader,
-                                    &mut entry.locations,
-                                    &res.world_time,
-                                    screensize,
-                                    window_size,
-                                    &dest,
-                                );
-
-                                // Set entity-specific uniforms
-                                set_entity_uniforms(
-                                    &mut entry.shader,
-                                    &mut entry.locations,
-                                    item.entity,
-                                    &item.resolved_pos,
-                                    item.resolved_rot.as_ref(),
-                                    item.resolved_scale.as_ref(),
-                                    Vector2 {
-                                        x: item.sprite.width,
-                                        y: item.sprite.height,
-                                    },
-                                    query_rigidbodies,
-                                );
-
-                                // Set user-defined uniforms
-                                for (name, value) in &entity_shader.uniforms {
-                                    set_uniform_value(
+                        // Apply entity shader if present
+                        if let Some(entity_shader) = &item.maybe_shader {
+                            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
+                                if entry.shader.is_shader_valid() {
+                                    // Set standard uniforms
+                                    set_standard_uniforms(
                                         &mut entry.shader,
                                         &mut entry.locations,
-                                        name,
-                                        value,
+                                        &res.world_time,
+                                        screensize,
+                                        window_size,
+                                        &dest,
+                                    );
+
+                                    // Set entity-specific uniforms
+                                    set_entity_uniforms(
+                                        &mut entry.shader,
+                                        &mut entry.locations,
+                                        item.entity,
+                                        &item.resolved_pos,
+                                        item.resolved_rot.as_ref(),
+                                        item.resolved_scale.as_ref(),
+                                        Vector2 {
+                                            x: item.sprite.width,
+                                            y: item.sprite.height,
+                                        },
+                                        query_rigidbodies,
+                                    );
+
+                                    // Set user-defined uniforms
+                                    for (name, value) in &entity_shader.uniforms {
+                                        set_uniform_value(
+                                            &mut entry.shader,
+                                            &mut entry.locations,
+                                            name,
+                                            value,
+                                        );
+                                    }
+
+                                    let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
+                                    d_shader.draw_texture_pro(
+                                        tex,
+                                        src,
+                                        dest,
+                                        origin_scaled,
+                                        rotation,
+                                        tint_color,
+                                    );
+                                } else {
+                                    warn!(
+                                        "Entity shader '{}' is invalid, rendering without shader",
+                                        entity_shader.shader_key
+                                    );
+                                    d2.draw_texture_pro(
+                                        tex,
+                                        src,
+                                        dest,
+                                        origin_scaled,
+                                        rotation,
+                                        tint_color,
                                     );
                                 }
-
-                                let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
-                                d_shader.draw_texture_pro(
-                                    tex,
-                                    src,
-                                    dest,
-                                    origin_scaled,
-                                    rotation,
-                                    tint_color,
-                                );
                             } else {
                                 warn!(
-                                    "Entity shader '{}' is invalid, rendering without shader",
+                                    "Entity shader '{}' not found, rendering without shader",
                                     entity_shader.shader_key
                                 );
                                 d2.draw_texture_pro(
@@ -387,10 +411,6 @@ pub fn render_system(
                                 );
                             }
                         } else {
-                            warn!(
-                                "Entity shader '{}' not found, rendering without shader",
-                                entity_shader.shader_key
-                            );
                             d2.draw_texture_pro(
                                 tex,
                                 src,
@@ -400,115 +420,126 @@ pub fn render_system(
                                 tint_color,
                             );
                         }
-                    } else {
-                        d2.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
-                    }
 
-                    if maybe_debug.is_some() && debug_res.overlay_config.show_sprite_bounds {
-                        draw_rotated_rect_lines(
-                            &mut d2,
-                            dest,
-                            origin_scaled,
-                            rotation,
-                            Color::BLUE,
-                        );
+                        if maybe_debug.is_some() && debug_res.overlay_config.show_sprite_bounds {
+                            draw_rotated_rect_lines(
+                                &mut d2,
+                                dest,
+                                origin_scaled,
+                                rotation,
+                                Color::BLUE,
+                            );
+                        }
                     }
                 }
-            }
             } // draw_world_sprites
 
             {
-            crate::tracy::tracy_span!("render/build_text_buffer");
-            text_buffer.clear();
-            text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
-                |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
-                    let resolved_pos = MapPosition {
-                        pos: maybe_gt.map_or(p.pos, |gt| gt.position),
-                    };
-                    let text_size = t.size();
-                    let min = resolved_pos.pos;
-                    let max = Vector2 {
-                        x: min.x + text_size.x,
-                        y: min.y + text_size.y,
-                    };
+                crate::tracy::tracy_span!("render/build_text_buffer");
+                text_buffer.clear();
+                text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
+                    |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
+                        let resolved_pos = MapPosition {
+                            pos: maybe_gt.map_or(p.pos, |gt| gt.position),
+                        };
+                        let text_size = t.size();
+                        let min = resolved_pos.pos;
+                        let max = Vector2 {
+                            x: min.x + text_size.x,
+                            y: min.y + text_size.y,
+                        };
 
-                    let overlap = !(max.x < view_min.x
-                        || min.x > view_max.x
-                        || max.y < view_min.y
-                        || min.y > view_max.y);
-                    overlap.then_some(TextBufferItem {
-                        entity,
-                        text: t.clone(),
-                        z_index: *z,
-                        resolved_pos,
-                        text_size,
-                        maybe_shader: maybe_shader.cloned(),
-                        maybe_tint: maybe_tint.copied(),
-                    })
-                },
-            ));
-            text_buffer.sort_unstable_by(|a, b| {
-                a.z_index
-                    .partial_cmp(&b.z_index)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
+                        let overlap = !(max.x < view_min.x
+                            || min.x > view_max.x
+                            || max.y < view_min.y
+                            || min.y > view_max.y);
+                        overlap.then_some(TextBufferItem {
+                            entity,
+                            text: t.clone(),
+                            z_index: *z,
+                            resolved_pos,
+                            text_size,
+                            maybe_shader: maybe_shader.cloned(),
+                            maybe_tint: maybe_tint.copied(),
+                        })
+                    },
+                ));
+                text_buffer.sort_unstable_by(|a, b| {
+                    a.z_index
+                        .partial_cmp(&b.z_index)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             } // build_text_buffer
             {
-            crate::tracy::tracy_span!("render/draw_world_texts");
-            for item in text_buffer.iter() {
-                if let Some(font) = fonts.get(&item.text.font) {
-                    let final_color = item
-                        .maybe_tint
-                        .map(|t| t.multiply(item.text.color))
-                        .unwrap_or(item.text.color);
+                crate::tracy::tracy_span!("render/draw_world_texts");
+                for item in text_buffer.iter() {
+                    if let Some(font) = fonts.get(&item.text.font) {
+                        let final_color = item
+                            .maybe_tint
+                            .map(|t| t.multiply(item.text.color))
+                            .unwrap_or(item.text.color);
 
-                    if let Some(entity_shader) = &item.maybe_shader {
-                        if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
-                            if entry.shader.is_shader_valid() {
-                                let dest = Rectangle {
-                                    x: item.resolved_pos.pos.x,
-                                    y: item.resolved_pos.pos.y,
-                                    width: item.text_size.x,
-                                    height: item.text_size.y,
-                                };
-                                set_standard_uniforms(
-                                    &mut entry.shader,
-                                    &mut entry.locations,
-                                    &res.world_time,
-                                    screensize,
-                                    window_size,
-                                    &dest,
-                                );
-                                set_entity_uniforms(
-                                    &mut entry.shader,
-                                    &mut entry.locations,
-                                    item.entity,
-                                    &item.resolved_pos,
-                                    None,
-                                    None,
-                                    item.text_size,
-                                    query_rigidbodies,
-                                );
-                                for (name, value) in &entity_shader.uniforms {
-                                    set_uniform_value(
+                        if let Some(entity_shader) = &item.maybe_shader {
+                            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
+                                if entry.shader.is_shader_valid() {
+                                    let dest = Rectangle {
+                                        x: item.resolved_pos.pos.x,
+                                        y: item.resolved_pos.pos.y,
+                                        width: item.text_size.x,
+                                        height: item.text_size.y,
+                                    };
+                                    set_standard_uniforms(
                                         &mut entry.shader,
                                         &mut entry.locations,
-                                        name,
-                                        value,
+                                        &res.world_time,
+                                        screensize,
+                                        window_size,
+                                        &dest,
+                                    );
+                                    set_entity_uniforms(
+                                        &mut entry.shader,
+                                        &mut entry.locations,
+                                        item.entity,
+                                        &item.resolved_pos,
+                                        None,
+                                        None,
+                                        item.text_size,
+                                        query_rigidbodies,
+                                    );
+                                    for (name, value) in &entity_shader.uniforms {
+                                        set_uniform_value(
+                                            &mut entry.shader,
+                                            &mut entry.locations,
+                                            name,
+                                            value,
+                                        );
+                                    }
+                                    let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
+                                    d_shader.draw_text_ex(
+                                        font,
+                                        &item.text.text,
+                                        item.resolved_pos.pos,
+                                        item.text.font_size,
+                                        1.0,
+                                        final_color,
+                                    );
+                                } else {
+                                    warn!(
+                                        "Entity shader '{}' is invalid, rendering without shader",
+                                        entity_shader.shader_key
+                                    );
+                                    d2.draw_text_ex(
+                                        font,
+                                        &item.text.text,
+                                        item.resolved_pos.pos,
+                                        item.text.font_size,
+                                        1.0,
+                                        final_color,
                                     );
                                 }
-                                let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
-                                d_shader.draw_text_ex(
-                                    font,
-                                    &item.text.text,
-                                    item.resolved_pos.pos,
-                                    item.text.font_size,
-                                    1.0,
-                                    final_color,
-                                );
                             } else {
                                 warn!(
-                                    "Entity shader '{}' is invalid, rendering without shader",
+                                    "Entity shader '{}' not found, rendering without shader",
                                     entity_shader.shader_key
                                 );
                                 d2.draw_text_ex(
@@ -521,10 +552,6 @@ pub fn render_system(
                                 );
                             }
                         } else {
-                            warn!(
-                                "Entity shader '{}' not found, rendering without shader",
-                                entity_shader.shader_key
-                            );
                             d2.draw_text_ex(
                                 font,
                                 &item.text.text,
@@ -534,28 +561,18 @@ pub fn render_system(
                                 final_color,
                             );
                         }
-                    } else {
-                        d2.draw_text_ex(
-                            font,
-                            &item.text.text,
-                            item.resolved_pos.pos,
-                            item.text.font_size,
-                            1.0,
-                            final_color,
-                        );
-                    }
 
-                    if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
-                        d2.draw_rectangle_lines(
-                            item.resolved_pos.pos.x as i32,
-                            item.resolved_pos.pos.y as i32,
-                            item.text_size.x as i32,
-                            item.text_size.y as i32,
-                            Color::ORANGE,
-                        );
+                        if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
+                            d2.draw_rectangle_lines(
+                                item.resolved_pos.pos.x as i32,
+                                item.resolved_pos.pos.y as i32,
+                                item.text_size.x as i32,
+                                item.text_size.y as i32,
+                                Color::ORANGE,
+                            );
+                        }
                     }
                 }
-            }
             } // draw_world_texts
 
             if maybe_debug.is_some() {
@@ -654,9 +671,9 @@ pub fn render_system(
         let debug_sprites = debug && debug_res.overlay_config.show_sprite_bounds;
         let debug_texts = debug && debug_res.overlay_config.show_text_bounds;
         {
-        crate::tracy::tracy_span!("render/screen_space");
-        draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug_sprites);
-        draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug_texts);
+            crate::tracy::tracy_span!("render/screen_space");
+            draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug_sprites);
+            draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug_texts);
         }
     }
 

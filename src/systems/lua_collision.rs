@@ -182,7 +182,9 @@ pub fn lua_collision_observer(
                 return;
             }
 
-            params.lua_runtime.drain_collision_phase_commands_into(&mut phase_buf);
+            params
+                .lua_runtime
+                .drain_collision_phase_commands_into(&mut phase_buf);
             for cmd in phase_buf.drain(..) {
                 process_phase_command(&mut params.luaphase_query, cmd);
             }

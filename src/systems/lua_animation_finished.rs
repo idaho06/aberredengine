@@ -63,7 +63,10 @@ pub fn lua_animation_finished_observer(
     let input_table = match lua_runtime.update_input_table(&input_snapshot) {
         Ok(t) => t,
         Err(e) => {
-            error!("Error creating input table for on_animation_end callback: {}", e);
+            error!(
+                "Error creating input table for on_animation_end callback: {}",
+                e
+            );
             return;
         }
     };
@@ -86,7 +89,10 @@ pub fn lua_animation_finished_observer(
     ) {
         Ok(ctx) => ctx,
         Err(e) => {
-            error!("Error building context for on_animation_end callback: {}", e);
+            error!(
+                "Error building context for on_animation_end callback: {}",
+                e
+            );
             return;
         }
     };
