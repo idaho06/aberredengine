@@ -173,9 +173,9 @@ function on_switch_scene(scene_name)
     -- 3. Load the scene module
     local scene = get_scene(scene_name)
     if scene then
-        -- 3. Inject new scene's callbacks into _G
+        -- 4. Inject new scene's callbacks into _G
         inject_callbacks(scene)
-        -- 4. Spawn scene entities
+        -- 5. Spawn scene entities
         if scene.spawn then
             scene.spawn()
         end
@@ -185,7 +185,7 @@ function on_switch_scene(scene_name)
 end
 
 -- Tune GC: defer automatic collections to avoid mid-gameplay stutter
-collectgarbage("setpause", 2000)   -- Default is 100, higher means less frequent collections
+collectgarbage("setpause", 400)    -- Default is 100; 4x deferral avoids stutter without 20x heap growth
 collectgarbage("setstepmul", 500)  -- Default is 200
 
 engine.log("main.lua loaded successfully!")

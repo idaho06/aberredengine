@@ -163,15 +163,6 @@ engine = {}
 ---@field max number|nil Range maximum (for range conditions)
 ---@field conditions AnimationRuleCondition[]|nil Sub-conditions (for all/any/not)
 
----Camera state returned by engine.get_camera()
----@class CameraState
----@field target_x number Camera target world X
----@field target_y number Camera target world Y
----@field offset_x number Camera screen offset X
----@field offset_y number Camera screen offset Y
----@field rotation number Camera rotation in degrees
----@field zoom number Camera zoom factor
-
 ---Visible world-space rectangle returned by engine.get_camera_view_rect(). Assumes zero rotation.
 ---@class CameraViewRect
 ---@field x number Left edge in world space
@@ -186,6 +177,15 @@ engine = {}
 ---@field mouse_y number Cursor Y in game-space (0..render_height, letterbox-corrected)
 ---@field mouse_world_x number Cursor X in world-space (after camera transform, matches MapPosition)
 ---@field mouse_world_y number Cursor Y in world-space (after camera transform, matches MapPosition)
+
+---Camera state returned by engine.get_camera()
+---@class CameraState
+---@field target_x number Camera target world X
+---@field target_y number Camera target world Y
+---@field offset_x number Camera screen offset X
+---@field offset_y number Camera screen offset Y
+---@field rotation number Camera rotation in degrees
+---@field zoom number Camera zoom factor
 
 -- ==================== Enums ====================
 
@@ -1182,11 +1182,11 @@ function engine.camera_follow_set_spring(stiffness, damping) end
 ---@param speed number
 function engine.camera_follow_set_zoom_speed(speed) end
 
----Get the current 2D camera state (target, offset, rotation, zoom). Returns values from the start of this frame after camera_follow_system has run. If called in the same callback as set_camera(), returns pre-override values. Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene.
+---Get the current 2D camera state (target, offset, rotation, zoom). Returns values from the start of this frame after camera_follow_system has run. If called in the same callback as set_camera(), returns pre-override values. Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene. Each call returns a new table; cache locally if reading multiple fields.
 ---@return table
 function engine.get_camera() end
 
----Get the visible world-space rectangle for the current camera: top-left corner (x, y) plus visible dimensions (w, h) in world units. Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned approximation only.
+---Get the visible world-space rectangle for the current camera: top-left corner (x, y) plus visible dimensions (w, h) in world units. Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned approximation only. Only available during on_update callbacks; returns {{ x=0, y=0, w=0, h=0 }} from on_setup / on_switch_scene. Each call returns a new table; cache locally if reading multiple fields.
 ---@return table
 function engine.get_camera_view_rect() end
 

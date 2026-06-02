@@ -4242,6 +4242,8 @@ engine.log("camera at: " .. cam.target_x .. ", " .. cam.target_y .. "  zoom: " .
 - Only populated during `on_update_<scene>` callbacks. Returns defaults (`zoom=1.0`, all else `0`) when called from `on_setup` or `on_switch_scene`.
 - If you call both `get_camera()` and `set_camera()` in the same callback, `get_camera()` returns the pre-override value because camera write commands are applied after Lua has run.
 
+**Performance note:** Each call allocates a new Lua table. Store the result in a local variable rather than calling the function multiple times within one callback.
+
 ---
 
 ### `engine.get_camera_view_rect() → CameraViewRect`
@@ -4251,6 +4253,11 @@ Returns the visible world-space rectangle for the current camera state. This is 
 **Returns:** `{ x, y, w, h }` where `(x, y)` is the top-left world corner and `(w, h)` are the visible dimensions in world units.
 
 **Assumes zero camera rotation.** Under non-zero rotation the result is an axis-aligned approximation only.
+
+**Limitations:**
+- Only populated during `on_update_<scene>` callbacks. Returns `{ x=0, y=0, w=0, h=0 }` when called from `on_setup` or `on_switch_scene`. Unlike `get_camera()` where `zoom=1` hints at a stale snapshot, all four fields defaulting to zero is a silent failure — position and size calculations using `w`/`h` will produce incorrect results.
+
+**Performance note:** Each call allocates a new Lua table. Store the result in a local variable rather than calling the function multiple times within one callback.
 
 ```lua
 -- Pin a background sprite to the visible world area (appears fixed on screen,

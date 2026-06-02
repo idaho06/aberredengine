@@ -1245,7 +1245,8 @@ impl LuaRuntime {
             "Get the current 2D camera state (target, offset, rotation, zoom). \
              Returns values from the start of this frame after camera_follow_system has run. \
              If called in the same callback as set_camera(), returns pre-override values. \
-             Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene.",
+             Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene. \
+             Each call returns a new table; cache locally if reading multiple fields.",
             "camera",
             &[],
             Some("table"),
@@ -1276,7 +1277,10 @@ impl LuaRuntime {
             "Get the visible world-space rectangle for the current camera: top-left corner (x, y) \
              plus visible dimensions (w, h) in world units. \
              Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned \
-             approximation only.",
+             approximation only. \
+             Only available during on_update callbacks; returns {{ x=0, y=0, w=0, h=0 }} from \
+             on_setup / on_switch_scene. \
+             Each call returns a new table; cache locally if reading multiple fields.",
             "camera",
             &[],
             Some("table"),
