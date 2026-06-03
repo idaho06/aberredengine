@@ -22,10 +22,10 @@ clap = { version = "4", features = ["derive"] }
 imgui = "0.12"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-raylib = { package = "sola-raylib", version = "6.1", features = ["wayland", "noscreenshot"] }
+raylib = { package = "sola-raylib", version = "6.2", features = ["wayland", "noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-raylib = { package = "sola-raylib", version = "6.1", features = ["noscreenshot"] }
+raylib = { package = "sola-raylib", version = "6.2", features = ["noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 embed-resource = "3"
