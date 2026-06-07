@@ -9,7 +9,9 @@
 use super::commands::{CloneCmd, UniformValue};
 use super::runtime::LuaAppData;
 use super::spawn_data::*;
+use super::stub_meta::BuilderMethodDef;
 use mlua::prelude::*;
+use mlua::MaybeSend;
 
 /// Parse a Lua value into a UniformValue.
 ///
@@ -122,72 +124,205 @@ impl LuaEntityBuilder {
     }
 }
 
-impl LuaUserData for LuaEntityBuilder {
-    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
-        // :with_group(name) - Set entity group
-        methods.add_method_mut("with_group", |_, this, name: String| {
+/// Registers a `with_*` builder method and, when a metadata collector is present, records its
+/// stub info. The PARAMS const inside the macro body is `'static` because const items always are.
+macro_rules! builder_method {
+    (
+        $methods:expr, $meta:expr,
+        $name:literal, $desc:literal,
+        [$( ($pname:literal, $ptype:literal) ),* $(,)?],
+        $closure:expr
+    ) => {
+        $methods.add_method_mut($name, $closure);
+        if let Some(collector) = $meta.as_mut() {
+            const PARAMS: &[(&str, &str)] = &[$( ($pname, $ptype) ),*];
+            collector.push(($name, $desc, PARAMS));
+        }
+    };
+}
+
+/// No-op `UserDataMethods` impl used only by `collect_builder_meta` to harvest stub metadata
+/// without performing real method registration.
+struct DummyMethods;
+
+impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
+    fn add_method<M, A, R>(&mut self, _name: impl Into<String>, _method: M)
+    where
+        M: Fn(&Lua, &LuaEntityBuilder, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+    }
+
+    fn add_method_mut<M, A, R>(&mut self, _name: impl Into<String>, _method: M)
+    where
+        M: FnMut(&Lua, &mut LuaEntityBuilder, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+    }
+
+    fn add_function<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
+    where
+        F: Fn(&Lua, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        unimplemented!()
+    }
+
+    fn add_function_mut<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
+    where
+        F: FnMut(&Lua, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        unimplemented!()
+    }
+
+    fn add_meta_method<M, A, R>(&mut self, _name: impl Into<String>, _method: M)
+    where
+        M: Fn(&Lua, &LuaEntityBuilder, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        unimplemented!()
+    }
+
+    fn add_meta_method_mut<M, A, R>(&mut self, _name: impl Into<String>, _method: M)
+    where
+        M: FnMut(&Lua, &mut LuaEntityBuilder, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        unimplemented!()
+    }
+
+    fn add_meta_function<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
+    where
+        F: Fn(&Lua, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        unimplemented!()
+    }
+
+    fn add_meta_function_mut<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
+    where
+        F: FnMut(&Lua, A) -> LuaResult<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        unimplemented!()
+    }
+}
+
+/// Collect stub metadata for all builder methods.
+/// Used by the stub generator path only; has no effect during normal gameplay.
+pub fn collect_builder_meta() -> Vec<BuilderMethodDef> {
+    let mut meta = Some(Vec::new());
+    let mut dummy = DummyMethods;
+    register_methods(&mut dummy, &mut meta);
+    let mut v = meta.unwrap();
+    // register_as and build are not with_* methods so the macro doesn't capture them;
+    // append their entries manually so the stub generator includes them.
+    const REGISTER_AS_PARAMS: &[(&str, &str)] = &[("key", "string")];
+    v.push(("register_as", "Register entity in WorldSignals for later retrieval", REGISTER_AS_PARAMS));
+    v.push(("build", "Queue entity for spawning or cloning", &[]));
+    v
+}
+
+fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
+    methods: &mut M,
+    meta: &mut Option<Vec<BuilderMethodDef>>,
+) {
+    builder_method!(
+        methods, meta,
+        "with_group", "Set entity group",
+        [("name", "string")],
+        |_, this, name: String| {
             this.cmd.group = Some(name);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_position(x, y) - Set world position
-        methods.add_method_mut("with_position", |_, this, (x, y): (f32, f32)| {
+    builder_method!(
+        methods, meta,
+        "with_position", "Set world position",
+        [("x", "number"), ("y", "number")],
+        |_, this, (x, y): (f32, f32)| {
             this.cmd.position = Some((x, y));
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_sprite(tex_key, width, height, origin_x, origin_y) - Set sprite
-        methods.add_method_mut(
-            "with_sprite",
-            |_, this, (tex_key, width, height, origin_x, origin_y): (String, f32, f32, f32, f32)| {
-                this.cmd.sprite = Some(SpriteData {
-                    tex_key,
-                    width,
-                    height,
-                    origin_x,
-                    origin_y,
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                    flip_h: false,
-                    flip_v: false,
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_sprite", "Set sprite",
+        [
+            ("tex_key", "string"),
+            ("width", "number"),
+            ("height", "number"),
+            ("origin_x", "number"),
+            ("origin_y", "number"),
+        ],
+        |_, this, (tex_key, width, height, origin_x, origin_y): (String, f32, f32, f32, f32)| {
+            this.cmd.sprite = Some(SpriteData {
+                tex_key,
+                width,
+                height,
+                origin_x,
+                origin_y,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                flip_h: false,
+                flip_v: false,
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_sprite_offset(offset_x, offset_y) - Set sprite offset
-        methods.add_method_mut(
-            "with_sprite_offset",
-            |_, this, (offset_x, offset_y): (f32, f32)| {
-                if let Some(ref mut sprite) = this.cmd.sprite {
-                    sprite.offset_x = offset_x;
-                    sprite.offset_y = offset_y;
-                }
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_sprite_offset", "Set sprite offset",
+        [("offset_x", "number"), ("offset_y", "number")],
+        |_, this, (offset_x, offset_y): (f32, f32)| {
+            if let Some(ref mut sprite) = this.cmd.sprite {
+                sprite.offset_x = offset_x;
+                sprite.offset_y = offset_y;
+            }
+            Ok(this.clone())
+        }
+    );
 
-        // :with_sprite_flip(flip_h, flip_v) - Set sprite flipping
-        methods.add_method_mut(
-            "with_sprite_flip",
-            |_, this, (flip_h, flip_v): (bool, bool)| {
-                if let Some(ref mut sprite) = this.cmd.sprite {
-                    sprite.flip_h = flip_h;
-                    sprite.flip_v = flip_v;
-                }
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_sprite_flip", "Set sprite flipping",
+        [("flip_h", "boolean"), ("flip_v", "boolean")],
+        |_, this, (flip_h, flip_v): (bool, bool)| {
+            if let Some(ref mut sprite) = this.cmd.sprite {
+                sprite.flip_h = flip_h;
+                sprite.flip_v = flip_v;
+            }
+            Ok(this.clone())
+        }
+    );
 
-        // :with_zindex(z) - Set render order
-        methods.add_method_mut("with_zindex", |_, this, z: f32| {
+    builder_method!(
+        methods, meta,
+        "with_zindex", "Set render order",
+        [("z", "number")],
+        |_, this, z: f32| {
             this.cmd.zindex = Some(z);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_velocity(vx, vy) - Set RigidBody velocity
-        // Creates a RigidBody if one doesn't exist, otherwise updates velocity
-        methods.add_method_mut("with_velocity", |_, this, (vx, vy): (f32, f32)| {
+    builder_method!(
+        methods, meta,
+        "with_velocity", "Set velocity (creates RigidBody if needed)",
+        [("vx", "number"), ("vy", "number")],
+        |_, this, (vx, vy): (f32, f32)| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
                 rb.velocity_x = vx;
                 rb.velocity_y = vy;
@@ -199,11 +334,14 @@ impl LuaUserData for LuaEntityBuilder {
                 });
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_friction(friction) - Set RigidBody friction (velocity damping)
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut("with_friction", |_, this, friction: f32| {
+    builder_method!(
+        methods, meta,
+        "with_friction", "Set friction (creates RigidBody if needed)",
+        [("friction", "number")],
+        |_, this, friction: f32| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
                 rb.friction = friction;
             } else {
@@ -213,11 +351,14 @@ impl LuaUserData for LuaEntityBuilder {
                 });
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_max_speed(speed) - Set RigidBody max_speed clamp
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut("with_max_speed", |_, this, speed: f32| {
+    builder_method!(
+        methods, meta,
+        "with_max_speed", "Set max speed clamp (creates RigidBody if needed)",
+        [("speed", "number")],
+        |_, this, speed: f32| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
                 rb.max_speed = Some(speed);
             } else {
@@ -227,38 +368,36 @@ impl LuaUserData for LuaEntityBuilder {
                 });
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_accel(name, x, y, enabled) - Add a named acceleration force
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut(
-            "with_accel",
-            |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
-                if let Some(ref mut rb) = this.cmd.rigidbody {
-                    rb.forces.push(ForceData {
-                        name,
-                        x,
-                        y,
-                        enabled,
-                    });
-                } else {
-                    this.cmd.rigidbody = Some(RigidBodyData {
-                        forces: vec![ForceData {
-                            name,
-                            x,
-                            y,
-                            enabled,
-                        }],
-                        ..RigidBodyData::default()
-                    });
-                }
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_accel", "Add a named acceleration force",
+        [
+            ("name", "string"),
+            ("x", "number"),
+            ("y", "number"),
+            ("enabled", "boolean"),
+        ],
+        |_, this, (name, x, y, enabled): (String, f32, f32, bool)| {
+            if let Some(ref mut rb) = this.cmd.rigidbody {
+                rb.forces.push(ForceData { name, x, y, enabled });
+            } else {
+                this.cmd.rigidbody = Some(RigidBodyData {
+                    forces: vec![ForceData { name, x, y, enabled }],
+                    ..RigidBodyData::default()
+                });
+            }
+            Ok(this.clone())
+        }
+    );
 
-        // :with_frozen() - Mark entity as frozen (physics skipped)
-        // Creates a RigidBody if one doesn't exist
-        methods.add_method_mut("with_frozen", |_, this, ()| {
+    builder_method!(
+        methods, meta,
+        "with_frozen", "Mark entity as frozen (physics skipped)",
+        [],
+        |_, this, (): ()| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
                 rb.frozen = true;
             } else {
@@ -268,182 +407,216 @@ impl LuaUserData for LuaEntityBuilder {
                 });
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_collider(width, height, origin_x, origin_y) - Set BoxCollider
-        methods.add_method_mut(
-            "with_collider",
-            |_, this, (width, height, origin_x, origin_y): (f32, f32, f32, f32)| {
-                this.cmd.collider = Some(ColliderData {
-                    width,
-                    height,
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                    origin_x,
-                    origin_y,
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_collider", "Set box collider",
+        [
+            ("width", "number"),
+            ("height", "number"),
+            ("origin_x", "number"),
+            ("origin_y", "number"),
+        ],
+        |_, this, (width, height, origin_x, origin_y): (f32, f32, f32, f32)| {
+            this.cmd.collider = Some(ColliderData {
+                width,
+                height,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                origin_x,
+                origin_y,
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_collider_offset(offset_x, offset_y) - Set collider offset
-        methods.add_method_mut(
-            "with_collider_offset",
-            |_, this, (offset_x, offset_y): (f32, f32)| {
-                if let Some(ref mut collider) = this.cmd.collider {
-                    collider.offset_x = offset_x;
-                    collider.offset_y = offset_y;
-                }
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_collider_offset", "Set collider offset",
+        [("offset_x", "number"), ("offset_y", "number")],
+        |_, this, (offset_x, offset_y): (f32, f32)| {
+            if let Some(ref mut collider) = this.cmd.collider {
+                collider.offset_x = offset_x;
+                collider.offset_y = offset_y;
+            }
+            Ok(this.clone())
+        }
+    );
 
-        // :with_mouse_controlled(follow_x, follow_y) - Enable mouse control
-        methods.add_method_mut(
-            "with_mouse_controlled",
-            |_, this, (follow_x, follow_y): (bool, bool)| {
-                this.cmd.mouse_controlled = Some((follow_x, follow_y));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_mouse_controlled", "Enable mouse position tracking",
+        [("follow_x", "boolean"), ("follow_y", "boolean")],
+        |_, this, (follow_x, follow_y): (bool, bool)| {
+            this.cmd.mouse_controlled = Some((follow_x, follow_y));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_rotation(degrees) - Set rotation
-        methods.add_method_mut("with_rotation", |_, this, degrees: f32| {
+    builder_method!(
+        methods, meta,
+        "with_rotation", "Set rotation in degrees",
+        [("degrees", "number")],
+        |_, this, degrees: f32| {
             this.cmd.rotation = Some(degrees);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_scale(sx, sy) - Set scale
-        methods.add_method_mut("with_scale", |_, this, (sx, sy): (f32, f32)| {
+    builder_method!(
+        methods, meta,
+        "with_scale", "Set scale",
+        [("sx", "number"), ("sy", "number")],
+        |_, this, (sx, sy): (f32, f32)| {
             this.cmd.scale = Some((sx, sy));
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_persistent() - Mark entity as persistent across scene changes
-        methods.add_method_mut("with_persistent", |_, this, ()| {
+    builder_method!(
+        methods, meta,
+        "with_persistent", "Survive scene transitions",
+        [],
+        |_, this, (): ()| {
             this.cmd.persistent = true;
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_signal_scalar(key, value) - Add a scalar signal
-        methods.add_method_mut(
-            "with_signal_scalar",
-            |_, this, (key, value): (String, f32)| {
-                this.cmd.signal_scalars.push((key, value));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_signal_scalar", "Add a scalar signal",
+        [("key", "string"), ("value", "number")],
+        |_, this, (key, value): (String, f32)| {
+            this.cmd.signal_scalars.push((key, value));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_signal_integer(key, value) - Add an integer signal
-        methods.add_method_mut(
-            "with_signal_integer",
-            |_, this, (key, value): (String, i32)| {
-                this.cmd.signal_integers.push((key, value));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_signal_integer", "Add an integer signal",
+        [("key", "string"), ("value", "integer")],
+        |_, this, (key, value): (String, i32)| {
+            this.cmd.signal_integers.push((key, value));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_signal_flag(key) - Add a flag signal
-        methods.add_method_mut("with_signal_flag", |_, this, key: String| {
+    builder_method!(
+        methods, meta,
+        "with_signal_flag", "Add a flag signal",
+        [("key", "string")],
+        |_, this, key: String| {
             this.cmd.signal_flags.push(key);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_signal_string(key, value) - Add a string signal
-        methods.add_method_mut(
-            "with_signal_string",
-            |_, this, (key, value): (String, String)| {
-                this.cmd.signal_strings.push((key, value));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_signal_string", "Add a string signal",
+        [("key", "string"), ("value", "string")],
+        |_, this, (key, value): (String, String)| {
+            this.cmd.signal_strings.push((key, value));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_screen_position(x, y) - Set screen position (for UI elements)
-        methods.add_method_mut("with_screen_position", |_, this, (x, y): (f32, f32)| {
+    builder_method!(
+        methods, meta,
+        "with_screen_position", "Set screen position (UI elements)",
+        [("x", "number"), ("y", "number")],
+        |_, this, (x, y): (f32, f32)| {
             this.cmd.screen_position = Some((x, y));
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_text(content, font, font_size, r, g, b, a) - Set DynamicText
-        methods.add_method_mut(
-            "with_text",
-            |_, this, (content, font, font_size, r, g, b, a): (String, String, f32, u8, u8, u8, u8)| {
-                this.cmd.text = Some(TextData {
-                    content,
-                    font,
-                    font_size,
-                    r,
-                    g,
-                    b,
-                    a,
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_text", "Set DynamicText component",
+        [
+            ("content", "string"),
+            ("font", "string"),
+            ("font_size", "number"),
+            ("r", "integer"),
+            ("g", "integer"),
+            ("b", "integer"),
+            ("a", "integer"),
+        ],
+        |_, this, (content, font, font_size, r, g, b, a): (String, String, f32, u8, u8, u8, u8)| {
+            this.cmd.text = Some(TextData { content, font, font_size, r, g, b, a });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_menu(items, origin_x, origin_y, font, font_size, item_spacing, use_screen_space)
-        // items is an array-like table of { id = "...", label = "..." }
-        methods.add_method_mut(
-            "with_menu",
-            |_, this,
-             (items_table, origin_x, origin_y, font, font_size, item_spacing, use_screen_space): (
-                LuaTable,
-                f32,
-                f32,
-                String,
-                f32,
-                f32,
-                bool,
-            )| {
-                let mut items: Vec<(String, String)> = Vec::new();
-                for value in items_table.sequence_values::<LuaTable>() {
-                    let item_table = value?;
-                    let id: String = item_table.get("id")?;
-                    let label: String = item_table.get("label")?;
-                    items.push((id, label));
-                }
+    builder_method!(
+        methods, meta,
+        "with_menu", "Add interactive menu",
+        [
+            ("items", "table"),
+            ("origin_x", "number"),
+            ("origin_y", "number"),
+            ("font", "string"),
+            ("font_size", "number"),
+            ("item_spacing", "number"),
+            ("use_screen_space", "boolean"),
+        ],
+        |_, this, (items_table, origin_x, origin_y, font, font_size, item_spacing, use_screen_space): (LuaTable, f32, f32, String, f32, f32, bool)| {
+            let mut items: Vec<(String, String)> = Vec::new();
+            for value in items_table.sequence_values::<LuaTable>() {
+                let item_table = value?;
+                let id: String = item_table.get("id")?;
+                let label: String = item_table.get("label")?;
+                items.push((id, label));
+            }
+            this.cmd.menu = Some(MenuData {
+                items,
+                origin_x,
+                origin_y,
+                font,
+                font_size,
+                item_spacing,
+                use_screen_space,
+                ..MenuData::default()
+            });
+            Ok(this.clone())
+        }
+    );
 
-                this.cmd.menu = Some(MenuData {
-                    items,
-                    origin_x,
-                    origin_y,
-                    font,
-                    font_size,
-                    item_spacing,
-                    use_screen_space,
-                    ..MenuData::default()
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_menu_colors", "Set menu normal/selected colors (RGBA)",
+        [
+            ("nr", "integer"),
+            ("ng", "integer"),
+            ("nb", "integer"),
+            ("na", "integer"),
+            ("sr", "integer"),
+            ("sg", "integer"),
+            ("sb", "integer"),
+            ("sa", "integer"),
+        ],
+        |_, this, (nr, ng, nb, na, sr, sg, sb, sa): (u8, u8, u8, u8, u8, u8, u8, u8)| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_colors() requires with_menu() first",
+                ));
+            };
+            menu.normal_color = Some(ColorData { r: nr, g: ng, b: nb, a: na });
+            menu.selected_color = Some(ColorData { r: sr, g: sg, b: sb, a: sa });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_menu_colors(normal_r, normal_g, normal_b, normal_a, selected_r, selected_g, selected_b, selected_a)
-        methods.add_method_mut(
-            "with_menu_colors",
-            |_, this, (nr, ng, nb, na, sr, sg, sb, sa): (u8, u8, u8, u8, u8, u8, u8, u8)| {
-                let Some(ref mut menu) = this.cmd.menu else {
-                    return Err(LuaError::runtime(
-                        "with_menu_colors() requires with_menu() first",
-                    ));
-                };
-                menu.normal_color = Some(ColorData {
-                    r: nr,
-                    g: ng,
-                    b: nb,
-                    a: na,
-                });
-                menu.selected_color = Some(ColorData {
-                    r: sr,
-                    g: sg,
-                    b: sb,
-                    a: sa,
-                });
-                Ok(this.clone())
-            },
-        );
-
-        // :with_menu_dynamic_text(dynamic)
-        methods.add_method_mut("with_menu_dynamic_text", |_, this, dynamic: bool| {
+    builder_method!(
+        methods, meta,
+        "with_menu_dynamic_text", "Enable dynamic text updates for menu items",
+        [("dynamic", "boolean")],
+        |_, this, dynamic: bool| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_dynamic_text() requires with_menu() first",
@@ -451,10 +624,14 @@ impl LuaUserData for LuaEntityBuilder {
             };
             menu.dynamic_text = Some(dynamic);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_menu_cursor(worldsignals_key)
-        methods.add_method_mut("with_menu_cursor", |_, this, key: String| {
+    builder_method!(
+        methods, meta,
+        "with_menu_cursor", "Set cursor entity for menu",
+        [("key", "string")],
+        |_, this, key: String| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_cursor() requires with_menu() first",
@@ -462,10 +639,14 @@ impl LuaUserData for LuaEntityBuilder {
             };
             menu.cursor_entity_key = Some(key);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_menu_selection_sound(sound_key)
-        methods.add_method_mut("with_menu_selection_sound", |_, this, sound_key: String| {
+    builder_method!(
+        methods, meta,
+        "with_menu_selection_sound", "Set sound for menu selection changes",
+        [("sound_key", "string")],
+        |_, this, sound_key: String| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_selection_sound() requires with_menu() first",
@@ -473,40 +654,44 @@ impl LuaUserData for LuaEntityBuilder {
             };
             menu.selection_change_sound = Some(sound_key);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_menu_action_set_scene(item_id, scene)
-        methods.add_method_mut(
-            "with_menu_action_set_scene",
-            |_, this, (item_id, scene): (String, String)| {
-                let Some(ref mut menu) = this.cmd.menu else {
-                    return Err(LuaError::runtime(
-                        "with_menu_action_set_scene() requires with_menu() first",
-                    ));
-                };
-                menu.actions
-                    .push((item_id, MenuActionData::SetScene { scene }));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_menu_action_set_scene", "Set scene-switch action for menu item",
+        [("item_id", "string"), ("scene", "string")],
+        |_, this, (item_id, scene): (String, String)| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_action_set_scene() requires with_menu() first",
+                ));
+            };
+            menu.actions.push((item_id, MenuActionData::SetScene { scene }));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_menu_action_show_submenu(item_id, submenu)
-        methods.add_method_mut(
-            "with_menu_action_show_submenu",
-            |_, this, (item_id, submenu): (String, String)| {
-                let Some(ref mut menu) = this.cmd.menu else {
-                    return Err(LuaError::runtime(
-                        "with_menu_action_show_submenu() requires with_menu() first",
-                    ));
-                };
-                menu.actions
-                    .push((item_id, MenuActionData::ShowSubMenu { menu: submenu }));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_menu_action_show_submenu", "Set submenu action for menu item",
+        [("item_id", "string"), ("submenu", "string")],
+        |_, this, (item_id, submenu): (String, String)| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_action_show_submenu() requires with_menu() first",
+                ));
+            };
+            menu.actions.push((item_id, MenuActionData::ShowSubMenu { menu: submenu }));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_menu_action_quit(item_id)
-        methods.add_method_mut("with_menu_action_quit", |_, this, item_id: String| {
+    builder_method!(
+        methods, meta,
+        "with_menu_action_quit", "Set quit action for menu item",
+        [("item_id", "string")],
+        |_, this, item_id: String| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_action_quit() requires with_menu() first",
@@ -514,10 +699,14 @@ impl LuaUserData for LuaEntityBuilder {
             };
             menu.actions.push((item_id, MenuActionData::QuitGame));
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_menu_callback(callback_name) - Set Lua callback for menu selection
-        methods.add_method_mut("with_menu_callback", |_, this, callback: String| {
+    builder_method!(
+        methods, meta,
+        "with_menu_callback", "Set Lua callback for menu selection",
+        [("callback", "string")],
+        |_, this, callback: String| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_callback() requires with_menu() first",
@@ -525,10 +714,14 @@ impl LuaUserData for LuaEntityBuilder {
             };
             menu.on_select_callback = Some(callback);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_menu_visible_count(count) - Set maximum visible items (enables scrolling)
-        methods.add_method_mut("with_menu_visible_count", |_, this, count: usize| {
+    builder_method!(
+        methods, meta,
+        "with_menu_visible_count", "Set max visible menu items (enables scrolling)",
+        [("count", "integer")],
+        |_, this, count: usize| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_visible_count() requires with_menu() first",
@@ -536,20 +729,27 @@ impl LuaUserData for LuaEntityBuilder {
             };
             menu.visible_count = Some(count);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_signals() - Add empty Signals component
-        methods.add_method_mut("with_signals", |_, this, ()| {
+    builder_method!(
+        methods, meta,
+        "with_signals", "Add empty Signals component",
+        [],
+        |_, this, (): ()| {
             this.cmd.has_signals = true;
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_phase(table) - Add LuaPhase component with phase definitions
-        // Table format: { initial = "phase_name", phases = { phase_name = { on_enter = "fn", on_update = "fn", on_exit = "fn" } } }
-        methods.add_method_mut("with_phase", |_, this, table: LuaTable| {
+    builder_method!(
+        methods, meta,
+        "with_phase",
+        "Add phase state machine\n\nExample:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
+        [("table", "table")],
+        |_, this, table: LuaTable| {
             let initial: String = table.get("initial")?;
             let mut phases = rustc_hash::FxHashMap::default();
-
             if let Ok(phases_table) = table.get::<LuaTable>("phases") {
                 for pair in phases_table.pairs::<String, LuaTable>() {
                     let (phase_name, callbacks_table) = pair?;
@@ -561,375 +761,403 @@ impl LuaUserData for LuaEntityBuilder {
                     phases.insert(phase_name, callbacks);
                 }
             }
-
             this.cmd.phase_data = Some(PhaseData { initial, phases });
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_stuckto(target_entity_id, follow_x, follow_y) - Attach entity to another entity
-        // target_entity_id is obtained from engine.get_entity()
-        methods.add_method_mut(
-            "with_stuckto",
-            |_, this, (target_entity_id, follow_x, follow_y): (u64, bool, bool)| {
-                this.cmd.stuckto = Some(StuckToData {
-                    target_entity_id,
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                    follow_x,
-                    follow_y,
-                    stored_velocity: None,
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_stuckto", "Attach entity to a target entity",
+        [
+            ("target_entity_id", "integer"),
+            ("follow_x", "boolean"),
+            ("follow_y", "boolean"),
+        ],
+        |_, this, (target_entity_id, follow_x, follow_y): (u64, bool, bool)| {
+            this.cmd.stuckto = Some(StuckToData {
+                target_entity_id,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                follow_x,
+                follow_y,
+                stored_velocity: None,
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_stuckto_offset(offset_x, offset_y) - Set offset for StuckTo component
-        methods.add_method_mut(
-            "with_stuckto_offset",
-            |_, this, (offset_x, offset_y): (f32, f32)| {
-                if let Some(ref mut stuckto) = this.cmd.stuckto {
-                    stuckto.offset_x = offset_x;
-                    stuckto.offset_y = offset_y;
-                }
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_stuckto_offset", "Set offset for StuckTo",
+        [("offset_x", "number"), ("offset_y", "number")],
+        |_, this, (offset_x, offset_y): (f32, f32)| {
+            if let Some(ref mut stuckto) = this.cmd.stuckto {
+                stuckto.offset_x = offset_x;
+                stuckto.offset_y = offset_y;
+            }
+            Ok(this.clone())
+        }
+    );
 
-        // :with_stuckto_stored_velocity(vx, vy) - Set velocity to restore when unstuck
-        methods.add_method_mut(
-            "with_stuckto_stored_velocity",
-            |_, this, (vx, vy): (f32, f32)| {
-                if let Some(ref mut stuckto) = this.cmd.stuckto {
-                    stuckto.stored_velocity = Some((vx, vy));
-                }
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_stuckto_stored_velocity", "Set velocity to restore when unstuck",
+        [("vx", "number"), ("vy", "number")],
+        |_, this, (vx, vy): (f32, f32)| {
+            if let Some(ref mut stuckto) = this.cmd.stuckto {
+                stuckto.stored_velocity = Some((vx, vy));
+            }
+            Ok(this.clone())
+        }
+    );
 
-        // :with_lua_timer(duration, callback) - Add LuaTimer component
-        // LuaTimer calls a Lua function after duration seconds
-        methods.add_method_mut(
-            "with_lua_timer",
-            |_, this, (duration, callback): (f32, String)| {
-                this.cmd.lua_timer = Some((duration, callback));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_lua_timer", "Add a Lua timer callback",
+        [("duration", "number"), ("callback", "string")],
+        |_, this, (duration, callback): (f32, String)| {
+            this.cmd.lua_timer = Some((duration, callback));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_ttl(seconds) - Add Ttl (time-to-live) component
-        // Entity will be automatically despawned after the specified duration
-        methods.add_method_mut("with_ttl", |_, this, seconds: f32| {
+    builder_method!(
+        methods, meta,
+        "with_ttl", "Set time-to-live (auto-despawn)",
+        [("seconds", "number")],
+        |_, this, seconds: f32| {
             this.cmd.ttl = Some(seconds);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_signal_binding(key) - Bind DynamicText to a WorldSignal value
-        // The text content will auto-update when the signal changes
-        methods.add_method_mut("with_signal_binding", |_, this, key: String| {
+    builder_method!(
+        methods, meta,
+        "with_signal_binding", "Bind text to a WorldSignal value",
+        [("key", "string")],
+        |_, this, key: String| {
             this.cmd.signal_binding = Some((key, None));
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_signal_binding_format(format) - Set format string for signal binding
-        // Use {} as placeholder, e.g., "Score: {}"
-        methods.add_method_mut("with_signal_binding_format", |_, this, format: String| {
+    builder_method!(
+        methods, meta,
+        "with_signal_binding_format", "Set format string for signal binding (use {} as placeholder)",
+        [("format", "string")],
+        |_, this, format: String| {
             if let Some((key, _)) = this.cmd.signal_binding.take() {
                 this.cmd.signal_binding = Some((key, Some(format)));
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_grid_layout(path, group, zindex) - Add GridLayout component
-        // Spawns entities from a JSON grid layout file
-        methods.add_method_mut(
-            "with_grid_layout",
-            |_, this, (path, group, zindex): (String, String, f32)| {
-                this.cmd.grid_layout = Some((path, group, zindex));
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_grid_layout", "Spawn entities from a JSON grid layout",
+        [("path", "string"), ("group", "string"), ("zindex", "number")],
+        |_, this, (path, group, zindex): (String, String, f32)| {
+            this.cmd.grid_layout = Some((path, group, zindex));
+            Ok(this.clone())
+        }
+    );
 
-        // :with_tween_position(from_x, from_y, to_x, to_y, duration) - Add TweenPosition component
-        // Animates MapPosition from (from_x, from_y) to (to_x, to_y) over duration seconds
-        // Defaults: easing = "linear", loop_mode = "once"
-        methods.add_method_mut(
-            "with_tween_position",
-            |_, this, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
-                this.cmd.tween_position = Some(TweenPositionData {
-                    from_x,
-                    from_y,
-                    to_x,
-                    to_y,
-                    config: TweenConfig::new(duration),
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_tween_position", "Add position tween animation",
+        [
+            ("from_x", "number"),
+            ("from_y", "number"),
+            ("to_x", "number"),
+            ("to_y", "number"),
+            ("duration", "number"),
+        ],
+        |_, this, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
+            this.cmd.tween_position = Some(TweenPositionData {
+                from_x,
+                from_y,
+                to_x,
+                to_y,
+                config: TweenConfig::new(duration),
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_tween_position_easing(easing) - Set easing for TweenPosition
-        // Valid values: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
-        methods.add_method_mut("with_tween_position_easing", |_, this, easing: String| {
+    builder_method!(
+        methods, meta,
+        "with_tween_position_easing", "Set easing for position tween",
+        [("easing", "string")],
+        |_, this, easing: String| {
             if let Some(ref mut tween) = this.cmd.tween_position {
                 tween.config.easing = easing;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_position_loop(loop_mode) - Set loop mode for TweenPosition
-        // Valid values: "once", "loop", "ping_pong"
-        methods.add_method_mut("with_tween_position_loop", |_, this, loop_mode: String| {
+    builder_method!(
+        methods, meta,
+        "with_tween_position_loop", "Set loop mode for position tween",
+        [("loop_mode", "string")],
+        |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_position {
                 tween.config.loop_mode = loop_mode;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_position_backwards() - Start position tween from the end, playing in reverse
-        methods.add_method_mut("with_tween_position_backwards", |_, this, ()| {
+    builder_method!(
+        methods, meta,
+        "with_tween_position_backwards", "Start position tween in reverse",
+        [],
+        |_, this, (): ()| {
             if let Some(ref mut tween) = this.cmd.tween_position {
                 tween.config.backwards = true;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_rotation(from, to, duration) - Add TweenRotation component
-        // Animates Rotation from `from` to `to` degrees over duration seconds
-        // Defaults: easing = "linear", loop_mode = "once"
-        methods.add_method_mut(
-            "with_tween_rotation",
-            |_, this, (from, to, duration): (f32, f32, f32)| {
-                this.cmd.tween_rotation = Some(TweenRotationData {
-                    from,
-                    to,
-                    config: TweenConfig::new(duration),
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_tween_rotation", "Add rotation tween animation",
+        [("from", "number"), ("to", "number"), ("duration", "number")],
+        |_, this, (from, to, duration): (f32, f32, f32)| {
+            this.cmd.tween_rotation = Some(TweenRotationData {
+                from,
+                to,
+                config: TweenConfig::new(duration),
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_tween_rotation_easing(easing) - Set easing for TweenRotation
-        methods.add_method_mut("with_tween_rotation_easing", |_, this, easing: String| {
+    builder_method!(
+        methods, meta,
+        "with_tween_rotation_easing", "Set easing for rotation tween",
+        [("easing", "string")],
+        |_, this, easing: String| {
             if let Some(ref mut tween) = this.cmd.tween_rotation {
                 tween.config.easing = easing;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_rotation_loop(loop_mode) - Set loop mode for TweenRotation
-        methods.add_method_mut("with_tween_rotation_loop", |_, this, loop_mode: String| {
+    builder_method!(
+        methods, meta,
+        "with_tween_rotation_loop", "Set loop mode for rotation tween",
+        [("loop_mode", "string")],
+        |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_rotation {
                 tween.config.loop_mode = loop_mode;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_rotation_backwards() - Start rotation tween from the end, playing in reverse
-        methods.add_method_mut("with_tween_rotation_backwards", |_, this, ()| {
+    builder_method!(
+        methods, meta,
+        "with_tween_rotation_backwards", "Start rotation tween in reverse",
+        [],
+        |_, this, (): ()| {
             if let Some(ref mut tween) = this.cmd.tween_rotation {
                 tween.config.backwards = true;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_scale(from_x, from_y, to_x, to_y, duration) - Add TweenScale component
-        // Animates Scale from (from_x, from_y) to (to_x, to_y) over duration seconds
-        // Defaults: easing = "linear", loop_mode = "once"
-        methods.add_method_mut(
-            "with_tween_scale",
-            |_, this, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
-                this.cmd.tween_scale = Some(TweenScaleData {
-                    from_x,
-                    from_y,
-                    to_x,
-                    to_y,
-                    config: TweenConfig::new(duration),
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_tween_scale", "Add scale tween animation",
+        [
+            ("from_x", "number"),
+            ("from_y", "number"),
+            ("to_x", "number"),
+            ("to_y", "number"),
+            ("duration", "number"),
+        ],
+        |_, this, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
+            this.cmd.tween_scale = Some(TweenScaleData {
+                from_x,
+                from_y,
+                to_x,
+                to_y,
+                config: TweenConfig::new(duration),
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_tween_scale_easing(easing) - Set easing for TweenScale
-        methods.add_method_mut("with_tween_scale_easing", |_, this, easing: String| {
+    builder_method!(
+        methods, meta,
+        "with_tween_scale_easing", "Set easing for scale tween",
+        [("easing", "string")],
+        |_, this, easing: String| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
                 tween.config.easing = easing;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_scale_loop(loop_mode) - Set loop mode for TweenScale
-        methods.add_method_mut("with_tween_scale_loop", |_, this, loop_mode: String| {
+    builder_method!(
+        methods, meta,
+        "with_tween_scale_loop", "Set loop mode for scale tween",
+        [("loop_mode", "string")],
+        |_, this, loop_mode: String| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
                 tween.config.loop_mode = loop_mode;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tween_scale_backwards() - Start scale tween from the end, playing in reverse
-        methods.add_method_mut("with_tween_scale_backwards", |_, this, ()| {
+    builder_method!(
+        methods, meta,
+        "with_tween_scale_backwards", "Start scale tween in reverse",
+        [],
+        |_, this, (): ()| {
             if let Some(ref mut tween) = this.cmd.tween_scale {
                 tween.config.backwards = true;
             }
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_lua_collision_rule(group_a, group_b, callback) - Add LuaCollisionRule component
-        // Registers a collision callback between two entity groups
-        // callback is the name of a Lua function to call when collision occurs
-        methods.add_method_mut(
-            "with_lua_collision_rule",
-            |_, this, (group_a, group_b, callback): (String, String, String)| {
-                this.cmd.lua_collision_rule = Some(LuaCollisionRuleData {
-                    group_a,
-                    group_b,
-                    callback,
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_lua_collision_rule", "Add collision callback between two groups",
+        [("group_a", "string"), ("group_b", "string"), ("callback", "string")],
+        |_, this, (group_a, group_b, callback): (String, String, String)| {
+            this.cmd.lua_collision_rule = Some(LuaCollisionRuleData {
+                group_a,
+                group_b,
+                callback,
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_animation(animation_key) - Add Animation component
-        // The animation_key refers to an animation registered via engine.register_animation()
-        methods.add_method_mut("with_animation", |_, this, animation_key: String| {
+    builder_method!(
+        methods, meta,
+        "with_animation", "Set animation by key",
+        [("animation_key", "string")],
+        |_, this, animation_key: String| {
             this.cmd.animation = Some(AnimationData { animation_key });
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_animation_controller(fallback_key) - Add AnimationController component
-        // The fallback_key is the default animation when no rules match
-        methods.add_method_mut(
-            "with_animation_controller",
-            |_, this, fallback_key: String| {
-                this.cmd.animation_controller = Some(AnimationControllerData {
-                    fallback_key,
-                    rules: Vec::new(),
-                });
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_animation_controller", "Add animation controller with fallback",
+        [("fallback_key", "string")],
+        |_, this, fallback_key: String| {
+            this.cmd.animation_controller = Some(AnimationControllerData {
+                fallback_key,
+                rules: Vec::new(),
+            });
+            Ok(this.clone())
+        }
+    );
 
-        // :with_animation_rule(condition_table, set_key) - Add rule to AnimationController
-        // condition_table format: { type = "has_flag", key = "moving" }
-        // or { type = "lacks_flag", key = "moving" }
-        // or { type = "scalar_cmp", key = "speed", op = "gt", value = 50.0 }
-        // or { type = "scalar_range", key = "speed", min = 5.0, max = 50.0, inclusive = true }
-        // or { type = "integer_cmp", key = "hp", op = "le", value = 0 }
-        // or { type = "integer_range", key = "hp", min = 0, max = 10, inclusive = true }
-        // or { type = "all", conditions = { ... } }
-        // or { type = "any", conditions = { ... } }
-        // or { type = "not", condition = { ... } }
-        methods.add_method_mut(
-            "with_animation_rule",
-            |_, this, (condition_table, set_key): (LuaTable, String)| {
-                fn parse_condition(table: &LuaTable) -> LuaResult<AnimationConditionData> {
-                    let cond_type: String = table.get("type")?;
-                    match cond_type.as_str() {
-                        "has_flag" => {
-                            let key: String = table.get("key")?;
-                            Ok(AnimationConditionData::HasFlag { key })
-                        }
-                        "lacks_flag" => {
-                            let key: String = table.get("key")?;
-                            Ok(AnimationConditionData::LacksFlag { key })
-                        }
-                        "scalar_cmp" => {
-                            let key: String = table.get("key")?;
-                            let op: String = table.get("op")?;
-                            let value: f32 = table.get("value")?;
-                            Ok(AnimationConditionData::ScalarCmp { key, op, value })
-                        }
-                        "scalar_range" => {
-                            let key: String = table.get("key")?;
-                            let min: f32 = table.get("min")?;
-                            let max: f32 = table.get("max")?;
-                            let inclusive: bool = table.get("inclusive").unwrap_or(true);
-                            Ok(AnimationConditionData::ScalarRange {
-                                key,
-                                min,
-                                max,
-                                inclusive,
-                            })
-                        }
-                        "integer_cmp" => {
-                            let key: String = table.get("key")?;
-                            let op: String = table.get("op")?;
-                            let value: i32 = table.get("value")?;
-                            Ok(AnimationConditionData::IntegerCmp { key, op, value })
-                        }
-                        "integer_range" => {
-                            let key: String = table.get("key")?;
-                            let min: i32 = table.get("min")?;
-                            let max: i32 = table.get("max")?;
-                            let inclusive: bool = table.get("inclusive").unwrap_or(true);
-                            Ok(AnimationConditionData::IntegerRange {
-                                key,
-                                min,
-                                max,
-                                inclusive,
-                            })
-                        }
-                        "all" => {
-                            let conditions_table: LuaTable = table.get("conditions")?;
-                            let mut conditions = Vec::new();
-                            for value in conditions_table.sequence_values::<LuaTable>() {
-                                conditions.push(parse_condition(&value?)?);
-                            }
-                            Ok(AnimationConditionData::All(conditions))
-                        }
-                        "any" => {
-                            let conditions_table: LuaTable = table.get("conditions")?;
-                            let mut conditions = Vec::new();
-                            for value in conditions_table.sequence_values::<LuaTable>() {
-                                conditions.push(parse_condition(&value?)?);
-                            }
-                            Ok(AnimationConditionData::Any(conditions))
-                        }
-                        "not" => {
-                            let inner_table: LuaTable = table.get("condition")?;
-                            let inner = parse_condition(&inner_table)?;
-                            Ok(AnimationConditionData::Not(Box::new(inner)))
-                        }
-                        _ => Err(LuaError::runtime(format!(
-                            "Unknown condition type: {}",
-                            cond_type
-                        ))),
+    builder_method!(
+        methods, meta,
+        "with_animation_rule", "Add animation rule to controller",
+        [("condition_table", "table"), ("set_key", "string")],
+        |_, this, (condition_table, set_key): (LuaTable, String)| {
+            fn parse_condition(table: &LuaTable) -> LuaResult<AnimationConditionData> {
+                let cond_type: String = table.get("type")?;
+                match cond_type.as_str() {
+                    "has_flag" => {
+                        let key: String = table.get("key")?;
+                        Ok(AnimationConditionData::HasFlag { key })
                     }
+                    "lacks_flag" => {
+                        let key: String = table.get("key")?;
+                        Ok(AnimationConditionData::LacksFlag { key })
+                    }
+                    "scalar_cmp" => {
+                        let key: String = table.get("key")?;
+                        let op: String = table.get("op")?;
+                        let value: f32 = table.get("value")?;
+                        Ok(AnimationConditionData::ScalarCmp { key, op, value })
+                    }
+                    "scalar_range" => {
+                        let key: String = table.get("key")?;
+                        let min: f32 = table.get("min")?;
+                        let max: f32 = table.get("max")?;
+                        let inclusive: bool = table.get("inclusive").unwrap_or(true);
+                        Ok(AnimationConditionData::ScalarRange { key, min, max, inclusive })
+                    }
+                    "integer_cmp" => {
+                        let key: String = table.get("key")?;
+                        let op: String = table.get("op")?;
+                        let value: i32 = table.get("value")?;
+                        Ok(AnimationConditionData::IntegerCmp { key, op, value })
+                    }
+                    "integer_range" => {
+                        let key: String = table.get("key")?;
+                        let min: i32 = table.get("min")?;
+                        let max: i32 = table.get("max")?;
+                        let inclusive: bool = table.get("inclusive").unwrap_or(true);
+                        Ok(AnimationConditionData::IntegerRange { key, min, max, inclusive })
+                    }
+                    "all" => {
+                        let conditions_table: LuaTable = table.get("conditions")?;
+                        let mut conditions = Vec::new();
+                        for value in conditions_table.sequence_values::<LuaTable>() {
+                            conditions.push(parse_condition(&value?)?);
+                        }
+                        Ok(AnimationConditionData::All(conditions))
+                    }
+                    "any" => {
+                        let conditions_table: LuaTable = table.get("conditions")?;
+                        let mut conditions = Vec::new();
+                        for value in conditions_table.sequence_values::<LuaTable>() {
+                            conditions.push(parse_condition(&value?)?);
+                        }
+                        Ok(AnimationConditionData::Any(conditions))
+                    }
+                    "not" => {
+                        let inner_table: LuaTable = table.get("condition")?;
+                        let inner = parse_condition(&inner_table)?;
+                        Ok(AnimationConditionData::Not(Box::new(inner)))
+                    }
+                    _ => Err(LuaError::runtime(format!(
+                        "Unknown condition type: {}",
+                        cond_type
+                    ))),
                 }
+            }
 
-                let Some(ref mut controller) = this.cmd.animation_controller else {
-                    return Err(LuaError::runtime(
-                        "with_animation_rule() requires with_animation_controller() first",
-                    ));
-                };
-
-                let condition = parse_condition(&condition_table)?;
-                controller
-                    .rules
-                    .push(AnimationRuleData { condition, set_key });
-                Ok(this.clone())
-            },
-        );
-
-        // :with_particle_emitter(table) - Add ParticleEmitter component
-        // Table format:
-        // {
-        //   templates = { "key1", "key2" },  -- WorldSignals keys for template entities
-        //   shape = "point",                 -- or { kind = "rect", width = 16, height = 8 }
-        //   offset = { x = 0, y = -10 },     -- optional, defaults to {0, 0}
-        //   particles_per_emission = 6,
-        //   emissions_per_second = 12,
-        //   emissions_remaining = 30,
-        //   arc = { -30, 30 },               -- degrees, 0° = up
-        //   speed = { 50, 120 },
-        //   ttl = { min = 0.4, max = 0.9 },  -- or number for fixed, or "none"
-        // }
-        methods.add_method_mut("with_particle_emitter", |_, this, table: LuaTable| {
-            use super::spawn_data::{
-                ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData,
+            let Some(ref mut controller) = this.cmd.animation_controller else {
+                return Err(LuaError::runtime(
+                    "with_animation_rule() requires with_animation_controller() first",
+                ));
             };
+
+            let condition = parse_condition(&condition_table)?;
+            controller.rules.push(AnimationRuleData { condition, set_key });
+            Ok(this.clone())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_particle_emitter", "Add particle emitter",
+        [("table", "table")],
+        |_, this, table: LuaTable| {
+            use super::spawn_data::{ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData};
 
             let mut data = ParticleEmitterData::default();
 
-            // Parse templates (required)
             if let Ok(templates_table) = table.get::<LuaTable>("templates") {
                 let mut keys = Vec::new();
                 for key in templates_table.sequence_values::<String>().flatten() {
@@ -938,7 +1166,6 @@ impl LuaUserData for LuaEntityBuilder {
                 data.template_keys = keys;
             }
 
-            // Parse shape (optional, defaults to point)
             if let Ok(shape_value) = table.get::<LuaValue>("shape") {
                 match shape_value {
                     LuaValue::String(s) if s.to_string_lossy() == "point" => {
@@ -959,13 +1186,11 @@ impl LuaUserData for LuaEntityBuilder {
                 }
             }
 
-            // Parse offset (optional)
             if let Ok(offset_table) = table.get::<LuaTable>("offset") {
                 data.offset_x = offset_table.get("x").unwrap_or(0.0);
                 data.offset_y = offset_table.get("y").unwrap_or(0.0);
             }
 
-            // Parse emission parameters (optional, have defaults)
             if let Ok(v) = table.get::<u32>("particles_per_emission") {
                 data.particles_per_emission = v;
             }
@@ -976,11 +1201,9 @@ impl LuaUserData for LuaEntityBuilder {
                 data.emissions_remaining = v;
             }
 
-            // Parse arc (optional)
             if let Ok(arc_table) = table.get::<LuaTable>("arc") {
                 let min: f32 = arc_table.get(1).unwrap_or(0.0);
                 let max: f32 = arc_table.get(2).unwrap_or(360.0);
-                // Normalize so min <= max
                 if min <= max {
                     data.arc_min_deg = min;
                     data.arc_max_deg = max;
@@ -990,11 +1213,9 @@ impl LuaUserData for LuaEntityBuilder {
                 }
             }
 
-            // Parse speed (optional)
             if let Ok(speed_table) = table.get::<LuaTable>("speed") {
                 let min: f32 = speed_table.get(1).unwrap_or(50.0);
                 let max: f32 = speed_table.get(2).unwrap_or(100.0);
-                // Normalize so min <= max
                 if min <= max {
                     data.speed_min = min;
                     data.speed_max = max;
@@ -1004,7 +1225,6 @@ impl LuaUserData for LuaEntityBuilder {
                 }
             }
 
-            // Parse ttl (optional)
             if let Ok(ttl_value) = table.get::<LuaValue>("ttl") {
                 match ttl_value {
                     LuaValue::String(s) if s.to_string_lossy() == "none" => {
@@ -1031,22 +1251,24 @@ impl LuaUserData for LuaEntityBuilder {
 
             this.cmd.particle_emitter = Some(data);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tint(r, g, b, a) - Set color tint for rendering
-        // RGBA values are 0-255
-        methods.add_method_mut("with_tint", |_, this, (r, g, b, a): (u8, u8, u8, u8)| {
+    builder_method!(
+        methods, meta,
+        "with_tint", "Set color tint (RGBA 0-255)",
+        [("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")],
+        |_, this, (r, g, b, a): (u8, u8, u8, u8)| {
             this.cmd.tint = Some((r, g, b, a));
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_shader(shader_key, uniforms_table?) - Add EntityShader component
-        // shader_key is the shader ID from engine.load_shader()
-        // uniforms_table is an optional table of { name = value } where value is:
-        //   - number (Float)
-        //   - {x, y} array (Vec2)
-        //   - {x, y, z, w} array (Vec4)
-        methods.add_method_mut("with_shader", |_, this, args: mlua::MultiValue| {
+    builder_method!(
+        methods, meta,
+        "with_shader", "Set per-entity shader with optional uniforms",
+        [("shader_key", "string"), ("uniforms", "table?")],
+        |_, this, args: mlua::MultiValue| {
             let mut iter = args.into_iter();
             let key_val = iter
                 .next()
@@ -1069,93 +1291,113 @@ impl LuaUserData for LuaEntityBuilder {
                 }
             }
 
-            this.cmd.shader = Some(EntityShaderData {
-                key: shader_key,
-                uniforms,
-            });
+            this.cmd.shader = Some(EntityShaderData { key: shader_key, uniforms });
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :register_as(key) - Register spawned entity in WorldSignals with this key
-        // This allows Lua to retrieve the entity ID later via engine.get_entity(key)
-        methods.add_method_mut("register_as", |_, this, key: String| {
-            this.cmd.register_as = Some(key);
-            Ok(this.clone())
-        });
-
-        // :with_parent(parent_id) - Set parent entity for transform hierarchy
-        // parent_id is obtained from engine.get_entity()
-        // Inserts ChildOf + GlobalTransform2D on the spawned entity
-        methods.add_method_mut("with_parent", |_, this, parent_id: u64| {
+    builder_method!(
+        methods, meta,
+        "with_parent", "Set parent entity for transform hierarchy",
+        [("parent_id", "integer")],
+        |_, this, parent_id: u64| {
             this.cmd.parent = Some(parent_id);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_tilemap(path) - Spawn tilemap root; tile entities become ChildOf children
-        methods.add_method_mut("with_tilemap", |_, this, path: String| {
+    builder_method!(
+        methods, meta,
+        "with_tilemap",
+        "Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.",
+        [("path", "string")],
+        |_, this, path: String| {
             this.cmd.tilemap_path = Some(path);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_lua_setup(callback) - Attach a one-shot Lua setup callback
-        methods.add_method_mut("with_lua_setup", |_, this, callback: String| {
+    builder_method!(
+        methods, meta,
+        "with_lua_setup",
+        "Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.",
+        [("callback", "string")],
+        |_, this, callback: String| {
             this.cmd.lua_setup = Some(callback);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_on_animation_end(callback) - Call fn(ctx, input) once when the non-looped animation finishes
-        methods.add_method_mut("with_on_animation_end", |_, this, callback: String| {
+    builder_method!(
+        methods, meta,
+        "with_on_animation_end",
+        "Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.",
+        [("fn_name", "string")],
+        |_, this, callback: String| {
             this.cmd.lua_on_animation_end = Some(callback);
             Ok(this.clone())
-        });
+        }
+    );
 
-        // :with_camera_target(priority?, zoom?) - Mark entity as camera follow target.
-        // priority defaults to 0; higher values take precedence.
-        // zoom is the desired camera zoom when this target wins (default 1.0).
-        methods.add_method_mut(
-            "with_camera_target",
-            |_, this, (priority, zoom): (Option<u8>, Option<f32>)| {
-                this.cmd.camera_target = Some(priority.unwrap_or(0));
-                this.cmd.camera_target_zoom = zoom;
-                Ok(this.clone())
-            },
-        );
+    builder_method!(
+        methods, meta,
+        "with_camera_target",
+        "Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).",
+        [("priority", "integer?"), ("zoom", "number?")],
+        |_, this, (priority, zoom): (Option<u8>, Option<f32>)| {
+            this.cmd.camera_target = Some(priority.unwrap_or(0));
+            this.cmd.camera_target_zoom = zoom;
+            Ok(this.clone())
+        }
+    );
 
-        // :build() - Queue the entity for spawning or cloning
-        methods.add_method("build", |lua, this, ()| {
-            let app_data = lua
-                .app_data_ref::<LuaAppData>()
-                .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+    // Non-builder-stub methods — kept as plain registrations.
+    // These have their own entries in stub_meta's non-BUILDER_METHODS sections.
 
-            match (this.mode, this.context) {
-                (BuilderMode::Spawn, BuilderContext::Regular) => {
-                    app_data.spawn_commands.borrow_mut().push(this.cmd.clone());
-                }
-                (BuilderMode::Spawn, BuilderContext::Collision) => {
-                    app_data
-                        .collision_spawn_commands
-                        .borrow_mut()
-                        .push(this.cmd.clone());
-                }
-                (BuilderMode::Clone, BuilderContext::Regular) => {
-                    let source_key = this.source_key.clone().unwrap_or_default();
-                    app_data.clone_commands.borrow_mut().push(CloneCmd {
+    methods.add_method_mut("register_as", |_, this, key: String| {
+        this.cmd.register_as = Some(key);
+        Ok(this.clone())
+    });
+
+    methods.add_method("build", |lua, this, ()| {
+        let app_data = lua
+            .app_data_ref::<LuaAppData>()
+            .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+
+        match (this.mode, this.context) {
+            (BuilderMode::Spawn, BuilderContext::Regular) => {
+                app_data.spawn_commands.borrow_mut().push(this.cmd.clone());
+            }
+            (BuilderMode::Spawn, BuilderContext::Collision) => {
+                app_data
+                    .collision_spawn_commands
+                    .borrow_mut()
+                    .push(this.cmd.clone());
+            }
+            (BuilderMode::Clone, BuilderContext::Regular) => {
+                let source_key = this.source_key.clone().unwrap_or_default();
+                app_data.clone_commands.borrow_mut().push(CloneCmd {
+                    source_key,
+                    overrides: this.cmd.clone(),
+                });
+            }
+            (BuilderMode::Clone, BuilderContext::Collision) => {
+                let source_key = this.source_key.clone().unwrap_or_default();
+                app_data
+                    .collision_clone_commands
+                    .borrow_mut()
+                    .push(CloneCmd {
                         source_key,
                         overrides: this.cmd.clone(),
                     });
-                }
-                (BuilderMode::Clone, BuilderContext::Collision) => {
-                    let source_key = this.source_key.clone().unwrap_or_default();
-                    app_data
-                        .collision_clone_commands
-                        .borrow_mut()
-                        .push(CloneCmd {
-                            source_key,
-                            overrides: this.cmd.clone(),
-                        });
-                }
             }
-            Ok(())
-        });
+        }
+        Ok(())
+    });
+}
+
+impl LuaUserData for LuaEntityBuilder {
+    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
+        register_methods(methods, &mut None);
     }
 }

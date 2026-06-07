@@ -163,12 +163,14 @@ engine = {}
 ---@field max number|nil Range maximum (for range conditions)
 ---@field conditions AnimationRuleCondition[]|nil Sub-conditions (for all/any/not)
 
----Visible world-space rectangle returned by engine.get_camera_view_rect(). Assumes zero rotation.
----@class CameraViewRect
----@field x number Left edge in world space
----@field y number Top edge in world space
----@field w number Width in world units
----@field h number Height in world units
+---Camera state returned by engine.get_camera()
+---@class CameraState
+---@field target_x number Camera target world X
+---@field target_y number Camera target world Y
+---@field offset_x number Camera screen offset X
+---@field offset_y number Camera screen offset Y
+---@field rotation number Camera rotation in degrees
+---@field zoom number Camera zoom factor
 
 ---Analog input values (mouse, scroll)
 ---@class AnalogInputs
@@ -178,14 +180,12 @@ engine = {}
 ---@field mouse_world_x number Cursor X in world-space (after camera transform, matches MapPosition)
 ---@field mouse_world_y number Cursor Y in world-space (after camera transform, matches MapPosition)
 
----Camera state returned by engine.get_camera()
----@class CameraState
----@field target_x number Camera target world X
----@field target_y number Camera target world Y
----@field offset_x number Camera screen offset X
----@field offset_y number Camera screen offset Y
----@field rotation number Camera rotation in degrees
----@field zoom number Camera zoom factor
+---Visible world-space rectangle returned by engine.get_camera_view_rect(). Assumes zero rotation.
+---@class CameraViewRect
+---@field x number Left edge in world space
+---@field y number Top edge in world space
+---@field w number Width in world units
+---@field h number Height in world units
 
 -- ==================== Enums ====================
 
