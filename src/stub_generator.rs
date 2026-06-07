@@ -307,8 +307,15 @@ fn extract_types(meta: &LuaTable) -> Result<Vec<TypeMeta>, LuaError> {
         "ParticleEmitterConfig",
         "MenuItem",
         "AnimationRuleCondition",
+        "CameraState",
+        "AnalogInputs",
+        "CameraViewRect",
     ];
-    result.sort_by_key(|t| type_order.iter().position(|n| *n == t.name).unwrap_or(99));
+    result.sort_by(|a, b| {
+        let a_order = type_order.iter().position(|n| *n == a.name).unwrap_or(99);
+        let b_order = type_order.iter().position(|n| *n == b.name).unwrap_or(99);
+        a_order.cmp(&b_order).then_with(|| a.name.cmp(&b.name))
+    });
     Ok(result)
 }
 
