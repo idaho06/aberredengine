@@ -12,6 +12,7 @@
 use crate::components::persistent::Persistent;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
+use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::*;
 use log::info;
@@ -38,7 +39,7 @@ pub fn state_is_playing(state: Res<GameState>) -> bool {
 /// Signal application exit via raylib and set the `quit_game` world signal flag.
 pub fn quit_game(mut world_signals: ResMut<WorldSignals>, mut rl: NonSendMut<RaylibHandle>) {
     info!("Quitting game...");
-    world_signals.set_flag("quit_game");
+    world_signals.set_flag(sk::QUIT_GAME);
     rl.request_quit();
 }
 

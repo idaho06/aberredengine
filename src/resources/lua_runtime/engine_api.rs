@@ -5,6 +5,7 @@
 use super::commands::*;
 use super::entity_builder::LuaEntityBuilder;
 use super::runtime::{LuaAppData, LuaRuntime};
+use crate::resources::signal_keys as sk;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
 
@@ -965,11 +966,11 @@ impl LuaRuntime {
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
                 let mut cmds = data.signal_commands.borrow_mut();
                 cmds.push(SignalCmd::SetString {
-                    key: "scene".into(),
+                    key: sk::SCENE.into(),
                     value: scene_name,
                 });
                 cmds.push(SignalCmd::SetFlag {
-                    key: "switch_scene".into(),
+                    key: sk::SWITCH_SCENE.into(),
                 });
                 Ok(())
             })?,
@@ -991,7 +992,7 @@ impl LuaRuntime {
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
                 data.signal_commands.borrow_mut().push(SignalCmd::SetFlag {
-                    key: "quit_game".into(),
+                    key: sk::QUIT_GAME.into(),
                 });
                 Ok(())
             })?,

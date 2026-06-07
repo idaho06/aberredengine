@@ -23,6 +23,7 @@ use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::GameStates::Quitting;
+use crate::resources::signal_keys as sk;
 use crate::resources::gamestate::NextGameState;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
@@ -708,7 +709,7 @@ fn dispatch_menu_action(
                 "menu_selection_observer: SetScene action found, scene_name={}",
                 scene_name
             );
-            ctx.world_signals.set_string("scene", scene_name.clone());
+            ctx.world_signals.set_string(sk::SCENE, scene_name.clone());
             ctx.commands.run_system(
                 *systems_store
                     .get("switch_scene")

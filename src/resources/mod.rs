@@ -51,6 +51,7 @@ pub mod rendertarget;
 pub mod scenemanager;
 pub mod screensize;
 pub mod shaderstore;
+pub mod signal_keys;
 pub mod systemsstore;
 pub mod texturestore;
 pub mod uniformvalue;

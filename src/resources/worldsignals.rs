@@ -34,6 +34,7 @@
 //! }
 //! ```
 
+use crate::resources::signal_keys as sk;
 use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
@@ -154,7 +155,7 @@ impl WorldSignals {
     /// Set an integer signal value.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         let key = key.into();
-        if let Some(group_name) = key.strip_prefix("group_count:") {
+        if let Some(group_name) = key.strip_prefix(sk::GROUP_COUNT_PREFIX) {
             self.group_counts
                 .insert(group_name.to_string(), value as u32);
             self.group_counts_dirty = true;
@@ -174,7 +175,7 @@ impl WorldSignals {
     pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
         use std::fmt::Write;
         let mut buf = arrayvec::ArrayString::<64>::new();
-        let _ = write!(buf, "group_count:{}", group_name);
+        let _ = write!(buf, "{}{}", sk::GROUP_COUNT_PREFIX, group_name);
         self.integers.get(buf.as_str()).copied()
     }
 
@@ -186,7 +187,7 @@ impl WorldSignals {
     pub fn set_group_count(&mut self, group_name: &str, count: i32) {
         use std::fmt::Write;
         let mut buf = arrayvec::ArrayString::<64>::new();
-        let _ = write!(buf, "group_count:{}", group_name);
+        let _ = write!(buf, "{}{}", sk::GROUP_COUNT_PREFIX, group_name);
         let current = self.integers.get(buf.as_str()).copied();
         if current != Some(count) {
             self.integers.insert(buf.to_string(), count);
@@ -204,7 +205,7 @@ impl WorldSignals {
             .integers
             .keys()
             .filter(|k| k.starts_with(prefix))
-            .filter_map(|k| k.strip_prefix("group_count:").map(str::to_string))
+            .filter_map(|k| k.strip_prefix(sk::GROUP_COUNT_PREFIX).map(str::to_string))
             .collect();
         let before = self.integers.len();
         self.integers.retain(|k, _| !k.starts_with(prefix));
@@ -220,7 +221,7 @@ impl WorldSignals {
     }
     /// Remove integer signals for group counting.
     pub fn clear_group_counts(&mut self) {
-        self.clear_integer_prefix("group_count:");
+        self.clear_integer_prefix(sk::GROUP_COUNT_PREFIX);
     }
     /// Set a string signal value.
     pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
@@ -253,7 +254,7 @@ impl WorldSignals {
         let result = self.integers.remove(key);
         if result.is_some() {
             self.integers_dirty = true;
-            if let Some(group_name) = key.strip_prefix("group_count:") {
+            if let Some(group_name) = key.strip_prefix(sk::GROUP_COUNT_PREFIX) {
                 self.group_counts.remove(group_name);
                 self.group_counts_dirty = true;
             }
@@ -873,7 +874,7 @@ mod tests {
     fn test_clear_integer_syncs_group_counts() {
         let mut ws = WorldSignals::default();
         ws.set_group_count("enemy", 5);
-        ws.clear_integer("group_count:enemy");
+        ws.clear_integer(&format!("{}enemy", sk::GROUP_COUNT_PREFIX));
         assert_eq!(ws.get_group_count("enemy"), None);
         let snap = ws.snapshot();
         assert_eq!(
@@ -886,7 +887,7 @@ mod tests {
     #[test]
     fn test_set_integer_syncs_group_counts() {
         let mut ws = WorldSignals::default();
-        ws.set_integer("group_count:enemy", 7);
+        ws.set_integer(format!("{}enemy", sk::GROUP_COUNT_PREFIX), 7);
         let snap = ws.snapshot();
         assert_eq!(
             snap.group_counts.get("enemy"),

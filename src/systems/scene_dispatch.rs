@@ -37,6 +37,7 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -210,9 +211,9 @@ pub fn scene_switch_system(
 
     let scene_name = ctx
         .world_signals
-        .get_string("scene")
+        .get_string(sk::SCENE)
         .cloned()
-        .unwrap_or_else(|| "menu".to_string());
+        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
 
     // Call on_exit for the previous scene
     if let Some(ref prev_name) = prev_scene
@@ -274,7 +275,7 @@ pub fn scene_switch_poll(
     mut world_signals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
 ) {
-    if world_signals.take_flag("switch_scene") {
+    if world_signals.take_flag(sk::SWITCH_SCENE) {
         commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
 }
@@ -299,7 +300,7 @@ pub fn scene_enter_play(
         .cloned()
         .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
 
-    world_signals.set_string("scene", initial);
+    world_signals.set_string(sk::SCENE, initial);
 
     commands.run_system(*systems_store.get("switch_scene").expect(
         "'switch_scene' system not registered; validate_required_systems should have caught this",

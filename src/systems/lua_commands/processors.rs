@@ -323,18 +323,15 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
         CameraFollowCmd::SetDeadzone { half_w, half_h } => {
             config.mode = FollowMode::Deadzone { half_w, half_h };
         }
-        CameraFollowCmd::SetEasing { easing } => match easing.as_str() {
-            "linear" => config.easing = EasingCurve::Linear,
-            "ease_out" => config.easing = EasingCurve::EaseOut,
-            "ease_in" => config.easing = EasingCurve::EaseIn,
-            "ease_in_out" => config.easing = EasingCurve::EaseInOut,
-            other => {
-                warn!(
+        CameraFollowCmd::SetEasing { easing } => {
+            match easing.parse::<EasingCurve>() {
+                Ok(curve) => config.easing = curve,
+                Err(_) => warn!(
                     "Unknown camera follow easing '{}'; expected \"linear\", \"ease_out\", \"ease_in\", or \"ease_in_out\"",
-                    other
-                );
+                    easing
+                ),
             }
-        },
+        }
         CameraFollowCmd::SetSpeed { speed } => {
             config.lerp_speed = speed;
         }

@@ -35,6 +35,7 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 
+use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
@@ -285,9 +286,9 @@ pub fn update(
 
     let scene_str = scene_state
         .world_signals
-        .get_string("scene")
+        .get_string(sk::SCENE)
         .map(|s| s.as_str())
-        .unwrap_or("menu");
+        .unwrap_or(sk::DEFAULT_SCENE);
 
     if cached_callback.get("on_update_".len()..) != Some(scene_str) {
         cached_callback.clear();
@@ -337,13 +338,13 @@ pub fn update(
     );
 
     // Check for quit flag (set by Lua)
-    if scene_state.world_signals.take_flag("quit_game") {
+    if scene_state.world_signals.take_flag(sk::QUIT_GAME) {
         next_game_state.set(GameStates::Quitting);
         return;
     }
 
     // Check for scene switch flag (set by Lua)
-    if scene_state.world_signals.take_flag("switch_scene") {
+    if scene_state.world_signals.take_flag(sk::SWITCH_SCENE) {
         debug!("Scene switch requested in world signals.");
         commands.run_system(*scene_state.systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
@@ -388,9 +389,9 @@ pub fn switch_scene(
 
     let scene = scene_state
         .world_signals
-        .get_string("scene")
+        .get_string(sk::SCENE)
         .cloned()
-        .unwrap_or_else(|| "menu".to_string());
+        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
 
     // Call Lua on_switch_scene function if it exists
     if lua_runtime.has_function("on_switch_scene")

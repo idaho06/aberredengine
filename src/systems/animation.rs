@@ -27,6 +27,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::events::animation::AnimationFinishedEvent;
 use crate::resources::animationstore::AnimationStore;
+use crate::resources::signal_keys as sk;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldtime::WorldTime;
 
@@ -60,7 +61,7 @@ pub fn animation(
                 && anim_comp.frame_index == 0
                 && let Some(signals) = maybe_signals.as_mut()
             {
-                signals.clear_flag("animation_ended");
+                signals.clear_flag(sk::ANIMATION_ENDED);
             }
             if anim_comp.finished {
                 continue;
@@ -78,7 +79,7 @@ pub fn animation(
                     } else {
                         anim_comp.frame_index = animation.frame_count - 1; // stay on last frame
                         if let Some(signals) = maybe_signals.as_mut() {
-                            signals.set_flag("animation_ended");
+                            signals.set_flag(sk::ANIMATION_ENDED);
                         }
                         if !anim_comp.finished {
                             anim_comp.finished = true;
@@ -86,7 +87,7 @@ pub fn animation(
                         }
                     }
                 } else if let Some(signals) = maybe_signals.as_mut() {
-                    signals.clear_flag("animation_ended");
+                    signals.clear_flag(sk::ANIMATION_ENDED);
                 }
             }
 
@@ -1045,7 +1046,7 @@ mod tests {
         );
     }
 
-    // --- stale "animation_ended" signal cleared on restart ---
+    // --- stale sk::ANIMATION_ENDED signal cleared on restart ---
 
     #[test]
     fn animation_stale_signal_cleared_after_restart() {
@@ -1117,7 +1118,7 @@ mod tests {
                 .entity(entity)
                 .get::<Signals>()
                 .unwrap()
-                .has_flag("animation_ended"),
+                .has_flag(sk::ANIMATION_ENDED),
             "animation_ended should be set after non-looped animation finishes",
         );
         assert!(world.entity(entity).get::<Animation>().unwrap().finished);
@@ -1129,7 +1130,7 @@ mod tests {
                 .entity(entity)
                 .get::<Signals>()
                 .unwrap()
-                .has_flag("animation_ended"),
+                .has_flag(sk::ANIMATION_ENDED),
             "animation_ended should still be set on subsequent ticks (finished guard, no processing)",
         );
 
@@ -1148,7 +1149,7 @@ mod tests {
                 .entity(entity)
                 .get::<Signals>()
                 .unwrap()
-                .has_flag("animation_ended"),
+                .has_flag(sk::ANIMATION_ENDED),
             "animation_ended should be cleared on first tick after restart",
         );
     }
