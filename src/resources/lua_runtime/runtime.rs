@@ -76,7 +76,12 @@ impl Default for GameConfigSnapshot {
 
 /// Shared state accessible from Lua function closures.
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
+///
+/// Queue fields must stay in sync with the list in `queue_registry.rs`.
+/// Drain methods and `clear_all_commands` are generated from that list.
+#[derive(Default)]
 pub(super) struct LuaAppData {
+    // Command queues — keep in sync with queue_registry.rs lua_queues! list
     pub(super) asset_commands: RefCell<Vec<AssetCmd>>,
     pub(super) spawn_commands: RefCell<Vec<SpawnCmd>>,
     pub(super) audio_commands: RefCell<Vec<AudioLuaCmd>>,
@@ -87,37 +92,23 @@ pub(super) struct LuaAppData {
     pub(super) camera_commands: RefCell<Vec<CameraCmd>>,
     pub(super) animation_commands: RefCell<Vec<AnimationCmd>>,
     pub(super) render_commands: RefCell<Vec<RenderCmd>>,
-    /// Clone commands for regular context (scene setup, phase callbacks)
     pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
-    // Collision-scoped command queues (processed immediately after each collision callback)
+    pub(super) gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
+    pub(super) camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
+    pub(super) input_commands: RefCell<Vec<InputCmd>>,
+    pub(super) map_commands: RefCell<Vec<MapLuaCmd>>,
     pub(super) collision_entity_commands: RefCell<Vec<EntityCmd>>,
     pub(super) collision_signal_commands: RefCell<Vec<SignalCmd>>,
     pub(super) collision_audio_commands: RefCell<Vec<AudioLuaCmd>>,
     pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
+    pub(super) collision_clone_commands: RefCell<Vec<CloneCmd>>,
     pub(super) collision_phase_commands: RefCell<Vec<PhaseCmd>>,
     pub(super) collision_camera_commands: RefCell<Vec<CameraCmd>>,
-    /// Clone commands for collision context (processed after collision callbacks)
-    pub(super) collision_clone_commands: RefCell<Vec<CloneCmd>>,
-    /// Cached world signal snapshot (read-only for Lua).
-    /// Updated before calling Lua callbacks via `update_signal_cache()`.
-    /// Using Arc allows cheap sharing without cloning all maps on every callback.
+    // Read-only caches — updated before each Lua callback
     pub(super) signal_snapshot: RefCell<Arc<SignalSnapshot>>,
-    /// Cached tracked group names (read-only snapshot for Lua)
     pub(super) tracked_groups: RefCell<FxHashSet<String>>,
-    /// Game config command queue
-    pub(super) gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
-    /// Camera follow config command queue
-    pub(super) camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
-    /// Cached game configuration snapshot (read-only for Lua)
     pub(super) gameconfig_snapshot: RefCell<GameConfigSnapshot>,
-    /// Input rebinding command queue
-    pub(super) input_commands: RefCell<Vec<InputCmd>>,
-    /// Cached input bindings snapshot (read-only for Lua: action_name → key_name)
     pub(super) bindings_snapshot: RefCell<std::collections::HashMap<String, String>>,
-    /// Map load command queue (drained by `process_lua_map_commands` system)
-    pub(super) map_commands: RefCell<Vec<MapLuaCmd>>,
-    /// Cached camera state snapshot (read-only for Lua).
-    /// Updated before calling Lua callbacks via `update_camera_cache()`.
     pub(super) camera_snapshot: RefCell<CameraSnapshot>,
 }
 
@@ -330,35 +321,16 @@ impl LuaRuntime {
         lua.load(r#"package.path = "./assets/scripts/?.lua;./assets/scripts/?/init.lua;" .. package.path"#)
             .exec()?;
 
-        // Set up shared app data for Lua closures to access
+        // Set up shared app data for Lua closures to access.
+        // Queue fields default to empty vecs; snapshot fields are listed explicitly
+        // so their meaningful non-zero defaults (zoom=1.0, fps=60, …) remain visible.
         lua.set_app_data(LuaAppData {
-            asset_commands: RefCell::new(Vec::new()),
-            spawn_commands: RefCell::new(Vec::new()),
-            audio_commands: RefCell::new(Vec::new()),
-            signal_commands: RefCell::new(Vec::new()),
-            phase_commands: RefCell::new(Vec::new()),
-            entity_commands: RefCell::new(Vec::new()),
-            group_commands: RefCell::new(Vec::new()),
-            camera_commands: RefCell::new(Vec::new()),
-            animation_commands: RefCell::new(Vec::new()),
-            render_commands: RefCell::new(Vec::new()),
-            clone_commands: RefCell::new(Vec::new()),
-            collision_entity_commands: RefCell::new(Vec::new()),
-            collision_signal_commands: RefCell::new(Vec::new()),
-            collision_audio_commands: RefCell::new(Vec::new()),
-            collision_spawn_commands: RefCell::new(Vec::new()),
-            collision_phase_commands: RefCell::new(Vec::new()),
-            collision_camera_commands: RefCell::new(Vec::new()),
-            collision_clone_commands: RefCell::new(Vec::new()),
             signal_snapshot: RefCell::new(Arc::new(SignalSnapshot::default())),
             tracked_groups: RefCell::new(FxHashSet::default()),
-            gameconfig_commands: RefCell::new(Vec::new()),
-            camera_follow_commands: RefCell::new(Vec::new()),
             gameconfig_snapshot: RefCell::new(GameConfigSnapshot::default()),
-            input_commands: RefCell::new(Vec::new()),
             bindings_snapshot: RefCell::new(std::collections::HashMap::new()),
-            map_commands: RefCell::new(Vec::new()),
             camera_snapshot: RefCell::new(CameraSnapshot::default()),
+            ..Default::default()
         });
 
         // Create collision context pool for table reuse

@@ -29,100 +29,10 @@ impl LuaRuntime {
     }
 
     // -------------------------------------------------------------------------
-    // Regular drain methods
+    // Drain methods — all 22 generated from queue_registry.rs via lua_queues!
     // -------------------------------------------------------------------------
 
-    pub fn drain_asset_commands_into(&self, out: &mut Vec<AssetCmd>) {
-        self.drain_queue_into(|d| &d.asset_commands, out);
-    }
-
-    pub fn drain_spawn_commands_into(&self, out: &mut Vec<SpawnCmd>) {
-        self.drain_queue_into(|d| &d.spawn_commands, out);
-    }
-
-    pub fn drain_audio_commands_into(&self, out: &mut Vec<AudioLuaCmd>) {
-        self.drain_queue_into(|d| &d.audio_commands, out);
-    }
-
-    pub fn drain_signal_commands_into(&self, out: &mut Vec<SignalCmd>) {
-        self.drain_queue_into(|d| &d.signal_commands, out);
-    }
-
-    pub fn drain_phase_commands_into(&self, out: &mut Vec<PhaseCmd>) {
-        self.drain_queue_into(|d| &d.phase_commands, out);
-    }
-
-    pub fn drain_entity_commands_into(&self, out: &mut Vec<EntityCmd>) {
-        self.drain_queue_into(|d| &d.entity_commands, out);
-    }
-
-    pub fn drain_group_commands_into(&self, out: &mut Vec<GroupCmd>) {
-        self.drain_queue_into(|d| &d.group_commands, out);
-    }
-
-    pub fn drain_camera_commands_into(&self, out: &mut Vec<CameraCmd>) {
-        self.drain_queue_into(|d| &d.camera_commands, out);
-    }
-
-    pub fn drain_animation_commands_into(&self, out: &mut Vec<AnimationCmd>) {
-        self.drain_queue_into(|d| &d.animation_commands, out);
-    }
-
-    pub fn drain_render_commands_into(&self, out: &mut Vec<RenderCmd>) {
-        self.drain_queue_into(|d| &d.render_commands, out);
-    }
-
-    pub fn drain_gameconfig_commands_into(&self, out: &mut Vec<GameConfigCmd>) {
-        self.drain_queue_into(|d| &d.gameconfig_commands, out);
-    }
-
-    pub fn drain_camera_follow_commands_into(&self, out: &mut Vec<CameraFollowCmd>) {
-        self.drain_queue_into(|d| &d.camera_follow_commands, out);
-    }
-
-    pub fn drain_map_commands_into(&self, out: &mut Vec<MapLuaCmd>) {
-        self.drain_queue_into(|d| &d.map_commands, out);
-    }
-
-    pub fn drain_input_commands_into(&self, out: &mut Vec<InputCmd>) {
-        self.drain_queue_into(|d| &d.input_commands, out);
-    }
-
-    pub fn drain_clone_commands_into(&self, out: &mut Vec<CloneCmd>) {
-        self.drain_queue_into(|d| &d.clone_commands, out);
-    }
-
-    // -------------------------------------------------------------------------
-    // Collision drain methods
-    // -------------------------------------------------------------------------
-
-    pub fn drain_collision_entity_commands_into(&self, out: &mut Vec<EntityCmd>) {
-        self.drain_queue_into(|d| &d.collision_entity_commands, out);
-    }
-
-    pub fn drain_collision_signal_commands_into(&self, out: &mut Vec<SignalCmd>) {
-        self.drain_queue_into(|d| &d.collision_signal_commands, out);
-    }
-
-    pub fn drain_collision_audio_commands_into(&self, out: &mut Vec<AudioLuaCmd>) {
-        self.drain_queue_into(|d| &d.collision_audio_commands, out);
-    }
-
-    pub fn drain_collision_spawn_commands_into(&self, out: &mut Vec<SpawnCmd>) {
-        self.drain_queue_into(|d| &d.collision_spawn_commands, out);
-    }
-
-    pub fn drain_collision_clone_commands_into(&self, out: &mut Vec<CloneCmd>) {
-        self.drain_queue_into(|d| &d.collision_clone_commands, out);
-    }
-
-    pub fn drain_collision_phase_commands_into(&self, out: &mut Vec<PhaseCmd>) {
-        self.drain_queue_into(|d| &d.collision_phase_commands, out);
-    }
-
-    pub fn drain_collision_camera_commands_into(&self, out: &mut Vec<CameraCmd>) {
-        self.drain_queue_into(|d| &d.collision_camera_commands, out);
-    }
+    crate::lua_queues!{drain_methods}
 
     // -------------------------------------------------------------------------
     // Queue management

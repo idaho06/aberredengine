@@ -36,6 +36,7 @@
 
 mod command_queues;
 mod commands;
+mod queue_registry;
 mod context;
 mod engine_api;
 mod entity_builder;
