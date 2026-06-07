@@ -100,6 +100,22 @@ impl<C> CollisionRule<C> {
     }
 }
 
+impl CollisionRule<CollisionCallback> {
+    /// Create a collision rule with a Rust function pointer callback.
+    ///
+    /// Prefer this over `::new` for Rust callbacks: the typed parameter forces
+    /// coercion from the function-item type to the `fn(...)` pointer type that
+    /// `Query<&CollisionRule>` expects. Without the coercion the query silently
+    /// matches nothing.
+    pub fn rust(
+        group_a: impl Into<String>,
+        group_b: impl Into<String>,
+        callback: CollisionCallback,
+    ) -> Self {
+        Self::new(group_a, group_b, callback)
+    }
+}
+
 /// Check if a collision rule's groups match the given group names and return
 /// entities ordered to match `rule_a` and `rule_b`.
 ///
@@ -426,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_match_and_order_direct() {
-        let rule = CollisionRule::new("ball", "brick", dummy_collision_callback);
+        let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
         let ent_a = Entity::from_bits(1);
         let ent_b = Entity::from_bits(2);
         let result = rule.match_and_order(ent_a, ent_b, "ball", "brick");
@@ -435,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_match_and_order_reversed() {
-        let rule = CollisionRule::new("ball", "brick", dummy_collision_callback);
+        let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
         let ent_a = Entity::from_bits(1);
         let ent_b = Entity::from_bits(2);
         // Groups come in swapped relative to the rule
@@ -446,7 +462,7 @@ mod tests {
 
     #[test]
     fn test_match_and_order_no_match() {
-        let rule = CollisionRule::new("ball", "brick", dummy_collision_callback);
+        let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
         let ent_a = Entity::from_bits(1);
         let ent_b = Entity::from_bits(2);
         let result = rule.match_and_order(ent_a, ent_b, "player", "enemy");
@@ -505,5 +521,13 @@ mod tests {
             match_groups("ball", "ball", ent_a, ent_b, "ball", "ball"),
             Some((ent_a, ent_b))
         );
+    }
+
+    #[test]
+    fn collision_rule_rust_ctor_accepts_fn_without_cast() {
+        fn cb(_: Entity, _: Entity, _: &BoxSides, _: &BoxSides, _: &mut GameCtx) {}
+        let rule = CollisionRule::rust("a", "b", cb);
+        assert_eq!(rule.group_a, "a");
+        assert_eq!(rule.group_b, "b");
     }
 }

@@ -94,6 +94,17 @@ impl<C> Timer<C> {
     }
 }
 
+impl Timer<TimerCallback> {
+    /// Create a timer with a Rust function pointer callback.
+    ///
+    /// Prefer this over `::new`: the typed parameter forces coercion from the
+    /// function-item type to the `fn(...)` pointer type that `Query<&mut Timer>`
+    /// expects.
+    pub fn rust(duration: f32, callback: TimerCallback) -> Self {
+        Self::new(duration, callback)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,14 +113,14 @@ mod tests {
 
     #[test]
     fn test_new_sets_duration_and_zero_elapsed() {
-        let timer = Timer::new(2.5, dummy_callback);
+        let timer = Timer::rust(2.5, dummy_callback);
         assert_eq!(timer.duration, 2.5);
         assert_eq!(timer.elapsed, 0.0);
     }
 
     #[test]
     fn test_reset_subtracts_duration() {
-        let mut timer = Timer::new(1.0, dummy_callback);
+        let mut timer = Timer::rust(1.0, dummy_callback);
         timer.elapsed = 1.3;
         timer.reset();
         assert!((timer.elapsed - 0.3).abs() < f32::EPSILON);
@@ -117,8 +128,15 @@ mod tests {
 
     #[test]
     fn test_timer_is_copy() {
-        let timer = Timer::new(1.0, dummy_callback);
+        let timer = Timer::rust(1.0, dummy_callback);
         let timer2 = timer; // Copy
         assert_eq!(timer.duration, timer2.duration);
+    }
+
+    #[test]
+    fn timer_rust_ctor_accepts_fn_without_cast() {
+        fn cb(_: Entity, _: &mut GameCtx, _: &InputState) {}
+        let t = Timer::rust(1.0, cb);
+        assert_eq!(t.duration, 1.0);
     }
 }
