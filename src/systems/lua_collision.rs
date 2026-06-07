@@ -153,10 +153,16 @@ pub fn lua_collision_observer(
             let group_a = params.groups.get(ent_a).ok().map(|g| g.name().to_string());
             let group_b = params.groups.get(ent_b).ok().map(|g| g.name().to_string());
 
-            // Update signal cache so Lua can read current world signals
-            params
-                .lua_runtime
-                .update_signal_cache(params.world_signals.snapshot());
+            // Refresh the cached world-signal snapshot only when something has
+            // changed since the last refresh. lua_plugin::update primes the
+            // cache every frame; within a collision-heavy frame the common case
+            // (no signal writes between collisions) skips the snapshot entirely,
+            // avoiding a full per-collision re-clone of the dirtied domains.
+            if params.world_signals.is_dirty() {
+                params
+                    .lua_runtime
+                    .update_signal_cache(params.world_signals.snapshot());
+            }
 
             if let Err(e) = call_lua_collision_callback(
                 &params.lua_runtime,

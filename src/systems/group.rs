@@ -62,6 +62,7 @@ pub fn update_group_counts_system(
     tracked_groups: Res<TrackedGroups>,
     mut counts: Local<FxHashMap<String, i32>>,
 ) {
+    crate::tracy::tracy_span!("update_group_counts");
     // Rebuild map (allocates String keys) only when tracked groups change.
     // In steady state this branch is never taken.
     if tracked_groups.is_changed() || counts.is_empty() {

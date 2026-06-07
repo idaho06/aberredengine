@@ -94,6 +94,7 @@ pub fn propagate_transforms(
     mut globals: Query<&mut GlobalTransform2D>,
     mut commands: Commands,
 ) {
+    crate::tracy::tracy_span!("propagate_transforms");
     for (root_entity, pos, rot, scale, children) in roots.iter() {
         let root_gt = GlobalTransform2D {
             position: pos.pos,

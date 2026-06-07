@@ -15,6 +15,7 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::signal_keys as sk;
 use crate::resources::worldtime::WorldTime;
 
 /// Apply acceleration forces and velocity to `MapPosition` using the frame's delta time.
@@ -38,13 +39,14 @@ pub fn movement(
     _screensize: Res<ScreenSize>,
     mut _audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
+    crate::tracy::tracy_span!("movement");
     for (_entity, mut position, mut rigidbody, mut maybe_signals) in query.iter_mut() {
         // Step 1: Skip frozen entities
         if rigidbody.frozen {
             // Still update signals for frozen entities (they might still be "moving" via external control)
             if let Some(signals) = maybe_signals.as_mut() {
-                signals.clear_flag("moving");
-                signals.set_scalar("speed_sq", 0.0);
+                signals.clear_flag(sk::MOVING);
+                signals.update_scalar(sk::SPEED_SQ, 0.0);
             }
             continue;
         }
@@ -87,11 +89,11 @@ pub fn movement(
         if let Some(signals) = maybe_signals.as_mut() {
             let speed_sq = rigidbody.velocity.length_sqr();
             if speed_sq > 0.0 {
-                signals.set_flag("moving");
+                signals.ensure_flag(sk::MOVING);
             } else {
-                signals.clear_flag("moving");
+                signals.clear_flag(sk::MOVING);
             }
-            signals.set_scalar("speed_sq", speed_sq);
+            signals.update_scalar(sk::SPEED_SQ, speed_sq);
         }
     }
 }

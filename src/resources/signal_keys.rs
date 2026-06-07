@@ -17,6 +17,14 @@ pub const SCENE: &str = "scene";
 /// reaches the last frame. Cleared when the animation restarts.
 pub const ANIMATION_ENDED: &str = "animation_ended";
 
+/// Flag: set on an entity's `Signals` component by `movement` while the entity
+/// has non-zero velocity; cleared when stationary. Read by animation rules.
+pub const MOVING: &str = "moving";
+
+/// Scalar: squared speed published on an entity's `Signals` component by
+/// `movement` each frame. Read by animation rules and exposed to Lua callbacks.
+pub const SPEED_SQ: &str = "speed_sq";
+
 /// The scene name used as fallback when `SCENE` has not been set.
 pub const DEFAULT_SCENE: &str = "menu";
 

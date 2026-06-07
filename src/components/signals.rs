@@ -65,6 +65,18 @@ impl Signals {
     pub fn set_scalar(&mut self, key: impl Into<String>, value: f32) {
         self.scalars.insert(key.into(), value);
     }
+    /// Set a scalar without allocating when the key already exists.
+    ///
+    /// Updates the existing value in place if present; otherwise allocates the
+    /// key once on first insert. Prefer this in per-frame hot paths with fixed
+    /// `&'static str` keys (e.g. `movement`).
+    pub fn update_scalar(&mut self, key: &str, value: f32) {
+        if let Some(slot) = self.scalars.get_mut(key) {
+            *slot = value;
+        } else {
+            self.scalars.insert(key.to_string(), value);
+        }
+    }
     /// Get a floating-point signal by key.
     pub fn get_scalar(&self, key: &str) -> Option<f32> {
         self.scalars.get(key).copied()
@@ -101,6 +113,15 @@ impl Signals {
     /// Mark a flag as present/true.
     pub fn set_flag(&mut self, key: impl Into<String>) {
         self.flags.insert(key.into());
+    }
+    /// Mark a flag present without allocating when it is already set.
+    ///
+    /// Allocates the key only on the first insert. Prefer this in per-frame hot
+    /// paths with fixed `&'static str` keys (e.g. `movement`).
+    pub fn ensure_flag(&mut self, key: &str) {
+        if !self.flags.contains(key) {
+            self.flags.insert(key.to_string());
+        }
     }
     /// Remove a flag (make it false/absent).
     pub fn clear_flag(&mut self, key: &str) {
@@ -168,6 +189,44 @@ mod tests {
         s.set_scalar("hp", 100.0);
         s.set_scalar("hp", 50.0);
         assert_eq!(s.get_scalar("hp"), Some(50.0));
+    }
+
+    #[test]
+    fn test_update_scalar_inserts_then_updates_in_place() {
+        let mut s = Signals::default();
+        s.update_scalar("speed_sq", 1.0);
+        assert_eq!(s.get_scalar("speed_sq"), Some(1.0));
+
+        // Repeated updates must overwrite the value without growing the map
+        // (steady-state hot path stays allocation-free: same key reused).
+        let ptr_before = s.scalars.get_key_value("speed_sq").unwrap().0.as_ptr();
+        for v in 0..100 {
+            s.update_scalar("speed_sq", v as f32);
+        }
+        let ptr_after = s.scalars.get_key_value("speed_sq").unwrap().0.as_ptr();
+        assert_eq!(s.scalars.len(), 1);
+        assert_eq!(s.get_scalar("speed_sq"), Some(99.0));
+        assert_eq!(
+            ptr_before, ptr_after,
+            "the key String must be reused across updates (no per-call realloc)"
+        );
+    }
+
+    #[test]
+    fn test_ensure_flag_sets_and_is_idempotent() {
+        let mut s = Signals::default();
+        s.ensure_flag("moving");
+        assert!(s.has_flag("moving"));
+
+        // Re-asserting an already-present flag keeps the existing key (no realloc).
+        let ptr_before = s.flags.get("moving").unwrap().as_ptr();
+        s.ensure_flag("moving");
+        let ptr_after = s.flags.get("moving").unwrap().as_ptr();
+        assert_eq!(s.flags.len(), 1);
+        assert_eq!(
+            ptr_before, ptr_after,
+            "the flag String must be reused when already present"
+        );
     }
 
     #[test]

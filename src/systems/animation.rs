@@ -52,6 +52,7 @@ pub fn animation(
     time: Res<WorldTime>,
     mut commands: Commands,
 ) {
+    crate::tracy::tracy_span!("animation");
     for (entity, mut anim_comp, mut sprite, mut maybe_signals) in query.iter_mut() {
         if let Some(animation) = animation_store.animations.get(&anim_comp.animation_key) {
             if animation.frame_count == 0 {
@@ -1165,6 +1166,7 @@ pub fn animation_controller(
     mut sprite_query: Query<&mut Sprite>,
     animation_store: Res<AnimationStore>,
 ) {
+    crate::tracy::tracy_span!("animation_controller");
     for (entity, mut controller, mut animation, signals) in query.iter_mut() {
         let mut selected: Option<&str> = None;
         for rule in &controller.rules {

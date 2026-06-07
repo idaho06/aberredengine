@@ -50,6 +50,7 @@ pub fn update_world_signals_binding_system(
     world_signals: Res<WorldSignals>,
     signals_query: Query<&Signals>,
 ) {
+    crate::tracy::tracy_span!("update_world_signals_binding");
     for (mut dynamic_text, signal_binding) in query.iter_mut() {
         let value_opt = match &signal_binding.source {
             SignalSource::World => {
