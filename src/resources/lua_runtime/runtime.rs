@@ -78,7 +78,7 @@ impl Default for GameConfigSnapshot {
 /// This is stored in Lua's app_data and allows Lua functions to queue commands.
 ///
 /// Queue fields must stay in sync with the list in `queue_registry.rs`.
-/// Drain methods and `clear_all_commands` are generated from that list.
+/// Drain methods and the body of `clear_all_commands` are generated from that list.
 #[derive(Default)]
 pub(super) struct LuaAppData {
     // Command queues — keep in sync with queue_registry.rs lua_queues! list

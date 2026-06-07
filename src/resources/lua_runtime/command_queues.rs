@@ -44,30 +44,7 @@ impl LuaRuntime {
     /// previous scene that might reference despawned entities.
     pub fn clear_all_commands(&self) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
-            // Regular queues
-            data.asset_commands.borrow_mut().clear();
-            data.spawn_commands.borrow_mut().clear();
-            data.clone_commands.borrow_mut().clear();
-            data.signal_commands.borrow_mut().clear();
-            data.phase_commands.borrow_mut().clear();
-            data.entity_commands.borrow_mut().clear();
-            data.audio_commands.borrow_mut().clear();
-            data.group_commands.borrow_mut().clear();
-            data.camera_commands.borrow_mut().clear();
-            data.render_commands.borrow_mut().clear();
-            data.animation_commands.borrow_mut().clear();
-            data.gameconfig_commands.borrow_mut().clear();
-            data.camera_follow_commands.borrow_mut().clear();
-            data.input_commands.borrow_mut().clear();
-            data.map_commands.borrow_mut().clear();
-            // Collision-scoped queues
-            data.collision_entity_commands.borrow_mut().clear();
-            data.collision_signal_commands.borrow_mut().clear();
-            data.collision_audio_commands.borrow_mut().clear();
-            data.collision_spawn_commands.borrow_mut().clear();
-            data.collision_clone_commands.borrow_mut().clear();
-            data.collision_phase_commands.borrow_mut().clear();
-            data.collision_camera_commands.borrow_mut().clear();
+            crate::lua_queues!{clear_body data}
         }
     }
 

@@ -168,7 +168,6 @@ impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        unimplemented!()
     }
 
     fn add_function_mut<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
@@ -177,7 +176,6 @@ impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        unimplemented!()
     }
 
     fn add_meta_method<M, A, R>(&mut self, _name: impl Into<String>, _method: M)
@@ -186,7 +184,6 @@ impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        unimplemented!()
     }
 
     fn add_meta_method_mut<M, A, R>(&mut self, _name: impl Into<String>, _method: M)
@@ -195,7 +192,6 @@ impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        unimplemented!()
     }
 
     fn add_meta_function<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
@@ -204,7 +200,6 @@ impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        unimplemented!()
     }
 
     fn add_meta_function_mut<F, A, R>(&mut self, _name: impl Into<String>, _function: F)
@@ -213,7 +208,6 @@ impl LuaUserDataMethods<LuaEntityBuilder> for DummyMethods {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        unimplemented!()
     }
 }
 
