@@ -244,12 +244,13 @@ pub fn render_system(
         {
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
-            let mut d2 = d.begin_mode2D(camera.0);
+            let render_cam = camera.pixel_snapped();
+            let mut d2 = d.begin_mode2D(render_cam);
 
             let (view_min, view_max) = compute_view_bounds(
                 screensize.w as f32,
                 screensize.h as f32,
-                camera.0,
+                render_cam,
                 |pos, cam| d2.get_screen_to_world2D(pos, cam),
             );
 

@@ -99,10 +99,10 @@ impl LuaRuntime {
         screen: &crate::resources::screensize::ScreenSize,
     ) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
-            let rect = camera.world_visible_rect(screen);
+            let rect = camera.world_visible_rect_snapped(screen);
             let mut snap = data.camera_snapshot.borrow_mut();
-            snap.target_x = camera.0.target.x;
-            snap.target_y = camera.0.target.y;
+            snap.target_x = camera.0.target.x.round();
+            snap.target_y = camera.0.target.y.round();
             snap.offset_x = camera.0.offset.x;
             snap.offset_y = camera.0.offset.y;
             snap.rotation = camera.0.rotation;

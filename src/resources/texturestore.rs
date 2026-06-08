@@ -41,7 +41,13 @@ impl TextureStore {
         self.map.get(key.as_ref())
     }
     /// Insert or replace a texture with a specific key.
+    ///
+    /// Forces TEXTURE_FILTER_POINT (nearest-neighbor) on every sprite texture so that
+    /// atlas tiles never bleed into adjacent tiles due to sub-pixel sampling.
     pub fn insert(&mut self, key: impl Into<String>, texture: Texture2D) {
+        unsafe {
+            ffi::SetTextureFilter(*texture, ffi::TextureFilter::TEXTURE_FILTER_POINT as i32);
+        }
         self.map.insert(key.into(), texture);
     }
     /// Remove a texture by its key, returning it if it existed.
