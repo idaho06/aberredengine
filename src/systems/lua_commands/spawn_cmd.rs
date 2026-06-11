@@ -175,12 +175,15 @@ fn apply_transform_components(
     // Set ChildOf and immediately compute the correct initial GlobalTransform2D
     // so the child renders at the right world position on its very first frame
     // (avoids a one-frame flash at world origin).
-    if let Some(parent_id) = transform.parent {
-        entity_commands.insert(ChildOf(Entity::from_bits(parent_id)));
+    if let Some(parent_id) = transform.parent
+        && let Some(parent) = super::entity_cmd::resolve_entity(parent_id)
+    {
+        entity_commands.insert(ChildOf(parent));
         entity_commands.queue(ComputeInitialGlobalTransform);
     }
-    if let Some(stuckto_data) = transform.stuckto {
-        let target = Entity::from_bits(stuckto_data.target_entity_id);
+    if let Some(stuckto_data) = transform.stuckto
+        && let Some(target) = super::entity_cmd::resolve_entity(stuckto_data.target_entity_id)
+    {
         let mut stuckto = StuckTo::new(target);
         stuckto.offset = Vector2 {
             x: stuckto_data.offset_x,

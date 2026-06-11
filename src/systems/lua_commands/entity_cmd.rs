@@ -29,6 +29,28 @@ use crate::resources::systemsstore::SystemsStore;
 
 use super::EntityCmdQueries;
 
+/// Resolve a Lua-supplied u64 entity ID, warning and returning None on invalid bits.
+pub(super) fn resolve_entity(id: u64) -> Option<Entity> {
+    match Entity::try_from_bits(id) {
+        Some(entity) => Some(entity),
+        None => {
+            warn!("Invalid entity bits received from Lua script: {}", id);
+            None
+        }
+    }
+}
+
+/// Get `EntityCommands` for a live entity, warning and returning None if despawned.
+fn get_entity_cmd<'a>(entity: Entity, commands: &'a mut Commands) -> Option<EntityCommands<'a>> {
+    match commands.get_entity(entity) {
+        Ok(entity_cmds) => Some(entity_cmds),
+        Err(_) => {
+            warn!("Cannot apply command to entity {:?}: entity was despawned", entity);
+            None
+        }
+    }
+}
+
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
@@ -108,13 +130,13 @@ pub fn process_entity_commands(
 fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SetVelocity { entity_id, vx, vy } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.velocity = Vector2 { x: vx, y: vy };
             }
         }
         EntityCmd::SetSpeed { entity_id, speed } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.set_speed(speed);
             }
@@ -123,7 +145,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             entity_id,
             friction,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.friction = friction;
             }
@@ -132,19 +154,19 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             entity_id,
             max_speed,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.max_speed = max_speed;
             }
         }
         EntityCmd::FreezeEntity { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.freeze();
             }
         }
         EntityCmd::UnfreezeEntity { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.unfreeze();
             }
@@ -156,13 +178,13 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             y,
             enabled,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.add_force_with_state(&name, Vector2 { x, y }, enabled);
             }
         }
         EntityCmd::RemoveForce { entity_id, name } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.remove_force(&name);
             }
@@ -172,7 +194,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             name,
             enabled,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.set_force_enabled(&name, enabled);
             }
@@ -183,7 +205,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             x,
             y,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.set_force_value(&name, Vector2 { x, y });
             }
@@ -195,19 +217,19 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
 fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SignalSetFlag { entity_id, flag } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_flag(&flag);
             }
         }
         EntityCmd::SignalClearFlag { entity_id, flag } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.clear_flag(&flag);
             }
         }
         EntityCmd::SignalToggleFlag { entity_id, flag } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.toggle_flag(&flag);
             }
@@ -217,13 +239,13 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             key,
             value,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_scalar(&key, value);
             }
         }
         EntityCmd::SignalClearScalar { entity_id, key } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.clear_scalar(&key);
             }
@@ -233,13 +255,13 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             key,
             value,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_string(&key, &value);
             }
         }
         EntityCmd::SignalClearString { entity_id, key } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.remove_string(&key);
             }
@@ -249,13 +271,13 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             key,
             value,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_integer(&key, value);
             }
         }
         EntityCmd::SignalClearInteger { entity_id, key } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.clear_integer(&key);
             }
@@ -271,7 +293,7 @@ fn process_animation_cmd(
 ) {
     match cmd {
         EntityCmd::RestartAnimation { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut animation) = queries.animation.get_mut(entity) {
                 animation.frame_index = 0;
                 animation.elapsed_time = 0.0;
@@ -282,7 +304,7 @@ fn process_animation_cmd(
             entity_id,
             animation_key,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut animation) = queries.animation.get_mut(entity) {
                 animation.animation_key = animation_key.clone();
                 animation.frame_index = 0;
@@ -301,7 +323,7 @@ fn process_animation_cmd(
             flip_h,
             flip_v,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut sprite) = queries.sprites.get_mut(entity) {
                 sprite.flip_h = flip_h;
                 sprite.flip_v = flip_v;
@@ -357,19 +379,22 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             &config,
         ),
         EntityCmd::RemoveTweenPosition { entity_id } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .remove::<Tween<MapPosition>>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<Tween<MapPosition>>();
+            }
         }
         EntityCmd::RemoveTweenRotation { entity_id } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .remove::<Tween<Rotation>>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<Tween<Rotation>>();
+            }
         }
         EntityCmd::RemoveTweenScale { entity_id } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .remove::<Tween<Scale>>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<Tween<Scale>>();
+            }
         }
         _ => unreachable!(),
     }
@@ -379,21 +404,24 @@ fn insert_tween<T>(commands: &mut Commands, entity_id: u64, from: T, to: T, conf
 where
     T: TweenValue + Send + Sync + 'static,
 {
+    let Some(entity) = resolve_entity(entity_id) else { return; };
     let tween = super::build_tween(from, to, config);
-    commands.entity(Entity::from_bits(entity_id)).insert(tween);
+    if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+        entity_cmds.insert(tween);
+    }
 }
 
 fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SetShader { entity_id, key } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(mut entity_cmds) = commands.get_entity(entity) {
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
                 entity_cmds.insert(EntityShader::new(key));
             }
         }
         EntityCmd::RemoveShader { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(mut entity_cmds) = commands.get_entity(entity) {
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
                 entity_cmds.remove::<EntityShader>();
             }
         }
@@ -402,13 +430,13 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
         | EntityCmd::ShaderSetVec2 { .. }
         | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, queries),
         EntityCmd::ShaderClearUniform { entity_id, name } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
                 shader.uniforms.remove(name.as_str());
             }
         }
         EntityCmd::ShaderClearUniforms { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
                 shader.uniforms.clear();
             }
@@ -420,14 +448,16 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
             b,
             a,
         } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .insert(Tint::new(r, g, b, a));
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.insert(Tint::new(r, g, b, a));
+            }
         }
         EntityCmd::RemoveTint { entity_id } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .remove::<Tint>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<Tint>();
+            }
         }
         _ => unreachable!(),
     }
@@ -461,7 +491,7 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
         } => (entity_id, name, UniformValue::Vec4 { x, y, z, w }),
         _ => unreachable!(),
     };
-    let entity = Entity::from_bits(entity_id);
+    let Some(entity) = resolve_entity(entity_id) else { return; };
     if let Ok(mut shader) = queries.shaders.get_mut(entity) {
         shader.uniforms.insert(Arc::from(name), value);
     }
@@ -470,45 +500,47 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
 fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SetPosition { entity_id, x, y } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut pos) = queries.positions.get_mut(entity) {
                 pos.pos.x = x;
                 pos.pos.y = y;
             }
         }
         EntityCmd::SetScreenPosition { entity_id, x, y } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut pos) = queries.screen_positions.get_mut(entity) {
                 pos.pos.x = x;
                 pos.pos.y = y;
             }
         }
         EntityCmd::SetRotation { entity_id, degrees } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .insert(Rotation { degrees });
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.insert(Rotation { degrees });
+            }
         }
         EntityCmd::SetScale { entity_id, sx, sy } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .insert(Scale::new(sx, sy));
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.insert(Scale::new(sx, sy));
+            }
         }
         EntityCmd::SetCameraTarget {
             entity_id,
             priority,
         } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             let existing_zoom = queries
                 .camera_targets
                 .get(entity)
                 .map(|ct| ct.zoom)
                 .unwrap_or(CameraTarget::default().zoom);
-            commands
-                .entity(entity)
-                .insert(CameraTarget::new(priority).with_zoom(existing_zoom));
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.insert(CameraTarget::new(priority).with_zoom(existing_zoom));
+            }
         }
         EntityCmd::SetCameraTargetZoom { entity_id, zoom } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut ct) = queries.camera_targets.get_mut(entity) {
                 ct.zoom = zoom.max(f32::EPSILON);
             } else {
@@ -519,9 +551,10 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             }
         }
         EntityCmd::RemoveCameraTarget { entity_id } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .remove::<CameraTarget>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<CameraTarget>();
+            }
         }
         _ => unreachable!(),
     }
@@ -533,32 +566,42 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             entity_id,
             parent_id,
         } => {
-            let child = Entity::from_bits(entity_id);
-            let parent = Entity::from_bits(parent_id);
-            commands
-                .entity(child)
-                .insert((ChildOf(parent), GlobalTransform2D::default()));
+            let Some(child) = resolve_entity(entity_id) else { return; };
+            let Some(parent) = resolve_entity(parent_id) else { return; };
+            if let Some(mut child_cmds) = get_entity_cmd(child, commands) {
+                child_cmds.insert((ChildOf(parent), GlobalTransform2D::default()));
+            }
             // Ensure parent also has GlobalTransform2D
-            if queries.global_transforms.get(parent).is_err() {
-                commands.entity(parent).insert(GlobalTransform2D::default());
+            if queries.global_transforms.get(parent).is_err()
+                && let Some(mut parent_cmds) = get_entity_cmd(parent, commands)
+            {
+                parent_cmds.insert(GlobalTransform2D::default());
             }
         }
         EntityCmd::RemoveParent { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             // Snap to world transform before detaching
-            if let Ok(gt) = queries.global_transforms.get(entity) {
+            let world_transform = queries
+                .global_transforms
+                .get(entity)
+                .ok()
+                .map(|gt| (gt.position, gt.rotation_degrees, gt.scale));
+            if let Some((position, rotation_degrees, scale)) = world_transform {
                 if let Ok(mut pos) = queries.positions.get_mut(entity) {
-                    pos.pos = gt.position;
+                    pos.pos = position;
                 }
-                commands.entity(entity).insert(Rotation {
-                    degrees: gt.rotation_degrees,
-                });
-                commands
-                    .entity(entity)
-                    .insert(Scale::new(gt.scale.x, gt.scale.y));
+                if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                    entity_cmds
+                        .insert(Rotation {
+                            degrees: rotation_degrees,
+                        })
+                        .insert(Scale::new(scale.x, scale.y))
+                        .remove::<ChildOf>()
+                        .remove::<GlobalTransform2D>();
+                }
+            } else if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<ChildOf>().remove::<GlobalTransform2D>();
             }
-            commands.entity(entity).remove::<ChildOf>();
-            commands.entity(entity).remove::<GlobalTransform2D>();
         }
         EntityCmd::InsertStuckTo {
             entity_id,
@@ -570,35 +613,41 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             stored_vx,
             stored_vy,
         } => {
-            let entity = Entity::from_bits(entity_id);
-            let target = Entity::from_bits(target_id);
-            commands.entity(entity).insert(StuckTo {
-                target,
-                offset: Vector2 {
-                    x: offset_x,
-                    y: offset_y,
-                },
-                follow_x,
-                follow_y,
-                stored_velocity: Some(Vector2 {
-                    x: stored_vx,
-                    y: stored_vy,
-                }),
-            });
-            commands
-                .entity(entity)
-                .remove::<crate::components::rigidbody::RigidBody>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(target) = resolve_entity(target_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds
+                    .insert(StuckTo {
+                        target,
+                        offset: Vector2 {
+                            x: offset_x,
+                            y: offset_y,
+                        },
+                        follow_x,
+                        follow_y,
+                        stored_velocity: Some(Vector2 {
+                            x: stored_vx,
+                            y: stored_vy,
+                        }),
+                    })
+                    .remove::<crate::components::rigidbody::RigidBody>();
+            }
         }
         EntityCmd::ReleaseStuckTo { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
-            if let Ok(stuckto) = queries.stuckto.get(entity)
-                && let Some(velocity) = stuckto.stored_velocity
-            {
-                let mut rb = crate::components::rigidbody::RigidBody::new();
-                rb.velocity = velocity;
-                commands.entity(entity).insert(rb);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let stored_velocity = queries
+                .stuckto
+                .get(entity)
+                .ok()
+                .and_then(|stuckto| stuckto.stored_velocity);
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                if let Some(velocity) = stored_velocity {
+                    let mut rb = crate::components::rigidbody::RigidBody::new();
+                    rb.velocity = velocity;
+                    entity_cmds.insert(rb);
+                }
+                entity_cmds.remove::<StuckTo>();
             }
-            commands.entity(entity).remove::<StuckTo>();
         }
         _ => unreachable!(),
     }
@@ -611,29 +660,52 @@ fn process_lifecycle_cmd(cmd: EntityCmd, commands: &mut Commands, systems_store:
             duration,
             callback,
         } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
+            }
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .remove::<LuaTimer>();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.remove::<LuaTimer>();
+            }
         }
         EntityCmd::Despawn { entity_id } => {
-            commands.entity(Entity::from_bits(entity_id)).despawn();
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.despawn();
+            }
         }
         EntityCmd::MenuDespawn { entity_id } => {
-            let entity = Entity::from_bits(entity_id);
+            let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Some(system_id) = systems_store.get_entity_system("menu_despawn") {
                 commands.run_system_with(*system_id, entity);
             }
         }
         EntityCmd::InsertTtl { entity_id, seconds } => {
-            commands
-                .entity(Entity::from_bits(entity_id))
-                .insert(Ttl::new(seconds));
+            let Some(entity) = resolve_entity(entity_id) else { return; };
+            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+                entity_cmds.insert(Ttl::new(seconds));
+            }
         }
         _ => unreachable!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_entity_rejects_invalid_bits() {
+        // Low 32 bits (entity index) of zero are invalid per `EntityIndex::try_from_bits`.
+        assert_eq!(resolve_entity(0), None);
+    }
+
+    #[test]
+    fn resolve_entity_accepts_valid_bits() {
+        let entity = Entity::from_raw_u32(42).unwrap();
+        assert_eq!(resolve_entity(entity.to_bits()), Some(entity));
     }
 }

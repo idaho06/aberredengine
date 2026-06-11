@@ -104,7 +104,7 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
             world_signals.remove_string(&key);
         }
         SignalCmd::SetEntity { key, entity_id } => {
-            if let Some(entity) = Entity::try_from_bits(entity_id) {
+            if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
                 world_signals.set_entity(&key, entity);
             }
         }
@@ -163,8 +163,9 @@ where
 {
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
-            let entity = Entity::from_bits(entity_id);
-            queue_phase_transition(phase_query, entity, phase);
+            if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
+                queue_phase_transition(phase_query, entity, phase);
+            }
         }
     }
 }
