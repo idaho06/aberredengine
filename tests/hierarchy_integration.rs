@@ -611,6 +611,57 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     );
 }
 
+/// P0-1: an EntityCmd with invalid entity bits (the EntityIndex niche value)
+/// must be skipped with a warn, not panic during processing.
+#[cfg(feature = "lua")]
+#[test]
+fn entity_cmd_invalid_entity_id_does_not_panic() {
+    let mut world = World::new();
+
+    // The low 32 bits of Entity::to_bits() encode EntityIndex via NonMaxU32's
+    // niche transmute, where a raw value of 0 corresponds to the excluded
+    // index -> Entity::try_from_bits(0) returns None. A bare 0 is also a
+    // plausible malformed id from Lua (e.g. an uninitialized/nil entity ref).
+    let invalid_id = 0u64;
+    assert_eq!(Entity::try_from_bits(invalid_id), None);
+
+    run_entity_cmds(
+        &mut world,
+        vec![EntityCmd::SetRotation {
+            entity_id: invalid_id,
+            degrees: 45.0,
+        }],
+    );
+}
+
+/// P0-2: Despawn followed by an insert-based command on the same entity in
+/// the same drained batch must not panic at command-apply time.
+#[cfg(feature = "lua")]
+#[test]
+fn entity_cmd_despawn_then_set_rotation_same_batch_does_not_panic() {
+    let mut world = World::new();
+
+    let e = world
+        .spawn((MapPosition::new(0.0, 0.0), Rotation { degrees: 0.0 }))
+        .id();
+
+    run_entity_cmds(
+        &mut world,
+        vec![
+            EntityCmd::Despawn {
+                entity_id: e.to_bits(),
+            },
+            EntityCmd::SetRotation {
+                entity_id: e.to_bits(),
+                degrees: 90.0,
+            },
+        ],
+    );
+
+    assert!(world.get_entity(e).is_err(), "entity should be despawned");
+    assert!(world.get::<Rotation>(e).is_none());
+}
+
 #[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_parent_multiple_children() {

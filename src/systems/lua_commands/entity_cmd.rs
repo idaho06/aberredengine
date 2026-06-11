@@ -51,6 +51,28 @@ fn get_entity_cmd<'a>(entity: Entity, commands: &'a mut Commands) -> Option<Enti
     }
 }
 
+/// Run `f` against the live `EntityCommands` for `entity_id`.
+///
+/// No-ops (with a warn log) if `entity_id` has invalid bits, or if the entity
+/// was already despawned in a prior frame's flush. `f` must use
+/// `try_insert`/`try_remove`/`try_despawn` (not the panicking
+/// `insert`/`remove`/`despawn`) so that an entity despawned *earlier in the
+/// same drained batch* (e.g. `Despawn{id}` then `SetRotation{id, ..}`) no-ops
+/// silently at apply time instead of panicking via Bevy's default (panic)
+/// error handler.
+fn with_entity_cmd(commands: &mut Commands, entity_id: u64, f: impl FnOnce(&mut EntityCommands)) {
+    let Some(entity) = resolve_entity(entity_id) else { return; };
+    with_entity_cmds(commands, entity, f);
+}
+
+/// Same as [`with_entity_cmd`], for callers that already hold a resolved
+/// `Entity` (avoids re-resolving it from bits).
+fn with_entity_cmds(commands: &mut Commands, entity: Entity, f: impl FnOnce(&mut EntityCommands)) {
+    if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+        f(&mut entity_cmds);
+    }
+}
+
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
@@ -379,22 +401,19 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             &config,
         ),
         EntityCmd::RemoveTweenPosition { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<Tween<MapPosition>>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<Tween<MapPosition>>();
+            });
         }
         EntityCmd::RemoveTweenRotation { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<Tween<Rotation>>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<Tween<Rotation>>();
+            });
         }
         EntityCmd::RemoveTweenScale { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<Tween<Scale>>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<Tween<Scale>>();
+            });
         }
         _ => unreachable!(),
     }
@@ -404,26 +423,23 @@ fn insert_tween<T>(commands: &mut Commands, entity_id: u64, from: T, to: T, conf
 where
     T: TweenValue + Send + Sync + 'static,
 {
-    let Some(entity) = resolve_entity(entity_id) else { return; };
     let tween = super::build_tween(from, to, config);
-    if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-        entity_cmds.insert(tween);
-    }
+    with_entity_cmd(commands, entity_id, |ec| {
+        ec.try_insert(tween);
+    });
 }
 
 fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SetShader { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(EntityShader::new(key));
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(EntityShader::new(key));
+            });
         }
         EntityCmd::RemoveShader { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<EntityShader>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<EntityShader>();
+            });
         }
         cmd @ (EntityCmd::ShaderSetFloat { .. }
         | EntityCmd::ShaderSetInt { .. }
@@ -448,16 +464,14 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
             b,
             a,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(Tint::new(r, g, b, a));
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(Tint::new(r, g, b, a));
+            });
         }
         EntityCmd::RemoveTint { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<Tint>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<Tint>();
+            });
         }
         _ => unreachable!(),
     }
@@ -514,16 +528,14 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             }
         }
         EntityCmd::SetRotation { entity_id, degrees } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(Rotation { degrees });
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(Rotation { degrees });
+            });
         }
         EntityCmd::SetScale { entity_id, sx, sy } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(Scale::new(sx, sy));
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(Scale::new(sx, sy));
+            });
         }
         EntityCmd::SetCameraTarget {
             entity_id,
@@ -535,9 +547,9 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                 .get(entity)
                 .map(|ct| ct.zoom)
                 .unwrap_or(CameraTarget::default().zoom);
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(CameraTarget::new(priority).with_zoom(existing_zoom));
-            }
+            with_entity_cmds(commands, entity, |ec| {
+                ec.try_insert(CameraTarget::new(priority).with_zoom(existing_zoom));
+            });
         }
         EntityCmd::SetCameraTargetZoom { entity_id, zoom } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
@@ -551,10 +563,9 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             }
         }
         EntityCmd::RemoveCameraTarget { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<CameraTarget>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<CameraTarget>();
+            });
         }
         _ => unreachable!(),
     }
@@ -566,16 +577,15 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             entity_id,
             parent_id,
         } => {
-            let Some(child) = resolve_entity(entity_id) else { return; };
             let Some(parent) = resolve_entity(parent_id) else { return; };
-            if let Some(mut child_cmds) = get_entity_cmd(child, commands) {
-                child_cmds.insert((ChildOf(parent), GlobalTransform2D::default()));
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert((ChildOf(parent), GlobalTransform2D::default()));
+            });
             // Ensure parent also has GlobalTransform2D
-            if queries.global_transforms.get(parent).is_err()
-                && let Some(mut parent_cmds) = get_entity_cmd(parent, commands)
-            {
-                parent_cmds.insert(GlobalTransform2D::default());
+            if queries.global_transforms.get(parent).is_err() {
+                with_entity_cmds(commands, parent, |ec| {
+                    ec.try_insert(GlobalTransform2D::default());
+                });
             }
         }
         EntityCmd::RemoveParent { entity_id } => {
@@ -590,17 +600,18 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                 if let Ok(mut pos) = queries.positions.get_mut(entity) {
                     pos.pos = position;
                 }
-                if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                    entity_cmds
-                        .insert(Rotation {
-                            degrees: rotation_degrees,
-                        })
-                        .insert(Scale::new(scale.x, scale.y))
-                        .remove::<ChildOf>()
-                        .remove::<GlobalTransform2D>();
-                }
-            } else if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<ChildOf>().remove::<GlobalTransform2D>();
+                with_entity_cmds(commands, entity, |ec| {
+                    ec.try_insert(Rotation {
+                        degrees: rotation_degrees,
+                    })
+                    .try_insert(Scale::new(scale.x, scale.y))
+                    .try_remove::<ChildOf>()
+                    .try_remove::<GlobalTransform2D>();
+                });
+            } else {
+                with_entity_cmds(commands, entity, |ec| {
+                    ec.try_remove::<ChildOf>().try_remove::<GlobalTransform2D>();
+                });
             }
         }
         EntityCmd::InsertStuckTo {
@@ -613,25 +624,23 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             stored_vx,
             stored_vy,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
             let Some(target) = resolve_entity(target_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds
-                    .insert(StuckTo {
-                        target,
-                        offset: Vector2 {
-                            x: offset_x,
-                            y: offset_y,
-                        },
-                        follow_x,
-                        follow_y,
-                        stored_velocity: Some(Vector2 {
-                            x: stored_vx,
-                            y: stored_vy,
-                        }),
-                    })
-                    .remove::<crate::components::rigidbody::RigidBody>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(StuckTo {
+                    target,
+                    offset: Vector2 {
+                        x: offset_x,
+                        y: offset_y,
+                    },
+                    follow_x,
+                    follow_y,
+                    stored_velocity: Some(Vector2 {
+                        x: stored_vx,
+                        y: stored_vy,
+                    }),
+                })
+                .try_remove::<crate::components::rigidbody::RigidBody>();
+            });
         }
         EntityCmd::ReleaseStuckTo { entity_id } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
@@ -640,14 +649,14 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                 .get(entity)
                 .ok()
                 .and_then(|stuckto| stuckto.stored_velocity);
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
+            with_entity_cmds(commands, entity, |ec| {
                 if let Some(velocity) = stored_velocity {
                     let mut rb = crate::components::rigidbody::RigidBody::new();
                     rb.velocity = velocity;
-                    entity_cmds.insert(rb);
+                    ec.try_insert(rb);
                 }
-                entity_cmds.remove::<StuckTo>();
-            }
+                ec.try_remove::<StuckTo>();
+            });
         }
         _ => unreachable!(),
     }
@@ -660,22 +669,19 @@ fn process_lifecycle_cmd(cmd: EntityCmd, commands: &mut Commands, systems_store:
             duration,
             callback,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
+            });
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.remove::<LuaTimer>();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<LuaTimer>();
+            });
         }
         EntityCmd::Despawn { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.despawn();
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_despawn();
+            });
         }
         EntityCmd::MenuDespawn { entity_id } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
@@ -684,10 +690,9 @@ fn process_lifecycle_cmd(cmd: EntityCmd, commands: &mut Commands, systems_store:
             }
         }
         EntityCmd::InsertTtl { entity_id, seconds } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-                entity_cmds.insert(Ttl::new(seconds));
-            }
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(Ttl::new(seconds));
+            });
         }
         _ => unreachable!(),
     }
