@@ -38,10 +38,12 @@ impl LuaRuntime {
     // Queue management
     // -------------------------------------------------------------------------
 
-    /// Clears all command queues without processing them.
+    /// Clears all `clear`-policy command queues without processing them.
     ///
     /// Call at the start of scene switches to discard stale commands from the
-    /// previous scene that might reference despawned entities.
+    /// previous scene that might reference despawned entities. Queues tagged
+    /// `preserve` in `lua_queues!{@master}` are left untouched (see
+    /// `queue_registry.rs` for the per-queue policy and rationale).
     pub fn clear_all_commands(&self) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             crate::lua_queues!{clear_body data}

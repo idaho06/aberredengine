@@ -475,7 +475,7 @@ mod tests {
     use crate::components::animation::Animation;
     use crate::components::sprite::Sprite;
     use bevy_ecs::message::Messages;
-    use bevy_ecs::system::SystemState;
+    use bevy_ecs::system::{RunSystemOnce, SystemState};
     use std::sync::Arc;
 
     /// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
@@ -592,5 +592,48 @@ mod tests {
             .get::<Animation>(entity)
             .expect("animation still present");
         assert_eq!(animation.animation_key, "walk");
+    }
+
+    #[test]
+    fn switch_scene_preserves_map_and_asset_commands_but_clears_scene_scoped_commands() {
+        let mut world = new_drain_test_world();
+
+        {
+            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load(
+                    "engine.load_map('maps/dummy.json')\n\
+                     engine.load_texture('boss', 'assets/boss.png')\n\
+                     engine.set_flag('stale_flag')",
+                )
+                .exec()
+                .expect("queue map/asset/signal commands");
+        }
+
+        world.run_system_once(switch_scene).unwrap();
+
+        let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+
+        let mut map_buf = Vec::new();
+        lua_runtime.drain_map_commands_into(&mut map_buf);
+        assert_eq!(
+            map_buf.len(),
+            1,
+            "map_commands queued before switch_scene must survive its clear_all_commands"
+        );
+
+        let mut asset_buf = Vec::new();
+        lua_runtime.drain_asset_commands_into(&mut asset_buf);
+        assert_eq!(
+            asset_buf.len(),
+            1,
+            "asset_commands queued before switch_scene must survive its clear_all_commands"
+        );
+
+        assert!(
+            !world.resource::<WorldSignals>().has_flag("stale_flag"),
+            "scene-scoped signal_commands should still be cleared by switch_scene"
+        );
     }
 }
