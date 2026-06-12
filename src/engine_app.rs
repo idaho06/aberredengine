@@ -777,6 +777,13 @@ impl EngineBuilder {
         update.add_systems(tilemap_spawn_system);
         update.add_systems(update_input_state);
         update.add_systems(check_pending_state);
+        #[cfg(feature = "lua")]
+        if has_lua {
+            update.add_systems(update_group_counts_system.before(lua_phase_system));
+        } else {
+            update.add_systems(update_group_counts_system);
+        }
+        #[cfg(not(feature = "lua"))]
         update.add_systems(update_group_counts_system);
         update.add_systems(
             (
@@ -1143,6 +1150,51 @@ mod tests {
         assert!(
             !system_type_ids.contains(&update_lua_timers_type),
             "update_lua_timers should be absent when has_lua is false"
+        );
+    }
+
+    #[cfg(feature = "lua")]
+    #[test]
+    fn test_build_schedule_with_lua_orders_group_counts_before_lua_phase() {
+        let mut world = World::new();
+        let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
+        let schedule =
+            EngineBuilder::build_schedule(builder.update_hook, Vec::new(), &mut world, true, false)
+                .expect("build_schedule should succeed with has_lua=true");
+
+        let system_type_ids: Vec<_> = schedule
+            .systems()
+            .expect("build_schedule initializes the schedule")
+            .map(|(_, system)| system.type_id())
+            .collect();
+
+        let index_of = |type_id, label| {
+            system_type_ids
+                .iter()
+                .position(|t| *t == type_id)
+                .unwrap_or_else(|| panic!("{label} should be present"))
+        };
+
+        let update_group_counts_index = index_of(
+            IntoSystem::into_system(update_group_counts_system).type_id(),
+            "update_group_counts_system",
+        );
+        let lua_phase_index = index_of(
+            IntoSystem::into_system(lua_phase_system).type_id(),
+            "lua_phase_system",
+        );
+        let lua_update_index = index_of(
+            IntoSystem::into_system(crate::lua_plugin::update).type_id(),
+            "lua_plugin::update",
+        );
+
+        assert!(
+            update_group_counts_index < lua_phase_index,
+            "update_group_counts_system should run before lua_phase_system"
+        );
+        assert!(
+            update_group_counts_index < lua_update_index,
+            "update_group_counts_system should run before lua_plugin::update"
         );
     }
 

@@ -406,6 +406,10 @@ pub fn switch_scene(
     scene_state.world_signals.clear_group_counts();
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
+    // Refresh the Lua signal cache so on_switch_scene sees the post-clear state
+    // (cleared entity registry and group counts), not the previous scene's snapshot.
+    lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
+
     let scene = scene_state
         .world_signals
         .get_string(sk::SCENE)
@@ -634,6 +638,48 @@ mod tests {
         assert!(
             !world.resource::<WorldSignals>().has_flag("stale_flag"),
             "scene-scoped signal_commands should still be cleared by switch_scene"
+        );
+    }
+
+    #[test]
+    fn switch_scene_refreshes_signal_cache_before_on_switch_scene() {
+        let mut world = new_drain_test_world();
+
+        let player = world.spawn_empty().id();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_entity("player", player);
+        let snapshot = world.resource_mut::<WorldSignals>().snapshot();
+
+        {
+            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            // Prime the cache with a snapshot that still contains "player",
+            // mimicking the stale state on_switch_scene would otherwise see.
+            lua_runtime.update_signal_cache(snapshot);
+
+            lua_runtime
+                .lua()
+                .load(
+                    "function on_switch_scene(scene)\n\
+                         _G.player_seen = engine.get_entity('player')\n\
+                     end",
+                )
+                .exec()
+                .expect("define on_switch_scene");
+        }
+
+        world.run_system_once(switch_scene).unwrap();
+
+        let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+        let player_seen: Option<u64> = lua_runtime
+            .lua()
+            .globals()
+            .get("player_seen")
+            .expect("player_seen global should be set");
+
+        assert!(
+            player_seen.is_none(),
+            "on_switch_scene should see a refreshed snapshot where 'player' was already cleared"
         );
     }
 }
