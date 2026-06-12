@@ -2691,40 +2691,30 @@ Available collision variants:
 - `engine.collision_entity_set_parent(entity_id, parent_id)`
 - `engine.collision_entity_remove_parent(entity_id)`
 
-### `engine.entity_set_camera_target(entity_id, priority)`
+### `engine.entity_set_camera_target(entity_id, priority?, zoom?)`
 
-Add or update a `CameraTarget` component on an entity at runtime. The camera follow system will track the entity with the highest priority.
+Add or update a `CameraTarget` component on an entity at runtime. The camera follow system will track the entity with the highest priority. The camera will smoothly lerp toward the winning target's `zoom` value.
 
 **Parameters:**
 
 - `entity_id` - The entity to mark as camera target
-- `priority` - Selection priority (integer, 0-255). Higher values win.
+- `priority` (integer, 0-255, optional) - Selection priority. Higher values win. Omitting it preserves the entity's existing priority (or `0` if it has no `CameraTarget` yet).
+- `zoom` (number, optional) - Desired camera zoom. Must be positive (clamped to a small positive value internally). Omitting it preserves the entity's existing zoom (or `1.0` if it has no `CameraTarget` yet).
 
 ```lua
 -- Make the player the camera target
 local player_id = engine.get_entity("player")
 engine.entity_set_camera_target(player_id, 0)
 
--- Switch camera to a boss entity with higher priority
+-- Switch camera to a boss entity with higher priority and a tighter zoom
 local boss_id = engine.get_entity("boss")
-engine.entity_set_camera_target(boss_id, 10)
-```
+engine.entity_set_camera_target(boss_id, 10, 2.0)
 
-### `engine.entity_set_camera_target_zoom(entity_id, zoom)`
-
-Update the desired zoom on an existing `CameraTarget` component at runtime. The camera will smoothly lerp toward this zoom level while the entity remains the winning target.
-
-**Parameters:**
-
-- `entity_id` - The entity with a `CameraTarget` component
-- `zoom` (number) - Desired camera zoom. Must be positive (clamped to a small positive value internally).
-
-```lua
--- Zoom in when the player enters a tight corridor
-engine.entity_set_camera_target_zoom(player_id, 2.0)
+-- Zoom in on the player without changing its priority
+engine.entity_set_camera_target(player_id, nil, 2.0)
 
 -- Zoom back out
-engine.entity_set_camera_target_zoom(player_id, 1.0)
+engine.entity_set_camera_target(player_id, nil, 1.0)
 ```
 
 ### `engine.entity_remove_camera_target(entity_id)`
@@ -2742,8 +2732,7 @@ engine.entity_remove_camera_target(boss_id)
 
 Available collision variants:
 
-- `engine.collision_entity_set_camera_target(entity_id, priority)`
-- `engine.collision_entity_set_camera_target_zoom(entity_id, zoom)`
+- `engine.collision_entity_set_camera_target(entity_id, priority?, zoom?)`
 - `engine.collision_entity_remove_camera_target(entity_id)`
 
 ### `engine.entity_menu_despawn(entity_id)`
@@ -4498,7 +4487,7 @@ engine.camera_follow_set_zoom_speed(5.0)   -- Default
 engine.camera_follow_set_zoom_speed(20.0)  -- Near-instant zoom
 ```
 
-The zoom value is sourced from the winning `CameraTarget`'s `zoom` field (set via `:with_camera_target(priority, zoom)` at spawn, or updated at runtime via `engine.entity_set_camera_target_zoom(entity_id, zoom)`).
+The zoom value is sourced from the winning `CameraTarget`'s `zoom` field (set via `:with_camera_target(priority, zoom)` at spawn, or updated at runtime via `engine.entity_set_camera_target(entity_id, nil, zoom)`).
 
 #### Complete Example: Asteroids with Look-Ahead Camera
 

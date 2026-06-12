@@ -132,7 +132,6 @@ pub fn process_entity_commands(
             | EntityCmd::SetRotation { .. }
             | EntityCmd::SetScale { .. }
             | EntityCmd::SetCameraTarget { .. }
-            | EntityCmd::SetCameraTargetZoom { .. }
             | EntityCmd::RemoveCameraTarget { .. }) => {
                 process_transform_cmd(cmd, commands, queries)
             }
@@ -544,27 +543,20 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
         EntityCmd::SetCameraTarget {
             entity_id,
             priority,
+            zoom,
         } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
-            let existing_zoom = queries
+            let existing = queries
                 .camera_targets
                 .get(entity)
-                .map(|ct| ct.zoom)
-                .unwrap_or(CameraTarget::default().zoom);
+                .copied()
+                .unwrap_or_default();
             with_entity_cmds(commands, entity, |ec| {
-                ec.try_insert(CameraTarget::new(priority).with_zoom(existing_zoom));
+                ec.try_insert(CameraTarget {
+                    priority: priority.unwrap_or(existing.priority),
+                    zoom: zoom.unwrap_or(existing.zoom).max(f32::EPSILON),
+                });
             });
-        }
-        EntityCmd::SetCameraTargetZoom { entity_id, zoom } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Ok(mut ct) = queries.camera_targets.get_mut(entity) {
-                ct.zoom = zoom.max(f32::EPSILON);
-            } else {
-                warn!(
-                    "SetCameraTargetZoom: entity {:?} has no CameraTarget component",
-                    entity
-                );
-            }
         }
         EntityCmd::RemoveCameraTarget { entity_id } => {
             with_entity_cmd(commands, entity_id, |ec| {
@@ -726,36 +718,111 @@ mod tests {
         assert_eq!(resolve_entity(entity.to_bits()), Some(entity));
     }
 
-    #[test]
-    fn despawn_removes_world_signals_registration_and_entity() {
+    /// Run a single `EntityCmd` through `process_entity_commands` against a
+    /// fresh `World`, applying the resulting ECS commands before returning.
+    fn run_entity_cmd(world: &mut World, world_signals: &mut WorldSignals, cmd: EntityCmd) {
         use bevy_ecs::system::SystemState;
 
+        let systems_store = SystemsStore::default();
+        let anim_store = AnimationStore::default();
+
+        let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(world);
+        {
+            let (mut commands, mut queries) = system_state.get_mut(world);
+            process_entity_commands(
+                &mut commands,
+                [cmd],
+                world_signals,
+                &mut queries,
+                &systems_store,
+                &anim_store,
+            );
+        }
+        system_state.apply(world);
+    }
+
+    #[test]
+    fn despawn_removes_world_signals_registration_and_entity() {
         let mut world = World::new();
         let entity = world.spawn_empty().id();
 
         let mut world_signals = WorldSignals::default();
         world_signals.set_entity("tpl", entity);
 
-        let systems_store = SystemsStore::default();
-        let anim_store = AnimationStore::default();
-
-        let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(&mut world);
-        {
-            let (mut commands, mut queries) = system_state.get_mut(&mut world);
-            process_entity_commands(
-                &mut commands,
-                [EntityCmd::Despawn {
-                    entity_id: entity.to_bits(),
-                }],
-                &mut world_signals,
-                &mut queries,
-                &systems_store,
-                &anim_store,
-            );
-        }
-        system_state.apply(&mut world);
+        run_entity_cmd(
+            &mut world,
+            &mut world_signals,
+            EntityCmd::Despawn {
+                entity_id: entity.to_bits(),
+            },
+        );
 
         assert!(world.get_entity(entity).is_err());
         assert!(world_signals.get_entity("tpl").is_none());
+    }
+
+    fn run_camera_target_cmd(world: &mut World, cmd: EntityCmd) {
+        run_entity_cmd(world, &mut WorldSignals::default(), cmd);
+    }
+
+    #[test]
+    fn set_camera_target_defaults_when_absent() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+
+        run_camera_target_cmd(
+            &mut world,
+            EntityCmd::SetCameraTarget {
+                entity_id: entity.to_bits(),
+                priority: None,
+                zoom: None,
+            },
+        );
+
+        let ct = world.get::<CameraTarget>(entity).unwrap();
+        assert_eq!(ct.priority, CameraTarget::default().priority);
+        assert_eq!(ct.zoom, CameraTarget::default().zoom);
+    }
+
+    #[test]
+    fn set_camera_target_preserves_existing_zoom_when_priority_only() {
+        let mut world = World::new();
+        let entity = world
+            .spawn(CameraTarget { priority: 5, zoom: 2.0 })
+            .id();
+
+        run_camera_target_cmd(
+            &mut world,
+            EntityCmd::SetCameraTarget {
+                entity_id: entity.to_bits(),
+                priority: Some(10),
+                zoom: None,
+            },
+        );
+
+        let ct = world.get::<CameraTarget>(entity).unwrap();
+        assert_eq!(ct.priority, 10);
+        assert_eq!(ct.zoom, 2.0);
+    }
+
+    #[test]
+    fn set_camera_target_preserves_existing_priority_when_zoom_only() {
+        let mut world = World::new();
+        let entity = world
+            .spawn(CameraTarget { priority: 5, zoom: 2.0 })
+            .id();
+
+        run_camera_target_cmd(
+            &mut world,
+            EntityCmd::SetCameraTarget {
+                entity_id: entity.to_bits(),
+                priority: None,
+                zoom: Some(3.0),
+            },
+        );
+
+        let ct = world.get::<CameraTarget>(entity).unwrap();
+        assert_eq!(ct.priority, 5);
+        assert_eq!(ct.zoom, 3.0);
     }
 }

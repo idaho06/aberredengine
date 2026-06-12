@@ -624,15 +624,11 @@ function engine.collision_entity_restart_animation(entity_id) end
 ---@param animation_key string
 function engine.collision_entity_set_animation(entity_id, animation_key) end
 
----Set CameraTarget component on an entity (higher priority wins)
+---Set CameraTarget component on an entity (higher priority wins). Omitted priority/zoom preserve the entity's existing value (or component defaults if none exists); zoom is smoothly lerped each frame via zoom_lerp_speed
 ---@param entity_id integer
----@param priority integer
-function engine.collision_entity_set_camera_target(entity_id, priority) end
-
----Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)
----@param entity_id integer
----@param zoom number
-function engine.collision_entity_set_camera_target_zoom(entity_id, zoom) end
+---@param priority integer|nil
+---@param zoom number|nil
+function engine.collision_entity_set_camera_target(entity_id, priority, zoom) end
 
 ---Enable or disable a named force on an entity
 ---@param entity_id integer
@@ -930,15 +926,11 @@ function engine.entity_restart_animation(entity_id) end
 ---@param animation_key string
 function engine.entity_set_animation(entity_id, animation_key) end
 
----Set CameraTarget component on an entity (higher priority wins)
+---Set CameraTarget component on an entity (higher priority wins). Omitted priority/zoom preserve the entity's existing value (or component defaults if none exists); zoom is smoothly lerped each frame via zoom_lerp_speed
 ---@param entity_id integer
----@param priority integer
-function engine.entity_set_camera_target(entity_id, priority) end
-
----Set zoom on an existing CameraTarget component (smoothly lerped each frame via zoom_lerp_speed)
----@param entity_id integer
----@param zoom number
-function engine.entity_set_camera_target_zoom(entity_id, zoom) end
+---@param priority integer|nil
+---@param zoom number|nil
+function engine.entity_set_camera_target(entity_id, priority, zoom) end
 
 ---Enable or disable a named force on an entity
 ---@param entity_id integer

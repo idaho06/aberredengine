@@ -223,6 +223,10 @@ fn test_key_from_str_unknown_returns_none() {
 #[test]
 fn test_action_from_str_all_valid_names() {
     let pairs: &[(&str, InputAction)] = &[
+        ("up", InputAction::MainDirectionUp),
+        ("down", InputAction::MainDirectionDown),
+        ("left", InputAction::MainDirectionLeft),
+        ("right", InputAction::MainDirectionRight),
         ("main_up", InputAction::MainDirectionUp),
         ("main_down", InputAction::MainDirectionDown),
         ("main_left", InputAction::MainDirectionLeft),

@@ -401,7 +401,7 @@ This section is meant to stay in sync with the actual implementation.
 - `entity_shader_clear_uniform`, `entity_shader_clear_uniforms`
 - `entity_set_tint`, `entity_remove_tint`
 - `entity_set_parent`, `entity_remove_parent`
-- `entity_set_camera_target`, `entity_set_camera_target_zoom`, `entity_remove_camera_target`
+- `entity_set_camera_target`, `entity_remove_camera_target`
 
 #### Collision Context Functions
 
@@ -661,7 +661,7 @@ engine.spawn()
 
 -- At runtime
 engine.entity_set_camera_target(entity_id, 10)
-engine.entity_set_camera_target_zoom(entity_id, 2.0)  -- update zoom independently
+engine.entity_set_camera_target(entity_id, nil, 2.0)  -- update zoom independently
 engine.entity_remove_camera_target(entity_id)
 ```
 

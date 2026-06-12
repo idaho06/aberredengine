@@ -294,10 +294,13 @@ pub enum EntityCmd {
     RemoveParent { entity_id: u64 },
     /// Remove entity tint
     RemoveTint { entity_id: u64 },
-    /// Set CameraTarget component on an entity
-    SetCameraTarget { entity_id: u64, priority: u8 },
-    /// Update zoom on an existing CameraTarget component
-    SetCameraTargetZoom { entity_id: u64, zoom: f32 },
+    /// Set CameraTarget component on an entity. `priority`/`zoom` of `None`
+    /// preserve the entity's existing value (or component default if absent).
+    SetCameraTarget {
+        entity_id: u64,
+        priority: Option<u8>,
+        zoom: Option<f32>,
+    },
     /// Remove CameraTarget component from an entity
     RemoveCameraTarget { entity_id: u64 },
 }

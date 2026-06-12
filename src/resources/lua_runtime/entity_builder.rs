@@ -281,10 +281,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_sprite_offset", "Set sprite offset",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this, (offset_x, offset_y): (f32, f32)| {
-            if let Some(ref mut sprite) = this.cmd.sprite {
-                sprite.offset_x = offset_x;
-                sprite.offset_y = offset_y;
-            }
+            let Some(ref mut sprite) = this.cmd.sprite else {
+                return Err(LuaError::runtime(
+                    "with_sprite_offset() requires with_sprite() first",
+                ));
+            };
+            sprite.offset_x = offset_x;
+            sprite.offset_y = offset_y;
             Ok(this.clone())
         }
     );
@@ -294,10 +297,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_sprite_flip", "Set sprite flipping",
         [("flip_h", "boolean"), ("flip_v", "boolean")],
         |_, this, (flip_h, flip_v): (bool, bool)| {
-            if let Some(ref mut sprite) = this.cmd.sprite {
-                sprite.flip_h = flip_h;
-                sprite.flip_v = flip_v;
-            }
+            let Some(ref mut sprite) = this.cmd.sprite else {
+                return Err(LuaError::runtime(
+                    "with_sprite_flip() requires with_sprite() first",
+                ));
+            };
+            sprite.flip_h = flip_h;
+            sprite.flip_v = flip_v;
             Ok(this.clone())
         }
     );
@@ -431,10 +437,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_collider_offset", "Set collider offset",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this, (offset_x, offset_y): (f32, f32)| {
-            if let Some(ref mut collider) = this.cmd.collider {
-                collider.offset_x = offset_x;
-                collider.offset_y = offset_y;
-            }
+            let Some(ref mut collider) = this.cmd.collider else {
+                return Err(LuaError::runtime(
+                    "with_collider_offset() requires with_collider() first",
+                ));
+            };
+            collider.offset_x = offset_x;
+            collider.offset_y = offset_y;
             Ok(this.clone())
         }
     );
@@ -786,10 +795,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_stuckto_offset", "Set offset for StuckTo",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this, (offset_x, offset_y): (f32, f32)| {
-            if let Some(ref mut stuckto) = this.cmd.stuckto {
-                stuckto.offset_x = offset_x;
-                stuckto.offset_y = offset_y;
-            }
+            let Some(ref mut stuckto) = this.cmd.stuckto else {
+                return Err(LuaError::runtime(
+                    "with_stuckto_offset() requires with_stuckto() first",
+                ));
+            };
+            stuckto.offset_x = offset_x;
+            stuckto.offset_y = offset_y;
             Ok(this.clone())
         }
     );
@@ -799,9 +811,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_stuckto_stored_velocity", "Set velocity to restore when unstuck",
         [("vx", "number"), ("vy", "number")],
         |_, this, (vx, vy): (f32, f32)| {
-            if let Some(ref mut stuckto) = this.cmd.stuckto {
-                stuckto.stored_velocity = Some((vx, vy));
-            }
+            let Some(ref mut stuckto) = this.cmd.stuckto else {
+                return Err(LuaError::runtime(
+                    "with_stuckto_stored_velocity() requires with_stuckto() first",
+                ));
+            };
+            stuckto.stored_velocity = Some((vx, vy));
             Ok(this.clone())
         }
     );
@@ -841,9 +856,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_signal_binding_format", "Set format string for signal binding (use {} as placeholder)",
         [("format", "string")],
         |_, this, format: String| {
-            if let Some((key, _)) = this.cmd.signal_binding.take() {
-                this.cmd.signal_binding = Some((key, Some(format)));
-            }
+            let Some((_, ref mut fmt)) = this.cmd.signal_binding else {
+                return Err(LuaError::runtime(
+                    "with_signal_binding_format() requires with_signal_binding() first",
+                ));
+            };
+            *fmt = Some(format);
             Ok(this.clone())
         }
     );
@@ -885,9 +903,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_position_easing", "Set easing for position tween",
         [("easing", "string")],
         |_, this, easing: String| {
-            if let Some(ref mut tween) = this.cmd.tween_position {
-                tween.config.easing = easing;
-            }
+            let Some(ref mut tween) = this.cmd.tween_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_position_easing() requires with_tween_position() first",
+                ));
+            };
+            tween.config.easing = easing;
             Ok(this.clone())
         }
     );
@@ -897,9 +918,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_position_loop", "Set loop mode for position tween",
         [("loop_mode", "string")],
         |_, this, loop_mode: String| {
-            if let Some(ref mut tween) = this.cmd.tween_position {
-                tween.config.loop_mode = loop_mode;
-            }
+            let Some(ref mut tween) = this.cmd.tween_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_position_loop() requires with_tween_position() first",
+                ));
+            };
+            tween.config.loop_mode = loop_mode;
             Ok(this.clone())
         }
     );
@@ -909,9 +933,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_position_backwards", "Start position tween in reverse",
         [],
         |_, this, (): ()| {
-            if let Some(ref mut tween) = this.cmd.tween_position {
-                tween.config.backwards = true;
-            }
+            let Some(ref mut tween) = this.cmd.tween_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_position_backwards() requires with_tween_position() first",
+                ));
+            };
+            tween.config.backwards = true;
             Ok(this.clone())
         }
     );
@@ -935,9 +962,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_rotation_easing", "Set easing for rotation tween",
         [("easing", "string")],
         |_, this, easing: String| {
-            if let Some(ref mut tween) = this.cmd.tween_rotation {
-                tween.config.easing = easing;
-            }
+            let Some(ref mut tween) = this.cmd.tween_rotation else {
+                return Err(LuaError::runtime(
+                    "with_tween_rotation_easing() requires with_tween_rotation() first",
+                ));
+            };
+            tween.config.easing = easing;
             Ok(this.clone())
         }
     );
@@ -947,9 +977,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_rotation_loop", "Set loop mode for rotation tween",
         [("loop_mode", "string")],
         |_, this, loop_mode: String| {
-            if let Some(ref mut tween) = this.cmd.tween_rotation {
-                tween.config.loop_mode = loop_mode;
-            }
+            let Some(ref mut tween) = this.cmd.tween_rotation else {
+                return Err(LuaError::runtime(
+                    "with_tween_rotation_loop() requires with_tween_rotation() first",
+                ));
+            };
+            tween.config.loop_mode = loop_mode;
             Ok(this.clone())
         }
     );
@@ -959,9 +992,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_rotation_backwards", "Start rotation tween in reverse",
         [],
         |_, this, (): ()| {
-            if let Some(ref mut tween) = this.cmd.tween_rotation {
-                tween.config.backwards = true;
-            }
+            let Some(ref mut tween) = this.cmd.tween_rotation else {
+                return Err(LuaError::runtime(
+                    "with_tween_rotation_backwards() requires with_tween_rotation() first",
+                ));
+            };
+            tween.config.backwards = true;
             Ok(this.clone())
         }
     );
@@ -993,9 +1029,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_scale_easing", "Set easing for scale tween",
         [("easing", "string")],
         |_, this, easing: String| {
-            if let Some(ref mut tween) = this.cmd.tween_scale {
-                tween.config.easing = easing;
-            }
+            let Some(ref mut tween) = this.cmd.tween_scale else {
+                return Err(LuaError::runtime(
+                    "with_tween_scale_easing() requires with_tween_scale() first",
+                ));
+            };
+            tween.config.easing = easing;
             Ok(this.clone())
         }
     );
@@ -1005,9 +1044,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_scale_loop", "Set loop mode for scale tween",
         [("loop_mode", "string")],
         |_, this, loop_mode: String| {
-            if let Some(ref mut tween) = this.cmd.tween_scale {
-                tween.config.loop_mode = loop_mode;
-            }
+            let Some(ref mut tween) = this.cmd.tween_scale else {
+                return Err(LuaError::runtime(
+                    "with_tween_scale_loop() requires with_tween_scale() first",
+                ));
+            };
+            tween.config.loop_mode = loop_mode;
             Ok(this.clone())
         }
     );
@@ -1017,9 +1059,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "with_tween_scale_backwards", "Start scale tween in reverse",
         [],
         |_, this, (): ()| {
-            if let Some(ref mut tween) = this.cmd.tween_scale {
-                tween.config.backwards = true;
-            }
+            let Some(ref mut tween) = this.cmd.tween_scale else {
+                return Err(LuaError::runtime(
+                    "with_tween_scale_backwards() requires with_tween_scale() first",
+                ));
+            };
+            tween.config.backwards = true;
             Ok(this.clone())
         }
     );
@@ -1393,5 +1438,80 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 impl LuaUserData for LuaEntityBuilder {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         register_methods(methods, &mut None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::resources::lua_runtime::LuaRuntime;
+
+    fn assert_runtime_error(script: &str, expected_msg: &str) {
+        let runtime = LuaRuntime::new().unwrap();
+        let err = runtime
+            .lua()
+            .load(script)
+            .exec()
+            .expect_err("expected script to raise an error");
+        let message = err.to_string();
+        assert!(
+            message.contains(expected_msg),
+            "expected error containing {expected_msg:?}, got {message:?}"
+        );
+    }
+
+    #[test]
+    fn with_sprite_offset_requires_with_sprite() {
+        assert_runtime_error(
+            "engine.spawn():with_sprite_offset(1, 1)",
+            "with_sprite_offset() requires with_sprite() first",
+        );
+    }
+
+    #[test]
+    fn with_collider_offset_requires_with_collider() {
+        assert_runtime_error(
+            "engine.spawn():with_collider_offset(1, 1)",
+            "with_collider_offset() requires with_collider() first",
+        );
+    }
+
+    #[test]
+    fn with_stuckto_offset_requires_with_stuckto() {
+        assert_runtime_error(
+            "engine.spawn():with_stuckto_offset(1, 1)",
+            "with_stuckto_offset() requires with_stuckto() first",
+        );
+    }
+
+    #[test]
+    fn with_signal_binding_format_requires_with_signal_binding() {
+        assert_runtime_error(
+            "engine.spawn():with_signal_binding_format('{}')",
+            "with_signal_binding_format() requires with_signal_binding() first",
+        );
+    }
+
+    #[test]
+    fn with_tween_position_easing_requires_with_tween_position() {
+        assert_runtime_error(
+            "engine.spawn():with_tween_position_easing('linear')",
+            "with_tween_position_easing() requires with_tween_position() first",
+        );
+    }
+
+    #[test]
+    fn with_tween_rotation_loop_requires_with_tween_rotation() {
+        assert_runtime_error(
+            "engine.spawn():with_tween_rotation_loop('loop')",
+            "with_tween_rotation_loop() requires with_tween_rotation() first",
+        );
+    }
+
+    #[test]
+    fn with_tween_scale_backwards_requires_with_tween_scale() {
+        assert_runtime_error(
+            "engine.spawn():with_tween_scale_backwards()",
+            "with_tween_scale_backwards() requires with_tween_scale() first",
+        );
     }
 }

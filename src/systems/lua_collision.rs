@@ -250,7 +250,10 @@ fn populate_collision_entity(
     signals: Option<&Signals>,
 ) -> mlua::Result<()> {
     entity_table.set("id", id)?;
-    entity_table.set("group", group.unwrap_or(""))?;
+    match group {
+        Some(g) => entity_table.set("group", g)?,
+        None => entity_table.set("group", mlua::Value::Nil)?,
+    }
     entity_table.set("speed_sq", speed_sq)?;
 
     if let Some((x, y)) = pos {
@@ -386,5 +389,65 @@ mod tests {
     #[test]
     fn test_box_side_to_str_bottom() {
         assert_eq!(box_side_to_str(&BoxSide::Bottom), "bottom");
+    }
+
+    #[test]
+    fn populate_collision_entity_group_none_is_nil() {
+        let lua = mlua::Lua::new();
+        let entity_table = lua.create_table().unwrap();
+        let pos_table = lua.create_table().unwrap();
+        let vel_table = lua.create_table().unwrap();
+        let rect_table = lua.create_table().unwrap();
+        let signals_table = lua.create_table().unwrap();
+
+        populate_collision_entity(
+            &lua,
+            &entity_table,
+            &pos_table,
+            &vel_table,
+            &rect_table,
+            &signals_table,
+            1,
+            None,
+            0.0,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let group: mlua::Value = entity_table.get("group").unwrap();
+        assert!(matches!(group, mlua::Value::Nil));
+    }
+
+    #[test]
+    fn populate_collision_entity_group_some_is_string() {
+        let lua = mlua::Lua::new();
+        let entity_table = lua.create_table().unwrap();
+        let pos_table = lua.create_table().unwrap();
+        let vel_table = lua.create_table().unwrap();
+        let rect_table = lua.create_table().unwrap();
+        let signals_table = lua.create_table().unwrap();
+
+        populate_collision_entity(
+            &lua,
+            &entity_table,
+            &pos_table,
+            &vel_table,
+            &rect_table,
+            &signals_table,
+            1,
+            Some("enemy"),
+            0.0,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let group: String = entity_table.get("group").unwrap();
+        assert_eq!(group, "enemy");
     }
 }

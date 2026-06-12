@@ -1,4 +1,6 @@
 use super::*;
+use crate::resources::lua_runtime::action_from_str;
+use crate::resources::lua_runtime::runtime::action_to_str;
 
 impl LuaRuntime {
     /// Registers the input rebinding API in the `engine` table.
@@ -36,9 +38,12 @@ impl LuaRuntime {
         engine.set(
             "get_binding",
             self.lua.create_function(|lua, action: String| {
+                let canonical = action_from_str(&action)
+                    .map(action_to_str)
+                    .unwrap_or(action.as_str());
                 let result = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.bindings_snapshot.borrow().get(&action).cloned());
+                    .and_then(|data| data.bindings_snapshot.borrow().get(canonical).cloned());
                 Ok(result)
             })?,
         )?;

@@ -289,10 +289,10 @@ pub(super) fn action_to_str(action: crate::events::input::InputAction) -> &'stat
 pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
     use crate::events::input::InputAction;
     match s {
-        "main_up" => Some(InputAction::MainDirectionUp),
-        "main_down" => Some(InputAction::MainDirectionDown),
-        "main_left" => Some(InputAction::MainDirectionLeft),
-        "main_right" => Some(InputAction::MainDirectionRight),
+        "up" | "main_up" => Some(InputAction::MainDirectionUp),
+        "down" | "main_down" => Some(InputAction::MainDirectionDown),
+        "left" | "main_left" => Some(InputAction::MainDirectionLeft),
+        "right" | "main_right" => Some(InputAction::MainDirectionRight),
         "secondary_up" => Some(InputAction::SecondaryDirectionUp),
         "secondary_down" => Some(InputAction::SecondaryDirectionDown),
         "secondary_left" => Some(InputAction::SecondaryDirectionLeft),
