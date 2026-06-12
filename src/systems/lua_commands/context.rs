@@ -23,7 +23,7 @@ pub(crate) fn build_entity_context(
     previous_phase: Option<&str>,
 ) -> LuaResult<LuaTable> {
     let lua = lua_runtime.lua();
-    let tables = lua_runtime.get_entity_ctx_pool()?;
+    let tables = lua_runtime.get_entity_ctx_pool();
 
     // Query all optional components
     let group = ctx_queries.groups.get(entity).ok().map(|g| g.name());

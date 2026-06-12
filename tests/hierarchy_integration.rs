@@ -1234,7 +1234,7 @@ use aberredengine::resources::lua_runtime::{
 #[test]
 fn entity_context_includes_world_transform_fields() {
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
-    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let tables = runtime.get_entity_ctx_pool();
     let lua = runtime.lua();
 
     let snapshot = EntitySnapshot {
@@ -1281,7 +1281,7 @@ fn entity_context_includes_world_transform_fields() {
 #[test]
 fn entity_context_nil_world_fields_without_hierarchy() {
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
-    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let tables = runtime.get_entity_ctx_pool();
     let lua = runtime.lua();
 
     let snapshot = EntitySnapshot {

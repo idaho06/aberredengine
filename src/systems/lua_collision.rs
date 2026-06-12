@@ -316,7 +316,7 @@ fn call_lua_collision_callback(
     group_b: Option<&str>,
 ) -> mlua::Result<()> {
     let lua = lua_runtime.lua();
-    let tables = lua_runtime.get_collision_ctx_pool()?;
+    let tables = lua_runtime.get_collision_ctx_pool();
 
     populate_collision_entity(
         lua,

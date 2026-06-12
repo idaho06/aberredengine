@@ -112,34 +112,9 @@ pub(super) struct LuaAppData {
     pub(super) camera_snapshot: RefCell<CameraSnapshot>,
 }
 
-/// Registry keys for pooled collision context tables.
-/// Created once during LuaRuntime initialization, reused for every collision.
-struct CollisionCtxPool {
-    // Main structure
-    ctx: LuaRegistryKey,
-    entity_a: LuaRegistryKey,
-    entity_b: LuaRegistryKey,
-
-    // Entity A subtables
-    pos_a: LuaRegistryKey,
-    vel_a: LuaRegistryKey,
-    rect_a: LuaRegistryKey,
-    signals_a: LuaRegistryKey,
-
-    // Entity B subtables
-    pos_b: LuaRegistryKey,
-    vel_b: LuaRegistryKey,
-    rect_b: LuaRegistryKey,
-    signals_b: LuaRegistryKey,
-
-    // Sides
-    // sides: LuaRegistryKey,
-    sides_a: LuaRegistryKey,
-    sides_b: LuaRegistryKey,
-}
-
-/// Borrowed references to pooled collision context tables.
-/// Used by collision system to populate and pass context to Lua callbacks.
+/// Pooled collision context tables, owned directly by `LuaRuntime` and reused for
+/// every collision via cheap `Clone` (each field is a ref-counted `LuaTable` handle).
+#[derive(Clone)]
 pub struct CollisionCtxTables {
     pub ctx: LuaTable,
     pub entity_a: LuaTable,
@@ -152,41 +127,13 @@ pub struct CollisionCtxTables {
     pub rect_b: LuaTable,
     pub signals_a: LuaTable,
     pub signals_b: LuaTable,
-    // pub sides: LuaTable,
     pub sides_a: LuaTable,
     pub sides_b: LuaTable,
 }
 
-/// Registry keys for a pooled input callback table.
-///
-/// Created once during LuaRuntime initialization and reused for scene, phase,
-/// and timer callbacks.
-struct InputCtxPool {
-    input: LuaRegistryKey,
-    digital: LuaRegistryKey,
-    analog: LuaRegistryKey,
-    up: LuaRegistryKey,
-    down: LuaRegistryKey,
-    left: LuaRegistryKey,
-    right: LuaRegistryKey,
-    action_1: LuaRegistryKey,
-    action_2: LuaRegistryKey,
-    action_3: LuaRegistryKey,
-    back: LuaRegistryKey,
-    special: LuaRegistryKey,
-    main_up: LuaRegistryKey,
-    main_down: LuaRegistryKey,
-    main_left: LuaRegistryKey,
-    main_right: LuaRegistryKey,
-    secondary_up: LuaRegistryKey,
-    secondary_down: LuaRegistryKey,
-    secondary_left: LuaRegistryKey,
-    secondary_right: LuaRegistryKey,
-    debug: LuaRegistryKey,
-    fullscreen: LuaRegistryKey,
-}
-
-/// Borrowed references to the pooled input callback table.
+/// Pooled input callback tables, owned directly by `LuaRuntime` and reused across
+/// scene, phase, and timer callbacks via cheap `Clone`.
+#[derive(Clone)]
 pub struct InputCtxTables {
     pub input: LuaTable,
     pub digital: LuaTable,
@@ -212,25 +159,9 @@ pub struct InputCtxTables {
     pub fullscreen: LuaTable,
 }
 
-/// Registry keys for pooled entity context tables.
-/// Created once during LuaRuntime initialization, reused for phase/timer callbacks.
-struct EntityCtxPool {
-    ctx: LuaRegistryKey,
-    pos: LuaRegistryKey,
-    screen_pos: LuaRegistryKey,
-    vel: LuaRegistryKey,
-    scale: LuaRegistryKey,
-    rect: LuaRegistryKey,
-    sprite: LuaRegistryKey,
-    animation: LuaRegistryKey,
-    timer: LuaRegistryKey,
-    signals: LuaRegistryKey,
-    world_pos: LuaRegistryKey,
-    world_scale: LuaRegistryKey,
-}
-
-/// Borrowed references to pooled entity context tables.
-/// Used by LuaPhase and LuaTimer systems to populate and pass context to Lua callbacks.
+/// Pooled entity context tables, owned directly by `LuaRuntime` and reused for
+/// phase/timer callbacks via cheap `Clone`.
+#[derive(Clone)]
 pub struct EntityCtxTables {
     pub ctx: LuaTable,
     pub pos: LuaTable,
@@ -253,11 +184,11 @@ pub struct EntityCtxTables {
 pub struct LuaRuntime {
     pub(super) lua: Lua,
     /// Pooled collision context tables for reuse across collisions.
-    collision_ctx_pool: Option<CollisionCtxPool>,
+    collision_ctx_tables: CollisionCtxTables,
     /// Pooled entity context tables for reuse across phase/timer callbacks.
-    entity_ctx_pool: Option<EntityCtxPool>,
+    entity_ctx_tables: EntityCtxTables,
     /// Pooled input callback table reused across Lua callback sites.
-    input_ctx_pool: Option<InputCtxPool>,
+    input_ctx_tables: InputCtxTables,
 }
 
 /// Converts an [`InputAction`] to its canonical Lua-facing string name.
@@ -333,20 +264,20 @@ impl LuaRuntime {
             ..Default::default()
         });
 
-        // Create collision context pool for table reuse
-        let collision_ctx_pool = Some(Self::create_collision_ctx_pool(&lua)?);
+        // Create collision context tables for reuse
+        let collision_ctx_tables = Self::create_collision_ctx_tables(&lua)?;
 
-        // Create entity context pool for table reuse (LuaPhase/LuaTimer)
-        let entity_ctx_pool = Some(Self::create_entity_ctx_pool(&lua)?);
+        // Create entity context tables for reuse (LuaPhase/LuaTimer)
+        let entity_ctx_tables = Self::create_entity_ctx_tables(&lua)?;
 
-        // Create input callback table pool for scene/phase/timer callbacks
-        let input_ctx_pool = Some(Self::create_input_ctx_pool(&lua)?);
+        // Create input callback tables for scene/phase/timer callbacks
+        let input_ctx_tables = Self::create_input_ctx_tables(&lua)?;
 
         let runtime = Self {
             lua,
-            collision_ctx_pool,
-            entity_ctx_pool,
-            input_ctx_pool,
+            collision_ctx_tables,
+            entity_ctx_tables,
+            input_ctx_tables,
         };
         runtime.register_base_api()?;
         runtime.register_asset_api()?;
@@ -372,9 +303,8 @@ impl LuaRuntime {
         Ok(runtime)
     }
 
-    /// Creates the pooled collision context tables.
-    /// These tables are stored in the Lua registry and reused for every collision.
-    fn create_collision_ctx_pool(lua: &Lua) -> LuaResult<CollisionCtxPool> {
+    /// Creates the pooled collision context tables, reused for every collision.
+    fn create_collision_ctx_tables(lua: &Lua) -> LuaResult<CollisionCtxTables> {
         // Create all tables
         let ctx = lua.create_table()?;
         let entity_a = lua.create_table()?;
@@ -412,119 +342,56 @@ impl LuaRuntime {
         ctx.set("b", entity_b.clone())?;
         ctx.set("sides", sides.clone())?;
 
-        // Store in registry to prevent GC
-        Ok(CollisionCtxPool {
-            ctx: lua.create_registry_value(ctx)?,
-            entity_a: lua.create_registry_value(entity_a)?,
-            entity_b: lua.create_registry_value(entity_b)?,
-            pos_a: lua.create_registry_value(pos_a)?,
-            pos_b: lua.create_registry_value(pos_b)?,
-            vel_a: lua.create_registry_value(vel_a)?,
-            vel_b: lua.create_registry_value(vel_b)?,
-            rect_a: lua.create_registry_value(rect_a)?,
-            rect_b: lua.create_registry_value(rect_b)?,
-            signals_a: lua.create_registry_value(signals_a)?,
-            signals_b: lua.create_registry_value(signals_b)?,
-            // sides: lua.create_registry_value(sides)?,
-            sides_a: lua.create_registry_value(sides_a)?,
-            sides_b: lua.create_registry_value(sides_b)?,
+        Ok(CollisionCtxTables {
+            ctx,
+            entity_a,
+            entity_b,
+            pos_a,
+            pos_b,
+            vel_a,
+            vel_b,
+            rect_a,
+            rect_b,
+            signals_a,
+            signals_b,
+            sides_a,
+            sides_b,
         })
     }
 
     /// Returns the pooled collision context tables for reuse.
     /// The caller must populate fields before passing to Lua callbacks.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the pool is not initialized or registry retrieval fails.
-    pub fn get_collision_ctx_pool(&self) -> LuaResult<CollisionCtxTables> {
-        let pool = self
-            .collision_ctx_pool
-            .as_ref()
-            .ok_or_else(|| LuaError::runtime("Collision context pool not initialized"))?;
-
-        Ok(CollisionCtxTables {
-            ctx: self.lua.registry_value(&pool.ctx)?,
-            entity_a: self.lua.registry_value(&pool.entity_a)?,
-            entity_b: self.lua.registry_value(&pool.entity_b)?,
-            pos_a: self.lua.registry_value(&pool.pos_a)?,
-            pos_b: self.lua.registry_value(&pool.pos_b)?,
-            vel_a: self.lua.registry_value(&pool.vel_a)?,
-            vel_b: self.lua.registry_value(&pool.vel_b)?,
-            rect_a: self.lua.registry_value(&pool.rect_a)?,
-            rect_b: self.lua.registry_value(&pool.rect_b)?,
-            signals_a: self.lua.registry_value(&pool.signals_a)?,
-            signals_b: self.lua.registry_value(&pool.signals_b)?,
-            //sides: self.lua.registry_value(&pool.sides)?,
-            sides_a: self.lua.registry_value(&pool.sides_a)?,
-            sides_b: self.lua.registry_value(&pool.sides_b)?,
-        })
+    pub fn get_collision_ctx_pool(&self) -> CollisionCtxTables {
+        self.collision_ctx_tables.clone()
     }
 
     /// Creates the pooled entity context tables for LuaPhase/LuaTimer callbacks.
-    /// These tables are stored in the Lua registry and reused for every callback.
-    fn create_entity_ctx_pool(lua: &Lua) -> LuaResult<EntityCtxPool> {
+    fn create_entity_ctx_tables(lua: &Lua) -> LuaResult<EntityCtxTables> {
         // Create all tables (not wired together since fields are optional)
-        let ctx = lua.create_table()?;
-        let pos = lua.create_table()?;
-        let screen_pos = lua.create_table()?;
-        let vel = lua.create_table()?;
-        let scale = lua.create_table()?;
-        let rect = lua.create_table()?;
-        let sprite = lua.create_table()?;
-        let animation = lua.create_table()?;
-        let timer = lua.create_table()?;
-        let signals = lua.create_table()?;
-        let world_pos = lua.create_table()?;
-        let world_scale = lua.create_table()?;
-
-        // Store in registry to prevent GC
-        Ok(EntityCtxPool {
-            ctx: lua.create_registry_value(ctx)?,
-            pos: lua.create_registry_value(pos)?,
-            screen_pos: lua.create_registry_value(screen_pos)?,
-            vel: lua.create_registry_value(vel)?,
-            scale: lua.create_registry_value(scale)?,
-            rect: lua.create_registry_value(rect)?,
-            sprite: lua.create_registry_value(sprite)?,
-            animation: lua.create_registry_value(animation)?,
-            timer: lua.create_registry_value(timer)?,
-            signals: lua.create_registry_value(signals)?,
-            world_pos: lua.create_registry_value(world_pos)?,
-            world_scale: lua.create_registry_value(world_scale)?,
+        Ok(EntityCtxTables {
+            ctx: lua.create_table()?,
+            pos: lua.create_table()?,
+            screen_pos: lua.create_table()?,
+            vel: lua.create_table()?,
+            scale: lua.create_table()?,
+            rect: lua.create_table()?,
+            sprite: lua.create_table()?,
+            animation: lua.create_table()?,
+            timer: lua.create_table()?,
+            signals: lua.create_table()?,
+            world_pos: lua.create_table()?,
+            world_scale: lua.create_table()?,
         })
     }
 
     /// Returns the pooled entity context tables for reuse.
     /// The caller must populate fields before passing to Lua callbacks.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the pool is not initialized or registry retrieval fails.
-    pub fn get_entity_ctx_pool(&self) -> LuaResult<EntityCtxTables> {
-        let pool = self
-            .entity_ctx_pool
-            .as_ref()
-            .ok_or_else(|| LuaError::runtime("Entity context pool not initialized"))?;
-
-        Ok(EntityCtxTables {
-            ctx: self.lua.registry_value(&pool.ctx)?,
-            pos: self.lua.registry_value(&pool.pos)?,
-            screen_pos: self.lua.registry_value(&pool.screen_pos)?,
-            vel: self.lua.registry_value(&pool.vel)?,
-            scale: self.lua.registry_value(&pool.scale)?,
-            rect: self.lua.registry_value(&pool.rect)?,
-            sprite: self.lua.registry_value(&pool.sprite)?,
-            animation: self.lua.registry_value(&pool.animation)?,
-            timer: self.lua.registry_value(&pool.timer)?,
-            signals: self.lua.registry_value(&pool.signals)?,
-            world_pos: self.lua.registry_value(&pool.world_pos)?,
-            world_scale: self.lua.registry_value(&pool.world_scale)?,
-        })
+    pub fn get_entity_ctx_pool(&self) -> EntityCtxTables {
+        self.entity_ctx_tables.clone()
     }
 
     /// Creates the pooled input callback tables.
-    fn create_input_ctx_pool(lua: &Lua) -> LuaResult<InputCtxPool> {
+    fn create_input_ctx_tables(lua: &Lua) -> LuaResult<InputCtxTables> {
         let input = lua.create_table()?;
         let digital = lua.create_table()?;
         let analog = lua.create_table()?;
@@ -572,63 +439,35 @@ impl LuaRuntime {
         input.set("digital", digital.clone())?;
         input.set("analog", analog.clone())?;
 
-        Ok(InputCtxPool {
-            input: lua.create_registry_value(input)?,
-            digital: lua.create_registry_value(digital)?,
-            analog: lua.create_registry_value(analog)?,
-            up: lua.create_registry_value(up)?,
-            down: lua.create_registry_value(down)?,
-            left: lua.create_registry_value(left)?,
-            right: lua.create_registry_value(right)?,
-            action_1: lua.create_registry_value(action_1)?,
-            action_2: lua.create_registry_value(action_2)?,
-            action_3: lua.create_registry_value(action_3)?,
-            back: lua.create_registry_value(back)?,
-            special: lua.create_registry_value(special)?,
-            main_up: lua.create_registry_value(main_up)?,
-            main_down: lua.create_registry_value(main_down)?,
-            main_left: lua.create_registry_value(main_left)?,
-            main_right: lua.create_registry_value(main_right)?,
-            secondary_up: lua.create_registry_value(secondary_up)?,
-            secondary_down: lua.create_registry_value(secondary_down)?,
-            secondary_left: lua.create_registry_value(secondary_left)?,
-            secondary_right: lua.create_registry_value(secondary_right)?,
-            debug: lua.create_registry_value(debug)?,
-            fullscreen: lua.create_registry_value(fullscreen)?,
+        Ok(InputCtxTables {
+            input,
+            digital,
+            analog,
+            up,
+            down,
+            left,
+            right,
+            action_1,
+            action_2,
+            action_3,
+            back,
+            special,
+            main_up,
+            main_down,
+            main_left,
+            main_right,
+            secondary_up,
+            secondary_down,
+            secondary_left,
+            secondary_right,
+            debug,
+            fullscreen,
         })
     }
 
     /// Returns the pooled input callback tables for reuse.
-    pub fn get_input_ctx_pool(&self) -> LuaResult<InputCtxTables> {
-        let pool = self
-            .input_ctx_pool
-            .as_ref()
-            .ok_or_else(|| LuaError::runtime("Input context pool not initialized"))?;
-
-        Ok(InputCtxTables {
-            input: self.lua.registry_value(&pool.input)?,
-            digital: self.lua.registry_value(&pool.digital)?,
-            analog: self.lua.registry_value(&pool.analog)?,
-            up: self.lua.registry_value(&pool.up)?,
-            down: self.lua.registry_value(&pool.down)?,
-            left: self.lua.registry_value(&pool.left)?,
-            right: self.lua.registry_value(&pool.right)?,
-            action_1: self.lua.registry_value(&pool.action_1)?,
-            action_2: self.lua.registry_value(&pool.action_2)?,
-            action_3: self.lua.registry_value(&pool.action_3)?,
-            back: self.lua.registry_value(&pool.back)?,
-            special: self.lua.registry_value(&pool.special)?,
-            main_up: self.lua.registry_value(&pool.main_up)?,
-            main_down: self.lua.registry_value(&pool.main_down)?,
-            main_left: self.lua.registry_value(&pool.main_left)?,
-            main_right: self.lua.registry_value(&pool.main_right)?,
-            secondary_up: self.lua.registry_value(&pool.secondary_up)?,
-            secondary_down: self.lua.registry_value(&pool.secondary_down)?,
-            secondary_left: self.lua.registry_value(&pool.secondary_left)?,
-            secondary_right: self.lua.registry_value(&pool.secondary_right)?,
-            debug: self.lua.registry_value(&pool.debug)?,
-            fullscreen: self.lua.registry_value(&pool.fullscreen)?,
-        })
+    pub fn get_input_ctx_pool(&self) -> InputCtxTables {
+        self.input_ctx_tables.clone()
     }
 
     fn update_button_table(
@@ -641,9 +480,10 @@ impl LuaRuntime {
         Ok(())
     }
 
-    /// Builds a Lua table representing the full input state for this frame.
+    /// Updates the pooled input callback table in-place and returns it.
     ///
-    /// The returned table has the following shape:
+    /// The returned table is ephemeral, reused across callbacks, and has the
+    /// following shape:
     ///
     /// ```lua
     /// input = {
@@ -662,17 +502,11 @@ impl LuaRuntime {
     ///     },
     /// }
     /// ```
-    pub fn create_input_table(&self, snapshot: &InputSnapshot) -> LuaResult<LuaTable> {
-        self.update_input_table(snapshot)
-    }
-
-    /// Updates the pooled input callback table in-place and returns it.
     ///
-    /// The returned table is ephemeral and reused across callbacks. Lua code
-    /// should treat it as read-only callback data and not retain it across
-    /// frames.
+    /// Lua code should treat it as read-only callback data and not retain it
+    /// across frames.
     pub fn update_input_table(&self, snapshot: &InputSnapshot) -> LuaResult<LuaTable> {
-        let tables = self.get_input_ctx_pool()?;
+        let tables = self.get_input_ctx_pool();
 
         Self::update_button_table(&tables.up, &snapshot.digital.up)?;
         Self::update_button_table(&tables.down, &snapshot.digital.down)?;

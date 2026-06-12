@@ -1988,7 +1988,7 @@ fn context_builder_passes_snapshot_strings_to_lua() {
     use std::sync::Arc;
 
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
-    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let tables = runtime.get_entity_ctx_pool();
     let lua = runtime.lua();
 
     // Source strings — simulate what the components hold
@@ -2059,7 +2059,7 @@ fn context_builder_nil_when_no_snapshots() {
     use aberredengine::resources::lua_runtime::{EntitySnapshot, build_entity_context_pooled};
 
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
-    let tables = runtime.get_entity_ctx_pool().expect("ctx pool");
+    let tables = runtime.get_entity_ctx_pool();
     let lua = runtime.lua();
 
     let snapshot = EntitySnapshot {
