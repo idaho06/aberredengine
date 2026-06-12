@@ -26,6 +26,7 @@ use crate::components::tween::{Tween, TweenValue};
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{EntityCmd, TweenConfig, UniformValue};
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::worldsignals::WorldSignals;
 
 use super::EntityCmdQueries;
 
@@ -76,6 +77,7 @@ fn with_entity_cmds(commands: &mut Commands, entity: Entity, f: impl FnOnce(&mut
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
+    world_signals: &mut WorldSignals,
     queries: &mut EntityCmdQueries,
     systems_store: &SystemsStore,
     anim_store: &AnimationStore,
@@ -144,7 +146,9 @@ pub fn process_entity_commands(
             | EntityCmd::RemoveLuaTimer { .. }
             | EntityCmd::Despawn { .. }
             | EntityCmd::MenuDespawn { .. }
-            | EntityCmd::InsertTtl { .. }) => process_lifecycle_cmd(cmd, commands, systems_store),
+            | EntityCmd::InsertTtl { .. }) => {
+                process_lifecycle_cmd(cmd, commands, world_signals, systems_store)
+            }
         }
     }
 }
@@ -662,7 +666,12 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
     }
 }
 
-fn process_lifecycle_cmd(cmd: EntityCmd, commands: &mut Commands, systems_store: &SystemsStore) {
+fn process_lifecycle_cmd(
+    cmd: EntityCmd,
+    commands: &mut Commands,
+    world_signals: &mut WorldSignals,
+    systems_store: &SystemsStore,
+) {
     match cmd {
         EntityCmd::InsertLuaTimer {
             entity_id,
@@ -679,9 +688,12 @@ fn process_lifecycle_cmd(cmd: EntityCmd, commands: &mut Commands, systems_store:
             });
         }
         EntityCmd::Despawn { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_despawn();
-            });
+            if let Some(entity) = resolve_entity(entity_id) {
+                world_signals.remove_entity_registrations_for(entity);
+                with_entity_cmds(commands, entity, |ec| {
+                    ec.try_despawn();
+                });
+            }
         }
         EntityCmd::MenuDespawn { entity_id } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
@@ -712,5 +724,38 @@ mod tests {
     fn resolve_entity_accepts_valid_bits() {
         let entity = Entity::from_raw_u32(42).unwrap();
         assert_eq!(resolve_entity(entity.to_bits()), Some(entity));
+    }
+
+    #[test]
+    fn despawn_removes_world_signals_registration_and_entity() {
+        use bevy_ecs::system::SystemState;
+
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", entity);
+
+        let systems_store = SystemsStore::default();
+        let anim_store = AnimationStore::default();
+
+        let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(&mut world);
+        {
+            let (mut commands, mut queries) = system_state.get_mut(&mut world);
+            process_entity_commands(
+                &mut commands,
+                [EntityCmd::Despawn {
+                    entity_id: entity.to_bits(),
+                }],
+                &mut world_signals,
+                &mut queries,
+                &systems_store,
+                &anim_store,
+            );
+        }
+        system_state.apply(&mut world);
+
+        assert!(world.get_entity(entity).is_err());
+        assert!(world_signals.get_entity("tpl").is_none());
     }
 }

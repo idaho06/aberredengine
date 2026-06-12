@@ -132,6 +132,7 @@ pub(crate) fn drain_and_process_effect_commands(
     process_entity_commands(
         commands,
         bufs.entities.drain(..),
+        world_signals,
         cmd_queries,
         systems_store,
         animation_store,

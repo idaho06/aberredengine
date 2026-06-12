@@ -611,6 +611,15 @@ pub fn process_clone_command(
         return;
     };
 
+    if commands.get_entity(source_entity).is_err() {
+        log::warn!(
+            "Clone source '{}' refers to a despawned entity; skipping clone",
+            cmd.source_key
+        );
+        world_signals.remove_entity(&cmd.source_key);
+        return;
+    }
+
     // 2. Clone entity using Bevy's clone_and_spawn API
     let mut source_commands = commands.entity(source_entity);
     let mut entity_commands = source_commands.clone_and_spawn();
@@ -630,5 +639,68 @@ pub fn process_clone_command(
     // 5. If no animation override was provided, reset to frame 0
     if !has_animation_override {
         entity_commands.queue(ResetAnimationCommand);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy_ecs::system::SystemState;
+
+    use super::*;
+
+    #[test]
+    fn clone_of_despawned_source_skips_and_cleans_registry() {
+        let mut world = World::new();
+        let source = world.spawn(MapPosition { pos: Vector2::new(1.0, 2.0) }).id();
+        world.despawn(source);
+
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let mut system_state = SystemState::<Commands>::new(&mut world);
+        {
+            let mut commands = system_state.get_mut(&mut world);
+            process_clone_command(
+                &mut commands,
+                CloneCmd {
+                    source_key: "tpl".to_string(),
+                    overrides: SpawnCmd::default(),
+                },
+                &mut world_signals,
+            );
+        }
+        system_state.apply(&mut world);
+
+        assert!(
+            world_signals.get_entity("tpl").is_none(),
+            "stale registry entry should be removed"
+        );
+    }
+
+    #[test]
+    fn clone_of_live_source_spawns_new_entity() {
+        let mut world = World::new();
+        let source = world.spawn(MapPosition { pos: Vector2::new(1.0, 2.0) }).id();
+
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let mut system_state = SystemState::<Commands>::new(&mut world);
+        {
+            let mut commands = system_state.get_mut(&mut world);
+            process_clone_command(
+                &mut commands,
+                CloneCmd {
+                    source_key: "tpl".to_string(),
+                    overrides: SpawnCmd::default(),
+                },
+                &mut world_signals,
+            );
+        }
+        system_state.apply(&mut world);
+
+        // Source entity plus the newly cloned entity should both exist.
+        let mut query = world.query::<&MapPosition>();
+        assert_eq!(query.iter(&world).count(), 2);
     }
 }

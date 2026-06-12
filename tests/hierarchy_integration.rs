@@ -464,18 +464,24 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(AnimationStore {
         animations: Default::default(),
     });
+    if !world.contains_resource::<WorldSignals>() {
+        world.insert_resource(WorldSignals::default());
+    }
 
     let mut state = SystemState::<(
         Commands,
         EntityCmdQueries,
+        ResMut<WorldSignals>,
         Res<SystemsStore>,
         Res<AnimationStore>,
     )>::new(world);
-    let (mut commands, mut queries, systems_store, anim_store) = state.get_mut(world);
+    let (mut commands, mut queries, mut world_signals, systems_store, anim_store) =
+        state.get_mut(world);
 
     process_entity_commands(
         &mut commands,
         cmds,
+        &mut world_signals,
         &mut queries,
         &systems_store,
         &anim_store,

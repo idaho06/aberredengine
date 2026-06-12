@@ -322,6 +322,18 @@ impl WorldSignals {
         result
     }
 
+    /// Remove all entity registrations pointing at `entity`.
+    ///
+    /// Called when an entity is despawned so stale registry entries (used by
+    /// `engine.clone`) don't outlive the entity they reference.
+    pub fn remove_entity_registrations_for(&mut self, entity: Entity) {
+        let before = self.entities.len();
+        self.entities.retain(|_, e| *e != entity);
+        if self.entities.len() != before {
+            self.entities_dirty = true;
+        }
+    }
+
     /// Remove all entity registrations whose [`Entity`] is not in `persistent_entities`.
     ///
     /// Called during scene transitions to mirror the entity despawn logic:
@@ -657,6 +669,43 @@ mod tests {
     fn test_remove_entity_nonexistent() {
         let mut ws = WorldSignals::default();
         assert_eq!(ws.remove_entity("nope"), None);
+    }
+
+    #[test]
+    fn test_remove_entity_registrations_for() {
+        let mut ws = WorldSignals::default();
+        let entity_a = Entity::from_bits(1);
+        let entity_b = Entity::from_bits(2);
+        ws.set_entity("player", entity_a);
+        ws.set_entity("cursor", entity_b);
+        ws.entities_dirty = false;
+
+        ws.remove_entity_registrations_for(entity_a);
+
+        assert!(
+            ws.get_entity("player").is_none(),
+            "registration pointing at the removed entity should be gone"
+        );
+        assert_eq!(
+            ws.get_entity("cursor"),
+            Some(&entity_b),
+            "registration pointing at a different entity should be kept"
+        );
+        assert!(ws.entities_dirty);
+    }
+
+    #[test]
+    fn test_remove_entity_registrations_for_no_match() {
+        let mut ws = WorldSignals::default();
+        let entity_a = Entity::from_bits(1);
+        let entity_b = Entity::from_bits(2);
+        ws.set_entity("cursor", entity_b);
+        ws.entities_dirty = false;
+
+        ws.remove_entity_registrations_for(entity_a);
+
+        assert_eq!(ws.get_entity("cursor"), Some(&entity_b));
+        assert!(!ws.entities_dirty);
     }
 
     #[test]
