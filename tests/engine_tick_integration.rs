@@ -293,6 +293,61 @@ fn collision_pipeline_triggers_lua_side_effects() {
     assert!(world.get::<Ttl>(b).is_some());
 }
 
+#[cfg(feature = "lua")]
+#[test]
+fn collision_callback_error_still_drains_queued_commands() {
+    let mut world = make_lua_callback_world(0.0);
+    world.init_resource::<Messages<AudioCmd>>();
+
+    {
+        let lua_runtime = world.non_send_resource::<LuaRuntime>();
+        lua_runtime
+            .lua()
+            .load(
+                r#"
+                function on_player_enemy_err(ctx)
+                    engine.collision_entity_signal_set_flag(ctx.a.id, "hit")
+                    local _ = ctx.nonexistent.field
+                end
+                "#,
+            )
+            .exec()
+            .expect("Failed to load collision Lua function");
+    }
+
+    let a = world
+        .spawn((
+            Group::new("player"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    world.spawn((
+        Group::new("enemy"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+    world.spawn((CollisionRule::new(
+        "player",
+        "enemy",
+        LuaCollisionCallback {
+            name: "on_player_enemy_err".into(),
+        },
+    ),));
+
+    world.add_observer(lua_collision_observer);
+
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let signals = world
+        .get::<Signals>(a)
+        .expect("Missing Signals on entity A");
+    assert!(signals.has_flag("hit"));
+}
+
 // =============================================================================
 // StuckTo System Tests
 // =============================================================================

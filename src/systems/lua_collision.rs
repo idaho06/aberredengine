@@ -164,7 +164,7 @@ pub fn lua_collision_observer(
                     .update_signal_cache(params.world_signals.snapshot());
             }
 
-            if let Err(e) = call_lua_collision_callback(
+            let callback_result = call_lua_collision_callback(
                 &params.lua_runtime,
                 callback_name,
                 ent_a.to_bits(),
@@ -183,10 +183,7 @@ pub fn lua_collision_observer(
                 signals_b,
                 group_a.as_deref(),
                 group_b.as_deref(),
-            ) {
-                error!(target: "lua", "Collision callback '{}' error: {}", callback_name, e);
-                return;
-            }
+            );
 
             params
                 .lua_runtime
@@ -206,6 +203,10 @@ pub fn lua_collision_observer(
                 &params.systems_store,
                 &params.animation_store,
             );
+
+            if let Err(e) = callback_result {
+                error!(target: "lua", "Collision callback '{}' error: {}", callback_name, e);
+            }
 
             return;
         }
