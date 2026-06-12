@@ -307,6 +307,10 @@ pub fn lua_phase_system(
     callback_transitions.clear();
     phase_entities.clear();
 
+    if query.is_empty() {
+        return;
+    }
+
     // Update signal cache so Lua can read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
 

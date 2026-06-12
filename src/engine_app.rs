@@ -827,7 +827,7 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if has_lua {
-            update.add_systems(lua_phase_system.after(collision_detector));
+            update.add_systems(lua_phase_system.run_if(state_is_playing).after(collision_detector));
             update.add_systems(
                 animation_controller
                     .after(lua_phase_system)
