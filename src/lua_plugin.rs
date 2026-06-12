@@ -27,8 +27,8 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::lua_runtime::{
-    CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, InputSnapshot, LuaRuntime, PhaseCmd,
-    RenderCmd,
+    AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, InputSnapshot,
+    LuaRuntime, PhaseCmd, RenderCmd,
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
@@ -66,7 +66,7 @@ pub struct GameSceneState<'w> {
     pub config: ResMut<'w, GameConfig>,
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
     pub systems_store: Res<'w, SystemsStore>,
-    pub anim_store: Res<'w, AnimationStore>,
+    pub anim_store: ResMut<'w, AnimationStore>,
 }
 
 /// Bundled entity processing queries.
@@ -88,6 +88,8 @@ pub(crate) struct CommonCmdBufs {
     gameconfig: Vec<GameConfigCmd>,
     camera_follow: Vec<CameraFollowCmd>,
     input: Vec<InputCmd>,
+    animation: Vec<AnimationCmd>,
+    group: Vec<GroupCmd>,
 }
 
 // This function is meant to load all resources
@@ -209,11 +211,10 @@ pub fn enter_play(
     ));
 }
 
-/// Drains and processes the 11 command queues that are common to both [`update`] and
+/// Drains and processes the command queues that are common to both [`update`] and
 /// [`switch_scene`]. Both contexts queue the same command types after their Lua callback
 /// returns; this helper eliminates the duplicated drain loops.
-///
-/// `switch_scene` additionally drains group and tilemap commands after this call.
+#[allow(clippy::too_many_arguments)]
 fn drain_common_commands(
     lua_runtime: &LuaRuntime,
     commands: &mut Commands,
@@ -221,8 +222,16 @@ fn drain_common_commands(
     scene_state: &mut GameSceneState,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     bindings: &mut InputBindings,
+    tracked_groups: &mut TrackedGroups,
     bufs: &mut CommonCmdBufs,
 ) {
+    // Drain animation registrations first so any same-batch SetAnimation/RestartAnimation
+    // entity commands can resolve the newly-registered tex_key from AnimationStore.
+    lua_runtime.drain_animation_commands_into(&mut bufs.animation);
+    for cmd in bufs.animation.drain(..) {
+        process_animation_command(&mut scene_state.anim_store, cmd);
+    }
+
     drain_and_process_phase_commands(lua_runtime, &mut bufs.phase, &mut entities.luaphase);
 
     drain_and_process_effect_commands(
@@ -256,6 +265,14 @@ fn drain_common_commands(
     for cmd in bufs.input.drain(..) {
         process_input_command(cmd, bindings);
     }
+
+    lua_runtime.drain_group_commands_into(&mut bufs.group);
+    if !bufs.group.is_empty() {
+        for cmd in bufs.group.drain(..) {
+            process_group_command(tracked_groups, cmd);
+        }
+        lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
+    }
 }
 
 /// Per-frame update system for scene-specific logic.
@@ -277,6 +294,7 @@ pub fn update(
     mut scene_state: GameSceneState,
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
+    mut tracked_groups: ResMut<TrackedGroups>,
     mut common_bufs: Local<CommonCmdBufs>,
     mut cached_callback: Local<String>,
 ) {
@@ -334,6 +352,7 @@ pub fn update(
         &mut scene_state,
         &mut scripting.audio_cmd_writer,
         &mut bindings,
+        &mut tracked_groups,
         &mut common_bufs,
     );
 
@@ -364,7 +383,6 @@ pub fn switch_scene(
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
     mut common_bufs: Local<CommonCmdBufs>,
-    mut group_buf: Local<Vec<GroupCmd>>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     debug!("switch_scene: System called!");
@@ -386,6 +404,7 @@ pub fn switch_scene(
 
     tracked_groups.clear();
     scene_state.world_signals.clear_group_counts();
+    lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
     let scene = scene_state
         .world_signals
@@ -407,16 +426,171 @@ pub fn switch_scene(
         &mut scene_state,
         &mut scripting.audio_cmd_writer,
         &mut bindings,
+        &mut tracked_groups,
         &mut common_bufs,
     );
 
-    group_buf.clear();
-    lua_runtime.drain_group_commands_into(&mut group_buf);
-    for cmd in group_buf.drain(..) {
-        process_group_command(&mut tracked_groups, cmd);
-    }
-    lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
-
     // Refresh the config cache after the drain may have applied GameConfigCmds.
     lua_runtime.update_gameconfig_cache(&scene_state.config);
+}
+
+/// Drains `asset_commands` queued from gameplay (`on_update_*`, `on_switch_scene`, phase/timer/
+/// collision callbacks) and loads them into `TextureStore`/`FontStore`/`ShaderStore`/audio.
+///
+/// `setup()` drains this queue once for `on_setup`-time loads; this system is the reachable
+/// drain site for any `engine.load_*` call made after setup. Mirrors
+/// [`crate::systems::mapspawn::process_lua_map_commands`].
+#[allow(clippy::too_many_arguments)]
+pub fn process_lua_asset_commands(
+    lua_runtime: NonSend<LuaRuntime>,
+    mut raylib: crate::systems::RaylibAccess,
+    mut tex_store: ResMut<TextureStore>,
+    mut fonts: NonSendMut<FontStore>,
+    mut shaders: NonSendMut<ShaderStore>,
+    mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    mut buf: Local<Vec<AssetCmd>>,
+) {
+    lua_runtime.drain_asset_commands_into(&mut buf);
+    if buf.is_empty() {
+        return;
+    }
+    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
+    for cmd in buf.drain(..) {
+        process_asset_command(
+            rl,
+            th,
+            cmd,
+            &mut tex_store,
+            &mut fonts,
+            &mut shaders,
+            &mut audio_cmd_writer,
+            load_font_with_mipmaps,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::animation::Animation;
+    use crate::components::sprite::Sprite;
+    use bevy_ecs::message::Messages;
+    use bevy_ecs::system::SystemState;
+    use std::sync::Arc;
+
+    /// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
+    fn new_drain_test_world() -> World {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+        world.insert_resource(PostProcessShader::default());
+        world.insert_resource(GameConfig::default());
+        world.insert_resource(CameraFollowConfig::default());
+        world.insert_resource(SystemsStore::default());
+        world.insert_resource(AnimationStore::default());
+        world.insert_resource(InputBindings::default());
+        world.insert_resource(TrackedGroups::default());
+        world.insert_resource(Messages::<AudioCmd>::default());
+        world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new"));
+        world
+    }
+
+    /// Runs [`drain_common_commands`] once against `world`, using a fresh
+    /// [`CommonCmdBufs`] (mirrors a single frame's drain in `update`/`switch_scene`).
+    fn run_drain_common_commands(world: &mut World) {
+        let mut system_state = SystemState::<(
+            Commands,
+            NonSend<LuaRuntime>,
+            EntityProcessing,
+            GameSceneState,
+            MessageWriter<AudioCmd>,
+            ResMut<InputBindings>,
+            ResMut<TrackedGroups>,
+        )>::new(world);
+
+        let mut bufs = CommonCmdBufs::default();
+        {
+            let (
+                mut commands,
+                lua_runtime,
+                mut entities,
+                mut scene_state,
+                mut audio_cmd_writer,
+                mut bindings,
+                mut tracked_groups,
+            ) = system_state.get_mut(world);
+
+            drain_common_commands(
+                &lua_runtime,
+                &mut commands,
+                &mut entities,
+                &mut scene_state,
+                &mut audio_cmd_writer,
+                &mut bindings,
+                &mut tracked_groups,
+                &mut bufs,
+            );
+        }
+        system_state.apply(world);
+    }
+
+    #[test]
+    fn drain_common_commands_processes_track_group_queued_mid_gameplay() {
+        let mut world = new_drain_test_world();
+
+        {
+            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load("engine.track_group('enemies')")
+                .exec()
+                .expect("queue track_group");
+        }
+
+        run_drain_common_commands(&mut world);
+
+        assert!(world.resource::<TrackedGroups>().groups.contains("enemies"));
+    }
+
+    #[test]
+    fn drain_common_commands_resolves_animation_registered_in_same_batch() {
+        let mut world = new_drain_test_world();
+
+        let entity = world
+            .spawn((
+                Sprite {
+                    tex_key: Arc::from("old_tex"),
+                    width: 16.0,
+                    height: 16.0,
+                    offset: Vector2::default(),
+                    origin: Vector2::default(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                Animation::new("idle"),
+            ))
+            .id();
+
+        {
+            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load(format!(
+                    "engine.register_animation('walk', 'player_walk', 0, 0, 16, 0, 1, 10, true)\n\
+                     engine.entity_set_animation({}, 'walk')",
+                    entity.to_bits()
+                ))
+                .exec()
+                .expect("queue register_animation + entity_set_animation");
+        }
+
+        run_drain_common_commands(&mut world);
+
+        let sprite = world.get::<Sprite>(entity).expect("sprite still present");
+        assert_eq!(sprite.tex_key.as_ref(), "player_walk");
+
+        let animation = world
+            .get::<Animation>(entity)
+            .expect("animation still present");
+        assert_eq!(animation.animation_key, "walk");
+    }
 }

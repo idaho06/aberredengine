@@ -833,6 +833,11 @@ impl EngineBuilder {
                     .before(render_system),
             );
             update.add_systems(
+                crate::lua_plugin::process_lua_asset_commands
+                    .run_if(state_is_playing)
+                    .after(crate::lua_plugin::update),
+            );
+            update.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
                     .after(check_pending_state)
