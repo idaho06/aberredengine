@@ -5,34 +5,7 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "set_camera",
-            camera_commands,
-            |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (
-                f32, f32, f32, f32, f32, f32
-            ),
-            CameraCmd::SetCamera2D {
-                target_x,
-                target_y,
-                offset_x,
-                offset_y,
-                rotation,
-                zoom
-            },
-            desc = "Set the 2D camera target, offset, rotation and zoom",
-            cat = "camera",
-            params = [
-                ("target_x", "number"),
-                ("target_y", "number"),
-                ("offset_x", "number"),
-                ("offset_y", "number"),
-                ("rotation", "number"),
-                ("zoom", "number")
-            ]
-        );
+        define_camera_cmd_twins!(engine, self.lua, meta_fns, "", camera_commands, "camera", "");
 
         engine.set(
             "get_camera",

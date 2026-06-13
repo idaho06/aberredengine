@@ -1194,8 +1194,8 @@ function engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoo
 -- ==================== Collision Commands ====================
 
 ---Clear a world signal flag (collision context)
----@param flag string
-function engine.collision_clear_flag(flag) end
+---@param key string
+function engine.collision_clear_flag(key) end
 
 ---Clear a world signal integer (collision context)
 ---@param key string
@@ -1223,7 +1223,7 @@ function engine.collision_phase_transition(entity_id, phase) end
 ---@param id string
 function engine.collision_play_sound(id) end
 
----Play a sound effect with pitch override (collision context)
+---Play a sound effect with pitch override (1.0 = normal) (collision context)
 ---@param id string
 ---@param pitch number
 function engine.collision_play_sound_pitched(id, pitch) end
@@ -1232,7 +1232,7 @@ function engine.collision_play_sound_pitched(id, pitch) end
 ---@param key string
 function engine.collision_remove_entity(key) end
 
----Set the 2D camera (collision context)
+---Set the 2D camera target, offset, rotation and zoom (collision context)
 ---@param target_x number
 ---@param target_y number
 ---@param offset_x number
@@ -1247,20 +1247,20 @@ function engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rot
 function engine.collision_set_entity(key, entity_id) end
 
 ---Set a world signal flag (collision context)
----@param flag string
-function engine.collision_set_flag(flag) end
+---@param key string
+function engine.collision_set_flag(key) end
 
----Set a world signal integer (collision context)
+---Set a world signal integer value (collision context)
 ---@param key string
 ---@param value integer
 function engine.collision_set_integer(key, value) end
 
----Set a world signal scalar (collision context)
+---Set a world signal scalar value (collision context)
 ---@param key string
 ---@param value number
 function engine.collision_set_scalar(key, value) end
 
----Set a world signal string (collision context)
+---Set a world signal string value (collision context)
 ---@param key string
 ---@param value string
 function engine.collision_set_string(key, value) end
@@ -1270,8 +1270,8 @@ function engine.collision_set_string(key, value) end
 function engine.collision_spawn() end
 
 ---Toggle a world signal flag (collision context)
----@param flag string
-function engine.collision_toggle_flag(flag) end
+---@param key string
+function engine.collision_toggle_flag(key) end
 
 -- ==================== Animation Registration ====================
 

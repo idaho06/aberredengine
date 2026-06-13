@@ -214,54 +214,7 @@ impl LuaRuntime {
             Some("table"),
         )?;
 
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "set_scalar",
-            signal_commands,
-            |(key, value)| (String, f32),
-            SignalCmd::SetScalar { key, value },
-            desc = "Set a world signal scalar value",
-            cat = "signal",
-            params = [("key", "string"), ("value", "number")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "set_integer",
-            signal_commands,
-            |(key, value)| (String, i32),
-            SignalCmd::SetInteger { key, value },
-            desc = "Set a world signal integer value",
-            cat = "signal",
-            params = [("key", "string"), ("value", "integer")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "set_string",
-            signal_commands,
-            |(key, value)| (String, String),
-            SignalCmd::SetString { key, value },
-            desc = "Set a world signal string value",
-            cat = "signal",
-            params = [("key", "string"), ("value", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "set_flag",
-            signal_commands,
-            |key| String,
-            SignalCmd::SetFlag { key },
-            desc = "Set a world signal flag",
-            cat = "signal",
-            params = [("key", "string")]
-        );
+        define_signal_cmd_twins!(engine, self.lua, meta_fns, "", signal_commands, "signal", "");
 
         engine.set(
             "change_scene",
@@ -311,91 +264,6 @@ impl LuaRuntime {
             &[],
             None,
         )?;
-
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "clear_flag",
-            signal_commands,
-            |key| String,
-            SignalCmd::ClearFlag { key },
-            desc = "Clear a world signal flag",
-            cat = "signal",
-            params = [("key", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "toggle_flag",
-            signal_commands,
-            |key| String,
-            SignalCmd::ToggleFlag { key },
-            desc = "Toggle a world signal flag",
-            cat = "signal",
-            params = [("key", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "clear_scalar",
-            signal_commands,
-            |key| String,
-            SignalCmd::ClearScalar { key },
-            desc = "Clear a world signal scalar",
-            cat = "signal",
-            params = [("key", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "clear_integer",
-            signal_commands,
-            |key| String,
-            SignalCmd::ClearInteger { key },
-            desc = "Clear a world signal integer",
-            cat = "signal",
-            params = [("key", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "clear_string",
-            signal_commands,
-            |key| String,
-            SignalCmd::ClearString { key },
-            desc = "Clear a world signal string",
-            cat = "signal",
-            params = [("key", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "set_entity",
-            signal_commands,
-            |(key, entity_id)| (String, u64),
-            SignalCmd::SetEntity { key, entity_id },
-            desc = "Register an entity ID in world signals",
-            cat = "signal",
-            params = [("key", "string"), ("entity_id", "integer")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "remove_entity",
-            signal_commands,
-            |key| String,
-            SignalCmd::RemoveEntity { key },
-            desc = "Remove a registered entity from world signals",
-            cat = "signal",
-            params = [("key", "string")]
-        );
 
         Ok(())
     }

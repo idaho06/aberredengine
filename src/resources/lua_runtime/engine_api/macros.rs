@@ -83,9 +83,12 @@ macro_rules! register_cmd {
     (@opt_ret) => { None };
 }
 
-/// Registers a batch of entity commands with a name prefix to a specific queue.
-macro_rules! register_entity_cmds {
-    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, [
+/// Registers a declarative list of commands under `$queue`/`$cat`, with
+/// each Lua function name prefixed by `$prefix` and each description
+/// suffixed by `$desc_suffix`. Call once per context (regular / collision)
+/// with the same list to keep both twins in sync.
+macro_rules! define_cmd_twins {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, $cat:expr, $desc_suffix:literal, [
         $( ($name:literal,
             |$args:pat_param| $arg_ty:ty, $cmd:expr,
             desc = $desc:expr,
@@ -95,9 +98,95 @@ macro_rules! register_entity_cmds {
         $(
             register_cmd!($engine, $lua, $meta_fns, concat!($prefix, $name), $queue,
                 |$args| $arg_ty, $cmd,
-                desc = $desc, cat = "entity",
+                desc = concat!($desc, $desc_suffix), cat = $cat,
                 params = [ $( ($pname, $pty) ),* ]);
         )*
+    };
+}
+
+/// Signal-command twins (regular `signal_commands` / `collision_signal_commands`).
+macro_rules! define_signal_cmd_twins {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, $cat:expr, $desc_suffix:literal) => {
+        define_cmd_twins!($engine, $lua, $meta_fns, $prefix, $queue, $cat, $desc_suffix, [
+            ("set_scalar", |(key, value)| (String, f32), SignalCmd::SetScalar { key, value },
+                desc = "Set a world signal scalar value",
+                params = [("key", "string"), ("value", "number")]),
+            ("set_integer", |(key, value)| (String, i32), SignalCmd::SetInteger { key, value },
+                desc = "Set a world signal integer value",
+                params = [("key", "string"), ("value", "integer")]),
+            ("set_string", |(key, value)| (String, String), SignalCmd::SetString { key, value },
+                desc = "Set a world signal string value",
+                params = [("key", "string"), ("value", "string")]),
+            ("set_flag", |key| String, SignalCmd::SetFlag { key },
+                desc = "Set a world signal flag",
+                params = [("key", "string")]),
+            ("clear_flag", |key| String, SignalCmd::ClearFlag { key },
+                desc = "Clear a world signal flag",
+                params = [("key", "string")]),
+            ("toggle_flag", |key| String, SignalCmd::ToggleFlag { key },
+                desc = "Toggle a world signal flag",
+                params = [("key", "string")]),
+            ("clear_scalar", |key| String, SignalCmd::ClearScalar { key },
+                desc = "Clear a world signal scalar",
+                params = [("key", "string")]),
+            ("clear_integer", |key| String, SignalCmd::ClearInteger { key },
+                desc = "Clear a world signal integer",
+                params = [("key", "string")]),
+            ("clear_string", |key| String, SignalCmd::ClearString { key },
+                desc = "Clear a world signal string",
+                params = [("key", "string")]),
+            ("set_entity", |(key, entity_id)| (String, u64), SignalCmd::SetEntity { key, entity_id },
+                desc = "Register an entity ID in world signals",
+                params = [("key", "string"), ("entity_id", "integer")]),
+            ("remove_entity", |key| String, SignalCmd::RemoveEntity { key },
+                desc = "Remove a registered entity from world signals",
+                params = [("key", "string")]),
+        ]);
+    };
+}
+
+/// Camera-command twins (regular `camera_commands` / `collision_camera_commands`).
+macro_rules! define_camera_cmd_twins {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, $cat:expr, $desc_suffix:literal) => {
+        define_cmd_twins!($engine, $lua, $meta_fns, $prefix, $queue, $cat, $desc_suffix, [
+            ("set_camera",
+                |(target_x, target_y, offset_x, offset_y, rotation, zoom)| (f32, f32, f32, f32, f32, f32),
+                CameraCmd::SetCamera2D { target_x, target_y, offset_x, offset_y, rotation, zoom },
+                desc = "Set the 2D camera target, offset, rotation and zoom",
+                params = [
+                    ("target_x", "number"),
+                    ("target_y", "number"),
+                    ("offset_x", "number"),
+                    ("offset_y", "number"),
+                    ("rotation", "number"),
+                    ("zoom", "number")
+                ]),
+        ]);
+    };
+}
+
+/// Audio-command twins (regular `audio_commands` / `collision_audio_commands`).
+macro_rules! define_audio_cmd_twins {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, $cat:expr, $desc_suffix:literal) => {
+        define_cmd_twins!($engine, $lua, $meta_fns, $prefix, $queue, $cat, $desc_suffix, [
+            ("play_sound", |id| String, AudioLuaCmd::PlaySound { id },
+                desc = "Play a sound effect",
+                params = [("id", "string")]),
+            ("play_sound_pitched", |(id, pitch)| (String, f32), AudioLuaCmd::PlaySoundPitched { id, pitch },
+                desc = "Play a sound effect with pitch override (1.0 = normal)",
+                params = [("id", "string"), ("pitch", "number")]),
+        ]);
+    };
+}
+
+/// Phase-command twins (regular `phase_commands` / `collision_phase_commands`).
+macro_rules! define_phase_cmd_twins {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, $cat:expr, $desc_suffix:literal) => {
+        define_cmd_twins!($engine, $lua, $meta_fns, $prefix, $queue, $cat, $desc_suffix, [
+            ("phase_transition", |(entity_id, phase)| (u64, String), PhaseCmd::TransitionTo { entity_id, phase },
+                desc = "Transition an entity to a new phase",
+                params = [("entity_id", "integer"), ("phase", "string")]),
+        ]);
     };
 }
 
@@ -105,7 +194,7 @@ macro_rules! register_entity_cmds {
 /// Called with `""` prefix for regular commands, `"collision_"` for collision commands.
 macro_rules! define_entity_cmds {
     ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident) => {
-        register_entity_cmds!($engine, $lua, $meta_fns, $prefix, $queue, [
+        define_cmd_twins!($engine, $lua, $meta_fns, $prefix, $queue, "entity", "", [
             ("entity_despawn", |entity_id| u64, EntityCmd::Despawn { entity_id },
                 desc = "Despawn an entity",
                 params = [("entity_id", "integer")]),

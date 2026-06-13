@@ -5,18 +5,7 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "phase_transition",
-            phase_commands,
-            |(entity_id, phase)| (u64, String),
-            PhaseCmd::TransitionTo { entity_id, phase },
-            desc = "Transition an entity to a new phase",
-            cat = "phase",
-            params = [("entity_id", "integer"), ("phase", "string")]
-        );
+        define_phase_cmd_twins!(engine, self.lua, meta_fns, "", phase_commands, "phase", "");
         Ok(())
     }
 

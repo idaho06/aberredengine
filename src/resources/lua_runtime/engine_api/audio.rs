@@ -17,30 +17,7 @@ impl LuaRuntime {
             cat = "audio",
             params = [("id", "string"), ("looped", "boolean")]
         );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "play_sound",
-            audio_commands,
-            |id| String,
-            AudioLuaCmd::PlaySound { id },
-            desc = "Play a sound effect",
-            cat = "audio",
-            params = [("id", "string")]
-        );
-        register_cmd!(
-            engine,
-            self.lua,
-            meta_fns,
-            "play_sound_pitched",
-            audio_commands,
-            |(id, pitch)| (String, f32),
-            AudioLuaCmd::PlaySoundPitched { id, pitch },
-            desc = "Play a sound effect with pitch override (1.0 = normal)",
-            cat = "audio",
-            params = [("id", "string"), ("pitch", "number")]
-        );
+        define_audio_cmd_twins!(engine, self.lua, meta_fns, "", audio_commands, "audio", "");
         register_cmd!(
             engine,
             self.lua,
