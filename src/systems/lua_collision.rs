@@ -48,7 +48,7 @@ use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{
-    LuaRuntime, PhaseCmd, SignalsCtxTables, populate_entity_signals,
+    LuaRuntime, PhaseCmd, SignalsCtxTables, clear_array_table, populate_entity_signals, set_opt,
 };
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -214,15 +214,6 @@ pub fn lua_collision_observer(
     }
 }
 
-/// Clear all numeric indices from a Lua table (for reusing array tables).
-fn clear_lua_array(table: &mlua::Table) -> mlua::Result<()> {
-    let len = table.raw_len();
-    for i in 1..=len {
-        table.raw_set(i, mlua::Value::Nil)?;
-    }
-    Ok(())
-}
-
 /// Convert BoxSide to string representation.
 fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str {
     match side {
@@ -257,38 +248,30 @@ fn populate_collision_entity(
     }
     entity_table.set("speed_sq", speed_sq)?;
 
-    if let Some((x, y)) = pos {
+    set_opt!(entity_table, "pos", pos, (x, y), {
         pos_table.set("x", x)?;
         pos_table.set("y", y)?;
         entity_table.set("pos", pos_table.clone())?;
-    } else {
-        entity_table.set("pos", mlua::Value::Nil)?;
-    }
+    });
 
-    if let Some((vx, vy)) = vel {
+    set_opt!(entity_table, "vel", vel, (vx, vy), {
         vel_table.set("x", vx)?;
         vel_table.set("y", vy)?;
         entity_table.set("vel", vel_table.clone())?;
-    } else {
-        entity_table.set("vel", mlua::Value::Nil)?;
-    }
+    });
 
-    if let Some((x, y, w, h)) = rect {
+    set_opt!(entity_table, "rect", rect, (x, y, w, h), {
         rect_table.set("x", x)?;
         rect_table.set("y", y)?;
         rect_table.set("w", w)?;
         rect_table.set("h", h)?;
         entity_table.set("rect", rect_table.clone())?;
-    } else {
-        entity_table.set("rect", mlua::Value::Nil)?;
-    }
+    });
 
-    if let Some(s) = signals {
+    set_opt!(entity_table, "signals", signals, s, {
         populate_entity_signals(signals_table, signals_inner, s)?;
         entity_table.set("signals", signals_table.clone())?;
-    } else {
-        entity_table.set("signals", mlua::Value::Nil)?;
-    }
+    });
 
     Ok(())
 }
@@ -350,12 +333,12 @@ fn call_lua_collision_callback(
         signals_b,
     )?;
 
-    clear_lua_array(&tables.sides_a)?;
+    clear_array_table(&tables.sides_a)?;
     for (i, side) in sides_a.iter().enumerate() {
         tables.sides_a.set(i + 1, box_side_to_str(side))?;
     }
 
-    clear_lua_array(&tables.sides_b)?;
+    clear_array_table(&tables.sides_b)?;
     for (i, side) in sides_b.iter().enumerate() {
         tables.sides_b.set(i + 1, box_side_to_str(side))?;
     }

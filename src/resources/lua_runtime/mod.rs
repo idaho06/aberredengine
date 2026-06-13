@@ -47,7 +47,7 @@ mod stub_meta;
 
 // Re-export all public types for backwards compatibility
 pub use commands::*;
-pub(crate) use context::populate_entity_signals;
+pub(crate) use context::{clear_array_table, populate_entity_signals, set_opt};
 pub use context::{
     AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
     SpriteSnapshot, build_entity_context_pooled,

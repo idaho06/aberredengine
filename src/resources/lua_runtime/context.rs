@@ -115,20 +115,21 @@ macro_rules! set_opt {
         if let Some(v) = $val {
             $ctx.set($key, v)?;
         } else {
-            $ctx.set($key, LuaValue::Nil)?;
+            $ctx.set($key, mlua::Value::Nil)?;
         }
     };
     ($ctx:expr, $key:literal, $val:expr, $v:pat, $body:block) => {
         if let Some($v) = $val {
             $body
         } else {
-            $ctx.set($key, LuaValue::Nil)?;
+            $ctx.set($key, mlua::Value::Nil)?;
         }
     };
 }
+pub(crate) use set_opt;
 
 /// Clears all numeric indices `1..=len` from an array-style Lua table.
-fn clear_array_table(table: &LuaTable) -> LuaResult<()> {
+pub(crate) fn clear_array_table(table: &LuaTable) -> LuaResult<()> {
     let len = table.raw_len();
     for i in 1..=len {
         table.raw_set(i, LuaValue::Nil)?;
