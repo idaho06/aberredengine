@@ -128,6 +128,9 @@ pub struct SignalsCtxTables {
     pub integers: LuaTable,
     pub scalars: LuaTable,
     pub strings: LuaTable,
+    /// Scratch buffer reused by `clear_map_table` to collect keys without
+    /// allocating a fresh `Vec` on every call. Always empty between calls.
+    pub scratch_keys: RefCell<Vec<LuaValue>>,
 }
 
 impl SignalsCtxTables {
@@ -137,6 +140,7 @@ impl SignalsCtxTables {
             integers: lua.create_table()?,
             scalars: lua.create_table()?,
             strings: lua.create_table()?,
+            scratch_keys: RefCell::new(Vec::new()),
         })
     }
 }

@@ -327,6 +327,9 @@ impl WorldSignals {
     /// Called when an entity is despawned so stale registry entries (used by
     /// `engine.clone`) don't outlive the entity they reference.
     pub fn remove_entity_registrations_for(&mut self, entity: Entity) {
+        if self.entities.is_empty() {
+            return;
+        }
         let before = self.entities.len();
         self.entities.retain(|_, e| *e != entity);
         if self.entities.len() != before {
@@ -705,6 +708,17 @@ mod tests {
         ws.remove_entity_registrations_for(entity_a);
 
         assert_eq!(ws.get_entity("cursor"), Some(&entity_b));
+        assert!(!ws.entities_dirty);
+    }
+
+    #[test]
+    fn test_remove_entity_registrations_for_empty_registry() {
+        let mut ws = WorldSignals::default();
+        let entity_a = Entity::from_bits(1);
+        ws.entities_dirty = false;
+
+        ws.remove_entity_registrations_for(entity_a);
+
         assert!(!ws.entities_dirty);
     }
 

@@ -410,6 +410,7 @@ mod tests {
             integers: lua.create_table().unwrap(),
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
+            scratch_keys: std::cell::RefCell::new(Vec::new()),
         };
 
         populate_collision_entity(
@@ -446,6 +447,7 @@ mod tests {
             integers: lua.create_table().unwrap(),
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
+            scratch_keys: std::cell::RefCell::new(Vec::new()),
         };
 
         populate_collision_entity(

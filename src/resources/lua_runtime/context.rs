@@ -31,6 +31,7 @@
 use super::runtime::{EntityCtxTables, SignalsCtxTables};
 use crate::components::signals::Signals;
 use mlua::{Lua, Result as LuaResult, Table as LuaTable, Value as LuaValue};
+use std::cell::RefCell;
 
 /// Snapshot of RigidBody data for context building.
 #[derive(Debug, Clone)]
@@ -143,12 +144,17 @@ fn clear_array_table(table: &LuaTable) -> LuaResult<()> {
 /// called 3x per entity per callback, the main Lua stack overflows
 /// (`StackError`) within seconds. Collecting keys via `pairs` and nil-ing
 /// them through the safe `set` path does not leak.
-fn clear_map_table(table: &LuaTable) -> LuaResult<()> {
-    let keys: Vec<LuaValue> = table
-        .pairs::<LuaValue, LuaValue>()
-        .map(|pair| pair.map(|(k, _)| k))
-        .collect::<LuaResult<_>>()?;
-    for key in keys {
+///
+/// `scratch` is a caller-owned buffer reused across calls to avoid allocating
+/// a fresh `Vec` every time; it is left empty when this function returns.
+fn clear_map_table(table: &LuaTable, scratch: &RefCell<Vec<LuaValue>>) -> LuaResult<()> {
+    let mut keys = scratch.borrow_mut();
+    keys.clear();
+    for pair in table.pairs::<LuaValue, LuaValue>() {
+        let (k, _) = pair?;
+        keys.push(k);
+    }
+    for key in keys.drain(..) {
         table.set(key, LuaValue::Nil)?;
     }
     Ok(())
@@ -168,21 +174,21 @@ pub(crate) fn populate_entity_signals(
     signals_table.set("flags", inner.flags.clone())?;
 
     // Integers map (variable keys)
-    clear_map_table(&inner.integers)?;
+    clear_map_table(&inner.integers, &inner.scratch_keys)?;
     for (key, value) in signals.get_integers() {
         inner.integers.set(key.as_str(), *value)?;
     }
     signals_table.set("integers", inner.integers.clone())?;
 
     // Scalars map (variable keys)
-    clear_map_table(&inner.scalars)?;
+    clear_map_table(&inner.scalars, &inner.scratch_keys)?;
     for (key, value) in signals.get_scalars() {
         inner.scalars.set(key.as_str(), *value)?;
     }
     signals_table.set("scalars", inner.scalars.clone())?;
 
     // Strings map (variable keys)
-    clear_map_table(&inner.strings)?;
+    clear_map_table(&inner.strings, &inner.scratch_keys)?;
     for (key, value) in signals.get_strings() {
         inner.strings.set(key.as_str(), value.as_str())?;
     }
@@ -316,6 +322,7 @@ mod tests {
             integers: lua.create_table().unwrap(),
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
+            scratch_keys: RefCell::new(Vec::new()),
         };
 
         let mut first = Signals::default();
@@ -357,6 +364,7 @@ mod tests {
             integers: lua.create_table().unwrap(),
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
+            scratch_keys: RefCell::new(Vec::new()),
         };
 
         let mut signals = Signals::default();
