@@ -8,13 +8,14 @@
 //!
 //! The input is organized into two categories:
 //! - `digital` - Boolean button states (pressed/just_pressed/just_released)
-//! - `analog` - Float axis values (reserved for future gamepad support)
+//! - `analog` - Float axis values for mouse/scroll input: wheel delta, and
+//!   cursor position in both game-space and world-space
 //!
 //! This structure mirrors the Lua table that will be passed to callbacks:
 //! ```lua
 //! input.digital.up.pressed
 //! input.digital.action_1.just_released
-//! input.analog.move_x  -- future
+//! input.analog.mouse_world_x
 //! ```
 
 use crate::resources::input::InputState;
