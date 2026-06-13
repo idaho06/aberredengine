@@ -358,6 +358,24 @@ impl WorldSignals {
     }
 
     /// Returns true if any signal domain has been modified since the last snapshot.
+    ///
+    /// `snapshot()` is already O(1) when nothing is dirty (six bool checks plus
+    /// one `Arc::clone`), so guarding `snapshot()` with `is_dirty()` only saves an
+    /// extra `Arc::clone`/drop pair and a `RefCell::borrow_mut` inside
+    /// `LuaRuntime::update_signal_cache`. That's only worth doing in a hot loop —
+    /// `lua_collision.rs` guards it because the collision callback runs per
+    /// collision pair. The other 5 call sites
+    /// (`lua_plugin::update`/`switch_scene`, `lua_phase_system`,
+    /// `lua_timer_observer`, `lua_setup_entity_system`,
+    /// `lua_animation_finished_observer`) call `update_signal_cache(snapshot())`
+    /// unconditionally, once per frame/event — the saving there is negligible
+    /// relative to the rest of the system, and staying unconditional means those
+    /// sites never depend on `is_dirty()`'s global, destructively-cleared state.
+    ///
+    /// Note: the collision-site guard is only correct because
+    /// `lua_plugin::update` unconditionally primes the cache once per frame
+    /// before any collisions run (see that call site's comment) — a guarded
+    /// site without that guarantee could serve Lua a stale snapshot.
     #[inline]
     pub fn is_dirty(&self) -> bool {
         self.scalars_dirty

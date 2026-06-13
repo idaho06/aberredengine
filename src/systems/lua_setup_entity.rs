@@ -18,8 +18,8 @@ use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
-    ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
-    drain_and_process_effect_commands, drain_and_process_phase_commands,
+    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context,
+    drain_phase_and_effects,
 };
 
 /// Call the named Lua setup function for every newly added [`LuaSetup`] entity.
@@ -72,11 +72,10 @@ pub fn lua_setup_entity_system(
         });
     }
 
-    drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);
-
-    drain_and_process_effect_commands(
+    drain_phase_and_effects(
         &lua_runtime,
-        DrainScope::Regular,
+        &mut phase_buf,
+        &mut luaphase_query,
         &mut effect_bufs,
         &mut commands,
         &mut world_signals,

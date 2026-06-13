@@ -27,8 +27,8 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
-    drain_and_process_effect_commands, drain_and_process_phase_commands,
+    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context,
+    drain_phase_and_effects,
 };
 use log::error;
 
@@ -100,11 +100,10 @@ pub fn lua_animation_finished_observer(
         func.call::<()>((ctx_table, input_table))
     });
 
-    drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);
-
-    drain_and_process_effect_commands(
+    drain_phase_and_effects(
         &lua_runtime,
-        DrainScope::Regular,
+        &mut phase_buf,
+        &mut luaphase_query,
         &mut effect_bufs,
         &mut commands,
         &mut world_signals,

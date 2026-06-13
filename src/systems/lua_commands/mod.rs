@@ -163,6 +163,43 @@ pub(crate) fn drain_and_process_phase_commands(
     }
 }
 
+/// Drain the phase queue, then the 6 regular effect queues, in the canonical
+/// order. Convenience wrapper for the 3 call sites (`lua_timer_observer`,
+/// `lua_setup_entity_system`, `lua_animation_finished_observer`) that have no
+/// work to interleave between the two drains.
+///
+/// `lua_phase_system` does NOT use this helper — it must run
+/// `apply_callback_transitions` between the phase drain and the effect drain
+/// (see `drain_and_process_effect_commands`'s doc comment above), so it calls
+/// `drain_and_process_phase_commands` / `drain_and_process_effect_commands`
+/// directly with `DrainScope::Regular`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn drain_phase_and_effects(
+    lua_runtime: &LuaRuntime,
+    phase_buf: &mut Vec<PhaseCmd>,
+    luaphase_query: &mut Query<(Entity, &mut LuaPhase)>,
+    effect_bufs: &mut EffectCmdBufs,
+    commands: &mut Commands,
+    world_signals: &mut WorldSignals,
+    cmd_queries: &mut EntityCmdQueries,
+    audio: &mut MessageWriter<AudioCmd>,
+    systems_store: &SystemsStore,
+    animation_store: &AnimationStore,
+) {
+    drain_and_process_phase_commands(lua_runtime, phase_buf, luaphase_query);
+    drain_and_process_effect_commands(
+        lua_runtime,
+        DrainScope::Regular,
+        effect_bufs,
+        commands,
+        world_signals,
+        cmd_queries,
+        audio,
+        systems_store,
+        animation_store,
+    );
+}
+
 /// Build a configured `Tween<T>` from component values and shared config.
 pub(crate) fn build_tween<T: TweenValue>(from: T, to: T, config: &TweenConfig) -> Tween<T> {
     let easing = config.easing.parse::<Easing>().unwrap();
