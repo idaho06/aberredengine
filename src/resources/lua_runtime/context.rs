@@ -28,7 +28,7 @@
 //! **Important**: Pooled context tables are reused. Lua scripts must not store
 //! references to `ctx` or its subtables for later use.
 
-use super::runtime::EntityCtxTables;
+use super::runtime::{EntityCtxTables, SignalsCtxTables};
 use crate::components::signals::Signals;
 use mlua::{Lua, Result as LuaResult, Table as LuaTable, Value as LuaValue};
 
@@ -117,45 +117,73 @@ macro_rules! set_opt {
     };
 }
 
-/// Populate entity signal tables (creates fresh tables for variable-length data).
+/// Clears all numeric indices `1..=len` from an array-style Lua table.
+fn clear_array_table(table: &LuaTable) -> LuaResult<()> {
+    let len = table.raw_len();
+    for i in 1..=len {
+        table.raw_set(i, LuaValue::Nil)?;
+    }
+    Ok(())
+}
+
+/// Clears all entries from a hash-style (string/number keyed) Lua table.
+///
+/// Deliberately does NOT use `mlua::Table::clear()`: in mlua 0.11.6's
+/// non-Luau implementation, `clear()` pushes the table onto the Lua stack via
+/// `push_ref` but never pops it, leaking one stack slot per call — with this
+/// called 3x per entity per callback, the main Lua stack overflows
+/// (`StackError`) within seconds. Collecting keys via `pairs` and nil-ing
+/// them through the safe `set` path does not leak.
+fn clear_map_table(table: &LuaTable) -> LuaResult<()> {
+    let keys: Vec<LuaValue> = table
+        .pairs::<LuaValue, LuaValue>()
+        .map(|pair| pair.map(|(k, _)| k))
+        .collect::<LuaResult<_>>()?;
+    for key in keys {
+        table.set(key, LuaValue::Nil)?;
+    }
+    Ok(())
+}
+
+/// Populate entity signal tables, reusing the pooled inner tables in place.
 pub(crate) fn populate_entity_signals(
-    lua: &Lua,
     signals_table: &LuaTable,
+    inner: &SignalsCtxTables,
     signals: &Signals,
 ) -> LuaResult<()> {
-    // Create fresh flags array (variable length)
-    let flags_table = lua.create_table()?;
+    // Flags array (variable length)
+    clear_array_table(&inner.flags)?;
     for (i, flag) in signals.get_flags().iter().enumerate() {
-        flags_table.set(i + 1, flag.as_str())?;
+        inner.flags.set(i + 1, flag.as_str())?;
     }
-    signals_table.set("flags", flags_table)?;
+    signals_table.set("flags", inner.flags.clone())?;
 
-    // Create fresh integers map (variable keys)
-    let integers_table = lua.create_table()?;
+    // Integers map (variable keys)
+    clear_map_table(&inner.integers)?;
     for (key, value) in signals.get_integers() {
-        integers_table.set(key.as_str(), *value)?;
+        inner.integers.set(key.as_str(), *value)?;
     }
-    signals_table.set("integers", integers_table)?;
+    signals_table.set("integers", inner.integers.clone())?;
 
-    // Create fresh scalars map (variable keys)
-    let scalars_table = lua.create_table()?;
+    // Scalars map (variable keys)
+    clear_map_table(&inner.scalars)?;
     for (key, value) in signals.get_scalars() {
-        scalars_table.set(key.as_str(), *value)?;
+        inner.scalars.set(key.as_str(), *value)?;
     }
-    signals_table.set("scalars", scalars_table)?;
+    signals_table.set("scalars", inner.scalars.clone())?;
 
-    // Create fresh strings map (variable keys)
-    let strings_table = lua.create_table()?;
+    // Strings map (variable keys)
+    clear_map_table(&inner.strings)?;
     for (key, value) in signals.get_strings() {
-        strings_table.set(key.as_str(), value.as_str())?;
+        inner.strings.set(key.as_str(), value.as_str())?;
     }
-    signals_table.set("strings", strings_table)?;
+    signals_table.set("strings", inner.strings.clone())?;
 
     Ok(())
 }
 
 pub fn build_entity_context_pooled<'a>(
-    lua: &Lua,
+    _lua: &Lua,
     tables: &EntityCtxTables,
     snapshot: &EntitySnapshot<'a>,
 ) -> LuaResult<LuaTable> {
@@ -242,7 +270,7 @@ pub fn build_entity_context_pooled<'a>(
 
     // Signals (creates fresh inner tables for variable-length data)
     set_opt!(tables.ctx, "signals", snapshot.signals, signals, {
-        populate_entity_signals(lua, &tables.signals, signals)?;
+        populate_entity_signals(&tables.signals, &tables.signals_inner, signals)?;
         tables.ctx.set("signals", tables.signals.clone())?;
     });
 
@@ -274,18 +302,24 @@ mod tests {
     fn populate_entity_signals_replaces_variable_length_tables() {
         let lua = Lua::new();
         let signals_table = lua.create_table().unwrap();
+        let inner = SignalsCtxTables {
+            flags: lua.create_table().unwrap(),
+            integers: lua.create_table().unwrap(),
+            scalars: lua.create_table().unwrap(),
+            strings: lua.create_table().unwrap(),
+        };
 
         let mut first = Signals::default();
         first.set_flag("active");
         first.set_integer("score", 7);
         first.set_scalar("speed", 2.5);
         first.set_string("state", "running");
-        populate_entity_signals(&lua, &signals_table, &first).unwrap();
+        populate_entity_signals(&signals_table, &inner, &first).unwrap();
 
         let mut second = Signals::default();
         second.set_flag("paused");
         second.set_scalar("momentum", 1.25);
-        populate_entity_signals(&lua, &signals_table, &second).unwrap();
+        populate_entity_signals(&signals_table, &inner, &second).unwrap();
 
         let flags: LuaTable = signals_table.get("flags").unwrap();
         let integers: LuaTable = signals_table.get("integers").unwrap();
@@ -298,5 +332,32 @@ mod tests {
         assert!(scalars.get::<Option<f32>>("speed").unwrap().is_none());
         assert_eq!(scalars.get::<f32>("momentum").unwrap(), 1.25);
         assert!(strings.get::<Option<String>>("state").unwrap().is_none());
+    }
+
+    #[test]
+    fn populate_entity_signals_does_not_leak_lua_stack_slots() {
+        // Regression test: mlua 0.11.6's `Table::clear()` (non-Luau) pushes
+        // the table ref via `push_ref` and never pops it, leaking one main
+        // stack slot per call. populate_entity_signals must not rely on
+        // `Table::clear()` directly, or repeated calls overflow the Lua
+        // stack (`StackError`) within a few thousand iterations.
+        let lua = Lua::new();
+        let signals_table = lua.create_table().unwrap();
+        let inner = SignalsCtxTables {
+            flags: lua.create_table().unwrap(),
+            integers: lua.create_table().unwrap(),
+            scalars: lua.create_table().unwrap(),
+            strings: lua.create_table().unwrap(),
+        };
+
+        let mut signals = Signals::default();
+        signals.set_flag("active");
+        signals.set_integer("score", 7);
+        signals.set_scalar("speed", 2.5);
+        signals.set_string("state", "running");
+
+        for _ in 0..20_000 {
+            populate_entity_signals(&signals_table, &inner, &signals).unwrap();
+        }
     }
 }

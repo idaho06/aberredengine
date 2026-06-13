@@ -118,7 +118,7 @@ fn call_phase_enter(
     input_table: &LuaTable,
     current_phase: &str,
 ) -> Option<String> {
-    match lua_runtime.get_function(fn_name) {
+    match lua_runtime.get_function_cached(fn_name) {
         Ok(Some(func)) => {
             let result = func.call::<LuaValue>((ctx_table.clone(), input_table.clone()));
             process_callback_return(result, current_phase, fn_name)
@@ -144,7 +144,7 @@ fn call_phase_update(
     dt: f32,
     current_phase: &str,
 ) -> Option<String> {
-    match lua_runtime.get_function(fn_name) {
+    match lua_runtime.get_function_cached(fn_name) {
         Ok(Some(func)) => {
             let result = func.call::<LuaValue>((ctx_table.clone(), input_table.clone(), dt));
             process_callback_return(result, current_phase, fn_name)
@@ -162,7 +162,7 @@ fn call_phase_update(
 
 /// Call phase exit callback: (ctx)
 fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, ctx_table: &LuaTable) {
-    match lua_runtime.get_function(fn_name) {
+    match lua_runtime.get_function_cached(fn_name) {
         Ok(Some(func)) => {
             if let Err(e) = func.call::<()>(ctx_table.clone()) {
                 error!(target: "lua", "Error in {}(): {}", fn_name, e);
@@ -316,7 +316,7 @@ pub fn lua_phase_system(
 
     // Create input snapshot once for all callbacks this frame
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table for phase system: {}", e);

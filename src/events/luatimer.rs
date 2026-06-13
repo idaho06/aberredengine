@@ -40,5 +40,5 @@ pub struct LuaTimerEvent {
     /// The entity whose timer expired.
     pub entity: Entity,
     /// The Lua function name to call.
-    pub callback: String,
+    pub callback: std::sync::Arc<str>,
 }

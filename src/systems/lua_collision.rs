@@ -47,7 +47,9 @@ use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd, populate_entity_signals};
+use crate::resources::lua_runtime::{
+    LuaRuntime, PhaseCmd, SignalsCtxTables, populate_entity_signals,
+};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::collision::{
@@ -57,7 +59,7 @@ use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
     process_phase_command,
 };
-use log::error;
+use log::{error, warn};
 
 /// System parameters for the Lua collision observer.
 #[derive(SystemParam)]
@@ -150,8 +152,7 @@ pub fn lua_collision_observer(
 
             let signals_a = params.entity_cmds.signals.get(ent_a).ok();
             let signals_b = params.entity_cmds.signals.get(ent_b).ok();
-            let group_a = params.groups.get(ent_a).ok().map(|g| g.name().to_string());
-            let group_b = params.groups.get(ent_b).ok().map(|g| g.name().to_string());
+            let (group_a, group_b) = if ent_a == a { (ga, gb) } else { (gb, ga) };
 
             // Refresh the cached world-signal snapshot only when something has
             // changed since the last refresh. lua_plugin::update primes the
@@ -181,8 +182,8 @@ pub fn lua_collision_observer(
                 &sides_b,
                 signals_a,
                 signals_b,
-                group_a.as_deref(),
-                group_b.as_deref(),
+                Some(group_a),
+                Some(group_b),
             );
 
             params
@@ -235,12 +236,12 @@ fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str
 /// Populate one side of a pooled collision context table for a single entity.
 #[allow(clippy::too_many_arguments)]
 fn populate_collision_entity(
-    lua: &mlua::Lua,
     entity_table: &mlua::Table,
     pos_table: &mlua::Table,
     vel_table: &mlua::Table,
     rect_table: &mlua::Table,
     signals_table: &mlua::Table,
+    signals_inner: &SignalsCtxTables,
     id: u64,
     group: Option<&str>,
     speed_sq: f32,
@@ -283,7 +284,7 @@ fn populate_collision_entity(
     }
 
     if let Some(s) = signals {
-        populate_entity_signals(lua, signals_table, s)?;
+        populate_entity_signals(signals_table, signals_inner, s)?;
         entity_table.set("signals", signals_table.clone())?;
     } else {
         entity_table.set("signals", mlua::Value::Nil)?;
@@ -315,16 +316,15 @@ fn call_lua_collision_callback(
     group_a: Option<&str>,
     group_b: Option<&str>,
 ) -> mlua::Result<()> {
-    let lua = lua_runtime.lua();
     let tables = lua_runtime.get_collision_ctx_pool();
 
     populate_collision_entity(
-        lua,
         &tables.entity_a,
         &tables.pos_a,
         &tables.vel_a,
         &tables.rect_a,
         &tables.signals_a,
+        &tables.signals_a_inner,
         entity_a_id,
         group_a,
         speed_sq_a,
@@ -335,12 +335,12 @@ fn call_lua_collision_callback(
     )?;
 
     populate_collision_entity(
-        lua,
         &tables.entity_b,
         &tables.pos_b,
         &tables.vel_b,
         &tables.rect_b,
         &tables.signals_b,
+        &tables.signals_b_inner,
         entity_b_id,
         group_b,
         speed_sq_b,
@@ -360,8 +360,14 @@ fn call_lua_collision_callback(
         tables.sides_b.set(i + 1, box_side_to_str(side))?;
     }
 
-    let func: mlua::Function = lua.globals().get(callback_name)?;
-    func.call::<()>(tables.ctx)?;
+    match lua_runtime.get_function_cached(callback_name)? {
+        Some(func) => {
+            func.call::<()>(tables.ctx)?;
+        }
+        None => {
+            warn!(target: "lua", "Collision callback '{}' not found", callback_name);
+        }
+    }
 
     Ok(())
 }
@@ -399,14 +405,20 @@ mod tests {
         let vel_table = lua.create_table().unwrap();
         let rect_table = lua.create_table().unwrap();
         let signals_table = lua.create_table().unwrap();
+        let signals_inner = SignalsCtxTables {
+            flags: lua.create_table().unwrap(),
+            integers: lua.create_table().unwrap(),
+            scalars: lua.create_table().unwrap(),
+            strings: lua.create_table().unwrap(),
+        };
 
         populate_collision_entity(
-            &lua,
             &entity_table,
             &pos_table,
             &vel_table,
             &rect_table,
             &signals_table,
+            &signals_inner,
             1,
             None,
             0.0,
@@ -429,14 +441,20 @@ mod tests {
         let vel_table = lua.create_table().unwrap();
         let rect_table = lua.create_table().unwrap();
         let signals_table = lua.create_table().unwrap();
+        let signals_inner = SignalsCtxTables {
+            flags: lua.create_table().unwrap(),
+            integers: lua.create_table().unwrap(),
+            scalars: lua.create_table().unwrap(),
+            strings: lua.create_table().unwrap(),
+        };
 
         populate_collision_entity(
-            &lua,
             &entity_table,
             &pos_table,
             &vel_table,
             &rect_table,
             &signals_table,
+            &signals_inner,
             1,
             Some("enemy"),
             0.0,

@@ -404,7 +404,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         entity_commands.insert(LuaPhase::new(phase_data.initial, phases));
     }
     if let Some((duration, callback)) = lua_timer {
-        entity_commands.insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
+        entity_commands.insert(LuaTimer::new(duration, LuaTimerCallback { name: callback.into() }));
     }
     if let Some(rule_data) = lua_collision_rule {
         use crate::components::collision::CollisionRule;

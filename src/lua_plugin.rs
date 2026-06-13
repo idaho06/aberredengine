@@ -324,7 +324,7 @@ pub fn update(
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table: {}", e);
@@ -333,7 +333,7 @@ pub fn update(
     };
 
     // Call scene-specific update callback with (input, dt)
-    match lua_runtime.get_function(cached_callback.as_str()) {
+    match lua_runtime.get_function_cached(cached_callback.as_str()) {
         Ok(Some(func)) => {
             if let Err(e) = func.call::<()>((input_table, delta_sec)) {
                 error!("Error calling {}: {}", cached_callback.as_str(), e);
@@ -391,6 +391,10 @@ pub fn switch_scene(
     // that might reference entities about to be despawned. This prevents panics when
     // entity commands are applied after their target entities have been despawned.
     lua_runtime.clear_all_commands();
+
+    // Callbacks are re-injected per scene; drop cached function handles so
+    // the new scene's definitions are resolved fresh.
+    lua_runtime.clear_function_cache();
 
     for entity in entities_to_clean.iter() {
         commands.entity(entity).despawn();

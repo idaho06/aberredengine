@@ -972,7 +972,7 @@ fn lua_timer_accumulates_time() {
         .spawn((LuaTimer::new(
             1.0,
             LuaTimerCallback {
-                name: "my_callback".to_string(),
+                name: "my_callback".into(),
             },
         ),))
         .id();
@@ -992,7 +992,7 @@ fn lua_timer_fires_event_when_expired() {
         .spawn((LuaTimer::new(
             0.5,
             LuaTimerCallback {
-                name: "on_timer".to_string(),
+                name: "on_timer".into(),
             },
         ),))
         .id();
@@ -1024,7 +1024,7 @@ fn lua_timer_resets_after_firing() {
         .spawn((LuaTimer::new(
             0.5,
             LuaTimerCallback {
-                name: "callback".to_string(),
+                name: "callback".into(),
             },
         ),))
         .id();
@@ -1048,7 +1048,7 @@ fn lua_timer_does_not_fire_before_duration() {
     world.spawn((LuaTimer::new(
         1.0,
         LuaTimerCallback {
-            name: "callback".to_string(),
+            name: "callback".into(),
         },
     ),));
 
@@ -1075,7 +1075,7 @@ fn lua_timer_event_carries_correct_callback_name() {
     world.spawn((LuaTimer::new(
         0.5,
         LuaTimerCallback {
-            name: "my_func".to_string(),
+            name: "my_func".into(),
         },
     ),));
 
@@ -1083,7 +1083,7 @@ fn lua_timer_event_carries_correct_callback_name() {
     let name_clone = received_name.clone();
 
     world.add_observer(move |trigger: On<LuaTimerEvent>| {
-        *name_clone.lock().unwrap() = trigger.event().callback.clone();
+        *name_clone.lock().unwrap() = trigger.event().callback.to_string();
     });
     world.flush();
 
@@ -1102,7 +1102,7 @@ fn lua_timer_multiple_entities_fire_with_correct_names() {
         .spawn((LuaTimer::new(
             0.5,
             LuaTimerCallback {
-                name: "func_a".to_string(),
+                name: "func_a".into(),
             },
         ),))
         .id();
@@ -1110,7 +1110,7 @@ fn lua_timer_multiple_entities_fire_with_correct_names() {
         .spawn((LuaTimer::new(
             0.5,
             LuaTimerCallback {
-                name: "func_b".to_string(),
+                name: "func_b".into(),
             },
         ),))
         .id();
@@ -1122,7 +1122,7 @@ fn lua_timer_multiple_entities_fire_with_correct_names() {
         events_clone
             .lock()
             .unwrap()
-            .push((trigger.event().entity, trigger.event().callback.clone()));
+            .push((trigger.event().entity, trigger.event().callback.to_string()));
     });
     world.flush();
 
@@ -1147,7 +1147,7 @@ fn lua_timer_callback_name_preserved_after_reset() {
         .spawn((LuaTimer::new(
             0.5,
             LuaTimerCallback {
-                name: "persist_cb".to_string(),
+                name: "persist_cb".into(),
             },
         ),))
         .id();
@@ -1157,7 +1157,7 @@ fn lua_timer_callback_name_preserved_after_reset() {
     tick_lua_timers(&mut world); // fires and resets
 
     let timer = world.get::<LuaTimer>(entity).unwrap();
-    assert_eq!(timer.callback.name, "persist_cb");
+    assert_eq!(&*timer.callback.name, "persist_cb");
 }
 
 #[cfg(feature = "lua")]
@@ -1172,7 +1172,7 @@ fn lua_timer_fires_across_multiple_ticks() {
     world.spawn((LuaTimer::new(
         0.8,
         LuaTimerCallback {
-            name: "cb".to_string(),
+            name: "cb".into(),
         },
     ),));
 

@@ -671,7 +671,7 @@ fn process_lifecycle_cmd(
             callback,
         } => {
             with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(LuaTimer::new(duration, LuaTimerCallback { name: callback }));
+                ec.try_insert(LuaTimer::new(duration, LuaTimerCallback { name: callback.into() }));
             });
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {

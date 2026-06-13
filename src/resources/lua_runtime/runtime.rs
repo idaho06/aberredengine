@@ -8,7 +8,7 @@ use super::input_snapshot::InputSnapshot;
 use super::spawn_data::*;
 use crate::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -110,6 +110,35 @@ pub(super) struct LuaAppData {
     pub(super) gameconfig_snapshot: RefCell<GameConfigSnapshot>,
     pub(super) bindings_snapshot: RefCell<std::collections::HashMap<String, String>>,
     pub(super) camera_snapshot: RefCell<CameraSnapshot>,
+    /// Resolved Lua function handles, cached by global name. Cleared on
+    /// scene switch via `clear_function_cache` (see `get_function_cached`).
+    pub(super) function_cache: RefCell<FxHashMap<String, LuaFunction>>,
+    /// Frame number and snapshot last written to the pooled input table, used
+    /// by `update_input_table` to skip redundant writes within a frame and
+    /// diff against the previous frame's values.
+    pub(super) last_input: RefCell<Option<(u64, InputSnapshot)>>,
+}
+
+/// Pooled inner tables for one entity's `signals` ctx field
+/// (`flags`/`integers`/`scalars`/`strings`), reused in place via
+/// `mlua::Table::clear()` across callbacks. See [`populate_entity_signals`](super::context::populate_entity_signals).
+#[derive(Clone)]
+pub struct SignalsCtxTables {
+    pub flags: LuaTable,
+    pub integers: LuaTable,
+    pub scalars: LuaTable,
+    pub strings: LuaTable,
+}
+
+impl SignalsCtxTables {
+    fn create(lua: &Lua) -> LuaResult<Self> {
+        Ok(Self {
+            flags: lua.create_table()?,
+            integers: lua.create_table()?,
+            scalars: lua.create_table()?,
+            strings: lua.create_table()?,
+        })
+    }
 }
 
 /// Pooled collision context tables, owned directly by `LuaRuntime` and reused for
@@ -127,6 +156,8 @@ pub struct CollisionCtxTables {
     pub rect_b: LuaTable,
     pub signals_a: LuaTable,
     pub signals_b: LuaTable,
+    pub signals_a_inner: SignalsCtxTables,
+    pub signals_b_inner: SignalsCtxTables,
     pub sides_a: LuaTable,
     pub sides_b: LuaTable,
 }
@@ -173,6 +204,7 @@ pub struct EntityCtxTables {
     pub animation: LuaTable,
     pub timer: LuaTable,
     pub signals: LuaTable,
+    pub signals_inner: SignalsCtxTables,
     pub world_pos: LuaTable,
     pub world_scale: LuaTable,
 }
@@ -237,6 +269,35 @@ pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
         "toggle_fullscreen" => Some(InputAction::ToggleFullscreen),
         _ => None,
     }
+}
+
+/// Invokes `$cb!(field)` for each of the 18 digital button fields shared by
+/// `DigitalInputs` and `InputCtxTables` (field and table names match for all
+/// of them). Used by [`LuaRuntime::diff_digital_tables`] and
+/// [`LuaRuntime::write_all_digital_tables`] so the button list is declared
+/// exactly once.
+macro_rules! for_each_digital_button {
+    ($cb:ident) => {
+        $cb!(up);
+        $cb!(down);
+        $cb!(left);
+        $cb!(right);
+        $cb!(action_1);
+        $cb!(action_2);
+        $cb!(action_3);
+        $cb!(back);
+        $cb!(special);
+        $cb!(main_up);
+        $cb!(main_down);
+        $cb!(main_left);
+        $cb!(main_right);
+        $cb!(secondary_up);
+        $cb!(secondary_down);
+        $cb!(secondary_left);
+        $cb!(secondary_right);
+        $cb!(debug);
+        $cb!(fullscreen);
+    };
 }
 
 impl LuaRuntime {
@@ -342,6 +403,9 @@ impl LuaRuntime {
         ctx.set("b", entity_b.clone())?;
         ctx.set("sides", sides.clone())?;
 
+        let signals_a_inner = SignalsCtxTables::create(lua)?;
+        let signals_b_inner = SignalsCtxTables::create(lua)?;
+
         Ok(CollisionCtxTables {
             ctx,
             entity_a,
@@ -354,6 +418,8 @@ impl LuaRuntime {
             rect_b,
             signals_a,
             signals_b,
+            signals_a_inner,
+            signals_b_inner,
             sides_a,
             sides_b,
         })
@@ -379,6 +445,7 @@ impl LuaRuntime {
             animation: lua.create_table()?,
             timer: lua.create_table()?,
             signals: lua.create_table()?,
+            signals_inner: SignalsCtxTables::create(lua)?,
             world_pos: lua.create_table()?,
             world_scale: lua.create_table()?,
         })
@@ -480,6 +547,50 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Diffs `new` against `old`, calling `update_button_table` for each of
+    /// the 18 digital buttons whose state changed.
+    fn diff_digital_tables(
+        tables: &InputCtxTables,
+        old: &super::input_snapshot::DigitalInputs,
+        new: &super::input_snapshot::DigitalInputs,
+    ) -> LuaResult<()> {
+        macro_rules! diff_one {
+            ($field:ident) => {
+                if old.$field != new.$field {
+                    Self::update_button_table(&tables.$field, &new.$field)?;
+                }
+            };
+        }
+        for_each_digital_button!(diff_one);
+        Ok(())
+    }
+
+    /// Writes every digital button table from `snapshot` unconditionally.
+    fn write_all_digital_tables(
+        tables: &InputCtxTables,
+        snapshot: &super::input_snapshot::DigitalInputs,
+    ) -> LuaResult<()> {
+        macro_rules! write_one {
+            ($field:ident) => {
+                Self::update_button_table(&tables.$field, &snapshot.$field)?;
+            };
+        }
+        for_each_digital_button!(write_one);
+        Ok(())
+    }
+
+    fn write_analog_table(
+        tables: &InputCtxTables,
+        analog: &super::input_snapshot::AnalogInputs,
+    ) -> LuaResult<()> {
+        tables.analog.set("scroll_y", analog.scroll_y)?;
+        tables.analog.set("mouse_x", analog.mouse_x)?;
+        tables.analog.set("mouse_y", analog.mouse_y)?;
+        tables.analog.set("mouse_world_x", analog.mouse_world_x)?;
+        tables.analog.set("mouse_world_y", analog.mouse_world_y)?;
+        Ok(())
+    }
+
     /// Updates the pooled input callback table in-place and returns it.
     ///
     /// The returned table is ephemeral, reused across callbacks, and has the
@@ -505,38 +616,36 @@ impl LuaRuntime {
     ///
     /// Lua code should treat it as read-only callback data and not retain it
     /// across frames.
-    pub fn update_input_table(&self, snapshot: &InputSnapshot) -> LuaResult<LuaTable> {
+    ///
+    /// `frame_count` lets repeated calls within the same frame (from
+    /// different callback sites) short-circuit entirely, and lets calls on a
+    /// new frame diff against the previous frame's snapshot, writing only the
+    /// digital buttons and analog values that actually changed.
+    pub fn update_input_table(&self, snapshot: &InputSnapshot, frame_count: u64) -> LuaResult<LuaTable> {
         let tables = self.get_input_ctx_pool();
 
-        Self::update_button_table(&tables.up, &snapshot.digital.up)?;
-        Self::update_button_table(&tables.down, &snapshot.digital.down)?;
-        Self::update_button_table(&tables.left, &snapshot.digital.left)?;
-        Self::update_button_table(&tables.right, &snapshot.digital.right)?;
-        Self::update_button_table(&tables.action_1, &snapshot.digital.action_1)?;
-        Self::update_button_table(&tables.action_2, &snapshot.digital.action_2)?;
-        Self::update_button_table(&tables.action_3, &snapshot.digital.action_3)?;
-        Self::update_button_table(&tables.back, &snapshot.digital.back)?;
-        Self::update_button_table(&tables.special, &snapshot.digital.special)?;
-        Self::update_button_table(&tables.main_up, &snapshot.digital.main_up)?;
-        Self::update_button_table(&tables.main_down, &snapshot.digital.main_down)?;
-        Self::update_button_table(&tables.main_left, &snapshot.digital.main_left)?;
-        Self::update_button_table(&tables.main_right, &snapshot.digital.main_right)?;
-        Self::update_button_table(&tables.secondary_up, &snapshot.digital.secondary_up)?;
-        Self::update_button_table(&tables.secondary_down, &snapshot.digital.secondary_down)?;
-        Self::update_button_table(&tables.secondary_left, &snapshot.digital.secondary_left)?;
-        Self::update_button_table(&tables.secondary_right, &snapshot.digital.secondary_right)?;
-        Self::update_button_table(&tables.debug, &snapshot.digital.debug)?;
-        Self::update_button_table(&tables.fullscreen, &snapshot.digital.fullscreen)?;
-
-        tables.analog.set("scroll_y", snapshot.analog.scroll_y)?;
-        tables.analog.set("mouse_x", snapshot.analog.mouse_x)?;
-        tables.analog.set("mouse_y", snapshot.analog.mouse_y)?;
-        tables
-            .analog
-            .set("mouse_world_x", snapshot.analog.mouse_world_x)?;
-        tables
-            .analog
-            .set("mouse_world_y", snapshot.analog.mouse_world_y)?;
+        let data = self
+            .lua
+            .app_data_ref::<LuaAppData>()
+            .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+        let mut last_input = data.last_input.borrow_mut();
+        match last_input.as_ref() {
+            Some((f, _)) if *f == frame_count => {
+                // Already updated for this frame by an earlier call site.
+                return Ok(tables.input);
+            }
+            Some((_, old)) => {
+                Self::diff_digital_tables(&tables, &old.digital, &snapshot.digital)?;
+                if old.analog != snapshot.analog {
+                    Self::write_analog_table(&tables, &snapshot.analog)?;
+                }
+            }
+            None => {
+                Self::write_all_digital_tables(&tables, &snapshot.digital)?;
+                Self::write_analog_table(&tables, &snapshot.analog)?;
+            }
+        }
+        *last_input = Some((frame_count, snapshot.clone()));
 
         Ok(tables.input)
     }
@@ -595,6 +704,49 @@ impl LuaRuntime {
         }
     }
 
+    /// Returns a global Lua function, caching the resolved handle by name.
+    ///
+    /// Subsequent calls with the same `name` skip the `globals()` lookup
+    /// entirely. The cache is invalidated on scene switch via
+    /// `clear_function_cache` — callbacks are re-injected per scene, so a
+    /// stale handle would otherwise keep pointing at the old scene's closure
+    /// environment.
+    ///
+    /// Caveat: if a script rebinds a global mid-scene, the cached handle wins
+    /// until the next scene switch.
+    pub fn get_function_cached(&self, name: &str) -> LuaResult<Option<LuaFunction>> {
+        let data = self
+            .lua
+            .app_data_ref::<LuaAppData>()
+            .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+        if let Some(f) = data.function_cache.borrow().get(name) {
+            return Ok(Some(f.clone()));
+        }
+        drop(data);
+
+        match self.get_function(name)? {
+            Some(f) => {
+                let data = self
+                    .lua
+                    .app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+                data.function_cache
+                    .borrow_mut()
+                    .insert(name.to_string(), f.clone());
+                Ok(Some(f))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Clears cached function handles (see `get_function_cached`). Call on
+    /// scene switch, alongside `clear_all_commands`.
+    pub fn clear_function_cache(&self) {
+        if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
+            data.function_cache.borrow_mut().clear();
+        }
+    }
+
     /// Checks if a global function exists.
     ///
     /// # Arguments
@@ -633,7 +785,7 @@ mod tests {
         snapshot.analog.mouse_x = 12.5;
         snapshot.analog.mouse_world_y = -4.0;
 
-        let input = runtime.update_input_table(&snapshot).unwrap();
+        let input = runtime.update_input_table(&snapshot, 1).unwrap();
         let digital: LuaTable = input.get("digital").unwrap();
         let action_1: LuaTable = digital.get("action_1").unwrap();
         let analog: LuaTable = input.get("analog").unwrap();
@@ -648,12 +800,12 @@ mod tests {
     fn pooled_input_table_reuses_same_lua_table() {
         let runtime = LuaRuntime::new().unwrap();
         let first = runtime
-            .update_input_table(&InputSnapshot::default())
+            .update_input_table(&InputSnapshot::default(), 1)
             .unwrap();
 
         let mut snapshot = InputSnapshot::default();
         snapshot.digital.back.just_pressed = true;
-        let second = runtime.update_input_table(&snapshot).unwrap();
+        let second = runtime.update_input_table(&snapshot, 2).unwrap();
 
         let globals = runtime.lua().globals();
         globals.set("first_input", first).unwrap();
@@ -665,5 +817,94 @@ mod tests {
             .eval::<bool>()
             .unwrap();
         assert!(same_identity);
+    }
+
+    #[test]
+    fn update_input_table_is_noop_within_same_frame() {
+        let runtime = LuaRuntime::new().unwrap();
+
+        let mut snapshot = InputSnapshot::default();
+        snapshot.digital.action_1.pressed = true;
+        let input = runtime.update_input_table(&snapshot, 7).unwrap();
+        let digital: LuaTable = input.get("digital").unwrap();
+        let action_1: LuaTable = digital.get("action_1").unwrap();
+        assert!(action_1.get::<bool>("pressed").unwrap());
+
+        // Mutate the table directly, then call again with the same frame
+        // count — the second call must be a no-op and not overwrite our
+        // out-of-band change.
+        action_1.set("pressed", false).unwrap();
+        let input_again = runtime.update_input_table(&snapshot, 7).unwrap();
+        let digital_again: LuaTable = input_again.get("digital").unwrap();
+        let action_1_again: LuaTable = digital_again.get("action_1").unwrap();
+        assert!(!action_1_again.get::<bool>("pressed").unwrap());
+    }
+
+    #[test]
+    fn update_input_table_diffs_on_new_frame() {
+        let runtime = LuaRuntime::new().unwrap();
+
+        let snapshot_a = InputSnapshot::default();
+        let input = runtime.update_input_table(&snapshot_a, 1).unwrap();
+        let digital: LuaTable = input.get("digital").unwrap();
+        let action_1: LuaTable = digital.get("action_1").unwrap();
+        let back: LuaTable = digital.get("back").unwrap();
+        assert!(!action_1.get::<bool>("pressed").unwrap());
+        assert!(!back.get::<bool>("pressed").unwrap());
+
+        let mut snapshot_b = InputSnapshot::default();
+        snapshot_b.digital.action_1.pressed = true;
+        snapshot_b.digital.action_1.just_pressed = true;
+        let _ = runtime.update_input_table(&snapshot_b, 2).unwrap();
+
+        // Changed button reflects the new state.
+        assert!(action_1.get::<bool>("pressed").unwrap());
+        assert!(action_1.get::<bool>("just_pressed").unwrap());
+        // Unchanged button is untouched (still false).
+        assert!(!back.get::<bool>("pressed").unwrap());
+    }
+
+    #[test]
+    fn get_function_cached_returns_callable_function() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load("function greet() return 'hello' end")
+            .exec()
+            .unwrap();
+
+        let first = runtime.get_function_cached("greet").unwrap().unwrap();
+        let second = runtime.get_function_cached("greet").unwrap().unwrap();
+
+        assert_eq!(first.call::<String>(()).unwrap(), "hello");
+        assert_eq!(second.call::<String>(()).unwrap(), "hello");
+    }
+
+    #[test]
+    fn clear_function_cache_picks_up_redefined_global() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load("function greet() return 'old' end")
+            .exec()
+            .unwrap();
+
+        let cached = runtime.get_function_cached("greet").unwrap().unwrap();
+        assert_eq!(cached.call::<String>(()).unwrap(), "old");
+
+        runtime
+            .lua()
+            .load("function greet() return 'new' end")
+            .exec()
+            .unwrap();
+
+        // Cache still holds the old handle until cleared.
+        let still_old = runtime.get_function_cached("greet").unwrap().unwrap();
+        assert_eq!(still_old.call::<String>(()).unwrap(), "old");
+
+        runtime.clear_function_cache();
+
+        let refreshed = runtime.get_function_cached("greet").unwrap().unwrap();
+        assert_eq!(refreshed.call::<String>(()).unwrap(), "new");
     }
 }

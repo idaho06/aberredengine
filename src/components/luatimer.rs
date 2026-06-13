@@ -61,7 +61,7 @@ use super::timer::Timer;
 #[derive(Clone, Debug, Default)]
 pub struct LuaTimerCallback {
     /// Lua function name to invoke when the timer fires.
-    pub name: String,
+    pub name: std::sync::Arc<str>,
 }
 
 /// Countdown timer that calls a Lua function when finished.

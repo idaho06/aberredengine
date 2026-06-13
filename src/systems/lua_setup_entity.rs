@@ -67,7 +67,7 @@ pub fn lua_setup_entity_system(
             }
         };
 
-        match lua_runtime.get_function(&lua_setup.callback) {
+        match lua_runtime.get_function_cached(&lua_setup.callback) {
             Ok(Some(func)) => {
                 if let Err(e) = func.call::<()>(ctx_table) {
                     error!(target: "lua", "Error in {}(): {}", lua_setup.callback, e);

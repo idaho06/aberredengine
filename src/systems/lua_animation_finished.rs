@@ -25,6 +25,7 @@ use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
+use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
     drain_and_process_effect_commands, drain_and_process_phase_commands,
@@ -37,6 +38,7 @@ pub fn lua_animation_finished_observer(
     trigger: On<AnimationFinishedEvent>,
     mut commands: Commands,
     input: Res<InputState>,
+    time: Res<WorldTime>,
     on_end_query: Query<&LuaOnAnimationEnd>,
     ctx_queries: ContextQueries,
     mut cmd_queries: EntityCmdQueries,
@@ -60,7 +62,7 @@ pub fn lua_animation_finished_observer(
     lua_runtime.update_signal_cache(world_signals.snapshot());
 
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
         Ok(t) => t,
         Err(e) => {
             error!(
@@ -97,7 +99,7 @@ pub fn lua_animation_finished_observer(
         }
     };
 
-    match lua_runtime.get_function(&callback_name) {
+    match lua_runtime.get_function_cached(&callback_name) {
         Ok(Some(func)) => {
             if let Err(e) = func.call::<()>((ctx_table, input_table)) {
                 error!(target: "lua", "Error in {}(): {}", callback_name, e);

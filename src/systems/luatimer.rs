@@ -126,6 +126,7 @@ pub fn lua_timer_observer(
     trigger: On<LuaTimerEvent>,
     mut commands: Commands,
     input: Res<InputState>,
+    time: Res<WorldTime>,
     // Bundled read-only queries for context building
     ctx_queries: ContextQueries,
     // Bundled mutable queries for command processing
@@ -148,7 +149,7 @@ pub fn lua_timer_observer(
 
     // Create input snapshot and table
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot) {
+    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table for timer callback: {}", e);
@@ -172,7 +173,7 @@ pub fn lua_timer_observer(
     };
 
     // Call the Lua callback with (ctx, input)
-    match lua_runtime.get_function(&event.callback) {
+    match lua_runtime.get_function_cached(&event.callback) {
         Ok(Some(func)) => {
             if let Err(e) = func.call::<()>((ctx_table, input_table)) {
                 error!(target: "lua", "Error in {}(): {}", event.callback, e);

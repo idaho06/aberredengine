@@ -20,7 +20,7 @@
 use crate::resources::input::InputState;
 
 /// State of a single digital input button.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct DigitalButtonState {
     /// Whether the button is currently held down.
     pub pressed: bool,
@@ -42,7 +42,7 @@ impl DigitalButtonState {
 }
 
 /// All digital input states.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct DigitalInputs {
     // Combined directional (WASD OR arrows)
     pub up: DigitalButtonState,
@@ -71,7 +71,7 @@ pub struct DigitalInputs {
 }
 
 /// Analog input values.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AnalogInputs {
     /// Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll.
     pub scroll_y: f32,
@@ -90,7 +90,7 @@ pub struct AnalogInputs {
 ///
 /// This is created once per frame from [`InputState`] and passed to Lua callbacks.
 /// The structure is designed to be easily convertible to a Lua table.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct InputSnapshot {
     pub digital: DigitalInputs,
     pub analog: AnalogInputs,
