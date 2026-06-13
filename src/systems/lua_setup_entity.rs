@@ -8,7 +8,7 @@
 //! For timing and contract details see [`crate::components::luasetup`].
 
 use bevy_ecs::prelude::*;
-use log::{error, warn};
+use log::error;
 
 use crate::components::luaphase::LuaPhase;
 use crate::components::luasetup::LuaSetup;
@@ -67,27 +67,9 @@ pub fn lua_setup_entity_system(
             }
         };
 
-        match lua_runtime.get_function_cached(&lua_setup.callback) {
-            Ok(Some(func)) => {
-                if let Err(e) = func.call::<()>(ctx_table) {
-                    error!(target: "lua", "Error in {}(): {}", lua_setup.callback, e);
-                }
-            }
-            Ok(None) => {
-                warn!(
-                    target: "lua",
-                    "LuaSetup callback '{}' not found",
-                    lua_setup.callback
-                );
-            }
-            Err(e) => {
-                error!(
-                    target: "lua",
-                    "Error resolving {}(): {}",
-                    lua_setup.callback, e
-                );
-            }
-        }
+        lua_runtime.call_named(&lua_setup.callback, "LuaSetup", |func| {
+            func.call::<()>(ctx_table)
+        });
     }
 
     drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);

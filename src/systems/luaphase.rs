@@ -60,10 +60,7 @@ fn build_phase_context(
     ctx_queries: &ContextQueries,
     cmd_queries: &EntityCmdQueries,
 ) -> LuaResult<LuaTable> {
-    let lua_phase_snapshot = Some(LuaPhaseSnapshot {
-        current: lua_phase.current.as_str(),
-        time_in_phase: lua_phase.time_in_phase,
-    });
+    let lua_phase_snapshot = Some(LuaPhaseSnapshot::from(lua_phase));
     build_entity_context(
         lua_runtime,
         entity,
@@ -76,34 +73,24 @@ fn build_phase_context(
 
 /// Process the return value from a phase callback.
 /// Returns Some(phase_name) if a valid transition was requested (different from current phase).
-fn process_callback_return(
-    result: LuaResult<LuaValue>,
-    current_phase: &str,
-    fn_name: &str,
-) -> Option<String> {
+fn process_callback_return(result: LuaValue, current_phase: &str, fn_name: &str) -> Option<String> {
     match result {
-        Ok(LuaValue::String(s)) => {
-            match s.to_str() {
-                Ok(phase) => {
-                    if phase != current_phase {
-                        Some(phase.to_string())
-                    } else {
-                        None // Same phase, ignore
-                    }
-                }
-                Err(e) => {
-                    error!(target: "lua", "Error converting return value in {}(): {}", fn_name, e);
-                    None
+        LuaValue::String(s) => match s.to_str() {
+            Ok(phase) => {
+                if phase != current_phase {
+                    Some(phase.to_string())
+                } else {
+                    None // Same phase, ignore
                 }
             }
-        }
-        Ok(LuaValue::Nil) => None,
-        Ok(_) => {
+            Err(e) => {
+                error!(target: "lua", "Error converting return value in {}(): {}", fn_name, e);
+                None
+            }
+        },
+        LuaValue::Nil => None,
+        _ => {
             warn!(target: "lua", "Phase callback '{}' returned non-string, non-nil value", fn_name);
-            None
-        }
-        Err(e) => {
-            error!(target: "lua", "Error in {}(): {}", fn_name, e);
             None
         }
     }
@@ -118,20 +105,10 @@ fn call_phase_enter(
     input_table: &LuaTable,
     current_phase: &str,
 ) -> Option<String> {
-    match lua_runtime.get_function_cached(fn_name) {
-        Ok(Some(func)) => {
-            let result = func.call::<LuaValue>((ctx_table.clone(), input_table.clone()));
-            process_callback_return(result, current_phase, fn_name)
-        }
-        Ok(None) => {
-            warn!(target: "lua", "Phase callback '{}' not found", fn_name);
-            None
-        }
-        Err(e) => {
-            error!(target: "lua", "Error resolving {}(): {}", fn_name, e);
-            None
-        }
-    }
+    let result = lua_runtime.call_named(fn_name, "Phase", |func| {
+        func.call::<LuaValue>((ctx_table.clone(), input_table.clone()))
+    })?;
+    process_callback_return(result, current_phase, fn_name)
 }
 
 /// Call phase update callback: (ctx, input, dt)
@@ -144,37 +121,15 @@ fn call_phase_update(
     dt: f32,
     current_phase: &str,
 ) -> Option<String> {
-    match lua_runtime.get_function_cached(fn_name) {
-        Ok(Some(func)) => {
-            let result = func.call::<LuaValue>((ctx_table.clone(), input_table.clone(), dt));
-            process_callback_return(result, current_phase, fn_name)
-        }
-        Ok(None) => {
-            warn!(target: "lua", "Phase callback '{}' not found", fn_name);
-            None
-        }
-        Err(e) => {
-            error!(target: "lua", "Error resolving {}(): {}", fn_name, e);
-            None
-        }
-    }
+    let result = lua_runtime.call_named(fn_name, "Phase", |func| {
+        func.call::<LuaValue>((ctx_table.clone(), input_table.clone(), dt))
+    })?;
+    process_callback_return(result, current_phase, fn_name)
 }
 
 /// Call phase exit callback: (ctx)
 fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, ctx_table: &LuaTable) {
-    match lua_runtime.get_function_cached(fn_name) {
-        Ok(Some(func)) => {
-            if let Err(e) = func.call::<()>(ctx_table.clone()) {
-                error!(target: "lua", "Error in {}(): {}", fn_name, e);
-            }
-        }
-        Ok(None) => {
-            warn!(target: "lua", "Phase callback '{}' not found", fn_name);
-        }
-        Err(e) => {
-            error!(target: "lua", "Error resolving {}(): {}", fn_name, e);
-        }
-    }
+    lua_runtime.call_named(fn_name, "Phase", |func| func.call::<()>(ctx_table.clone()));
 }
 
 struct LuaPhaseRunner<'a, 'w, 's> {

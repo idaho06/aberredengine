@@ -739,6 +739,36 @@ impl LuaRuntime {
         }
     }
 
+    /// Resolves `name` via [`get_function_cached`](Self::get_function_cached) and invokes it
+    /// through `f`, centralizing the not-found/error logging shared by every callback dispatch
+    /// site (phase, timer, setup, animation-end).
+    ///
+    /// `label` identifies the callback kind for the "not found" warning (e.g. `"Phase"`,
+    /// `"Timer"`). Returns `None` if the callback is missing or resolving/calling it errors;
+    /// the error is logged in both cases.
+    pub fn call_named<R, F>(&self, name: &str, label: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(LuaFunction) -> LuaResult<R>,
+    {
+        match self.get_function_cached(name) {
+            Ok(Some(func)) => match f(func) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    log::error!(target: "lua", "Error in {}(): {}", name, e);
+                    None
+                }
+            },
+            Ok(None) => {
+                log::warn!(target: "lua", "{} callback '{}' not found", label, name);
+                None
+            }
+            Err(e) => {
+                log::error!(target: "lua", "Error resolving {}(): {}", name, e);
+                None
+            }
+        }
+    }
+
     /// Clears cached function handles (see `get_function_cached`). Call on
     /// scene switch, alongside `clear_all_commands`.
     pub fn clear_function_cache(&self) {

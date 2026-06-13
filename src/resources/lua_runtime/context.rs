@@ -63,6 +63,15 @@ pub struct LuaPhaseSnapshot<'a> {
     pub time_in_phase: f32,
 }
 
+impl<'a> From<&'a crate::components::luaphase::LuaPhase> for LuaPhaseSnapshot<'a> {
+    fn from(phase: &'a crate::components::luaphase::LuaPhase) -> Self {
+        Self {
+            current: phase.current.as_str(),
+            time_in_phase: phase.time_in_phase,
+        }
+    }
+}
+
 /// Snapshot of LuaTimer data for context building.
 #[derive(Debug)]
 pub struct LuaTimerSnapshot<'a> {

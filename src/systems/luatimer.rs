@@ -47,7 +47,7 @@ use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
     drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
-use log::{error, warn};
+use log::error;
 
 use super::timer_core::{TimerRunner, run_timer_update};
 
@@ -92,10 +92,7 @@ fn build_timer_context(
     let lua_phase_snapshot = luaphase_query
         .get(entity)
         .ok()
-        .map(|(_, p)| LuaPhaseSnapshot {
-            current: p.current.as_str(),
-            time_in_phase: p.time_in_phase,
-        });
+        .map(|(_, p)| LuaPhaseSnapshot::from(p));
     build_entity_context(
         lua_runtime,
         entity,
@@ -173,19 +170,9 @@ pub fn lua_timer_observer(
     };
 
     // Call the Lua callback with (ctx, input)
-    match lua_runtime.get_function_cached(&event.callback) {
-        Ok(Some(func)) => {
-            if let Err(e) = func.call::<()>((ctx_table, input_table)) {
-                error!(target: "lua", "Error in {}(): {}", event.callback, e);
-            }
-        }
-        Ok(None) => {
-            warn!(target: "lua", "Timer callback '{}' not found", event.callback);
-        }
-        Err(e) => {
-            error!(target: "lua", "Error resolving {}(): {}", event.callback, e);
-        }
-    }
+    lua_runtime.call_named(&event.callback, "Timer", |func| {
+        func.call::<()>((ctx_table, input_table))
+    });
 
     drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);
 

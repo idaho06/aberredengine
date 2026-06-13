@@ -30,7 +30,7 @@ use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
     drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
-use log::{error, warn};
+use log::error;
 
 /// Observer that calls a Lua function when a non-looped animation finishes.
 #[allow(clippy::too_many_arguments)]
@@ -76,10 +76,7 @@ pub fn lua_animation_finished_observer(
     let lua_phase_snapshot = luaphase_query
         .get(entity)
         .ok()
-        .map(|(_, p)| LuaPhaseSnapshot {
-            current: p.current.as_str(),
-            time_in_phase: p.time_in_phase,
-        });
+        .map(|(_, p)| LuaPhaseSnapshot::from(p));
 
     let ctx_table = match build_entity_context(
         &lua_runtime,
@@ -99,19 +96,9 @@ pub fn lua_animation_finished_observer(
         }
     };
 
-    match lua_runtime.get_function_cached(&callback_name) {
-        Ok(Some(func)) => {
-            if let Err(e) = func.call::<()>((ctx_table, input_table)) {
-                error!(target: "lua", "Error in {}(): {}", callback_name, e);
-            }
-        }
-        Ok(None) => {
-            warn!(target: "lua", "on_animation_end callback '{}' not found", callback_name);
-        }
-        Err(e) => {
-            error!(target: "lua", "Error resolving {}(): {}", callback_name, e);
-        }
-    }
+    lua_runtime.call_named(&callback_name, "on_animation_end", |func| {
+        func.call::<()>((ctx_table, input_table))
+    });
 
     drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut luaphase_query);
 

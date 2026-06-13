@@ -156,6 +156,30 @@ impl LuaRuntime {
             cat = "collision",
             params = [("key", "string")]
         );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_set_entity",
+            collision_signal_commands,
+            |(key, entity_id)| (String, u64),
+            SignalCmd::SetEntity { key, entity_id },
+            desc = "Register an entity ID in world signals (collision context)",
+            cat = "collision",
+            params = [("key", "string"), ("entity_id", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "collision_remove_entity",
+            collision_signal_commands,
+            |key| String,
+            SignalCmd::RemoveEntity { key },
+            desc = "Remove a registered entity from world signals (collision context)",
+            cat = "collision",
+            params = [("key", "string")]
+        );
 
         register_cmd!(
             engine,

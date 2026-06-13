@@ -1228,6 +1228,10 @@ function engine.collision_play_sound(id) end
 ---@param pitch number
 function engine.collision_play_sound_pitched(id, pitch) end
 
+---Remove a registered entity from world signals (collision context)
+---@param key string
+function engine.collision_remove_entity(key) end
+
 ---Set the 2D camera (collision context)
 ---@param target_x number
 ---@param target_y number
@@ -1236,6 +1240,11 @@ function engine.collision_play_sound_pitched(id, pitch) end
 ---@param rotation number
 ---@param zoom number
 function engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom) end
+
+---Register an entity ID in world signals (collision context)
+---@param key string
+---@param entity_id integer
+function engine.collision_set_entity(key, entity_id) end
 
 ---Set a world signal flag (collision context)
 ---@param flag string

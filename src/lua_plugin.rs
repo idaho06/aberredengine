@@ -324,24 +324,18 @@ pub fn update(
 
     // Create input snapshot and Lua table for callbacks
     let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
-        Ok(table) => table,
+    match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
+        Ok(input_table) => {
+            // Call scene-specific update callback with (input, dt)
+            lua_runtime.call_named(cached_callback.as_str(), "Scene", |func| {
+                func.call::<()>((input_table, delta_sec))
+            });
+        }
         Err(e) => {
+            // Skip the scene callback this frame, but still drain queues and
+            // check quit/switch flags below — commands queued by timers/phase
+            // callbacks earlier this frame must not be lost (P4-2).
             error!("Error creating input table: {}", e);
-            return;
-        }
-    };
-
-    // Call scene-specific update callback with (input, dt)
-    match lua_runtime.get_function_cached(cached_callback.as_str()) {
-        Ok(Some(func)) => {
-            if let Err(e) = func.call::<()>((input_table, delta_sec)) {
-                error!("Error calling {}: {}", cached_callback.as_str(), e);
-            }
-        }
-        Ok(None) => {}
-        Err(e) => {
-            error!("Error resolving {}: {}", cached_callback.as_str(), e);
         }
     }
 
