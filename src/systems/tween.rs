@@ -86,6 +86,12 @@ pub fn tween_system<T: TweenValue>(
         }
 
         let duration = tw.duration;
+        if duration <= 0.0 {
+            *value = T::interpolate(&tw.from, &tw.to, 1.0);
+            tw.playing = false;
+            continue;
+        }
+
         let loop_mode = tw.loop_mode;
         let mut time = tw.time;
         let mut forward = tw.forward;
@@ -498,6 +504,18 @@ mod tests {
         assert!(approx_eq(target.scale.y, 2.0));
         assert!(approx_eq(tween.time, 0.5));
         assert!(tween.playing);
+    }
+
+    #[test]
+    fn test_tween_system_zero_duration_snaps_to_end() {
+        let (target, tween) = run_tween_once(
+            Rotation { degrees: 0.0 },
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 0.0),
+            0.1,
+        );
+
+        assert!(approx_eq(target.degrees, 180.0));
+        assert!(!tween.playing);
     }
 
     #[test]
