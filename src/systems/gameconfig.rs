@@ -11,11 +11,9 @@ use crate::resources::fullscreen::FullScreen;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::windowsize::WindowSize;
 use bevy_ecs::prelude::*;
 use log::{debug, error};
 use raylib::ffi;
-//use std::time::Duration;
 
 /// System that applies game configuration changes.
 ///
@@ -34,7 +32,6 @@ pub fn apply_gameconfig_changes(
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut screen_size: ResMut<ScreenSize>,
-    mut _window_size: ResMut<WindowSize>,
     fullscreen: Option<Res<FullScreen>>,
     mut commands: Commands,
 ) {
@@ -43,15 +40,6 @@ pub fn apply_gameconfig_changes(
         return;
     };
 
-    // On first insertion, load configuration from file
-    /*     if config.is_added() {
-           eprintln!("GameConfig added, loading from file...");
-           if let Err(e) = config.bypass_change_detection().load_from_file() {
-               eprintln!("Config file not found or invalid, using defaults: {}", e);
-           }
-           // Fall through to apply loaded (or default) values
-       }
-    */
     // Apply changes when config is added or modified
     if config.is_changed() || config.is_added() {
         // Apply render size if different from current
@@ -86,24 +74,9 @@ pub fn apply_gameconfig_changes(
             commands.trigger(SwitchFullScreenEvent {});
         }
 
-        // Apply window size if not fullscreen in the config
-        /*         if !config.fullscreen {
-                   let (w, h) = config.window_size();
-                   let current_w = rl.get_screen_width();
-                   let current_h = rl.get_screen_height();
-                   if current_w != w as i32 || current_h != h as i32 {
-                       eprintln!(
-                           "Resizing window: {}x{} -> {}x{}",
-                           current_w, current_h, w, h
-                       );
-                       rl.set_window_size(w as i32, h as i32);
-                       // update window size in resource WindowSize if exists
-                       window_size.w = w as i32;
-                       window_size.h = h as i32;
-                   }
-               }
-        */
-        // TODO: This currently does not handle switching to fullscreen mode. Raylib bug??
+        // Note: resizing the OS window to match config.window_size() when not
+        // fullscreen is not implemented. WindowSize is refreshed every frame
+        // from the actual window size regardless (see engine_app.rs).
 
         // Apply vsync setting only if it differs from the current window state
         let vsync_flag = ffi::ConfigFlags::FLAG_VSYNC_HINT as u32;
@@ -125,6 +98,4 @@ pub fn apply_gameconfig_changes(
 
         debug!("GameConfig changes applied.");
     }
-    // clean up change detection flag
-    // config.bypass_change_detection();
 }

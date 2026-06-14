@@ -67,40 +67,6 @@ pub enum GridValue {
     Bool(bool),
 }
 
-/* impl GridValue {
-    /// Attempts to retrieve the value as an integer.
-    pub fn as_int(&self) -> Option<i64> {
-        match self {
-            GridValue::Int(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Attempts to retrieve the value as a float.
-    pub fn as_float(&self) -> Option<f64> {
-        match self {
-            GridValue::Float(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Attempts to retrieve the value as a string.
-    pub fn as_string(&self) -> Option<&str> {
-        match self {
-            GridValue::String(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Attempts to retrieve the value as a boolean.
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            GridValue::Bool(v) => Some(*v),
-            _ => None,
-        }
-    }
-}
- */
 impl GridLayoutData {
     /// Loads grid layout data from a JSON file at the specified path.
     pub fn load_from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {

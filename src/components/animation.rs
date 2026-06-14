@@ -27,10 +27,8 @@
 //!         "dead",
 //!     );
 //! ```
-#![allow(dead_code, unused_variables)]
 use bevy_ecs::prelude::Component;
 use serde::{Deserialize, Serialize};
-//use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
 /// Per-entity animation playback state.
@@ -461,7 +459,3 @@ mod tests {
         assert_eq!(ctrl.current_key, "standing");
     }
 }
-
-/*
-TODO: Create methods to load/save AnimationController and Animation from/to JSON or other formats
-*/

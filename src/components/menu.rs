@@ -41,7 +41,6 @@ pub struct MenuItem {
     pub id: String,
     pub label: String,
     pub dynamic_text: bool,
-    // pub enabled: bool,
     pub entity: Option<Entity>, // If not dynamic_text, the entity holding the text sprite
 }
 
@@ -106,7 +105,6 @@ impl Menu {
                 id: id.to_string(),
                 label: label.to_string(),
                 dynamic_text: true,
-                // enabled: true,
                 entity: None,
             })
             .collect();

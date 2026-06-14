@@ -9,7 +9,6 @@ use raylib::prelude::Texture2D;
 use raylib::prelude::{Color, Font, Image, RaylibHandle, RaylibThread};
 use rustc_hash::FxHashMap;
 use std::ffi::CString;
-// use std::collections::HashMap;
 
 #[derive(Resource)]
 /// Map of texture keys to loaded textures.
