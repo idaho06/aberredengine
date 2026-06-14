@@ -294,6 +294,72 @@ pub(super) fn get_uniform_loc(
         .or_insert_with(|| shader.get_shader_location(name))
 }
 
+/// Raw `SetShaderValue` call. All `set_*` helpers below funnel through this
+/// single `unsafe` site so the `SHADER_UNIFORM_*` tag and pointer type can
+/// only mismatch in one place.
+fn set_shader_value_raw(
+    shader: &mut Shader,
+    loc: i32,
+    ptr: *const std::ffi::c_void,
+    ty: ffi::ShaderUniformDataType,
+) {
+    unsafe {
+        ffi::SetShaderValue(**shader, loc, ptr, ty as i32);
+    }
+}
+
+/// Set a `float` uniform by name, if present in the shader.
+fn set_float(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &str, value: &f32) {
+    let loc = get_uniform_loc(shader, locations, name);
+    if loc >= 0 {
+        set_shader_value_raw(
+            shader,
+            loc,
+            value as *const f32 as *const std::ffi::c_void,
+            ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT,
+        );
+    }
+}
+
+/// Set an `int` uniform by name, if present in the shader.
+fn set_int(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &str, value: &i32) {
+    let loc = get_uniform_loc(shader, locations, name);
+    if loc >= 0 {
+        set_shader_value_raw(
+            shader,
+            loc,
+            value as *const i32 as *const std::ffi::c_void,
+            ffi::ShaderUniformDataType::SHADER_UNIFORM_INT,
+        );
+    }
+}
+
+/// Set a `vec2` uniform by name, if present in the shader.
+fn set_vec2(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &str, value: &[f32; 2]) {
+    let loc = get_uniform_loc(shader, locations, name);
+    if loc >= 0 {
+        set_shader_value_raw(
+            shader,
+            loc,
+            value.as_ptr() as *const std::ffi::c_void,
+            ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2,
+        );
+    }
+}
+
+/// Set a `vec4` uniform by name, if present in the shader.
+fn set_vec4(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &str, value: &[f32; 4]) {
+    let loc = get_uniform_loc(shader, locations, name);
+    if loc >= 0 {
+        set_shader_value_raw(
+            shader,
+            loc,
+            value.as_ptr() as *const std::ffi::c_void,
+            ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4,
+        );
+    }
+}
+
 /// Set standard uniforms on a shader for post-processing.
 ///
 /// Standard uniforms:
@@ -312,138 +378,52 @@ pub(super) fn set_standard_uniforms(
     dest: &Rectangle,
 ) {
     // uTime (float)
-    let loc = get_uniform_loc(shader, locations, "uTime");
-    if loc >= 0 {
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                &world_time.elapsed as *const f32 as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
-            );
-        }
-    }
+    set_float(shader, locations, "uTime", &world_time.elapsed);
 
     // uDeltaTime (float)
-    let loc = get_uniform_loc(shader, locations, "uDeltaTime");
-    if loc >= 0 {
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                &world_time.delta as *const f32 as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
-            );
-        }
-    }
+    set_float(shader, locations, "uDeltaTime", &world_time.delta);
 
     // uResolution (vec2) - game resolution
-    let loc = get_uniform_loc(shader, locations, "uResolution");
-    if loc >= 0 {
-        let resolution = [screensize.w as f32, screensize.h as f32];
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                resolution.as_ptr() as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-            );
-        }
-    }
+    set_vec2(
+        shader,
+        locations,
+        "uResolution",
+        &[screensize.w as f32, screensize.h as f32],
+    );
 
     // uFrame (int)
-    let loc = get_uniform_loc(shader, locations, "uFrame");
-    if loc >= 0 {
-        let frame = world_time.frame_count as i32;
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                &frame as *const i32 as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_INT as i32,
-            );
-        }
-    }
+    set_int(shader, locations, "uFrame", &(world_time.frame_count as i32));
 
     // uWindowResolution (vec2)
-    let loc = get_uniform_loc(shader, locations, "uWindowResolution");
-    if loc >= 0 {
-        let window_res = [window_size.w as f32, window_size.h as f32];
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                window_res.as_ptr() as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-            );
-        }
-    }
+    set_vec2(
+        shader,
+        locations,
+        "uWindowResolution",
+        &[window_size.w as f32, window_size.h as f32],
+    );
 
     // uLetterbox (vec4) - destination rectangle
-    let loc = get_uniform_loc(shader, locations, "uLetterbox");
-    if loc >= 0 {
-        let letterbox = [dest.x, dest.y, dest.width, dest.height];
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                letterbox.as_ptr() as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
-            );
-        }
-    }
+    set_vec4(
+        shader,
+        locations,
+        "uLetterbox",
+        &[dest.x, dest.y, dest.width, dest.height],
+    );
 }
 
-/// Set a user-defined uniform value on a shader.
+/// Set a user-defined uniform value on a shader. Silently skips uniforms
+/// not found in the shader (handled by the `set_*` helpers).
 pub(super) fn set_uniform_value(
     shader: &mut Shader,
     locations: &mut FxHashMap<String, i32>,
     name: &str,
     value: &UniformValue,
 ) {
-    let loc = get_uniform_loc(shader, locations, name);
-
-    if loc < 0 {
-        return; // Uniform not found in shader, silently skip
-    }
-
-    unsafe {
-        match value {
-            UniformValue::Float(v) => {
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    v as *const f32 as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
-                );
-            }
-            UniformValue::Int(v) => {
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    v as *const i32 as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_INT as i32,
-                );
-            }
-            UniformValue::Vec2 { x, y } => {
-                let vec = [*x, *y];
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    vec.as_ptr() as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-                );
-            }
-            UniformValue::Vec4 { x, y, z, w } => {
-                let vec = [*x, *y, *z, *w];
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    vec.as_ptr() as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
-                );
-            }
-        }
+    match value {
+        UniformValue::Float(v) => set_float(shader, locations, name, v),
+        UniformValue::Int(v) => set_int(shader, locations, name, v),
+        UniformValue::Vec2 { x, y } => set_vec2(shader, locations, name, &[*x, *y]),
+        UniformValue::Vec4 { x, y, z, w } => set_vec4(shader, locations, name, &[*x, *y, *z, *w]),
     }
 }
 
@@ -468,91 +448,31 @@ pub(super) fn set_entity_uniforms(
     rigidbody_query: &Query<&RigidBody>,
 ) {
     // uEntityId (int) - use bits representation truncated to i32
-    let loc = get_uniform_loc(shader, locations, "uEntityId");
-    if loc >= 0 {
-        let entity_id = (entity.to_bits() & 0xFFFFFFFF) as i32;
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                &entity_id as *const i32 as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_INT as i32,
-            );
-        }
-    }
+    set_int(
+        shader,
+        locations,
+        "uEntityId",
+        &((entity.to_bits() & 0xFFFFFFFF) as i32),
+    );
 
     // uEntityPos (vec2)
-    let loc = get_uniform_loc(shader, locations, "uEntityPos");
-    if loc >= 0 {
-        let entity_pos = [pos.pos.x, pos.pos.y];
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                entity_pos.as_ptr() as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-            );
-        }
-    }
+    set_vec2(shader, locations, "uEntityPos", &[pos.pos.x, pos.pos.y]);
 
     // uSpriteSize (vec2)
-    let loc = get_uniform_loc(shader, locations, "uSpriteSize");
-    if loc >= 0 {
-        let sprite_size = [size.x, size.y];
-        unsafe {
-            ffi::SetShaderValue(
-                **shader,
-                loc,
-                sprite_size.as_ptr() as *const std::ffi::c_void,
-                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-            );
-        }
-    }
+    set_vec2(shader, locations, "uSpriteSize", &[size.x, size.y]);
 
     // uRotation (float) - only if Rotation component present
     if let Some(rot) = rotation {
-        let loc = get_uniform_loc(shader, locations, "uRotation");
-        if loc >= 0 {
-            unsafe {
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    &rot.degrees as *const f32 as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
-                );
-            }
-        }
+        set_float(shader, locations, "uRotation", &rot.degrees);
     }
 
     // uScale (vec2) - only if Scale component present
     if let Some(s) = scale {
-        let loc = get_uniform_loc(shader, locations, "uScale");
-        if loc >= 0 {
-            let scale_vec = [s.scale.x, s.scale.y];
-            unsafe {
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    scale_vec.as_ptr() as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-                );
-            }
-        }
+        set_vec2(shader, locations, "uScale", &[s.scale.x, s.scale.y]);
     }
 
     // uVelocity (vec2) - only if RigidBody component present
     if let Ok(rb) = rigidbody_query.get(entity) {
-        let loc = get_uniform_loc(shader, locations, "uVelocity");
-        if loc >= 0 {
-            let velocity = [rb.velocity.x, rb.velocity.y];
-            unsafe {
-                ffi::SetShaderValue(
-                    **shader,
-                    loc,
-                    velocity.as_ptr() as *const std::ffi::c_void,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
-                );
-            }
-        }
+        set_vec2(shader, locations, "uVelocity", &[rb.velocity.x, rb.velocity.y]);
     }
 }

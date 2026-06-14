@@ -274,7 +274,7 @@ fn apply_render_components(
     if let Some(shader_data) = shader {
         let mut entity_shader = EntityShader::new(shader_data.key);
         for (name, value) in shader_data.uniforms {
-            entity_shader.uniforms.insert(Arc::from(name), value);
+            entity_shader.uniforms_mut().insert(Arc::from(name), value);
         }
         entity_commands.insert(entity_shader);
     }

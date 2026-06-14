@@ -451,13 +451,13 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
         EntityCmd::ShaderClearUniform { entity_id, name } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms.remove(name.as_str());
+                shader.uniforms_mut().remove(name.as_str());
             }
         }
         EntityCmd::ShaderClearUniforms { entity_id } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms.clear();
+                shader.uniforms_mut().clear();
             }
         }
         EntityCmd::SetTint {
@@ -510,7 +510,7 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
     };
     let Some(entity) = resolve_entity(entity_id) else { return; };
     if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-        shader.uniforms.insert(Arc::from(name), value);
+        shader.uniforms_mut().insert(Arc::from(name), value);
     }
 }
 

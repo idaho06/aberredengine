@@ -365,7 +365,7 @@ pub fn render_system(
                                     );
 
                                     // Set user-defined uniforms
-                                    for (name, value) in &entity_shader.uniforms {
+                                    for (name, value) in entity_shader.uniforms.iter() {
                                         set_uniform_value(
                                             &mut entry.shader,
                                             &mut entry.locations,
@@ -506,7 +506,7 @@ pub fn render_system(
                                         item.text_size,
                                         query_rigidbodies,
                                     );
-                                    for (name, value) in &entity_shader.uniforms {
+                                    for (name, value) in entity_shader.uniforms.iter() {
                                         set_uniform_value(
                                             &mut entry.shader,
                                             &mut entry.locations,

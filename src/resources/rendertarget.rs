@@ -19,6 +19,16 @@ pub enum RenderFilter {
     Bilinear,
 }
 
+impl RenderFilter {
+    /// Map to the raylib `TextureFilter` FFI constant.
+    fn to_ffi(self) -> i32 {
+        match self {
+            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
+            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
+        }
+    }
+}
+
 /// Render target for fixed-resolution rendering with scaling.
 ///
 /// This resource holds a `RenderTexture2D` at the game's internal resolution.
@@ -85,10 +95,7 @@ impl RenderTarget {
         rl: &mut RaylibHandle,
         th: &RaylibThread,
     ) -> Result<(), String> {
-        let filter_value = match self.filter {
-            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
-            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
-        };
+        let filter_value = self.filter.to_ffi();
 
         if self.ping.is_none() {
             let ping = rl
@@ -121,10 +128,7 @@ impl RenderTarget {
 
     /// Apply the current filter setting to the main texture via FFI.
     fn apply_filter(&mut self) {
-        let filter_value = match self.filter {
-            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
-            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
-        };
+        let filter_value = self.filter.to_ffi();
         unsafe {
             ffi::SetTextureFilter(self.texture.texture, filter_value);
         }
@@ -156,10 +160,7 @@ impl RenderTarget {
         self.apply_filter();
 
         // Recreate ping/pong buffers if they exist
-        let filter_value = match self.filter {
-            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
-            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
-        };
+        let filter_value = self.filter.to_ffi();
 
         if self.ping.is_some() {
             let ping = rl

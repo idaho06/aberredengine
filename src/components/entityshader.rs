@@ -22,14 +22,17 @@ use crate::resources::uniformvalue::UniformValue;
 ///
 /// // With uniforms
 /// let mut shader = EntityShader::new("glow");
-/// shader.uniforms.insert(Arc::from("uIntensity"), UniformValue::Float(0.8));
+/// shader.uniforms_mut().insert(Arc::from("uIntensity"), UniformValue::Float(0.8));
 /// ```
 #[derive(Component, Clone, Debug)]
 pub struct EntityShader {
     /// Key referencing a shader in the ShaderStore.
     pub shader_key: Arc<str>,
     /// Per-entity uniform values. These are set on the shader before drawing.
-    pub uniforms: FxHashMap<Arc<str>, UniformValue>,
+    ///
+    /// Wrapped in `Arc` so that cloning an `EntityShader` (e.g. when buffering
+    /// it for the render pass) is just a refcount bump, not a hashmap clone.
+    pub uniforms: Arc<FxHashMap<Arc<str>, UniformValue>>,
 }
 
 impl EntityShader {
@@ -37,8 +40,14 @@ impl EntityShader {
     pub fn new(key: impl Into<Arc<str>>) -> Self {
         Self {
             shader_key: key.into(),
-            uniforms: FxHashMap::default(),
+            uniforms: Arc::new(FxHashMap::default()),
         }
+    }
+
+    /// Get a mutable reference to the uniforms map, cloning the underlying
+    /// map only if it is currently shared (copy-on-write via `Arc::make_mut`).
+    pub fn uniforms_mut(&mut self) -> &mut FxHashMap<Arc<str>, UniformValue> {
+        Arc::make_mut(&mut self.uniforms)
     }
 }
 
@@ -64,7 +73,7 @@ mod tests {
     fn test_uniform_insert_float() {
         let mut shader = EntityShader::new("test");
         shader
-            .uniforms
+            .uniforms_mut()
             .insert(Arc::from("uIntensity"), UniformValue::Float(0.5));
         assert_eq!(shader.uniforms.len(), 1);
         assert!(matches!(
@@ -77,7 +86,7 @@ mod tests {
     fn test_uniform_insert_vec2() {
         let mut shader = EntityShader::new("test");
         shader
-            .uniforms
+            .uniforms_mut()
             .insert(Arc::from("uOffset"), UniformValue::Vec2 { x: 1.0, y: 2.0 });
         assert!(matches!(
             shader.uniforms.get(&Arc::from("uOffset") as &Arc<str>),
@@ -88,7 +97,7 @@ mod tests {
     #[test]
     fn test_uniform_insert_vec4() {
         let mut shader = EntityShader::new("test");
-        shader.uniforms.insert(
+        shader.uniforms_mut().insert(
             Arc::from("uColor"),
             UniformValue::Vec4 {
                 x: 1.0,
@@ -104,7 +113,7 @@ mod tests {
     fn test_uniform_insert_int() {
         let mut shader = EntityShader::new("test");
         shader
-            .uniforms
+            .uniforms_mut()
             .insert(Arc::from("uMode"), UniformValue::Int(3));
         assert!(matches!(
             shader.uniforms.get(&Arc::from("uMode") as &Arc<str>),
@@ -116,11 +125,13 @@ mod tests {
     fn test_multiple_uniforms() {
         let mut shader = EntityShader::new("complex");
         shader
-            .uniforms
+            .uniforms_mut()
             .insert(Arc::from("a"), UniformValue::Float(1.0));
-        shader.uniforms.insert(Arc::from("b"), UniformValue::Int(2));
         shader
-            .uniforms
+            .uniforms_mut()
+            .insert(Arc::from("b"), UniformValue::Int(2));
+        shader
+            .uniforms_mut()
             .insert(Arc::from("c"), UniformValue::Vec2 { x: 0.0, y: 0.0 });
         assert_eq!(shader.uniforms.len(), 3);
     }
