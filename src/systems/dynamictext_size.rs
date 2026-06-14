@@ -32,8 +32,13 @@ pub fn dynamictext_size_system(
             continue;
         };
 
-        let text_c_string = std::ffi::CString::new(text.text.as_bytes())
-            .expect("Failed to convert text content to CString");
+        let Ok(text_c_string) = std::ffi::CString::new(text.text.as_bytes()) else {
+            warn!(
+                "DynamicText content for font '{}' contains a NUL byte; size unchanged",
+                text.font
+            );
+            continue;
+        };
 
         let measured =
             unsafe { ffi::MeasureTextEx(**font, text_c_string.as_ptr(), text.font_size, 1.0) };
