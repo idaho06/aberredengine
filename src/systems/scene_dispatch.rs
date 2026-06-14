@@ -198,7 +198,7 @@ pub fn scene_switch_system(
     let prev_scene = scene_manager.active_scene.clone();
 
     for entity in entities_to_clean.iter() {
-        ctx.commands.entity(entity).despawn();
+        ctx.commands.entity(entity).try_despawn();
     }
 
     // Clear entity registrations for despawned (non-persistent) entities

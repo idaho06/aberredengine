@@ -391,7 +391,7 @@ pub fn switch_scene(
     lua_runtime.clear_function_cache();
 
     for entity in entities_to_clean.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 
     // Clear entity registrations for despawned (non-persistent) entities

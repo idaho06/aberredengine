@@ -46,6 +46,6 @@ pub fn quit_game(mut world_signals: ResMut<WorldSignals>, mut rl: NonSendMut<Ray
 /// Despawn all entities that are not marked [`Persistent`].
 pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<Persistent>>) {
     for entity in query.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 }

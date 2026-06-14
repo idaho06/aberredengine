@@ -311,25 +311,25 @@ pub fn menu_despawn(
         texture_store.remove(&texture_key);
 
         if let Some(item_entity) = item.entity {
-            commands.entity(item_entity).despawn();
+            commands.entity(item_entity).try_despawn();
         }
     }
 
     // Despawn indicator entities if applicable
     if let Some(top_entity) = menu.top_indicator_entity {
-        commands.entity(top_entity).despawn();
+        commands.entity(top_entity).try_despawn();
     }
     if let Some(bottom_entity) = menu.bottom_indicator_entity {
-        commands.entity(bottom_entity).despawn();
+        commands.entity(bottom_entity).try_despawn();
     }
 
     // Despawn cursor entity if applicable
     if let Some(cursor_entity) = menu.cursor_entity {
-        commands.entity(cursor_entity).despawn();
+        commands.entity(cursor_entity).try_despawn();
     }
 
     // Finally despawn the menu entity itself
-    commands.entity(target).despawn();
+    commands.entity(target).try_despawn();
 }
 
 /// Handles input events to navigate menus and confirm selections.
