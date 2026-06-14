@@ -213,9 +213,7 @@ mod tests {
     fn resolve_world_pos_local_only() {
         let mut world = World::new();
         let e = world
-            .spawn(MapPosition {
-                pos: raylib::math::Vector2 { x: 5.0, y: 10.0 },
-            })
+            .spawn(MapPosition::new(5.0, 10.0))
             .id();
 
         let mut state =
@@ -234,9 +232,7 @@ mod tests {
         let mut world = World::new();
         let e = world
             .spawn((
-                MapPosition {
-                    pos: raylib::math::Vector2 { x: 5.0, y: 10.0 },
-                },
+                MapPosition::new(5.0, 10.0),
                 GlobalTransform2D {
                     position: raylib::math::Vector2 { x: 100.0, y: 200.0 },
                     rotation_degrees: 0.0,
@@ -279,9 +275,7 @@ mod tests {
         let mut world = World::new();
         let e = world
             .spawn((
-                MapPosition {
-                    pos: raylib::math::Vector2 { x: 10.0, y: 20.0 },
-                },
+                MapPosition::new(10.0, 20.0),
                 BoxCollider::new(30.0, 40.0),
             ))
             .id();

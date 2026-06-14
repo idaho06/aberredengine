@@ -158,9 +158,9 @@ pub fn menu_spawn_system(
                     y: origin.y + (viewport_index as f32) * item_spacing,
                 };
                 if use_screen_space {
-                    ecmd.insert(ScreenPosition { pos });
+                    ecmd.insert(ScreenPosition::from_vec(pos));
                 } else {
-                    ecmd.insert(MapPosition { pos });
+                    ecmd.insert(MapPosition::from_vec(pos));
                 }
             }
             // Non-visible items don't get position component, so render system skips them
@@ -198,9 +198,11 @@ pub fn menu_spawn_system(
                 if use_screen_space {
                     commands
                         .entity(top_indicator)
-                        .insert(ScreenPosition { pos });
+                        .insert(ScreenPosition::from_vec(pos));
                 } else {
-                    commands.entity(top_indicator).insert(MapPosition { pos });
+                    commands
+                        .entity(top_indicator)
+                        .insert(MapPosition::from_vec(pos));
                 }
             }
             menu.top_indicator_entity = Some(top_indicator);
@@ -227,11 +229,11 @@ pub fn menu_spawn_system(
                 if use_screen_space {
                     commands
                         .entity(bottom_indicator)
-                        .insert(ScreenPosition { pos });
+                        .insert(ScreenPosition::from_vec(pos));
                 } else {
                     commands
                         .entity(bottom_indicator)
-                        .insert(MapPosition { pos });
+                        .insert(MapPosition::from_vec(pos));
                 }
             }
             menu.bottom_indicator_entity = Some(bottom_indicator);
@@ -259,13 +261,13 @@ pub fn menu_spawn_system(
                 y: origin.y + (selected_viewport_index as f32) * item_spacing,
             };
             if use_screen_space {
-                commands.entity(cursor_entity).insert(ScreenPosition {
-                    pos: cursor_position,
-                });
+                commands
+                    .entity(cursor_entity)
+                    .insert(ScreenPosition::from_vec(cursor_position));
             } else {
-                commands.entity(cursor_entity).insert(MapPosition {
-                    pos: cursor_position,
-                });
+                commands
+                    .entity(cursor_entity)
+                    .insert(MapPosition::from_vec(cursor_position));
                 commands.entity(cursor_entity).insert(ZIndex(23.0));
             }
             debug!(
@@ -455,13 +457,13 @@ pub fn menu_controller_observer(
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
                 if menu.use_screen_space {
-                    commands.entity(cursor_entity).insert(ScreenPosition {
-                        pos: cursor_position,
-                    });
+                    commands
+                        .entity(cursor_entity)
+                        .insert(ScreenPosition::from_vec(cursor_position));
                 } else {
-                    commands.entity(cursor_entity).insert(MapPosition {
-                        pos: cursor_position,
-                    });
+                    commands
+                        .entity(cursor_entity)
+                        .insert(MapPosition::from_vec(cursor_position));
                 }
             }
             // Play selection change sound if configured
@@ -497,9 +499,11 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 if menu.use_screen_space {
                     commands
                         .entity(entity)
-                        .insert(ScreenPosition { pos: new_pos });
+                        .insert(ScreenPosition::from_vec(new_pos));
                 } else {
-                    commands.entity(entity).insert(MapPosition { pos: new_pos });
+                    commands
+                        .entity(entity)
+                        .insert(MapPosition::from_vec(new_pos));
                 }
             } else {
                 // Remove position component to hide (render system skips)
@@ -523,9 +527,13 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 y: menu.origin.y - menu.item_spacing,
             };
             if menu.use_screen_space {
-                commands.entity(top_entity).insert(ScreenPosition { pos });
+                commands
+                    .entity(top_entity)
+                    .insert(ScreenPosition::from_vec(pos));
             } else {
-                commands.entity(top_entity).insert(MapPosition { pos });
+                commands
+                    .entity(top_entity)
+                    .insert(MapPosition::from_vec(pos));
             }
         } else if menu.use_screen_space {
             commands.entity(top_entity).remove::<ScreenPosition>();
@@ -543,9 +551,11 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
             if menu.use_screen_space {
                 commands
                     .entity(bottom_entity)
-                    .insert(ScreenPosition { pos });
+                    .insert(ScreenPosition::from_vec(pos));
             } else {
-                commands.entity(bottom_entity).insert(MapPosition { pos });
+                commands
+                    .entity(bottom_entity)
+                    .insert(MapPosition::from_vec(pos));
             }
         } else if menu.use_screen_space {
             commands.entity(bottom_entity).remove::<ScreenPosition>();

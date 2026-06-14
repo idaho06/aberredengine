@@ -3046,9 +3046,7 @@ fn animation_horizontal_only_no_wrapping() {
                 finished: false,
             },
             make_sprite("sheet"),
-            MapPosition {
-                pos: Vector2 { x: 0.0, y: 0.0 },
-            },
+            MapPosition::new(0.0, 0.0),
         ))
         .id();
 
@@ -3105,9 +3103,7 @@ fn animation_wraps_rows_with_vertical_displacement() {
                 finished: false,
             },
             make_sprite("sheet"),
-            MapPosition {
-                pos: Vector2 { x: 0.0, y: 0.0 },
-            },
+            MapPosition::new(0.0, 0.0),
         ))
         .id();
 
@@ -3210,9 +3206,7 @@ fn animation_wraps_with_partial_first_row() {
                 finished: false,
             },
             make_sprite("sheet"),
-            MapPosition {
-                pos: Vector2 { x: 0.0, y: 0.0 },
-            },
+            MapPosition::new(0.0, 0.0),
         ))
         .id();
 
@@ -3291,9 +3285,7 @@ fn animation_vdisp_no_texture_falls_back_to_horizontal() {
                 finished: false,
             },
             make_sprite("nonexistent"),
-            MapPosition {
-                pos: Vector2 { x: 0.0, y: 0.0 },
-            },
+            MapPosition::new(0.0, 0.0),
         ))
         .id();
 
@@ -3338,9 +3330,7 @@ fn animation_single_frame_per_row_wrapping() {
                 finished: false,
             },
             make_sprite("sheet"),
-            MapPosition {
-                pos: Vector2 { x: 0.0, y: 0.0 },
-            },
+            MapPosition::new(0.0, 0.0),
         ))
         .id();
 

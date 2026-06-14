@@ -217,7 +217,7 @@ pub fn resolve_world_transform(
 ) -> (MapPosition, Option<Scale>, Option<Rotation>) {
     if let Some(gt) = maybe_gt {
         (
-            MapPosition { pos: gt.position },
+            MapPosition::from_vec(gt.position),
             Some(Scale { scale: gt.scale }),
             Some(Rotation {
                 degrees: gt.rotation_degrees,

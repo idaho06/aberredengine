@@ -21,6 +21,7 @@
 //! - [`luaphase`] – *(feature = "lua")* Lua-based state machine with enter/update/exit callbacks
 //! - [`luasetup`] – *(feature = "lua")* one-shot entity setup callback fired on `Added<LuaSetup>`
 //! - [`phase`] – Rust-based state machine with enter/update/exit function-pointer callbacks
+//! - [`position2d`] – generic 2D position component shared by [`mapposition`] and [`screenposition`]
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
@@ -61,6 +62,7 @@ pub mod menu;
 pub mod particleemitter;
 pub mod persistent;
 pub mod phase;
+pub mod position2d;
 pub mod rigidbody;
 pub mod rotation;
 pub mod scale;

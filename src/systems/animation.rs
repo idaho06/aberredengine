@@ -909,9 +909,7 @@ mod tests {
                     finished: false,
                 },
                 make_sprite(),
-                MapPosition {
-                    pos: Vector2 { x: 0.0, y: 0.0 },
-                },
+                MapPosition::new(0.0, 0.0),
             ))
             .id();
 
@@ -995,9 +993,7 @@ mod tests {
             flip_h: false,
             flip_v: false,
         };
-        let make_pos = || MapPosition {
-            pos: Vector2 { x: 0.0, y: 0.0 },
-        };
+        let make_pos = || MapPosition::new(0.0, 0.0);
 
         // Entity A: non-looped "death" already at its last valid frame (index 3).
         // The tick will try to advance to 4, clamp back to 3, and — with the bug — break
@@ -1100,9 +1096,7 @@ mod tests {
                     finished: false,
                 },
                 make_sprite(),
-                MapPosition {
-                    pos: Vector2 { x: 0.0, y: 0.0 },
-                },
+                MapPosition::new(0.0, 0.0),
                 Signals::default(),
             ))
             .id();

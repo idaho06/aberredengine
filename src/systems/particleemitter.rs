@@ -70,7 +70,7 @@ pub fn particle_emitter_system(
         emitter.time_since_emit += dt;
 
         // Use world position from GlobalTransform2D when available
-        let emit_pos = maybe_gt.map_or(*owner_pos, |gt| MapPosition { pos: gt.position });
+        let emit_pos = maybe_gt.map_or(*owner_pos, |gt| MapPosition::from_vec(gt.position));
 
         // Catch-up loop: emit multiple times if dt is large
         while emitter.time_since_emit >= period && emitter.emissions_remaining > 0 {

@@ -440,9 +440,8 @@ pub fn render_system(
                 text_buffer.clear();
                 text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
                     |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
-                        let resolved_pos = MapPosition {
-                            pos: maybe_gt.map_or(p.pos, |gt| gt.position),
-                        };
+                        let resolved_pos =
+                            MapPosition::from_vec(maybe_gt.map_or(p.pos, |gt| gt.position));
                         let text_size = t.size();
                         let min = resolved_pos.pos;
                         let max = Vector2 {
