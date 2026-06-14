@@ -57,6 +57,7 @@ pub(super) struct GameConfigSnapshot {
     pub background_r: u8,
     pub background_g: u8,
     pub background_b: u8,
+    pub pixel_snap_camera: bool,
 }
 
 impl Default for GameConfigSnapshot {
@@ -70,6 +71,7 @@ impl Default for GameConfigSnapshot {
             background_r: 80,
             background_g: 80,
             background_b: 80,
+            pixel_snap_camera: true,
         }
     }
 }

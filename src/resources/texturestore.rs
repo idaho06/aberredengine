@@ -3,6 +3,7 @@
 //! A thin wrapper around a hash map that stores `raylib::prelude::Texture2D`
 //! objects keyed by string IDs. Insert textures during setup and read them in
 //! render systems.
+use crate::resources::texturefilter::TextureFilter;
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;
 use raylib::prelude::Texture2D;
@@ -39,13 +40,15 @@ impl TextureStore {
     pub fn get(&self, key: impl AsRef<str>) -> Option<&Texture2D> {
         self.map.get(key.as_ref())
     }
-    /// Insert or replace a texture with a specific key.
+    /// Insert or replace a texture with a specific key, applying the given sampling filter.
     ///
-    /// Forces TEXTURE_FILTER_POINT (nearest-neighbor) on every sprite texture so that
-    /// atlas tiles never bleed into adjacent tiles due to sub-pixel sampling.
-    pub fn insert(&mut self, key: impl Into<String>, texture: Texture2D) {
+    /// `TextureFilter::Nearest` (the default) avoids atlas tiles bleeding into
+    /// adjacent tiles due to sub-pixel sampling -- the right choice for pixel
+    /// art. Use `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly
+    /// scaled/rotated sprites.
+    pub fn insert(&mut self, key: impl Into<String>, texture: Texture2D, filter: TextureFilter) {
         unsafe {
-            ffi::SetTextureFilter(*texture, ffi::TextureFilter::TEXTURE_FILTER_POINT as i32);
+            ffi::SetTextureFilter(*texture, filter.to_ffi());
         }
         self.map.insert(key.into(), texture);
     }

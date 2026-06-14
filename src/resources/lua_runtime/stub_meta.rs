@@ -604,6 +604,18 @@ impl LuaRuntime {
                 &["none"],
             ),
             (
+                "TextureFilter",
+                "Texture sampling filter mode",
+                &[
+                    "nearest",
+                    "bilinear",
+                    "trilinear",
+                    "anisotropic_4x",
+                    "anisotropic_8x",
+                    "anisotropic_16x",
+                ],
+            ),
+            (
                 "Category",
                 "Function category",
                 &[

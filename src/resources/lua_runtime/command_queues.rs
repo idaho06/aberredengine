@@ -92,6 +92,10 @@ impl LuaRuntime {
     ///
     /// Call this before invoking any Lua callback that may read camera state.
     ///
+    /// `pixel_snap` mirrors `GameConfig::pixel_snap_camera`: when `true`, the cached target and
+    /// view rect are rounded to integer pixels (matching what `render_system` draws); when
+    /// `false`, the raw float values are cached instead.
+    ///
     /// Note: if a script calls both `get_camera()` and `engine.set_camera()` in the same
     /// callback, `get_camera()` returns the pre-override values because camera write commands
     /// are queued and applied in `process_lua_map_commands`, which runs after `lua_plugin::update`.
@@ -99,12 +103,25 @@ impl LuaRuntime {
         &self,
         camera: &crate::resources::camera2d::Camera2DRes,
         screen: &crate::resources::screensize::ScreenSize,
+        pixel_snap: bool,
     ) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
-            let rect = camera.world_visible_rect_snapped(screen);
+            let (rect, target_x, target_y) = if pixel_snap {
+                (
+                    camera.world_visible_rect_snapped(screen),
+                    camera.0.target.x.round(),
+                    camera.0.target.y.round(),
+                )
+            } else {
+                (
+                    camera.world_visible_rect(screen),
+                    camera.0.target.x,
+                    camera.0.target.y,
+                )
+            };
             let mut snap = data.camera_snapshot.borrow_mut();
-            snap.target_x = camera.0.target.x.round();
-            snap.target_y = camera.0.target.y.round();
+            snap.target_x = target_x;
+            snap.target_y = target_y;
             snap.offset_x = camera.0.offset.x;
             snap.offset_y = camera.0.offset.y;
             snap.rotation = camera.0.rotation;
@@ -128,6 +145,7 @@ impl LuaRuntime {
             snapshot.background_r = config.background_color.r;
             snapshot.background_g = config.background_color.g;
             snapshot.background_b = config.background_color.b;
+            snapshot.pixel_snap_camera = config.pixel_snap_camera;
         }
     }
 }

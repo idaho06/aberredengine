@@ -61,6 +61,11 @@ pub struct TextureEntry {
     pub key: String,
     /// Relative path to the image file.
     pub path: String,
+    /// Texture sampling filter: "nearest" (default), "bilinear", "trilinear",
+    /// "anisotropic_4x", "anisotropic_8x", or "anisotropic_16x". Absent or
+    /// unrecognized values fall back to "nearest".
+    #[serde(default)]
+    pub filter: Option<String>,
 }
 
 /// A font asset to load into [`crate::resources::fontstore::FontStore`].
@@ -266,6 +271,7 @@ mod tests {
             textures: vec![TextureEntry {
                 key: "player".into(),
                 path: "assets/textures/player.png".into(),
+                filter: None,
             }],
             fonts: vec![FontEntry {
                 key: "arcade".into(),

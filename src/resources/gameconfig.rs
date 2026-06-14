@@ -9,6 +9,7 @@
 //! [render]
 //! width = 640
 //! height = 360
+//! pixel_snap_camera = true
 //!
 //! [window]
 //! width = 1280
@@ -33,6 +34,7 @@ const DEFAULT_WINDOW_HEIGHT: u32 = 720;
 const DEFAULT_TARGET_FPS: u32 = 120;
 const DEFAULT_VSYNC: bool = true;
 const DEFAULT_FULLSCREEN: bool = false;
+const DEFAULT_PIXEL_SNAP_CAMERA: bool = true;
 const DEFAULT_BACKGROUND_COLOR: Color = Color::new(80, 80, 80, 255);
 const DEFAULT_CONFIG_PATH: &str = "./config.ini";
 const DEFAULT_WINDOW_TITLE: &str = "Aberred Engine";
@@ -60,6 +62,13 @@ pub struct GameConfig {
     pub vsync: bool,
     /// Start in fullscreen mode.
     pub fullscreen: bool,
+    /// Snap the camera/view rect to integer pixels before rendering.
+    ///
+    /// Eliminates sprite atlas bleeding caused by sub-pixel sampling during
+    /// camera movement. Useful for pixel-art games; disable for games with
+    /// smooth rotation/zoom (e.g. an asteroids-style game) where sub-pixel
+    /// camera motion looks better.
+    pub pixel_snap_camera: bool,
     /// Background clear color for the render target.
     pub background_color: Color,
     /// Window title.
@@ -85,6 +94,7 @@ impl GameConfig {
             target_fps: DEFAULT_TARGET_FPS,
             vsync: DEFAULT_VSYNC,
             fullscreen: DEFAULT_FULLSCREEN,
+            pixel_snap_camera: DEFAULT_PIXEL_SNAP_CAMERA,
             background_color: DEFAULT_BACKGROUND_COLOR,
             window_title: DEFAULT_WINDOW_TITLE.to_string(),
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
@@ -157,6 +167,9 @@ impl GameConfig {
         }
         if let Some(fullscreen) = config.getbool("window", "fullscreen").ok().flatten() {
             self.fullscreen = fullscreen;
+        }
+        if let Some(snap) = config.getbool("render", "pixel_snap_camera").ok().flatten() {
+            self.pixel_snap_camera = snap;
         }
         if let Some(title) = config.get("window", "title") {
             self.window_title = title;

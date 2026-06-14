@@ -580,16 +580,18 @@ fn setup(
 
 ### Textures
 
-`TextureStore` is pre-inserted by the engine. Request it as `ResMut<TextureStore>` and call `.insert()` to populate it:
+`TextureStore` is pre-inserted by the engine. Request it as `ResMut<TextureStore>` and call `.insert()` to populate it, passing the desired `TextureFilter` (use `TextureFilter::Nearest` for pixel art, `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly scaled/rotated sprites):
 
 ```rust
+use aberredengine::resources::texturefilter::TextureFilter;
+
 let tex = rl.load_texture(th, "assets/textures/player.png")
     .expect("Failed to load player texture");
-tex_store.insert("player", tex);
+tex_store.insert("player", tex, TextureFilter::Nearest);
 
 let bg = rl.load_texture(th, "assets/textures/background.png")
     .expect("Failed to load background texture");
-tex_store.insert("background", bg);
+tex_store.insert("background", bg, TextureFilter::Nearest);
 ```
 
 Keys are arbitrary strings you'll reference later in `Sprite` components.
@@ -768,7 +770,7 @@ fn setup(
 
     // Textures (TextureStore is pre-inserted — just populate it)
     let player_tex = rl.load_texture(th, "assets/textures/player.png").unwrap();
-    tex_store.insert("player", player_tex);
+    tex_store.insert("player", player_tex, TextureFilter::Nearest);
 
     // Fonts
     let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32)

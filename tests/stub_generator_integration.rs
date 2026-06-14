@@ -40,7 +40,7 @@ fn generated_stubs_contain_representative_signatures() {
         "Missing engine.log()"
     );
     assert!(
-        content.contains("function engine.load_texture(id, path)"),
+        content.contains("function engine.load_texture(id, path, filter)"),
         "Missing engine.load_texture()"
     );
     assert!(

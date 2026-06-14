@@ -210,6 +210,9 @@ engine = {}
 ---Tween loop mode
 ---@alias LoopMode "once" | "loop" | "ping_pong"
 
+---Texture sampling filter mode
+---@alias TextureFilter "nearest" | "bilinear" | "trilinear" | "anisotropic_4x" | "anisotropic_8x" | "anisotropic_16x"
+
 ---Time-to-live specification (number, {min,max} table, or 'none')
 ---@alias TtlSpec "none"
 
@@ -328,10 +331,11 @@ function engine.load_music(id, path) end
 ---@param path string
 function engine.load_sound(id, path) end
 
----Load a texture from file
+---Load a texture from file. `filter` is one of "nearest" (default), "bilinear", "trilinear", "anisotropic_4x", "anisotropic_8x", "anisotropic_16x"
 ---@param id string
 ---@param path string
-function engine.load_texture(id, path) end
+---@param filter string|nil
+function engine.load_texture(id, path, filter) end
 
 -- ==================== Entity Spawning ====================
 
@@ -1297,6 +1301,10 @@ function engine.get_background_color() end
 ---@return boolean
 function engine.get_fullscreen() end
 
+---Get whether the camera/view rect is snapped to integer pixels
+---@return boolean
+function engine.get_pixel_snap_camera() end
+
 ---Get current internal render resolution
 ---@return table
 function engine.get_render_size() end
@@ -1359,6 +1367,10 @@ function engine.set_background_color(r, g, b) end
 ---Set fullscreen mode
 ---@param enabled boolean
 function engine.set_fullscreen(enabled) end
+
+---Snap the camera/view rect to integer pixels before rendering (reduces sprite atlas bleeding; disable for smooth rotation/zoom)
+---@param enabled boolean
+function engine.set_pixel_snap_camera(enabled) end
 
 ---Set internal render resolution (min 120x120, max 7680x4320)
 ---@param width integer

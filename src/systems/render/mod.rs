@@ -244,7 +244,11 @@ pub fn render_system(
         {
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
-            let render_cam = camera.pixel_snapped();
+            let render_cam = if res.config.pixel_snap_camera {
+                camera.pixel_snapped()
+            } else {
+                camera.0
+            };
             let mut d2 = d.begin_mode2D(render_cam);
 
             let (view_min, view_max) = compute_view_bounds(

@@ -23,11 +23,12 @@ use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gamestate::GameStates::Quitting;
-use crate::resources::signal_keys as sk;
 use crate::resources::gamestate::NextGameState;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
+use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::texturefilter::TextureFilter;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::texturestore::load_texture_from_text;
 use crate::systems::GameCtx;
@@ -127,7 +128,7 @@ pub fn menu_spawn_system(
                 let width = texture_handle.width as f32;
                 let height = texture_handle.height as f32;
                 let key = format!("menu_{}", menu_item.id);
-                texture_store.insert(&key, texture_handle);
+                texture_store.insert(&key, texture_handle, TextureFilter::Nearest);
                 ecmd.insert(Sprite {
                     tex_key: Arc::from(key),
                     width,

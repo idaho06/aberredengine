@@ -23,6 +23,7 @@
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
+//! - [`texturefilter`] – texture sampling filter mode shared by render target and texture store
 //! - [`texturestore`] – loaded textures keyed by string IDs
 //! - [`windowsize`] – actual window dimensions for letterbox calculations
 //! - [`worldsignals`] – global signal storage for cross-system communication
@@ -53,6 +54,7 @@ pub mod screensize;
 pub mod shaderstore;
 pub mod signal_keys;
 pub mod systemsstore;
+pub mod texturefilter;
 pub mod texturestore;
 pub mod uniformvalue;
 pub mod windowsize;

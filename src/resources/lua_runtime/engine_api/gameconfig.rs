@@ -93,6 +93,39 @@ impl LuaRuntime {
             Some("boolean"),
         )?;
 
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_pixel_snap_camera",
+            gameconfig_commands,
+            |enabled| bool,
+            GameConfigCmd::PixelSnapCamera { enabled },
+            desc = "Snap the camera/view rect to integer pixels before rendering (reduces sprite atlas bleeding; disable for smooth rotation/zoom)",
+            cat = "render",
+            params = [("enabled", "boolean")]
+        );
+
+        engine.set(
+            "get_pixel_snap_camera",
+            self.lua.create_function(|lua, ()| {
+                let value = lua
+                    .app_data_ref::<LuaAppData>()
+                    .map(|data| data.gameconfig_snapshot.borrow().pixel_snap_camera)
+                    .unwrap_or(true);
+                Ok(value)
+            })?,
+        )?;
+        push_fn_meta(
+            &self.lua,
+            &meta_fns,
+            "get_pixel_snap_camera",
+            "Get whether the camera/view rect is snapped to integer pixels",
+            "render",
+            &[],
+            Some("boolean"),
+        )?;
+
         engine.set(
             "get_target_fps",
             self.lua.create_function(|lua, ()| {

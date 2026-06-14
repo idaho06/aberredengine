@@ -40,6 +40,7 @@ use crate::resources::mapdata::load_map;
 use crate::resources::mapdata::{
     EntityDef, MapData, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
 };
+use crate::resources::texturefilter::TextureFilter;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::RaylibAccess;
@@ -60,7 +61,9 @@ pub fn spawn_map(
     for entry in &map.textures {
         match rl.load_texture(th, &entry.path) {
             Ok(tex) => {
-                texture_store.insert(&entry.key, tex);
+                let filter =
+                    TextureFilter::from_opt_str_or_warn(entry.filter.as_deref(), &entry.key);
+                texture_store.insert(&entry.key, tex, filter);
             }
             Err(e) => {
                 log::warn!("spawn_map: failed to load texture '{}': {e}", entry.path);

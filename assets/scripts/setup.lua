@@ -38,25 +38,28 @@ local function load_asteroids()
     engine.log_debug("Loading Asteroids assets...")
 
     -- Textures
-    engine.load_texture("asteroids-ship_sheet", "./assets/textures/asteroids/ship.png")
-    engine.load_texture("asteroids-space01", "./assets/textures/asteroids/space01.png")
-    engine.load_texture("asteroids-space02", "./assets/textures/asteroids/space02.png")
-    engine.load_texture("asteroids-space03", "./assets/textures/asteroids/space03.png")
-    engine.load_texture("asteroids-space04", "./assets/textures/asteroids/space04.png")
-    engine.load_texture("asteroids-big01", "./assets/textures/asteroids/big01.png")
-    engine.load_texture("asteroids-big02", "./assets/textures/asteroids/big02.png")
-    engine.load_texture("asteroids-big03", "./assets/textures/asteroids/big03.png")
-    engine.load_texture("asteroids-medium01", "./assets/textures/asteroids/medium01.png")
-    engine.load_texture("asteroids-medium02", "./assets/textures/asteroids/medium02.png")
-    engine.load_texture("asteroids-medium03", "./assets/textures/asteroids/medium03.png")
-    engine.load_texture("asteroids-small01", "./assets/textures/asteroids/small01.png")
-    engine.load_texture("asteroids-small02", "./assets/textures/asteroids/small02.png")
-    engine.load_texture("asteroids-small03", "./assets/textures/asteroids/small03.png")
-    engine.load_texture("asteroids-laser", "./assets/textures/asteroids/laser.png")
-    engine.load_texture("asteroids-explosion01_sheet", "./assets/textures/asteroids/explosion01.png")
-    engine.load_texture("asteroids-explosion02_sheet", "./assets/textures/asteroids/explosion02.png")
-    engine.load_texture("asteroids-explosion03_sheet", "./assets/textures/asteroids/explosion03.png")
-    engine.load_texture("asteroids-stars01_sheet", "./assets/textures/asteroids/stars01.png")
+    -- Asteroids sprites rotate and scale smoothly, so use anisotropic filtering
+    -- (paired with engine.set_pixel_snap_camera(false) in level01.lua's M.spawn()).
+    local filter = "anisotropic_8x"
+    engine.load_texture("asteroids-ship_sheet", "./assets/textures/asteroids/ship.png", filter)
+    engine.load_texture("asteroids-space01", "./assets/textures/asteroids/space01.png", filter)
+    engine.load_texture("asteroids-space02", "./assets/textures/asteroids/space02.png", filter)
+    engine.load_texture("asteroids-space03", "./assets/textures/asteroids/space03.png", filter)
+    engine.load_texture("asteroids-space04", "./assets/textures/asteroids/space04.png", filter)
+    engine.load_texture("asteroids-big01", "./assets/textures/asteroids/big01.png", filter)
+    engine.load_texture("asteroids-big02", "./assets/textures/asteroids/big02.png", filter)
+    engine.load_texture("asteroids-big03", "./assets/textures/asteroids/big03.png", filter)
+    engine.load_texture("asteroids-medium01", "./assets/textures/asteroids/medium01.png", filter)
+    engine.load_texture("asteroids-medium02", "./assets/textures/asteroids/medium02.png", filter)
+    engine.load_texture("asteroids-medium03", "./assets/textures/asteroids/medium03.png", filter)
+    engine.load_texture("asteroids-small01", "./assets/textures/asteroids/small01.png", filter)
+    engine.load_texture("asteroids-small02", "./assets/textures/asteroids/small02.png", filter)
+    engine.load_texture("asteroids-small03", "./assets/textures/asteroids/small03.png", filter)
+    engine.load_texture("asteroids-laser", "./assets/textures/asteroids/laser.png", filter)
+    engine.load_texture("asteroids-explosion01_sheet", "./assets/textures/asteroids/explosion01.png", filter)
+    engine.load_texture("asteroids-explosion02_sheet", "./assets/textures/asteroids/explosion02.png", filter)
+    engine.load_texture("asteroids-explosion03_sheet", "./assets/textures/asteroids/explosion03.png", filter)
+    engine.load_texture("asteroids-stars01_sheet", "./assets/textures/asteroids/stars01.png", filter)
 
     -- Sound effects
     engine.load_sound("asteroids-blaster", "./assets/audio/asteroids/blaster.ogg")
@@ -145,8 +148,10 @@ local function load_kraken()
     engine.log_debug("Loading Kraken assets...")
 
     -- Textures
-    engine.load_texture("kraken-mouth", "./assets/textures/kraken/mouth.png")
-    engine.load_texture("kraken-tentacle", "./assets/textures/kraken/tentacle.png")
+    -- Kraken tentacles rotate/stretch smoothly, so use anisotropic filtering.
+    local filter = "anisotropic_8x"
+    engine.load_texture("kraken-mouth", "./assets/textures/kraken/mouth.png", filter)
+    engine.load_texture("kraken-tentacle", "./assets/textures/kraken/tentacle.png", filter)
 end
 
 --- Load assets for the Sidescroller example

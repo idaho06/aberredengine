@@ -4,30 +4,9 @@
 //! then scaled to fit the actual window size. This enables resolution-independent
 //! rendering with proper aspect ratio preservation.
 
-use raylib::ffi::{self, TextureFilter};
+use crate::resources::texturefilter::TextureFilter;
+use raylib::ffi;
 use raylib::prelude::*;
-
-/// Texture filtering mode for scaling the render target.
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub enum RenderFilter {
-    /// Point/nearest-neighbor filtering - sharp pixels, no blur.
-    /// Best for pixel art games.
-    #[default]
-    Nearest,
-    /// Bilinear filtering - smooth scaling with interpolation.
-    /// Best for high-resolution or vector-style graphics.
-    Bilinear,
-}
-
-impl RenderFilter {
-    /// Map to the raylib `TextureFilter` FFI constant.
-    fn to_ffi(self) -> i32 {
-        match self {
-            RenderFilter::Nearest => TextureFilter::TEXTURE_FILTER_POINT as i32,
-            RenderFilter::Bilinear => TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
-        }
-    }
-}
 
 /// Render target for fixed-resolution rendering with scaling.
 ///
@@ -53,7 +32,7 @@ pub struct RenderTarget {
     /// Game's internal render height in pixels.
     pub game_height: u32,
     /// Current texture filtering mode.
-    pub filter: RenderFilter,
+    pub filter: TextureFilter,
 }
 
 impl RenderTarget {
@@ -77,7 +56,7 @@ impl RenderTarget {
             pong: None,
             game_width: width,
             game_height: height,
-            filter: RenderFilter::default(),
+            filter: TextureFilter::default(),
         };
 
         // Apply default filter
@@ -121,7 +100,7 @@ impl RenderTarget {
     /// Set the texture filtering mode.
     ///
     /// Changes take effect immediately.
-    pub fn set_filter(&mut self, filter: RenderFilter) {
+    pub fn set_filter(&mut self, filter: TextureFilter) {
         self.filter = filter;
         self.apply_filter();
     }

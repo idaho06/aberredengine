@@ -11,11 +11,11 @@ impl LuaRuntime {
             meta_fns,
             "load_texture",
             asset_commands,
-            |(id, path)| (String, String),
-            AssetCmd::Texture { id, path },
-            desc = "Load a texture from file",
+            |(id, path, filter)| (String, String, Option<String>),
+            AssetCmd::Texture { id, path, filter },
+            desc = "Load a texture from file. `filter` is one of \"nearest\" (default), \"bilinear\", \"trilinear\", \"anisotropic_4x\", \"anisotropic_8x\", \"anisotropic_16x\"",
             cat = "asset",
-            params = [("id", "string"), ("path", "string")]
+            params = [("id", "string"), ("path", "string"), ("filter", "string?")]
         );
         register_cmd!(
             engine,

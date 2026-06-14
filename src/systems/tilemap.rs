@@ -16,6 +16,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::zindex::ZIndex;
+use crate::resources::texturefilter::TextureFilter;
 use crate::resources::texturestore::TextureStore;
 use crate::systems::RaylibAccess;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -184,7 +185,7 @@ pub fn tilemap_spawn_system(
         let tex_w = texture.width;
         let tex_h = texture.height;
         if texture_store.get(&key).is_none() {
-            texture_store.insert(&key, texture);
+            texture_store.insert(&key, texture, TextureFilter::Nearest);
         }
 
         if !has_map_pos {

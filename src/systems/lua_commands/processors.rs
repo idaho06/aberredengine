@@ -24,6 +24,7 @@ use crate::resources::lua_runtime::{
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::shaderstore::ShaderStore;
+use crate::resources::texturefilter::TextureFilter;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::phase_core::queue_phase_transition;
@@ -192,10 +193,11 @@ pub fn process_asset_command<F1>(
     ) -> Result<raylib::prelude::Font, String>,
 {
     match cmd {
-        AssetCmd::Texture { id, path } => match rl.load_texture(th, &path) {
+        AssetCmd::Texture { id, path, filter } => match rl.load_texture(th, &path) {
             Ok(tex) => {
                 debug!("Loaded texture '{}' from '{}'", id, path);
-                tex_store.insert(&id, tex);
+                let filter = TextureFilter::from_opt_str_or_warn(filter.as_deref(), &id);
+                tex_store.insert(&id, tex, filter);
             }
             Err(e) => {
                 error!("Failed to load texture '{}': {}", path, e);
@@ -301,6 +303,9 @@ pub fn process_gameconfig_command(cmd: GameConfigCmd, config: &mut GameConfig) {
         GameConfigCmd::BackgroundColor { r, g, b } => {
             config.background_color = Color::new(r, g, b, 255);
         }
+        GameConfigCmd::PixelSnapCamera { enabled } => {
+            config.pixel_snap_camera = enabled;
+        }
     }
 }
 
@@ -324,15 +329,13 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
         CameraFollowCmd::SetDeadzone { half_w, half_h } => {
             config.mode = FollowMode::Deadzone { half_w, half_h };
         }
-        CameraFollowCmd::SetEasing { easing } => {
-            match easing.parse::<EasingCurve>() {
-                Ok(curve) => config.easing = curve,
-                Err(_) => warn!(
-                    "Unknown camera follow easing '{}'; expected \"linear\", \"ease_out\", \"ease_in\", or \"ease_in_out\"",
-                    easing
-                ),
-            }
-        }
+        CameraFollowCmd::SetEasing { easing } => match easing.parse::<EasingCurve>() {
+            Ok(curve) => config.easing = curve,
+            Err(_) => warn!(
+                "Unknown camera follow easing '{}'; expected \"linear\", \"ease_out\", \"ease_in\", or \"ease_in_out\"",
+                easing
+            ),
+        },
         CameraFollowCmd::SetSpeed { speed } => {
             config.lerp_speed = speed;
         }

@@ -395,6 +395,8 @@ end
 local function on_update_asteroids_level01(input, dt)
     -- Check for back button to return to menu
     if input.digital.back.just_pressed then
+        -- Restore default pixel-snapped camera for pixel-art scenes like the menu.
+        engine.set_pixel_snap_camera(true)
         engine.change_scene("menu")
     end
 end
@@ -590,6 +592,10 @@ function M.spawn()
 
     -- Set render resolution for Asteroids
     engine.set_render_size(640, 360)
+
+    -- Smoothly rotating/zooming sprites look better unsnapped, paired with
+    -- the anisotropic texture filtering set in setup.lua's load_asteroids().
+    engine.set_pixel_snap_camera(false)
 
     -- Configure camera to follow the ship with look-ahead
     engine.set_camera(0, 0, 640 / 2, 360 / 2, 0.0, 1.0)

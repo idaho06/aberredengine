@@ -12,7 +12,13 @@ pub use crate::resources::uniformvalue::UniformValue;
 #[derive(Debug, Clone)]
 pub enum AssetCmd {
     /// Load a texture from a file path
-    Texture { id: String, path: String },
+    Texture {
+        id: String,
+        path: String,
+        /// Texture sampling filter: "nearest" (default), "bilinear", "trilinear",
+        /// "anisotropic_4x", "anisotropic_8x", or "anisotropic_16x".
+        filter: Option<String>,
+    },
     /// Load a font from a file path with a specific size
     Font { id: String, path: String, size: i32 },
     /// Load a music track from a file path
@@ -402,6 +408,8 @@ pub enum GameConfigCmd {
     RenderSize { width: u32, height: u32 },
     /// Set background clear color
     BackgroundColor { r: u8, g: u8, b: u8 },
+    /// Toggle camera/view pixel snapping
+    PixelSnapCamera { enabled: bool },
 }
 
 /// Commands for runtime input rebinding from Lua.
