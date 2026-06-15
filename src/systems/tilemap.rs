@@ -185,7 +185,7 @@ pub fn tilemap_spawn_system(
         let tex_w = texture.width;
         let tex_h = texture.height;
         if texture_store.get(&key).is_none() {
-            texture_store.insert(&key, texture, TextureFilter::Nearest);
+            texture_store.insert(&key, texture, TextureFilter::Nearest, None);
         }
 
         if !has_map_pos {

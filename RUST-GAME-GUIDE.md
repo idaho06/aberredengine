@@ -580,21 +580,30 @@ fn setup(
 
 ### Textures
 
-`TextureStore` is pre-inserted by the engine. Request it as `ResMut<TextureStore>` and call `.insert()` to populate it, passing the desired `TextureFilter` (use `TextureFilter::Nearest` for pixel art, `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly scaled/rotated sprites):
+`TextureStore` is pre-inserted by the engine. Request it as `ResMut<TextureStore>` and call `.insert()` to populate it, passing the desired `TextureFilter` (use `TextureFilter::Nearest` for pixel art, `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly scaled/rotated sprites) and an optional source path:
 
 ```rust
 use aberredengine::resources::texturefilter::TextureFilter;
 
 let tex = rl.load_texture(th, "assets/textures/player.png")
     .expect("Failed to load player texture");
-tex_store.insert("player", tex, TextureFilter::Nearest);
+tex_store.insert("player", tex, TextureFilter::Nearest, None);
 
 let bg = rl.load_texture(th, "assets/textures/background.png")
     .expect("Failed to load background texture");
-tex_store.insert("background", bg, TextureFilter::Nearest);
+tex_store.insert("background", bg, TextureFilter::Nearest, None);
 ```
 
-Keys are arbitrary strings you'll reference later in `Sprite` components.
+Keys are arbitrary strings you'll reference later in `Sprite` components. The last argument records the source file path in `TextureStore.paths` for editor/introspection use — pass `None` for textures loaded by game code (it's only meaningful for editor-managed assets).
+
+Other `TextureStore` methods useful for introspection:
+
+| Method | Description |
+|--------|-------------|
+| `.filter(key)` | Returns the `TextureFilter` last passed to `insert()` for `key` (defaults to `Nearest`) |
+| `.set_filter(key, filter)` | Updates the sampling filter of an already-loaded texture in place; returns `false` if `key` isn't loaded |
+| `TextureFilter::ALL` | All six filter variants, in declaration order — useful for building filter pickers |
+| `TextureFilter::as_str()` / `FromStr` | Round-trip a filter to/from its config string (`"nearest"`, `"bilinear"`, etc.) |
 
 ### Fonts
 
@@ -770,7 +779,7 @@ fn setup(
 
     // Textures (TextureStore is pre-inserted — just populate it)
     let player_tex = rl.load_texture(th, "assets/textures/player.png").unwrap();
-    tex_store.insert("player", player_tex, TextureFilter::Nearest);
+    tex_store.insert("player", player_tex, TextureFilter::Nearest, None);
 
     // Fonts
     let font = load_font_with_mipmaps(rl, th, "assets/fonts/arcade.ttf", 32)
@@ -1706,6 +1715,7 @@ Section 2 showed the basics. This is the complete reference.
 | `width` | `u32` | `640` | Internal render width |
 | `height` | `u32` | `360` | Internal render height |
 | `background_color` | `R,G,B` | `80,80,80` | Background clear color (0–255 per channel) |
+| `pixel_snap_camera` | `bool` | `true` | Snap the camera target/view-rect to integer pixels each frame, avoiding sprite atlas bleeding. Disable for games with smooth rotation/zoom (e.g. asteroids-style). Also toggleable at runtime via `config.pixel_snap_camera` or the Lua `engine.set_pixel_snap_camera(bool)` / `get_pixel_snap_camera()` API. |
 
 **`[window]` section:**
 

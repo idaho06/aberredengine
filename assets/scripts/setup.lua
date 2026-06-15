@@ -40,7 +40,7 @@ local function load_asteroids()
     -- Textures
     -- Asteroids sprites rotate and scale smoothly, so use anisotropic filtering
     -- (paired with engine.set_pixel_snap_camera(false) in level01.lua's M.spawn()).
-    local filter = "anisotropic_8x"
+    local filter = "trilinear"
     engine.load_texture("asteroids-ship_sheet", "./assets/textures/asteroids/ship.png", filter)
     engine.load_texture("asteroids-space01", "./assets/textures/asteroids/space01.png", filter)
     engine.load_texture("asteroids-space02", "./assets/textures/asteroids/space02.png", filter)
@@ -149,7 +149,7 @@ local function load_kraken()
 
     -- Textures
     -- Kraken tentacles rotate/stretch smoothly, so use anisotropic filtering.
-    local filter = "anisotropic_8x"
+    local filter = "trilinear"
     engine.load_texture("kraken-mouth", "./assets/textures/kraken/mouth.png", filter)
     engine.load_texture("kraken-tentacle", "./assets/textures/kraken/tentacle.png", filter)
 end

@@ -128,7 +128,7 @@ pub fn menu_spawn_system(
                 let width = texture_handle.width as f32;
                 let height = texture_handle.height as f32;
                 let key = format!("menu_{}", menu_item.id);
-                texture_store.insert(&key, texture_handle, TextureFilter::Nearest);
+                texture_store.insert(&key, texture_handle, TextureFilter::Nearest, None);
                 ecmd.insert(Sprite {
                     tex_key: Arc::from(key),
                     width,

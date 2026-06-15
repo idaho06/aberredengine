@@ -15,12 +15,18 @@ use std::ffi::CString;
 /// Map of texture keys to loaded textures.
 ///
 /// The `paths` map stores the source file path (relative to the working
-/// directory) for each editor-managed texture. Engine-internal textures
-/// (loaded by mapspawn, Lua, etc.) are never added to `paths`; absence of an
-/// entry means the texture was not loaded from a user-visible file.
+/// directory) for each editor-managed texture, set via the `path` argument to
+/// `insert()`. Engine-internal textures (loaded by mapspawn, Lua, etc.) pass
+/// `None` and are never added to `paths`; absence of an entry means the
+/// texture was not loaded from a user-visible file.
+///
+/// The `filters` map stores the sampling filter each texture was last
+/// `insert()`ed with. Absence of an entry means [`TextureFilter::default`]
+/// (`Nearest`).
 pub struct TextureStore {
     pub map: FxHashMap<String, Texture2D>,
     pub paths: FxHashMap<String, String>,
+    pub filters: FxHashMap<String, TextureFilter>,
 }
 
 impl Default for TextureStore {
@@ -34,11 +40,17 @@ impl TextureStore {
         TextureStore {
             map: FxHashMap::default(),
             paths: FxHashMap::default(),
+            filters: FxHashMap::default(),
         }
     }
     /// Get a texture by its key.
     pub fn get(&self, key: impl AsRef<str>) -> Option<&Texture2D> {
         self.map.get(key.as_ref())
+    }
+    /// Sampling filter the texture at `key` was last inserted with, or
+    /// [`TextureFilter::default`] (`Nearest`) if `key` is not tracked.
+    pub fn filter(&self, key: impl AsRef<str>) -> TextureFilter {
+        self.filters.get(key.as_ref()).copied().unwrap_or_default()
     }
     /// Insert or replace a texture with a specific key, applying the given sampling filter.
     ///
@@ -46,15 +58,44 @@ impl TextureStore {
     /// adjacent tiles due to sub-pixel sampling -- the right choice for pixel
     /// art. Use `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly
     /// scaled/rotated sprites.
-    pub fn insert(&mut self, key: impl Into<String>, texture: Texture2D, filter: TextureFilter) {
+    ///
+    /// `path` records the source file path in `paths` (see struct docs). Pass `None` for
+    /// engine-internal textures not loaded from a user-visible file.
+    pub fn insert(
+        &mut self,
+        key: impl Into<String>,
+        texture: Texture2D,
+        filter: TextureFilter,
+        path: Option<String>,
+    ) {
         unsafe {
             ffi::SetTextureFilter(*texture, filter.to_ffi());
         }
-        self.map.insert(key.into(), texture);
+        let key = key.into();
+        self.filters.insert(key.clone(), filter);
+        if let Some(path) = path {
+            self.paths.insert(key.clone(), path);
+        }
+        self.map.insert(key, texture);
     }
     /// Remove a texture by its key, returning it if it existed.
     pub fn remove(&mut self, key: impl AsRef<str>) -> Option<Texture2D> {
+        self.filters.remove(key.as_ref());
+        self.paths.remove(key.as_ref());
         self.map.remove(key.as_ref())
+    }
+    /// Update the sampling filter of an already-loaded texture in place.
+    ///
+    /// Returns `false` (no-op) if `key` is not loaded.
+    pub fn set_filter(&mut self, key: impl AsRef<str>, filter: TextureFilter) -> bool {
+        let Some(texture) = self.map.get(key.as_ref()) else {
+            return false;
+        };
+        unsafe {
+            ffi::SetTextureFilter(**texture, filter.to_ffi());
+        }
+        self.filters.insert(key.as_ref().to_string(), filter);
+        true
     }
 }
 

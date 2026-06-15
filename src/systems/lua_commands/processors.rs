@@ -197,7 +197,7 @@ pub fn process_asset_command<F1>(
             Ok(tex) => {
                 debug!("Loaded texture '{}' from '{}'", id, path);
                 let filter = TextureFilter::from_opt_str_or_warn(filter.as_deref(), &id);
-                tex_store.insert(&id, tex, filter);
+                tex_store.insert(&id, tex, filter, None);
             }
             Err(e) => {
                 error!("Failed to load texture '{}': {}", path, e);

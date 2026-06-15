@@ -63,7 +63,7 @@ pub fn spawn_map(
             Ok(tex) => {
                 let filter =
                     TextureFilter::from_opt_str_or_warn(entry.filter.as_deref(), &entry.key);
-                texture_store.insert(&entry.key, tex, filter);
+                texture_store.insert(&entry.key, tex, filter, None);
             }
             Err(e) => {
                 log::warn!("spawn_map: failed to load texture '{}': {e}", entry.path);

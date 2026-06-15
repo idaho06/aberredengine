@@ -42,6 +42,33 @@ impl TextureFilter {
     }
 }
 
+impl TextureFilter {
+    /// All variants, in declaration order. Used by the editor to populate filter
+    /// pickers without hand-maintaining a duplicate list.
+    pub const ALL: [TextureFilter; 6] = [
+        TextureFilter::Nearest,
+        TextureFilter::Bilinear,
+        TextureFilter::Trilinear,
+        TextureFilter::Anisotropic4x,
+        TextureFilter::Anisotropic8x,
+        TextureFilter::Anisotropic16x,
+    ];
+}
+
+impl TextureFilter {
+    /// Canonical string form, the inverse of [`FromStr`](std::str::FromStr).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TextureFilter::Nearest => "nearest",
+            TextureFilter::Bilinear => "bilinear",
+            TextureFilter::Trilinear => "trilinear",
+            TextureFilter::Anisotropic4x => "anisotropic_4x",
+            TextureFilter::Anisotropic8x => "anisotropic_8x",
+            TextureFilter::Anisotropic16x => "anisotropic_16x",
+        }
+    }
+}
+
 impl std::str::FromStr for TextureFilter {
     type Err = ();
 
@@ -95,6 +122,13 @@ mod tests {
     }
 
     #[test]
+    fn as_str_round_trips_through_from_str() {
+        for filter in TextureFilter::ALL {
+            assert_eq!(filter.as_str().parse(), Ok(filter));
+        }
+    }
+
+    #[test]
     fn from_str_rejects_unknown_values() {
         assert_eq!("".parse::<TextureFilter>(), Err(()));
         assert_eq!("Nearest".parse::<TextureFilter>(), Err(()));
@@ -104,15 +138,7 @@ mod tests {
     #[test]
     fn to_ffi_maps_to_distinct_raylib_constants() {
         use std::collections::HashSet;
-        let variants = [
-            TextureFilter::Nearest,
-            TextureFilter::Bilinear,
-            TextureFilter::Trilinear,
-            TextureFilter::Anisotropic4x,
-            TextureFilter::Anisotropic8x,
-            TextureFilter::Anisotropic16x,
-        ];
-        let ffi_values: HashSet<i32> = variants.iter().map(|f| f.to_ffi()).collect();
-        assert_eq!(ffi_values.len(), variants.len());
+        let ffi_values: HashSet<i32> = TextureFilter::ALL.iter().map(|f| f.to_ffi()).collect();
+        assert_eq!(ffi_values.len(), TextureFilter::ALL.len());
     }
 }
