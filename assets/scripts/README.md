@@ -291,6 +291,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_play_sound_pitched()` instead of `engine.play_sound_pitched()`
 - `engine.collision_set_flag()` / `engine.collision_clear_flag()` instead of `engine.set_flag()` / `engine.clear_flag()`
 - `engine.collision_set_integer()` instead of `engine.set_integer()`
+- `engine.collision_set_entity()` / `engine.collision_remove_entity()` instead of `engine.set_entity()` / `engine.remove_entity()`
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
@@ -393,6 +394,14 @@ Error level logging with "[Lua ERROR]" prefix.
 
 ```lua
 engine.log_error("Failed to load asset: " .. path)
+```
+
+### `engine.log_debug(message)`
+
+Debug-level logging. This call is a **no-op in release builds** — use it freely during development without worrying about production overhead.
+
+```lua
+engine.log_debug("ctx.pos = " .. ctx.pos.x .. ", " .. ctx.pos.y)
 ```
 
 ---
@@ -649,13 +658,33 @@ end
 
 Assets are queued during `on_setup()` and loaded before entering the Playing state.
 
-### `engine.load_texture(id, path)`
+### `engine.load_texture(id, path, filter?)`
 
-Load a texture from disk.
+Load a texture from disk with an optional sampling filter.
+
+**Parameters:**
+
+- `id` - Unique texture identifier
+- `path` - Path to the texture file
+- `filter` (optional string) - Sampling filter. Accepted values:
+
+| Value | Description |
+|-------|-------------|
+| `"nearest"` | Nearest-neighbor (default) — no blurring, best for pixel art |
+| `"bilinear"` | Bilinear filtering — smooth scaling |
+| `"trilinear"` | Trilinear filtering — smooth scaling with mipmaps |
+| `"anisotropic_4x"` | Anisotropic 4× — best quality at oblique angles |
+| `"anisotropic_8x"` | Anisotropic 8× |
+| `"anisotropic_16x"` | Anisotropic 16× |
+
+Unrecognized values log a warning and fall back to `"nearest"`.
 
 ```lua
 engine.load_texture("ball", "./assets/textures/ball_12.png")
 engine.load_texture("vaus_sheet", "./assets/textures/vaus_sheet.png")
+
+-- With explicit filter (e.g. for a 3D-style game with rotating sprites)
+engine.load_texture("ship", "./assets/textures/ship.png", "trilinear")
 ```
 
 ### `engine.load_font(id, path, size)`
@@ -3439,6 +3468,32 @@ Remove a string signal during collision.
 engine.collision_clear_string("active_effect")
 ```
 
+#### `engine.collision_set_entity(key, entity_id)`
+
+Register an entity in the world-signal registry during collision handling. This is the collision-safe twin of `engine.set_entity()` — commands are drained immediately after the callback returns.
+
+```lua
+function on_ball_spawn_enemy(ctx)
+    engine.collision_spawn()
+        :with_group("enemy")
+        :with_position(ctx.b.pos.x, ctx.b.pos.y)
+        :register_as("spawned_enemy")
+        :build()
+    -- The registration above goes through collision_set_entity internally
+end
+```
+
+#### `engine.collision_remove_entity(key)`
+
+Remove an entity registration from the world-signal registry during collision handling. Collision-safe twin of `engine.remove_entity()`.
+
+```lua
+function on_boss_defeated(ctx)
+    engine.collision_entity_despawn(ctx.b.id)
+    engine.collision_remove_entity("boss")
+end
+```
+
 #### `engine.collision_spawn()`
 
 Create a new entity builder for spawning entities during collision. Returns a `CollisionEntityBuilder` with the same capabilities as the standard `EntityBuilder`.
@@ -5157,7 +5212,7 @@ end
 
 ## Game Configuration
 
-Runtime game configuration functions for toggling fullscreen, vsync, target FPS, and internal render resolution from Lua. Changes are applied by the engine's `apply_gameconfig_changes` system via Bevy change detection.
+Runtime game configuration functions for toggling fullscreen, vsync, target FPS, render resolution, pixel snapping, and render filter from Lua. Changes are applied by the engine's `apply_gameconfig_changes` system via Bevy change detection.
 
 ### Writing Configuration
 
@@ -5204,6 +5259,30 @@ engine.set_render_size(1920, 1080)  -- Full HD internal resolution
 engine.set_render_size(640, 360)    -- Default resolution
 ```
 
+#### `engine.set_pixel_snap_camera(enabled)`
+
+Enable or disable camera pixel-snapping. When enabled (the default), the camera target and view rectangle are rounded to integer pixels before rendering, which prevents sprite atlas bleeding in pixel-art games. Disable for games that use smooth rotation or zoom (e.g. asteroids-style).
+
+Also configurable via `pixel_snap_camera` in `config.ini`.
+
+```lua
+engine.set_pixel_snap_camera(true)   -- Default — good for pixel art
+engine.set_pixel_snap_camera(false)  -- Smooth camera for rotation/zoom games
+```
+
+#### `engine.set_render_target_filter(filter)`
+
+Set the texture sampling filter used for the final render-target-to-window blit. This affects how the internal game resolution is upscaled to the window size.
+
+Accepted values: `"nearest"` (default), `"bilinear"`, `"trilinear"`, `"anisotropic_4x"`, `"anisotropic_8x"`, `"anisotropic_16x"`.
+
+Also configurable via `render_target_filter` in `config.ini`.
+
+```lua
+engine.set_render_target_filter("nearest")   -- Crisp pixel art upscaling (default)
+engine.set_render_target_filter("bilinear")  -- Smooth upscaling
+```
+
 ### Reading Configuration
 
 #### `engine.get_fullscreen() -> boolean`
@@ -5240,6 +5319,16 @@ Get current internal render resolution. Returns a table with `width` and `height
 ```lua
 local size = engine.get_render_size()
 engine.log_info("Render: " .. size.width .. "x" .. size.height)
+```
+
+#### `engine.get_pixel_snap_camera() -> boolean`
+
+Get current pixel-snapping state.
+
+```lua
+if engine.get_pixel_snap_camera() then
+    engine.log_info("Pixel snap is enabled")
+end
 ```
 
 #### `engine.set_background_color(r, g, b)`
