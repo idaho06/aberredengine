@@ -106,6 +106,19 @@ impl LuaRuntime {
             params = [("enabled", "boolean")]
         );
 
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_render_target_filter",
+            gameconfig_commands,
+            |filter| String,
+            GameConfigCmd::RenderTargetFilter { filter },
+            desc = "Set the texture filter for the final render-target-to-window blit (\"nearest\", \"bilinear\", \"trilinear\", \"anisotropic_4x\", \"anisotropic_8x\", \"anisotropic_16x\")",
+            cat = "render",
+            params = [("filter", "string")]
+        );
+
         engine.set(
             "get_pixel_snap_camera",
             self.lua.create_function(|lua, ()| {

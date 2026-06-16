@@ -1377,6 +1377,10 @@ function engine.set_pixel_snap_camera(enabled) end
 ---@param height integer
 function engine.set_render_size(width, height) end
 
+---Set the texture filter for the final render-target-to-window blit ("nearest", "bilinear", "trilinear", "anisotropic_4x", "anisotropic_8x", "anisotropic_16x")
+---@param filter string
+function engine.set_render_target_filter(filter) end
+
 ---Set target FPS (nil resets to 60)
 ---@param fps integer|nil
 function engine.set_target_fps(fps) end

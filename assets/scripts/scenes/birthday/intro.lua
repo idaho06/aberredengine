@@ -225,6 +225,7 @@ function M.spawn()
 
     -- Set render resolution for Birthday Card
     engine.set_render_size(618, 864)
+    engine.set_render_target_filter("trilinear")
 
     local camera_offset_x = 618.0 / 2.0
     local camera_offset_y = 864.0 / 2.0

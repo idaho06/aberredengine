@@ -63,6 +63,11 @@ pub fn apply_gameconfig_changes(
             }
         }
 
+        // Apply render target filter if changed
+        if config.render_target_filter != render_target.filter {
+            render_target.set_filter(config.render_target_filter);
+        }
+
         // Synchronize fullscreen state between config and window
         let is_fullscreen = fullscreen.is_some();
         if config.fullscreen != is_fullscreen {

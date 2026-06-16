@@ -26,6 +26,8 @@ use log::{debug, info};
 use raylib::prelude::Color;
 use std::path::PathBuf;
 
+use crate::resources::texturefilter::TextureFilter;
+
 /// Default safe values for startup
 const DEFAULT_RENDER_WIDTH: u32 = 640;
 const DEFAULT_RENDER_HEIGHT: u32 = 360;
@@ -69,6 +71,11 @@ pub struct GameConfig {
     /// smooth rotation/zoom (e.g. an asteroids-style game) where sub-pixel
     /// camera motion looks better.
     pub pixel_snap_camera: bool,
+    /// Texture filter applied to the render target when blitting to the window.
+    ///
+    /// `Nearest` (default) gives sharp pixel-art scaling. `Bilinear` or higher
+    /// produces smooth interpolation when the window is larger than the game resolution.
+    pub render_target_filter: TextureFilter,
     /// Background clear color for the render target.
     pub background_color: Color,
     /// Window title.
@@ -95,6 +102,7 @@ impl GameConfig {
             vsync: DEFAULT_VSYNC,
             fullscreen: DEFAULT_FULLSCREEN,
             pixel_snap_camera: DEFAULT_PIXEL_SNAP_CAMERA,
+            render_target_filter: TextureFilter::default(),
             background_color: DEFAULT_BACKGROUND_COLOR,
             window_title: DEFAULT_WINDOW_TITLE.to_string(),
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
@@ -170,6 +178,10 @@ impl GameConfig {
         }
         if let Some(snap) = config.getbool("render", "pixel_snap_camera").ok().flatten() {
             self.pixel_snap_camera = snap;
+        }
+        if let Some(filter_str) = config.get("render", "render_target_filter") {
+            self.render_target_filter =
+                TextureFilter::from_opt_str_or_warn(Some(&filter_str), "render_target_filter");
         }
         if let Some(title) = config.get("window", "title") {
             self.window_title = title;
@@ -466,6 +478,28 @@ mod tests {
         assert_eq!(config.window_title, "Aberred Engine");
 
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_render_target_filter_default_is_nearest() {
+        let config = GameConfig::new();
+        assert_eq!(config.render_target_filter, TextureFilter::Nearest);
+    }
+
+    #[test]
+    fn test_render_target_filter_parses_from_ini() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[render]\nrender_target_filter = bilinear\n")
+            .unwrap();
+        assert_eq!(config.render_target_filter, TextureFilter::Bilinear);
+    }
+
+    #[test]
+    fn test_render_target_filter_missing_keeps_nearest() {
+        let mut config = GameConfig::new();
+        config.load_from_str("[render]\nwidth = 320\n").unwrap();
+        assert_eq!(config.render_target_filter, TextureFilter::Nearest);
     }
 
     #[test]

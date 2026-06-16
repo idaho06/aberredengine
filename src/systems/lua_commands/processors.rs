@@ -306,6 +306,10 @@ pub fn process_gameconfig_command(cmd: GameConfigCmd, config: &mut GameConfig) {
         GameConfigCmd::PixelSnapCamera { enabled } => {
             config.pixel_snap_camera = enabled;
         }
+        GameConfigCmd::RenderTargetFilter { filter } => {
+            config.render_target_filter =
+                TextureFilter::from_opt_str_or_warn(Some(&filter), "set_render_target_filter");
+        }
     }
 }
 

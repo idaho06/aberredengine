@@ -55,6 +55,7 @@ function M.spawn()
 
     -- Set render resolution for menu
     engine.set_render_size(640, 360)
+    engine.set_render_target_filter("nearest")
     engine.set_vsync(true)     -- vsync on for menu to cap FPS and reduce CPU/GPU load
     engine.set_target_fps(120) -- target 120 FPS for menu
 

@@ -410,6 +410,8 @@ pub enum GameConfigCmd {
     BackgroundColor { r: u8, g: u8, b: u8 },
     /// Toggle camera/view pixel snapping
     PixelSnapCamera { enabled: bool },
+    /// Set the texture filter for the render-target-to-window blit
+    RenderTargetFilter { filter: String },
 }
 
 /// Commands for runtime input rebinding from Lua.

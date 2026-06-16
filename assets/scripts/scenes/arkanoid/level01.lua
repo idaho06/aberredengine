@@ -602,6 +602,7 @@ function M.spawn()
 
     -- Set render resolution for Arkanoid (672x768)
     engine.set_render_size(672, 768)
+    engine.set_render_target_filter("trilinear")
 
     -- Reset counters
     ball_bounces = 0
