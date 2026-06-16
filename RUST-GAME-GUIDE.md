@@ -722,7 +722,7 @@ commands.spawn(TileMap::new("assets/tilemaps/level01"));
 commands.spawn((
     TileMap::new("assets/tilemaps/level01"),
     MapPosition::new(100.0, 200.0),
-    Scale { x: 2.0, y: 2.0 },
+    Scale::new(2.0, 2.0),
 ));
 ```
 
@@ -920,9 +920,9 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled { up_velocity, down_velocity, left_velocity, right_velocity }` |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
-| `Timer` | `Timer::new(duration_secs, callback as TimerCallback)` — **must cast** |
+| `Timer` | `Timer::rust(duration_secs, callback)` — use `::rust()` for Rust callbacks; see §7.1 |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
-| `CollisionRule` | `CollisionRule::new("group_a", "group_b", callback as CollisionCallback)` — **must cast** |
+| `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
 | `LuaOnAnimationEnd` | `LuaOnAnimationEnd::new("fn_name")` — `[feature=lua]`; fires once when non-looped animation finishes; Rust counterpart is `AnimationFinishedEvent` |
 | `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
 | `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
@@ -1133,12 +1133,12 @@ type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
 **Creating a timer:**
 
 ```rust
-use aberredengine::components::timer::{Timer, TimerCallback};
+use aberredengine::components::timer::Timer;
 
 // Spawn an entity with a 2-second repeating timer
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
-    Timer::new(2.0, on_timer_fire as TimerCallback),
+    Timer::rust(2.0, on_timer_fire),
 ));
 
 fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -1147,14 +1147,14 @@ fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
 }
 ```
 
-> **Warning:** The `as TimerCallback` cast is required. `Timer<C>` is generic — without the cast, Rust infers `C` from the specific function item type rather than the `TimerCallback` alias. The `update_timers` system queries `Query<(Entity, &mut Timer)>` (which expands to `Timer<TimerCallback>`), so it will **never find the entity** and the timer will silently never fire.
+> **Note:** Use `Timer::rust(duration, callback)` for Rust callbacks. `Timer<C>` is generic — `Timer::rust()` forces the parameter to the concrete `TimerCallback` fn-pointer type that `Query<(Entity, &mut Timer)>` expects. If you use the generic `Timer::new()` with a plain function reference, Rust infers a unique function-item type that the query can never match, and the timer silently never fires.
 
-**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback. Remember to use the `as TimerCallback` cast when spawning:
+**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback:
 
 ```rust
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
-    Timer::new(5.0, one_shot_callback as TimerCallback),
+    Timer::rust(5.0, one_shot_callback),
 ));
 
 fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
@@ -1317,16 +1317,16 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 **Creating a collision rule:**
 
 ```rust
-use aberredengine::components::collision::{CollisionRule, CollisionCallback, BoxSide};
+use aberredengine::components::collision::{CollisionRule, BoxSide};
 use aberredengine::components::persistent::Persistent;
 
 ctx.commands.spawn((
-    CollisionRule::new("ball", "brick", ball_brick_collision as CollisionCallback),
+    CollisionRule::rust("ball", "brick", ball_brick_collision),
     Persistent, // survive scene switches
 ));
 ```
 
-> **Warning:** The `as CollisionCallback` cast is required. `CollisionRule<C>` is generic — without the cast, Rust infers `C` from the specific function item type rather than the `CollisionCallback` alias. The `rust_collision_observer` queries `Query<&CollisionRule>` (which expands to `CollisionRule<CollisionCallback>`), so it will **never find the entity** and the callback will silently never fire.
+> **Note:** Use `CollisionRule::rust(group_a, group_b, callback)` for Rust callbacks. `CollisionRule<C>` is generic — `CollisionRule::rust()` forces the parameter to the concrete `CollisionCallback` fn-pointer type that `Query<&CollisionRule>` expects. If you use the generic `CollisionRule::new()` with a plain function reference, Rust infers a unique function-item type that the query can never match, and the callback silently never fires.
 
 > **Note:** `CollisionRule` entities are regular entities — they get despawned on scene switch unless marked `Persistent`.
 
@@ -1585,6 +1585,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `set_flag` | `(&mut self, key: impl Into<String>)` |
 | `has_flag` | `(&self, key: &str) -> bool` |
 | `clear_flag` | `(&mut self, key: &str)` |
+| `take_flag` | `(&mut self, key: &str) -> bool` — returns `true` and clears the flag if present; `false` if absent. Equivalent to `has_flag` + `clear_flag` in one lookup. Preferred in `on_update` to consume a GUI action flag. |
 
 **Entities:**
 
@@ -1716,6 +1717,7 @@ Section 2 showed the basics. This is the complete reference.
 | `height` | `u32` | `360` | Internal render height |
 | `background_color` | `R,G,B` | `80,80,80` | Background clear color (0–255 per channel) |
 | `pixel_snap_camera` | `bool` | `true` | Snap the camera target/view-rect to integer pixels each frame, avoiding sprite atlas bleeding. Disable for games with smooth rotation/zoom (e.g. asteroids-style). Also toggleable at runtime via `config.pixel_snap_camera` or the Lua `engine.set_pixel_snap_camera(bool)` / `get_pixel_snap_camera()` API. |
+| `render_target_filter` | `string` | `"nearest"` | Sampling filter for the render-target-to-window blit. Values: `"nearest"` (default, sharp pixel art), `"bilinear"`, `"trilinear"`, `"anisotropic_4x"`, `"anisotropic_8x"`, `"anisotropic_16x"`. Unrecognized values warn and fall back to `"nearest"`. Changeable at runtime via `ResMut<GameConfig>`. |
 
 **`[window]` section:**
 
