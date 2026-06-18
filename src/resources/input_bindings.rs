@@ -142,162 +142,110 @@ impl Default for InputBindings {
 // Key ↔ string conversion helpers
 // ---------------------------------------------------------------------------
 
+/// Canonical (non-alias) name ↔ key table, the single source of truth for
+/// both [`key_from_str`] and [`key_to_str`]. Alias names (`"return"`,
+/// `"esc"`, `"shift"`, `"ctrl"`) are handled separately since they have no
+/// corresponding canonical-name entry to round-trip to.
+const KEY_NAME_TABLE: &[(&str, KeyboardKey)] = &[
+    // Letters
+    ("a", KeyboardKey::KEY_A),
+    ("b", KeyboardKey::KEY_B),
+    ("c", KeyboardKey::KEY_C),
+    ("d", KeyboardKey::KEY_D),
+    ("e", KeyboardKey::KEY_E),
+    ("f", KeyboardKey::KEY_F),
+    ("g", KeyboardKey::KEY_G),
+    ("h", KeyboardKey::KEY_H),
+    ("i", KeyboardKey::KEY_I),
+    ("j", KeyboardKey::KEY_J),
+    ("k", KeyboardKey::KEY_K),
+    ("l", KeyboardKey::KEY_L),
+    ("m", KeyboardKey::KEY_M),
+    ("n", KeyboardKey::KEY_N),
+    ("o", KeyboardKey::KEY_O),
+    ("p", KeyboardKey::KEY_P),
+    ("q", KeyboardKey::KEY_Q),
+    ("r", KeyboardKey::KEY_R),
+    ("s", KeyboardKey::KEY_S),
+    ("t", KeyboardKey::KEY_T),
+    ("u", KeyboardKey::KEY_U),
+    ("v", KeyboardKey::KEY_V),
+    ("w", KeyboardKey::KEY_W),
+    ("x", KeyboardKey::KEY_X),
+    ("y", KeyboardKey::KEY_Y),
+    ("z", KeyboardKey::KEY_Z),
+    // Digits
+    ("0", KeyboardKey::KEY_ZERO),
+    ("1", KeyboardKey::KEY_ONE),
+    ("2", KeyboardKey::KEY_TWO),
+    ("3", KeyboardKey::KEY_THREE),
+    ("4", KeyboardKey::KEY_FOUR),
+    ("5", KeyboardKey::KEY_FIVE),
+    ("6", KeyboardKey::KEY_SIX),
+    ("7", KeyboardKey::KEY_SEVEN),
+    ("8", KeyboardKey::KEY_EIGHT),
+    ("9", KeyboardKey::KEY_NINE),
+    // Special
+    ("space", KeyboardKey::KEY_SPACE),
+    ("enter", KeyboardKey::KEY_ENTER),
+    ("escape", KeyboardKey::KEY_ESCAPE),
+    ("backspace", KeyboardKey::KEY_BACKSPACE),
+    ("tab", KeyboardKey::KEY_TAB),
+    // Arrows
+    ("up", KeyboardKey::KEY_UP),
+    ("down", KeyboardKey::KEY_DOWN),
+    ("left", KeyboardKey::KEY_LEFT),
+    ("right", KeyboardKey::KEY_RIGHT),
+    // Modifiers
+    ("lshift", KeyboardKey::KEY_LEFT_SHIFT),
+    ("rshift", KeyboardKey::KEY_RIGHT_SHIFT),
+    ("lctrl", KeyboardKey::KEY_LEFT_CONTROL),
+    ("rctrl", KeyboardKey::KEY_RIGHT_CONTROL),
+    ("lalt", KeyboardKey::KEY_LEFT_ALT),
+    ("ralt", KeyboardKey::KEY_RIGHT_ALT),
+    // Function keys
+    ("f1", KeyboardKey::KEY_F1),
+    ("f2", KeyboardKey::KEY_F2),
+    ("f3", KeyboardKey::KEY_F3),
+    ("f4", KeyboardKey::KEY_F4),
+    ("f5", KeyboardKey::KEY_F5),
+    ("f6", KeyboardKey::KEY_F6),
+    ("f7", KeyboardKey::KEY_F7),
+    ("f8", KeyboardKey::KEY_F8),
+    ("f9", KeyboardKey::KEY_F9),
+    ("f10", KeyboardKey::KEY_F10),
+    ("f11", KeyboardKey::KEY_F11),
+    ("f12", KeyboardKey::KEY_F12),
+];
+
 /// Parse a human-readable key name into a [`KeyboardKey`].
 ///
 /// Returns `None` for unknown names. Names are lowercase, e.g. `"w"`, `"space"`,
 /// `"f11"`. Common aliases (`"return"` → `KEY_ENTER`, `"esc"` → `KEY_ESCAPE`) are
 /// accepted.
 pub fn key_from_str(s: &str) -> Option<KeyboardKey> {
-    match s {
-        // Letters
-        "a" => Some(KeyboardKey::KEY_A),
-        "b" => Some(KeyboardKey::KEY_B),
-        "c" => Some(KeyboardKey::KEY_C),
-        "d" => Some(KeyboardKey::KEY_D),
-        "e" => Some(KeyboardKey::KEY_E),
-        "f" => Some(KeyboardKey::KEY_F),
-        "g" => Some(KeyboardKey::KEY_G),
-        "h" => Some(KeyboardKey::KEY_H),
-        "i" => Some(KeyboardKey::KEY_I),
-        "j" => Some(KeyboardKey::KEY_J),
-        "k" => Some(KeyboardKey::KEY_K),
-        "l" => Some(KeyboardKey::KEY_L),
-        "m" => Some(KeyboardKey::KEY_M),
-        "n" => Some(KeyboardKey::KEY_N),
-        "o" => Some(KeyboardKey::KEY_O),
-        "p" => Some(KeyboardKey::KEY_P),
-        "q" => Some(KeyboardKey::KEY_Q),
-        "r" => Some(KeyboardKey::KEY_R),
-        "s" => Some(KeyboardKey::KEY_S),
-        "t" => Some(KeyboardKey::KEY_T),
-        "u" => Some(KeyboardKey::KEY_U),
-        "v" => Some(KeyboardKey::KEY_V),
-        "w" => Some(KeyboardKey::KEY_W),
-        "x" => Some(KeyboardKey::KEY_X),
-        "y" => Some(KeyboardKey::KEY_Y),
-        "z" => Some(KeyboardKey::KEY_Z),
-        // Digits
-        "0" => Some(KeyboardKey::KEY_ZERO),
-        "1" => Some(KeyboardKey::KEY_ONE),
-        "2" => Some(KeyboardKey::KEY_TWO),
-        "3" => Some(KeyboardKey::KEY_THREE),
-        "4" => Some(KeyboardKey::KEY_FOUR),
-        "5" => Some(KeyboardKey::KEY_FIVE),
-        "6" => Some(KeyboardKey::KEY_SIX),
-        "7" => Some(KeyboardKey::KEY_SEVEN),
-        "8" => Some(KeyboardKey::KEY_EIGHT),
-        "9" => Some(KeyboardKey::KEY_NINE),
-        // Special
-        "space" => Some(KeyboardKey::KEY_SPACE),
-        "enter" | "return" => Some(KeyboardKey::KEY_ENTER),
-        "escape" | "esc" => Some(KeyboardKey::KEY_ESCAPE),
-        "backspace" => Some(KeyboardKey::KEY_BACKSPACE),
-        "tab" => Some(KeyboardKey::KEY_TAB),
-        // Arrows
-        "up" => Some(KeyboardKey::KEY_UP),
-        "down" => Some(KeyboardKey::KEY_DOWN),
-        "left" => Some(KeyboardKey::KEY_LEFT),
-        "right" => Some(KeyboardKey::KEY_RIGHT),
-        // Modifiers
-        "lshift" | "shift" => Some(KeyboardKey::KEY_LEFT_SHIFT),
-        "rshift" => Some(KeyboardKey::KEY_RIGHT_SHIFT),
-        "lctrl" | "ctrl" => Some(KeyboardKey::KEY_LEFT_CONTROL),
-        "rctrl" => Some(KeyboardKey::KEY_RIGHT_CONTROL),
-        "lalt" | "alt" => Some(KeyboardKey::KEY_LEFT_ALT),
-        "ralt" => Some(KeyboardKey::KEY_RIGHT_ALT),
-        // Function keys
-        "f1" => Some(KeyboardKey::KEY_F1),
-        "f2" => Some(KeyboardKey::KEY_F2),
-        "f3" => Some(KeyboardKey::KEY_F3),
-        "f4" => Some(KeyboardKey::KEY_F4),
-        "f5" => Some(KeyboardKey::KEY_F5),
-        "f6" => Some(KeyboardKey::KEY_F6),
-        "f7" => Some(KeyboardKey::KEY_F7),
-        "f8" => Some(KeyboardKey::KEY_F8),
-        "f9" => Some(KeyboardKey::KEY_F9),
-        "f10" => Some(KeyboardKey::KEY_F10),
-        "f11" => Some(KeyboardKey::KEY_F11),
-        "f12" => Some(KeyboardKey::KEY_F12),
-        _ => None,
-    }
+    KEY_NAME_TABLE
+        .iter()
+        .find(|(name, _)| *name == s)
+        .map(|(_, k)| *k)
+        .or(match s {
+            "return" => Some(KeyboardKey::KEY_ENTER),
+            "esc" => Some(KeyboardKey::KEY_ESCAPE),
+            "shift" => Some(KeyboardKey::KEY_LEFT_SHIFT),
+            "ctrl" => Some(KeyboardKey::KEY_LEFT_CONTROL),
+            _ => None,
+        })
 }
 
 /// Serialize a [`KeyboardKey`] to a canonical lowercase string.
 ///
 /// Returns `"unknown"` for keys not covered by the mapping.
 pub fn key_to_str(k: KeyboardKey) -> &'static str {
-    match k {
-        // Letters
-        KeyboardKey::KEY_A => "a",
-        KeyboardKey::KEY_B => "b",
-        KeyboardKey::KEY_C => "c",
-        KeyboardKey::KEY_D => "d",
-        KeyboardKey::KEY_E => "e",
-        KeyboardKey::KEY_F => "f",
-        KeyboardKey::KEY_G => "g",
-        KeyboardKey::KEY_H => "h",
-        KeyboardKey::KEY_I => "i",
-        KeyboardKey::KEY_J => "j",
-        KeyboardKey::KEY_K => "k",
-        KeyboardKey::KEY_L => "l",
-        KeyboardKey::KEY_M => "m",
-        KeyboardKey::KEY_N => "n",
-        KeyboardKey::KEY_O => "o",
-        KeyboardKey::KEY_P => "p",
-        KeyboardKey::KEY_Q => "q",
-        KeyboardKey::KEY_R => "r",
-        KeyboardKey::KEY_S => "s",
-        KeyboardKey::KEY_T => "t",
-        KeyboardKey::KEY_U => "u",
-        KeyboardKey::KEY_V => "v",
-        KeyboardKey::KEY_W => "w",
-        KeyboardKey::KEY_X => "x",
-        KeyboardKey::KEY_Y => "y",
-        KeyboardKey::KEY_Z => "z",
-        // Digits
-        KeyboardKey::KEY_ZERO => "0",
-        KeyboardKey::KEY_ONE => "1",
-        KeyboardKey::KEY_TWO => "2",
-        KeyboardKey::KEY_THREE => "3",
-        KeyboardKey::KEY_FOUR => "4",
-        KeyboardKey::KEY_FIVE => "5",
-        KeyboardKey::KEY_SIX => "6",
-        KeyboardKey::KEY_SEVEN => "7",
-        KeyboardKey::KEY_EIGHT => "8",
-        KeyboardKey::KEY_NINE => "9",
-        // Special
-        KeyboardKey::KEY_SPACE => "space",
-        KeyboardKey::KEY_ENTER => "enter",
-        KeyboardKey::KEY_ESCAPE => "escape",
-        KeyboardKey::KEY_BACKSPACE => "backspace",
-        KeyboardKey::KEY_TAB => "tab",
-        // Arrows
-        KeyboardKey::KEY_UP => "up",
-        KeyboardKey::KEY_DOWN => "down",
-        KeyboardKey::KEY_LEFT => "left",
-        KeyboardKey::KEY_RIGHT => "right",
-        // Modifiers
-        KeyboardKey::KEY_LEFT_SHIFT => "lshift",
-        KeyboardKey::KEY_RIGHT_SHIFT => "rshift",
-        KeyboardKey::KEY_LEFT_CONTROL => "lctrl",
-        KeyboardKey::KEY_RIGHT_CONTROL => "rctrl",
-        KeyboardKey::KEY_LEFT_ALT => "lalt",
-        KeyboardKey::KEY_RIGHT_ALT => "ralt",
-        // Function keys
-        KeyboardKey::KEY_F1 => "f1",
-        KeyboardKey::KEY_F2 => "f2",
-        KeyboardKey::KEY_F3 => "f3",
-        KeyboardKey::KEY_F4 => "f4",
-        KeyboardKey::KEY_F5 => "f5",
-        KeyboardKey::KEY_F6 => "f6",
-        KeyboardKey::KEY_F7 => "f7",
-        KeyboardKey::KEY_F8 => "f8",
-        KeyboardKey::KEY_F9 => "f9",
-        KeyboardKey::KEY_F10 => "f10",
-        KeyboardKey::KEY_F11 => "f11",
-        KeyboardKey::KEY_F12 => "f12",
-        _ => "unknown",
-    }
+    KEY_NAME_TABLE
+        .iter()
+        .find(|(_, key)| *key == k)
+        .map(|(s, _)| *s)
+        .unwrap_or("unknown")
 }
 
 // ---------------------------------------------------------------------------
