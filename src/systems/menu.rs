@@ -38,6 +38,27 @@ use log::error;
 use log::{debug, warn};
 use raylib::prelude::Vector2;
 
+/// Z-index applied to world-space menu elements so they render above other world entities.
+const MENU_WORLD_Z_INDEX: f32 = 23.0;
+
+/// Inserts [`ScreenPosition`] or [`MapPosition`] depending on `use_screen_space`.
+fn set_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool, pos: Vector2) {
+    if use_screen_space {
+        ecmd.insert(ScreenPosition::from_vec(pos));
+    } else {
+        ecmd.insert(MapPosition::from_vec(pos));
+    }
+}
+
+/// Removes [`ScreenPosition`] or [`MapPosition`] depending on `use_screen_space`.
+fn clear_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool) {
+    if use_screen_space {
+        ecmd.remove::<ScreenPosition>();
+    } else {
+        ecmd.remove::<MapPosition>();
+    }
+}
+
 /// Spawns entities for newly added [`Menu`] components.
 ///
 /// For each menu item, spawns a text entity (either [`DynamicText`] or a
@@ -146,7 +167,7 @@ pub fn menu_spawn_system(
 
             // For world-space, add ZIndex to ALL items (needed when they become visible)
             if !use_screen_space {
-                ecmd.insert(ZIndex(23.0));
+                ecmd.insert(ZIndex(MENU_WORLD_Z_INDEX));
             }
 
             // Only add position component for visible items
@@ -158,11 +179,7 @@ pub fn menu_spawn_system(
                     x: origin.x,
                     y: origin.y + (viewport_index as f32) * item_spacing,
                 };
-                if use_screen_space {
-                    ecmd.insert(ScreenPosition::from_vec(pos));
-                } else {
-                    ecmd.insert(MapPosition::from_vec(pos));
-                }
+                set_menu_position(&mut ecmd, use_screen_space, pos);
             }
             // Non-visible items don't get position component, so render system skips them
 
@@ -187,7 +204,7 @@ pub fn menu_spawn_system(
             top_cmd.insert(Group::new(format!("menu_{}", entity)));
             // For world-space, add ZIndex always (needed when indicator becomes visible)
             if !use_screen_space {
-                top_cmd.insert(ZIndex(23.0));
+                top_cmd.insert(ZIndex(MENU_WORLD_Z_INDEX));
             }
             let top_indicator = top_cmd.id();
             // Position only if needed (scroll_offset > 0)
@@ -196,15 +213,7 @@ pub fn menu_spawn_system(
                     x: origin.x,
                     y: origin.y - item_spacing,
                 };
-                if use_screen_space {
-                    commands
-                        .entity(top_indicator)
-                        .insert(ScreenPosition::from_vec(pos));
-                } else {
-                    commands
-                        .entity(top_indicator)
-                        .insert(MapPosition::from_vec(pos));
-                }
+                set_menu_position(&mut commands.entity(top_indicator), use_screen_space, pos);
             }
             menu.top_indicator_entity = Some(top_indicator);
 
@@ -218,7 +227,7 @@ pub fn menu_spawn_system(
             bottom_cmd.insert(Group::new(format!("menu_{}", entity)));
             // For world-space, add ZIndex always (needed when indicator becomes visible)
             if !use_screen_space {
-                bottom_cmd.insert(ZIndex(23.0));
+                bottom_cmd.insert(ZIndex(MENU_WORLD_Z_INDEX));
             }
             let bottom_indicator = bottom_cmd.id();
             // Position only if needed (visible_end < items.len())
@@ -227,15 +236,7 @@ pub fn menu_spawn_system(
                     x: origin.x,
                     y: origin.y + (vc as f32) * item_spacing,
                 };
-                if use_screen_space {
-                    commands
-                        .entity(bottom_indicator)
-                        .insert(ScreenPosition::from_vec(pos));
-                } else {
-                    commands
-                        .entity(bottom_indicator)
-                        .insert(MapPosition::from_vec(pos));
-                }
+                set_menu_position(&mut commands.entity(bottom_indicator), use_screen_space, pos);
             }
             menu.bottom_indicator_entity = Some(bottom_indicator);
         }
@@ -261,15 +262,10 @@ pub fn menu_spawn_system(
                 x: origin.x,
                 y: origin.y + (selected_viewport_index as f32) * item_spacing,
             };
-            if use_screen_space {
-                commands
-                    .entity(cursor_entity)
-                    .insert(ScreenPosition::from_vec(cursor_position));
-            } else {
-                commands
-                    .entity(cursor_entity)
-                    .insert(MapPosition::from_vec(cursor_position));
-                commands.entity(cursor_entity).insert(ZIndex(23.0));
+            let mut cursor_cmd = commands.entity(cursor_entity);
+            set_menu_position(&mut cursor_cmd, use_screen_space, cursor_position);
+            if !use_screen_space {
+                cursor_cmd.insert(ZIndex(MENU_WORLD_Z_INDEX));
             }
             debug!(
                 "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
@@ -457,15 +453,11 @@ pub fn menu_controller_observer(
                     x: menu.origin.x,
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
-                if menu.use_screen_space {
-                    commands
-                        .entity(cursor_entity)
-                        .insert(ScreenPosition::from_vec(cursor_position));
-                } else {
-                    commands
-                        .entity(cursor_entity)
-                        .insert(MapPosition::from_vec(cursor_position));
-                }
+                set_menu_position(
+                    &mut commands.entity(cursor_entity),
+                    menu.use_screen_space,
+                    cursor_position,
+                );
             }
             // Play selection change sound if configured
             if let Some(sound_key) = &menu.selection_change_sound {
@@ -497,22 +489,10 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                     x: menu.origin.x,
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
-                if menu.use_screen_space {
-                    commands
-                        .entity(entity)
-                        .insert(ScreenPosition::from_vec(new_pos));
-                } else {
-                    commands
-                        .entity(entity)
-                        .insert(MapPosition::from_vec(new_pos));
-                }
+                set_menu_position(&mut commands.entity(entity), menu.use_screen_space, new_pos);
             } else {
                 // Remove position component to hide (render system skips)
-                if menu.use_screen_space {
-                    commands.entity(entity).remove::<ScreenPosition>();
-                } else {
-                    commands.entity(entity).remove::<MapPosition>();
-                }
+                clear_menu_position(&mut commands.entity(entity), menu.use_screen_space);
             }
         }
     }
@@ -527,19 +507,9 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 x: menu.origin.x,
                 y: menu.origin.y - menu.item_spacing,
             };
-            if menu.use_screen_space {
-                commands
-                    .entity(top_entity)
-                    .insert(ScreenPosition::from_vec(pos));
-            } else {
-                commands
-                    .entity(top_entity)
-                    .insert(MapPosition::from_vec(pos));
-            }
-        } else if menu.use_screen_space {
-            commands.entity(top_entity).remove::<ScreenPosition>();
+            set_menu_position(&mut commands.entity(top_entity), menu.use_screen_space, pos);
         } else {
-            commands.entity(top_entity).remove::<MapPosition>();
+            clear_menu_position(&mut commands.entity(top_entity), menu.use_screen_space);
         }
     }
 
@@ -549,19 +519,9 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 x: menu.origin.x,
                 y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
             };
-            if menu.use_screen_space {
-                commands
-                    .entity(bottom_entity)
-                    .insert(ScreenPosition::from_vec(pos));
-            } else {
-                commands
-                    .entity(bottom_entity)
-                    .insert(MapPosition::from_vec(pos));
-            }
-        } else if menu.use_screen_space {
-            commands.entity(bottom_entity).remove::<ScreenPosition>();
+            set_menu_position(&mut commands.entity(bottom_entity), menu.use_screen_space, pos);
         } else {
-            commands.entity(bottom_entity).remove::<MapPosition>();
+            clear_menu_position(&mut commands.entity(bottom_entity), menu.use_screen_space);
         }
     }
 }
