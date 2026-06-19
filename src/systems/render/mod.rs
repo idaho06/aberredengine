@@ -18,6 +18,8 @@ mod postprocess;
 mod sprite;
 mod text;
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
@@ -121,16 +123,31 @@ pub(super) struct ScreenSpriteBufferItem {
 }
 
 /// Screen-space text draw item. Mirrors [`ScreenSpriteBufferItem`]'s simplicity.
+///
+/// Stores only the fields [`draw_screen_text_item`](text::draw_screen_text_item)
+/// actually reads, rather than a full [`DynamicText`] clone — `DynamicText` also
+/// carries `initial_text`/`initial_color`, which exist for editor round-tripping
+/// and are never read at draw time. Avoiding them keeps this struct (and thus
+/// every element of the [`ScreenDrawItem`] enum it's wrapped in, sprites
+/// included) smaller, which matters for cache density when sorting/iterating
+/// tens of thousands of items per frame.
 pub(super) struct ScreenTextBufferItem {
-    text: DynamicText,
+    text: Arc<str>,
+    font: Arc<str>,
+    font_size: f32,
+    color: Color,
+    size: Vector2,
     z_index: ZIndex,
     pos: ScreenPosition,
     maybe_tint: Option<Tint>,
 }
 
 /// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
-/// one dispatch order. Extensible: a future GUI refactor can add variants here
-/// (e.g. NPatch panel/button) without touching the sort/dispatch skeleton.
+/// one dispatch order. A future GUI refactor can add variants here (e.g.
+/// NPatch panel/button) — doing so touches this enum plus one match arm each
+/// in [`ScreenDrawItem::z_index`], [`ScreenDrawItem::variant_rank`], the
+/// collect step, and the dispatch loop in [`draw_screen_space`]; it does not
+/// require restructuring the sort/dispatch skeleton itself.
 pub(super) enum ScreenDrawItem {
     Sprite(ScreenSpriteBufferItem),
     Text(ScreenTextBufferItem),
@@ -154,6 +171,16 @@ impl ScreenDrawItem {
             ScreenDrawItem::Sprite(_) => 0,
             ScreenDrawItem::Text(_) => 1,
         }
+    }
+
+    /// Draw-order comparator: ascending `z_index`, then `variant_rank` as the
+    /// tie-break. Shared by `draw_screen_space` and its tests so the two
+    /// can't drift apart.
+    fn cmp_draw_order(a: &Self, b: &Self) -> std::cmp::Ordering {
+        a.z_index()
+            .partial_cmp(&b.z_index())
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
     }
 }
 
@@ -905,19 +932,18 @@ fn draw_screen_space(
     }));
     buffer.extend(screen_texts.iter().map(|(t, p, z, maybe_tint)| {
         ScreenDrawItem::Text(ScreenTextBufferItem {
-            text: t.clone(),
+            text: Arc::clone(&t.text),
+            font: Arc::clone(&t.font),
+            font_size: t.font_size,
+            color: t.color,
+            size: t.size(),
             z_index: *z,
             pos: *p,
             maybe_tint: maybe_tint.copied(),
         })
     }));
 
-    buffer.sort_unstable_by(|a, b| {
-        a.z_index()
-            .partial_cmp(&b.z_index())
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
-    });
+    buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
 
     for item in buffer.iter() {
         match item {
@@ -930,7 +956,6 @@ fn draw_screen_space(
 #[cfg(test)]
 mod screen_draw_buffer_tests {
     use super::*;
-    use crate::components::dynamictext::DynamicText;
     use crate::components::screenposition::ScreenPosition;
 
     fn sprite_item(z: f32) -> ScreenDrawItem {
@@ -952,7 +977,11 @@ mod screen_draw_buffer_tests {
 
     fn text_item(z: f32) -> ScreenDrawItem {
         ScreenDrawItem::Text(ScreenTextBufferItem {
-            text: DynamicText::new("hi", "font", 12.0, Color::WHITE),
+            text: Arc::from("hi"),
+            font: Arc::from("font"),
+            font_size: 12.0,
+            color: Color::WHITE,
+            size: Vector2::zero(),
             z_index: ZIndex(z),
             pos: ScreenPosition::new(0.0, 0.0),
             maybe_tint: None,
@@ -960,12 +989,7 @@ mod screen_draw_buffer_tests {
     }
 
     fn sort(mut buffer: Vec<ScreenDrawItem>) -> Vec<ScreenDrawItem> {
-        buffer.sort_unstable_by(|a, b| {
-            a.z_index()
-                .partial_cmp(&b.z_index())
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
-        });
+        buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
         buffer
     }
 

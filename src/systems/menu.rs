@@ -44,6 +44,13 @@ use raylib::prelude::Vector2;
 /// is safe.
 const MENU_Z_INDEX: f32 = 23.0;
 
+/// Inserts the [`ZIndex`] every menu element needs to render, in either space.
+/// Single source of truth for this requirement so a future menu element type
+/// can't forget it the way the 4 call sites here once could drift independently.
+fn insert_menu_zindex(ecmd: &mut EntityCommands) {
+    ecmd.insert(ZIndex(MENU_Z_INDEX));
+}
+
 /// Inserts [`ScreenPosition`] or [`MapPosition`] depending on `use_screen_space`.
 fn set_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool, pos: Vector2) {
     if use_screen_space {
@@ -168,9 +175,8 @@ pub fn menu_spawn_system(
                 );
             }
 
-            // ZIndex is required for screen-space rendering and harmless for
-            // world-space; add it to ALL items (needed when they become visible).
-            ecmd.insert(ZIndex(MENU_Z_INDEX));
+            // Add to ALL items, visible or not (needed once they become visible).
+            insert_menu_zindex(&mut ecmd);
 
             // Only add position component for visible items
             let is_visible = i >= scroll_offset && i < visible_end;
@@ -204,9 +210,8 @@ pub fn menu_spawn_system(
                 normal_color,
             ));
             top_cmd.insert(Group::new(format!("menu_{}", entity)));
-            // ZIndex is required for screen-space rendering and harmless for
-            // world-space; add it always (needed when indicator becomes visible).
-            top_cmd.insert(ZIndex(MENU_Z_INDEX));
+            // Add always (needed once the indicator becomes visible).
+            insert_menu_zindex(&mut top_cmd);
             let top_indicator = top_cmd.id();
             // Position only if needed (scroll_offset > 0)
             if scroll_offset > 0 {
@@ -226,9 +231,8 @@ pub fn menu_spawn_system(
                 normal_color,
             ));
             bottom_cmd.insert(Group::new(format!("menu_{}", entity)));
-            // ZIndex is required for screen-space rendering and harmless for
-            // world-space; add it always (needed when indicator becomes visible).
-            bottom_cmd.insert(ZIndex(MENU_Z_INDEX));
+            // Add always (needed once the indicator becomes visible).
+            insert_menu_zindex(&mut bottom_cmd);
             let bottom_indicator = bottom_cmd.id();
             // Position only if needed (visible_end < items.len())
             if visible_end < menu.items.len() {
@@ -264,9 +268,7 @@ pub fn menu_spawn_system(
             };
             let mut cursor_cmd = commands.entity(cursor_entity);
             set_menu_position(&mut cursor_cmd, use_screen_space, cursor_position);
-            // ZIndex is required for screen-space rendering and harmless for
-            // world-space; add it unconditionally.
-            cursor_cmd.insert(ZIndex(MENU_Z_INDEX));
+            insert_menu_zindex(&mut cursor_cmd);
             debug!(
                 "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
                 cursor_entity, cursor_position
