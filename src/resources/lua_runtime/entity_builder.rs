@@ -535,7 +535,7 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_screen_position", "Set screen position (UI elements)",
+        "with_screen_position", "Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.",
         [("x", "number"), ("y", "number")],
         |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
             this.cmd.screen_position = Some((x, y));

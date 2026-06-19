@@ -196,7 +196,7 @@ pub struct RenderQueries<'w, 's> {
         (
             &'static DynamicText,
             &'static ScreenPosition,
-            Option<&'static ZIndex>,
+            &'static ZIndex,
             Option<&'static Tint>,
         ),
     >,
@@ -206,7 +206,7 @@ pub struct RenderQueries<'w, 's> {
         (
             &'static Sprite,
             &'static ScreenPosition,
-            Option<&'static ZIndex>,
+            &'static ZIndex,
             Option<&'static Tint>,
         ),
     >,
@@ -873,18 +873,8 @@ pub fn render_system(
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
-    screen_sprites: &Query<(
-        &Sprite,
-        &ScreenPosition,
-        Option<&ZIndex>,
-        Option<&Tint>,
-    )>,
-    screen_texts: &Query<(
-        &DynamicText,
-        &ScreenPosition,
-        Option<&ZIndex>,
-        Option<&Tint>,
-    )>,
+    screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>)>,
+    screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     textures: &TextureStore,
     fonts: &FontStore,
     buffer: &mut Vec<ScreenDrawItem>,
@@ -892,18 +882,18 @@ fn draw_screen_space(
     debug_texts: bool,
 ) {
     buffer.clear();
-    buffer.extend(screen_sprites.iter().map(|(s, p, maybe_z, maybe_tint)| {
+    buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint)| {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
             sprite: s.clone(),
-            z_index: maybe_z.copied().unwrap_or(ZIndex(0.0)),
+            z_index: *z,
             pos: *p,
             maybe_tint: maybe_tint.copied(),
         })
     }));
-    buffer.extend(screen_texts.iter().map(|(t, p, maybe_z, maybe_tint)| {
+    buffer.extend(screen_texts.iter().map(|(t, p, z, maybe_tint)| {
         ScreenDrawItem::Text(ScreenTextBufferItem {
             text: t.clone(),
-            z_index: maybe_z.copied().unwrap_or(ZIndex(0.0)),
+            z_index: *z,
             pos: *p,
             maybe_tint: maybe_tint.copied(),
         })

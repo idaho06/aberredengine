@@ -1629,7 +1629,7 @@ function EntityBuilder:with_rotation(degrees) end
 ---@return EntityBuilder
 function EntityBuilder:with_scale(sx, sy) end
 
----Set screen position (UI elements)
+---Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.
 ---@param x number
 ---@param y number
 ---@return EntityBuilder
@@ -2056,7 +2056,7 @@ function CollisionEntityBuilder:with_rotation(degrees) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_scale(sx, sy) end
 
----Set screen position (UI elements)
+---Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.
 ---@param x number
 ---@param y number
 ---@return CollisionEntityBuilder

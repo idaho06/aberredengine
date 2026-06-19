@@ -1027,8 +1027,14 @@ Set entity's world position.
 
 Set entity's screen position (for UI elements that don't scroll with camera).
 
+**Requires `:with_zindex()` to render** — screen-space rendering requires `ZIndex`
+(mirrors world-space `:with_position()` entities). An entity with
+`:with_screen_position()` but no `:with_zindex()` is silently excluded from
+rendering, not an error.
+
 ```lua
 :with_screen_position(10, 10)  -- Top-left corner
+:with_zindex(100)              -- required for it to actually render
 ```
 
 #### `:with_sprite(tex_key, width, height, origin_x, origin_y)`
@@ -1068,6 +1074,10 @@ Flip sprite horizontally and/or vertically (requires `:with_sprite()`).
 #### `:with_zindex(z)`
 
 Set rendering order (higher values render on top). Accepts floating-point values for fine-grained control.
+
+**Required for screen-space rendering**: any entity using `:with_screen_position()`
+must also call `:with_zindex()`, or it won't render (silently excluded), exactly
+like world-space `:with_position()` entities already require.
 
 **Parameters:**
 
