@@ -37,7 +37,7 @@ use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
     LuaCollisionRuleData, MenuActionData, MenuData, ParticleEmitterData, PhaseData, RigidBodyData,
     SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData, TweenRotationData,
-    TweenScaleData,
+    TweenScaleData, TweenScreenPositionData,
 };
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -105,6 +105,7 @@ pub(super) fn apply_components(
         cmd.animation,
         cmd.animation_controller,
         cmd.tween_position,
+        cmd.tween_screen_position,
         cmd.tween_rotation,
         cmd.tween_scale,
     );
@@ -288,6 +289,7 @@ fn apply_animation_components(
     animation: Option<AnimationData>,
     animation_controller: Option<AnimationControllerData>,
     tween_position: Option<TweenPositionData>,
+    tween_screen_position: Option<TweenScreenPositionData>,
     tween_rotation: Option<TweenRotationData>,
     tween_scale: Option<TweenScaleData>,
 ) {
@@ -309,6 +311,19 @@ fn apply_animation_components(
                 y: td.from_y,
             }),
             MapPosition::from_vec(Vector2 {
+                x: td.to_x,
+                y: td.to_y,
+            }),
+            &td.config,
+        ));
+    }
+    if let Some(td) = tween_screen_position {
+        entity_commands.insert(super::build_tween(
+            ScreenPosition::from_vec(Vector2 {
+                x: td.from_x,
+                y: td.from_y,
+            }),
+            ScreenPosition::from_vec(Vector2 {
                 x: td.to_x,
                 y: td.to_y,
             }),

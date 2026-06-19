@@ -15,7 +15,7 @@ use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
-use crate::components::mapposition::MapPosition;
+use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 
@@ -103,7 +103,7 @@ pub trait TweenValue: Component<Mutability = Mutable> + Clone + Debug {
     fn interpolate(from: &Self, to: &Self, t: f32) -> Self;
 }
 
-impl TweenValue for MapPosition {
+impl<S: PositionSpace + Debug> TweenValue for Position2D<S> {
     fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
         Self::from_vec(lerp_v2(from.pos, to.pos, t))
     }
@@ -180,6 +180,8 @@ impl<T: TweenValue> Tween<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::mapposition::MapPosition;
+    use crate::components::screenposition::ScreenPosition;
 
     const EPSILON: f32 = 1e-6;
 
@@ -193,6 +195,10 @@ mod tests {
 
     fn map_position(x: f32, y: f32) -> MapPosition {
         MapPosition::from_vec(Vector2 { x, y })
+    }
+
+    fn screen_position(x: f32, y: f32) -> ScreenPosition {
+        ScreenPosition::from_vec(Vector2 { x, y })
     }
 
     fn scale(x: f32, y: f32) -> Scale {
@@ -359,6 +365,16 @@ mod tests {
     #[test]
     fn test_map_position_interpolation() {
         let mid = MapPosition::interpolate(&map_position(0.0, 0.0), &map_position(10.0, 20.0), 0.5);
+        assert!(vec_approx_eq(mid.pos, Vector2 { x: 5.0, y: 10.0 }));
+    }
+
+    #[test]
+    fn test_screen_position_interpolation() {
+        let mid = ScreenPosition::interpolate(
+            &screen_position(0.0, 0.0),
+            &screen_position(10.0, 20.0),
+            0.5,
+        );
         assert!(vec_approx_eq(mid.pos, Vector2 { x: 5.0, y: 10.0 }));
     }
 

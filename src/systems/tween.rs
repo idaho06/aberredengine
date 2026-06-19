@@ -120,6 +120,7 @@ mod tests {
     use crate::components::mapposition::MapPosition;
     use crate::components::rotation::Rotation;
     use crate::components::scale::Scale;
+    use crate::components::screenposition::ScreenPosition;
     use raylib::prelude::Vector2;
 
     const EPSILON: f32 = 1e-6;
@@ -468,6 +469,24 @@ mod tests {
             Tween::new(
                 MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
                 MapPosition::from_vec(Vector2 { x: 10.0, y: 20.0 }),
+                1.0,
+            ),
+            0.5,
+        );
+
+        assert!(approx_eq(target.pos.x, 5.0));
+        assert!(approx_eq(target.pos.y, 10.0));
+        assert!(approx_eq(tween.time, 0.5));
+        assert!(tween.playing);
+    }
+
+    #[test]
+    fn test_tween_system_updates_screen_position() {
+        let (target, tween) = run_tween_once(
+            ScreenPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+            Tween::new(
+                ScreenPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+                ScreenPosition::from_vec(Vector2 { x: 10.0, y: 20.0 }),
                 1.0,
             ),
             0.5,

@@ -950,6 +950,73 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_tween_screen_position", "Add screen position tween animation",
+        [
+            ("from_x", "number"),
+            ("from_y", "number"),
+            ("to_x", "number"),
+            ("to_y", "number"),
+            ("duration", "number"),
+        ],
+        |_, this: &mut LuaEntityBuilder, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
+            this.cmd.tween_screen_position = Some(TweenScreenPositionData {
+                from_x,
+                from_y,
+                to_x,
+                to_y,
+                config: TweenConfig::new(duration),
+            });
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_tween_screen_position_easing", "Set easing for screen position tween",
+        [("easing", "string")],
+        |_, this: &mut LuaEntityBuilder, easing: String| {
+            let Some(ref mut tween) = this.cmd.tween_screen_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_screen_position_easing() requires with_tween_screen_position() first",
+                ));
+            };
+            tween.config.easing = easing;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_tween_screen_position_loop", "Set loop mode for screen position tween",
+        [("loop_mode", "string")],
+        |_, this: &mut LuaEntityBuilder, loop_mode: String| {
+            let Some(ref mut tween) = this.cmd.tween_screen_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_screen_position_loop() requires with_tween_screen_position() first",
+                ));
+            };
+            tween.config.loop_mode = loop_mode;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_tween_screen_position_backwards", "Start screen position tween in reverse",
+        [],
+        |_, this: &mut LuaEntityBuilder, (): ()| {
+            let Some(ref mut tween) = this.cmd.tween_screen_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_screen_position_backwards() requires with_tween_screen_position() first",
+                ));
+            };
+            tween.config.backwards = true;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_tween_rotation", "Add rotation tween animation",
         [("from", "number"), ("to", "number"), ("duration", "number")],
         |_, this: &mut LuaEntityBuilder, (from, to, duration): (f32, f32, f32)| {

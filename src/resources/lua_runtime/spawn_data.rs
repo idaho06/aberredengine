@@ -100,6 +100,16 @@ pub struct TweenPositionData {
     pub config: TweenConfig,
 }
 
+/// TweenScreenPosition component data for spawning.
+#[derive(Debug, Clone)]
+pub struct TweenScreenPositionData {
+    pub from_x: f32,
+    pub from_y: f32,
+    pub to_x: f32,
+    pub to_y: f32,
+    pub config: TweenConfig,
+}
+
 /// TweenRotation component data for spawning.
 #[derive(Debug, Clone)]
 pub struct TweenRotationData {
@@ -376,6 +386,8 @@ pub struct SpawnCmd {
     pub grid_layout: Option<(String, String, f32)>,
     /// TweenPosition component data
     pub tween_position: Option<TweenPositionData>,
+    /// TweenScreenPosition component data
+    pub tween_screen_position: Option<TweenScreenPositionData>,
     /// TweenRotation component data
     pub tween_rotation: Option<TweenRotationData>,
     /// TweenScale component data

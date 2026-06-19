@@ -1814,6 +1814,29 @@ function EntityBuilder:with_tween_scale_easing(easing) end
 ---@return EntityBuilder
 function EntityBuilder:with_tween_scale_loop(loop_mode) end
 
+---Add screen position tween animation
+---@param from_x number
+---@param from_y number
+---@param to_x number
+---@param to_y number
+---@param duration number
+---@return EntityBuilder
+function EntityBuilder:with_tween_screen_position(from_x, from_y, to_x, to_y, duration) end
+
+---Start screen position tween in reverse
+---@return EntityBuilder
+function EntityBuilder:with_tween_screen_position_backwards() end
+
+---Set easing for screen position tween
+---@param easing string
+---@return EntityBuilder
+function EntityBuilder:with_tween_screen_position_easing(easing) end
+
+---Set loop mode for screen position tween
+---@param loop_mode string
+---@return EntityBuilder
+function EntityBuilder:with_tween_screen_position_loop(loop_mode) end
+
 ---Set velocity (creates RigidBody if needed)
 ---@param vx number
 ---@param vy number
@@ -2240,6 +2263,29 @@ function CollisionEntityBuilder:with_tween_scale_easing(easing) end
 ---@param loop_mode string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_scale_loop(loop_mode) end
+
+---Add screen position tween animation
+---@param from_x number
+---@param from_y number
+---@param to_x number
+---@param to_y number
+---@param duration number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_screen_position(from_x, from_y, to_x, to_y, duration) end
+
+---Start screen position tween in reverse
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_screen_position_backwards() end
+
+---Set easing for screen position tween
+---@param easing string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_screen_position_easing(easing) end
+
+---Set loop mode for screen position tween
+---@param loop_mode string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_screen_position_loop(loop_mode) end
 
 ---Set velocity (creates RigidBody if needed)
 ---@param vx number
