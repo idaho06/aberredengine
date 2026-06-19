@@ -53,6 +53,11 @@ pub struct InputState {
     pub mouse_world_x: f32,
     /// Mouse Y in world-space (after camera transform). Matches MapPosition coordinates.
     pub mouse_world_y: f32,
+    /// Raw left mouse button state. Unlike action_1/action_2/etc., this is
+    /// NOT routed through InputBindings/InputAction rebinding — GUI hit
+    /// testing always reacts to the literal left mouse button, same tier as
+    /// mouse_x/mouse_y.
+    pub mouse_left_button: BoolState,
 }
 
 #[cfg(test)]
@@ -93,5 +98,13 @@ mod tests {
         assert!(!input.maindirection_up.just_pressed);
         assert!(!input.action_1.just_pressed);
         assert!(!input.action_back.just_released);
+    }
+
+    #[test]
+    fn test_inputstate_mouse_left_button_default_inactive() {
+        let input = InputState::default();
+        assert!(!input.mouse_left_button.active);
+        assert!(!input.mouse_left_button.just_pressed);
+        assert!(!input.mouse_left_button.just_released);
     }
 }

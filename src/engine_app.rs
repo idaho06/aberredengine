@@ -90,6 +90,8 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
+use crate::resources::guiinputstate::GuiInputState;
+use crate::systems::gui_button_click::gui_button_click_observer;
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
@@ -117,6 +119,7 @@ use crate::systems::gamestate::{
 };
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
+use crate::systems::gui_hit_test::gui_hit_test_system;
 use crate::systems::gui_layout::gui_layout_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
@@ -630,6 +633,7 @@ impl EngineBuilder {
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DebugOverlayConfig::default());
+        world.insert_resource(GuiInputState::default());
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {
@@ -747,6 +751,7 @@ impl EngineBuilder {
         world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
+        world.spawn((Observer::new(gui_button_click_observer), Persistent));
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
@@ -804,11 +809,15 @@ impl EngineBuilder {
         update.add_systems(tween_system::<Rotation>);
         update.add_systems(tween_system::<Scale>);
         update.add_systems(tween_system::<ScreenPosition>);
-        // gui_hit_test_system/gui_click_system ordering will be added once those systems exist
-        // (see docs/gui-system-architecture.md, Systems & Execution Order).
         update.add_systems(
             gui_layout_system
                 .after(tween_system::<ScreenPosition>)
+                .before(render_system),
+        );
+        update.add_systems(
+            gui_hit_test_system
+                .after(update_input_state)
+                .after(gui_layout_system)
                 .before(render_system),
         );
         update.add_systems(particle_emitter_system.before(movement));

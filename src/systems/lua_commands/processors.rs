@@ -16,7 +16,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::{GuiNinePatch, GuiTheme};
+use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
@@ -253,8 +253,20 @@ pub fn process_asset_command<F1>(
     }
 }
 
-/// Process a single render command from Lua and update post-process state.
-pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShader, commands: &mut Commands) {
+/// Process a single render command from Lua and update post-process/GUI-theme state.
+///
+/// `gui_theme_staging` is shared across the whole per-frame drain loop (not
+/// reset per command) so that `SetGuiThemePanel`/`SetGuiThemeButton` calls in
+/// the same batch — or across frames — mutate one field at a time instead of
+/// each blindly replacing the whole `GuiTheme` resource and stomping
+/// whichever field the other one had already set. Callers seed it from the
+/// current resource (if any) before draining and write it back with exactly
+/// one `commands.insert_resource(...)` after the loop.
+pub fn process_render_command(
+    cmd: RenderCmd,
+    post_process: &mut PostProcessShader,
+    gui_theme_staging: &mut Option<GuiTheme>,
+) {
     match cmd {
         RenderCmd::SetPostProcessShader { ids } => {
             post_process.set_shader_chain(ids.clone());
@@ -293,16 +305,47 @@ pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShad
             right,
             bottom,
         } => {
-            commands.insert_resource(GuiTheme {
-                panel: GuiNinePatch {
-                    tex_key: Arc::from(tex_key),
-                    source: Rectangle::new(source_x, source_y, source_w, source_h),
-                    left,
-                    top,
-                    right,
-                    bottom,
-                },
-            });
+            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
+            theme.panel = GuiNinePatch {
+                tex_key: Arc::from(tex_key),
+                source: Rectangle::new(source_x, source_y, source_w, source_h),
+                left,
+                top,
+                right,
+                bottom,
+            };
+        }
+        RenderCmd::SetGuiThemeButton {
+            state,
+            tex_key,
+            source_x,
+            source_y,
+            source_w,
+            source_h,
+            left,
+            top,
+            right,
+            bottom,
+        } => {
+            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
+            let skin = theme.button.get_or_insert_with(GuiButtonSkin::default);
+            let patch = GuiNinePatch {
+                tex_key: Arc::from(tex_key),
+                source: Rectangle::new(source_x, source_y, source_w, source_h),
+                left,
+                top,
+                right,
+                bottom,
+            };
+            match state.as_str() {
+                "normal" => skin.normal = patch,
+                "hover" => skin.hover = patch,
+                "pressed" => skin.pressed = patch,
+                "disabled" => skin.disabled = patch,
+                other => {
+                    warn!("set_gui_theme_button: unknown state '{}', ignoring", other);
+                }
+            }
         }
     }
 }
@@ -464,11 +507,95 @@ mod tests {
     use bevy_ecs::system::SystemState;
     use raylib::prelude::Vector2;
 
-    use super::{process_animation_command, process_audio_command, process_signal_command};
+    use super::{
+        process_animation_command, process_audio_command, process_render_command,
+        process_signal_command,
+    };
     use crate::events::audio::AudioCmd;
     use crate::resources::animationstore::AnimationStore;
-    use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd, SignalCmd};
+    use crate::resources::guitheme::GuiTheme;
+    use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd, RenderCmd, SignalCmd};
+    use crate::resources::postprocessshader::PostProcessShader;
     use crate::resources::worldsignals::WorldSignals;
+
+    fn set_button_cmd(state: &str) -> RenderCmd {
+        RenderCmd::SetGuiThemeButton {
+            state: state.to_string(),
+            tex_key: format!("tex_{state}"),
+            source_x: 0.0,
+            source_y: 0.0,
+            source_w: 32.0,
+            source_h: 32.0,
+            left: 4,
+            top: 4,
+            right: 4,
+            bottom: 4,
+        }
+    }
+
+    #[test]
+    fn gui_theme_staging_panel_then_all_button_states_survive() {
+        let mut post_process = PostProcessShader::default();
+        let mut staging: Option<GuiTheme> = None;
+
+        process_render_command(
+            RenderCmd::SetGuiThemePanel {
+                tex_key: "panel_tex".to_string(),
+                source_x: 0.0,
+                source_y: 0.0,
+                source_w: 64.0,
+                source_h: 64.0,
+                left: 6,
+                top: 6,
+                right: 6,
+                bottom: 6,
+            },
+            &mut post_process,
+            &mut staging,
+        );
+        for state in ["normal", "hover", "pressed", "disabled"] {
+            process_render_command(set_button_cmd(state), &mut post_process, &mut staging);
+        }
+
+        let theme = staging.expect("theme should be staged");
+        assert_eq!(&*theme.panel.tex_key, "panel_tex");
+        let skin = theme.button.expect("button skin should be staged");
+        assert_eq!(&*skin.normal.tex_key, "tex_normal");
+        assert_eq!(&*skin.hover.tex_key, "tex_hover");
+        assert_eq!(&*skin.pressed.tex_key, "tex_pressed");
+        assert_eq!(&*skin.disabled.tex_key, "tex_disabled");
+    }
+
+    #[test]
+    fn gui_theme_staging_button_states_then_panel_survive_reverse_order() {
+        let mut post_process = PostProcessShader::default();
+        let mut staging: Option<GuiTheme> = None;
+
+        for state in ["normal", "hover", "pressed", "disabled"] {
+            process_render_command(set_button_cmd(state), &mut post_process, &mut staging);
+        }
+        process_render_command(
+            RenderCmd::SetGuiThemePanel {
+                tex_key: "panel_tex".to_string(),
+                source_x: 0.0,
+                source_y: 0.0,
+                source_w: 64.0,
+                source_h: 64.0,
+                left: 6,
+                top: 6,
+                right: 6,
+                bottom: 6,
+            },
+            &mut post_process,
+            &mut staging,
+        );
+
+        let theme = staging.expect("theme should be staged");
+        assert_eq!(&*theme.panel.tex_key, "panel_tex");
+        let skin = theme.button.expect("button skin should be staged");
+        assert_eq!(&*skin.normal.tex_key, "tex_normal");
+        assert_eq!(&*skin.disabled.tex_key, "tex_disabled");
+    }
 
     #[test]
     fn stop_all_sounds_maps_to_stop_all_fx() {

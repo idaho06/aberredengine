@@ -1368,6 +1368,19 @@ function engine.set_background_color(r, g, b) end
 ---@param enabled boolean
 function engine.set_fullscreen(enabled) end
 
+---Set one button-state nine-patch skin. Call once per state: "normal"/"hover"/"pressed"/"disabled"
+---@param state string
+---@param tex_key string
+---@param source_x number
+---@param source_y number
+---@param source_w number
+---@param source_h number
+---@param left integer
+---@param top integer
+---@param right integer
+---@param bottom integer
+function engine.set_gui_theme_button(state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+
 ---Set the GuiWindow theme's nine-patch panel texture/region/borders
 ---@param tex_key string
 ---@param source_x number
@@ -1488,6 +1501,15 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---@param name string
 ---@return EntityBuilder
 function EntityBuilder:with_group(name) end
+
+---Set GuiButton component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (no engine-wide default font exists; a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---@param width number
+---@param height number
+---@param label string
+---@param font string
+---@param callback_name string
+---@return EntityBuilder
+function EntityBuilder:with_gui_button(width, height, label, font, callback_name) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number
@@ -1950,6 +1972,15 @@ function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
 ---@param name string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_group(name) end
+
+---Set GuiButton component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (no engine-wide default font exists; a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---@param width number
+---@param height number
+---@param label string
+---@param font string
+---@param callback_name string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_button(width, height, label, font, callback_name) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number

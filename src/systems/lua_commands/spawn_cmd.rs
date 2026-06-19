@@ -15,6 +15,7 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
+use crate::components::guibutton::GuiButton;
 use crate::components::guioffset::GuiOffset;
 use crate::components::guiwindow::GuiWindow;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
@@ -56,9 +57,57 @@ pub fn process_spawn_command(
     cmd: SpawnCmd,
     world_signals: &mut WorldSignals,
 ) {
+    // Captured before `cmd` moves into `apply_components` — the caption
+    // child is spawned synchronously below, same frame as the button
+    // itself, since `entity` is already known here (unlike GuiWindow's
+    // children, which need a Lua `:with_lua_setup()` round trip because
+    // window and children come from two separate top-level `:build()` calls).
+    let gui_button_caption = cmd.gui_button.clone();
+    let button_zindex = cmd.zindex;
+
     let mut entity_commands = commands.spawn_empty();
     let entity = entity_commands.id();
     apply_components(&mut entity_commands, cmd, world_signals, entity);
+
+    if let Some(btn) = gui_button_caption {
+        spawn_gui_button_caption(
+            commands,
+            entity,
+            &btn.label,
+            btn.font,
+            ZIndex(button_zindex.unwrap_or(0.0)),
+        );
+    }
+}
+
+/// Spawns a caption child entity for a `GuiButton`: `DynamicText` +
+/// `ChildOf(button)` + `GuiOffset(padding)` + the same `ZIndex` as the
+/// button — the `Panel`/`Text` `variant_rank` tie-break (see
+/// `src/systems/render/mod.rs`) draws text above the button's background at
+/// equal z, so no separate "caption z" is needed. Padding is a fixed
+/// constant for v1, not theme-driven: `DynamicText`'s size is only known
+/// after a frame (`dynamictext_size_system`), so perfect centering is a
+/// future refinement, not a v1 requirement. Font size/color are likewise
+/// fixed for v1 — no caller varies them yet (revisit once `GuiTheme.font`/
+/// `font_size`/`text_color` exist, per `docs/gui-system-architecture.md`'s
+/// Theme section).
+pub fn spawn_gui_button_caption(
+    commands: &mut Commands,
+    button: Entity,
+    label: &str,
+    font: impl Into<String>,
+    z_index: ZIndex,
+) -> Entity {
+    const CAPTION_PADDING: Vector2 = Vector2 { x: 8.0, y: 4.0 };
+    const CAPTION_FONT_SIZE: f32 = 16.0;
+    commands
+        .spawn((
+            DynamicText::new(label, font, CAPTION_FONT_SIZE, Color::WHITE),
+            ChildOf(button),
+            GuiOffset(CAPTION_PADDING),
+            z_index,
+        ))
+        .id()
 }
 
 pub(super) fn apply_components(
@@ -84,6 +133,11 @@ pub(super) fn apply_components(
         entity_commands.insert(GuiWindow {
             size: Vector2::new(w, h),
         });
+    }
+    if let Some(ref btn) = cmd.gui_button {
+        entity_commands.insert(
+            GuiButton::new(btn.width, btn.height).with_on_click_callback(btn.callback_name.clone()),
+        );
     }
 
     apply_transform_components(
@@ -679,6 +733,7 @@ mod tests {
     use bevy_ecs::system::SystemState;
 
     use super::*;
+    use crate::resources::lua_runtime::GuiButtonSpawnData;
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -734,5 +789,49 @@ mod tests {
         // Source entity plus the newly cloned entity should both exist.
         let mut query = world.query::<&MapPosition>();
         assert_eq!(query.iter(&world).count(), 2);
+    }
+
+    #[test]
+    fn gui_button_spawn_creates_button_and_caption_in_same_call() {
+        let mut world = World::new();
+        let mut world_signals = WorldSignals::default();
+
+        let mut system_state = SystemState::<Commands>::new(&mut world);
+        {
+            let mut commands = system_state.get_mut(&mut world);
+            process_spawn_command(
+                &mut commands,
+                SpawnCmd {
+                    screen_position: Some((10.0, 20.0)),
+                    zindex: Some(5.0),
+                    gui_button: Some(GuiButtonSpawnData {
+                        width: 80.0,
+                        height: 24.0,
+                        label: "Start".to_string(),
+                        font: "test_font".to_string(),
+                        callback_name: "on_start_clicked".to_string(),
+                    }),
+                    ..Default::default()
+                },
+                &mut world_signals,
+            );
+        }
+        system_state.apply(&mut world);
+
+        let (button_entity, button) = world
+            .query::<(Entity, &GuiButton)>()
+            .iter(&world)
+            .next()
+            .expect("button entity should be spawned");
+        assert_eq!(button.on_click_callback.as_deref(), Some("on_start_clicked"));
+
+        let (caption_parent, caption_text, caption_zindex) = world
+            .query::<(&ChildOf, &DynamicText, &ZIndex)>()
+            .iter(&world)
+            .next()
+            .expect("caption child entity should be spawned in the same call");
+        assert_eq!(caption_parent.parent(), button_entity);
+        assert_eq!(&*caption_text.text, "Start");
+        assert_eq!(caption_zindex.0, 5.0);
     }
 }

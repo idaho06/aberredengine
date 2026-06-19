@@ -12,6 +12,8 @@
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::worldsignals::WorldSignals)
+//! - [`gui_button_click`] – dispatch the Lua/Rust callback chain for a clicked `GuiButton`
+//! - [`gui_hit_test`] – resolve `GuiButton` hover/press/click state from cursor + mouse button
 //! - [`gui_layout`] – resolve GUI children's `ScreenPosition` from parent `ScreenPosition` + `GuiOffset`
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
 //! - [`inputsimplecontroller`] – translate input state into velocity on entities
@@ -54,6 +56,8 @@ pub mod gameconfig;
 pub mod gamestate;
 pub mod gridlayout;
 pub mod group;
+pub mod gui_button_click;
+pub mod gui_hit_test;
 pub mod gui_layout;
 pub mod input;
 pub mod inputaccelerationcontroller;

@@ -56,6 +56,20 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
+    /// Set one state's nine-patch in the global `GuiTheme`'s button skin.
+    /// `state` is one of "normal"/"hover"/"pressed"/"disabled".
+    SetGuiThemeButton {
+        state: String,
+        tex_key: String,
+        source_x: f32,
+        source_y: f32,
+        source_w: f32,
+        source_h: f32,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    },
 }
 
 /// Audio commands that Lua can queue.

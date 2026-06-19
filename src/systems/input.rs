@@ -177,4 +177,13 @@ pub fn update_input_state(
     let world_mouse_pos = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
     input.mouse_world_x = world_mouse_pos.x;
     input.mouse_world_y = world_mouse_pos.y;
+
+    // --- Raw left mouse button (not routed through InputBindings) ---
+    // GUI hit-testing reacts to the literal left mouse button, independent
+    // of any action rebinding.
+    input.mouse_left_button = crate::resources::input::BoolState {
+        active: rl.is_mouse_button_down(raylib::ffi::MouseButton::MOUSE_BUTTON_LEFT),
+        just_pressed: rl.is_mouse_button_pressed(raylib::ffi::MouseButton::MOUSE_BUTTON_LEFT),
+        just_released: rl.is_mouse_button_released(raylib::ffi::MouseButton::MOUSE_BUTTON_LEFT),
+    };
 }

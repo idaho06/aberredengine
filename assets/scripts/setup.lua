@@ -229,6 +229,7 @@ end
 local function load_gui_demo()
     engine.log_debug("Loading GUI Demo assets...")
     engine.load_texture("gui-bluewindow", "./assets/textures/gui/bluewindow_6_6_6_6.png")
+    engine.load_texture("gui-button-atlas", "./assets/textures/gui/button_atlas_8_8_8_8.png")
 end
 
 --- Called during the Setup game state to load all assets.

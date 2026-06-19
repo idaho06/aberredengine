@@ -1,6 +1,7 @@
 -- scenes/gui_demo.lua
--- GuiWindow + a single GuiOffset child, exercising the Child Layout Model
--- (gui_layout_system). No buttons/hit-test yet. See
+-- GuiWindow + a GuiOffset child label + a real GuiButton, exercising the
+-- Child Layout Model (gui_layout_system) and hit-test/click
+-- (gui_hit_test_system + gui_button_click_observer). See
 -- docs/gui-system-architecture.md for the full design.
 
 local M = {}
@@ -19,6 +20,21 @@ local function build_gui_demo_window(ctx)
         :with_gui_offset(16, 16)
         :with_zindex(2)
         :build()
+
+    -- GuiButton's caption spawns in the same call as the button itself (no
+    -- :with_lua_setup() round trip needed here) — see
+    -- docs/gui-system-architecture.md's Components section.
+    engine.spawn()
+        :with_gui_button(100, 28, "Click Me", "arcade", "on_gui_demo_button_clicked")
+        :with_parent(ctx.id)
+        :with_gui_offset(16, 50)
+        :with_zindex(2)
+        :build()
+end
+
+--- Fired by gui_button_click_observer when the demo button is clicked.
+local function on_gui_demo_button_clicked()
+    engine.log_debug("GUI Demo button clicked!")
 end
 
 --- Called each frame when gui_demo scene is active.
@@ -34,6 +50,7 @@ end
 
 M._callbacks = {
     build_gui_demo_window = build_gui_demo_window,
+    on_gui_demo_button_clicked = on_gui_demo_button_clicked,
     on_update_gui_demo = on_update_gui_demo,
 }
 
@@ -54,6 +71,15 @@ function M.spawn()
     -- switch_scene) — unlike AssetCmd's "preserve" queue, it would never
     -- survive being queued during on_setup(), before the first scene switch.
     engine.set_gui_theme_panel("gui-bluewindow", 0, 0, 64, 64, 6, 6, 6, 6)
+
+    -- Button skin: button_atlas_8_8_8_8.png is a 128x128 2x2 grid of 64x64
+    -- cells (top-left=normal, top-right=hover, bottom-left=pressed,
+    -- bottom-right=disabled), 8px nine-patch borders on all sides (encoded
+    -- in the filename, same convention as bluewindow_6_6_6_6.png above).
+    engine.set_gui_theme_button("normal", "gui-button-atlas", 0, 0, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_button("hover", "gui-button-atlas", 64, 0, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_button("pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_button("disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
 
     engine.spawn()
         :with_gui_window(200, 150)

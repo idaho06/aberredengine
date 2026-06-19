@@ -204,6 +204,42 @@ impl LuaRuntime {
                 ("bottom", "integer")
             ]
         );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_button",
+            render_commands,
+            |(state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
+                String, String, f32, f32, f32, f32, i32, i32, i32, i32
+            ),
+            RenderCmd::SetGuiThemeButton {
+                state,
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom
+            },
+            desc = "Set one button-state nine-patch skin. Call once per state: \"normal\"/\"hover\"/\"pressed\"/\"disabled\"",
+            cat = "render",
+            params = [
+                ("state", "string"),
+                ("tex_key", "string"),
+                ("source_x", "number"),
+                ("source_y", "number"),
+                ("source_w", "number"),
+                ("source_h", "number"),
+                ("left", "integer"),
+                ("top", "integer"),
+                ("right", "integer"),
+                ("bottom", "integer")
+            ]
+        );
 
         Ok(())
     }

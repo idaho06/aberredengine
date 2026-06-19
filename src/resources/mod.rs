@@ -17,7 +17,8 @@
 //! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
 //! - [`group`] – set of group names tracked for entity counting
-//! - [`guitheme`] – theme resource for GUI rendering (nine-patch window panel in v1)
+//! - [`guiinputstate`] – per-frame scratch state for GUI click consumption
+//! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`imgui_bridge`] – internal Dear ImGui backend that replaces raylib's removed feature
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
@@ -42,6 +43,7 @@ pub mod fullscreen;
 pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
+pub mod guiinputstate;
 pub mod guitheme;
 pub mod imgui_bridge;
 pub mod input;

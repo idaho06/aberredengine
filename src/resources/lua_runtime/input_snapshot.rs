@@ -69,6 +69,8 @@ pub struct DigitalInputs {
     // Special function keys
     pub debug: DigitalButtonState,
     pub fullscreen: DigitalButtonState,
+    // Raw left mouse button (not routed through InputBindings)
+    pub mouse_left: DigitalButtonState,
 }
 
 /// Analog input values.
@@ -157,6 +159,8 @@ impl InputSnapshot {
                 // Function keys
                 debug: DigitalButtonState::from_bool_state(&input.mode_debug),
                 fullscreen: DigitalButtonState::from_bool_state(&input.fullscreen_toggle),
+                // Raw left mouse button
+                mouse_left: DigitalButtonState::from_bool_state(&input.mouse_left_button),
             },
             analog: AnalogInputs {
                 scroll_y: input.scroll_y,
@@ -432,6 +436,17 @@ mod tests {
         let snap = InputSnapshot::from_input_state(&input);
         assert_eq!(snap.analog.mouse_world_x, -150.0);
         assert_eq!(snap.analog.mouse_world_y, 75.5);
+    }
+
+    #[test]
+    fn test_mouse_left_button_field_populated() {
+        let mut input = default_input();
+        input.mouse_left_button.active = true;
+        input.mouse_left_button.just_pressed = true;
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.digital.mouse_left.pressed);
+        assert!(snap.digital.mouse_left.just_pressed);
+        assert!(!snap.digital.mouse_left.just_released);
     }
 
     #[test]

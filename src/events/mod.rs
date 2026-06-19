@@ -9,6 +9,7 @@
 //! - [`audio`] – commands and messages for the background audio thread
 //! - [`collision`] – collision notifications emitted by the physics/collision system
 //! - [`gamestate`] – state transition notifications for the high-level game flow
+//! - [`gui_button`] – GUI button click events
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
 //! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
@@ -21,6 +22,7 @@ pub mod animation;
 pub mod audio;
 pub mod collision;
 pub mod gamestate;
+pub mod gui_button;
 pub mod input;
 #[cfg(feature = "lua")]
 pub mod luatimer;

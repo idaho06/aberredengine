@@ -29,6 +29,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::guibutton::{GuiButton, GuiWidgetState};
 use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -46,7 +47,7 @@ use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::{GuiNinePatch, GuiTheme};
+use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme};
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -268,6 +269,7 @@ pub struct RenderQueries<'w, 's> {
         ),
     >,
     pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
+    pub gui_buttons: Query<'w, 's, (&'static GuiButton, &'static ScreenPosition, &'static ZIndex)>,
 }
 
 /// Extra resources needed for the imgui debug panels.
@@ -778,6 +780,7 @@ pub fn render_system(
                 &queries.screen_sprites,
                 &queries.screen_texts,
                 &queries.gui_windows,
+                &queries.gui_buttons,
                 res.gui_theme.as_deref(),
                 textures,
                 fonts,
@@ -931,12 +934,23 @@ pub fn render_system(
 /// heterogeneous buffer on the cheaper allocation-free sort even though it
 /// holds two item types, which matters once this buffer holds tens of
 /// thousands of items (e.g. a screen-space bunnymark-style stress scene).
+/// Selects the nine-patch for a `GuiButton`'s current state from its skin.
+fn resolve_button_patch(skin: &GuiButtonSkin, state: GuiWidgetState) -> &GuiNinePatch {
+    match state {
+        GuiWidgetState::Normal => &skin.normal,
+        GuiWidgetState::Hovered => &skin.hover,
+        GuiWidgetState::Pressed => &skin.pressed,
+        GuiWidgetState::Disabled => &skin.disabled,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
     screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
+    gui_buttons: &Query<(&GuiButton, &ScreenPosition, &ZIndex)>,
     gui_theme: Option<&GuiTheme>,
     textures: &TextureStore,
     fonts: &FontStore,
@@ -955,6 +969,16 @@ fn draw_screen_space(
                 pos: *p,
             })
         }));
+        if let Some(skin) = &theme.button {
+            buffer.extend(gui_buttons.iter().map(|(b, p, z)| {
+                ScreenDrawItem::Panel(ScreenPanelBufferItem {
+                    panel: resolve_button_patch(skin, b.state).clone(),
+                    size: b.size,
+                    z_index: *z,
+                    pos: *p,
+                })
+            }));
+        }
     }
     buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint)| {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
@@ -1052,5 +1076,48 @@ mod screen_draw_buffer_tests {
         let sorted = sort(buffer);
         assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
         assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
+    }
+}
+
+#[cfg(test)]
+mod resolve_button_patch_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn patch(tag: &str) -> GuiNinePatch {
+        GuiNinePatch {
+            tex_key: Arc::from(tag),
+            ..GuiNinePatch::default()
+        }
+    }
+
+    fn skin() -> GuiButtonSkin {
+        GuiButtonSkin {
+            normal: patch("normal"),
+            hover: patch("hover"),
+            pressed: patch("pressed"),
+            disabled: patch("disabled"),
+        }
+    }
+
+    #[test]
+    fn resolves_each_state_to_its_matching_patch() {
+        let skin = skin();
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Normal).tex_key,
+            "normal"
+        );
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Hovered).tex_key,
+            "hover"
+        );
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Pressed).tex_key,
+            "pressed"
+        );
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Disabled).tex_key,
+            "disabled"
+        );
     }
 }

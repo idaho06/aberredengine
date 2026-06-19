@@ -194,6 +194,7 @@ pub struct InputCtxTables {
     pub secondary_right: LuaTable,
     pub debug: LuaTable,
     pub fullscreen: LuaTable,
+    pub mouse_left: LuaTable,
 }
 
 /// Pooled entity context tables, owned directly by `LuaRuntime` and reused for
@@ -277,7 +278,7 @@ pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
     }
 }
 
-/// Invokes `$cb!(field)` for each of the 18 digital button fields shared by
+/// Invokes `$cb!(field)` for each of the 19 digital button fields shared by
 /// `DigitalInputs` and `InputCtxTables` (field and table names match for all
 /// of them). Used by [`LuaRuntime::diff_digital_tables`] and
 /// [`LuaRuntime::write_all_digital_tables`] so the button list is declared
@@ -303,6 +304,7 @@ macro_rules! for_each_digital_button {
         $cb!(secondary_right);
         $cb!(debug);
         $cb!(fullscreen);
+        $cb!(mouse_left);
     };
 }
 
@@ -488,6 +490,7 @@ impl LuaRuntime {
         let secondary_right = lua.create_table()?;
         let debug = lua.create_table()?;
         let fullscreen = lua.create_table()?;
+        let mouse_left = lua.create_table()?;
 
         digital.set("up", up.clone())?;
         digital.set("down", down.clone())?;
@@ -508,6 +511,7 @@ impl LuaRuntime {
         digital.set("secondary_right", secondary_right.clone())?;
         digital.set("debug", debug.clone())?;
         digital.set("fullscreen", fullscreen.clone())?;
+        digital.set("mouse_left", mouse_left.clone())?;
 
         input.set("digital", digital.clone())?;
         input.set("analog", analog.clone())?;
@@ -535,6 +539,7 @@ impl LuaRuntime {
             secondary_right,
             debug,
             fullscreen,
+            mouse_left,
         })
     }
 
