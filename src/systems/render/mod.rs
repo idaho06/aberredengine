@@ -143,6 +143,18 @@ impl ScreenDrawItem {
             ScreenDrawItem::Text(t) => t.z_index,
         }
     }
+
+    /// Secondary sort key, used only to break ties at equal `z_index`: text
+    /// (1) always sorts after sprite (0), so a caption draws on top of a
+    /// same-z background. Encoding the tie-break here (rather than relying on
+    /// `sort_by`'s stability + insertion order) lets the buffer use the
+    /// faster in-place `sort_unstable_by` instead of an allocating stable sort.
+    fn variant_rank(&self) -> u8 {
+        match self {
+            ScreenDrawItem::Sprite(_) => 0,
+            ScreenDrawItem::Text(_) => 1,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -863,13 +875,14 @@ pub fn render_system(
 /// Collects screen-space sprites and texts into one merged buffer, sorts by
 /// [`ZIndex`], and dispatches draw calls in that order.
 ///
-/// Sprites are collected before texts, and the sort is **stable** (not
-/// `sort_unstable_by`, unlike the homogeneous world-space buffers) so that
-/// items sharing a z-index break ties deterministically: text draws on top of
-/// a same-z sprite, which is the sane default for UI captions over panel
-/// backgrounds. Don't "simplify" this back to `sort_unstable_by` by copying
-/// the world-space pattern — the world-space buffers never face this
-/// tie-break problem because each one only ever holds one item type.
+/// Uses the same in-place `sort_unstable_by` as the world-space buffers — the
+/// equal-z tie-break (text drawn on top of a same-z sprite, the sane default
+/// for UI captions over panel backgrounds) is encoded directly in the
+/// comparator via [`ScreenDrawItem::variant_rank`] instead of relying on
+/// `sort_by`'s stability and a fixed collection order. This keeps the merged,
+/// heterogeneous buffer on the cheaper allocation-free sort even though it
+/// holds two item types, which matters once this buffer holds tens of
+/// thousands of items (e.g. a screen-space bunnymark-style stress scene).
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
@@ -899,10 +912,11 @@ fn draw_screen_space(
         })
     }));
 
-    buffer.sort_by(|a, b| {
+    buffer.sort_unstable_by(|a, b| {
         a.z_index()
             .partial_cmp(&b.z_index())
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
     });
 
     for item in buffer.iter() {
@@ -946,10 +960,11 @@ mod screen_draw_buffer_tests {
     }
 
     fn sort(mut buffer: Vec<ScreenDrawItem>) -> Vec<ScreenDrawItem> {
-        buffer.sort_by(|a, b| {
+        buffer.sort_unstable_by(|a, b| {
             a.z_index()
                 .partial_cmp(&b.z_index())
                 .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
         });
         buffer
     }
@@ -964,9 +979,17 @@ mod screen_draw_buffer_tests {
 
     #[test]
     fn equal_zindex_ties_break_with_text_on_top() {
-        // Sprites collected before texts (matches draw_screen_space), then a
-        // stable sort must preserve that relative order at equal z.
         let buffer = vec![sprite_item(1.0), text_item(1.0)];
+        let sorted = sort(buffer);
+        assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
+        assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
+    }
+
+    #[test]
+    fn equal_zindex_tie_break_is_independent_of_insertion_order() {
+        // The tie-break is encoded in `variant_rank`, not insertion order, so
+        // it must hold even when texts are pushed before sprites.
+        let buffer = vec![text_item(1.0), sprite_item(1.0)];
         let sorted = sort(buffer);
         assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
         assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
