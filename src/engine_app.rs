@@ -117,6 +117,7 @@ use crate::systems::gamestate::{
 };
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
+use crate::systems::gui_layout::gui_layout_system;
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
@@ -802,10 +803,14 @@ impl EngineBuilder {
         update.add_systems(tween_system::<MapPosition>);
         update.add_systems(tween_system::<Rotation>);
         update.add_systems(tween_system::<Scale>);
-        // tween_system::<ScreenPosition> must run .before(gui_layout_system) once that system
-        // exists, so animated window positions don't leave children trailing by one frame (see
-        // docs/gui-system-architecture.md, Animation / Tweening).
         update.add_systems(tween_system::<ScreenPosition>);
+        // gui_hit_test_system/gui_click_system ordering will be added once those systems exist
+        // (see docs/gui-system-architecture.md, Systems & Execution Order).
+        update.add_systems(
+            gui_layout_system
+                .after(tween_system::<ScreenPosition>)
+                .before(render_system),
+        );
         update.add_systems(particle_emitter_system.before(movement));
         update.add_systems(movement);
         update.add_systems(ttl_system.after(movement));

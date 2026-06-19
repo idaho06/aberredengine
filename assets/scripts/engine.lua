@@ -1489,6 +1489,12 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---@return EntityBuilder
 function EntityBuilder:with_group(name) end
 
+---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
+---@param x number
+---@param y number
+---@return EntityBuilder
+function EntityBuilder:with_gui_offset(x, y) end
+
 ---Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.
 ---@param width number
 ---@param height number
@@ -1944,6 +1950,12 @@ function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
 ---@param name string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_group(name) end
+
+---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
+---@param x number
+---@param y number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_offset(x, y) end
 
 ---Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.
 ---@param width number

@@ -1,10 +1,25 @@
 -- scenes/gui_demo.lua
--- Smallest GUI slice: a single static GuiWindow panel, no children/buttons yet.
--- See docs/gui-system-architecture.md for the full design.
+-- GuiWindow + a single GuiOffset child, exercising the Child Layout Model
+-- (gui_layout_system). No buttons/hit-test yet. See
+-- docs/gui-system-architecture.md for the full design.
 
 local M = {}
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
+
+--- Fires the frame after the window spawns (ctx.id = window's real entity
+-- id) — :with_parent() needs a live entity id, which a single Lua callback
+-- can't get synchronously for an entity it just queued via :build(). See
+-- docs/gui-system-architecture.md, "Window/children build order".
+--- @param ctx EntityContext
+local function build_gui_demo_window(ctx)
+    engine.spawn()
+        :with_text("Hello, GUI!", "arcade", 10, 255, 255, 255, 255)
+        :with_parent(ctx.id)
+        :with_gui_offset(16, 16)
+        :with_zindex(2)
+        :build()
+end
 
 --- Called each frame when gui_demo scene is active.
 --- @param input InputSnapshot Input state table
@@ -18,6 +33,7 @@ end
 -- ─── Callback registry ──────────────────────────────────────────────────────
 
 M._callbacks = {
+    build_gui_demo_window = build_gui_demo_window,
     on_update_gui_demo = on_update_gui_demo,
 }
 
@@ -43,6 +59,7 @@ function M.spawn()
         :with_gui_window(200, 150)
         :with_screen_position(220, 105)
         :with_zindex(0)
+        :with_lua_setup("build_gui_demo_window")
         :build()
 
     engine.spawn()

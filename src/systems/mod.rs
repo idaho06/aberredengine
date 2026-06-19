@@ -12,6 +12,7 @@
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::worldsignals::WorldSignals)
+//! - [`gui_layout`] – resolve GUI children's `ScreenPosition` from parent `ScreenPosition` + `GuiOffset`
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
 //! - [`inputsimplecontroller`] – translate input state into velocity on entities
 //! - [`inputaccelerationcontroller`] – translate input state into acceleration on entities
@@ -53,6 +54,7 @@ pub mod gameconfig;
 pub mod gamestate;
 pub mod gridlayout;
 pub mod group;
+pub mod gui_layout;
 pub mod input;
 pub mod inputaccelerationcontroller;
 pub mod inputsimplecontroller;

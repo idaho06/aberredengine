@@ -555,6 +555,21 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_gui_offset", "Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.",
+        [("x", "number"), ("y", "number")],
+        |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
+            if this.cmd.parent.is_none() {
+                return Err(LuaError::runtime(
+                    "with_gui_offset() requires with_parent() first",
+                ));
+            }
+            this.cmd.gui_offset = Some((x, y));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_text", "Set DynamicText component",
         [
             ("content", "string"),

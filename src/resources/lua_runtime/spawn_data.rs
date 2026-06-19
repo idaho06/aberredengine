@@ -420,6 +420,8 @@ pub struct SpawnCmd {
     pub tilemap_path: Option<String>,
     /// GuiWindow size (width, height) — themed panel rendered via the global `GuiTheme`
     pub gui_window: Option<(f32, f32)>,
+    /// GuiOffset (x, y) — position relative to `parent`, resolved each frame by `gui_layout_system`
+    pub gui_offset: Option<(f32, f32)>,
     /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`
     pub lua_setup: Option<String>,
     /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes

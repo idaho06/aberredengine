@@ -15,6 +15,7 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
+use crate::components::guioffset::GuiOffset;
 use crate::components::guiwindow::GuiWindow;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
@@ -93,6 +94,7 @@ pub(super) fn apply_components(
             rotation: cmd.rotation,
             scale: cmd.scale,
             parent: cmd.parent,
+            gui_offset: cmd.gui_offset,
             stuckto: cmd.stuckto,
             camera_target: cmd.camera_target,
             camera_target_zoom: cmd.camera_target_zoom,
@@ -156,6 +158,7 @@ struct TransformComponents {
     rotation: Option<f32>,
     scale: Option<(f32, f32)>,
     parent: Option<u64>,
+    gui_offset: Option<(f32, f32)>,
     stuckto: Option<StuckToData>,
     camera_target: Option<u8>,
     camera_target_zoom: Option<f32>,
@@ -187,6 +190,9 @@ fn apply_transform_components(
     {
         entity_commands.insert(ChildOf(parent));
         entity_commands.queue(ComputeInitialGlobalTransform);
+    }
+    if let Some((x, y)) = transform.gui_offset {
+        entity_commands.insert(GuiOffset(Vector2 { x, y }));
     }
     if let Some(stuckto_data) = transform.stuckto
         && let Some(target) = super::entity_cmd::resolve_entity(stuckto_data.target_entity_id)
