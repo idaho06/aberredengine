@@ -64,8 +64,8 @@ use self::geometry::{
 use self::postprocess::{
     apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
-use self::sprite::draw_screen_sprites;
-use self::text::draw_screen_texts;
+use self::sprite::draw_screen_sprite_item;
+use self::text::draw_screen_text_item;
 
 type MapSpriteQueryData = (
     Entity,
@@ -110,10 +110,46 @@ pub(super) struct TextBufferItem {
     maybe_tint: Option<Tint>,
 }
 
+/// Screen-space sprite draw item. Simpler than [`SpriteBufferItem`]: screen-space
+/// has no Scale/Rotation/GlobalTransform2D resolution, no `EntityShader` support
+/// (screen-space shaders are out of scope), and no view-bounds culling.
+pub(super) struct ScreenSpriteBufferItem {
+    sprite: Sprite,
+    z_index: ZIndex,
+    pos: ScreenPosition,
+    maybe_tint: Option<Tint>,
+}
+
+/// Screen-space text draw item. Mirrors [`ScreenSpriteBufferItem`]'s simplicity.
+pub(super) struct ScreenTextBufferItem {
+    text: DynamicText,
+    z_index: ZIndex,
+    pos: ScreenPosition,
+    maybe_tint: Option<Tint>,
+}
+
+/// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
+/// one dispatch order. Extensible: a future GUI refactor can add variants here
+/// (e.g. NPatch panel/button) without touching the sort/dispatch skeleton.
+pub(super) enum ScreenDrawItem {
+    Sprite(ScreenSpriteBufferItem),
+    Text(ScreenTextBufferItem),
+}
+
+impl ScreenDrawItem {
+    fn z_index(&self) -> ZIndex {
+        match self {
+            ScreenDrawItem::Sprite(s) => s.z_index,
+            ScreenDrawItem::Text(t) => t.z_index,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
     text_buffer: Vec<TextBufferItem>,
+    screen_draw_buffer: Vec<ScreenDrawItem>,
 }
 
 /// Bundled render resources to reduce system parameter count.
@@ -160,6 +196,7 @@ pub struct RenderQueries<'w, 's> {
         (
             &'static DynamicText,
             &'static ScreenPosition,
+            Option<&'static ZIndex>,
             Option<&'static Tint>,
         ),
     >,
@@ -169,6 +206,7 @@ pub struct RenderQueries<'w, 's> {
         (
             &'static Sprite,
             &'static ScreenPosition,
+            Option<&'static ZIndex>,
             Option<&'static Tint>,
         ),
     >,
@@ -226,6 +264,7 @@ pub fn render_system(
     let RenderLocals {
         sprite_buffer,
         text_buffer,
+        screen_draw_buffer,
     } = &mut *locals;
 
     // Unpack bundled resources for easier access
@@ -676,8 +715,16 @@ pub fn render_system(
         let debug_texts = debug && debug_res.overlay_config.show_text_bounds;
         {
             crate::tracy::tracy_span!("render/screen_space");
-            draw_screen_sprites(&mut d, &queries.screen_sprites, textures, debug_sprites);
-            draw_screen_texts(&mut d, &queries.screen_texts, fonts, debug_texts);
+            draw_screen_space(
+                &mut d,
+                &queries.screen_sprites,
+                &queries.screen_texts,
+                textures,
+                fonts,
+                screen_draw_buffer,
+                debug_sprites,
+                debug_texts,
+            );
         }
     }
 
@@ -810,5 +857,128 @@ pub fn render_system(
             &res.window_size,
             None::<fn(&RaylibDrawHandle<'_>)>,
         );
+    }
+}
+
+/// Collects screen-space sprites and texts into one merged buffer, sorts by
+/// [`ZIndex`], and dispatches draw calls in that order.
+///
+/// Sprites are collected before texts, and the sort is **stable** (not
+/// `sort_unstable_by`, unlike the homogeneous world-space buffers) so that
+/// items sharing a z-index break ties deterministically: text draws on top of
+/// a same-z sprite, which is the sane default for UI captions over panel
+/// backgrounds. Don't "simplify" this back to `sort_unstable_by` by copying
+/// the world-space pattern — the world-space buffers never face this
+/// tie-break problem because each one only ever holds one item type.
+#[allow(clippy::too_many_arguments)]
+fn draw_screen_space(
+    d: &mut impl RaylibDraw,
+    screen_sprites: &Query<(
+        &Sprite,
+        &ScreenPosition,
+        Option<&ZIndex>,
+        Option<&Tint>,
+    )>,
+    screen_texts: &Query<(
+        &DynamicText,
+        &ScreenPosition,
+        Option<&ZIndex>,
+        Option<&Tint>,
+    )>,
+    textures: &TextureStore,
+    fonts: &FontStore,
+    buffer: &mut Vec<ScreenDrawItem>,
+    debug_sprites: bool,
+    debug_texts: bool,
+) {
+    buffer.clear();
+    buffer.extend(screen_sprites.iter().map(|(s, p, maybe_z, maybe_tint)| {
+        ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
+            sprite: s.clone(),
+            z_index: maybe_z.copied().unwrap_or(ZIndex(0.0)),
+            pos: *p,
+            maybe_tint: maybe_tint.copied(),
+        })
+    }));
+    buffer.extend(screen_texts.iter().map(|(t, p, maybe_z, maybe_tint)| {
+        ScreenDrawItem::Text(ScreenTextBufferItem {
+            text: t.clone(),
+            z_index: maybe_z.copied().unwrap_or(ZIndex(0.0)),
+            pos: *p,
+            maybe_tint: maybe_tint.copied(),
+        })
+    }));
+
+    buffer.sort_by(|a, b| {
+        a.z_index()
+            .partial_cmp(&b.z_index())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for item in buffer.iter() {
+        match item {
+            ScreenDrawItem::Sprite(s) => draw_screen_sprite_item(d, s, textures, debug_sprites),
+            ScreenDrawItem::Text(t) => draw_screen_text_item(d, t, fonts, debug_texts),
+        }
+    }
+}
+
+#[cfg(test)]
+mod screen_draw_buffer_tests {
+    use super::*;
+    use crate::components::dynamictext::DynamicText;
+    use crate::components::screenposition::ScreenPosition;
+
+    fn sprite_item(z: f32) -> ScreenDrawItem {
+        ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
+            sprite: Sprite {
+                tex_key: std::sync::Arc::from("tex"),
+                width: 1.0,
+                height: 1.0,
+                offset: Vector2::zero(),
+                origin: Vector2::zero(),
+                flip_h: false,
+                flip_v: false,
+            },
+            z_index: ZIndex(z),
+            pos: ScreenPosition::new(0.0, 0.0),
+            maybe_tint: None,
+        })
+    }
+
+    fn text_item(z: f32) -> ScreenDrawItem {
+        ScreenDrawItem::Text(ScreenTextBufferItem {
+            text: DynamicText::new("hi", "font", 12.0, Color::WHITE),
+            z_index: ZIndex(z),
+            pos: ScreenPosition::new(0.0, 0.0),
+            maybe_tint: None,
+        })
+    }
+
+    fn sort(mut buffer: Vec<ScreenDrawItem>) -> Vec<ScreenDrawItem> {
+        buffer.sort_by(|a, b| {
+            a.z_index()
+                .partial_cmp(&b.z_index())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        buffer
+    }
+
+    #[test]
+    fn sorts_mixed_items_by_ascending_zindex() {
+        let buffer = vec![sprite_item(5.0), text_item(-2.0), sprite_item(0.0)];
+        let sorted = sort(buffer);
+        let zs: Vec<f32> = sorted.iter().map(|i| i.z_index().0).collect();
+        assert_eq!(zs, vec![-2.0, 0.0, 5.0]);
+    }
+
+    #[test]
+    fn equal_zindex_ties_break_with_text_on_top() {
+        // Sprites collected before texts (matches draw_screen_space), then a
+        // stable sort must preserve that relative order at equal z.
+        let buffer = vec![sprite_item(1.0), text_item(1.0)];
+        let sorted = sort(buffer);
+        assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
+        assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
     }
 }
