@@ -79,6 +79,7 @@ local scene_registry = {
     bunnymark_screen_loop= "scenes.bunnymark.screen_loop",
     bunnymark_map_phase  = "scenes.bunnymark.map_phase",
     bunnymark_screen_phase="scenes.bunnymark.screen_phase",
+    gui_demo             = "scenes.gui_demo",
 }
 
 -- Loaded scene modules (cached to avoid re-requiring)

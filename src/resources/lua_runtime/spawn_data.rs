@@ -418,6 +418,8 @@ pub struct SpawnCmd {
     pub camera_target_zoom: Option<f32>,
     /// TileMap path — spawns a tilemap root entity whose tiles become `ChildOf` children
     pub tilemap_path: Option<String>,
+    /// GuiWindow size (width, height) — themed panel rendered via the global `GuiTheme`
+    pub gui_window: Option<(f32, f32)>,
     /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`
     pub lua_setup: Option<String>,
     /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes

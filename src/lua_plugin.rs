@@ -248,7 +248,7 @@ fn drain_common_commands(
 
     lua_runtime.drain_render_commands_into(&mut bufs.render);
     for cmd in bufs.render.drain(..) {
-        process_render_command(cmd, &mut scene_state.post_process);
+        process_render_command(cmd, &mut scene_state.post_process, commands);
     }
 
     lua_runtime.drain_gameconfig_commands_into(&mut bufs.gameconfig);

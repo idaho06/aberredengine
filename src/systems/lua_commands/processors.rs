@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
-use raylib::prelude::{Camera2D, Color, Vector2};
+use raylib::prelude::{Camera2D, Color, Rectangle, Vector2};
 
 use crate::components::phase::Phase;
 use crate::events::audio::AudioCmd;
@@ -16,6 +16,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::guitheme::{GuiNinePatch, GuiTheme};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
@@ -253,7 +254,7 @@ pub fn process_asset_command<F1>(
 }
 
 /// Process a single render command from Lua and update post-process state.
-pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShader) {
+pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShader, commands: &mut Commands) {
     match cmd {
         RenderCmd::SetPostProcessShader { ids } => {
             post_process.set_shader_chain(ids.clone());
@@ -280,6 +281,28 @@ pub fn process_render_command(cmd: RenderCmd, post_process: &mut PostProcessShad
         }
         RenderCmd::ClearPostProcessUniforms => {
             post_process.clear_uniforms();
+        }
+        RenderCmd::SetGuiThemePanel {
+            tex_key,
+            source_x,
+            source_y,
+            source_w,
+            source_h,
+            left,
+            top,
+            right,
+            bottom,
+        } => {
+            commands.insert_resource(GuiTheme {
+                panel: GuiNinePatch {
+                    tex_key: Arc::from(tex_key),
+                    source: Rectangle::new(source_x, source_y, source_w, source_h),
+                    left,
+                    top,
+                    right,
+                    bottom,
+                },
+            });
         }
     }
 }

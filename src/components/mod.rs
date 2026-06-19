@@ -14,6 +14,7 @@
 //! - [`entityshader`] – per-entity shader for custom rendering effects
 //! - [`gridlayout`] – data-driven grid spawner for tile-based layouts
 //! - [`group`] – tag component for grouping entities by name
+//! - [`guiwindow`] – static themed GUI window panel, rendered as a nine-patch background
 //! - [`inputcontrolled`] – input-driven movement intent for keyboard and mouse
 //! - [`mapposition`] – world-space position (pivot) for an entity
 //! - [`menu`] – interactive menu component and actions
@@ -46,6 +47,7 @@ pub mod entityshader;
 pub mod globaltransform2d;
 pub mod gridlayout;
 pub mod group;
+pub mod guiwindow;
 pub mod inputcontrolled;
 #[cfg(feature = "lua")]
 pub mod lua_on_animation_end;

@@ -1368,6 +1368,18 @@ function engine.set_background_color(r, g, b) end
 ---@param enabled boolean
 function engine.set_fullscreen(enabled) end
 
+---Set the GuiWindow theme's nine-patch panel texture/region/borders
+---@param tex_key string
+---@param source_x number
+---@param source_y number
+---@param source_w number
+---@param source_h number
+---@param left integer
+---@param top integer
+---@param right integer
+---@param bottom integer
+function engine.set_gui_theme_panel(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+
 ---Snap the camera/view rect to integer pixels before rendering (reduces sprite atlas bleeding; disable for smooth rotation/zoom)
 ---@param enabled boolean
 function engine.set_pixel_snap_camera(enabled) end
@@ -1476,6 +1488,12 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---@param name string
 ---@return EntityBuilder
 function EntityBuilder:with_group(name) end
+
+---Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.
+---@param width number
+---@param height number
+---@return EntityBuilder
+function EntityBuilder:with_gui_window(width, height) end
 
 ---Add collision callback between two groups
 ---@param group_a string
@@ -1926,6 +1944,12 @@ function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
 ---@param name string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_group(name) end
+
+---Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.
+---@param width number
+---@param height number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_window(width, height) end
 
 ---Add collision callback between two groups
 ---@param group_a string

@@ -545,6 +545,16 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_gui_window", "Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.",
+        [("width", "number"), ("height", "number")],
+        |_, this: &mut LuaEntityBuilder, (width, height): (f32, f32)| {
+            this.cmd.gui_window = Some((width, height));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_text", "Set DynamicText component",
         [
             ("content", "string"),

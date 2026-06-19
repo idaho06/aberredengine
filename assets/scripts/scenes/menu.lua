@@ -23,6 +23,8 @@ local function on_showcase_menu_select(ctx)
         engine.change_scene("sidescroller_level01")
     elseif ctx.item_id == "bunnymark" then
         engine.change_scene("bunnymark_menu")
+    elseif ctx.item_id == "gui_demo" then
+        engine.change_scene("gui_demo")
     elseif ctx.item_id == "exit" then
         engine.quit()
     end
@@ -112,6 +114,7 @@ function M.spawn()
                 { id = "kraken",       label = "Kraken" },
                 { id = "sidescroller", label = "Ember Paths" },
                 { id = "bunnymark",    label = "Bunnymark" },
+                { id = "gui_demo",     label = "GUI Demo" },
                 { id = "exit",         label = "Exit" },
             },
             16 + 8,

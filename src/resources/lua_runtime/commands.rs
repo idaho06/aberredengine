@@ -44,6 +44,18 @@ pub enum RenderCmd {
     ClearPostProcessUniform { name: String },
     /// Clear all uniforms from the post-process shader
     ClearPostProcessUniforms,
+    /// Set the global `GuiTheme`'s window panel nine-patch
+    SetGuiThemePanel {
+        tex_key: String,
+        source_x: f32,
+        source_y: f32,
+        source_w: f32,
+        source_h: f32,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    },
 }
 
 /// Audio commands that Lua can queue.

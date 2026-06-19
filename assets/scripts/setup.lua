@@ -225,6 +225,12 @@ local function load_bunnymark()
     engine.load_texture("bunnymark-raybunny", "./assets/textures/bunnymark/raybunny.png")
 end
 
+--- Load assets for the GUI Demo example
+local function load_gui_demo()
+    engine.log_debug("Loading GUI Demo assets...")
+    engine.load_texture("gui-bluewindow", "./assets/textures/gui/bluewindow_6_6_6_6.png")
+end
+
 --- Called during the Setup game state to load all assets.
 --- Assets are queued here and processed by the Rust engine.
 function M.load_assets()
@@ -237,6 +243,7 @@ function M.load_assets()
     load_kraken()
     load_sidescroller()
     load_bunnymark()
+    load_gui_demo()
 
     engine.log_debug("All assets queued for loading!")
 end

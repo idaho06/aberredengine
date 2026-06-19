@@ -14,6 +14,7 @@
 
 mod debug_overlay;
 pub mod geometry;
+mod gui_panel;
 mod postprocess;
 mod sprite;
 mod text;
@@ -28,6 +29,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -44,6 +46,7 @@ use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::guitheme::{GuiNinePatch, GuiTheme};
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -66,6 +69,7 @@ use self::geometry::{
 use self::postprocess::{
     apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
+use self::gui_panel::draw_screen_panel_item;
 use self::sprite::draw_screen_sprite_item;
 use self::text::draw_screen_text_item;
 
@@ -142,6 +146,15 @@ pub(super) struct ScreenTextBufferItem {
     maybe_tint: Option<Tint>,
 }
 
+/// Screen-space GUI window panel draw item. Window backgrounds sit below
+/// sprites/text drawn on top of them (see [`ScreenDrawItem::variant_rank`]).
+pub(super) struct ScreenPanelBufferItem {
+    panel: GuiNinePatch,
+    size: Vector2,
+    z_index: ZIndex,
+    pos: ScreenPosition,
+}
+
 /// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
 /// one dispatch order. A future GUI refactor can add variants here (e.g.
 /// NPatch panel/button) — doing so touches this enum plus one match arm each
@@ -149,6 +162,7 @@ pub(super) struct ScreenTextBufferItem {
 /// collect step, and the dispatch loop in [`draw_screen_space`]; it does not
 /// require restructuring the sort/dispatch skeleton itself.
 pub(super) enum ScreenDrawItem {
+    Panel(ScreenPanelBufferItem),
     Sprite(ScreenSpriteBufferItem),
     Text(ScreenTextBufferItem),
 }
@@ -156,20 +170,23 @@ pub(super) enum ScreenDrawItem {
 impl ScreenDrawItem {
     fn z_index(&self) -> ZIndex {
         match self {
+            ScreenDrawItem::Panel(p) => p.z_index,
             ScreenDrawItem::Sprite(s) => s.z_index,
             ScreenDrawItem::Text(t) => t.z_index,
         }
     }
 
-    /// Secondary sort key, used only to break ties at equal `z_index`: text
-    /// (1) always sorts after sprite (0), so a caption draws on top of a
-    /// same-z background. Encoding the tie-break here (rather than relying on
-    /// `sort_by`'s stability + insertion order) lets the buffer use the
-    /// faster in-place `sort_unstable_by` instead of an allocating stable sort.
+    /// Secondary sort key, used only to break ties at equal `z_index`: panel
+    /// backgrounds (0) sort below sprites (1), which sort below text (2), so
+    /// a caption draws on top of its own widget's background. Encoding the
+    /// tie-break here (rather than relying on `sort_by`'s stability +
+    /// insertion order) lets the buffer use the faster in-place
+    /// `sort_unstable_by` instead of an allocating stable sort.
     fn variant_rank(&self) -> u8 {
         match self {
-            ScreenDrawItem::Sprite(_) => 0,
-            ScreenDrawItem::Text(_) => 1,
+            ScreenDrawItem::Panel(_) => 0,
+            ScreenDrawItem::Sprite(_) => 1,
+            ScreenDrawItem::Text(_) => 2,
         }
     }
 
@@ -203,6 +220,7 @@ pub struct RenderResources<'w> {
     pub config: Res<'w, GameConfig>,
     pub maybe_debug: Option<Res<'w, DebugMode>>,
     pub fonts: NonSend<'w, FontStore>,
+    pub gui_theme: Option<Res<'w, GuiTheme>>,
 }
 
 /// Bundled queries for the render system.
@@ -249,6 +267,7 @@ pub struct RenderQueries<'w, 's> {
             Option<&'static Tint>,
         ),
     >,
+    pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
 }
 
 /// Extra resources needed for the imgui debug panels.
@@ -758,6 +777,8 @@ pub fn render_system(
                 &mut d,
                 &queries.screen_sprites,
                 &queries.screen_texts,
+                &queries.gui_windows,
+                res.gui_theme.as_deref(),
                 textures,
                 fonts,
                 screen_draw_buffer,
@@ -915,6 +936,8 @@ fn draw_screen_space(
     d: &mut impl RaylibDraw,
     screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
+    gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
+    gui_theme: Option<&GuiTheme>,
     textures: &TextureStore,
     fonts: &FontStore,
     buffer: &mut Vec<ScreenDrawItem>,
@@ -922,6 +945,17 @@ fn draw_screen_space(
     debug_texts: bool,
 ) {
     buffer.clear();
+    if let Some(theme) = gui_theme {
+        let panel = &theme.panel;
+        buffer.extend(gui_windows.iter().map(|(w, p, z)| {
+            ScreenDrawItem::Panel(ScreenPanelBufferItem {
+                panel: panel.clone(),
+                size: w.size,
+                z_index: *z,
+                pos: *p,
+            })
+        }));
+    }
     buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint)| {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
             sprite: s.clone(),
@@ -947,6 +981,7 @@ fn draw_screen_space(
 
     for item in buffer.iter() {
         match item {
+            ScreenDrawItem::Panel(p) => draw_screen_panel_item(d, p, textures),
             ScreenDrawItem::Sprite(s) => draw_screen_sprite_item(d, s, textures, debug_sprites),
             ScreenDrawItem::Text(t) => draw_screen_text_item(d, t, fonts, debug_texts),
         }
