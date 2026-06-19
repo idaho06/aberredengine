@@ -17,6 +17,7 @@ use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
+use crate::systems::transform_compose::{Transform2D, compose_transform};
 
 type RootsQuery<'w, 's> = Query<
     'w,
@@ -43,16 +44,6 @@ type ChildrenQuery<'w, 's> = Query<
     With<ChildOf>,
 >;
 
-/// Rotate a 2D vector by `angle_degrees`.
-pub(crate) fn rotate(v: Vector2, angle_degrees: f32) -> Vector2 {
-    let rad = angle_degrees * std::f32::consts::PI / 180.0;
-    let (sin, cos) = rad.sin_cos();
-    Vector2 {
-        x: v.x * cos - v.y * sin,
-        y: v.x * sin + v.y * cos,
-    }
-}
-
 /// Compose a child [`GlobalTransform2D`] from a parent world transform and the
 /// child's local position, rotation, and scale.
 fn compose_child_transform(
@@ -61,21 +52,22 @@ fn compose_child_transform(
     local_rot: f32,
     local_scale: Vector2,
 ) -> GlobalTransform2D {
-    let scaled_offset = Vector2 {
-        x: local_pos.x * parent_gt.scale.x,
-        y: local_pos.y * parent_gt.scale.y,
-    };
-    let rotated_offset = rotate(scaled_offset, parent_gt.rotation_degrees);
+    let result = compose_transform(
+        Transform2D {
+            pos: parent_gt.position,
+            rot_degrees: parent_gt.rotation_degrees,
+            scale: parent_gt.scale,
+        },
+        Transform2D {
+            pos: local_pos,
+            rot_degrees: local_rot,
+            scale: local_scale,
+        },
+    );
     GlobalTransform2D {
-        position: Vector2 {
-            x: parent_gt.position.x + rotated_offset.x,
-            y: parent_gt.position.y + rotated_offset.y,
-        },
-        rotation_degrees: parent_gt.rotation_degrees + local_rot,
-        scale: Vector2 {
-            x: parent_gt.scale.x * local_scale.x,
-            y: parent_gt.scale.y * local_scale.y,
-        },
+        position: result.pos,
+        rotation_degrees: result.rot_degrees,
+        scale: result.scale,
     }
 }
 
