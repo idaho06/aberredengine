@@ -84,15 +84,21 @@ impl std::str::FromStr for Easing {
     }
 }
 
-fn lerp_v2(a: Vector2, b: Vector2, t: f32) -> Vector2 {
-    Vector2 {
-        x: a.x + (b.x - a.x) * t,
-        y: a.y + (b.y - a.y) * t,
+/// Linear interpolation for tweenable scalar/vector value types.
+pub trait Lerp: Copy {
+    fn lerp(a: Self, b: Self, t: f32) -> Self;
+}
+
+impl Lerp for f32 {
+    fn lerp(a: Self, b: Self, t: f32) -> Self {
+        a + (b - a) * t
     }
 }
 
-fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
+impl Lerp for Vector2 {
+    fn lerp(a: Self, b: Self, t: f32) -> Self {
+        a.lerp(b, t)
+    }
 }
 
 /// Value trait for tweenable ECS components.
@@ -105,14 +111,14 @@ pub trait TweenValue: Component<Mutability = Mutable> + Clone + Debug {
 
 impl<S: PositionSpace + Debug> TweenValue for Position2D<S> {
     fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
-        Self::from_vec(lerp_v2(from.pos, to.pos, t))
+        Self::from_vec(Lerp::lerp(from.pos, to.pos, t))
     }
 }
 
 impl TweenValue for Rotation {
     fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
         Self {
-            degrees: lerp_f32(from.degrees, to.degrees, t),
+            degrees: f32::lerp(from.degrees, to.degrees, t),
         }
     }
 }
@@ -120,7 +126,7 @@ impl TweenValue for Rotation {
 impl TweenValue for Scale {
     fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
         Self {
-            scale: lerp_v2(from.scale, to.scale, t),
+            scale: Lerp::lerp(from.scale, to.scale, t),
         }
     }
 }
