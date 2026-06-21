@@ -368,6 +368,19 @@ pub fn process_render_command(
                 bottom,
             });
         }
+        RenderCmd::SetGuiThemeFont {
+            font_key,
+            font_size,
+            r,
+            g,
+            b,
+            a,
+        } => {
+            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
+            theme.font = Arc::from(font_key);
+            theme.font_size = font_size;
+            theme.text_color = Color::new(r, g, b, a);
+        }
     }
 }
 
@@ -526,7 +539,7 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::prelude::{MessageReader, MessageWriter, World};
     use bevy_ecs::system::SystemState;
-    use raylib::prelude::Vector2;
+    use raylib::prelude::{Color, Vector2};
 
     use super::{
         process_animation_command, process_audio_command, process_render_command,
@@ -592,6 +605,18 @@ mod tests {
             &mut post_process,
             &mut staging,
         );
+        process_render_command(
+            RenderCmd::SetGuiThemeFont {
+                font_key: "arcade".to_string(),
+                font_size: 20.0,
+                r: 10,
+                g: 20,
+                b: 30,
+                a: 255,
+            },
+            &mut post_process,
+            &mut staging,
+        );
 
         let theme = staging.expect("theme should be staged");
         assert_eq!(&*theme.panel.tex_key, "panel_tex");
@@ -602,6 +627,9 @@ mod tests {
         assert_eq!(&*skin.disabled.unwrap().tex_key, "tex_disabled");
         let label = theme.label.expect("label nine-patch should be staged");
         assert_eq!(&*label.tex_key, "label_tex");
+        assert_eq!(&*theme.font, "arcade");
+        assert_eq!(theme.font_size, 20.0);
+        assert_eq!(theme.text_color, Color::new(10, 20, 30, 255));
     }
 
     #[test]

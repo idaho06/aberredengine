@@ -578,6 +578,18 @@ function engine.collision_entity_insert_tween_rotation(entity_id, from, to, dura
 ---@param backwards boolean
 function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
 
+---Insert a screen-position tween on an entity (also inserts ScreenPosition itself if missing)
+---@param entity_id integer
+---@param from_x number
+---@param from_y number
+---@param to_x number
+---@param to_y number
+---@param duration number
+---@param easing string
+---@param loop_mode string
+---@param backwards boolean
+function engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.collision_entity_menu_despawn(entity_id) end
@@ -598,6 +610,10 @@ function engine.collision_entity_remove_lua_timer(entity_id) end
 ---Remove entity from its parent, snapping to current world position
 ---@param entity_id integer
 function engine.collision_entity_remove_parent(entity_id) end
+
+---Remove ScreenPosition from an entity
+---@param entity_id integer
+function engine.collision_entity_remove_screen_position(entity_id) end
 
 ---Remove per-entity shader
 ---@param entity_id integer
@@ -880,6 +896,18 @@ function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easi
 ---@param backwards boolean
 function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
 
+---Insert a screen-position tween on an entity (also inserts ScreenPosition itself if missing)
+---@param entity_id integer
+---@param from_x number
+---@param from_y number
+---@param to_x number
+---@param to_y number
+---@param duration number
+---@param easing string
+---@param loop_mode string
+---@param backwards boolean
+function engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.entity_menu_despawn(entity_id) end
@@ -900,6 +928,10 @@ function engine.entity_remove_lua_timer(entity_id) end
 ---Remove entity from its parent, snapping to current world position
 ---@param entity_id integer
 function engine.entity_remove_parent(entity_id) end
+
+---Remove ScreenPosition from an entity
+---@param entity_id integer
+function engine.entity_remove_screen_position(entity_id) end
 
 ---Remove per-entity shader
 ---@param entity_id integer
@@ -1381,6 +1413,15 @@ function engine.set_fullscreen(enabled) end
 ---@param bottom integer
 function engine.set_gui_theme_button(state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
+---Set the GuiTheme's caption font/size/color, used by every GuiButton/GuiLabel caption
+---@param font_key string
+---@param font_size number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.set_gui_theme_font(font_key, font_size, r, g, b, a) end
+
 ---Set the GuiLabel theme's nine-patch panel texture/region/borders
 ---@param tex_key string
 ---@param source_x number
@@ -1514,22 +1555,20 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---@return EntityBuilder
 function EntityBuilder:with_group(name) end
 
----Set GuiButton component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (no engine-wide default font exists; a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiButton component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param label string
----@param font string
 ---@param callback_name string
 ---@return EntityBuilder
-function EntityBuilder:with_gui_button(width, height, label, font, callback_name) end
+function EntityBuilder:with_gui_button(width, height, label, callback_name) end
 
----Set GuiLabel component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiLabel component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param text string
----@param font string
 ---@return EntityBuilder
-function EntityBuilder:with_gui_label(width, height, text, font) end
+function EntityBuilder:with_gui_label(width, height, text) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number
@@ -1993,22 +2032,20 @@ function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_group(name) end
 
----Set GuiButton component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (no engine-wide default font exists; a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiButton component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param label string
----@param font string
 ---@param callback_name string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_gui_button(width, height, label, font, callback_name) end
+function CollisionEntityBuilder:with_gui_button(width, height, label, callback_name) end
 
----Set GuiLabel component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiLabel component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param text string
----@param font string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_gui_label(width, height, text, font) end
+function CollisionEntityBuilder:with_gui_label(width, height, text) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number

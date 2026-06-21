@@ -246,6 +246,7 @@ fn drain_common_commands(
         audio_cmd_writer,
         &scene_state.systems_store,
         &scene_state.anim_store,
+        gui_theme,
     );
 
     lua_runtime.drain_render_commands_into(&mut bufs.render);

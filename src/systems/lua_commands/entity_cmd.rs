@@ -18,6 +18,7 @@ use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
+use crate::components::screenposition::ScreenPosition;
 use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
@@ -112,6 +113,7 @@ pub fn process_entity_commands(
             cmd @ (EntityCmd::InsertTweenPosition { .. }
             | EntityCmd::InsertTweenRotation { .. }
             | EntityCmd::InsertTweenScale { .. }
+            | EntityCmd::InsertTweenScreenPosition { .. }
             | EntityCmd::RemoveTweenPosition { .. }
             | EntityCmd::RemoveTweenRotation { .. }
             | EntityCmd::RemoveTweenScale { .. }) => process_tween_cmd(cmd, commands),
@@ -129,6 +131,7 @@ pub fn process_entity_commands(
 
             cmd @ (EntityCmd::SetPosition { .. }
             | EntityCmd::SetScreenPosition { .. }
+            | EntityCmd::RemoveScreenPosition { .. }
             | EntityCmd::SetRotation { .. }
             | EntityCmd::SetScale { .. }
             | EntityCmd::SetCameraTarget { .. }
@@ -403,6 +406,29 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             Scale::new(to_x, to_y),
             &config,
         ),
+        EntityCmd::InsertTweenScreenPosition {
+            entity_id,
+            from_x,
+            from_y,
+            to_x,
+            to_y,
+            config,
+        } => {
+            // Unlike MapPosition/Rotation/Scale, ScreenPosition is not
+            // guaranteed to already exist — its presence/absence is the GUI
+            // visibility toggle, so a hidden entity has none. Insert it
+            // (seeded at `from`) alongside the tween in the same batch.
+            let from = ScreenPosition::from_vec(Vector2 {
+                x: from_x,
+                y: from_y,
+            });
+            let to = ScreenPosition::from_vec(Vector2 { x: to_x, y: to_y });
+            let tween = super::build_tween(from, to, &config);
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(from);
+                ec.try_insert(tween);
+            });
+        }
         EntityCmd::RemoveTweenPosition { entity_id } => {
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_remove::<Tween<MapPosition>>();
@@ -529,6 +555,11 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                 pos.pos.x = x;
                 pos.pos.y = y;
             }
+        }
+        EntityCmd::RemoveScreenPosition { entity_id } => {
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<ScreenPosition>();
+            });
         }
         EntityCmd::SetRotation { entity_id, degrees } => {
             with_entity_cmd(commands, entity_id, |ec| {
@@ -824,5 +855,106 @@ mod tests {
         let ct = world.get::<CameraTarget>(entity).unwrap();
         assert_eq!(ct.priority, 5);
         assert_eq!(ct.zoom, 3.0);
+    }
+
+    fn run_screen_position_cmd(world: &mut World, cmd: EntityCmd) {
+        run_entity_cmd(world, &mut WorldSignals::default(), cmd);
+    }
+
+    #[test]
+    fn insert_tween_screen_position_adds_both_components_when_missing() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        assert!(world.get::<ScreenPosition>(entity).is_none());
+
+        run_screen_position_cmd(
+            &mut world,
+            EntityCmd::InsertTweenScreenPosition {
+                entity_id: entity.to_bits(),
+                from_x: 10.0,
+                from_y: 400.0,
+                to_x: 10.0,
+                to_y: 260.0,
+                config: TweenConfig {
+                    duration: 1.0,
+                    easing: "linear".to_string(),
+                    loop_mode: "once".to_string(),
+                    backwards: false,
+                },
+            },
+        );
+
+        let pos = world
+            .get::<ScreenPosition>(entity)
+            .expect("ScreenPosition should be inserted alongside the tween");
+        assert_eq!(pos.pos.x, 10.0);
+        assert_eq!(pos.pos.y, 400.0);
+        let tween = world
+            .get::<Tween<ScreenPosition>>(entity)
+            .expect("Tween<ScreenPosition> should be inserted");
+        assert_eq!(tween.to.pos.y, 260.0);
+    }
+
+    #[test]
+    fn insert_tween_screen_position_overwrites_existing_position() {
+        let mut world = World::new();
+        let entity = world
+            .spawn(ScreenPosition::from_vec(Vector2 { x: 10.0, y: 260.0 }))
+            .id();
+
+        run_screen_position_cmd(
+            &mut world,
+            EntityCmd::InsertTweenScreenPosition {
+                entity_id: entity.to_bits(),
+                from_x: 10.0,
+                from_y: 260.0,
+                to_x: 10.0,
+                to_y: 400.0,
+                config: TweenConfig {
+                    duration: 1.0,
+                    easing: "linear".to_string(),
+                    loop_mode: "once".to_string(),
+                    backwards: false,
+                },
+            },
+        );
+
+        let pos = world.get::<ScreenPosition>(entity).unwrap();
+        assert_eq!(pos.pos.y, 260.0);
+        let tween = world.get::<Tween<ScreenPosition>>(entity).unwrap();
+        assert_eq!(tween.to.pos.y, 400.0);
+    }
+
+    #[test]
+    fn remove_screen_position_removes_component() {
+        let mut world = World::new();
+        let entity = world
+            .spawn(ScreenPosition::from_vec(Vector2 { x: 1.0, y: 2.0 }))
+            .id();
+
+        run_screen_position_cmd(
+            &mut world,
+            EntityCmd::RemoveScreenPosition {
+                entity_id: entity.to_bits(),
+            },
+        );
+
+        assert!(world.get::<ScreenPosition>(entity).is_none());
+    }
+
+    #[test]
+    fn remove_screen_position_noop_on_entity_without_one() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+
+        run_screen_position_cmd(
+            &mut world,
+            EntityCmd::RemoveScreenPosition {
+                entity_id: entity.to_bits(),
+            },
+        );
+
+        assert!(world.get_entity(entity).is_ok());
+        assert!(world.get::<ScreenPosition>(entity).is_none());
     }
 }

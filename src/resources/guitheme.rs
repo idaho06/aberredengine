@@ -14,7 +14,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::Rectangle;
+use raylib::prelude::{Color, Rectangle};
 
 /// Nine-patch metadata for one themed visual: a texture region plus border
 /// offsets in pixels, mapping 1:1 onto raylib's `NPatchInfo`.
@@ -49,12 +49,32 @@ pub struct GuiButtonSkin {
 
 /// Global theme for GUI rendering. `label` is `None` until
 /// `engine.set_gui_theme_label` is called — a `GuiLabel` renders its caption
-/// with no background panel until then.
-#[derive(Resource, Clone, Debug, Default)]
+/// with no background panel until then. `font`/`font_size`/`text_color`
+/// configure every widget caption's `DynamicText`; an unset `font` (empty
+/// `Arc<str>`, the default) renders no glyphs — `FontStore::get` already
+/// returns `None` for an unset key and silently skips the draw, so this is
+/// the same "unconfigured = skip" idiom `button`/`label` already use.
+#[derive(Resource, Clone, Debug)]
 pub struct GuiTheme {
     pub panel: GuiNinePatch,
     pub button: Option<GuiButtonSkin>,
     pub label: Option<GuiNinePatch>,
+    pub font: Arc<str>,
+    pub font_size: f32,
+    pub text_color: Color,
+}
+
+impl Default for GuiTheme {
+    fn default() -> Self {
+        Self {
+            panel: GuiNinePatch::default(),
+            button: None,
+            label: None,
+            font: Arc::from(""),
+            font_size: 16.0,
+            text_color: Color::WHITE,
+        }
+    }
 }
 
 impl GuiTheme {
@@ -92,6 +112,7 @@ mod tests {
             },
             button: None,
             label: None,
+            ..GuiTheme::default()
         };
         assert_eq!(theme.panel.left, 6);
         assert_eq!(&*theme.panel.tex_key, "gui_panel");
@@ -125,6 +146,14 @@ mod tests {
     fn test_gui_theme_default_label_none() {
         let theme = GuiTheme::default();
         assert!(theme.label.is_none());
+    }
+
+    #[test]
+    fn test_gui_theme_default_font_config() {
+        let theme = GuiTheme::default();
+        assert_eq!(&*theme.font, "");
+        assert_eq!(theme.font_size, 16.0);
+        assert_eq!(theme.text_color, Color::WHITE);
     }
 
 

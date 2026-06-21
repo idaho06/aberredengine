@@ -570,14 +570,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_button", "Set GuiButton component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (no engine-wide default font exists; a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
-        [("width", "number"), ("height", "number"), ("label", "string"), ("font", "string"), ("callback_name", "string")],
-        |_, this: &mut LuaEntityBuilder, (width, height, label, font, callback_name): (f32, f32, String, String, String)| {
+        "with_gui_button", "Set GuiButton component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [("width", "number"), ("height", "number"), ("label", "string"), ("callback_name", "string")],
+        |_, this: &mut LuaEntityBuilder, (width, height, label, callback_name): (f32, f32, String, String)| {
             this.cmd.gui_button = Some(GuiButtonSpawnData {
                 width,
                 height,
                 label,
-                font,
                 callback_name,
             });
             Ok(())
@@ -586,14 +585,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_label", "Set GuiLabel component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
-        [("width", "number"), ("height", "number"), ("text", "string"), ("font", "string")],
-        |_, this: &mut LuaEntityBuilder, (width, height, text, font): (f32, f32, String, String)| {
+        "with_gui_label", "Set GuiLabel component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [("width", "number"), ("height", "number"), ("text", "string")],
+        |_, this: &mut LuaEntityBuilder, (width, height, text): (f32, f32, String)| {
             this.cmd.gui_label = Some(GuiLabelSpawnData {
                 width,
                 height,
                 text,
-                font,
             });
             Ok(())
         }

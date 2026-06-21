@@ -219,28 +219,26 @@ pub struct TextData {
 }
 
 /// Data for spawning a `GuiButton` + its caption child entity.
+/// Caption font/size/color come from `GuiTheme`, not from this struct — see
+/// `process_spawn_command`. An empty `label` skips spawning the caption
+/// entity entirely (captionless button).
 #[derive(Debug, Clone)]
 pub struct GuiButtonSpawnData {
     pub width: f32,
     pub height: f32,
     pub label: String,
-    /// Font key for the caption — must be a key already registered via
-    /// `engine.load_font`; there is no engine-wide guaranteed default font,
-    /// so this is a required param rather than a hardcoded fallback (a
-    /// missing key renders the caption invisibly, not with a fallback font).
-    pub font: String,
     pub callback_name: String,
 }
 
 /// Data for spawning a `GuiLabel` + its caption child entity.
+/// Caption font/size/color come from `GuiTheme`, not from this struct — see
+/// `process_spawn_command`. An empty `text` skips spawning the caption
+/// entity entirely (captionless label).
 #[derive(Debug, Clone)]
 pub struct GuiLabelSpawnData {
     pub width: f32,
     pub height: f32,
     pub text: String,
-    /// Font key for the caption — must be a key already registered via
-    /// `engine.load_font`, same requirement as `GuiButtonSpawnData::font`.
-    pub font: String,
 }
 
 /// RGBA color data (0-255 per channel)

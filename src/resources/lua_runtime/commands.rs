@@ -82,6 +82,16 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
+    /// Set the global `GuiTheme`'s caption font/size/color, used by every
+    /// `GuiButton`/`GuiLabel` caption's `DynamicText`.
+    SetGuiThemeFont {
+        font_key: String,
+        font_size: f32,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    },
 }
 
 /// Audio commands that Lua can queue.
@@ -208,6 +218,18 @@ pub enum EntityCmd {
         to_y: f32,
         config: TweenConfig,
     },
+    /// Insert TweenScreenPosition component (also inserts ScreenPosition
+    /// itself if the entity doesn't have one yet — unlike MapPosition/
+    /// Rotation/Scale, ScreenPosition is not guaranteed to exist, since its
+    /// presence/absence is the GUI visibility toggle)
+    InsertTweenScreenPosition {
+        entity_id: u64,
+        from_x: f32,
+        from_y: f32,
+        to_x: f32,
+        to_y: f32,
+        config: TweenConfig,
+    },
     /// Remove TweenPosition component
     RemoveTweenPosition { entity_id: u64 },
     /// Remove TweenRotation component
@@ -274,6 +296,10 @@ pub enum EntityCmd {
     SetPosition { entity_id: u64, x: f32, y: f32 },
     /// Set entity screen-space position (ScreenPosition)
     SetScreenPosition { entity_id: u64, x: f32, y: f32 },
+    /// Remove ScreenPosition from an entity — e.g. fully hiding a GUI window
+    /// after its hide-tween finishes (see Tween section above for inserting
+    /// ScreenPosition; this is the symmetric removal)
+    RemoveScreenPosition { entity_id: u64 },
     /// Despawn an entity
     Despawn { entity_id: u64 },
     /// Despawn a menu entity and its items/cursor/textures

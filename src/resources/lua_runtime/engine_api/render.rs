@@ -276,6 +276,33 @@ impl LuaRuntime {
             ]
         );
 
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_font",
+            render_commands,
+            |(font_key, font_size, r, g, b, a)| (String, f32, u8, u8, u8, u8),
+            RenderCmd::SetGuiThemeFont {
+                font_key,
+                font_size,
+                r,
+                g,
+                b,
+                a
+            },
+            desc = "Set the GuiTheme's caption font/size/color, used by every GuiButton/GuiLabel caption",
+            cat = "render",
+            params = [
+                ("font_key", "string"),
+                ("font_size", "number"),
+                ("r", "integer"),
+                ("g", "integer"),
+                ("b", "integer"),
+                ("a", "integer")
+            ]
+        );
+
         Ok(())
     }
 }
