@@ -937,13 +937,14 @@ pub fn render_system(
 /// heterogeneous buffer on the cheaper allocation-free sort even though it
 /// holds two item types, which matters once this buffer holds tens of
 /// thousands of items (e.g. a screen-space bunnymark-style stress scene).
-/// Selects the nine-patch for a `GuiButton`'s current state from its skin.
+/// Selects the nine-patch for a `GuiButton`'s current state from its skin,
+/// falling back to `normal` for any state whose patch was never set.
 fn resolve_button_patch(skin: &GuiButtonSkin, state: GuiWidgetState) -> &GuiNinePatch {
     match state {
         GuiWidgetState::Normal => &skin.normal,
-        GuiWidgetState::Hovered => &skin.hover,
-        GuiWidgetState::Pressed => &skin.pressed,
-        GuiWidgetState::Disabled => &skin.disabled,
+        GuiWidgetState::Hovered => skin.hover.as_ref().unwrap_or(&skin.normal),
+        GuiWidgetState::Pressed => skin.pressed.as_ref().unwrap_or(&skin.normal),
+        GuiWidgetState::Disabled => skin.disabled.as_ref().unwrap_or(&skin.normal),
     }
 }
 
@@ -1108,9 +1109,9 @@ mod resolve_button_patch_tests {
     fn skin() -> GuiButtonSkin {
         GuiButtonSkin {
             normal: patch("normal"),
-            hover: patch("hover"),
-            pressed: patch("pressed"),
-            disabled: patch("disabled"),
+            hover: Some(patch("hover")),
+            pressed: Some(patch("pressed")),
+            disabled: Some(patch("disabled")),
         }
     }
 
@@ -1132,6 +1133,28 @@ mod resolve_button_patch_tests {
         assert_eq!(
             &*resolve_button_patch(&skin, GuiWidgetState::Disabled).tex_key,
             "disabled"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_normal_when_state_patch_unset() {
+        let skin = GuiButtonSkin {
+            normal: patch("normal"),
+            hover: None,
+            pressed: None,
+            disabled: None,
+        };
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Hovered).tex_key,
+            "normal"
+        );
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Pressed).tex_key,
+            "normal"
+        );
+        assert_eq!(
+            &*resolve_button_patch(&skin, GuiWidgetState::Disabled).tex_key,
+            "normal"
         );
     }
 }

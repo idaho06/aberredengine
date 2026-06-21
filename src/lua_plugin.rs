@@ -257,7 +257,13 @@ fn drain_common_commands(
         for cmd in bufs.render.drain(..) {
             process_render_command(cmd, &mut scene_state.post_process, &mut gui_theme_staging);
         }
-        if let Some(theme) = gui_theme_staging {
+        if let Some(mut theme) = gui_theme_staging {
+            if !theme.drop_invalid_button_skin() {
+                error!(
+                    "GuiTheme.button is set but its 'normal' nine-patch was never set via \
+                     engine.set_gui_theme_button(\"normal\", ...) — button theme dropped, buttons render with no background"
+                );
+            }
             commands.insert_resource(theme);
         }
     }

@@ -79,9 +79,9 @@ function M.spawn()
     -- bottom-right=disabled), 8px nine-patch borders on all sides (encoded
     -- in the filename, same convention as bluewindow_6_6_6_6.png above).
     engine.set_gui_theme_button("normal", "gui-button-atlas", 0, 0, 64, 64, 8, 8, 8, 8)
-    engine.set_gui_theme_button("hover", "gui-button-atlas", 64, 0, 64, 64, 8, 8, 8, 8)
+    -- engine.set_gui_theme_button("hover", "gui-button-atlas", 64, 0, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_button("pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
-    engine.set_gui_theme_button("disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
+    -- engine.set_gui_theme_button("disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
 
     -- Label skin: label_6_6_6_6.png is 64x64 with 6px nine-patch borders on
     -- all sides (encoded in the filename, same convention as

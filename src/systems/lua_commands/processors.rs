@@ -339,9 +339,9 @@ pub fn process_render_command(
             };
             match state.as_str() {
                 "normal" => skin.normal = patch,
-                "hover" => skin.hover = patch,
-                "pressed" => skin.pressed = patch,
-                "disabled" => skin.disabled = patch,
+                "hover" => skin.hover = Some(patch),
+                "pressed" => skin.pressed = Some(patch),
+                "disabled" => skin.disabled = Some(patch),
                 other => {
                     warn!("set_gui_theme_button: unknown state '{}', ignoring", other);
                 }
@@ -597,9 +597,9 @@ mod tests {
         assert_eq!(&*theme.panel.tex_key, "panel_tex");
         let skin = theme.button.expect("button skin should be staged");
         assert_eq!(&*skin.normal.tex_key, "tex_normal");
-        assert_eq!(&*skin.hover.tex_key, "tex_hover");
-        assert_eq!(&*skin.pressed.tex_key, "tex_pressed");
-        assert_eq!(&*skin.disabled.tex_key, "tex_disabled");
+        assert_eq!(&*skin.hover.unwrap().tex_key, "tex_hover");
+        assert_eq!(&*skin.pressed.unwrap().tex_key, "tex_pressed");
+        assert_eq!(&*skin.disabled.unwrap().tex_key, "tex_disabled");
         let label = theme.label.expect("label nine-patch should be staged");
         assert_eq!(&*label.tex_key, "label_tex");
     }
@@ -632,7 +632,22 @@ mod tests {
         assert_eq!(&*theme.panel.tex_key, "panel_tex");
         let skin = theme.button.expect("button skin should be staged");
         assert_eq!(&*skin.normal.tex_key, "tex_normal");
-        assert_eq!(&*skin.disabled.tex_key, "tex_disabled");
+        assert_eq!(&*skin.disabled.unwrap().tex_key, "tex_disabled");
+    }
+
+    #[test]
+    fn gui_theme_staging_button_normal_only_leaves_other_states_none() {
+        let mut post_process = PostProcessShader::default();
+        let mut staging: Option<GuiTheme> = None;
+
+        process_render_command(set_button_cmd("normal"), &mut post_process, &mut staging);
+
+        let theme = staging.expect("theme should be staged");
+        let skin = theme.button.expect("button skin should be staged");
+        assert_eq!(&*skin.normal.tex_key, "tex_normal");
+        assert!(skin.hover.is_none());
+        assert!(skin.pressed.is_none());
+        assert!(skin.disabled.is_none());
     }
 
     #[test]

@@ -28,13 +28,23 @@ pub struct GuiNinePatch {
     pub bottom: i32,
 }
 
-/// Per-state nine-patch skin for a `GuiButton`.
+impl GuiNinePatch {
+    /// True if this patch has never been set (still `GuiNinePatch::default()`'s empty `tex_key`).
+    pub fn is_unset(&self) -> bool {
+        self.tex_key.is_empty()
+    }
+}
+
+/// Per-state nine-patch skin for a `GuiButton`. `normal` is the only
+/// required patch — `hover`/`pressed`/`disabled` fall back to `normal` when
+/// unset, so a game that wants a flat look doesn't have to call
+/// `engine.set_gui_theme_button` once per state.
 #[derive(Clone, Debug, Default)]
 pub struct GuiButtonSkin {
     pub normal: GuiNinePatch,
-    pub hover: GuiNinePatch,
-    pub pressed: GuiNinePatch,
-    pub disabled: GuiNinePatch,
+    pub hover: Option<GuiNinePatch>,
+    pub pressed: Option<GuiNinePatch>,
+    pub disabled: Option<GuiNinePatch>,
 }
 
 /// Global theme for GUI rendering. `label` is `None` until
@@ -45,6 +55,24 @@ pub struct GuiTheme {
     pub panel: GuiNinePatch,
     pub button: Option<GuiButtonSkin>,
     pub label: Option<GuiNinePatch>,
+}
+
+impl GuiTheme {
+    /// Clears `button` if its skin's `normal` patch was never configured —
+    /// a developer mistake (`button` is `Some` but its one required patch is
+    /// still unset), not a fallback case. Returns `false` when this happened,
+    /// so callers can log a warning; centralizes the "is this theme
+    /// renderable" check next to the type instead of duplicating it in
+    /// render/Lua-integration code.
+    pub fn drop_invalid_button_skin(&mut self) -> bool {
+        if let Some(skin) = &self.button
+            && skin.normal.is_unset()
+        {
+            self.button = None;
+            return false;
+        }
+        true
+    }
 }
 
 #[cfg(test)]
@@ -74,6 +102,16 @@ mod tests {
         let patch = GuiNinePatch::default();
         assert_eq!(&*patch.tex_key, "");
         assert_eq!(patch.left, 0);
+        assert!(patch.is_unset());
+    }
+
+    #[test]
+    fn test_gui_nine_patch_is_unset_false_when_tex_key_set() {
+        let patch = GuiNinePatch {
+            tex_key: Arc::from("some_tex"),
+            ..GuiNinePatch::default()
+        };
+        assert!(!patch.is_unset());
     }
 
     #[test]
@@ -89,12 +127,39 @@ mod tests {
         assert!(theme.label.is_none());
     }
 
+
+    #[test]
+    fn drop_invalid_button_skin_clears_button_when_normal_unset() {
+        let mut theme = GuiTheme {
+            button: Some(GuiButtonSkin::default()),
+            ..GuiTheme::default()
+        };
+        assert!(!theme.drop_invalid_button_skin());
+        assert!(theme.button.is_none());
+    }
+
+    #[test]
+    fn drop_invalid_button_skin_keeps_button_when_normal_set() {
+        let mut theme = GuiTheme {
+            button: Some(GuiButtonSkin {
+                normal: GuiNinePatch {
+                    tex_key: Arc::from("tex"),
+                    ..GuiNinePatch::default()
+                },
+                ..GuiButtonSkin::default()
+            }),
+            ..GuiTheme::default()
+        };
+        assert!(theme.drop_invalid_button_skin());
+        assert!(theme.button.is_some());
+    }
+
     #[test]
     fn test_gui_button_skin_default_all_empty() {
         let skin = GuiButtonSkin::default();
         assert_eq!(&*skin.normal.tex_key, "");
-        assert_eq!(&*skin.hover.tex_key, "");
-        assert_eq!(&*skin.pressed.tex_key, "");
-        assert_eq!(&*skin.disabled.tex_key, "");
+        assert!(skin.hover.is_none());
+        assert!(skin.pressed.is_none());
+        assert!(skin.disabled.is_none());
     }
 }
