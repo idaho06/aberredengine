@@ -95,6 +95,10 @@ local function on_show_window2_clicked()
         return
     end
     local id = engine.get_entity("gui_demo_window2")
+    if id == nil then
+        engine.log_error("gui_demo_window2 entity not found!")
+        return
+    end
     engine.entity_insert_tween_screen_position(
         id, WINDOW2_X, WINDOW2_HIDDEN_Y, WINDOW2_X, WINDOW2_SHOWN_Y,
         WINDOW2_ANIM_DURATION, "quad_out", "once", false
@@ -110,6 +114,10 @@ local function on_hide_window2_clicked()
         return
     end
     local id = engine.get_entity("gui_demo_window2")
+    if id == nil then
+        engine.log_error("gui_demo_window2 entity not found!")
+        return
+    end
     engine.entity_insert_tween_screen_position(
         id, WINDOW2_X, WINDOW2_SHOWN_Y, WINDOW2_X, WINDOW2_HIDDEN_Y,
         WINDOW2_ANIM_DURATION, "quad_in", "once", false
@@ -127,6 +135,10 @@ end
 -- ScreenPosition off again the next time the window is shown.
 local function on_hide_window2_timer_done()
     local id = engine.get_entity("gui_demo_window2")
+    if id == nil then
+        engine.log_error("gui_demo_window2 entity not found!")
+        return
+    end
     engine.entity_remove_screen_position(id)
     engine.entity_remove_lua_timer(id)
 end
