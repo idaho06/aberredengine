@@ -1,12 +1,15 @@
 //! Theme resource for GUI rendering.
 //!
-//! [`GuiTheme`] carries a `panel` nine-patch (used by `GuiWindow`) and an
+//! [`GuiTheme`] carries a `panel` nine-patch (used by `GuiWindow`), an
 //! optional `button` skin (used by `GuiButton`, one nine-patch per
-//! [`GuiWidgetState`](crate::components::guibutton::GuiWidgetState)). See
+//! [`GuiWidgetState`](crate::components::guibutton::GuiWidgetState)), and an
+//! optional `label` nine-patch (used by
+//! [`GuiLabel`](crate::components::guilabel::GuiLabel)). See
 //! `docs/gui-system-architecture.md` for the full design.
 //!
-//! `button` is `Option` because a v1 game that only themes panels (never
-//! calls `engine.set_gui_theme_button`) shouldn't need to set it.
+//! `button`/`label` are `Option` because a v1 game that only themes panels
+//! (never calls `engine.set_gui_theme_button`/`set_gui_theme_label`)
+//! shouldn't need to set them.
 
 use std::sync::Arc;
 
@@ -34,11 +37,14 @@ pub struct GuiButtonSkin {
     pub disabled: GuiNinePatch,
 }
 
-/// Global theme for GUI rendering.
+/// Global theme for GUI rendering. `label` is `None` until
+/// `engine.set_gui_theme_label` is called — a `GuiLabel` renders its caption
+/// with no background panel until then.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct GuiTheme {
     pub panel: GuiNinePatch,
     pub button: Option<GuiButtonSkin>,
+    pub label: Option<GuiNinePatch>,
 }
 
 #[cfg(test)]
@@ -57,6 +63,7 @@ mod tests {
                 bottom: 6,
             },
             button: None,
+            label: None,
         };
         assert_eq!(theme.panel.left, 6);
         assert_eq!(&*theme.panel.tex_key, "gui_panel");
@@ -74,6 +81,12 @@ mod tests {
         let theme = GuiTheme::default();
         assert!(theme.button.is_none());
         assert_eq!(&*theme.panel.tex_key, "");
+    }
+
+    #[test]
+    fn test_gui_theme_default_label_none() {
+        let theme = GuiTheme::default();
+        assert!(theme.label.is_none());
     }
 
     #[test]

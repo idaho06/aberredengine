@@ -30,6 +30,7 @@ use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::guibutton::{GuiButton, GuiWidgetState};
+use crate::components::guilabel::GuiLabel;
 use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -270,6 +271,7 @@ pub struct RenderQueries<'w, 's> {
     >,
     pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
     pub gui_buttons: Query<'w, 's, (&'static GuiButton, &'static ScreenPosition, &'static ZIndex)>,
+    pub gui_labels: Query<'w, 's, (&'static GuiLabel, &'static ScreenPosition, &'static ZIndex)>,
 }
 
 /// Extra resources needed for the imgui debug panels.
@@ -781,6 +783,7 @@ pub fn render_system(
                 &queries.screen_texts,
                 &queries.gui_windows,
                 &queries.gui_buttons,
+                &queries.gui_labels,
                 res.gui_theme.as_deref(),
                 textures,
                 fonts,
@@ -951,6 +954,7 @@ fn draw_screen_space(
     screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
     gui_buttons: &Query<(&GuiButton, &ScreenPosition, &ZIndex)>,
+    gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
     gui_theme: Option<&GuiTheme>,
     textures: &TextureStore,
     fonts: &FontStore,
@@ -974,6 +978,16 @@ fn draw_screen_space(
                 ScreenDrawItem::Panel(ScreenPanelBufferItem {
                     panel: resolve_button_patch(skin, b.state).clone(),
                     size: b.size,
+                    z_index: *z,
+                    pos: *p,
+                })
+            }));
+        }
+        if let Some(label_patch) = &theme.label {
+            buffer.extend(gui_labels.iter().map(|(l, p, z)| {
+                ScreenDrawItem::Panel(ScreenPanelBufferItem {
+                    panel: label_patch.clone(),
+                    size: l.size,
                     z_index: *z,
                     pos: *p,
                 })

@@ -232,6 +232,17 @@ pub struct GuiButtonSpawnData {
     pub callback_name: String,
 }
 
+/// Data for spawning a `GuiLabel` + its caption child entity.
+#[derive(Debug, Clone)]
+pub struct GuiLabelSpawnData {
+    pub width: f32,
+    pub height: f32,
+    pub text: String,
+    /// Font key for the caption — must be a key already registered via
+    /// `engine.load_font`, same requirement as `GuiButtonSpawnData::font`.
+    pub font: String,
+}
+
 /// RGBA color data (0-255 per channel)
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ColorData {
@@ -441,6 +452,9 @@ pub struct SpawnCmd {
     /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes
     pub lua_on_animation_end: Option<String>,
     /// GuiButton data (size, caption, click callback) — spawns the button entity plus a
-    /// caption `DynamicText` child in the same call, same frame (see `spawn_gui_button_caption`)
+    /// caption `DynamicText` child in the same call, same frame (see `spawn_gui_caption`)
     pub gui_button: Option<GuiButtonSpawnData>,
+    /// GuiLabel data (size, caption text) — spawns the label entity plus a
+    /// caption `DynamicText` child in the same call, same frame (see `spawn_gui_caption`)
+    pub gui_label: Option<GuiLabelSpawnData>,
 }

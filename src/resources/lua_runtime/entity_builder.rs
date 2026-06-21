@@ -586,6 +586,21 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_gui_label", "Set GuiLabel component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [("width", "number"), ("height", "number"), ("text", "string"), ("font", "string")],
+        |_, this: &mut LuaEntityBuilder, (width, height, text, font): (f32, f32, String, String)| {
+            this.cmd.gui_label = Some(GuiLabelSpawnData {
+                width,
+                height,
+                text,
+                font,
+            });
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_text", "Set DynamicText component",
         [
             ("content", "string"),

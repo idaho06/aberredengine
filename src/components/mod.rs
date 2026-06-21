@@ -15,6 +15,7 @@
 //! - [`gridlayout`] – data-driven grid spawner for tile-based layouts
 //! - [`group`] – tag component for grouping entities by name
 //! - [`guibutton`] – clickable themed GUI button, with hover/press/disabled state
+//! - [`guilabel`] – static themed GUI label (text caption, no interaction state)
 //! - [`guioffset`] – child positioning offset for GUI hierarchies, resolved by `gui_layout_system`
 //! - [`guiwindow`] – static themed GUI window panel, rendered as a nine-patch background
 //! - [`inputcontrolled`] – input-driven movement intent for keyboard and mouse
@@ -50,6 +51,7 @@ pub mod globaltransform2d;
 pub mod gridlayout;
 pub mod group;
 pub mod guibutton;
+pub mod guilabel;
 pub mod guioffset;
 pub mod guiwindow;
 pub mod inputcontrolled;

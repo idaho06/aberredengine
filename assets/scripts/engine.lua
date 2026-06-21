@@ -1381,6 +1381,18 @@ function engine.set_fullscreen(enabled) end
 ---@param bottom integer
 function engine.set_gui_theme_button(state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
+---Set the GuiLabel theme's nine-patch panel texture/region/borders
+---@param tex_key string
+---@param source_x number
+---@param source_y number
+---@param source_w number
+---@param source_h number
+---@param left integer
+---@param top integer
+---@param right integer
+---@param bottom integer
+function engine.set_gui_theme_label(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+
 ---Set the GuiWindow theme's nine-patch panel texture/region/borders
 ---@param tex_key string
 ---@param source_x number
@@ -1510,6 +1522,14 @@ function EntityBuilder:with_group(name) end
 ---@param callback_name string
 ---@return EntityBuilder
 function EntityBuilder:with_gui_button(width, height, label, font, callback_name) end
+
+---Set GuiLabel component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---@param width number
+---@param height number
+---@param text string
+---@param font string
+---@return EntityBuilder
+function EntityBuilder:with_gui_label(width, height, text, font) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number
@@ -1981,6 +2001,14 @@ function CollisionEntityBuilder:with_group(name) end
 ---@param callback_name string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_button(width, height, label, font, callback_name) end
+
+---Set GuiLabel component + spawn a caption DynamicText child, same frame. `font` must already be registered via engine.load_font (a missing key renders the caption invisibly). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---@param width number
+---@param height number
+---@param text string
+---@param font string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_label(width, height, text, font) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number

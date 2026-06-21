@@ -241,6 +241,41 @@ impl LuaRuntime {
             ]
         );
 
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_label",
+            render_commands,
+            |(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
+                String, f32, f32, f32, f32, i32, i32, i32, i32
+            ),
+            RenderCmd::SetGuiThemeLabel {
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom
+            },
+            desc = "Set the GuiLabel theme's nine-patch panel texture/region/borders",
+            cat = "render",
+            params = [
+                ("tex_key", "string"),
+                ("source_x", "number"),
+                ("source_y", "number"),
+                ("source_w", "number"),
+                ("source_h", "number"),
+                ("left", "integer"),
+                ("top", "integer"),
+                ("right", "integer"),
+                ("bottom", "integer")
+            ]
+        );
+
         Ok(())
     }
 }

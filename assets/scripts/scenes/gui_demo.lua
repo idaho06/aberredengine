@@ -1,5 +1,5 @@
 -- scenes/gui_demo.lua
--- GuiWindow + a GuiOffset child label + a real GuiButton, exercising the
+-- GuiWindow + a GuiOffset child GuiLabel + a real GuiButton, exercising the
 -- Child Layout Model (gui_layout_system) and hit-test/click
 -- (gui_hit_test_system + gui_button_click_observer). See
 -- docs/gui-system-architecture.md for the full design.
@@ -14,8 +14,10 @@ local M = {}
 -- docs/gui-system-architecture.md, "Window/children build order".
 --- @param ctx EntityContext
 local function build_gui_demo_window(ctx)
+    -- GuiLabel's caption spawns in the same call as the label itself (no
+    -- :with_lua_setup() round trip needed here), exactly like GuiButton's.
     engine.spawn()
-        :with_text("Hello, GUI!", "arcade", 10, 255, 255, 255, 255)
+        :with_gui_label(160, 24, "Hello, GUI!", "arcade")
         :with_parent(ctx.id)
         :with_gui_offset(16, 16)
         :with_zindex(2)
@@ -25,7 +27,7 @@ local function build_gui_demo_window(ctx)
     -- :with_lua_setup() round trip needed here) — see
     -- docs/gui-system-architecture.md's Components section.
     engine.spawn()
-        :with_gui_button(100, 28, "Click Me", "arcade", "on_gui_demo_button_clicked")
+        :with_gui_button(100, 20, "Click Me", "arcade", "on_gui_demo_button_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 50)
         :with_zindex(2)
@@ -81,6 +83,11 @@ function M.spawn()
     engine.set_gui_theme_button("pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_button("disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
 
+    -- Label skin: label_6_6_6_6.png is 64x64 with 6px nine-patch borders on
+    -- all sides (encoded in the filename, same convention as
+    -- bluewindow_6_6_6_6.png above).
+    engine.set_gui_theme_label("gui-label", 0, 0, 64, 64, 6, 6, 6, 6)
+
     engine.spawn()
         :with_gui_window(200, 150)
         :with_screen_position(220, 105)
@@ -89,7 +96,7 @@ function M.spawn()
         :build()
 
     engine.spawn()
-        :with_text("GUI Demo - press Back to return", "arcade", 12, 200, 200, 200, 255)
+        :with_text("GUI Demo - press Back to return", "arcade", 16, 200, 200, 200, 255)
         :with_screen_position(140, 20)
         :with_zindex(1)
         :build()

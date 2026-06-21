@@ -70,6 +70,18 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
+    /// Set the global `GuiTheme`'s label nine-patch
+    SetGuiThemeLabel {
+        tex_key: String,
+        source_x: f32,
+        source_y: f32,
+        source_w: f32,
+        source_h: f32,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    },
 }
 
 /// Audio commands that Lua can queue.

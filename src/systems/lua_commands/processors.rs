@@ -347,6 +347,27 @@ pub fn process_render_command(
                 }
             }
         }
+        RenderCmd::SetGuiThemeLabel {
+            tex_key,
+            source_x,
+            source_y,
+            source_w,
+            source_h,
+            left,
+            top,
+            right,
+            bottom,
+        } => {
+            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
+            theme.label = Some(GuiNinePatch {
+                tex_key: Arc::from(tex_key),
+                source: Rectangle::new(source_x, source_y, source_w, source_h),
+                left,
+                top,
+                right,
+                bottom,
+            });
+        }
     }
 }
 
@@ -556,6 +577,21 @@ mod tests {
         for state in ["normal", "hover", "pressed", "disabled"] {
             process_render_command(set_button_cmd(state), &mut post_process, &mut staging);
         }
+        process_render_command(
+            RenderCmd::SetGuiThemeLabel {
+                tex_key: "label_tex".to_string(),
+                source_x: 0.0,
+                source_y: 0.0,
+                source_w: 48.0,
+                source_h: 32.0,
+                left: 6,
+                top: 6,
+                right: 6,
+                bottom: 6,
+            },
+            &mut post_process,
+            &mut staging,
+        );
 
         let theme = staging.expect("theme should be staged");
         assert_eq!(&*theme.panel.tex_key, "panel_tex");
@@ -564,6 +600,8 @@ mod tests {
         assert_eq!(&*skin.hover.tex_key, "tex_hover");
         assert_eq!(&*skin.pressed.tex_key, "tex_pressed");
         assert_eq!(&*skin.disabled.tex_key, "tex_disabled");
+        let label = theme.label.expect("label nine-patch should be staged");
+        assert_eq!(&*label.tex_key, "label_tex");
     }
 
     #[test]
