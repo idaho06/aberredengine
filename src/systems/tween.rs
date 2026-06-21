@@ -6,6 +6,7 @@
 //! `tween_system::<Scale>`.
 
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
+use crate::events::tween::TweenFinishedEvent;
 use crate::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 
@@ -75,12 +76,18 @@ pub(crate) fn advance(
 }
 
 /// Animate components based on their matching [`Tween<T>`] component.
+///
+/// Triggers [`TweenFinishedEvent<T>`] the frame a tween's `playing` flag
+/// flips from `true` to `false` — i.e. a `LoopMode::Once` tween reaching its
+/// end, or the zero-duration snap-to-end case. `Loop`/`PingPong` tweens never
+/// stop playing, so they never trigger it.
 pub fn tween_system<T: TweenValue>(
     world_time: Res<WorldTime>,
-    mut query: Query<(&mut T, &mut Tween<T>)>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut T, &mut Tween<T>)>,
 ) {
     let dt = world_time.delta.max(0.0);
-    for (mut value, mut tw) in query.iter_mut() {
+    for (entity, mut value, mut tw) in query.iter_mut() {
         if !tw.playing {
             continue;
         }
@@ -89,27 +96,33 @@ pub fn tween_system<T: TweenValue>(
         if duration <= 0.0 {
             *value = T::interpolate(&tw.from, &tw.to, 1.0);
             tw.playing = false;
-            continue;
+        } else {
+            let loop_mode = tw.loop_mode;
+            let mut time = tw.time;
+            let mut forward = tw.forward;
+            let mut playing = tw.playing;
+            advance(
+                &mut time,
+                duration,
+                &mut forward,
+                &mut playing,
+                loop_mode,
+                dt,
+            );
+            tw.time = time;
+            tw.forward = forward;
+            tw.playing = playing;
+
+            let t = ease(tw.easing, tw.time / duration);
+            *value = T::interpolate(&tw.from, &tw.to, t);
         }
 
-        let loop_mode = tw.loop_mode;
-        let mut time = tw.time;
-        let mut forward = tw.forward;
-        let mut playing = tw.playing;
-        advance(
-            &mut time,
-            duration,
-            &mut forward,
-            &mut playing,
-            loop_mode,
-            dt,
-        );
-        tw.time = time;
-        tw.forward = forward;
-        tw.playing = playing;
-
-        let t = ease(tw.easing, tw.time / duration);
-        *value = T::interpolate(&tw.from, &tw.to, t);
+        // Reached this point with `playing` true on entry (the early
+        // `continue` above filters out already-stopped tweens), so a single
+        // check here is enough to catch every way either branch can stop it.
+        if !tw.playing {
+            commands.trigger(TweenFinishedEvent::<T>::new(entity));
+        }
     }
 }
 
@@ -549,5 +562,124 @@ mod tests {
         assert!(approx_eq(target.degrees, 180.0));
         assert!(approx_eq(tween.time, 1.0));
         assert!(!tween.forward);
+    }
+
+    // ==================== TWEEN FINISHED EVENT TESTS ====================
+
+    #[derive(Resource, Default)]
+    struct FinishedCount(u32);
+
+    fn count_finished_events<T: TweenValue>(world: &mut World) {
+        world.spawn(Observer::new(
+            |_trigger: On<TweenFinishedEvent<T>>, mut count: ResMut<FinishedCount>| {
+                count.0 += 1;
+            },
+        ));
+        world.flush();
+    }
+
+    #[test]
+    fn tween_finished_event_fires_once_for_loop_mode_once() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta: 0.6,
+            ..WorldTime::default()
+        });
+        world.insert_resource(FinishedCount::default());
+        count_finished_events::<Rotation>(&mut world);
+
+        world.spawn((
+            Rotation { degrees: 0.0 },
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0),
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(tween_system::<Rotation>);
+
+        // First frame: time goes from 0.0 to 0.6, tween still playing.
+        schedule.run(&mut world);
+        assert_eq!(world.resource::<FinishedCount>().0, 0);
+
+        // Second frame: time goes from 0.6 to 1.2, clamped to 1.0, finishes.
+        schedule.run(&mut world);
+        assert_eq!(world.resource::<FinishedCount>().0, 1);
+
+        // Third frame: already stopped, must not fire again.
+        schedule.run(&mut world);
+        assert_eq!(world.resource::<FinishedCount>().0, 1);
+    }
+
+    #[test]
+    fn tween_finished_event_fires_for_zero_duration_snap() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta: 0.1,
+            ..WorldTime::default()
+        });
+        world.insert_resource(FinishedCount::default());
+        count_finished_events::<Rotation>(&mut world);
+
+        world.spawn((
+            Rotation { degrees: 0.0 },
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 0.0),
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(tween_system::<Rotation>);
+        schedule.run(&mut world);
+
+        assert_eq!(world.resource::<FinishedCount>().0, 1);
+    }
+
+    #[test]
+    fn tween_finished_event_never_fires_for_loop_mode() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta: 0.6,
+            ..WorldTime::default()
+        });
+        world.insert_resource(FinishedCount::default());
+        count_finished_events::<Rotation>(&mut world);
+
+        world.spawn((
+            Rotation { degrees: 0.0 },
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
+                .with_loop_mode(LoopMode::Loop),
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(tween_system::<Rotation>);
+
+        for _ in 0..5 {
+            schedule.run(&mut world);
+        }
+
+        assert_eq!(world.resource::<FinishedCount>().0, 0);
+    }
+
+    #[test]
+    fn tween_finished_event_never_fires_for_pingpong() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta: 0.6,
+            ..WorldTime::default()
+        });
+        world.insert_resource(FinishedCount::default());
+        count_finished_events::<Rotation>(&mut world);
+
+        world.spawn((
+            Rotation { degrees: 0.0 },
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
+                .with_loop_mode(LoopMode::PingPong),
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(tween_system::<Rotation>);
+
+        for _ in 0..5 {
+            schedule.run(&mut world);
+        }
+
+        assert_eq!(world.resource::<FinishedCount>().0, 0);
     }
 }

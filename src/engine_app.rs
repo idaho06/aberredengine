@@ -157,6 +157,8 @@ use crate::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
 use crate::systems::lua_setup_entity::lua_setup_entity_system;
 #[cfg(feature = "lua")]
+use crate::systems::lua_tween_finished::lua_tween_finished_observer;
+#[cfg(feature = "lua")]
 use crate::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use crate::systems::luatimer::{lua_timer_observer, update_lua_timers};
@@ -756,6 +758,16 @@ impl EngineBuilder {
         if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
             world.spawn((Observer::new(lua_animation_finished_observer), Persistent));
+
+            fn spawn_tween_finished_observer<T: crate::components::tween::TweenValue>(
+                world: &mut World,
+            ) {
+                world.spawn((Observer::new(lua_tween_finished_observer::<T>), Persistent));
+            }
+            spawn_tween_finished_observer::<MapPosition>(world);
+            spawn_tween_finished_observer::<Rotation>(world);
+            spawn_tween_finished_observer::<Scale>(world);
+            spawn_tween_finished_observer::<ScreenPosition>(world);
         }
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;

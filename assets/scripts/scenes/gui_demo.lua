@@ -107,8 +107,9 @@ local function on_show_window2_clicked()
 end
 
 --- Slides window 2 back out, then removes its ScreenPosition once the
--- animation finishes (a LuaTimer matching the tween's duration, rather than
--- a tween-completion event — Tween has no completion signal today).
+-- slide-out tween finishes — entity_insert_tween_screen_position's trailing
+-- on_finished arg calls on_hide_window2_tween_done directly, no separate
+-- LuaTimer needed to fake a completion signal.
 local function on_hide_window2_clicked()
     if not engine.has_flag("gui_demo_window2_visible") then
         return
@@ -120,27 +121,16 @@ local function on_hide_window2_clicked()
     end
     engine.entity_insert_tween_screen_position(
         id, WINDOW2_X, WINDOW2_SHOWN_Y, WINDOW2_X, WINDOW2_HIDDEN_Y,
-        WINDOW2_ANIM_DURATION, "quad_in", "once", false
+        WINDOW2_ANIM_DURATION, "quad_in", "once", false, "on_hide_window2_tween_done"
     )
-    engine.entity_insert_lua_timer(id, WINDOW2_ANIM_DURATION, "on_hide_window2_timer_done")
     engine.clear_flag("gui_demo_window2_visible")
 end
 
---- Fired WINDOW2_ANIM_DURATION seconds after the Hide click — removes
--- ScreenPosition so window 2 (and its children, via gui_layout_system's
--- existing hide-cascade) goes fully invisible again, not just off-screen.
--- LuaTimer is a *repeating* timer (it resets elapsed and keeps firing after
--- each callback, it never self-removes) — must explicitly remove it here, or
--- it keeps firing every WINDOW2_ANIM_DURATION seconds forever and yanks
--- ScreenPosition off again the next time the window is shown.
-local function on_hide_window2_timer_done()
-    local id = engine.get_entity("gui_demo_window2")
-    if id == nil then
-        engine.log_error("gui_demo_window2 entity not found!")
-        return
-    end
-    engine.entity_remove_screen_position(id)
-    engine.entity_remove_lua_timer(id)
+--- Fired once the slide-out tween above finishes — removes ScreenPosition so
+-- window 2 (and its children, via gui_layout_system's existing
+-- hide-cascade) goes fully invisible again, not just off-screen.
+local function on_hide_window2_tween_done(ctx)
+    engine.entity_remove_screen_position(ctx.id)
 end
 
 --- Called each frame when gui_demo scene is active.
@@ -160,7 +150,7 @@ M._callbacks = {
     on_gui_demo_button_clicked = on_gui_demo_button_clicked,
     on_show_window2_clicked = on_show_window2_clicked,
     on_hide_window2_clicked = on_hide_window2_clicked,
-    on_hide_window2_timer_done = on_hide_window2_timer_done,
+    on_hide_window2_tween_done = on_hide_window2_tween_done,
     on_update_gui_demo = on_update_gui_demo,
 }
 

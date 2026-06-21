@@ -77,6 +77,9 @@ pub struct TweenConfig {
     pub easing: String,
     pub loop_mode: String,
     pub backwards: bool,
+    /// Name of the Lua function to call when the tween finishes. Empty
+    /// string means no callback.
+    pub callback: String,
 }
 
 impl TweenConfig {
@@ -86,6 +89,7 @@ impl TweenConfig {
             easing: "linear".to_string(),
             loop_mode: "once".to_string(),
             backwards: false,
+            callback: String::new(),
         }
     }
 }

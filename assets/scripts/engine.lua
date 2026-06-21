@@ -554,7 +554,8 @@ function engine.collision_entity_insert_ttl(entity_id, seconds) end
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Insert a rotation tween on an entity
 ---@param entity_id integer
@@ -564,7 +565,8 @@ function engine.collision_entity_insert_tween_position(entity_id, from_x, from_y
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Insert a scale tween on an entity
 ---@param entity_id integer
@@ -576,7 +578,8 @@ function engine.collision_entity_insert_tween_rotation(entity_id, from, to, dura
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Insert a screen-position tween on an entity (also inserts ScreenPosition itself if missing)
 ---@param entity_id integer
@@ -588,7 +591,8 @@ function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, t
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Despawn a menu entity and its children
 ---@param entity_id integer
@@ -872,7 +876,8 @@ function engine.entity_insert_ttl(entity_id, seconds) end
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Insert a rotation tween on an entity
 ---@param entity_id integer
@@ -882,7 +887,8 @@ function engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Insert a scale tween on an entity
 ---@param entity_id integer
@@ -894,7 +900,8 @@ function engine.entity_insert_tween_rotation(entity_id, from, to, duration, easi
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Insert a screen-position tween on an entity (also inserts ScreenPosition itself if missing)
 ---@param entity_id integer
@@ -906,7 +913,8 @@ function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y,
 ---@param easing string
 ---@param loop_mode string
 ---@param backwards boolean
-function engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards) end
+---@param on_finished string
+function engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished) end
 
 ---Despawn a menu entity and its children
 ---@param entity_id integer
@@ -1875,6 +1883,11 @@ function EntityBuilder:with_tween_position_easing(easing) end
 ---@return EntityBuilder
 function EntityBuilder:with_tween_position_loop(loop_mode) end
 
+---Set a Lua callback to call when the position tween finishes
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_tween_position_on_finished(callback) end
+
 ---Add rotation tween animation
 ---@param from number
 ---@param to number
@@ -1895,6 +1908,11 @@ function EntityBuilder:with_tween_rotation_easing(easing) end
 ---@param loop_mode string
 ---@return EntityBuilder
 function EntityBuilder:with_tween_rotation_loop(loop_mode) end
+
+---Set a Lua callback to call when the rotation tween finishes
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_tween_rotation_on_finished(callback) end
 
 ---Add scale tween animation
 ---@param from_x number
@@ -1919,6 +1937,11 @@ function EntityBuilder:with_tween_scale_easing(easing) end
 ---@return EntityBuilder
 function EntityBuilder:with_tween_scale_loop(loop_mode) end
 
+---Set a Lua callback to call when the scale tween finishes
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_tween_scale_on_finished(callback) end
+
 ---Add screen position tween animation
 ---@param from_x number
 ---@param from_y number
@@ -1941,6 +1964,11 @@ function EntityBuilder:with_tween_screen_position_easing(easing) end
 ---@param loop_mode string
 ---@return EntityBuilder
 function EntityBuilder:with_tween_screen_position_loop(loop_mode) end
+
+---Set a Lua callback to call when the screen position tween finishes
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_tween_screen_position_on_finished(callback) end
 
 ---Set velocity (creates RigidBody if needed)
 ---@param vx number
@@ -2352,6 +2380,11 @@ function CollisionEntityBuilder:with_tween_position_easing(easing) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_position_loop(loop_mode) end
 
+---Set a Lua callback to call when the position tween finishes
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_position_on_finished(callback) end
+
 ---Add rotation tween animation
 ---@param from number
 ---@param to number
@@ -2372,6 +2405,11 @@ function CollisionEntityBuilder:with_tween_rotation_easing(easing) end
 ---@param loop_mode string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_rotation_loop(loop_mode) end
+
+---Set a Lua callback to call when the rotation tween finishes
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_rotation_on_finished(callback) end
 
 ---Add scale tween animation
 ---@param from_x number
@@ -2396,6 +2434,11 @@ function CollisionEntityBuilder:with_tween_scale_easing(easing) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_scale_loop(loop_mode) end
 
+---Set a Lua callback to call when the scale tween finishes
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_scale_on_finished(callback) end
+
 ---Add screen position tween animation
 ---@param from_x number
 ---@param from_y number
@@ -2418,6 +2461,11 @@ function CollisionEntityBuilder:with_tween_screen_position_easing(easing) end
 ---@param loop_mode string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_screen_position_loop(loop_mode) end
+
+---Set a Lua callback to call when the screen position tween finishes
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_screen_position_on_finished(callback) end
 
 ---Set velocity (creates RigidBody if needed)
 ---@param vx number

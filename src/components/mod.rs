@@ -58,6 +58,8 @@ pub mod inputcontrolled;
 #[cfg(feature = "lua")]
 pub mod lua_on_animation_end;
 #[cfg(feature = "lua")]
+pub mod lua_on_tween_finished;
+#[cfg(feature = "lua")]
 pub mod luacollision;
 #[cfg(feature = "lua")]
 pub mod luaphase;

@@ -31,3 +31,4 @@ pub mod spawnmap;
 pub mod switchdebug;
 pub mod switchfullscreen;
 pub mod timer;
+pub mod tween;

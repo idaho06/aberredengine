@@ -1004,6 +1004,21 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_tween_position_on_finished", "Set a Lua callback to call when the position tween finishes",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            let Some(ref mut tween) = this.cmd.tween_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_position_on_finished() requires with_tween_position() first",
+                ));
+            };
+            tween.config.callback = callback;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_tween_screen_position", "Add screen position tween animation",
         [
             ("from_x", "number"),
@@ -1071,6 +1086,21 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_tween_screen_position_on_finished", "Set a Lua callback to call when the screen position tween finishes",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            let Some(ref mut tween) = this.cmd.tween_screen_position else {
+                return Err(LuaError::runtime(
+                    "with_tween_screen_position_on_finished() requires with_tween_screen_position() first",
+                ));
+            };
+            tween.config.callback = callback;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_tween_rotation", "Add rotation tween animation",
         [("from", "number"), ("to", "number"), ("duration", "number")],
         |_, this: &mut LuaEntityBuilder, (from, to, duration): (f32, f32, f32)| {
@@ -1124,6 +1154,21 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 ));
             };
             tween.config.backwards = true;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_tween_rotation_on_finished", "Set a Lua callback to call when the rotation tween finishes",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            let Some(ref mut tween) = this.cmd.tween_rotation else {
+                return Err(LuaError::runtime(
+                    "with_tween_rotation_on_finished() requires with_tween_rotation() first",
+                ));
+            };
+            tween.config.callback = callback;
             Ok(())
         }
     );
@@ -1191,6 +1236,21 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 ));
             };
             tween.config.backwards = true;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_tween_scale_on_finished", "Set a Lua callback to call when the scale tween finishes",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            let Some(ref mut tween) = this.cmd.tween_scale else {
+                return Err(LuaError::runtime(
+                    "with_tween_scale_on_finished() requires with_tween_scale() first",
+                ));
+            };
+            tween.config.callback = callback;
             Ok(())
         }
     );

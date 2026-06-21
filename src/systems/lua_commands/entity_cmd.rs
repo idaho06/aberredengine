@@ -427,6 +427,7 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_insert(from);
                 ec.try_insert(tween);
+                super::apply_tween_finished_callback::<ScreenPosition>(ec, &config);
             });
         }
         EntityCmd::RemoveTweenPosition { entity_id } => {
@@ -455,6 +456,7 @@ where
     let tween = super::build_tween(from, to, config);
     with_entity_cmd(commands, entity_id, |ec| {
         ec.try_insert(tween);
+        super::apply_tween_finished_callback::<T>(ec, config);
     });
 }
 
@@ -736,6 +738,7 @@ fn process_lifecycle_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 
     #[test]
     fn resolve_entity_rejects_invalid_bits() {
@@ -875,12 +878,7 @@ mod tests {
                 from_y: 400.0,
                 to_x: 10.0,
                 to_y: 260.0,
-                config: TweenConfig {
-                    duration: 1.0,
-                    easing: "linear".to_string(),
-                    loop_mode: "once".to_string(),
-                    backwards: false,
-                },
+                config: TweenConfig::new(1.0),
             },
         );
 
@@ -893,6 +891,57 @@ mod tests {
             .get::<Tween<ScreenPosition>>(entity)
             .expect("Tween<ScreenPosition> should be inserted");
         assert_eq!(tween.to.pos.y, 260.0);
+    }
+
+    #[test]
+    fn insert_tween_screen_position_without_callback_clears_stale_callback_from_prior_insert() {
+        // Regression test: a hide-tween with an on_finished callback,
+        // followed later by a callback-less show-tween on the same entity
+        // (the gui_demo.lua Show/Hide pattern), must not leave the hide
+        // callback attached — otherwise it fires again when the unrelated
+        // show-tween finishes.
+        let mut world = World::new();
+        let entity = world
+            .spawn(ScreenPosition::from_vec(Vector2 { x: 10.0, y: 260.0 }))
+            .id();
+
+        let mut hide_config = TweenConfig::new(1.0);
+        hide_config.callback = "on_hide_done".to_string();
+        run_screen_position_cmd(
+            &mut world,
+            EntityCmd::InsertTweenScreenPosition {
+                entity_id: entity.to_bits(),
+                from_x: 10.0,
+                from_y: 260.0,
+                to_x: 10.0,
+                to_y: 400.0,
+                config: hide_config,
+            },
+        );
+        assert!(
+            world
+                .get::<LuaOnTweenFinished<ScreenPosition>>(entity)
+                .is_some(),
+            "hide-tween's callback component should be attached"
+        );
+
+        run_screen_position_cmd(
+            &mut world,
+            EntityCmd::InsertTweenScreenPosition {
+                entity_id: entity.to_bits(),
+                from_x: 10.0,
+                from_y: 400.0,
+                to_x: 10.0,
+                to_y: 260.0,
+                config: TweenConfig::new(1.0),
+            },
+        );
+        assert!(
+            world
+                .get::<LuaOnTweenFinished<ScreenPosition>>(entity)
+                .is_none(),
+            "callback-less show-tween must clear the stale hide-tween callback"
+        );
     }
 
     #[test]
@@ -910,12 +959,7 @@ mod tests {
                 from_y: 260.0,
                 to_x: 10.0,
                 to_y: 400.0,
-                config: TweenConfig {
-                    duration: 1.0,
-                    easing: "linear".to_string(),
-                    loop_mode: "once".to_string(),
-                    backwards: false,
-                },
+                config: TweenConfig::new(1.0),
             },
         );
 

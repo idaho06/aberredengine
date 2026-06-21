@@ -71,6 +71,8 @@ pub mod lua_commands;
 #[cfg(feature = "lua")]
 pub mod lua_setup_entity;
 #[cfg(feature = "lua")]
+pub mod lua_tween_finished;
+#[cfg(feature = "lua")]
 pub mod luaphase;
 #[cfg(feature = "lua")]
 pub mod luatimer;
