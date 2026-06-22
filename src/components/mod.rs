@@ -14,7 +14,9 @@
 //! - [`entityshader`] – per-entity shader for custom rendering effects
 //! - [`gridlayout`] – data-driven grid spawner for tile-based layouts
 //! - [`group`] – tag component for grouping entities by name
-//! - [`guibutton`] – clickable themed GUI button, with hover/press/disabled state
+//! - [`guibutton`] – marker selecting the nine-patch button skin in rendering; hit-test/click state lives in [`guiinteractable`]
+//! - [`guiimage`] – clickable image widget (inventory item slots); co-located `Sprite` for the visual, no caption child
+//! - [`guiinteractable`] – shared hit-test/click state (size, hover/press/disabled, callbacks) for `GuiButton`/`GuiImage`
 //! - [`guilabel`] – static themed GUI label (text caption, no interaction state)
 //! - [`guioffset`] – child positioning offset for GUI hierarchies, resolved by `gui_layout_system`
 //! - [`guiwindow`] – static themed GUI window panel, rendered as a nine-patch background
@@ -51,6 +53,8 @@ pub mod globaltransform2d;
 pub mod gridlayout;
 pub mod group;
 pub mod guibutton;
+pub mod guiimage;
+pub mod guiinteractable;
 pub mod guilabel;
 pub mod guioffset;
 pub mod guiwindow;

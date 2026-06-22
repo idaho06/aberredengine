@@ -55,7 +55,6 @@ use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::guitheme::GuiTheme;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
     TweenConfig,
@@ -108,7 +107,6 @@ pub(crate) fn drain_and_process_effect_commands(
     audio: &mut MessageWriter<AudioCmd>,
     systems_store: &SystemsStore,
     animation_store: &AnimationStore,
-    gui_theme: Option<&GuiTheme>,
 ) {
     match scope {
         DrainScope::Regular => {
@@ -141,7 +139,7 @@ pub(crate) fn drain_and_process_effect_commands(
         animation_store,
     );
     for cmd in bufs.spawns.drain(..) {
-        process_spawn_command(commands, cmd, world_signals, gui_theme);
+        process_spawn_command(commands, cmd, world_signals);
     }
     for cmd in bufs.clones.drain(..) {
         process_clone_command(commands, cmd, world_signals);
@@ -188,7 +186,6 @@ pub(crate) fn drain_phase_and_effects(
     audio: &mut MessageWriter<AudioCmd>,
     systems_store: &SystemsStore,
     animation_store: &AnimationStore,
-    gui_theme: Option<&GuiTheme>,
 ) {
     drain_and_process_phase_commands(lua_runtime, phase_buf, luaphase_query);
     drain_and_process_effect_commands(
@@ -201,7 +198,6 @@ pub(crate) fn drain_phase_and_effects(
         audio,
         systems_store,
         animation_store,
-        gui_theme,
     );
 }
 

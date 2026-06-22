@@ -91,7 +91,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
-use crate::systems::gui_button_click::gui_button_click_observer;
+use crate::systems::gui_interactable_click::gui_interactable_click_observer;
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
@@ -121,6 +121,9 @@ use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::gui_hit_test::gui_hit_test_system;
 use crate::systems::gui_layout::gui_layout_system;
+use crate::systems::gui_spawn::{
+    gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
+};
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
@@ -753,7 +756,7 @@ impl EngineBuilder {
         world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
-        world.spawn((Observer::new(gui_button_click_observer), Persistent));
+        world.spawn((Observer::new(gui_interactable_click_observer), Persistent));
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
@@ -821,6 +824,10 @@ impl EngineBuilder {
         update.add_systems(tween_system::<Rotation>);
         update.add_systems(tween_system::<Scale>);
         update.add_systems(tween_system::<ScreenPosition>);
+        update.add_systems(
+            (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
+                .before(gui_layout_system),
+        );
         update.add_systems(
             gui_layout_system
                 .after(tween_system::<ScreenPosition>)

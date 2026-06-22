@@ -29,7 +29,8 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::guibutton::{GuiButton, GuiWidgetState};
+use crate::components::guibutton::GuiButton;
+use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
 use crate::components::guilabel::GuiLabel;
 use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
@@ -270,7 +271,12 @@ pub struct RenderQueries<'w, 's> {
         ),
     >,
     pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
-    pub gui_buttons: Query<'w, 's, (&'static GuiButton, &'static ScreenPosition, &'static ZIndex)>,
+    pub gui_buttons: Query<
+        'w,
+        's,
+        (&'static GuiInteractable, &'static ScreenPosition, &'static ZIndex),
+        With<GuiButton>,
+    >,
     pub gui_labels: Query<'w, 's, (&'static GuiLabel, &'static ScreenPosition, &'static ZIndex)>,
 }
 
@@ -954,7 +960,7 @@ fn draw_screen_space(
     screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
-    gui_buttons: &Query<(&GuiButton, &ScreenPosition, &ZIndex)>,
+    gui_buttons: &Query<(&GuiInteractable, &ScreenPosition, &ZIndex), With<GuiButton>>,
     gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
     gui_theme: Option<&GuiTheme>,
     textures: &TextureStore,
@@ -975,10 +981,10 @@ fn draw_screen_space(
             })
         }));
         if let Some(skin) = &theme.button {
-            buffer.extend(gui_buttons.iter().map(|(b, p, z)| {
+            buffer.extend(gui_buttons.iter().map(|(interactable, p, z)| {
                 ScreenDrawItem::Panel(ScreenPanelBufferItem {
-                    panel: resolve_button_patch(skin, b.state).clone(),
-                    size: b.size,
+                    panel: resolve_button_patch(skin, interactable.state).clone(),
+                    size: interactable.size,
                     z_index: *z,
                     pos: *p,
                 })

@@ -25,7 +25,6 @@ use crate::components::tween::TweenValue;
 use crate::events::audio::AudioCmd;
 use crate::events::tween::TweenFinishedEvent;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::guitheme::GuiTheme;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
@@ -53,7 +52,6 @@ pub fn lua_tween_finished_observer<T: TweenValue>(
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     systems_store: Res<SystemsStore>,
     animation_store: Res<AnimationStore>,
-    gui_theme: Option<Res<GuiTheme>>,
     mut phase_buf: Local<Vec<PhaseCmd>>,
     mut effect_bufs: Local<EffectCmdBufs>,
 ) {
@@ -117,6 +115,5 @@ pub fn lua_tween_finished_observer<T: TweenValue>(
         &mut audio_cmd_writer,
         &systems_store,
         &animation_store,
-        gui_theme.as_deref(),
     );
 }

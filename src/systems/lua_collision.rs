@@ -47,7 +47,6 @@ use crate::components::signals::Signals;
 use crate::events::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
-use crate::resources::guitheme::GuiTheme;
 use crate::resources::lua_runtime::{
     LuaRuntime, PhaseCmd, SignalsCtxTables, clear_array_table, populate_entity_signals, set_opt,
 };
@@ -76,7 +75,6 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub systems_store: Res<'w, SystemsStore>,
     pub animation_store: Res<'w, AnimationStore>,
-    pub gui_theme: Option<Res<'w, GuiTheme>>,
 }
 
 pub fn lua_collision_observer(
@@ -205,7 +203,6 @@ pub fn lua_collision_observer(
                 &mut params.audio_cmds,
                 &params.systems_store,
                 &params.animation_store,
-                params.gui_theme.as_deref(),
             );
 
             if let Err(e) = callback_result {
