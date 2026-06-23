@@ -6,6 +6,9 @@
 //! The builder supports both spawning new entities and cloning existing ones,
 //! in both regular and collision contexts.
 
+use crate::components::guibutton::GuiButton;
+use crate::components::guiimage::GuiImage;
+use crate::components::guilabel::GuiLabel;
 use super::commands::{CloneCmd, UniformValue};
 use super::runtime::LuaAppData;
 use super::spawn_data::*;
@@ -570,29 +573,45 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_button", "Set GuiButton component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "with_gui_button", "Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
         [("width", "number"), ("height", "number"), ("label", "string"), ("callback_name", "string")],
         |_, this: &mut LuaEntityBuilder, (width, height, label, callback_name): (f32, f32, String, String)| {
-            this.cmd.gui_button = Some(GuiButtonSpawnData {
-                width,
-                height,
-                label,
-                callback_name,
-            });
+            this.cmd.gui_button = Some(GuiButton::with_lua_callback(width, height, label, callback_name));
             Ok(())
         }
     );
 
     builder_method!(
         methods, meta,
-        "with_gui_label", "Set GuiLabel component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "with_gui_button_disabled", "Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.",
+        [],
+        |_, this: &mut LuaEntityBuilder, (): ()| {
+            let Some(btn) = this.cmd.gui_button.as_mut() else {
+                return Err(LuaError::runtime(
+                    "with_gui_button_disabled() requires with_gui_button() first",
+                ));
+            };
+            btn.disabled = true;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_label", "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
         [("width", "number"), ("height", "number"), ("text", "string")],
         |_, this: &mut LuaEntityBuilder, (width, height, text): (f32, f32, String)| {
-            this.cmd.gui_label = Some(GuiLabelSpawnData {
-                width,
-                height,
-                text,
-            });
+            this.cmd.gui_label = Some(GuiLabel::new(width, height, text));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_image", "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [("width", "number"), ("height", "number"), ("tex_key", "string"), ("callback_name", "string")],
+        |_, this: &mut LuaEntityBuilder, (width, height, tex_key, callback_name): (f32, f32, String, String)| {
+            this.cmd.gui_image = Some(GuiImage::with_lua_callback(width, height, tex_key, callback_name));
             Ok(())
         }
     );

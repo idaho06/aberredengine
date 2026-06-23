@@ -1,77 +1,82 @@
-//! GUI button click dispatch.
+//! GUI interactable click dispatch.
 //!
-//! [`gui_button_click_observer`] reacts to [`GuiButtonClickEvent`] (triggered
-//! by `gui_hit_test_system`) and resolves the callback chain on the clicked
-//! `GuiButton`: Lua name first, Rust fn-pointer second — mirroring
+//! [`gui_interactable_click_observer`] reacts to [`GuiInteractableClickEvent`]
+//! (triggered by `gui_hit_test_system`) and resolves the callback chain on
+//! the clicked entity's `GuiInteractable`: Lua name first, Rust fn-pointer
+//! second — mirroring
 //! [`menu_selection_observer`](crate::systems::menu::menu_selection_observer)'s
-//! existing priority chain.
+//! existing priority chain. Generalized from the former
+//! `gui_button_click_observer` when `GuiInteractable` was extracted out of
+//! `GuiButton` — this same observer now dispatches clicks for `GuiButton`,
+//! `GuiImage`, and any future widget carrying `GuiInteractable`.
 
 use bevy_ecs::prelude::*;
 use log::warn;
 
-use crate::components::guibutton::GuiButton;
-use crate::events::gui_button::GuiButtonClickEvent;
+use crate::components::guiinteractable::GuiInteractable;
+use crate::events::gui_interactable::GuiInteractableClickEvent;
 use crate::systems::GameCtx;
 
 #[cfg(feature = "lua")]
-pub fn gui_button_click_observer(
-    trigger: On<GuiButtonClickEvent>,
-    buttons: Query<&GuiButton>,
+pub fn gui_interactable_click_observer(
+    trigger: On<GuiInteractableClickEvent>,
+    interactables: Query<&GuiInteractable>,
     mut ctx: GameCtx,
     lua_runtime: bevy_ecs::system::NonSend<crate::resources::lua_runtime::LuaRuntime>,
 ) {
     let event = trigger.event();
-    let Ok(button) = buttons.get(event.button) else {
+    let Ok(interactable) = interactables.get(event.entity) else {
         warn!(
-            "gui_button_click_observer: button entity {:?} not found",
-            event.button
+            "gui_interactable_click_observer: entity {:?} not found",
+            event.entity
         );
         return;
     };
 
     // Priority 1: Lua callback
-    if let Some(ref callback_name) = button.on_click_callback {
+    if let Some(ref callback_name) = interactable.on_click_callback {
         if lua_runtime.has_function(callback_name) {
             let lua_ctx = lua_runtime.lua().create_table().unwrap();
-            lua_ctx.set("button_id", event.button.to_bits()).unwrap();
+            lua_ctx.set("entity_id", event.entity.to_bits()).unwrap();
             if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
-                log::error!(target: "lua", "Error in gui button callback '{}': {}", callback_name, e);
+                log::error!(target: "lua", "Error in gui interactable callback '{}': {}", callback_name, e);
             }
         } else {
-            warn!(target: "lua", "gui button callback '{}' not found", callback_name);
+            warn!(target: "lua", "gui interactable callback '{}' not found", callback_name);
         }
         return;
     }
 
     // Priority 2: Rust callback
-    if let Some(cb) = button.on_rust_callback {
-        cb(event.button, &mut ctx);
+    if let Some(cb) = interactable.on_rust_callback {
+        cb(event.entity, &mut ctx);
     }
 }
 
 #[cfg(not(feature = "lua"))]
-pub fn gui_button_click_observer(
-    trigger: On<GuiButtonClickEvent>,
-    buttons: Query<&GuiButton>,
+pub fn gui_interactable_click_observer(
+    trigger: On<GuiInteractableClickEvent>,
+    interactables: Query<&GuiInteractable>,
     mut ctx: GameCtx,
 ) {
     let event = trigger.event();
-    let Ok(button) = buttons.get(event.button) else {
+    let Ok(interactable) = interactables.get(event.entity) else {
         warn!(
-            "gui_button_click_observer: button entity {:?} not found",
-            event.button
+            "gui_interactable_click_observer: entity {:?} not found",
+            event.entity
         );
         return;
     };
 
-    if let Some(cb) = button.on_rust_callback {
-        cb(event.button, &mut ctx);
+    if let Some(cb) = interactable.on_rust_callback {
+        cb(event.entity, &mut ctx);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::guiimage::GuiImage;
     use crate::resources::appstate::AppState;
     use crate::resources::camerafollowconfig::CameraFollowConfig;
     use crate::resources::gameconfig::GameConfig;
@@ -94,14 +99,14 @@ mod tests {
         world.insert_resource(InputBindings::default());
         world.insert_resource(Messages::<crate::events::audio::AudioCmd>::default());
         #[cfg(feature = "lua")]
-        world.insert_non_send_resource(
+        world.insert_non_send(
             crate::resources::lua_runtime::LuaRuntime::new().expect("LuaRuntime::new"),
         );
         world
     }
 
     fn tick(world: &mut World) {
-        world.spawn(Observer::new(gui_button_click_observer));
+        world.spawn(Observer::new(gui_interactable_click_observer));
         world.flush();
     }
 
@@ -114,11 +119,11 @@ mod tests {
     fn rust_callback_fires_when_no_lua_callback_set() {
         let mut world = setup_world();
         let button = world
-            .spawn(GuiButton::rust(80.0, 24.0, dummy_callback))
+            .spawn(GuiInteractable::rust(80.0, 24.0, dummy_callback))
             .id();
 
         tick(&mut world);
-        world.trigger(GuiButtonClickEvent { button });
+        world.trigger(GuiInteractableClickEvent { entity: button });
         world.flush();
 
         assert!(
@@ -135,7 +140,7 @@ mod tests {
 
         let mut world = setup_world();
         {
-            let lua_rt = world.non_send_resource::<LuaRuntime>();
+            let lua_rt = world.non_send::<LuaRuntime>();
             lua_rt
                 .lua()
                 .load("function on_gui_button_clicked() end")
@@ -145,13 +150,13 @@ mod tests {
 
         let button = world
             .spawn(
-                GuiButton::rust(80.0, 24.0, dummy_callback)
+                GuiInteractable::rust(80.0, 24.0, dummy_callback)
                     .with_on_click_callback("on_gui_button_clicked"),
             )
             .id();
 
         tick(&mut world);
-        world.trigger(GuiButtonClickEvent { button });
+        world.trigger(GuiInteractableClickEvent { entity: button });
         world.flush();
 
         assert!(
@@ -169,7 +174,28 @@ mod tests {
         world.despawn(bogus);
 
         tick(&mut world);
-        world.trigger(GuiButtonClickEvent { button: bogus });
+        world.trigger(GuiInteractableClickEvent { entity: bogus });
         world.flush();
+    }
+
+    #[test]
+    fn gui_image_click_dispatches_through_same_observer() {
+        let mut world = setup_world();
+        let image = world
+            .spawn((
+                GuiImage::new(40.0, 40.0, "item_sword"),
+                GuiInteractable::rust(40.0, 40.0, dummy_callback),
+            ))
+            .id();
+
+        tick(&mut world);
+        world.trigger(GuiInteractableClickEvent { entity: image });
+        world.flush();
+
+        assert!(
+            world
+                .resource::<WorldSignals>()
+                .has_flag("rust_callback_fired")
+        );
     }
 }

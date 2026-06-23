@@ -762,7 +762,9 @@ mod tests {
 
         let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(world);
         {
-            let (mut commands, mut queries) = system_state.get_mut(world);
+            let (mut commands, mut queries) = system_state
+                .get_mut(world)
+                .expect("Entity command test params should fetch");
             process_entity_commands(
                 &mut commands,
                 [cmd],

@@ -15,8 +15,6 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
-use crate::components::guibutton::GuiButton;
-use crate::components::guilabel::GuiLabel;
 use crate::components::guioffset::GuiOffset;
 use crate::components::guiwindow::GuiWindow;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
@@ -37,7 +35,6 @@ use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
 use crate::components::zindex::ZIndex;
 
-use crate::resources::guitheme::GuiTheme;
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
     LuaCollisionRuleData, MenuActionData, MenuData, ParticleEmitterData, PhaseData, RigidBodyData,
@@ -49,108 +46,23 @@ use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
 use super::parse::convert_animation_condition;
 
-use log::{error, warn};
+use log::warn;
 /// Process a spawn command from Lua and create the corresponding entity.
 ///
-/// Creates a new entity and delegates all component insertion to [`apply_components`].
-/// `gui_theme` resolves caption font/size/color for `GuiButton`/`GuiLabel`
-/// captions (see [`spawn_gui_caption`]); `None` falls back to
-/// `GuiTheme::default()`'s values, same as an unconfigured theme.
+/// Creates a new entity and delegates all component insertion to
+/// [`apply_components`]. `GuiButton`/`GuiLabel`/`GuiImage` are inserted as
+/// plain components — their caption/`GuiInteractable`/`Sprite` companions
+/// are spawned by `gui_button_spawn_system`/`gui_label_spawn_system`/
+/// `gui_image_spawn_system` (`systems/gui_spawn.rs`) reacting on
+/// `Added<T>`, not by this function.
 pub fn process_spawn_command(
     commands: &mut Commands,
     cmd: SpawnCmd,
     world_signals: &mut WorldSignals,
-    gui_theme: Option<&GuiTheme>,
 ) {
-    // Captured before `cmd` moves into `apply_components` — the caption
-    // child is spawned synchronously below, same frame as the button/label
-    // itself, since `entity` is already known here (unlike GuiWindow's
-    // children, which need a Lua `:with_lua_setup()` round trip because
-    // window and children come from two separate top-level `:build()` calls).
-    let gui_button_caption = cmd.gui_button.clone();
-    let gui_label_caption = cmd.gui_label.clone();
-    let caption_zindex = cmd.zindex;
-
     let mut entity_commands = commands.spawn_empty();
     let entity = entity_commands.id();
     apply_components(&mut entity_commands, cmd, world_signals, entity);
-
-    // Most spawns are not a GuiButton/GuiLabel, so resolving (and cloning)
-    // GuiTheme is gated behind actually needing a caption — avoids cloning
-    // the whole theme (including `button`'s 4 nested nine-patches) on every
-    // non-GUI spawn.
-    let want_button = gui_button_caption.as_ref().is_some_and(|b| !b.label.is_empty());
-    let want_label = gui_label_caption.as_ref().is_some_and(|l| !l.text.is_empty());
-    if !want_button && !want_label {
-        return;
-    }
-
-    let default_theme = GuiTheme::default();
-    let theme = gui_theme.unwrap_or(&default_theme);
-    if theme.font.is_empty() {
-        error!(
-            "GuiTheme.font is unset — call engine.set_gui_theme_font(...) before spawning \
-             GuiButton/GuiLabel captions; the caption entity is still spawned but renders with no visible text"
-        );
-    }
-
-    if want_button {
-        let btn = gui_button_caption.unwrap();
-        spawn_gui_caption(
-            commands,
-            entity,
-            &btn.label,
-            theme.font.clone(),
-            theme.font_size,
-            theme.text_color,
-            ZIndex(caption_zindex.unwrap_or(0.0)),
-        );
-    }
-    if want_label {
-        let lbl = gui_label_caption.unwrap();
-        spawn_gui_caption(
-            commands,
-            entity,
-            &lbl.text,
-            theme.font.clone(),
-            theme.font_size,
-            theme.text_color,
-            ZIndex(caption_zindex.unwrap_or(0.0)),
-        );
-    }
-}
-
-/// Spawns a caption child entity for a `GuiButton`/`GuiLabel`: `DynamicText`
-/// plus `ChildOf(parent)`, `GuiOffset(padding)`, and the same `ZIndex` as
-/// the parent — the `Panel`/`Text` `variant_rank` tie-break (see
-/// `src/systems/render/mod.rs`) draws text above the parent's background at
-/// equal z, so no separate "caption z" is needed. Padding is a fixed
-/// constant for v1, not theme-driven: `DynamicText`'s size is only known
-/// after a frame (`dynamictext_size_system`), so perfect centering is a
-/// future refinement, not a v1 requirement. `font`/`font_size`/`color` are
-/// resolved by the caller from `GuiTheme` (or its defaults when no theme is
-/// set) — this function stays decoupled from the `GuiTheme` resource type.
-/// Callers must not call this with an empty `text` — that's the
-/// "captionless widget" signal, handled by skipping the call entirely, not
-/// by this function.
-pub fn spawn_gui_caption(
-    commands: &mut Commands,
-    parent: Entity,
-    text: &str,
-    font: Arc<str>,
-    font_size: f32,
-    color: Color,
-    z_index: ZIndex,
-) -> Entity {
-    const CAPTION_PADDING: Vector2 = Vector2 { x: 8.0, y: 4.0 };
-    commands
-        .spawn((
-            DynamicText::new(text, &*font, font_size, color),
-            ChildOf(parent),
-            GuiOffset(CAPTION_PADDING),
-            z_index,
-        ))
-        .id()
 }
 
 pub(super) fn apply_components(
@@ -177,13 +89,18 @@ pub(super) fn apply_components(
             size: Vector2::new(w, h),
         });
     }
-    if let Some(ref btn) = cmd.gui_button {
-        entity_commands.insert(
-            GuiButton::new(btn.width, btn.height).with_on_click_callback(btn.callback_name.clone()),
-        );
+    // GuiButton/GuiLabel/GuiImage carry all their own spawn data; the
+    // co-located GuiInteractable/caption/Sprite are spawned by
+    // gui_button_spawn_system/gui_label_spawn_system/gui_image_spawn_system
+    // (systems/gui_spawn.rs) reacting on Added<T>.
+    if let Some(btn) = cmd.gui_button {
+        entity_commands.insert(btn);
     }
-    if let Some(ref lbl) = cmd.gui_label {
-        entity_commands.insert(GuiLabel::new(lbl.width, lbl.height));
+    if let Some(lbl) = cmd.gui_label {
+        entity_commands.insert(lbl);
+    }
+    if let Some(img) = cmd.gui_image {
+        entity_commands.insert(img);
     }
 
     apply_transform_components(
@@ -721,6 +638,8 @@ fn apply_particle_emitter(
 struct ResetAnimationCommand;
 
 impl bevy_ecs::system::EntityCommand for ResetAnimationCommand {
+    type Out = ();
+
     fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
         if let Some(mut animation) = entity.get_mut::<Animation>() {
             animation.reset();
@@ -783,7 +702,6 @@ mod tests {
     use bevy_ecs::system::SystemState;
 
     use super::*;
-    use crate::resources::lua_runtime::GuiButtonSpawnData;
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -796,7 +714,9 @@ mod tests {
 
         let mut system_state = SystemState::<Commands>::new(&mut world);
         {
-            let mut commands = system_state.get_mut(&mut world);
+            let mut commands = system_state
+                .get_mut(&mut world)
+                .expect("Commands should fetch in clone test");
             process_clone_command(
                 &mut commands,
                 CloneCmd {
@@ -824,7 +744,9 @@ mod tests {
 
         let mut system_state = SystemState::<Commands>::new(&mut world);
         {
-            let mut commands = system_state.get_mut(&mut world);
+            let mut commands = system_state
+                .get_mut(&mut world)
+                .expect("Commands should fetch in clone test");
             process_clone_command(
                 &mut commands,
                 CloneCmd {
@@ -839,223 +761,5 @@ mod tests {
         // Source entity plus the newly cloned entity should both exist.
         let mut query = world.query::<&MapPosition>();
         assert_eq!(query.iter(&world).count(), 2);
-    }
-
-    #[test]
-    fn gui_button_spawn_creates_button_and_caption_in_same_call() {
-        let mut world = World::new();
-        let mut world_signals = WorldSignals::default();
-        let theme = GuiTheme {
-            font: Arc::from("test_font"),
-            font_size: 18.0,
-            text_color: Color::new(1, 2, 3, 255),
-            ..GuiTheme::default()
-        };
-
-        let mut system_state = SystemState::<Commands>::new(&mut world);
-        {
-            let mut commands = system_state.get_mut(&mut world);
-            process_spawn_command(
-                &mut commands,
-                SpawnCmd {
-                    screen_position: Some((10.0, 20.0)),
-                    zindex: Some(5.0),
-                    gui_button: Some(GuiButtonSpawnData {
-                        width: 80.0,
-                        height: 24.0,
-                        label: "Start".to_string(),
-                        callback_name: "on_start_clicked".to_string(),
-                    }),
-                    ..Default::default()
-                },
-                &mut world_signals,
-                Some(&theme),
-            );
-        }
-        system_state.apply(&mut world);
-
-        let (button_entity, button) = world
-            .query::<(Entity, &GuiButton)>()
-            .iter(&world)
-            .next()
-            .expect("button entity should be spawned");
-        assert_eq!(button.on_click_callback.as_deref(), Some("on_start_clicked"));
-
-        let (caption_parent, caption_text, caption_zindex) = world
-            .query::<(&ChildOf, &DynamicText, &ZIndex)>()
-            .iter(&world)
-            .next()
-            .expect("caption child entity should be spawned in the same call");
-        assert_eq!(caption_parent.parent(), button_entity);
-        assert_eq!(&*caption_text.text, "Start");
-        assert_eq!(caption_zindex.0, 5.0);
-        assert_eq!(&*caption_text.font, "test_font");
-        assert_eq!(caption_text.font_size, 18.0);
-        assert_eq!(caption_text.color, Color::new(1, 2, 3, 255));
-    }
-
-    #[test]
-    fn gui_button_spawn_with_empty_label_skips_caption() {
-        let mut world = World::new();
-        let mut world_signals = WorldSignals::default();
-
-        let mut system_state = SystemState::<Commands>::new(&mut world);
-        {
-            let mut commands = system_state.get_mut(&mut world);
-            process_spawn_command(
-                &mut commands,
-                SpawnCmd {
-                    screen_position: Some((10.0, 20.0)),
-                    zindex: Some(5.0),
-                    gui_button: Some(GuiButtonSpawnData {
-                        width: 80.0,
-                        height: 24.0,
-                        label: String::new(),
-                        callback_name: "on_start_clicked".to_string(),
-                    }),
-                    ..Default::default()
-                },
-                &mut world_signals,
-                None,
-            );
-        }
-        system_state.apply(&mut world);
-
-        world
-            .query::<(Entity, &GuiButton)>()
-            .iter(&world)
-            .next()
-            .expect("button entity should still be spawned");
-        assert_eq!(
-            world.query::<&DynamicText>().iter(&world).count(),
-            0,
-            "no caption child should be spawned for an empty label"
-        );
-    }
-
-    #[test]
-    fn gui_label_spawn_creates_label_and_caption_in_same_call() {
-        let mut world = World::new();
-        let mut world_signals = WorldSignals::default();
-        let theme = GuiTheme {
-            font: Arc::from("test_font"),
-            font_size: 18.0,
-            text_color: Color::new(1, 2, 3, 255),
-            ..GuiTheme::default()
-        };
-
-        let mut system_state = SystemState::<Commands>::new(&mut world);
-        {
-            let mut commands = system_state.get_mut(&mut world);
-            process_spawn_command(
-                &mut commands,
-                SpawnCmd {
-                    screen_position: Some((10.0, 20.0)),
-                    zindex: Some(5.0),
-                    gui_label: Some(crate::resources::lua_runtime::GuiLabelSpawnData {
-                        width: 160.0,
-                        height: 24.0,
-                        text: "Hello, GUI!".to_string(),
-                    }),
-                    ..Default::default()
-                },
-                &mut world_signals,
-                Some(&theme),
-            );
-        }
-        system_state.apply(&mut world);
-
-        let (label_entity, label) = world
-            .query::<(Entity, &GuiLabel)>()
-            .iter(&world)
-            .next()
-            .expect("label entity should be spawned");
-        assert!((label.size.x - 160.0).abs() < f32::EPSILON);
-
-        let (caption_parent, caption_text, caption_zindex) = world
-            .query::<(&ChildOf, &DynamicText, &ZIndex)>()
-            .iter(&world)
-            .next()
-            .expect("caption child entity should be spawned in the same call");
-        assert_eq!(caption_parent.parent(), label_entity);
-        assert_eq!(&*caption_text.text, "Hello, GUI!");
-        assert_eq!(caption_zindex.0, 5.0);
-        assert_eq!(&*caption_text.font, "test_font");
-        assert_eq!(caption_text.font_size, 18.0);
-        assert_eq!(caption_text.color, Color::new(1, 2, 3, 255));
-    }
-
-    #[test]
-    fn gui_label_spawn_with_empty_text_skips_caption() {
-        let mut world = World::new();
-        let mut world_signals = WorldSignals::default();
-
-        let mut system_state = SystemState::<Commands>::new(&mut world);
-        {
-            let mut commands = system_state.get_mut(&mut world);
-            process_spawn_command(
-                &mut commands,
-                SpawnCmd {
-                    screen_position: Some((10.0, 20.0)),
-                    zindex: Some(5.0),
-                    gui_label: Some(crate::resources::lua_runtime::GuiLabelSpawnData {
-                        width: 160.0,
-                        height: 24.0,
-                        text: String::new(),
-                    }),
-                    ..Default::default()
-                },
-                &mut world_signals,
-                None,
-            );
-        }
-        system_state.apply(&mut world);
-
-        world
-            .query::<(Entity, &GuiLabel)>()
-            .iter(&world)
-            .next()
-            .expect("label entity should still be spawned");
-        assert_eq!(
-            world.query::<&DynamicText>().iter(&world).count(),
-            0,
-            "no caption child should be spawned for empty text"
-        );
-    }
-
-    #[test]
-    fn gui_caption_falls_back_to_default_theme_when_no_theme_set() {
-        let mut world = World::new();
-        let mut world_signals = WorldSignals::default();
-
-        let mut system_state = SystemState::<Commands>::new(&mut world);
-        {
-            let mut commands = system_state.get_mut(&mut world);
-            process_spawn_command(
-                &mut commands,
-                SpawnCmd {
-                    screen_position: Some((10.0, 20.0)),
-                    zindex: Some(5.0),
-                    gui_label: Some(crate::resources::lua_runtime::GuiLabelSpawnData {
-                        width: 160.0,
-                        height: 24.0,
-                        text: "Hello, GUI!".to_string(),
-                    }),
-                    ..Default::default()
-                },
-                &mut world_signals,
-                None,
-            );
-        }
-        system_state.apply(&mut world);
-
-        let caption_text = world
-            .query::<&DynamicText>()
-            .iter(&world)
-            .next()
-            .expect("caption should still spawn with default theme values");
-        assert_eq!(&*caption_text.font, "");
-        assert_eq!(caption_text.font_size, 16.0);
-        assert_eq!(caption_text.color, Color::WHITE);
     }
 }

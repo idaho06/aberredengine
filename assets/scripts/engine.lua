@@ -1563,7 +1563,7 @@ function EntityBuilder:with_grid_layout(path, group, zindex) end
 ---@return EntityBuilder
 function EntityBuilder:with_group(name) end
 
----Set GuiButton component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param label string
@@ -1571,7 +1571,19 @@ function EntityBuilder:with_group(name) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_button(width, height, label, callback_name) end
 
----Set GuiLabel component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.
+---@return EntityBuilder
+function EntityBuilder:with_gui_button_disabled() end
+
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---@param width number
+---@param height number
+---@param tex_key string
+---@param callback_name string
+---@return EntityBuilder
+function EntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
+
+---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param text string
@@ -2060,7 +2072,7 @@ function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_group(name) end
 
----Set GuiButton component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param label string
@@ -2068,7 +2080,19 @@ function CollisionEntityBuilder:with_group(name) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_button(width, height, label, callback_name) end
 
----Set GuiLabel component + spawn a caption DynamicText child, same frame, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_button_disabled() end
+
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---@param width number
+---@param height number
+---@param tex_key string
+---@param callback_name string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
+
+---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param text string

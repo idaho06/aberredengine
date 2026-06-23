@@ -101,7 +101,7 @@ local function on_show_window2_clicked()
     end
     engine.entity_insert_tween_screen_position(
         id, WINDOW2_X, WINDOW2_HIDDEN_Y, WINDOW2_X, WINDOW2_SHOWN_Y,
-        WINDOW2_ANIM_DURATION, "quad_out", "once", false
+        WINDOW2_ANIM_DURATION, "quad_out", "once", false, ""
     )
     engine.set_flag("gui_demo_window2_visible")
 end

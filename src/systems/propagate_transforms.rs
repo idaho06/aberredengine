@@ -181,6 +181,8 @@ pub fn cleanup_orphaned_global_transforms(
 pub struct ComputeInitialGlobalTransform;
 
 impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
+    type Out = ();
+
     fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
         // Resolve parent — bail if entity has no ChildOf
         let Some(parent_entity) = entity.get::<ChildOf>().map(|c| c.parent()) else {

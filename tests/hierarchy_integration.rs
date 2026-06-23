@@ -476,7 +476,9 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
         Res<AnimationStore>,
     )>::new(world);
     let (mut commands, mut queries, mut world_signals, systems_store, anim_store) =
-        state.get_mut(world);
+        state
+            .get_mut(world)
+            .expect("Hierarchy test params should fetch");
 
     process_entity_commands(
         &mut commands,
@@ -743,8 +745,10 @@ fn spawn_cmd_with_parent_applies_childof() {
 
     // Process the spawn command via SystemState
     let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
-    let (mut commands, mut world_signals) = state.get_mut(&mut world);
-    process_spawn_command(&mut commands, cmd, &mut world_signals, None);
+    let (mut commands, mut world_signals) = state
+        .get_mut(&mut world)
+        .expect("Hierarchy test params should fetch");
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
     state.apply(&mut world);
 
     // Find the spawned child (entity that has ChildOf)
@@ -816,8 +820,10 @@ fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
     };
 
     let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
-    let (mut commands, mut world_signals) = state.get_mut(&mut world);
-    process_spawn_command(&mut commands, cmd, &mut world_signals, None);
+    let (mut commands, mut world_signals) = state
+        .get_mut(&mut world)
+        .expect("Hierarchy test params should fetch");
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
     state.apply(&mut world);
 
     let mut child_entity = None;
@@ -890,8 +896,10 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
     };
 
     let mut state = SystemState::<(Commands, ResMut<WorldSignals>)>::new(&mut world);
-    let (mut commands, mut world_signals) = state.get_mut(&mut world);
-    process_spawn_command(&mut commands, cmd, &mut world_signals, None);
+    let (mut commands, mut world_signals) = state
+        .get_mut(&mut world)
+        .expect("Hierarchy test params should fetch");
+    process_spawn_command(&mut commands, cmd, &mut world_signals);
     state.apply(&mut world);
 
     let mut child_entity = None;
@@ -1727,7 +1735,9 @@ fn stale_gt_removed_after_child_despawn() {
     // 8. resolve_world_pos must now return MapPosition (300, 0)
     let mut state =
         SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
-    let (positions, global_transforms) = state.get(&world);
+    let (positions, global_transforms) = state
+        .get(&world)
+        .expect("Hierarchy queries should fetch");
     let resolved = resolve_world_pos(&positions, &global_transforms, player).unwrap();
 
     assert!(

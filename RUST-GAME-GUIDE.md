@@ -4,7 +4,7 @@ This guide explains how to build a 2D game in pure Rust using the Aberred Engine
 
 ## 1. What the Engine Provides
 
-Aberred Engine is a 2D game engine built on **Bevy ECS 0.18** and **sola-raylib 6.1**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
+Aberred Engine is a 2D game engine built on **Bevy ECS 0.19** and **sola-raylib 6.2**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
 
 Built-in systems:
 
@@ -927,6 +927,13 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
 | `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
 | `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
+| `Tween<ScreenPosition>` | `Tween::new(ScreenPosition::new(from_x, from_y), ScreenPosition::new(to_x, to_y), duration)` |
+| `GuiWindow` | `GuiWindow { size: Vector2::new(w, h) }` |
+| `GuiButton` | `GuiButton::new(width, height, "Caption")` |
+| `GuiLabel` | `GuiLabel::new(width, height, "Text")` |
+| `GuiImage` | `GuiImage::new(width, height, "tex_key")` |
+| `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.6 |
+| `GuiOffset` | `GuiOffset(Vector2::new(x, y))` — position relative to a `ChildOf` parent |
 
 ### Tween components in Rust
 
@@ -937,6 +944,7 @@ Use the target component type as `T`:
 - `Tween<MapPosition>` for position animation
 - `Tween<Rotation>` for rotation animation
 - `Tween<Scale>` for scale animation
+- `Tween<ScreenPosition>` for screen-space (UI) position animation
 
 This replaces the older concrete Rust types such as `TweenPosition`, `TweenRotation`, and `TweenScale`.
 
@@ -991,6 +999,22 @@ ctx.commands.spawn((
         0.75,
     )
     .with_backwards(),
+));
+```
+
+**Screen-position tween example (UI):**
+
+```rust
+use aberredengine::components::screenposition::ScreenPosition;
+use aberredengine::components::tween::Tween;
+
+ctx.commands.spawn((
+    ScreenPosition::new(-200.0, 50.0),
+    Tween::new(
+        ScreenPosition::new(-200.0, 50.0),
+        ScreenPosition::new(20.0, 50.0),
+        0.4,
+    ),
 ));
 ```
 
@@ -1073,6 +1097,23 @@ ctx.commands.spawn((
     Persistent,  // survives scene switches
 ));
 ```
+
+> **Bevy 0.19 gotcha:** Bevy backs each `Resource` with an internal entity carrying an `IsResource` marker
+> component. If you write a custom system (via `.add_system()` or `.configure_schedule()`) that scans for
+> "all entities without `Persistent`" — e.g. your own cleanup/reset logic — a bare
+> `Query<Entity, Without<Persistent>>` will also match these internal resource entities and despawn them.
+> Use `aberredengine::components::persistent::CleanableEntity` instead, the same query filter the engine's
+> own scene-switch cleanup now uses internally:
+>
+> ```rust
+> use aberredengine::components::persistent::CleanableEntity;
+>
+> fn my_cleanup(query: Query<Entity, CleanableEntity>, mut commands: Commands) {
+>     for entity in &query {
+>         commands.entity(entity).despawn();
+>     }
+> }
+> ```
 
 ### 6.4 Group tracking across scenes
 
@@ -1503,6 +1544,164 @@ EngineBuilder::new()
 ```
 
 **Lua consumers:** attach `LuaOnAnimationEnd::new("fn_name")` to the entity (or use `:with_on_animation_end("fn_name")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
+
+### 7.6 Tween Finished Event
+
+**Source:** `src/events/tween.rs`, `src/systems/tween.rs`
+
+`TweenFinishedEvent<T>` is triggered **once** by the tween system for a given `Tween<T>` the frame it stops playing — either a `LoopMode::Once` tween reaching its end, or a zero-duration tween snapping immediately. `LoopMode::Loop` and `LoopMode::PingPong` tweens never trigger it, since they never stop playing on their own.
+
+**Event struct (generic over the tweened component type):**
+
+```rust
+pub struct TweenFinishedEvent<T: TweenValue> {
+    pub entity: Entity,
+}
+```
+
+**Observing from Rust** — register a persistent observer per tweened type with `EngineBuilder::add_observer`. The engine already runs one monomorphized tween system per `T` (`MapPosition`, `Rotation`, `Scale`, `ScreenPosition`), so register one observer per `T` you care about:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::bevy_ecs::observer::On;
+use aberredengine::components::mapposition::MapPosition;
+use aberredengine::events::tween::TweenFinishedEvent;
+
+fn on_move_tween_done(
+    trigger: On<TweenFinishedEvent<MapPosition>>,
+    mut commands: Commands,
+) {
+    // Despawn the entity whose move tween just finished
+    commands.entity(trigger.event().entity).despawn();
+}
+
+// Register in main:
+EngineBuilder::new()
+    .add_observer(on_move_tween_done)
+    // …
+```
+
+**Lua consumers:** attach `LuaOnTweenFinished<T>::new("fn_name")` to the entity (or use the matching
+`:with_tween_{position,rotation,scale,screen_position}_on_finished("fn_name")` builder method). The Lua
+callback signature is `fn(ctx, input)` — the same as the animation-finished and timer/phase callbacks.
+
+### 7.7 GUI Widgets
+
+**Source:** `src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `src/resources/guitheme.rs`, `src/systems/{gui_spawn,gui_layout,gui_hit_test,gui_interactable_click}.rs`, `src/events/gui_interactable.rs`
+
+The engine provides a themed, nine-patch-skinned in-game GUI widget system — panels, buttons, labels, and
+clickable images. It is plain ECS components and systems, fully usable from pure Rust; all of its systems
+(`gui_button_spawn_system`, `gui_label_spawn_system`, `gui_image_spawn_system`, `gui_layout_system`,
+`gui_hit_test_system`, `gui_interactable_click_observer`) are registered automatically by `EngineBuilder`
+regardless of the `lua` feature — there's nothing extra to wire up.
+
+This is distinct from the `gui_callback` ImGui overlay covered in Section 3 — ImGui is for editor/debug
+tooling rendered every frame via a callback; this widget system is for in-game UI made of regular entities
+that participate in the normal render/collision/hierarchy pipeline (positioned with `ScreenPosition`,
+parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
+
+**Core components:**
+
+| Component | Shape | Notes |
+|-----------|-------|-------|
+| `GuiWindow` | `{ size: Vector2 }` | Themed panel. Visibility = presence/absence of `ScreenPosition` on the same entity. |
+| `GuiButton` | `GuiButton::new(w, h, "Caption")` | Self-contained; `gui_button_spawn_system` reacts one frame later to insert a `GuiInteractable` (via `insert_if_new`) and, unless the caption is empty, spawn a themed caption `DynamicText` child. |
+| `GuiLabel` | `GuiLabel::new(w, h, "Text")` | Same caption-child pattern as `GuiButton`, minus any interaction — never hit-tested. |
+| `GuiImage` | `GuiImage::new(w, h, "tex_key")` | `gui_image_spawn_system` inserts a co-located `GuiInteractable` + `Sprite` (same entity, no child) referencing `tex_key` in `TextureStore`. No automatic hover/press tint — handle visual feedback yourself (e.g. via the click callback). |
+| `GuiInteractable` | `GuiInteractable::rust(w, h, callback)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). Use the `::rust()` coercion constructor — mirrors `CollisionRule::rust`/`Timer::rust` — for a Rust fn-pointer callback: `GuiRustCallback = fn(Entity, &mut GameCtx)`. |
+| `GuiOffset` | `GuiOffset(Vector2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every frame; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
+
+> **Important:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they
+> add — they will not overwrite one you pre-spawned. **To get a Rust callback, you must spawn
+> `GuiInteractable::rust(...)` yourself in the same bundle as `GuiButton`/`GuiImage`.** If you only spawn
+> `GuiButton`/`GuiImage` alone, the inserted default `GuiInteractable` has no Rust callback wired — only the
+> Lua `callback_name`-based dispatch path, which no-ops with no matching Lua function present.
+
+**Theming:** `GuiTheme` is an ordinary `Resource` — set it once (e.g. in a setup system via `ResMut<GuiTheme>`)
+before spawning any windows/buttons/labels:
+
+```rust
+use aberredengine::bevy_ecs::prelude::ResMut;
+use aberredengine::raylib::prelude::{Color, Rectangle};
+use aberredengine::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme};
+
+fn setup_gui_theme(mut theme: ResMut<GuiTheme>) {
+    theme.panel = GuiNinePatch {
+        tex_key: "gui_panel".into(),
+        source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+        left: 6,
+        top: 6,
+        right: 6,
+        bottom: 6,
+    };
+    theme.button = Some(GuiButtonSkin {
+        normal: GuiNinePatch {
+            tex_key: "gui_button".into(),
+            source: Rectangle::new(0.0, 0.0, 32.0, 32.0),
+            left: 4,
+            top: 4,
+            right: 4,
+            bottom: 4,
+        },
+        ..Default::default() // hover/pressed/disabled fall back to normal if unset
+    });
+    theme.font = "main_font".into();
+    theme.font_size = 16.0;
+    theme.text_color = Color::WHITE;
+}
+```
+
+`GuiNinePatch { tex_key, source, left, top, right, bottom }` maps 1:1 onto raylib's `NPatchInfo`. `tex_key`
+must already be loaded into `TextureStore` (see Section 4). `theme.font` defaults to an empty key — if it's
+still unset when a non-empty caption is about to spawn, the engine logs an `error!`; the caption entity still
+spawns, it just renders no visible glyphs.
+
+**Complete example — a panel with one clickable button:**
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::raylib::prelude::Vector2;
+use aberredengine::components::guibutton::GuiButton;
+use aberredengine::components::guiinteractable::GuiInteractable;
+use aberredengine::components::guioffset::GuiOffset;
+use aberredengine::components::guiwindow::GuiWindow;
+use aberredengine::components::screenposition::ScreenPosition;
+use aberredengine::components::zindex::ZIndex;
+use aberredengine::systems::GameCtx;
+
+fn on_start_clicked(_entity: Entity, ctx: &mut GameCtx) {
+    ctx.world_signals.set_flag("start_pressed");
+}
+
+fn spawn_menu_panel(ctx: &mut GameCtx) {
+    let panel = ctx
+        .commands
+        .spawn((
+            GuiWindow { size: Vector2::new(200.0, 100.0) },
+            ScreenPosition::new(50.0, 50.0),
+            ZIndex(10.0),
+        ))
+        .id();
+
+    ctx.commands.spawn((
+        GuiButton::new(120.0, 32.0, "Start"),
+        GuiInteractable::rust(120.0, 32.0, on_start_clicked),
+        ChildOf(panel),
+        GuiOffset(Vector2::new(40.0, 34.0)),
+        ZIndex(10.0),
+    ));
+}
+```
+
+The button entity needs no `ScreenPosition` set directly — `gui_layout_system` supplies it each frame from
+the parent's `ScreenPosition` plus `GuiOffset`.
+
+**Click events:** clicks dispatch primarily through the per-widget `GuiInteractable.on_rust_callback` /
+`on_click_callback` (Lua name) shown above. For cross-cutting logic that doesn't belong to one specific
+widget (analytics, a UI click sound), you can additionally observe `GuiInteractableClickEvent { entity }`
+(`src/events/gui_interactable.rs`) the same way as `AnimationFinishedEvent`/`TweenFinishedEvent<T>` above —
+register it once with `EngineBuilder::add_observer`; it fires for any `GuiInteractable`-carrying widget
+(`GuiButton` or `GuiImage`) on a press-then-release-inside.
 
 ---
 

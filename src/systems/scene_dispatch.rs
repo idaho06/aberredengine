@@ -30,7 +30,7 @@ use log::{debug, error, info};
 use raylib::prelude::{Camera2D, Color, Vector2};
 use rustc_hash::FxHashSet;
 
-use crate::components::persistent::Persistent;
+use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::resources::appstate::AppState;
 use crate::resources::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
@@ -188,7 +188,7 @@ pub struct SceneDescriptor {
 /// 7. Call `on_enter` on the new scene
 pub fn scene_switch_system(
     mut ctx: GameCtx,
-    entities_to_clean: Query<Entity, Without<Persistent>>,
+    entities_to_clean: Query<Entity, CleanableEntity>,
     persistent_entities: Query<Entity, With<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut scene_manager: ResMut<SceneManager>,

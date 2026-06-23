@@ -378,7 +378,9 @@ fn test_input_bindings_mutation_via_ecs_system_state() {
     // Simulate a 1-frame system that rebinds Action1 to KEY_Z
     let mut state: SystemState<ResMut<InputBindings>> = SystemState::new(&mut world);
     {
-        let mut bindings = state.get_mut(&mut world);
+        let mut bindings = state
+            .get_mut(&mut world)
+            .expect("InputBindings resource should fetch");
         bindings.rebind(
             InputAction::Action1,
             InputBinding::Keyboard(KeyboardKey::KEY_Z),

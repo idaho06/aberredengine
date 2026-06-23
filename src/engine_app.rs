@@ -91,7 +91,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
-use crate::systems::gui_button_click::gui_button_click_observer;
+use crate::systems::gui_interactable_click::gui_interactable_click_observer;
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
@@ -121,6 +121,9 @@ use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::gui_hit_test::gui_hit_test_system;
 use crate::systems::gui_layout::gui_layout_system;
+use crate::systems::gui_spawn::{
+    gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
+};
 use crate::systems::input::update_input_state;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
@@ -610,17 +613,17 @@ impl EngineBuilder {
         world.insert_resource(config);
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
-        world.insert_non_send_resource(render_target);
+        world.insert_non_send(render_target);
 
         setup_audio(&mut world);
 
         world.insert_resource(GameState::new());
         world.insert_resource(NextGameState::new());
-        world.insert_non_send_resource(FontStore::new());
+        world.insert_non_send(FontStore::new());
         let imgui_bridge = ImguiBridge::new_dark()
             .map_err(|err| format!("Failed to initialize imgui bridge: {err}"))?;
-        world.insert_non_send_resource(imgui_bridge);
-        world.insert_non_send_resource(ShaderStore::new());
+        world.insert_non_send(imgui_bridge);
+        world.insert_non_send(ShaderStore::new());
         world.insert_resource(TextureStore::new());
         world.insert_resource(Camera2DRes(Camera2D {
             target: Vector2 { x: 0.0, y: 0.0 },
@@ -644,11 +647,11 @@ impl EngineBuilder {
             if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
                 log::error!("Failed to load Lua script: {}", e);
             }
-            world.insert_non_send_resource(lua_runtime);
+            world.insert_non_send(lua_runtime);
         }
 
-        world.insert_non_send_resource(rl);
-        world.insert_non_send_resource(thread);
+        world.insert_non_send(rl);
+        world.insert_non_send(thread);
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
         Ok(world)
@@ -753,7 +756,7 @@ impl EngineBuilder {
         world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
-        world.spawn((Observer::new(gui_button_click_observer), Persistent));
+        world.spawn((Observer::new(gui_interactable_click_observer), Persistent));
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
@@ -821,6 +824,10 @@ impl EngineBuilder {
         update.add_systems(tween_system::<Rotation>);
         update.add_systems(tween_system::<Scale>);
         update.add_systems(tween_system::<ScreenPosition>);
+        update.add_systems(
+            (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
+                .before(gui_layout_system),
+        );
         update.add_systems(
             gui_layout_system
                 .after(tween_system::<ScreenPosition>)
@@ -934,11 +941,11 @@ impl EngineBuilder {
         let _tracy = tracy_client::Client::start();
 
         while !world
-            .non_send_resource::<raylib::RaylibHandle>()
+            .non_send::<raylib::RaylibHandle>()
             .window_should_close()
         {
             let dt = world
-                .non_send_resource::<raylib::RaylibHandle>()
+                .non_send::<raylib::RaylibHandle>()
                 .get_frame_time();
 
             // update_world_time is called directly (not via the schedule) because
@@ -955,7 +962,7 @@ impl EngineBuilder {
             crate::tracy::tracy_frame_mark!();
 
             let (new_w, new_h) = {
-                let rl = world.non_send_resource::<raylib::RaylibHandle>();
+                let rl = world.non_send::<raylib::RaylibHandle>();
                 (rl.get_screen_width(), rl.get_screen_height())
             };
             {
@@ -1154,12 +1161,12 @@ mod tests {
         let system_type_ids: Vec<_> = schedule
             .systems()
             .expect("build_schedule initializes the schedule")
-            .map(|(_, system)| system.type_id())
+            .map(|(_, system)| system.system_type())
             .collect();
-        let phase_system_type = IntoSystem::into_system(phase_system).type_id();
-        let animation_controller_type = IntoSystem::into_system(animation_controller).type_id();
-        let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).type_id();
-        let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).type_id();
+        let phase_system_type = IntoSystem::into_system(phase_system).system_type();
+        let animation_controller_type = IntoSystem::into_system(animation_controller).system_type();
+        let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).system_type();
+        let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).system_type();
 
         let phase_index = system_type_ids
             .iter()
@@ -1196,7 +1203,7 @@ mod tests {
         let system_type_ids: Vec<_> = schedule
             .systems()
             .expect("build_schedule initializes the schedule")
-            .map(|(_, system)| system.type_id())
+            .map(|(_, system)| system.system_type())
             .collect();
 
         let index_of = |type_id, label| {
@@ -1207,15 +1214,15 @@ mod tests {
         };
 
         let update_group_counts_index = index_of(
-            IntoSystem::into_system(update_group_counts_system).type_id(),
+            IntoSystem::into_system(update_group_counts_system).system_type(),
             "update_group_counts_system",
         );
         let lua_phase_index = index_of(
-            IntoSystem::into_system(lua_phase_system).type_id(),
+            IntoSystem::into_system(lua_phase_system).system_type(),
             "lua_phase_system",
         );
         let lua_update_index = index_of(
-            IntoSystem::into_system(crate::lua_plugin::update).type_id(),
+            IntoSystem::into_system(crate::lua_plugin::update).system_type(),
             "lua_plugin::update",
         );
 

@@ -3,6 +3,9 @@
 //! These structs hold component data that Lua scripts specify when spawning entities.
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
+use crate::components::guibutton::GuiButton;
+use crate::components::guiimage::GuiImage;
+use crate::components::guilabel::GuiLabel;
 use crate::resources::uniformvalue::UniformValue;
 
 /// Sprite component data for spawning.
@@ -222,29 +225,6 @@ pub struct TextData {
     pub a: u8,
 }
 
-/// Data for spawning a `GuiButton` + its caption child entity.
-/// Caption font/size/color come from `GuiTheme`, not from this struct — see
-/// `process_spawn_command`. An empty `label` skips spawning the caption
-/// entity entirely (captionless button).
-#[derive(Debug, Clone)]
-pub struct GuiButtonSpawnData {
-    pub width: f32,
-    pub height: f32,
-    pub label: String,
-    pub callback_name: String,
-}
-
-/// Data for spawning a `GuiLabel` + its caption child entity.
-/// Caption font/size/color come from `GuiTheme`, not from this struct — see
-/// `process_spawn_command`. An empty `text` skips spawning the caption
-/// entity entirely (captionless label).
-#[derive(Debug, Clone)]
-pub struct GuiLabelSpawnData {
-    pub width: f32,
-    pub height: f32,
-    pub text: String,
-}
-
 /// RGBA color data (0-255 per channel)
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ColorData {
@@ -453,10 +433,16 @@ pub struct SpawnCmd {
     pub lua_setup: Option<String>,
     /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes
     pub lua_on_animation_end: Option<String>,
-    /// GuiButton data (size, caption, click callback) — spawns the button entity plus a
-    /// caption `DynamicText` child in the same call, same frame (see `spawn_gui_caption`)
-    pub gui_button: Option<GuiButtonSpawnData>,
-    /// GuiLabel data (size, caption text) — spawns the label entity plus a
-    /// caption `DynamicText` child in the same call, same frame (see `spawn_gui_caption`)
-    pub gui_label: Option<GuiLabelSpawnData>,
+    /// GuiButton component (size, caption, click callback, disabled state) —
+    /// inserted as-is; `gui_button_spawn_system` reacts on `Added<GuiButton>`
+    /// to spawn the co-located `GuiInteractable` and caption child.
+    pub gui_button: Option<GuiButton>,
+    /// GuiLabel component (size, caption text) — inserted as-is;
+    /// `gui_label_spawn_system` reacts on `Added<GuiLabel>` to spawn the
+    /// caption child.
+    pub gui_label: Option<GuiLabel>,
+    /// GuiImage component (size, texture, click callback) — inserted as-is;
+    /// `gui_image_spawn_system` reacts on `Added<GuiImage>` to spawn the
+    /// co-located `GuiInteractable` + `Sprite`.
+    pub gui_image: Option<GuiImage>,
 }
