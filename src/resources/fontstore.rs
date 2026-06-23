@@ -22,7 +22,7 @@ pub struct FontMeta {
 /// Map of font keys to loaded fonts.
 ///
 /// This is a non-send resource; use `NonSend<FontStore>` in system parameters.
-// NonSend resource: insert with insert_non_send_resource and access via NonSend/NonSendMut
+// NonSend resource: insert with insert_non_send and access via NonSend/NonSendMut
 pub struct FontStore {
     fonts: FxHashMap<String, Font>,
     pub meta: FxHashMap<String, FontMeta>,

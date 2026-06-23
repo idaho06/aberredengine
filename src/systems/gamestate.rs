@@ -9,7 +9,7 @@
 //! - [`clean_all_entities`] despawns all entities that are not marked
 //!   [`Persistent`](crate::components::persistent::Persistent).
 
-use crate::components::persistent::Persistent;
+use crate::components::persistent::CleanableEntity;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use crate::resources::signal_keys as sk;
@@ -44,7 +44,10 @@ pub fn quit_game(mut world_signals: ResMut<WorldSignals>, mut rl: NonSendMut<Ray
 }
 
 /// Despawn all entities that are not marked [`Persistent`].
-pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, Without<Persistent>>) {
+pub fn clean_all_entities(
+    mut commands: Commands,
+    query: Query<Entity, CleanableEntity>,
+) {
     for entity in query.iter() {
         commands.entity(entity).try_despawn();
     }

@@ -14,7 +14,7 @@
 //! - [`EntityProcessing`] – entity command queries + LuaPhase query
 
 use crate::components::luaphase::LuaPhase;
-use crate::components::persistent::Persistent;
+use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
@@ -390,7 +390,7 @@ pub fn switch_scene(
     mut commands: Commands,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
-    entities_to_clean: Query<Entity, Without<Persistent>>,
+    entities_to_clean: Query<Entity, CleanableEntity>,
     persistent_entities: Query<Entity, With<Persistent>>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut entities: EntityProcessing,
@@ -513,7 +513,7 @@ mod tests {
         world.insert_resource(InputBindings::default());
         world.insert_resource(TrackedGroups::default());
         world.insert_resource(Messages::<AudioCmd>::default());
-        world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new"));
+        world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world
     }
 
@@ -543,7 +543,9 @@ mod tests {
                 mut bindings,
                 mut tracked_groups,
                 gui_theme,
-            ) = system_state.get_mut(world);
+            ) = system_state
+                .get_mut(world)
+                .expect("drain_common_commands test params should fetch");
 
             drain_common_commands(
                 &lua_runtime,
@@ -565,7 +567,7 @@ mod tests {
         let mut world = new_drain_test_world();
 
         {
-            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
             lua_runtime
                 .lua()
                 .load("engine.track_group('enemies')")
@@ -616,7 +618,7 @@ mod tests {
             .id();
 
         {
-            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
             lua_runtime
                 .lua()
                 .load(format!(
@@ -644,7 +646,7 @@ mod tests {
         let mut world = new_drain_test_world();
 
         {
-            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
             lua_runtime
                 .lua()
                 .load(
@@ -658,7 +660,7 @@ mod tests {
 
         world.run_system_once(switch_scene).unwrap();
 
-        let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+        let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
 
         let mut map_buf = Vec::new();
         lua_runtime.drain_map_commands_into(&mut map_buf);
@@ -693,7 +695,7 @@ mod tests {
         let snapshot = world.resource_mut::<WorldSignals>().snapshot();
 
         {
-            let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
             // Prime the cache with a snapshot that still contains "player",
             // mimicking the stale state on_switch_scene would otherwise see.
             lua_runtime.update_signal_cache(snapshot);
@@ -711,7 +713,7 @@ mod tests {
 
         world.run_system_once(switch_scene).unwrap();
 
-        let lua_runtime = world.get_non_send_resource::<LuaRuntime>().unwrap();
+        let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
         let player_seen: Option<u64> = lua_runtime
             .lua()
             .globals()

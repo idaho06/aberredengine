@@ -638,6 +638,8 @@ fn apply_particle_emitter(
 struct ResetAnimationCommand;
 
 impl bevy_ecs::system::EntityCommand for ResetAnimationCommand {
+    type Out = ();
+
     fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
         if let Some(mut animation) = entity.get_mut::<Animation>() {
             animation.reset();
@@ -712,7 +714,9 @@ mod tests {
 
         let mut system_state = SystemState::<Commands>::new(&mut world);
         {
-            let mut commands = system_state.get_mut(&mut world);
+            let mut commands = system_state
+                .get_mut(&mut world)
+                .expect("Commands should fetch in clone test");
             process_clone_command(
                 &mut commands,
                 CloneCmd {
@@ -740,7 +744,9 @@ mod tests {
 
         let mut system_state = SystemState::<Commands>::new(&mut world);
         {
-            let mut commands = system_state.get_mut(&mut world);
+            let mut commands = system_state
+                .get_mut(&mut world)
+                .expect("Commands should fetch in clone test");
             process_clone_command(
                 &mut commands,
                 CloneCmd {

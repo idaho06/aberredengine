@@ -430,7 +430,13 @@ fn non_persistent_entities_despawned() {
 
     // Only persistent entities should remain
     let non_persistent: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
     assert!(
@@ -814,7 +820,9 @@ fn scene_switch_does_not_emit_stop_all_music() {
 
     world.resource_mut::<Messages<AudioCmd>>().update();
     let mut reader_state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
-    let mut reader = reader_state.get_mut(&mut world);
+    let mut reader = reader_state
+        .get_mut(&mut world)
+        .expect("Audio command reader should fetch");
     let cmds: Vec<_> = reader.read().collect();
 
     assert!(

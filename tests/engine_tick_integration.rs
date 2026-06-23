@@ -226,10 +226,10 @@ fn collision_pipeline_triggers_lua_side_effects() {
     world.init_resource::<Messages<AudioCmd>>();
 
     let lua_runtime = LuaRuntime::new().expect("Failed to init Lua runtime");
-    world.insert_non_send_resource(lua_runtime);
+    world.insert_non_send(lua_runtime);
 
     {
-        let lua_runtime = world.non_send_resource::<LuaRuntime>();
+        let lua_runtime = world.non_send::<LuaRuntime>();
         lua_runtime
             .lua()
             .load(
@@ -300,7 +300,7 @@ fn collision_callback_error_still_drains_queued_commands() {
     world.init_resource::<Messages<AudioCmd>>();
 
     {
-        let lua_runtime = world.non_send_resource::<LuaRuntime>();
+        let lua_runtime = world.non_send::<LuaRuntime>();
         lua_runtime
             .lua()
             .load(
@@ -1330,7 +1330,9 @@ fn rust_timer_observer_can_write_audio() {
 
     // Read messages via SystemState<MessageReader>
     let mut state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
-    let mut reader = state.get_mut(&mut world);
+    let mut reader = state
+        .get_mut(&mut world)
+        .expect("Audio command reader should fetch");
     let cmds: Vec<_> = reader.read().collect();
     assert_eq!(cmds.len(), 1);
     assert!(matches!(cmds[0], AudioCmd::PlayFx { id } if id == "explosion"));
@@ -2363,10 +2365,10 @@ fn lua_phase_on_exit_sees_post_swap_phase_state() {
     });
 
     let lua_runtime = LuaRuntime::new().expect("Failed to init Lua runtime");
-    world.insert_non_send_resource(lua_runtime);
+    world.insert_non_send(lua_runtime);
 
     {
-        let lua_runtime = world.non_send_resource::<LuaRuntime>();
+        let lua_runtime = world.non_send::<LuaRuntime>();
         lua_runtime
             .lua()
             .load(
@@ -2613,7 +2615,9 @@ fn phase_callback_can_write_audio() {
     world.resource_mut::<Messages<AudioCmd>>().update();
 
     let mut state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
-    let mut reader = state.get_mut(&mut world);
+    let mut reader = state
+        .get_mut(&mut world)
+        .expect("Audio command reader should fetch");
     let cmds: Vec<_> = reader.read().collect();
     assert_eq!(cmds.len(), 1);
     assert!(matches!(cmds[0], AudioCmd::PlayFx { id } if id == "phase_start"));
@@ -3385,7 +3389,7 @@ fn make_lua_callback_world(delta: f32) -> World {
         animations: Default::default(),
     });
     let lua_runtime = LuaRuntime::new().expect("LuaRuntime::new");
-    world.insert_non_send_resource(lua_runtime);
+    world.insert_non_send(lua_runtime);
     world
 }
 
@@ -3411,7 +3415,7 @@ fn timer_callback_spawn_then_clone_same_drain() {
     let mut world = make_lua_callback_world(1.0);
 
     {
-        let rt = world.non_send_resource::<LuaRuntime>();
+        let rt = world.non_send::<LuaRuntime>();
         rt.lua()
             .load(
                 r#"
@@ -3457,7 +3461,7 @@ fn collision_callback_spawn_then_clone_same_drain() {
     let mut world = make_lua_callback_world(0.0);
 
     {
-        let rt = world.non_send_resource::<LuaRuntime>();
+        let rt = world.non_send::<LuaRuntime>();
         rt.lua()
             .load(
                 r#"
@@ -3521,7 +3525,7 @@ fn lua_phase_return_value_beats_phase_transition_cmd() {
     let mut world = make_lua_callback_world(0.016);
 
     {
-        let rt = world.non_send_resource::<LuaRuntime>();
+        let rt = world.non_send::<LuaRuntime>();
         rt.lua()
             .load(
                 r#"
@@ -3580,7 +3584,7 @@ fn collision_callback_phase_plus_signal_all_processed() {
     let mut world = make_lua_callback_world(0.0);
 
     {
-        let rt = world.non_send_resource::<LuaRuntime>();
+        let rt = world.non_send::<LuaRuntime>();
         rt.lua()
             .load(
                 r#"

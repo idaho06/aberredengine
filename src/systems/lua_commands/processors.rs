@@ -685,7 +685,9 @@ mod tests {
 
         let mut system_state = SystemState::<MessageWriter<AudioCmd>>::new(&mut world);
         {
-            let mut writer = system_state.get_mut(&mut world);
+            let mut writer = system_state
+                .get_mut(&mut world)
+                .expect("Audio message writer should fetch");
             process_audio_command(&mut writer, AudioLuaCmd::StopAllSounds);
         }
         system_state.apply(&mut world);
@@ -693,7 +695,9 @@ mod tests {
         world.resource_mut::<Messages<AudioCmd>>().update();
 
         let mut reader_state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
-        let mut reader = reader_state.get_mut(&mut world);
+        let mut reader = reader_state
+            .get_mut(&mut world)
+            .expect("Audio message reader should fetch");
         let cmds: Vec<_> = reader.read().collect();
 
         assert_eq!(cmds.len(), 1);

@@ -369,7 +369,7 @@ fn query_basic_iteration() {
     let mut sum = 0.0;
 
     let mut state = SystemState::<Query<&Position>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Position query should fetch");
 
     for pos in query.iter() {
         count += 1;
@@ -388,7 +388,9 @@ fn query_mutable_iteration() {
     world.spawn((Health(50),));
 
     let mut state = SystemState::<Query<&mut Health>>::new(&mut world);
-    let mut query = state.get_mut(&mut world);
+    let mut query = state
+        .get_mut(&mut world)
+        .expect("Health query should fetch");
 
     for mut health in query.iter_mut() {
         health.0 += 10;
@@ -397,7 +399,7 @@ fn query_mutable_iteration() {
     state.apply(&mut world);
 
     let mut state2 = SystemState::<Query<&Health>>::new(&mut world);
-    let query2 = state2.get(&world);
+    let query2 = state2.get(&world).expect("Health query should fetch");
 
     let total: i32 = query2.iter().map(|h| h.0).sum();
     assert_eq!(total, 170);
@@ -412,7 +414,7 @@ fn query_with_filter() {
     world.spawn((Position { x: 3.0, y: 3.0 }, Player));
 
     let mut state = SystemState::<Query<&Position, With<Player>>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Player position query should fetch");
 
     let count = query.iter().count();
     assert_eq!(count, 2);
@@ -427,7 +429,9 @@ fn query_without_filter() {
     world.spawn((Position { x: 3.0, y: 3.0 },));
 
     let mut state = SystemState::<Query<&Position, Without<Player>>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state
+        .get(&world)
+        .expect("Non-player position query should fetch");
 
     let count = query.iter().count();
     assert_eq!(count, 2);
@@ -441,7 +445,9 @@ fn query_optional_component() {
     world.spawn((Position { x: 2.0, y: 2.0 },));
 
     let mut state = SystemState::<Query<(&Position, Option<&Velocity>)>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state
+        .get(&world)
+        .expect("Optional velocity query should fetch");
 
     let mut with_vel = 0;
     let mut without_vel = 0;
@@ -465,7 +471,7 @@ fn query_get_single() {
     world.spawn((Position { x: 5.0, y: 5.0 }, Player));
 
     let mut state = SystemState::<Query<&Position, With<Player>>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Single player query should fetch");
 
     let result = query.single().unwrap();
     assert!((result.x - 5.0).abs() < f32::EPSILON);
@@ -478,7 +484,9 @@ fn query_entity_access() {
     let entity = world.spawn((Position { x: 1.0, y: 1.0 },)).id();
 
     let mut state = SystemState::<Query<(Entity, &Position)>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state
+        .get(&world)
+        .expect("Entity position query should fetch");
 
     let (queried_entity, _pos) = query.single().unwrap();
     assert_eq!(queried_entity, entity);
@@ -494,7 +502,9 @@ fn query_combinations_mut() {
     world.spawn((Position { x: 3.0, y: 3.0 },));
 
     let mut state = SystemState::<Query<(Entity, &Position)>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state
+        .get(&world)
+        .expect("Entity position query should fetch");
 
     let mut pairs = 0;
     for [_a, _b] in query.iter_combinations::<2>() {
@@ -516,7 +526,9 @@ fn query_multiple_components() {
     ));
 
     let mut state = SystemState::<Query<(&Position, &Velocity, &Health)>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state
+        .get(&world)
+        .expect("Multi-component query should fetch");
 
     let (pos, vel, health) = query.single().unwrap();
     assert!((pos.x - 1.0).abs() < f32::EPSILON);
@@ -534,7 +546,7 @@ fn query_or_filter() {
 
     let mut state =
         SystemState::<Query<&Position, Or<(With<Player>, With<Enemy>)>>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Or-filter query should fetch");
 
     let count = query.iter().count();
     assert_eq!(count, 2);
@@ -548,7 +560,7 @@ fn query_get_by_entity() {
     world.spawn((Position { x: 0.0, y: 0.0 },));
 
     let mut state = SystemState::<Query<&Position>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Position query should fetch");
 
     let pos = query.get(entity).unwrap();
     assert!((pos.x - 42.0).abs() < f32::EPSILON);
@@ -693,7 +705,9 @@ fn commands_trigger_event() {
 
     // Use Commands to trigger
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
     commands.trigger(SimpleEvent(1));
     state.apply(&mut world);
 
@@ -920,7 +934,7 @@ fn schedule_with_queries() {
     schedule.run(&mut world);
 
     let mut state = SystemState::<Query<&Position>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Position query should fetch");
 
     let positions: Vec<_> = query.iter().collect();
     assert!(
@@ -936,7 +950,9 @@ fn system_commands_run_system() {
     let system_id = world.register_system(increment_counter);
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
     commands.run_system(system_id);
     state.apply(&mut world);
 
@@ -982,7 +998,9 @@ fn messages_write_and_read() {
     // Write messages
     {
         let mut state = SystemState::<MessageWriter<TestMessage>>::new(&mut world);
-        let mut writer = state.get_mut(&mut world);
+        let mut writer = state
+            .get_mut(&mut world)
+            .expect("Message writer should fetch");
         writer.write(TestMessage { value: 42 });
         writer.write(TestMessage { value: 100 });
         state.apply(&mut world);
@@ -994,7 +1012,9 @@ fn messages_write_and_read() {
     // Read messages
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         let messages: Vec<_> = reader.read().collect();
 
         assert_eq!(messages.len(), 2);
@@ -1011,7 +1031,9 @@ fn messages_write_batch() {
     // Write batch
     {
         let mut state = SystemState::<MessageWriter<TestMessage>>::new(&mut world);
-        let mut writer = state.get_mut(&mut world);
+        let mut writer = state
+            .get_mut(&mut world)
+            .expect("Message writer should fetch");
         writer.write_batch(vec![
             TestMessage { value: 1 },
             TestMessage { value: 2 },
@@ -1025,7 +1047,9 @@ fn messages_write_batch() {
     // Count messages
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         let count = reader.read().count();
         assert_eq!(count, 3);
     }
@@ -1039,7 +1063,9 @@ fn messages_cleared_after_update() {
     // Write and update
     {
         let mut state = SystemState::<MessageWriter<TestMessage>>::new(&mut world);
-        let mut writer = state.get_mut(&mut world);
+        let mut writer = state
+            .get_mut(&mut world)
+            .expect("Message writer should fetch");
         writer.write(TestMessage { value: 42 });
         state.apply(&mut world);
     }
@@ -1048,7 +1074,9 @@ fn messages_cleared_after_update() {
     // Read once
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         assert_eq!(reader.read().count(), 1);
     }
 
@@ -1058,7 +1086,9 @@ fn messages_cleared_after_update() {
     // Read again - should be empty
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         assert_eq!(reader.read().count(), 0);
     }
 }
@@ -1100,7 +1130,9 @@ fn messages_multiple_readers() {
     // Write message
     {
         let mut state = SystemState::<MessageWriter<TestMessage>>::new(&mut world);
-        let mut writer = state.get_mut(&mut world);
+        let mut writer = state
+            .get_mut(&mut world)
+            .expect("Message writer should fetch");
         writer.write(TestMessage { value: 10 });
         state.apply(&mut world);
     }
@@ -1109,7 +1141,9 @@ fn messages_multiple_readers() {
     // First reader
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         let sum: i32 = reader.read().map(|m| m.value).sum();
         assert_eq!(sum, 10);
     }
@@ -1117,7 +1151,9 @@ fn messages_multiple_readers() {
     // Second reader should still see the messages (they're only cleared on next update)
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         let sum: i32 = reader.read().map(|m| m.value).sum();
         assert_eq!(sum, 10);
     }
@@ -1131,7 +1167,9 @@ fn messages_from_iterator() {
     // Write from iterator
     {
         let mut state = SystemState::<MessageWriter<TestMessage>>::new(&mut world);
-        let mut writer = state.get_mut(&mut world);
+        let mut writer = state
+            .get_mut(&mut world)
+            .expect("Message writer should fetch");
         writer.write_batch((0..5).map(|i| TestMessage { value: i }));
         state.apply(&mut world);
     }
@@ -1141,7 +1179,9 @@ fn messages_from_iterator() {
     // Verify all messages
     {
         let mut state = SystemState::<MessageReader<TestMessage>>::new(&mut world);
-        let mut reader = state.get_mut(&mut world);
+        let mut reader = state
+            .get_mut(&mut world)
+            .expect("Message reader should fetch");
         let values: Vec<_> = reader.read().map(|m| m.value).collect();
         assert_eq!(values, vec![0, 1, 2, 3, 4]);
     }
@@ -1263,7 +1303,9 @@ fn system_param_in_system_state() {
     world.insert_resource(Config::default());
 
     let mut state = SystemState::<BundledResources>::new(&mut world);
-    let mut res = state.get_mut(&mut world);
+    let mut res = state
+        .get_mut(&mut world)
+        .expect("Bundled resources should fetch");
     res.counter.0 = 99;
     state.apply(&mut world);
 
@@ -1303,14 +1345,18 @@ fn commands_spawn_entity() {
     let mut world = World::new();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
 
     commands.spawn((Position { x: 10.0, y: 20.0 },));
 
     state.apply(&mut world);
 
     let mut query_state = SystemState::<Query<&Position>>::new(&mut world);
-    let query = query_state.get(&world);
+    let query = query_state
+        .get(&world)
+        .expect("Position query should fetch");
 
     assert_eq!(query.iter().count(), 1);
     let pos = query.single().unwrap();
@@ -1324,7 +1370,9 @@ fn commands_entity_insert() {
     let entity = world.spawn((Position { x: 0.0, y: 0.0 },)).id();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
 
     commands.entity(entity).insert(Velocity { x: 1.0, y: 2.0 });
 
@@ -1341,7 +1389,9 @@ fn commands_entity_despawn() {
     let entity = world.spawn((Position { x: 0.0, y: 0.0 },)).id();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
 
     commands.entity(entity).despawn();
 
@@ -1355,7 +1405,9 @@ fn commands_insert_resource() {
     let mut world = World::new();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
 
     commands.insert_resource(Counter(42));
 
@@ -1380,8 +1432,12 @@ fn commands_in_system() {
     let mut player_state = SystemState::<Query<&Position, With<Player>>>::new(&mut world);
     let mut enemy_state = SystemState::<Query<&Position, With<Enemy>>>::new(&mut world);
 
-    let player_query = player_state.get(&world);
-    let enemy_query = enemy_state.get(&world);
+    let player_query = player_state
+        .get(&world)
+        .expect("Player query should fetch");
+    let enemy_query = enemy_state
+        .get(&world)
+        .expect("Enemy query should fetch");
 
     assert_eq!(player_query.iter().count(), 1);
     assert_eq!(enemy_query.iter().count(), 1);
@@ -1470,9 +1526,9 @@ impl NonSendHandle {
 fn non_send_resource_insert_and_access() {
     let mut world = World::new();
 
-    world.insert_non_send_resource(NonSendHandle::new(42));
+    world.insert_non_send(NonSendHandle::new(42));
 
-    let handle = world.non_send_resource::<NonSendHandle>();
+    let handle = world.non_send::<NonSendHandle>();
     assert_eq!(handle.value, 42);
 }
 
@@ -1480,14 +1536,14 @@ fn non_send_resource_insert_and_access() {
 fn non_send_resource_mut() {
     let mut world = World::new();
 
-    world.insert_non_send_resource(NonSendHandle::new(0));
+    world.insert_non_send(NonSendHandle::new(0));
 
     {
-        let mut handle = world.non_send_resource_mut::<NonSendHandle>();
+        let mut handle = world.non_send_mut::<NonSendHandle>();
         handle.value = 100;
     }
 
-    let handle = world.non_send_resource::<NonSendHandle>();
+    let handle = world.non_send::<NonSendHandle>();
     assert_eq!(handle.value, 100);
 }
 
@@ -1495,7 +1551,7 @@ fn non_send_resource_mut() {
 fn non_send_in_system() {
     let mut world = World::new();
     world.insert_resource(Counter(0));
-    world.insert_non_send_resource(NonSendHandle::new(50));
+    world.insert_non_send(NonSendHandle::new(50));
 
     fn use_non_send(handle: NonSend<NonSendHandle>, mut counter: ResMut<Counter>) {
         counter.0 = handle.value;
@@ -1511,7 +1567,7 @@ fn non_send_in_system() {
 #[test]
 fn non_send_mut_in_system() {
     let mut world = World::new();
-    world.insert_non_send_resource(NonSendHandle::new(0));
+    world.insert_non_send(NonSendHandle::new(0));
 
     fn mutate_non_send(mut handle: NonSendMut<NonSendHandle>) {
         handle.value = 999;
@@ -1521,7 +1577,7 @@ fn non_send_mut_in_system() {
     schedule.add_systems(mutate_non_send);
     schedule.run(&mut world);
 
-    let handle = world.non_send_resource::<NonSendHandle>();
+    let handle = world.non_send::<NonSendHandle>();
     assert_eq!(handle.value, 999);
 }
 
@@ -1548,7 +1604,7 @@ fn query_empty_world() {
     let mut world = World::new();
 
     let mut state = SystemState::<Query<&Position>>::new(&mut world);
-    let query = state.get(&world);
+    let query = state.get(&world).expect("Position query should fetch");
 
     assert_eq!(query.iter().count(), 0);
 }
@@ -1620,7 +1676,7 @@ struct PersistenceTestEvent(#[allow(dead_code)] i32);
 fn observer_without_persistent_is_despawned_by_cleanup() {
     // This test demonstrates the problem: observers spawned as entities
     // can be accidentally despawned by scene cleanup queries like:
-    // Query<Entity, Without<Persistent>>
+    // Query<Entity, (Without<Persistent>, Without<IsResource>)>
     let mut world = World::new();
 
     let counter = Arc::new(Mutex::new(0));
@@ -1643,7 +1699,13 @@ fn observer_without_persistent_is_despawned_by_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -1692,7 +1754,13 @@ fn observer_with_persistent_survives_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -1750,7 +1818,13 @@ fn multiple_observers_mixed_persistence() {
 
     // Simulate scene cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -1792,7 +1866,13 @@ fn commands_trigger_works_with_persistent_observer() {
 
     // Simulate scene cleanup BEFORE using Commands::trigger
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -1802,7 +1882,9 @@ fn commands_trigger_works_with_persistent_observer() {
 
     // Use Commands to trigger (like the input system does)
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
     commands.trigger(PersistenceTestEvent(42));
     state.apply(&mut world);
 
@@ -1856,7 +1938,7 @@ fn registered_system_is_an_entity() {
 fn registered_system_without_persistent_is_despawned_by_cleanup() {
     // This test demonstrates the problem: registered systems are entities
     // and can be accidentally despawned by scene cleanup queries like:
-    // Query<Entity, Without<Persistent>>
+    // Query<Entity, (Without<Persistent>, Without<IsResource>)>
     let mut world = World::new();
     world.insert_resource(Counter(0));
 
@@ -1873,7 +1955,13 @@ fn registered_system_without_persistent_is_despawned_by_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -1918,7 +2006,13 @@ fn registered_system_with_persistent_survives_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -1963,7 +2057,13 @@ fn registered_system_with_input_survives_cleanup_when_persistent() {
 
     // Simulate scene cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -2006,7 +2106,13 @@ fn multiple_registered_systems_mixed_persistence() {
 
     // Simulate scene cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -2044,7 +2150,13 @@ fn commands_run_system_works_with_persistent_system() {
 
     // Simulate scene cleanup BEFORE using Commands::run_system
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -2054,7 +2166,9 @@ fn commands_run_system_works_with_persistent_system() {
 
     // Use Commands to run system (like the menu selection observer does)
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state.get_mut(&mut world);
+    let mut commands = state
+        .get_mut(&mut world)
+        .expect("Commands should fetch");
     commands.run_system(system_id);
     state.apply(&mut world);
 
@@ -2089,7 +2203,13 @@ fn system_entity_can_have_additional_components() {
 
     // Simulate cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<Entity, Without<Persistent>>()
+        .query_filtered::<
+            Entity,
+            (
+                Without<Persistent>,
+                Without<bevy_ecs::resource::IsResource>,
+            ),
+        >()
         .iter(&world)
         .collect();
 
@@ -2117,7 +2237,9 @@ fn clone_and_spawn_after_deferred_spawn_same_buffer() {
 
     let mut sys_state: SystemState<Commands> = SystemState::new(&mut world);
     {
-        let mut commands = sys_state.get_mut(&mut world);
+        let mut commands = sys_state
+            .get_mut(&mut world)
+            .expect("Commands should fetch");
 
         // Spawn source with a component (deferred)
         let mut source_ec = commands.spawn_empty();

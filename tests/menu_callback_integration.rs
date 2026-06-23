@@ -40,7 +40,7 @@ fn setup_world() -> World {
     world.insert_resource(CameraFollowConfig::default());
     world.insert_resource(InputBindings::default());
     #[cfg(feature = "lua")]
-    world.insert_non_send_resource(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
+    world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world
 }
 
@@ -365,7 +365,7 @@ fn lua_callback_takes_priority_over_rust_callback() {
 
     // Register a Lua function the observer will find
     {
-        let lua_rt = world.non_send_resource::<LuaRuntime>();
+        let lua_rt = world.non_send::<LuaRuntime>();
         lua_rt
             .lua()
             .load("function on_menu_select(menu, item_id, index) end")

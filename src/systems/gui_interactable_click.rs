@@ -99,7 +99,7 @@ mod tests {
         world.insert_resource(InputBindings::default());
         world.insert_resource(Messages::<crate::events::audio::AudioCmd>::default());
         #[cfg(feature = "lua")]
-        world.insert_non_send_resource(
+        world.insert_non_send(
             crate::resources::lua_runtime::LuaRuntime::new().expect("LuaRuntime::new"),
         );
         world
@@ -140,7 +140,7 @@ mod tests {
 
         let mut world = setup_world();
         {
-            let lua_rt = world.non_send_resource::<LuaRuntime>();
+            let lua_rt = world.non_send::<LuaRuntime>();
             lua_rt
                 .lua()
                 .load("function on_gui_button_clicked() end")

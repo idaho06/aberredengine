@@ -92,7 +92,7 @@ mod tests {
         let b = world.spawn(Group::new("enemy")).id();
 
         let mut state = SystemState::<Query<&Group>>::new(&mut world);
-        let groups = state.get(&world);
+        let groups = state.get(&world).expect("Group query should fetch");
 
         let result = resolve_groups(&groups, a, b);
         assert_eq!(result, Some(("player", "enemy")));
@@ -105,7 +105,7 @@ mod tests {
         let b = world.spawn(Group::new("enemy")).id();
 
         let mut state = SystemState::<Query<&Group>>::new(&mut world);
-        let groups = state.get(&world);
+        let groups = state.get(&world).expect("Group query should fetch");
 
         assert_eq!(resolve_groups(&groups, a, b), None);
     }
@@ -117,7 +117,7 @@ mod tests {
         let b = world.spawn_empty().id();
 
         let mut state = SystemState::<Query<&Group>>::new(&mut world);
-        let groups = state.get(&world);
+        let groups = state.get(&world).expect("Group query should fetch");
 
         assert_eq!(resolve_groups(&groups, a, b), None);
     }
@@ -129,7 +129,7 @@ mod tests {
         let b = world.spawn_empty().id();
 
         let mut state = SystemState::<Query<&Group>>::new(&mut world);
-        let groups = state.get(&world);
+        let groups = state.get(&world).expect("Group query should fetch");
 
         assert_eq!(resolve_groups(&groups, a, b), None);
     }
@@ -204,7 +204,9 @@ mod tests {
 
         let mut state =
             SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
-        let (positions, global_transforms) = state.get(&world);
+        let (positions, global_transforms) = state
+            .get(&world)
+            .expect("Position and transform queries should fetch");
 
         assert!(resolve_world_pos(&positions, &global_transforms, e).is_none());
     }
@@ -218,7 +220,9 @@ mod tests {
 
         let mut state =
             SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
-        let (positions, global_transforms) = state.get(&world);
+        let (positions, global_transforms) = state
+            .get(&world)
+            .expect("Position and transform queries should fetch");
 
         let result = resolve_world_pos(&positions, &global_transforms, e);
         assert!(result.is_some());
@@ -243,7 +247,9 @@ mod tests {
 
         let mut state =
             SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
-        let (positions, global_transforms) = state.get(&world);
+        let (positions, global_transforms) = state
+            .get(&world)
+            .expect("Position and transform queries should fetch");
 
         let result = resolve_world_pos(&positions, &global_transforms, e);
         assert!(result.is_some());
@@ -265,7 +271,9 @@ mod tests {
             Query<&GlobalTransform2D>,
             Query<&BoxCollider>,
         )>::new(&mut world);
-        let (positions, global_transforms, box_colliders) = state.get(&world);
+        let (positions, global_transforms, box_colliders) = state
+            .get(&world)
+            .expect("Collider queries should fetch");
 
         assert!(resolve_collider_rect(&positions, &global_transforms, &box_colliders, e).is_none());
     }
@@ -285,7 +293,9 @@ mod tests {
             Query<&GlobalTransform2D>,
             Query<&BoxCollider>,
         )>::new(&mut world);
-        let (positions, global_transforms, box_colliders) = state.get(&world);
+        let (positions, global_transforms, box_colliders) = state
+            .get(&world)
+            .expect("Collider queries should fetch");
 
         let rect = resolve_collider_rect(&positions, &global_transforms, &box_colliders, e);
         assert!(rect.is_some());
