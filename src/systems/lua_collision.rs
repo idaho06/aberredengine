@@ -77,6 +77,8 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub animation_store: Res<'w, AnimationStore>,
 }
 
+/// Observes `CollisionEvent`, invokes the matching Lua collision callback, and
+/// queues any phase/animation/timer effects it requests.
 pub fn lua_collision_observer(
     trigger: On<CollisionEvent>,
     mut params: LuaCollisionObserverParams,

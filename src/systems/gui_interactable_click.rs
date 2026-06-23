@@ -17,6 +17,8 @@ use crate::components::guiinteractable::GuiInteractable;
 use crate::events::gui_interactable::GuiInteractableClickEvent;
 use crate::systems::GameCtx;
 
+/// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's named
+/// Lua callback first, falling back to its Rust fn-pointer callback.
 #[cfg(feature = "lua")]
 pub fn gui_interactable_click_observer(
     trigger: On<GuiInteractableClickEvent>,
@@ -53,6 +55,8 @@ pub fn gui_interactable_click_observer(
     }
 }
 
+/// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's Rust
+/// fn-pointer callback (no Lua feature, so no Lua-name lookup).
 #[cfg(not(feature = "lua"))]
 pub fn gui_interactable_click_observer(
     trigger: On<GuiInteractableClickEvent>,

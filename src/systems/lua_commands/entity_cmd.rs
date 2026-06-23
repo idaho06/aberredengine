@@ -75,6 +75,8 @@ fn with_entity_cmds(commands: &mut Commands, entity: Entity, f: impl FnOnce(&mut
     }
 }
 
+/// Drains the Lua entity command queue and dispatches each `EntityCmd` to the
+/// matching ECS mutation (SetVelocity, SetAnimation, Despawn, etc.).
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,

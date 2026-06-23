@@ -300,6 +300,12 @@ pub(super) enum SourceBuffer {
     Pong,
 }
 
+/// Whether this frame needs an open ImGui frame at all — true when debug mode
+/// is active or the active scene registered a `gui_callback`, independently.
+fn needs_imgui(debug_active: bool, has_gui_callback: bool) -> bool {
+    debug_active || has_gui_callback
+}
+
 /// Main render pass.
 ///
 /// Contract
@@ -310,6 +316,12 @@ pub(super) enum SourceBuffer {
 ///   camera parameters, and optional collider boxes/signals).
 /// - When the active scene's `gui_callback` is set, opens an ImGui frame and
 ///   calls it every frame, independent of debug mode.
+///
+/// Not covered by `tests/*.rs`: this system takes `NonSendMut<RenderTarget>`,
+/// `NonSendMut<ImguiBridge>`, `NonSendMut<ShaderStore>`, and `NonSend<FontStore>`,
+/// all of which require a live raylib/GL window context that the integration
+/// test suite never starts. Its extractable pure decision logic (e.g.
+/// [`needs_imgui`]) is unit-tested directly instead.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn render_system(
     mut raylib: crate::systems::RaylibAccess,
@@ -812,7 +824,7 @@ pub fn render_system(
         .and_then(|sm| sm.active_scene.as_deref().and_then(|name| sm.get(name)))
         .and_then(|desc| desc.gui_callback);
 
-    let needs_imgui = debug_active || gui_callback.is_some();
+    let needs_imgui = needs_imgui(debug_active, gui_callback.is_some());
 
     if needs_imgui {
         // Debug-only values — computed only when needed
@@ -1030,6 +1042,31 @@ fn draw_screen_space(
             ScreenDrawItem::Sprite(s) => draw_screen_sprite_item(d, s, textures, debug_sprites),
             ScreenDrawItem::Text(t) => draw_screen_text_item(d, t, fonts, debug_texts),
         }
+    }
+}
+
+#[cfg(test)]
+mod needs_imgui_tests {
+    use super::needs_imgui;
+
+    #[test]
+    fn neither_debug_nor_gui_callback_skips_imgui() {
+        assert!(!needs_imgui(false, false));
+    }
+
+    #[test]
+    fn debug_active_alone_needs_imgui() {
+        assert!(needs_imgui(true, false));
+    }
+
+    #[test]
+    fn gui_callback_alone_needs_imgui() {
+        assert!(needs_imgui(false, true));
+    }
+
+    #[test]
+    fn both_debug_and_gui_callback_needs_imgui() {
+        assert!(needs_imgui(true, true));
     }
 }
 

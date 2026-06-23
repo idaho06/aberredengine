@@ -198,6 +198,8 @@ pub(crate) fn populate_entity_signals(
     Ok(())
 }
 
+/// Builds an entity ctx snapshot table by reusing pooled tables/subtables —
+/// callers must not retain references past the callback (see `EntityCtxTables`).
 pub fn build_entity_context_pooled<'a>(
     _lua: &Lua,
     tables: &EntityCtxTables,
