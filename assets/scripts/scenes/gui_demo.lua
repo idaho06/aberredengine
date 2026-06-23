@@ -74,8 +74,15 @@ local function build_gui_demo_window2(ctx)
         :with_zindex(2)
         :build()
 
+    -- Mixed-theme demo: window 2's button uses the "compact" theme (set up
+    -- in M.spawn() below) instead of "default" — themes are flat/explicit
+    -- per widget, not inherited from the parent GuiWindow, so this call is
+    -- required even though build_gui_demo_window2's own GuiWindow already
+    -- set :with_gui_theme_key("compact"). See docs/gui-system-architecture.md,
+    -- Roadmap item #2.
     engine.spawn()
         :with_gui_button(80, 20, "Hide", "on_hide_window2_clicked")
+        :with_gui_theme_key("compact")
         :with_parent(ctx.id)
         :with_gui_offset(16, 60)
         :with_zindex(2)
@@ -164,31 +171,11 @@ function M.spawn()
     engine.set_camera(0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
     engine.set_background_color(20, 24, 30)
 
-    -- Theme: bluewindow_6_6_6_6.png is 64x64 with 6px nine-patch borders on
-    -- all sides (encoded in the filename). Set here, not in setup.lua's
-    -- load_gui_demo(): this queues a RenderCmd, and RenderCmd's queue has
-    -- "clear" policy (wiped by clear_all_commands() at the start of every
-    -- switch_scene) — unlike AssetCmd's "preserve" queue, it would never
-    -- survive being queued during on_setup(), before the first scene switch.
-    engine.set_gui_theme_panel("gui-bluewindow", 0, 0, 64, 64, 6, 6, 6, 6)
-
-    -- Button skin: button_atlas_8_8_8_8.png is a 128x128 2x2 grid of 64x64
-    -- cells (top-left=normal, top-right=hover, bottom-left=pressed,
-    -- bottom-right=disabled), 8px nine-patch borders on all sides (encoded
-    -- in the filename, same convention as bluewindow_6_6_6_6.png above).
-    engine.set_gui_theme_button("normal", "gui-button-atlas", 0, 0, 64, 64, 8, 8, 8, 8)
-    -- engine.set_gui_theme_button("hover", "gui-button-atlas", 64, 0, 64, 64, 8, 8, 8, 8)
-    engine.set_gui_theme_button("pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
-    -- engine.set_gui_theme_button("disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
-
-    -- Label skin: label_6_6_6_6.png is 64x64 with 6px nine-patch borders on
-    -- all sides (encoded in the filename, same convention as
-    -- bluewindow_6_6_6_6.png above).
-    engine.set_gui_theme_label("gui-label", 0, 0, 64, 64, 6, 6, 6, 6)
-
-    -- Caption font/size/color for every GuiButton/GuiLabel caption — set once
-    -- here rather than per :with_gui_button()/:with_gui_label() call.
-    engine.set_gui_theme_font("arcade", 16, 255, 255, 255, 255)
+    -- GUI themes ("default" + "compact") are registered once in setup.lua's
+    -- load_gui_demo(), called from on_setup() — gui_theme_commands is a
+    -- "preserve"-policy queue (see queue_registry.rs), so theme setup
+    -- belongs with the rest of this scene's asset loading rather than being
+    -- re-asserted here every time the scene is entered.
 
     engine.spawn()
         :with_gui_window(200, 150)
@@ -209,9 +196,12 @@ function M.spawn()
     engine.clear_flag("gui_demo_window2_visible")
 
     -- No :with_screen_position() here — window 2 starts fully invisible;
-    -- on_show_window2_clicked is what gives it one.
+    -- on_show_window2_clicked is what gives it one. Uses the "compact"
+    -- theme (registered alongside "default" in setup.lua's load_gui_demo())
+    -- to demonstrate two named themes coexisting in the same scene.
     engine.spawn()
         :with_gui_window(300, 90)
+        :with_gui_theme_key("compact")
         :with_zindex(0)
         :with_lua_setup("build_gui_demo_window2")
         :build()

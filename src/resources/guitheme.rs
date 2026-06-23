@@ -15,6 +15,10 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::Resource;
 use raylib::prelude::{Color, Rectangle};
+use rustc_hash::{FxHashMap, FxHashSet};
+
+/// Default theme key used by widgets that never call `:with_gui_theme_key`.
+pub const DEFAULT_GUI_THEME_KEY: &str = "default";
 
 /// Nine-patch metadata for one themed visual: a texture region plus border
 /// offsets in pixels, mapping 1:1 onto raylib's `NPatchInfo`.
@@ -47,14 +51,17 @@ pub struct GuiButtonSkin {
     pub disabled: Option<GuiNinePatch>,
 }
 
-/// Global theme for GUI rendering. `label` is `None` until
+/// One named theme's worth of GUI styling. `label` is `None` until
 /// `engine.set_gui_theme_label` is called — a `GuiLabel` renders its caption
 /// with no background panel until then. `font`/`font_size`/`text_color`
 /// configure every widget caption's `DynamicText`; an unset `font` (empty
 /// `Arc<str>`, the default) renders no glyphs — `FontStore::get` already
 /// returns `None` for an unset key and silently skips the draw, so this is
 /// the same "unconfigured = skip" idiom `button`/`label` already use.
-#[derive(Resource, Clone, Debug)]
+///
+/// Not a `Resource` itself — stored by name inside [`GuiThemeStore`], which
+/// is the actual resource. See `docs/gui-system-architecture.md` Roadmap #2.
+#[derive(Clone, Debug)]
 pub struct GuiTheme {
     pub panel: GuiNinePatch,
     pub button: Option<GuiButtonSkin>,
@@ -92,6 +99,52 @@ impl GuiTheme {
             return false;
         }
         true
+    }
+}
+
+/// Named, persistent store of GUI themes. Replaces the old single global
+/// `GuiTheme` resource so a scene can mix multiple themed `GuiWindow`s/
+/// `GuiButton`s/`GuiLabel`s (different `theme_key` per widget, see
+/// `components.md`). Always inserted at startup (see `engine_app.rs`) so
+/// consumers take a plain `Res<GuiThemeStore>` rather than
+/// `Option<Res<_>>` — only individual *keys* may be missing, not the store
+/// itself.
+///
+/// Resources aren't touched by `clear_all_commands()`, so a theme registered
+/// under a name persists across scene switches exactly like the old single
+/// `GuiTheme` resource did — only the `RenderCmd` queue used to set it is
+/// scene-scoped.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct GuiThemeStore {
+    pub themes: FxHashMap<Arc<str>, GuiTheme>,
+}
+
+impl GuiThemeStore {
+    pub fn get(&self, key: &str) -> Option<&GuiTheme> {
+        self.themes.get(key)
+    }
+}
+
+/// Dedupes "widget references an unregistered theme_key" warnings so a
+/// missing key logs once instead of every frame for every widget that
+/// references it (a real `warn!` per widget per frame would flood the log
+/// at 60Hz). Scoped to process lifetime, not per-scene — revisit if a typo
+/// fixed mid-session needs to be re-flagged after a scene switch.
+#[derive(Resource, Default)]
+pub struct GuiThemeWarnCache {
+    warned_keys: FxHashSet<Arc<str>>,
+}
+
+impl GuiThemeWarnCache {
+    /// Returns `true` the first time `key` is reported missing, `false` on
+    /// every subsequent call for the same key.
+    pub fn warn_once(&mut self, key: &str) -> bool {
+        if self.warned_keys.contains(key) {
+            false
+        } else {
+            self.warned_keys.insert(Arc::from(key));
+            true
+        }
     }
 }
 

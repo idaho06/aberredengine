@@ -12,8 +12,12 @@
 //!
 //! See `docs/gui-system-architecture.md`.
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
+
+use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 
 /// Render this entity via `GuiTheme.button`'s nine-patch skin. Carries
 /// everything needed to spawn itself: `gui_button_spawn_system` reacts on
@@ -31,6 +35,9 @@ pub struct GuiButton {
     pub callback_name: String,
     /// Authored disabled state, applied to the spawned `GuiInteractable.state`.
     pub disabled: bool,
+    /// Selects which named theme in `GuiThemeStore` to render this button
+    /// (and its caption) with. Default `"default"`.
+    pub theme_key: Arc<str>,
 }
 
 impl GuiButton {
@@ -40,6 +47,7 @@ impl GuiButton {
             caption: caption.into(),
             callback_name: String::new(),
             disabled: false,
+            theme_key: Arc::from(DEFAULT_GUI_THEME_KEY),
         }
     }
 
@@ -63,6 +71,11 @@ impl GuiButton {
 
     pub fn with_disabled(mut self) -> Self {
         self.disabled = true;
+        self
+    }
+
+    pub fn with_theme_key(mut self, key: impl Into<Arc<str>>) -> Self {
+        self.theme_key = key.into();
         self
     }
 }

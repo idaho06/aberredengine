@@ -175,11 +175,12 @@ impl LuaRuntime {
             self.lua,
             meta_fns,
             "set_gui_theme_panel",
-            render_commands,
-            |(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
-                String, f32, f32, f32, f32, i32, i32, i32, i32
+            gui_theme_commands,
+            |(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
+                String, String, f32, f32, f32, f32, i32, i32, i32, i32
             ),
             RenderCmd::SetGuiThemePanel {
+                theme_key,
                 tex_key,
                 source_x,
                 source_y,
@@ -190,9 +191,10 @@ impl LuaRuntime {
                 right,
                 bottom
             },
-            desc = "Set the GuiWindow theme's nine-patch panel texture/region/borders",
+            desc = "Set the named theme's GuiWindow nine-patch panel texture/region/borders in GuiThemeStore",
             cat = "render",
             params = [
+                ("theme_key", "string"),
                 ("tex_key", "string"),
                 ("source_x", "number"),
                 ("source_y", "number"),
@@ -209,11 +211,12 @@ impl LuaRuntime {
             self.lua,
             meta_fns,
             "set_gui_theme_button",
-            render_commands,
-            |(state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
-                String, String, f32, f32, f32, f32, i32, i32, i32, i32
+            gui_theme_commands,
+            |(theme_key, state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
+                String, String, String, f32, f32, f32, f32, i32, i32, i32, i32
             ),
             RenderCmd::SetGuiThemeButton {
+                theme_key,
                 state,
                 tex_key,
                 source_x,
@@ -225,9 +228,10 @@ impl LuaRuntime {
                 right,
                 bottom
             },
-            desc = "Set one button-state nine-patch skin. Call once per state: \"normal\"/\"hover\"/\"pressed\"/\"disabled\"",
+            desc = "Set one button-state nine-patch skin on the named theme. Call once per state: \"normal\"/\"hover\"/\"pressed\"/\"disabled\"",
             cat = "render",
             params = [
+                ("theme_key", "string"),
                 ("state", "string"),
                 ("tex_key", "string"),
                 ("source_x", "number"),
@@ -246,11 +250,12 @@ impl LuaRuntime {
             self.lua,
             meta_fns,
             "set_gui_theme_label",
-            render_commands,
-            |(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
-                String, f32, f32, f32, f32, i32, i32, i32, i32
+            gui_theme_commands,
+            |(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
+                String, String, f32, f32, f32, f32, i32, i32, i32, i32
             ),
             RenderCmd::SetGuiThemeLabel {
+                theme_key,
                 tex_key,
                 source_x,
                 source_y,
@@ -261,9 +266,10 @@ impl LuaRuntime {
                 right,
                 bottom
             },
-            desc = "Set the GuiLabel theme's nine-patch panel texture/region/borders",
+            desc = "Set the named theme's GuiLabel nine-patch panel texture/region/borders in GuiThemeStore",
             cat = "render",
             params = [
+                ("theme_key", "string"),
                 ("tex_key", "string"),
                 ("source_x", "number"),
                 ("source_y", "number"),
@@ -281,9 +287,10 @@ impl LuaRuntime {
             self.lua,
             meta_fns,
             "set_gui_theme_font",
-            render_commands,
-            |(font_key, font_size, r, g, b, a)| (String, f32, u8, u8, u8, u8),
+            gui_theme_commands,
+            |(theme_key, font_key, font_size, r, g, b, a)| (String, String, f32, u8, u8, u8, u8),
             RenderCmd::SetGuiThemeFont {
+                theme_key,
                 font_key,
                 font_size,
                 r,
@@ -291,9 +298,10 @@ impl LuaRuntime {
                 b,
                 a
             },
-            desc = "Set the GuiTheme's caption font/size/color, used by every GuiButton/GuiLabel caption",
+            desc = "Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it",
             cat = "render",
             params = [
+                ("theme_key", "string"),
                 ("font_key", "string"),
                 ("font_size", "number"),
                 ("r", "integer"),

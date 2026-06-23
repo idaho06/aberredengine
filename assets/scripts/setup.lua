@@ -225,12 +225,60 @@ local function load_bunnymark()
     engine.load_texture("bunnymark-raybunny", "./assets/textures/bunnymark/raybunny.png")
 end
 
---- Load assets for the GUI Demo example
+--- Load assets and register GUI themes for the GUI Demo example.
+--
+-- Theme registration (engine.set_gui_theme_*) lives here, not in
+-- gui_demo.lua's M.spawn(): those calls queue into gui_theme_commands, a
+-- "preserve"-policy queue (see queue_registry.rs) that survives the first
+-- switch_scene's clear_all_commands() — unlike most RenderCmd-backed calls
+-- (e.g. post-process), theme setup is initial game configuration, not
+-- per-scene state, so it belongs alongside the rest of on_setup()'s asset
+-- loading.
 local function load_gui_demo()
     engine.log_debug("Loading GUI Demo assets...")
     engine.load_texture("gui-bluewindow", "./assets/textures/gui/bluewindow_6_6_6_6.png")
     engine.load_texture("gui-button-atlas", "./assets/textures/gui/button_atlas_8_8_8_8.png")
     engine.load_texture("gui-label", "./assets/textures/gui/label_6_6_6_6.png")
+
+    -- "default" theme: bluewindow_6_6_6_6.png is 64x64 with 6px nine-patch
+    -- borders on all sides (encoded in the filename). Every set_gui_theme_*
+    -- call takes the theme name as its first argument (see
+    -- docs/gui-system-architecture.md, Roadmap item #2) — a named theme
+    -- registered here persists in GuiThemeStore across every scene switch
+    -- for the rest of the game's lifetime, not just this one scene.
+    engine.set_gui_theme_panel("default", "gui-bluewindow", 0, 0, 64, 64, 6, 6, 6, 6)
+
+    -- Button skin: button_atlas_8_8_8_8.png is a 128x128 2x2 grid of 64x64
+    -- cells (top-left=normal, top-right=hover, bottom-left=pressed,
+    -- bottom-right=disabled), 8px nine-patch borders on all sides (encoded
+    -- in the filename, same convention as bluewindow_6_6_6_6.png above).
+    engine.set_gui_theme_button("default", "normal", "gui-button-atlas", 0, 0, 64, 64, 8, 8, 8, 8)
+    -- engine.set_gui_theme_button("default", "hover", "gui-button-atlas", 64, 0, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_button("default", "pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
+    -- engine.set_gui_theme_button("default", "disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
+
+    -- Label skin: label_6_6_6_6.png is 64x64 with 6px nine-patch borders on
+    -- all sides (encoded in the filename, same convention as
+    -- bluewindow_6_6_6_6.png above).
+    engine.set_gui_theme_label("default", "gui-label", 0, 0, 64, 64, 6, 6, 6, 6)
+
+    -- Caption font/size/color for every "default"-themed GuiButton/GuiLabel
+    -- caption — set once here rather than per :with_gui_button()/
+    -- :with_gui_label() call.
+    engine.set_gui_theme_font("default", "arcade", 16, 255, 255, 255, 255)
+
+    -- "compact" theme: a second named theme, mixed into the same scene
+    -- alongside "default" — gui_demo.lua's window 2 and its Hide button
+    -- reference it via :with_gui_theme_key("compact") instead of inheriting
+    -- "default" from anywhere (theme_key is flat/explicit per widget, never
+    -- inherited from a parent GuiWindow). Reuses the same atlas textures as
+    -- "default" but with a smaller, tinted caption font, to demonstrate
+    -- that two themes can coexist and render independently in one scene —
+    -- not that they must use different art.
+    engine.set_gui_theme_panel("compact", "gui-bluewindow", 0, 0, 64, 64, 6, 6, 6, 6)
+    engine.set_gui_theme_button("compact", "normal", "gui-button-atlas", 0, 0, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_button("compact", "pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_font("compact", "arcade", 12, 255, 220, 120, 255)
 end
 
 --- Called during the Setup game state to load all assets.

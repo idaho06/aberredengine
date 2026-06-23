@@ -23,7 +23,7 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
-use crate::resources::guitheme::GuiTheme;
+use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::lua_runtime::{
@@ -39,11 +39,12 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
+use std::sync::Arc;
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
     drain_and_process_phase_commands, process_animation_command, process_asset_command,
     process_camera_follow_command, process_gameconfig_command, process_group_command,
-    process_input_command, process_render_command, process_signal_command,
+    process_input_command, process_render_command, process_signal_command, render_cmd_theme_key,
 };
 use crate::systems::mapspawn::load_font_with_mipmaps;
 use bevy_ecs::prelude::*;
@@ -86,6 +87,7 @@ pub(crate) struct CommonCmdBufs {
     phase: Vec<PhaseCmd>,
     effects: EffectCmdBufs,
     render: Vec<RenderCmd>,
+    gui_theme: Vec<RenderCmd>,
     gameconfig: Vec<GameConfigCmd>,
     camera_follow: Vec<CameraFollowCmd>,
     input: Vec<InputCmd>,
@@ -225,7 +227,8 @@ fn drain_common_commands(
     bindings: &mut InputBindings,
     tracked_groups: &mut TrackedGroups,
     bufs: &mut CommonCmdBufs,
-    gui_theme: Option<&GuiTheme>,
+    gui_theme_store: &GuiThemeStore,
+    gui_theme_warn_cache: &mut GuiThemeWarnCache,
 ) {
     // Drain animation registrations first so any same-batch SetAnimation/RestartAnimation
     // entity commands can resolve the newly-registered tex_key from AnimationStore.
@@ -249,23 +252,40 @@ fn drain_common_commands(
     );
 
     lua_runtime.drain_render_commands_into(&mut bufs.render);
-    if !bufs.render.is_empty() {
+    // gui_theme_commands is a separate, `preserve`-policy queue (see
+    // queue_registry.rs) so a `set_gui_theme_*` call queued from on_setup()
+    // survives the first switch_scene's clear_all_commands() — unlike
+    // render_commands (post-process, `clear` policy), which is wiped every
+    // scene switch since post-process commands may reference a scene's
+    // about-to-be-despawned state.
+    lua_runtime.drain_gui_theme_commands_into(&mut bufs.gui_theme);
+    if !bufs.render.is_empty() || !bufs.gui_theme.is_empty() {
         // Seed/write-back only when there's actually a render command to apply —
-        // avoids cloning GuiTheme and re-inserting it (marking it "changed" for
-        // any Changed<GuiTheme> consumer) on every frame when nothing was queued.
-        let mut gui_theme_staging = gui_theme.cloned();
-        for cmd in bufs.render.drain(..) {
+        // avoids cloning the whole GuiThemeStore and re-inserting it (marking it
+        // "changed" for any Changed<GuiThemeStore> consumer) on every frame when
+        // nothing was queued. Seeding from the current store (not a blank one)
+        // means a SetGuiTheme* command for one key never disturbs any other
+        // key already persisted in the resource.
+        let mut gui_theme_staging = gui_theme_store.clone();
+        let mut touched_keys: FxHashSet<Arc<str>> = FxHashSet::default();
+        for cmd in bufs.render.drain(..).chain(bufs.gui_theme.drain(..)) {
+            if let Some(key) = render_cmd_theme_key(&cmd) {
+                touched_keys.insert(Arc::from(key));
+            }
             process_render_command(cmd, &mut scene_state.post_process, &mut gui_theme_staging);
         }
-        if let Some(mut theme) = gui_theme_staging {
-            if !theme.drop_invalid_button_skin() {
+        for key in touched_keys {
+            if let Some(theme) = gui_theme_staging.themes.get_mut(&key)
+                && !theme.drop_invalid_button_skin()
+                && gui_theme_warn_cache.warn_once(&format!("{key}::button"))
+            {
                 error!(
-                    "GuiTheme.button is set but its 'normal' nine-patch was never set via \
-                     engine.set_gui_theme_button(\"normal\", ...) — button theme dropped, buttons render with no background"
+                    "GuiTheme '{key}' has button set but its 'normal' nine-patch was never set via \
+                     engine.set_gui_theme_button(\"{key}\", \"normal\", ...) — button theme dropped, buttons render with no background"
                 );
             }
-            commands.insert_resource(theme);
         }
+        commands.insert_resource(gui_theme_staging);
     }
 
     lua_runtime.drain_gameconfig_commands_into(&mut bufs.gameconfig);
@@ -314,7 +334,8 @@ pub fn update(
     mut tracked_groups: ResMut<TrackedGroups>,
     mut common_bufs: Local<CommonCmdBufs>,
     mut cached_callback: Local<String>,
-    gui_theme: Option<Res<GuiTheme>>,
+    gui_theme_store: Res<GuiThemeStore>,
+    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
 ) {
     crate::tracy::tracy_span!("lua_update");
     let lua_runtime = &scripting.lua_runtime;
@@ -366,7 +387,8 @@ pub fn update(
         &mut bindings,
         &mut tracked_groups,
         &mut common_bufs,
-        gui_theme.as_deref(),
+        &gui_theme_store,
+        &mut gui_theme_warn_cache,
     );
 
     // Check for quit flag (set by Lua)
@@ -396,7 +418,8 @@ pub fn switch_scene(
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
     mut common_bufs: Local<CommonCmdBufs>,
-    gui_theme: Option<Res<GuiTheme>>,
+    gui_theme_store: Res<GuiThemeStore>,
+    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     debug!("switch_scene: System called!");
@@ -450,7 +473,8 @@ pub fn switch_scene(
         &mut bindings,
         &mut tracked_groups,
         &mut common_bufs,
-        gui_theme.as_deref(),
+        &gui_theme_store,
+        &mut gui_theme_warn_cache,
     );
 
     // Refresh the config cache after the drain may have applied GameConfigCmds.
@@ -499,7 +523,6 @@ mod tests {
     use crate::components::sprite::Sprite;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
-    use std::sync::Arc;
 
     /// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
     fn new_drain_test_world() -> World {
@@ -513,13 +536,15 @@ mod tests {
         world.insert_resource(InputBindings::default());
         world.insert_resource(TrackedGroups::default());
         world.insert_resource(Messages::<AudioCmd>::default());
+        world.insert_resource(GuiThemeStore::default());
+        world.insert_resource(GuiThemeWarnCache::default());
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world
     }
 
     /// Runs [`drain_common_commands`] once against `world`, using a fresh
     /// [`CommonCmdBufs`] (mirrors a single frame's drain in `update`/`switch_scene`).
-    /// Reads any existing `GuiTheme` resource, mirroring the real call sites.
+    /// Reads the existing `GuiThemeStore` resource, mirroring the real call sites.
     fn run_drain_common_commands(world: &mut World) {
         let mut system_state = SystemState::<(
             Commands,
@@ -529,7 +554,8 @@ mod tests {
             MessageWriter<AudioCmd>,
             ResMut<InputBindings>,
             ResMut<TrackedGroups>,
-            Option<Res<GuiTheme>>,
+            Res<GuiThemeStore>,
+            ResMut<GuiThemeWarnCache>,
         )>::new(world);
 
         let mut bufs = CommonCmdBufs::default();
@@ -542,7 +568,8 @@ mod tests {
                 mut audio_cmd_writer,
                 mut bindings,
                 mut tracked_groups,
-                gui_theme,
+                gui_theme_store,
+                mut gui_theme_warn_cache,
             ) = system_state
                 .get_mut(world)
                 .expect("drain_common_commands test params should fetch");
@@ -556,7 +583,8 @@ mod tests {
                 &mut bindings,
                 &mut tracked_groups,
                 &mut bufs,
-                gui_theme.as_deref(),
+                &gui_theme_store,
+                &mut gui_theme_warn_cache,
             );
         }
         system_state.apply(world);
@@ -581,20 +609,19 @@ mod tests {
     }
 
     #[test]
-    fn drain_common_commands_leaves_gui_theme_unchanged_when_no_render_commands_queued() {
+    fn drain_common_commands_leaves_gui_theme_store_unchanged_when_no_render_commands_queued() {
         let mut world = new_drain_test_world();
-        world.insert_resource(GuiTheme::default());
         world.clear_trackers();
 
         run_drain_common_commands(&mut world);
 
         // No RenderCmd was queued this frame, so the gated seed/write-back in
-        // drain_common_commands must not have cloned-and-reinserted GuiTheme —
-        // otherwise every consumer using Changed<GuiTheme> would see a spurious
+        // drain_common_commands must not have cloned-and-reinserted GuiThemeStore —
+        // otherwise every consumer using Changed<GuiThemeStore> would see a spurious
         // change every frame regardless of whether a theme command ever fired.
         assert!(
-            !world.resource_ref::<GuiTheme>().is_changed(),
-            "GuiTheme must not be marked changed when no RenderCmd was queued"
+            !world.resource_ref::<GuiThemeStore>().is_changed(),
+            "GuiThemeStore must not be marked changed when no RenderCmd was queued"
         );
     }
 

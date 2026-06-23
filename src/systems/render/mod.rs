@@ -49,7 +49,7 @@ use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme};
+use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -223,7 +223,8 @@ pub struct RenderResources<'w> {
     pub config: Res<'w, GameConfig>,
     pub maybe_debug: Option<Res<'w, DebugMode>>,
     pub fonts: NonSend<'w, FontStore>,
-    pub gui_theme: Option<Res<'w, GuiTheme>>,
+    pub gui_theme_store: Res<'w, GuiThemeStore>,
+    pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
 }
 
 /// Bundled queries for the render system.
@@ -274,8 +275,12 @@ pub struct RenderQueries<'w, 's> {
     pub gui_buttons: Query<
         'w,
         's,
-        (&'static GuiInteractable, &'static ScreenPosition, &'static ZIndex),
-        With<GuiButton>,
+        (
+            &'static GuiButton,
+            &'static GuiInteractable,
+            &'static ScreenPosition,
+            &'static ZIndex,
+        ),
     >,
     pub gui_labels: Query<'w, 's, (&'static GuiLabel, &'static ScreenPosition, &'static ZIndex)>,
 }
@@ -328,7 +333,7 @@ pub fn render_system(
     mut render_target: NonSendMut<RenderTarget>,
     mut imgui_bridge: NonSendMut<ImguiBridge>,
     mut shader_store: NonSendMut<ShaderStore>,
-    res: RenderResources,
+    mut res: RenderResources,
     queries: RenderQueries,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
@@ -802,7 +807,8 @@ pub fn render_system(
                 &queries.gui_windows,
                 &queries.gui_buttons,
                 &queries.gui_labels,
-                res.gui_theme.as_deref(),
+                &res.gui_theme_store,
+                &mut res.gui_theme_warn_cache,
                 textures,
                 fonts,
                 screen_draw_buffer,
@@ -966,15 +972,43 @@ fn resolve_button_patch(skin: &GuiButtonSkin, state: GuiWidgetState) -> &GuiNine
     }
 }
 
+fn screen_panel_item(
+    panel: GuiNinePatch,
+    size: Vector2,
+    z_index: ZIndex,
+    pos: ScreenPosition,
+) -> ScreenDrawItem {
+    ScreenDrawItem::Panel(ScreenPanelBufferItem {
+        panel,
+        size,
+        z_index,
+        pos,
+    })
+}
+
+fn warn_missing_theme(
+    gui_theme_warn_cache: &mut GuiThemeWarnCache,
+    widget_kind: &str,
+    theme_key: &str,
+    detail: &str,
+) {
+    if gui_theme_warn_cache.warn_once(theme_key) {
+        warn!(
+            "{widget_kind} references unregistered theme_key '{theme_key}'{detail}"
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
     screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
-    gui_buttons: &Query<(&GuiInteractable, &ScreenPosition, &ZIndex), With<GuiButton>>,
+    gui_buttons: &Query<(&GuiButton, &GuiInteractable, &ScreenPosition, &ZIndex)>,
     gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
-    gui_theme: Option<&GuiTheme>,
+    gui_theme_store: &GuiThemeStore,
+    gui_theme_warn_cache: &mut GuiThemeWarnCache,
     textures: &TextureStore,
     fonts: &FontStore,
     buffer: &mut Vec<ScreenDrawItem>,
@@ -982,35 +1016,48 @@ fn draw_screen_space(
     debug_texts: bool,
 ) {
     buffer.clear();
-    if let Some(theme) = gui_theme {
-        let panel = &theme.panel;
-        buffer.extend(gui_windows.iter().map(|(w, p, z)| {
-            ScreenDrawItem::Panel(ScreenPanelBufferItem {
-                panel: panel.clone(),
-                size: w.size,
-                z_index: *z,
-                pos: *p,
-            })
-        }));
-        if let Some(skin) = &theme.button {
-            buffer.extend(gui_buttons.iter().map(|(interactable, p, z)| {
-                ScreenDrawItem::Panel(ScreenPanelBufferItem {
-                    panel: resolve_button_patch(skin, interactable.state).clone(),
-                    size: interactable.size,
-                    z_index: *z,
-                    pos: *p,
-                })
-            }));
+    for (window, p, z) in gui_windows.iter() {
+        match gui_theme_store.get(&window.theme_key) {
+            Some(theme) => buffer.push(screen_panel_item(theme.panel.clone(), window.size, *z, *p)),
+            None => warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiWindow",
+                &window.theme_key,
+                " — skipping themed background",
+            ),
         }
-        if let Some(label_patch) = &theme.label {
-            buffer.extend(gui_labels.iter().map(|(l, p, z)| {
-                ScreenDrawItem::Panel(ScreenPanelBufferItem {
-                    panel: label_patch.clone(),
-                    size: l.size,
-                    z_index: *z,
-                    pos: *p,
-                })
-            }));
+    }
+    for (button, interactable, p, z) in gui_buttons.iter() {
+        match gui_theme_store
+            .get(&button.theme_key)
+            .and_then(|theme| theme.button.as_ref())
+        {
+            Some(skin) => buffer.push(screen_panel_item(
+                resolve_button_patch(skin, interactable.state).clone(),
+                interactable.size,
+                *z,
+                *p,
+            )),
+            None => warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiButton",
+                &button.theme_key,
+                " (or that theme has no button skin) — skipping themed background",
+            ),
+        }
+    }
+    for (label, p, z) in gui_labels.iter() {
+        match gui_theme_store
+            .get(&label.theme_key)
+            .and_then(|theme| theme.label.as_ref())
+        {
+            Some(patch) => buffer.push(screen_panel_item(patch.clone(), label.size, *z, *p)),
+            None => warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiLabel",
+                &label.theme_key,
+                " (or that theme has no label patch) — skipping themed background",
+            ),
         }
     }
     buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint)| {

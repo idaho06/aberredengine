@@ -94,6 +94,7 @@ pub(super) struct LuaAppData {
     pub(super) camera_commands: RefCell<Vec<CameraCmd>>,
     pub(super) animation_commands: RefCell<Vec<AnimationCmd>>,
     pub(super) render_commands: RefCell<Vec<RenderCmd>>,
+    pub(super) gui_theme_commands: RefCell<Vec<RenderCmd>>,
     pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
     pub(super) gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
     pub(super) camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
@@ -816,6 +817,46 @@ impl Default for LuaRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gui_theme_commands_preserve_policy_survives_clear_render_commands_does_not() {
+        let runtime = LuaRuntime::new().unwrap();
+        if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
+            data.gui_theme_commands.borrow_mut().push(RenderCmd::SetGuiThemeFont {
+                theme_key: "default".to_string(),
+                font_key: "arcade".to_string(),
+                font_size: 16.0,
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            });
+            data.render_commands
+                .borrow_mut()
+                .push(RenderCmd::ClearPostProcessUniforms);
+        }
+
+        // Mirrors switch_scene's clear_all_commands() call, which runs
+        // before commands queued during on_setup() (or earlier this frame)
+        // are ever drained.
+        runtime.clear_all_commands();
+
+        let mut render_buf = Vec::new();
+        runtime.drain_render_commands_into(&mut render_buf);
+        assert!(
+            render_buf.is_empty(),
+            "render_commands (clear policy) must be wiped by clear_all_commands"
+        );
+
+        let mut theme_buf = Vec::new();
+        runtime.drain_gui_theme_commands_into(&mut theme_buf);
+        assert_eq!(
+            theme_buf.len(),
+            1,
+            "gui_theme_commands (preserve policy) must survive clear_all_commands, \
+             so engine.set_gui_theme_* calls queued from on_setup() aren't lost"
+        );
+    }
 
     #[test]
     fn pooled_input_table_updates_values() {

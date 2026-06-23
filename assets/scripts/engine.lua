@@ -1408,7 +1408,8 @@ function engine.set_background_color(r, g, b) end
 ---@param enabled boolean
 function engine.set_fullscreen(enabled) end
 
----Set one button-state nine-patch skin. Call once per state: "normal"/"hover"/"pressed"/"disabled"
+---Set one button-state nine-patch skin on the named theme. Call once per state: "normal"/"hover"/"pressed"/"disabled"
+---@param theme_key string
 ---@param state string
 ---@param tex_key string
 ---@param source_x number
@@ -1419,18 +1420,20 @@ function engine.set_fullscreen(enabled) end
 ---@param top integer
 ---@param right integer
 ---@param bottom integer
-function engine.set_gui_theme_button(state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+function engine.set_gui_theme_button(theme_key, state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
----Set the GuiTheme's caption font/size/color, used by every GuiButton/GuiLabel caption
+---Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it
+---@param theme_key string
 ---@param font_key string
 ---@param font_size number
 ---@param r integer
 ---@param g integer
 ---@param b integer
 ---@param a integer
-function engine.set_gui_theme_font(font_key, font_size, r, g, b, a) end
+function engine.set_gui_theme_font(theme_key, font_key, font_size, r, g, b, a) end
 
----Set the GuiLabel theme's nine-patch panel texture/region/borders
+---Set the named theme's GuiLabel nine-patch panel texture/region/borders in GuiThemeStore
+---@param theme_key string
 ---@param tex_key string
 ---@param source_x number
 ---@param source_y number
@@ -1440,9 +1443,10 @@ function engine.set_gui_theme_font(font_key, font_size, r, g, b, a) end
 ---@param top integer
 ---@param right integer
 ---@param bottom integer
-function engine.set_gui_theme_label(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+function engine.set_gui_theme_label(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
----Set the GuiWindow theme's nine-patch panel texture/region/borders
+---Set the named theme's GuiWindow nine-patch panel texture/region/borders in GuiThemeStore
+---@param theme_key string
 ---@param tex_key string
 ---@param source_x number
 ---@param source_y number
@@ -1452,7 +1456,7 @@ function engine.set_gui_theme_label(tex_key, source_x, source_y, source_w, sourc
 ---@param top integer
 ---@param right integer
 ---@param bottom integer
-function engine.set_gui_theme_panel(tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+function engine.set_gui_theme_panel(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
 ---Snap the camera/view rect to integer pixels before rendering (reduces sprite atlas bleeding; disable for smooth rotation/zoom)
 ---@param enabled boolean
@@ -1583,7 +1587,7 @@ function EntityBuilder:with_gui_button_disabled() end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
 
----Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param text string
@@ -1596,7 +1600,12 @@ function EntityBuilder:with_gui_label(width, height, text) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_offset(x, y) end
 
----Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.
+---Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.
+---@param key string
+---@return EntityBuilder
+function EntityBuilder:with_gui_theme_key(key) end
+
+---Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@return EntityBuilder
@@ -2092,7 +2101,7 @@ function CollisionEntityBuilder:with_gui_button_disabled() end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
 
----Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param text string
@@ -2105,7 +2114,12 @@ function CollisionEntityBuilder:with_gui_label(width, height, text) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_offset(x, y) end
 
----Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.
+---Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.
+---@param key string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_theme_key(key) end
+
+---Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@return CollisionEntityBuilder

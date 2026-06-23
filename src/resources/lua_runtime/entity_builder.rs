@@ -9,6 +9,7 @@
 use crate::components::guibutton::GuiButton;
 use crate::components::guiimage::GuiImage;
 use crate::components::guilabel::GuiLabel;
+use crate::components::guiwindow::GuiWindow;
 use super::commands::{CloneCmd, UniformValue};
 use super::runtime::LuaAppData;
 use super::spawn_data::*;
@@ -548,10 +549,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_window", "Set GuiWindow component (themed panel, drawn via the global GuiTheme). Requires :with_screen_position() and :with_zindex() to render.",
+        "with_gui_window", "Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.",
         [("width", "number"), ("height", "number")],
         |_, this: &mut LuaEntityBuilder, (width, height): (f32, f32)| {
-            this.cmd.gui_window = Some((width, height));
+            this.cmd.gui_window = Some(GuiWindow::new(width, height));
             Ok(())
         }
     );
@@ -598,10 +599,31 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_label", "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "with_gui_label", "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
         [("width", "number"), ("height", "number"), ("text", "string")],
         |_, this: &mut LuaEntityBuilder, (width, height, text): (f32, f32, String)| {
             this.cmd.gui_label = Some(GuiLabel::new(width, height, text));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_theme_key", "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.",
+        [("key", "string")],
+        |_, this: &mut LuaEntityBuilder, key: String| {
+            let key: std::sync::Arc<str> = std::sync::Arc::from(key.as_str());
+            if let Some(window) = this.cmd.gui_window.as_mut() {
+                window.theme_key = key;
+            } else if let Some(button) = this.cmd.gui_button.as_mut() {
+                button.theme_key = key;
+            } else if let Some(label) = this.cmd.gui_label.as_mut() {
+                label.theme_key = key;
+            } else {
+                return Err(LuaError::runtime(
+                    "with_gui_theme_key() requires with_gui_window()/with_gui_button()/with_gui_label() first",
+                ));
+            }
             Ok(())
         }
     );

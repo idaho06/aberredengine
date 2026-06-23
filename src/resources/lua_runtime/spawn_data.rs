@@ -6,6 +6,7 @@
 use crate::components::guibutton::GuiButton;
 use crate::components::guiimage::GuiImage;
 use crate::components::guilabel::GuiLabel;
+use crate::components::guiwindow::GuiWindow;
 use crate::resources::uniformvalue::UniformValue;
 
 /// Sprite component data for spawning.
@@ -425,8 +426,9 @@ pub struct SpawnCmd {
     pub camera_target_zoom: Option<f32>,
     /// TileMap path — spawns a tilemap root entity whose tiles become `ChildOf` children
     pub tilemap_path: Option<String>,
-    /// GuiWindow size (width, height) — themed panel rendered via the global `GuiTheme`
-    pub gui_window: Option<(f32, f32)>,
+    /// GuiWindow component (size, theme_key) — inserted as-is; themed panel
+    /// rendered via the named theme looked up in `GuiThemeStore`.
+    pub gui_window: Option<GuiWindow>,
     /// GuiOffset (x, y) — position relative to `parent`, resolved each frame by `gui_layout_system`
     pub gui_offset: Option<(f32, f32)>,
     /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`

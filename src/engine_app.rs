@@ -91,6 +91,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
+use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use crate::systems::gui_interactable_click::gui_interactable_click_observer;
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
@@ -639,6 +640,8 @@ impl EngineBuilder {
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DebugOverlayConfig::default());
         world.insert_resource(GuiInputState::default());
+        world.insert_resource(GuiThemeStore::default());
+        world.insert_resource(GuiThemeWarnCache::default());
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {

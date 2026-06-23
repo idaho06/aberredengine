@@ -16,7 +16,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme};
+use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
@@ -253,19 +253,61 @@ pub fn process_asset_command<F1>(
     }
 }
 
+/// Returns the `theme_key` a `RenderCmd` touches, if it's one of the
+/// `SetGuiTheme*` variants — used by callers to know which `GuiThemeStore`
+/// entries were touched in a drain batch, so per-key validation
+/// (`GuiTheme::drop_invalid_button_skin`) only re-checks themes that
+/// actually changed instead of the whole store every frame.
+pub fn render_cmd_theme_key(cmd: &RenderCmd) -> Option<&str> {
+    match cmd {
+        RenderCmd::SetGuiThemePanel { theme_key, .. }
+        | RenderCmd::SetGuiThemeButton { theme_key, .. }
+        | RenderCmd::SetGuiThemeLabel { theme_key, .. }
+        | RenderCmd::SetGuiThemeFont { theme_key, .. } => Some(theme_key.as_str()),
+        _ => None,
+    }
+}
+
+fn staged_theme_mut<'a>(gui_theme_staging: &'a mut GuiThemeStore, theme_key: &str) -> &'a mut GuiTheme {
+    gui_theme_staging.themes.entry(Arc::from(theme_key)).or_default()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_nine_patch(
+    tex_key: String,
+    source_x: f32,
+    source_y: f32,
+    source_w: f32,
+    source_h: f32,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+) -> GuiNinePatch {
+    GuiNinePatch {
+        tex_key: Arc::from(tex_key),
+        source: Rectangle::new(source_x, source_y, source_w, source_h),
+        left,
+        top,
+        right,
+        bottom,
+    }
+}
+
 /// Process a single render command from Lua and update post-process/GUI-theme state.
 ///
 /// `gui_theme_staging` is shared across the whole per-frame drain loop (not
 /// reset per command) so that `SetGuiThemePanel`/`SetGuiThemeButton` calls in
-/// the same batch — or across frames — mutate one field at a time instead of
-/// each blindly replacing the whole `GuiTheme` resource and stomping
-/// whichever field the other one had already set. Callers seed it from the
-/// current resource (if any) before draining and write it back with exactly
-/// one `commands.insert_resource(...)` after the loop.
+/// the same batch — or across frames — mutate one field of one named theme
+/// at a time instead of each blindly replacing the whole entry and stomping
+/// whichever field the other one had already set, and crucially without
+/// disturbing any *other* theme key in the store. Callers seed it from the
+/// current resource before draining and write it back with exactly one
+/// `commands.insert_resource(...)` after the loop.
 pub fn process_render_command(
     cmd: RenderCmd,
     post_process: &mut PostProcessShader,
-    gui_theme_staging: &mut Option<GuiTheme>,
+    gui_theme_staging: &mut GuiThemeStore,
 ) {
     match cmd {
         RenderCmd::SetPostProcessShader { ids } => {
@@ -295,6 +337,7 @@ pub fn process_render_command(
             post_process.clear_uniforms();
         }
         RenderCmd::SetGuiThemePanel {
+            theme_key,
             tex_key,
             source_x,
             source_y,
@@ -305,17 +348,13 @@ pub fn process_render_command(
             right,
             bottom,
         } => {
-            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
-            theme.panel = GuiNinePatch {
-                tex_key: Arc::from(tex_key),
-                source: Rectangle::new(source_x, source_y, source_w, source_h),
-                left,
-                top,
-                right,
-                bottom,
-            };
+            let theme = staged_theme_mut(gui_theme_staging, &theme_key);
+            theme.panel = build_nine_patch(
+                tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom,
+            );
         }
         RenderCmd::SetGuiThemeButton {
+            theme_key,
             state,
             tex_key,
             source_x,
@@ -327,16 +366,11 @@ pub fn process_render_command(
             right,
             bottom,
         } => {
-            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
+            let theme = staged_theme_mut(gui_theme_staging, &theme_key);
             let skin = theme.button.get_or_insert_with(GuiButtonSkin::default);
-            let patch = GuiNinePatch {
-                tex_key: Arc::from(tex_key),
-                source: Rectangle::new(source_x, source_y, source_w, source_h),
-                left,
-                top,
-                right,
-                bottom,
-            };
+            let patch = build_nine_patch(
+                tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom,
+            );
             match state.as_str() {
                 "normal" => skin.normal = patch,
                 "hover" => skin.hover = Some(patch),
@@ -348,6 +382,7 @@ pub fn process_render_command(
             }
         }
         RenderCmd::SetGuiThemeLabel {
+            theme_key,
             tex_key,
             source_x,
             source_y,
@@ -358,17 +393,13 @@ pub fn process_render_command(
             right,
             bottom,
         } => {
-            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
-            theme.label = Some(GuiNinePatch {
-                tex_key: Arc::from(tex_key),
-                source: Rectangle::new(source_x, source_y, source_w, source_h),
-                left,
-                top,
-                right,
-                bottom,
-            });
+            let theme = staged_theme_mut(gui_theme_staging, &theme_key);
+            theme.label = Some(build_nine_patch(
+                tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom,
+            ));
         }
         RenderCmd::SetGuiThemeFont {
+            theme_key,
             font_key,
             font_size,
             r,
@@ -376,7 +407,7 @@ pub fn process_render_command(
             b,
             a,
         } => {
-            let theme = gui_theme_staging.get_or_insert_with(GuiTheme::default);
+            let theme = staged_theme_mut(gui_theme_staging, &theme_key);
             theme.font = Arc::from(font_key);
             theme.font_size = font_size;
             theme.text_color = Color::new(r, g, b, a);
@@ -547,13 +578,14 @@ mod tests {
     };
     use crate::events::audio::AudioCmd;
     use crate::resources::animationstore::AnimationStore;
-    use crate::resources::guitheme::GuiTheme;
+    use crate::resources::guitheme::GuiThemeStore;
     use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd, RenderCmd, SignalCmd};
     use crate::resources::postprocessshader::PostProcessShader;
     use crate::resources::worldsignals::WorldSignals;
 
-    fn set_button_cmd(state: &str) -> RenderCmd {
+    fn set_button_cmd(theme_key: &str, state: &str) -> RenderCmd {
         RenderCmd::SetGuiThemeButton {
+            theme_key: theme_key.to_string(),
             state: state.to_string(),
             tex_key: format!("tex_{state}"),
             source_x: 0.0,
@@ -567,31 +599,33 @@ mod tests {
         }
     }
 
+    fn set_panel_cmd(theme_key: &str, tex_key: &str) -> RenderCmd {
+        RenderCmd::SetGuiThemePanel {
+            theme_key: theme_key.to_string(),
+            tex_key: tex_key.to_string(),
+            source_x: 0.0,
+            source_y: 0.0,
+            source_w: 64.0,
+            source_h: 64.0,
+            left: 6,
+            top: 6,
+            right: 6,
+            bottom: 6,
+        }
+    }
+
     #[test]
     fn gui_theme_staging_panel_then_all_button_states_survive() {
         let mut post_process = PostProcessShader::default();
-        let mut staging: Option<GuiTheme> = None;
+        let mut staging = GuiThemeStore::default();
 
-        process_render_command(
-            RenderCmd::SetGuiThemePanel {
-                tex_key: "panel_tex".to_string(),
-                source_x: 0.0,
-                source_y: 0.0,
-                source_w: 64.0,
-                source_h: 64.0,
-                left: 6,
-                top: 6,
-                right: 6,
-                bottom: 6,
-            },
-            &mut post_process,
-            &mut staging,
-        );
+        process_render_command(set_panel_cmd("default", "panel_tex"), &mut post_process, &mut staging);
         for state in ["normal", "hover", "pressed", "disabled"] {
-            process_render_command(set_button_cmd(state), &mut post_process, &mut staging);
+            process_render_command(set_button_cmd("default", state), &mut post_process, &mut staging);
         }
         process_render_command(
             RenderCmd::SetGuiThemeLabel {
+                theme_key: "default".to_string(),
                 tex_key: "label_tex".to_string(),
                 source_x: 0.0,
                 source_y: 0.0,
@@ -607,6 +641,7 @@ mod tests {
         );
         process_render_command(
             RenderCmd::SetGuiThemeFont {
+                theme_key: "default".to_string(),
                 font_key: "arcade".to_string(),
                 font_size: 20.0,
                 r: 10,
@@ -618,14 +653,14 @@ mod tests {
             &mut staging,
         );
 
-        let theme = staging.expect("theme should be staged");
+        let theme = staging.themes.get("default").expect("theme should be staged");
         assert_eq!(&*theme.panel.tex_key, "panel_tex");
-        let skin = theme.button.expect("button skin should be staged");
+        let skin = theme.button.clone().expect("button skin should be staged");
         assert_eq!(&*skin.normal.tex_key, "tex_normal");
         assert_eq!(&*skin.hover.unwrap().tex_key, "tex_hover");
         assert_eq!(&*skin.pressed.unwrap().tex_key, "tex_pressed");
         assert_eq!(&*skin.disabled.unwrap().tex_key, "tex_disabled");
-        let label = theme.label.expect("label nine-patch should be staged");
+        let label = theme.label.clone().expect("label nine-patch should be staged");
         assert_eq!(&*label.tex_key, "label_tex");
         assert_eq!(&*theme.font, "arcade");
         assert_eq!(theme.font_size, 20.0);
@@ -635,30 +670,16 @@ mod tests {
     #[test]
     fn gui_theme_staging_button_states_then_panel_survive_reverse_order() {
         let mut post_process = PostProcessShader::default();
-        let mut staging: Option<GuiTheme> = None;
+        let mut staging = GuiThemeStore::default();
 
         for state in ["normal", "hover", "pressed", "disabled"] {
-            process_render_command(set_button_cmd(state), &mut post_process, &mut staging);
+            process_render_command(set_button_cmd("default", state), &mut post_process, &mut staging);
         }
-        process_render_command(
-            RenderCmd::SetGuiThemePanel {
-                tex_key: "panel_tex".to_string(),
-                source_x: 0.0,
-                source_y: 0.0,
-                source_w: 64.0,
-                source_h: 64.0,
-                left: 6,
-                top: 6,
-                right: 6,
-                bottom: 6,
-            },
-            &mut post_process,
-            &mut staging,
-        );
+        process_render_command(set_panel_cmd("default", "panel_tex"), &mut post_process, &mut staging);
 
-        let theme = staging.expect("theme should be staged");
+        let theme = staging.themes.get("default").expect("theme should be staged");
         assert_eq!(&*theme.panel.tex_key, "panel_tex");
-        let skin = theme.button.expect("button skin should be staged");
+        let skin = theme.button.clone().expect("button skin should be staged");
         assert_eq!(&*skin.normal.tex_key, "tex_normal");
         assert_eq!(&*skin.disabled.unwrap().tex_key, "tex_disabled");
     }
@@ -666,16 +687,50 @@ mod tests {
     #[test]
     fn gui_theme_staging_button_normal_only_leaves_other_states_none() {
         let mut post_process = PostProcessShader::default();
-        let mut staging: Option<GuiTheme> = None;
+        let mut staging = GuiThemeStore::default();
 
-        process_render_command(set_button_cmd("normal"), &mut post_process, &mut staging);
+        process_render_command(set_button_cmd("default", "normal"), &mut post_process, &mut staging);
 
-        let theme = staging.expect("theme should be staged");
-        let skin = theme.button.expect("button skin should be staged");
+        let theme = staging.themes.get("default").expect("theme should be staged");
+        let skin = theme.button.clone().expect("button skin should be staged");
         assert_eq!(&*skin.normal.tex_key, "tex_normal");
         assert!(skin.hover.is_none());
         assert!(skin.pressed.is_none());
         assert!(skin.disabled.is_none());
+    }
+
+    #[test]
+    fn gui_theme_staging_two_keys_do_not_interfere() {
+        let mut post_process = PostProcessShader::default();
+        let mut staging = GuiThemeStore::default();
+
+        process_render_command(set_panel_cmd("theme_a", "panel_a"), &mut post_process, &mut staging);
+        process_render_command(set_panel_cmd("theme_b", "panel_b"), &mut post_process, &mut staging);
+        process_render_command(set_button_cmd("theme_b", "normal"), &mut post_process, &mut staging);
+
+        let theme_a = staging.themes.get("theme_a").expect("theme_a should be staged");
+        assert_eq!(&*theme_a.panel.tex_key, "panel_a");
+        assert!(theme_a.button.is_none());
+
+        let theme_b = staging.themes.get("theme_b").expect("theme_b should be staged");
+        assert_eq!(&*theme_b.panel.tex_key, "panel_b");
+        assert!(theme_b.button.is_some());
+    }
+
+    #[test]
+    fn gui_theme_staging_existing_other_key_preserved_across_drain() {
+        let mut post_process = PostProcessShader::default();
+        let mut staging = GuiThemeStore::default();
+        process_render_command(set_panel_cmd("theme_a", "panel_a"), &mut post_process, &mut staging);
+
+        // Simulate a later frame's staging seeded from the persisted resource,
+        // draining only a "theme_b" command.
+        process_render_command(set_panel_cmd("theme_b", "panel_b"), &mut post_process, &mut staging);
+
+        let theme_a = staging.themes.get("theme_a").expect("theme_a should survive");
+        assert_eq!(&*theme_a.panel.tex_key, "panel_a");
+        let theme_b = staging.themes.get("theme_b").expect("theme_b should be staged");
+        assert_eq!(&*theme_b.panel.tex_key, "panel_b");
     }
 
     #[test]

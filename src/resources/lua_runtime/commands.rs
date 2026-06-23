@@ -44,8 +44,9 @@ pub enum RenderCmd {
     ClearPostProcessUniform { name: String },
     /// Clear all uniforms from the post-process shader
     ClearPostProcessUniforms,
-    /// Set the global `GuiTheme`'s window panel nine-patch
+    /// Set the named theme's window panel nine-patch in `GuiThemeStore`
     SetGuiThemePanel {
+        theme_key: String,
         tex_key: String,
         source_x: f32,
         source_y: f32,
@@ -56,9 +57,10 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
-    /// Set one state's nine-patch in the global `GuiTheme`'s button skin.
+    /// Set one state's nine-patch in the named theme's button skin.
     /// `state` is one of "normal"/"hover"/"pressed"/"disabled".
     SetGuiThemeButton {
+        theme_key: String,
         state: String,
         tex_key: String,
         source_x: f32,
@@ -70,8 +72,9 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
-    /// Set the global `GuiTheme`'s label nine-patch
+    /// Set the named theme's label nine-patch
     SetGuiThemeLabel {
+        theme_key: String,
         tex_key: String,
         source_x: f32,
         source_y: f32,
@@ -82,9 +85,10 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
-    /// Set the global `GuiTheme`'s caption font/size/color, used by every
-    /// `GuiButton`/`GuiLabel` caption's `DynamicText`.
+    /// Set the named theme's caption font/size/color, used by every
+    /// `GuiButton`/`GuiLabel` caption's `DynamicText` that references it.
     SetGuiThemeFont {
+        theme_key: String,
         font_key: String,
         font_size: f32,
         r: u8,

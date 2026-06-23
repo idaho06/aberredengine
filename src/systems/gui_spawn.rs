@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use log::error;
+use log::{error, warn};
 use raylib::prelude::Vector2;
 
 use crate::components::dynamictext::DynamicText;
@@ -33,7 +33,7 @@ use crate::components::guilabel::GuiLabel;
 use crate::components::guioffset::GuiOffset;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
-use crate::resources::guitheme::GuiTheme;
+use crate::resources::guitheme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 
 /// Spawns a themed caption child entity for a `GuiButton`/`GuiLabel`,
 /// unless `text` is empty (the "captionless widget" signal). `DynamicText`
@@ -44,15 +44,18 @@ use crate::resources::guitheme::GuiTheme;
 /// constant for v1, not theme-driven: `DynamicText`'s size is only known
 /// after a frame (`dynamictext_size_system`), so perfect centering is a
 /// future refinement, not a v1 requirement. `font`/`font_size`/`text_color`
-/// are resolved from `GuiTheme` (or its defaults when no theme is set),
-/// logging the existing "forgot to call engine.set_gui_theme_font" error
-/// when `font` is unset. `z_index` defaults to `0.0` when the parent has no
-/// `ZIndex` yet.
+/// are resolved from the named theme (`theme_key`) in `GuiThemeStore` (or
+/// built-in defaults if the key isn't registered, with a one-time warn via
+/// `gui_theme_warn_cache`), logging the existing "forgot to call
+/// engine.set_gui_theme_font" error when `font` is unset. `z_index`
+/// defaults to `0.0` when the parent has no `ZIndex` yet.
 fn spawn_themed_caption(
     commands: &mut Commands,
     parent: Entity,
     text: &str,
-    gui_theme: Option<&GuiTheme>,
+    theme_key: &str,
+    gui_theme_store: &GuiThemeStore,
+    gui_theme_warn_cache: &mut GuiThemeWarnCache,
     z_index: Option<&ZIndex>,
 ) {
     if text.is_empty() {
@@ -61,12 +64,25 @@ fn spawn_themed_caption(
 
     const CAPTION_PADDING: Vector2 = Vector2 { x: 8.0, y: 4.0 };
 
-    let default_theme = GuiTheme::default();
-    let theme = gui_theme.unwrap_or(&default_theme);
+    let default_theme;
+    let theme = match gui_theme_store.get(theme_key) {
+        Some(theme) => theme,
+        None => {
+            if gui_theme_warn_cache.warn_once(theme_key) {
+                warn!(
+                    "Caption theme_key '{}' not registered in GuiThemeStore — using built-in defaults",
+                    theme_key
+                );
+            }
+            default_theme = GuiTheme::default();
+            &default_theme
+        }
+    };
     if theme.font.is_empty() {
         error!(
-            "GuiTheme.font is unset — call engine.set_gui_theme_font(...) before spawning \
-             GuiButton/GuiLabel captions; the caption entity is still spawned but renders with no visible text"
+            "GuiTheme '{}'.font is unset — call engine.set_gui_theme_font(\"{}\", ...) before spawning \
+             GuiButton/GuiLabel captions; the caption entity is still spawned but renders with no visible text",
+            theme_key, theme_key
         );
     }
     commands.spawn((
@@ -83,7 +99,8 @@ fn spawn_themed_caption(
 pub fn gui_button_spawn_system(
     mut commands: Commands,
     query: Query<(Entity, &GuiButton, Option<&ZIndex>), Added<GuiButton>>,
-    gui_theme: Option<Res<GuiTheme>>,
+    gui_theme_store: Res<GuiThemeStore>,
+    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
 ) {
     for (entity, button, z_index) in &query {
         let mut interactable = GuiInteractable::new(button.size.x, button.size.y);
@@ -99,7 +116,9 @@ pub fn gui_button_spawn_system(
             &mut commands,
             entity,
             &button.caption,
-            gui_theme.as_deref(),
+            &button.theme_key,
+            &gui_theme_store,
+            &mut gui_theme_warn_cache,
             z_index,
         );
     }
@@ -110,14 +129,17 @@ pub fn gui_button_spawn_system(
 pub fn gui_label_spawn_system(
     mut commands: Commands,
     query: Query<(Entity, &GuiLabel, Option<&ZIndex>), Added<GuiLabel>>,
-    gui_theme: Option<Res<GuiTheme>>,
+    gui_theme_store: Res<GuiThemeStore>,
+    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
 ) {
     for (entity, label, z_index) in &query {
         spawn_themed_caption(
             &mut commands,
             entity,
             &label.caption,
-            gui_theme.as_deref(),
+            &label.theme_key,
+            &gui_theme_store,
+            &mut gui_theme_warn_cache,
             z_index,
         );
     }
@@ -157,6 +179,7 @@ mod tests {
 
     use super::*;
     use crate::components::guiinteractable::GuiWidgetState;
+    use crate::components::guiwindow::GuiWindow;
     use crate::components::screenposition::ScreenPosition;
 
     fn tick<M>(world: &mut World, system: impl IntoSystem<(), (), M>) {
@@ -165,15 +188,27 @@ mod tests {
             .expect("system should run without error");
     }
 
+    fn store_with_default(theme: GuiTheme) -> GuiThemeStore {
+        GuiThemeStore {
+            themes: std::iter::once((Arc::from("default"), theme)).collect(),
+        }
+    }
+
+    fn insert_empty_theme_store(world: &mut World) {
+        world.insert_resource(GuiThemeStore::default());
+        world.insert_resource(GuiThemeWarnCache::default());
+    }
+
     #[test]
     fn gui_button_spawn_creates_interactable_and_caption() {
         let mut world = World::new();
-        world.insert_resource(GuiTheme {
+        world.insert_resource(store_with_default(GuiTheme {
             font: Arc::from("test_font"),
             font_size: 18.0,
             text_color: Color::new(1, 2, 3, 255),
             ..GuiTheme::default()
-        });
+        }));
+        world.insert_resource(GuiThemeWarnCache::default());
         let button_entity = world
             .spawn((
                 GuiButton {
@@ -214,6 +249,7 @@ mod tests {
     #[test]
     fn gui_button_spawn_with_empty_caption_skips_caption() {
         let mut world = World::new();
+        insert_empty_theme_store(&mut world);
         world.spawn((
             GuiButton {
             callback_name: "on_start_clicked".into(),
@@ -235,6 +271,7 @@ mod tests {
     #[test]
     fn gui_button_spawn_disabled_applies_to_interactable() {
         let mut world = World::new();
+        insert_empty_theme_store(&mut world);
         let button_entity = world
             .spawn((
                 GuiButton::new(80.0, 24.0, "").with_disabled(),
@@ -256,6 +293,7 @@ mod tests {
         fn dummy_callback(_entity: Entity, _ctx: &mut crate::systems::GameCtx) {}
 
         let mut world = World::new();
+        insert_empty_theme_store(&mut world);
         let button_entity = world
             .spawn((
                 GuiButton::new(80.0, 24.0, "").with_disabled(),
@@ -284,12 +322,13 @@ mod tests {
     #[test]
     fn gui_label_spawn_creates_caption() {
         let mut world = World::new();
-        world.insert_resource(GuiTheme {
+        world.insert_resource(store_with_default(GuiTheme {
             font: Arc::from("test_font"),
             font_size: 18.0,
             text_color: Color::new(1, 2, 3, 255),
             ..GuiTheme::default()
-        });
+        }));
+        world.insert_resource(GuiThemeWarnCache::default());
         let label_entity = world
             .spawn((
                 GuiLabel::new(160.0, 24.0, "Hello, GUI!"),
@@ -316,6 +355,7 @@ mod tests {
     #[test]
     fn gui_label_spawn_with_empty_caption_skips_caption() {
         let mut world = World::new();
+        insert_empty_theme_store(&mut world);
         world.spawn((
             GuiLabel::new(160.0, 24.0, ""),
             ScreenPosition::new(10.0, 20.0),
@@ -334,6 +374,7 @@ mod tests {
     #[test]
     fn gui_caption_falls_back_to_default_theme_when_no_theme_set() {
         let mut world = World::new();
+        insert_empty_theme_store(&mut world);
         world.spawn((
             GuiLabel::new(160.0, 24.0, "Hello, GUI!"),
             ScreenPosition::new(10.0, 20.0),
@@ -350,6 +391,110 @@ mod tests {
         assert_eq!(&*caption_text.font, "");
         assert_eq!(caption_text.font_size, 16.0);
         assert_eq!(caption_text.color, Color::WHITE);
+        assert!(
+            !world
+                .resource_mut::<GuiThemeWarnCache>()
+                .warn_once("default"),
+            "missing theme_key should be recorded after the fallback"
+        );
+    }
+
+    #[test]
+    fn gui_button_spawn_uses_theme_key_to_resolve_caption_font() {
+        let mut world = World::new();
+        world.insert_resource(GuiThemeStore {
+            themes: [
+                (
+                    Arc::from("theme_a"),
+                    GuiTheme {
+                        font: Arc::from("font_a"),
+                        ..GuiTheme::default()
+                    },
+                ),
+                (
+                    Arc::from("theme_b"),
+                    GuiTheme {
+                        font: Arc::from("font_b"),
+                        ..GuiTheme::default()
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        });
+        world.insert_resource(GuiThemeWarnCache::default());
+        world.spawn((
+            GuiButton::new(80.0, 24.0, "A").with_theme_key("theme_a"),
+            ScreenPosition::new(0.0, 0.0),
+            ZIndex(0.0),
+        ));
+        world.spawn((
+            GuiButton::new(80.0, 24.0, "B").with_theme_key("theme_b"),
+            ScreenPosition::new(0.0, 0.0),
+            ZIndex(0.0),
+        ));
+
+        tick(&mut world, gui_button_spawn_system);
+
+        let mut fonts: Vec<String> = world
+            .query::<&DynamicText>()
+            .iter(&world)
+            .map(|t| t.font.to_string())
+            .collect();
+        fonts.sort();
+        assert_eq!(fonts, vec!["font_a".to_string(), "font_b".to_string()]);
+    }
+
+    #[test]
+    fn gui_button_does_not_inherit_parent_window_theme_key() {
+        // Locks in the Option-A decision (flat, explicit theme_key, no
+        // hierarchy inheritance) against regression: a GuiButton parented
+        // under a differently-themed GuiWindow must keep its own default
+        // theme_key, not silently pick up the window's.
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        let window = world
+            .spawn(GuiWindow::new(200.0, 150.0).with_theme_key("window_theme"))
+            .id();
+        world.spawn((
+            GuiButton::new(80.0, 24.0, ""),
+            ChildOf(window),
+            ScreenPosition::new(0.0, 0.0),
+            ZIndex(0.0),
+        ));
+
+        tick(&mut world, gui_button_spawn_system);
+
+        let button = world
+            .query::<&GuiButton>()
+            .iter(&world)
+            .next()
+            .expect("button should exist");
+        assert_eq!(&*button.theme_key, "default");
+    }
+
+    #[test]
+    fn gui_label_spawn_with_unregistered_theme_key_warns_and_uses_default_font() {
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        world.spawn((
+            GuiLabel::new(160.0, 24.0, "Hello").with_theme_key("missing"),
+            ScreenPosition::new(0.0, 0.0),
+            ZIndex(0.0),
+        ));
+
+        tick(&mut world, gui_label_spawn_system);
+
+        let caption_text = world
+            .query::<&DynamicText>()
+            .iter(&world)
+            .next()
+            .expect("caption should still spawn with default values");
+        assert_eq!(&*caption_text.font, "");
+        assert!(
+            !world.resource_mut::<GuiThemeWarnCache>().warn_once("missing"),
+            "the missing key should already be recorded by spawn_themed_caption's fallback"
+        );
     }
 
     #[test]
