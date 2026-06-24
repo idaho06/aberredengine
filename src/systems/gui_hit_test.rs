@@ -47,11 +47,17 @@ pub fn gui_hit_test_system(
 
     // Highest-ZIndex hit under the cursor wins (Disabled widgets are still
     // eligible to win — a Disabled top widget blocks/consumes clicks for
-    // anything beneath it).
+    // anything beneath it). Exact ZIndex ties are broken by lower Entity id,
+    // so the winner is deterministic regardless of Bevy's (unstable,
+    // archetype-dependent) query iteration order — see camera_follow.rs for
+    // the same lower-Entity-id-wins-ties convention.
     let mut winner: Option<(Entity, f32)> = None;
     for (entity, interactable, pos, z) in interactables.iter() {
         if contains_point(pos.pos(), interactable.size, cursor) {
-            let better = winner.map(|(_, wz)| z.0 > wz).unwrap_or(true);
+            let better = match winner {
+                None => true,
+                Some((we, wz)) => z.0 > wz || (z.0 == wz && entity < we),
+            };
             if better {
                 winner = Some((entity, z.0));
             }
@@ -257,6 +263,32 @@ mod tests {
         );
         assert_eq!(
             world.get::<GuiInteractable>(low).unwrap().state,
+            GuiWidgetState::Normal
+        );
+    }
+
+    #[test]
+    fn equal_zindex_tie_broken_by_lower_entity_id_regardless_of_spawn_order() {
+        let mut world = new_world();
+        let first_spawned = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);
+        let second_spawned = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);
+        let lower_id = first_spawned.min(second_spawned);
+        let higher_id = first_spawned.max(second_spawned);
+        {
+            let mut input = world.resource_mut::<InputState>();
+            input.mouse_x = 50.0;
+            input.mouse_y = 50.0;
+        }
+
+        tick(&mut world);
+
+        assert_eq!(
+            world.get::<GuiInteractable>(lower_id).unwrap().state,
+            GuiWidgetState::Hovered,
+            "lower Entity id should win an exact ZIndex tie"
+        );
+        assert_eq!(
+            world.get::<GuiInteractable>(higher_id).unwrap().state,
             GuiWidgetState::Normal
         );
     }
