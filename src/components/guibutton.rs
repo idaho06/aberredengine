@@ -33,7 +33,10 @@ pub struct GuiButton {
     /// string = no callback wired (`GuiInteractable.on_click_callback` stays
     /// `None`).
     pub callback_name: String,
-    /// Authored disabled state, applied to the spawned `GuiInteractable.state`.
+    /// Authored disabled state, applied to the spawned `GuiInteractable.state`
+    /// once at spawn time. Mutating this field after spawn has no further
+    /// effect — toggle `GuiInteractable.state` directly for runtime
+    /// enable/disable (see Open Item #1 in the design doc).
     pub disabled: bool,
     /// Selects which named theme in `GuiThemeStore` to render this button
     /// (and its caption) with. Default `"default"`.

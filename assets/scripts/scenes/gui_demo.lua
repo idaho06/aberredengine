@@ -1,7 +1,7 @@
 -- scenes/gui_demo.lua
 -- GuiWindow + a GuiOffset child GuiLabel + a real GuiButton, exercising the
 -- Child Layout Model (gui_layout_system) and hit-test/click
--- (gui_hit_test_system + gui_button_click_observer). See
+-- (gui_hit_test_system + gui_interactable_click_observer). See
 -- docs/gui-system-architecture.md for the full design.
 
 local M = {}
@@ -89,7 +89,7 @@ local function build_gui_demo_window2(ctx)
         :build()
 end
 
---- Fired by gui_button_click_observer when the demo button is clicked.
+--- Fired by gui_interactable_click_observer when the demo button is clicked.
 local function on_gui_demo_button_clicked()
     engine.log_debug("GUI Demo button clicked!")
 end

@@ -1,10 +1,14 @@
 //! Shared hit-test/click state for clickable GUI widgets.
 //!
-//! [`GuiInteractable`] was extracted out of `GuiButton` so a second clickable
-//! widget (`GuiImage`) can reuse `gui_hit_test_system`/the click-dispatch
-//! observer without duplicating size/state/callback fields or the
-//! winner-resolution algorithm. `GuiButton` is now a render-routing marker
-//! only — its former fields all live here. See
+//! [`GuiInteractable`] is the shared hit-test/click runtime state for
+//! clickable GUI widgets — extracted out of `GuiButton` so a second
+//! clickable widget (`GuiImage`) can reuse `gui_hit_test_system`/the
+//! click-dispatch observer without duplicating the winner-resolution
+//! algorithm. `GuiButton`/`GuiImage` still carry their own full spawn-time
+//! data (size, caption/tex_key, callback_name, theme_key); the
+//! `gui_button_spawn_system`/`gui_image_spawn_system` reactive spawn systems
+//! (`systems/gui_spawn.rs`) react on `Added<GuiButton>`/`Added<GuiImage>` to
+//! insert the co-located `GuiInteractable` one frame later. See
 //! `docs/gui-system-architecture.md`.
 
 use bevy_ecs::prelude::{Component, Entity};
