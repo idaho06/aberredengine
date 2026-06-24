@@ -187,7 +187,7 @@ mod tests {
         let mut world = setup_world();
         let image = world
             .spawn((
-                GuiImage::new(40.0, 40.0, "item_sword"),
+                GuiImage::new(40.0, 40.0, "item_sword", 0.0, 0.0),
                 GuiInteractable::rust(40.0, 40.0, dummy_callback),
             ))
             .id();

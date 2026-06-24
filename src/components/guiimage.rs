@@ -28,6 +28,13 @@ use raylib::prelude::Vector2;
 pub struct GuiImage {
     pub size: Vector2,
     pub tex_key: String,
+    /// Pixel position of the atlas sub-rect within `tex_key` (mirrors
+    /// `Sprite.offset`) — `size` doubles as both the source-rect size and
+    /// the render size, same convention `Sprite` already uses. Single-state
+    /// only for now: this is the "normal" image; per-state
+    /// (hover/pressed/disabled) offsets are a deliberately separate,
+    /// not-yet-implemented follow-up.
+    pub offset: Vector2,
     /// Lua callback name, checked first by the click dispatch chain. Empty
     /// string = no callback wired (`GuiInteractable.on_click_callback` stays
     /// `None`) — the image still hit-tests/hovers/presses, it just has
@@ -36,10 +43,11 @@ pub struct GuiImage {
 }
 
 impl GuiImage {
-    pub fn new(width: f32, height: f32, tex_key: impl Into<String>) -> Self {
+    pub fn new(width: f32, height: f32, tex_key: impl Into<String>, offset_x: f32, offset_y: f32) -> Self {
         Self {
             size: Vector2::new(width, height),
             tex_key: tex_key.into(),
+            offset: Vector2::new(offset_x, offset_y),
             callback_name: String::new(),
         }
     }
@@ -54,11 +62,13 @@ impl GuiImage {
         width: f32,
         height: f32,
         tex_key: impl Into<String>,
+        offset_x: f32,
+        offset_y: f32,
         callback_name: impl Into<String>,
     ) -> Self {
         Self {
             callback_name: callback_name.into(),
-            ..Self::new(width, height, tex_key)
+            ..Self::new(width, height, tex_key, offset_x, offset_y)
         }
     }
 }
@@ -69,18 +79,22 @@ mod tests {
 
     #[test]
     fn test_guiimage_new() {
-        let img = GuiImage::new(32.0, 32.0, "item_sword");
+        let img = GuiImage::new(32.0, 32.0, "item_sword", 64.0, 32.0);
         assert!((img.size.x - 32.0).abs() < f32::EPSILON);
         assert!((img.size.y - 32.0).abs() < f32::EPSILON);
         assert_eq!(img.tex_key, "item_sword");
+        assert!((img.offset.x - 64.0).abs() < f32::EPSILON);
+        assert!((img.offset.y - 32.0).abs() < f32::EPSILON);
         assert!(img.callback_name.is_empty());
     }
 
     #[cfg(feature = "lua")]
     #[test]
     fn test_guiimage_with_lua_callback() {
-        let img = GuiImage::with_lua_callback(32.0, 32.0, "item_sword", "on_sword_clicked");
+        let img = GuiImage::with_lua_callback(32.0, 32.0, "item_sword", 64.0, 32.0, "on_sword_clicked");
         assert_eq!(img.tex_key, "item_sword");
+        assert!((img.offset.x - 64.0).abs() < f32::EPSILON);
+        assert!((img.offset.y - 32.0).abs() < f32::EPSILON);
         assert_eq!(img.callback_name, "on_sword_clicked");
     }
 }

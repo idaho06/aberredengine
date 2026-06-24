@@ -341,7 +341,7 @@ mod tests {
         let img = world
             .spawn((
                 GuiInteractable::new(50.0, 20.0),
-                GuiImage::new(50.0, 20.0, "item_sword"),
+                GuiImage::new(50.0, 20.0, "item_sword", 0.0, 0.0),
                 ScreenPosition::new(10.0, 10.0),
                 ZIndex(0.0),
             ))

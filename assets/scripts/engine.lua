@@ -1579,13 +1579,15 @@ function EntityBuilder:with_gui_button(width, height, label, callback_name) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_button_disabled() end
 
----Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — single-state only, no per-state hover/pressed/disabled offsets yet. An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param tex_key string
+---@param offset_x number
+---@param offset_y number
 ---@param callback_name string
 ---@return EntityBuilder
-function EntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
+function EntityBuilder:with_gui_image(width, height, tex_key, offset_x, offset_y, callback_name) end
 
 ---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
@@ -2103,13 +2105,15 @@ function CollisionEntityBuilder:with_gui_button(width, height, label, callback_n
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_button_disabled() end
 
----Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — single-state only, no per-state hover/pressed/disabled offsets yet. An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param tex_key string
+---@param offset_x number
+---@param offset_y number
 ---@param callback_name string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
+function CollisionEntityBuilder:with_gui_image(width, height, tex_key, offset_x, offset_y, callback_name) end
 
 ---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number

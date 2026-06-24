@@ -182,7 +182,7 @@ pub fn gui_image_spawn_system(
                 tex_key: Arc::from(image.tex_key.as_str()),
                 width: image.size.x,
                 height: image.size.y,
-                offset: Vector2::new(0.0, 0.0),
+                offset: image.offset,
                 origin: Vector2::new(0.0, 0.0),
                 flip_h: false,
                 flip_v: false,
@@ -649,7 +649,7 @@ mod tests {
         let mut world = World::new();
         world.spawn(GuiImage {
             callback_name: "on_item_clicked".into(),
-            ..GuiImage::new(32.0, 32.0, "item_sword")
+            ..GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0)
         });
 
         tick(&mut world, gui_image_spawn_system);
@@ -676,7 +676,7 @@ mod tests {
     #[test]
     fn gui_image_spawn_with_empty_callback_name_skips_callback_wiring() {
         let mut world = World::new();
-        world.spawn(GuiImage::new(32.0, 32.0, "item_sword"));
+        world.spawn(GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0));
 
         tick(&mut world, gui_image_spawn_system);
 
@@ -694,7 +694,7 @@ mod tests {
 
         let mut world = World::new();
         world.spawn((
-            GuiImage::new(32.0, 32.0, "item_sword"),
+            GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0),
             GuiInteractable::rust(32.0, 32.0, dummy_callback),
             Sprite {
                 tex_key: Arc::from("custom_override"),
@@ -719,5 +719,21 @@ mod tests {
             "insert_if_new must not overwrite a pre-spawned GuiInteractable"
         );
         assert_eq!(&*sprite.tex_key, "custom_override");
+    }
+
+    #[test]
+    fn gui_image_spawn_propagates_offset_to_sprite() {
+        let mut world = World::new();
+        world.spawn(GuiImage::new(32.0, 32.0, "item_sword", 64.0, 32.0));
+
+        tick(&mut world, gui_image_spawn_system);
+
+        let sprite = world
+            .query::<&Sprite>()
+            .iter(&world)
+            .next()
+            .expect("image entity with Sprite should be spawned");
+        assert!((sprite.offset.x - 64.0).abs() < f32::EPSILON);
+        assert!((sprite.offset.y - 32.0).abs() < f32::EPSILON);
     }
 }

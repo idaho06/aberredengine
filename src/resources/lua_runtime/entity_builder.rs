@@ -665,10 +665,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_image", "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
-        [("width", "number"), ("height", "number"), ("tex_key", "string"), ("callback_name", "string")],
-        |_, this: &mut LuaEntityBuilder, (width, height, tex_key, callback_name): (f32, f32, String, String)| {
-            this.cmd.gui_image = Some(GuiImage::with_lua_callback(width, height, tex_key, callback_name));
+        "with_gui_image", "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — single-state only, no per-state hover/pressed/disabled offsets yet. An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [("width", "number"), ("height", "number"), ("tex_key", "string"), ("offset_x", "number"), ("offset_y", "number"), ("callback_name", "string")],
+        |_, this: &mut LuaEntityBuilder, (width, height, tex_key, offset_x, offset_y, callback_name): (f32, f32, String, f32, f32, String)| {
+            this.cmd.gui_image = Some(GuiImage::with_lua_callback(width, height, tex_key, offset_x, offset_y, callback_name));
             Ok(())
         }
     );
