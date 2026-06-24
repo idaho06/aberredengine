@@ -19,9 +19,16 @@ local WINDOW2_ANIM_DURATION = 1.0
 -- WorldSignals — the standalone "Wave" GuiLabel below reads it back via
 -- :with_gui_label_signal_binding("wave"), demonstrating the signal-bound
 -- dynamic label feature with no per-frame Lua-side text manipulation.
-local WAVE_FREQUENCY_HZ = 0.5
+local WAVE_FREQUENCY_HZ = 0.1
 local WAVE_AMPLITUDE = 100.0
 local wave_elapsed_time = 0.0
+
+-- Tracks how window 2 was last shown so the Hide button can mirror it
+-- symmetrically — slide back out if it slid in, vanish instantly if it
+-- appeared instantly.
+local SHOW_MODE_SLIDE = "slide"
+local SHOW_MODE_INSTANT = "instant"
+local window2_show_mode = SHOW_MODE_SLIDE
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
@@ -53,9 +60,18 @@ local function build_gui_demo_window(ctx)
     -- Shows the second window (spawned with no ScreenPosition of its own —
     -- see build_gui_demo_window2) by sliding it in from off-screen.
     engine.spawn()
-        :with_gui_button(80, 20, "Show", "on_show_window2_clicked")
+        :with_gui_button(80, 20, "Slide", "on_slide_window2_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 80)
+        :with_zindex(2)
+        :build()
+
+    -- Shows the second window instantly, by giving it a ScreenPosition
+    -- directly instead of tweening one in.
+    engine.spawn()
+        :with_gui_button(80, 20, "Appear", "on_appear_window2_clicked")
+        :with_parent(ctx.id)
+        :with_gui_offset(16, 110)
         :with_zindex(2)
         :build()
 end
@@ -97,6 +113,17 @@ local function build_gui_demo_window2(ctx)
         :with_gui_offset(16, 60)
         :with_zindex(2)
         :build()
+
+    -- Disabled button using the "default" theme (not "compact", unlike its
+    -- siblings here) — demonstrates a disabled GuiButton plus mixed themes
+    -- within the same window.
+    engine.spawn()
+        :with_gui_button(180, 20, "Can't touch this!", "")
+        :with_gui_button_disabled()
+        :with_parent(ctx.id)
+        :with_gui_offset(106, 60)
+        :with_zindex(2)
+        :build()
 end
 
 --- Fired by gui_interactable_click_observer when the demo button is clicked.
@@ -104,42 +131,74 @@ local function on_gui_demo_button_clicked()
     engine.log_debug("GUI Demo button clicked!")
 end
 
---- Slides window 2 in from off-screen at the bottom. Inserts both
--- ScreenPosition (the window has none yet) and the tween in one call, via
--- engine.entity_insert_tween_screen_position.
-local function on_show_window2_clicked()
-    if engine.has_flag("gui_demo_window2_visible") then
-        return
-    end
+--- Shared lookup for window 2's entity, used by all three callbacks below.
+-- Returns nil (after logging) if the entity isn't found.
+local function find_window2_or_warn()
     local id = engine.get_entity("gui_demo_window2")
     if id == nil then
         engine.log_error("gui_demo_window2 entity not found!")
+    end
+    return id
+end
+
+--- Slides window 2 in from off-screen at the bottom. Inserts both
+-- ScreenPosition (the window has none yet) and the tween in one call, via
+-- engine.entity_insert_tween_screen_position.
+local function on_slide_window2_clicked()
+    if engine.has_flag("gui_demo_window2_visible") then
+        return
+    end
+    local id = find_window2_or_warn()
+    if id == nil then
         return
     end
     engine.entity_insert_tween_screen_position(
         id, WINDOW2_X, WINDOW2_HIDDEN_Y, WINDOW2_X, WINDOW2_SHOWN_Y,
         WINDOW2_ANIM_DURATION, "quad_out", "once", false, ""
     )
+    window2_show_mode = SHOW_MODE_SLIDE
     engine.set_flag("gui_demo_window2_visible")
 end
 
---- Slides window 2 back out, then removes its ScreenPosition once the
--- slide-out tween finishes — entity_insert_tween_screen_position's trailing
--- on_finished arg calls on_hide_window2_tween_done directly, no separate
--- LuaTimer needed to fake a completion signal.
+--- Shows window 2 instantly at its resting position, by giving it a
+-- ScreenPosition directly instead of tweening one in.
+local function on_appear_window2_clicked()
+    if engine.has_flag("gui_demo_window2_visible") then
+        return
+    end
+    local id = find_window2_or_warn()
+    if id == nil then
+        return
+    end
+    -- entity_set_screen_position only mutates an existing ScreenPosition, and
+    -- window 2 starts with none — entity_insert_tween_screen_position with a
+    -- zero duration inserts it and snaps in the same call instead.
+    engine.entity_insert_tween_screen_position(
+        id, WINDOW2_X, WINDOW2_SHOWN_Y, WINDOW2_X, WINDOW2_SHOWN_Y,
+        0.0, "linear", "once", false, ""
+    )
+    window2_show_mode = SHOW_MODE_INSTANT
+    engine.set_flag("gui_demo_window2_visible")
+end
+
+--- Hides window 2 the way it appeared — sliding back out if it slid in,
+-- vanishing instantly if it appeared instantly.
 local function on_hide_window2_clicked()
     if not engine.has_flag("gui_demo_window2_visible") then
         return
     end
-    local id = engine.get_entity("gui_demo_window2")
+    local id = find_window2_or_warn()
     if id == nil then
-        engine.log_error("gui_demo_window2 entity not found!")
         return
     end
-    engine.entity_insert_tween_screen_position(
-        id, WINDOW2_X, WINDOW2_SHOWN_Y, WINDOW2_X, WINDOW2_HIDDEN_Y,
-        WINDOW2_ANIM_DURATION, "quad_in", "once", false, "on_hide_window2_tween_done"
-    )
+    if window2_show_mode == SHOW_MODE_INSTANT then
+        engine.entity_remove_screen_position(id)
+    else
+        engine.entity_insert_tween_screen_position(
+            id, WINDOW2_X, WINDOW2_SHOWN_Y, WINDOW2_X, WINDOW2_HIDDEN_Y,
+            WINDOW2_ANIM_DURATION, "quad_in", "once", false, "on_hide_window2_tween_done"
+        )
+    end
     engine.clear_flag("gui_demo_window2_visible")
 end
 
@@ -171,7 +230,8 @@ M._callbacks = {
     build_gui_demo_window = build_gui_demo_window,
     build_gui_demo_window2 = build_gui_demo_window2,
     on_gui_demo_button_clicked = on_gui_demo_button_clicked,
-    on_show_window2_clicked = on_show_window2_clicked,
+    on_slide_window2_clicked = on_slide_window2_clicked,
+    on_appear_window2_clicked = on_appear_window2_clicked,
     on_hide_window2_clicked = on_hide_window2_clicked,
     on_hide_window2_tween_done = on_hide_window2_tween_done,
     on_update_gui_demo = on_update_gui_demo,
