@@ -31,6 +31,7 @@ use crate::components::guiimage::GuiImage;
 use crate::components::guiinteractable::GuiInteractable;
 use crate::components::guilabel::GuiLabel;
 use crate::components::guioffset::GuiOffset;
+use crate::components::signalbinding::SignalBinding;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::resources::guitheme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
@@ -48,7 +49,11 @@ use crate::resources::guitheme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 /// built-in defaults if the key isn't registered, with a one-time warn via
 /// `gui_theme_warn_cache`), logging the existing "forgot to call
 /// engine.set_gui_theme_font" error when `font` is unset. `z_index`
-/// defaults to `0.0` when the parent has no `ZIndex` yet.
+/// defaults to `0.0` when the parent has no `ZIndex` yet. `signal_binding`
+/// (currently only ever passed by `gui_label_spawn_system`, never by
+/// `gui_button_spawn_system`), if `Some`, attaches a `SignalBinding` to the
+/// caption so it auto-updates from `WorldSignals`.
+#[allow(clippy::too_many_arguments)]
 fn spawn_themed_caption(
     commands: &mut Commands,
     parent: Entity,
@@ -57,6 +62,7 @@ fn spawn_themed_caption(
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
     z_index: Option<&ZIndex>,
+    signal_binding: Option<&(String, Option<String>)>,
 ) {
     if text.is_empty() {
         return;
@@ -85,12 +91,19 @@ fn spawn_themed_caption(
             theme_key, theme_key
         );
     }
-    commands.spawn((
+    let mut caption = commands.spawn((
         DynamicText::new(text, &*theme.font, theme.font_size, theme.text_color),
         ChildOf(parent),
         GuiOffset(CAPTION_PADDING),
         z_index.copied().unwrap_or(ZIndex(0.0)),
     ));
+    if let Some((key, format)) = signal_binding {
+        let mut binding = SignalBinding::new(key);
+        if let Some(fmt) = format {
+            binding = binding.with_format(fmt);
+        }
+        caption.insert(binding);
+    }
 }
 
 /// Spawns entities for newly added [`GuiButton`] components: the
@@ -120,12 +133,17 @@ pub fn gui_button_spawn_system(
             &gui_theme_store,
             &mut gui_theme_warn_cache,
             z_index,
+            None,
         );
     }
 }
 
 /// Spawns the caption `DynamicText` child for newly added [`GuiLabel`]
-/// components, unless `caption` is empty.
+/// components, unless `caption` is empty. If `label.signal_binding` is set,
+/// the caption also gets a `SignalBinding`, so
+/// `update_world_signals_binding_system` keeps it in sync with
+/// `WorldSignals` -- `caption` remains the placeholder shown until the
+/// signal key first resolves.
 pub fn gui_label_spawn_system(
     mut commands: Commands,
     query: Query<(Entity, &GuiLabel, Option<&ZIndex>), Added<GuiLabel>>,
@@ -141,6 +159,7 @@ pub fn gui_label_spawn_system(
             &gui_theme_store,
             &mut gui_theme_warn_cache,
             z_index,
+            label.signal_binding.as_ref(),
         );
     }
 }
@@ -369,6 +388,134 @@ mod tests {
             0,
             "no caption child should be spawned for empty caption"
         );
+    }
+
+    #[test]
+    fn gui_label_spawn_with_signal_binding_attaches_binding_to_caption() {
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        world.insert_resource(store_with_default(GuiTheme::default()));
+        world.spawn((
+            GuiLabel::new(160.0, 24.0, "0").with_signal_binding("score"),
+            ScreenPosition::new(10.0, 20.0),
+            ZIndex(5.0),
+        ));
+
+        tick(&mut world, gui_label_spawn_system);
+
+        let binding = world
+            .query::<&SignalBinding>()
+            .iter(&world)
+            .next()
+            .expect("caption child should have a SignalBinding when GuiLabel.signal_binding is set");
+        assert_eq!(binding.signal_key, "score");
+        assert_eq!(binding.format, None);
+    }
+
+    #[test]
+    fn gui_label_spawn_signal_binding_format_is_attached() {
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        world.insert_resource(store_with_default(GuiTheme::default()));
+        world.spawn((
+            GuiLabel::new(160.0, 24.0, "0")
+                .with_signal_binding("hp")
+                .with_signal_binding_format("HP: {}"),
+            ScreenPosition::new(10.0, 20.0),
+            ZIndex(5.0),
+        ));
+
+        tick(&mut world, gui_label_spawn_system);
+
+        let binding = world
+            .query::<&SignalBinding>()
+            .iter(&world)
+            .next()
+            .expect("caption child should have a SignalBinding");
+        assert_eq!(binding.signal_key, "hp");
+        assert_eq!(binding.format.as_deref(), Some("HP: {}"));
+    }
+
+    #[test]
+    fn gui_label_spawn_without_signal_binding_has_no_binding() {
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        world.insert_resource(store_with_default(GuiTheme::default()));
+        world.spawn((
+            GuiLabel::new(160.0, 24.0, "Hello, GUI!"),
+            ScreenPosition::new(10.0, 20.0),
+            ZIndex(5.0),
+        ));
+
+        tick(&mut world, gui_label_spawn_system);
+
+        assert_eq!(
+            world.query::<&SignalBinding>().iter(&world).count(),
+            0,
+            "no SignalBinding should be attached when GuiLabel.signal_binding is unset"
+        );
+    }
+
+    #[test]
+    fn gui_button_caption_never_gets_a_signal_binding() {
+        // gui_button_spawn_system always passes None for signal_binding --
+        // SignalBinding wiring is GuiLabel-only per the design doc's
+        // Roadmap item #3.
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        world.insert_resource(store_with_default(GuiTheme::default()));
+        world.spawn((
+            GuiButton::new(80.0, 24.0, "Start"),
+            ScreenPosition::new(10.0, 20.0),
+            ZIndex(5.0),
+        ));
+
+        tick(&mut world, gui_button_spawn_system);
+
+        assert_eq!(world.query::<&SignalBinding>().iter(&world).count(), 0);
+    }
+
+    #[test]
+    fn gui_label_signal_binding_placeholder_then_live_update() {
+        use crate::resources::worldsignals::WorldSignals;
+        use crate::systems::signalbinding::update_world_signals_binding_system;
+
+        let mut world = World::new();
+        insert_empty_theme_store(&mut world);
+        world.insert_resource(store_with_default(GuiTheme::default()));
+        world.insert_resource(WorldSignals::default());
+        world.spawn((
+            GuiLabel::new(160.0, 24.0, "0").with_signal_binding("score"),
+            ScreenPosition::new(10.0, 20.0),
+            ZIndex(5.0),
+        ));
+
+        tick(&mut world, gui_label_spawn_system);
+        tick(&mut world, update_world_signals_binding_system);
+
+        let caption_text = world
+            .query::<&DynamicText>()
+            .iter(&world)
+            .next()
+            .expect("caption should be spawned")
+            .text
+            .clone();
+        assert_eq!(
+            &*caption_text, "0",
+            "caption keeps the placeholder while the signal key is unset"
+        );
+
+        world.resource_mut::<WorldSignals>().set_integer("score", 42);
+        tick(&mut world, update_world_signals_binding_system);
+
+        let caption_text = world
+            .query::<&DynamicText>()
+            .iter(&world)
+            .next()
+            .expect("caption should still exist")
+            .text
+            .clone();
+        assert_eq!(&*caption_text, "42");
     }
 
     #[test]

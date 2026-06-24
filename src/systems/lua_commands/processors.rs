@@ -253,21 +253,6 @@ pub fn process_asset_command<F1>(
     }
 }
 
-/// Returns the `theme_key` a `RenderCmd` touches, if it's one of the
-/// `SetGuiTheme*` variants — used by callers to know which `GuiThemeStore`
-/// entries were touched in a drain batch, so per-key validation
-/// (`GuiTheme::drop_invalid_button_skin`) only re-checks themes that
-/// actually changed instead of the whole store every frame.
-pub fn render_cmd_theme_key(cmd: &RenderCmd) -> Option<&str> {
-    match cmd {
-        RenderCmd::SetGuiThemePanel { theme_key, .. }
-        | RenderCmd::SetGuiThemeButton { theme_key, .. }
-        | RenderCmd::SetGuiThemeLabel { theme_key, .. }
-        | RenderCmd::SetGuiThemeFont { theme_key, .. } => Some(theme_key.as_str()),
-        _ => None,
-    }
-}
-
 fn staged_theme_mut<'a>(gui_theme_staging: &'a mut GuiThemeStore, theme_key: &str) -> &'a mut GuiTheme {
     gui_theme_staging.themes.entry(Arc::from(theme_key)).or_default()
 }

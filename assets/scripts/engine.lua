@@ -1594,6 +1594,16 @@ function EntityBuilder:with_gui_image(width, height, tex_key, callback_name) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_label(width, height, text) end
 
+---Bind a GuiLabel's caption to a WorldSignal value -- gui_label_spawn_system attaches a SignalBinding to the caption DynamicText child, kept in sync by update_world_signals_binding_system. The label's caption text (set via :with_gui_label) remains the placeholder shown until the signal key first resolves. Requires :with_gui_label() first.
+---@param key string
+---@return EntityBuilder
+function EntityBuilder:with_gui_label_signal_binding(key) end
+
+---Set format string for a GuiLabel's signal binding (use {} as placeholder). Requires :with_gui_label_signal_binding() first.
+---@param format string
+---@return EntityBuilder
+function EntityBuilder:with_gui_label_signal_binding_format(format) end
+
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number
 ---@param y number
@@ -2107,6 +2117,16 @@ function CollisionEntityBuilder:with_gui_image(width, height, tex_key, callback_
 ---@param text string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_label(width, height, text) end
+
+---Bind a GuiLabel's caption to a WorldSignal value -- gui_label_spawn_system attaches a SignalBinding to the caption DynamicText child, kept in sync by update_world_signals_binding_system. The label's caption text (set via :with_gui_label) remains the placeholder shown until the signal key first resolves. Requires :with_gui_label() first.
+---@param key string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_label_signal_binding(key) end
+
+---Set format string for a GuiLabel's signal binding (use {} as placeholder). Requires :with_gui_label_signal_binding() first.
+---@param format string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_label_signal_binding_format(format) end
 
 ---Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.
 ---@param x number

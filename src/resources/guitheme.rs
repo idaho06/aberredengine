@@ -125,14 +125,24 @@ impl GuiThemeStore {
     }
 }
 
-/// Dedupes "widget references an unregistered theme_key" warnings so a
-/// missing key logs once instead of every frame for every widget that
-/// references it (a real `warn!` per widget per frame would flood the log
-/// at 60Hz). Scoped to process lifetime, not per-scene — revisit if a typo
-/// fixed mid-session needs to be re-flagged after a scene switch.
+/// Dedupes GUI theme warnings so each one logs once instead of every frame
+/// for every widget that triggers it (a real `warn!`/`error!` per widget
+/// per frame would flood the log at 60Hz). Scoped to process lifetime, not
+/// per-scene — revisit if a typo fixed mid-session needs to be re-flagged
+/// after a scene switch.
+///
+/// Two independent domains, two independent sets: "widget references an
+/// unregistered theme_key" (`warn_once`) and "theme's button skin has no
+/// `normal` patch, dropped" (`warn_once_invalid_button_skin`) are unrelated
+/// conditions that both key off the same `theme_key` string. Sharing one set
+/// between them (e.g. via a hand-rolled `"{key}::button"` composite key)
+/// would let a theme literally named `"foo::button"` collide with the
+/// warning key for theme `"foo"`'s button-skin case — kept as two sets
+/// instead, so each domain's key is just the plain `theme_key`.
 #[derive(Resource, Default)]
 pub struct GuiThemeWarnCache {
     warned_keys: FxHashSet<Arc<str>>,
+    warned_invalid_button_skins: FxHashSet<Arc<str>>,
 }
 
 impl GuiThemeWarnCache {
@@ -143,6 +153,18 @@ impl GuiThemeWarnCache {
             false
         } else {
             self.warned_keys.insert(Arc::from(key));
+            true
+        }
+    }
+
+    /// Returns `true` the first time `key`'s button skin is reported
+    /// invalid (no `normal` patch set), `false` on every subsequent call for
+    /// the same key.
+    pub fn warn_once_invalid_button_skin(&mut self, key: &str) -> bool {
+        if self.warned_invalid_button_skins.contains(key) {
+            false
+        } else {
+            self.warned_invalid_button_skins.insert(Arc::from(key));
             true
         }
     }

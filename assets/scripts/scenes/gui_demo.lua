@@ -13,6 +13,16 @@ local WINDOW2_SHOWN_Y = 260
 local WINDOW2_HIDDEN_Y = 400
 local WINDOW2_ANIM_DURATION = 1.0
 
+-- "wave" signal: a 0.5 Hz / amplitude-100 sine wave, recomputed every frame
+-- from accumulated dt (the engine exposes no direct elapsed-time getter to
+-- Lua, see CLAUDE.md's input/signal API surface) and pushed into
+-- WorldSignals — the standalone "Wave" GuiLabel below reads it back via
+-- :with_gui_label_signal_binding("wave"), demonstrating the signal-bound
+-- dynamic label feature with no per-frame Lua-side text manipulation.
+local WAVE_FREQUENCY_HZ = 0.5
+local WAVE_AMPLITUDE = 100.0
+local wave_elapsed_time = 0.0
+
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
 --- Fires the frame after the window spawns (ctx.id = window's real entity
@@ -147,6 +157,12 @@ local function on_update_gui_demo(input, dt)
     if input.digital.back.just_pressed then
         engine.change_scene("menu")
     end
+
+    wave_elapsed_time = wave_elapsed_time + dt
+    local wave = WAVE_AMPLITUDE * math.sin(2.0 * math.pi * WAVE_FREQUENCY_HZ * wave_elapsed_time)
+    -- Rounded to 1 decimal -- get_scalar's "{}" formatting has no precision
+    -- control, so an unrounded f32 can render with many trailing digits.
+    engine.set_scalar("wave", math.floor(wave * 10.0 + 0.5) / 10.0)
 end
 
 -- ─── Callback registry ──────────────────────────────────────────────────────
@@ -188,6 +204,19 @@ function M.spawn()
         :with_text("GUI Demo - press Back to return", "arcade", 16, 200, 200, 200, 255)
         :with_screen_position(140, 20)
         :with_zindex(1)
+        :build()
+
+    -- Standalone GuiLabel (no parent window) bound to the "wave" signal
+    -- computed in on_update_gui_demo, top-right of the 640x360 render area.
+    -- "0.0" is the placeholder shown until the first on_update tick writes
+    -- "wave" into WorldSignals.
+    engine.spawn()
+        :with_gui_label(110, 24, "0.0")
+        :with_gui_label_signal_binding("wave")
+        :with_gui_label_signal_binding_format("Wave: {}")
+        :with_gui_theme_key("compact")
+        :with_screen_position(640 - 110 - 10, 10)
+        :with_zindex(2)
         :build()
 
     -- Reset in case this scene is being re-entered (the flag is a generic

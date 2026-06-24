@@ -609,6 +609,41 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_gui_label_signal_binding", "Bind a GuiLabel's caption to a WorldSignal value -- gui_label_spawn_system attaches a SignalBinding to the caption DynamicText child, kept in sync by update_world_signals_binding_system. The label's caption text (set via :with_gui_label) remains the placeholder shown until the signal key first resolves. Requires :with_gui_label() first.",
+        [("key", "string")],
+        |_, this: &mut LuaEntityBuilder, key: String| {
+            let Some(label) = this.cmd.gui_label.as_mut() else {
+                return Err(LuaError::runtime(
+                    "with_gui_label_signal_binding() requires with_gui_label() first",
+                ));
+            };
+            label.signal_binding = Some((key, None));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_label_signal_binding_format", "Set format string for a GuiLabel's signal binding (use {} as placeholder). Requires :with_gui_label_signal_binding() first.",
+        [("format", "string")],
+        |_, this: &mut LuaEntityBuilder, format: String| {
+            let Some((_, fmt)) = this
+                .cmd
+                .gui_label
+                .as_mut()
+                .and_then(|label| label.signal_binding.as_mut())
+            else {
+                return Err(LuaError::runtime(
+                    "with_gui_label_signal_binding_format() requires with_gui_label_signal_binding() first",
+                ));
+            };
+            *fmt = Some(format);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_gui_theme_key", "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {

@@ -39,12 +39,11 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use std::sync::Arc;
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
     drain_and_process_phase_commands, process_animation_command, process_asset_command,
     process_camera_follow_command, process_gameconfig_command, process_group_command,
-    process_input_command, process_render_command, process_signal_command, render_cmd_theme_key,
+    process_input_command, process_render_command, process_signal_command,
 };
 use crate::systems::mapspawn::load_font_with_mipmaps;
 use bevy_ecs::prelude::*;
@@ -267,17 +266,16 @@ fn drain_common_commands(
         // means a SetGuiTheme* command for one key never disturbs any other
         // key already persisted in the resource.
         let mut gui_theme_staging = gui_theme_store.clone();
-        let mut touched_keys: FxHashSet<Arc<str>> = FxHashSet::default();
         for cmd in bufs.render.drain(..).chain(bufs.gui_theme.drain(..)) {
-            if let Some(key) = render_cmd_theme_key(&cmd) {
-                touched_keys.insert(Arc::from(key));
-            }
             process_render_command(cmd, &mut scene_state.post_process, &mut gui_theme_staging);
         }
-        for key in touched_keys {
-            if let Some(theme) = gui_theme_staging.themes.get_mut(&key)
-                && !theme.drop_invalid_button_skin()
-                && gui_theme_warn_cache.warn_once(&format!("{key}::button"))
+        // Re-validate every staged theme's button skin (not just the ones a
+        // command touched this batch) -- cheap (a handful of themes, one
+        // bool check each) and avoids re-deriving "which keys changed" via a
+        // second match over the just-drained commands.
+        for (key, theme) in gui_theme_staging.themes.iter_mut() {
+            if !theme.drop_invalid_button_skin()
+                && gui_theme_warn_cache.warn_once_invalid_button_skin(key)
             {
                 error!(
                     "GuiTheme '{key}' has button set but its 'normal' nine-patch was never set via \
@@ -523,6 +521,7 @@ mod tests {
     use crate::components::sprite::Sprite;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
+    use std::sync::Arc;
 
     /// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
     fn new_drain_test_world() -> World {
