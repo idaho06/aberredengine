@@ -8,8 +8,8 @@ local M = {}
 
 -- Second window's shown/hidden ScreenPosition + slide-in/out duration —
 -- shared between the Show/Hide callbacks below.
-local WINDOW2_X = 170
-local WINDOW2_SHOWN_Y = 260
+local WINDOW2_X = 10
+local WINDOW2_SHOWN_Y = 265
 local WINDOW2_HIDDEN_Y = 400
 local WINDOW2_ANIM_DURATION = 1.0
 
@@ -29,6 +29,10 @@ local wave_elapsed_time = 0.0
 local SHOW_MODE_SLIDE = "slide"
 local SHOW_MODE_INSTANT = "instant"
 local window2_show_mode = SHOW_MODE_SLIDE
+
+-- Tracks the sword attack cooldown so on_update can display remaining seconds.
+-- Set to the random duration on click; decremented each frame; 0 = not on cooldown.
+local sword_cooldown_secs = 0.0
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
@@ -126,6 +130,287 @@ local function build_gui_demo_window2(ctx)
         :build()
 end
 
+-- ─── Character window helpers ────────────────────────────────────────────────
+
+--- Returns true and logs nothing when the game is still active; returns false
+-- (after no-op) when the game-over flag is set. Used as a guard at the top
+-- of every action callback to prevent double-fires after game ends.
+local function char_game_active()
+    return not engine.has_flag("char_game_over")
+end
+
+--- Re-evaluates which buttons should be enabled based on current signal state.
+-- Called after any action that changes potions or gold.
+-- Sword cooldown is NOT managed here — on_sword_cooldown_done handles that.
+local function check_button_states()
+    local potions = engine.get_integer("char_potions")
+    local gold    = engine.get_integer("char_gold")
+
+    local potion_id = engine.get_entity("char_potion")
+    local sell_id   = engine.get_entity("char_sell")
+    local buy_id    = engine.get_entity("char_buy")
+
+    if potion_id then engine.entity_set_gui_disabled(potion_id, potions <= 0) end
+    if sell_id   then engine.entity_set_gui_disabled(sell_id,   potions <= 0) end
+    if buy_id    then engine.entity_set_gui_disabled(buy_id,    gold < 2)     end
+end
+
+--- Ends the game: sets game-over flag, displays a final message, stops the
+-- enemy timer, and disables all four interactive buttons.
+local function end_game(message)
+    engine.set_flag("char_game_over")
+    engine.set_string("char_message", message)
+
+    local timer_id  = engine.get_entity("char_enemy_timer")
+    local potion_id = engine.get_entity("char_potion")
+    local sword_id  = engine.get_entity("char_sword")
+    local buy_id    = engine.get_entity("char_buy")
+    local sell_id   = engine.get_entity("char_sell")
+
+    if timer_id  then engine.entity_remove_lua_timer(timer_id)        end
+    if potion_id then engine.entity_set_gui_disabled(potion_id, true) end
+    if sword_id  then engine.entity_set_gui_disabled(sword_id,  true) end
+    if buy_id    then engine.entity_set_gui_disabled(buy_id,    true) end
+    if sell_id   then engine.entity_set_gui_disabled(sell_id,   true) end
+    sword_cooldown_secs = 0.0
+    engine.set_string("char_sword_cooldown", "")
+end
+
+-- ─── Character window: child setup callbacks ─────────────────────────────────
+
+--- Stores the enemy timer entity id and fires the first attack timer.
+--- @param ctx EntityContext
+local function on_char_enemy_timer_setup(ctx)
+    engine.set_entity("char_enemy_timer", ctx.id)
+    engine.entity_insert_lua_timer(ctx.id, math.random(5, 10), "on_enemy_attack")
+end
+
+-- ─── Character window: action callbacks ──────────────────────────────────────
+
+--- Fires when the enemy attack timer ticks. Removes itself, deals damage,
+-- then reschedules with a new random delay (variable interval).
+--- @param ctx EntityContext
+local function on_enemy_attack(ctx)
+    engine.entity_remove_lua_timer(ctx.id)
+    if not char_game_active() then return end
+
+    local dmg = math.random(1, 10)
+    local hp  = engine.get_integer("char_hp") - dmg
+    engine.set_string("char_message", "Enemy dealt\n" .. dmg .. " damage!")
+
+    if hp <= 0 then
+        engine.set_integer("char_hp", 0)
+        end_game("Defeated!\nEnemy wins.")
+    else
+        engine.set_integer("char_hp", hp)
+        engine.entity_insert_lua_timer(ctx.id, math.random(5, 10), "on_enemy_attack")
+    end
+end
+
+--- Use a potion: restore 5–10 HP (capped at 100), consume one potion.
+local function on_potion_clicked()
+    if not char_game_active() then return end
+    local potions = engine.get_integer("char_potions")
+    if potions <= 0 then return end
+
+    local heal = math.random(5, 10)
+    local hp   = math.min(engine.get_integer("char_hp") + heal, 100)
+    engine.set_integer("char_hp",      hp)
+    engine.set_integer("char_potions", potions - 1)
+    engine.set_string("char_message",  "Recovered " .. heal .. " HP!")
+    check_button_states()
+end
+
+--- Attack the enemy: deal 1–10 damage and start sword cooldown.
+local function on_sword_clicked(evt)
+    if not char_game_active() then return end
+    local sword_id = evt.entity_id
+
+    local cooldown = math.random(5, 8)
+    sword_cooldown_secs = cooldown
+    engine.entity_set_gui_disabled(sword_id, true)
+    engine.entity_insert_lua_timer(sword_id, cooldown, "on_sword_cooldown_done")
+
+    local dmg      = math.random(1, 10)
+    local enemy_hp = engine.get_integer("char_enemy_hp") - dmg
+    engine.set_string("char_message", "You dealt\n" .. dmg .. " damage!")
+
+    if enemy_hp <= 0 then
+        engine.set_integer("char_enemy_hp", 0)
+        end_game("Victory!\nEnemy defeated.")
+    else
+        engine.set_integer("char_enemy_hp", enemy_hp)
+    end
+end
+
+--- Re-enables the sword after its cooldown expires.
+--- @param ctx EntityContext
+local function on_sword_cooldown_done(ctx)
+    engine.entity_remove_lua_timer(ctx.id)
+    sword_cooldown_secs = 0.0
+    engine.set_string("char_sword_cooldown", "")
+    if char_game_active() then
+        engine.entity_set_gui_disabled(ctx.id, false)
+    end
+end
+
+--- Buy a potion for 2 gold.
+local function on_char_buy_clicked()
+    if not char_game_active() then return end
+    local gold = engine.get_integer("char_gold")
+    if gold < 2 then return end
+
+    engine.set_integer("char_gold",    gold - 2)
+    engine.set_integer("char_potions", engine.get_integer("char_potions") + 1)
+    engine.set_string("char_message",  "Bought a potion for\n2 gold!")
+    check_button_states()
+end
+
+--- Sell a potion for 1 gold.
+local function on_char_sell_clicked()
+    if not char_game_active() then return end
+    local potions = engine.get_integer("char_potions")
+    if potions <= 0 then return end
+
+    engine.set_integer("char_potions", potions - 1)
+    engine.set_integer("char_gold",    engine.get_integer("char_gold") + 1)
+    engine.set_string("char_message",  "Sold a potion for\n1 gold!")
+    check_button_states()
+end
+
+-- ─── Character window: main build callback ────────────────────────────────────
+
+--- Spawns all children of the Character window one frame after the window
+-- entity itself is created. Uses :with_lua_setup on interactive children so
+-- their entity ids can be stored for later disable/enable calls.
+--- @param ctx EntityContext
+local function build_character_window(ctx)
+    -- Title label
+    engine.spawn()
+        :with_gui_label(181, 20, "Character")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 10)
+        :with_zindex(2)
+        :build()
+
+    -- Potion GuiImage — 2×2 atlas, 32×32 cells:
+    -- Normal(0,0)  Hover(32,0)  Pressed/Selected(0,32)  Disabled(32,32)
+    engine.spawn()
+        :with_gui_image(32, 32, "gui-potion-btn", 0, 0, "on_potion_clicked")
+        :with_gui_image_hover_offset(32, 0)
+        :with_gui_image_pressed_offset(0, 32)
+        :with_gui_image_disabled_offset(32, 32)
+        :register_as("char_potion")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 36)
+        :with_zindex(2)
+        :build()
+
+    -- Potion count label (signal-bound)
+    engine.spawn()
+        :with_gui_label(32, 20, "x3")
+        :with_gui_label_signal_binding("char_potions")
+        :with_gui_label_signal_binding_format("x{}")
+        :with_gui_theme_key("compact")
+        :with_parent(ctx.id)
+        :with_gui_offset(46, 43)
+        :with_zindex(2)
+        :build()
+
+    -- "+" buy button
+    engine.spawn()
+        :with_gui_button(28, 20, "+", "on_char_buy_clicked")
+        :with_gui_theme_key("compact")
+        :register_as("char_buy")
+        :with_parent(ctx.id)
+        :with_gui_offset(82, 43)
+        :with_zindex(2)
+        :build()
+
+    -- "-" sell button
+    engine.spawn()
+        :with_gui_button(28, 20, "-", "on_char_sell_clicked")
+        :with_gui_theme_key("compact")
+        :register_as("char_sell")
+        :with_parent(ctx.id)
+        :with_gui_offset(113, 43)
+        :with_zindex(2)
+        :build()
+
+    -- Sword GuiImage — same 2×2 atlas layout as the potion button
+    engine.spawn()
+        :with_gui_image(32, 32, "gui-sword-btn", 0, 0, "on_sword_clicked")
+        :with_gui_image_hover_offset(32, 0)
+        :with_gui_image_pressed_offset(0, 32)
+        :with_gui_image_disabled_offset(32, 32)
+        :register_as("char_sword")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 80)
+        :with_zindex(2)
+        :build()
+
+    -- Sword cooldown countdown: shows "Xs" while the sword is on cooldown,
+    -- empty when ready. Positioned to the right of the sword image.
+    engine.spawn()
+        :with_gui_label(40, 18, "")
+        :with_gui_label_signal_binding("char_sword_cooldown")
+        :with_gui_label_signal_binding_format("{}")
+        :with_gui_theme_key("compact")
+        :with_parent(ctx.id)
+        :with_gui_offset(46, 88)
+        :with_zindex(2)
+        :build()
+
+    -- Message label (signal-bound to "char_message"): starts blank, updated
+    -- by each game action. Empty initial caption is fine here because
+    -- spawn_themed_caption creates the DynamicText child whenever a signal
+    -- binding is present, even for empty text.
+    engine.spawn()
+        :with_gui_label(181, 36, "")
+        :with_gui_label_signal_binding("char_message")
+        :with_gui_label_signal_binding_format("{}")
+        :with_gui_theme_key("compact")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 120)
+        :with_zindex(2)
+        :build()
+
+    -- HP stat label
+    engine.spawn()
+        :with_gui_label(181, 18, "HP: 100")
+        :with_gui_label_signal_binding("char_hp")
+        :with_gui_label_signal_binding_format("HP: {}")
+        :with_gui_theme_key("compact")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 162)
+        :with_zindex(2)
+        :build()
+
+    -- Gold stat label
+    engine.spawn()
+        :with_gui_label(181, 18, "Gold: 10")
+        :with_gui_label_signal_binding("char_gold")
+        :with_gui_label_signal_binding_format("Gold: {}")
+        :with_gui_theme_key("compact")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 182)
+        :with_zindex(2)
+        :build()
+
+    -- Enemy HP stat label
+    engine.spawn()
+        :with_gui_label(181, 18, "Enemy HP: 50")
+        :with_gui_label_signal_binding("char_enemy_hp")
+        :with_gui_label_signal_binding_format("Enemy HP: {}")
+        :with_gui_theme_key("compact")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 202)
+        :with_zindex(2)
+        :build()
+end
+
+-- ─── Existing demo callbacks ──────────────────────────────────────────────────
+
 --- Fired by gui_interactable_click_observer when the demo button is clicked.
 local function on_gui_demo_button_clicked()
     engine.log_debug("GUI Demo button clicked!")
@@ -217,6 +502,16 @@ local function on_update_gui_demo(input, dt)
         engine.change_scene("menu")
     end
 
+    if sword_cooldown_secs > 0.0 then
+        sword_cooldown_secs = sword_cooldown_secs - dt
+        if sword_cooldown_secs <= 0.0 then
+            sword_cooldown_secs = 0.0
+            engine.set_string("char_sword_cooldown", "")
+        else
+            engine.set_string("char_sword_cooldown", math.ceil(sword_cooldown_secs) .. "s")
+        end
+    end
+
     wave_elapsed_time = wave_elapsed_time + dt
     local wave = WAVE_AMPLITUDE * math.sin(2.0 * math.pi * WAVE_FREQUENCY_HZ * wave_elapsed_time)
     -- Rounded to 1 decimal -- get_scalar's "{}" formatting has no precision
@@ -227,14 +522,25 @@ end
 -- ─── Callback registry ──────────────────────────────────────────────────────
 
 M._callbacks = {
-    build_gui_demo_window = build_gui_demo_window,
-    build_gui_demo_window2 = build_gui_demo_window2,
+    -- Existing demo window callbacks
+    build_gui_demo_window      = build_gui_demo_window,
+    build_gui_demo_window2     = build_gui_demo_window2,
     on_gui_demo_button_clicked = on_gui_demo_button_clicked,
-    on_slide_window2_clicked = on_slide_window2_clicked,
-    on_appear_window2_clicked = on_appear_window2_clicked,
-    on_hide_window2_clicked = on_hide_window2_clicked,
+    on_slide_window2_clicked   = on_slide_window2_clicked,
+    on_appear_window2_clicked  = on_appear_window2_clicked,
+    on_hide_window2_clicked    = on_hide_window2_clicked,
     on_hide_window2_tween_done = on_hide_window2_tween_done,
-    on_update_gui_demo = on_update_gui_demo,
+    on_update_gui_demo         = on_update_gui_demo,
+    -- Character window setup callbacks
+    build_character_window     = build_character_window,
+    on_char_enemy_timer_setup  = on_char_enemy_timer_setup,
+    -- Character window action callbacks
+    on_enemy_attack            = on_enemy_attack,
+    on_potion_clicked          = on_potion_clicked,
+    on_sword_clicked           = on_sword_clicked,
+    on_sword_cooldown_done     = on_sword_cooldown_done,
+    on_char_buy_clicked        = on_char_buy_clicked,
+    on_char_sell_clicked       = on_char_sell_clicked,
 }
 
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -253,29 +559,27 @@ function M.spawn()
     -- belongs with the rest of this scene's asset loading rather than being
     -- re-asserted here every time the scene is entered.
 
+    -- Window 1 moved left (was x=220, y=105)
     engine.spawn()
         :with_gui_window(200, 150)
-        :with_screen_position(220, 105)
+        :with_screen_position(10, 80)
         :with_zindex(0)
         :with_lua_setup("build_gui_demo_window")
         :build()
 
     engine.spawn()
         :with_text("GUI Demo - press Back to return", "arcade", 16, 200, 200, 200, 255)
-        :with_screen_position(140, 20)
+        :with_screen_position(10, 18)
         :with_zindex(1)
         :build()
 
-    -- Standalone GuiLabel (no parent window) bound to the "wave" signal
-    -- computed in on_update_gui_demo, top-right of the 640x360 render area.
-    -- "0.0" is the placeholder shown until the first on_update tick writes
-    -- "wave" into WorldSignals.
+    -- Wave label moved to middle zone (was x=520, would overlap Character window)
     engine.spawn()
         :with_gui_label(110, 24, "0.0")
         :with_gui_label_signal_binding("wave")
         :with_gui_label_signal_binding_format("Wave: {}")
         :with_gui_theme_key("compact")
-        :with_screen_position(640 - 110 - 10, 10)
+        :with_screen_position(225, 10)
         :with_zindex(2)
         :build()
 
@@ -293,6 +597,32 @@ function M.spawn()
         :with_gui_theme_key("compact")
         :with_zindex(0)
         :with_lua_setup("build_gui_demo_window2")
+        :build()
+
+    -- ── Character window (mini-game) ──────────────────────────────────────
+    -- Initialize all game signals so signal-bound labels show correct values
+    -- from the first frame, even before the window's LuaSetup fires.
+    engine.set_integer("char_hp",        30)
+    engine.set_integer("char_gold",      10)
+    engine.set_integer("char_potions",    3)
+    engine.set_integer("char_enemy_hp",  50)
+    engine.set_string("char_message",        "")
+    engine.set_string("char_sword_cooldown", "")
+    sword_cooldown_secs = 0.0
+    engine.clear_flag("char_game_over")
+
+    engine.spawn()
+        :with_gui_window(197, 240)
+        :with_screen_position(440, 30)
+        :with_zindex(0)
+        :with_lua_setup("build_character_window")
+        :build()
+
+    -- Enemy attack timer — a standalone entity (no components beyond LuaTimer)
+    -- so its id can be stored and the timer removed cleanly on game over.
+    -- on_char_enemy_timer_setup registers the id and starts the first tick.
+    engine.spawn()
+        :with_lua_setup("on_char_enemy_timer_setup")
         :build()
 
     engine.log_debug("GUI demo scene entities queued!")

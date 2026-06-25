@@ -239,6 +239,8 @@ local function load_gui_demo()
     engine.load_texture("gui-bluewindow", "./assets/textures/gui/bluewindow_6_6_6_6.png")
     engine.load_texture("gui-button-atlas", "./assets/textures/gui/button_atlas_8_8_8_8.png")
     engine.load_texture("gui-label", "./assets/textures/gui/label_6_6_6_6.png")
+    engine.load_texture("gui-potion-btn", "./assets/textures/gui/potion_button.png")
+    engine.load_texture("gui-sword-btn", "./assets/textures/gui/sword_button.png")
 
     -- "default" theme: bluewindow_6_6_6_6.png is 64x64 with 6px nine-patch
     -- borders on all sides (encoded in the filename). Every set_gui_theme_*
@@ -277,8 +279,10 @@ local function load_gui_demo()
     -- not that they must use different art.
     engine.set_gui_theme_panel("compact", "gui-bluewindow", 0, 0, 64, 64, 6, 6, 6, 6)
     engine.set_gui_theme_button("compact", "normal", "gui-button-atlas", 0, 0, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_button("compact", "hover", "gui-button-atlas", 64, 0, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_button("compact", "pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
-    engine.set_gui_theme_font("compact", "arcade", 12, 255, 220, 120, 255)
+    engine.set_gui_theme_button("compact", "disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_font("compact", "arcade", 13, 255, 220, 120, 255)
 end
 
 --- Called during the Setup game state to load all assets.
