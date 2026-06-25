@@ -9,6 +9,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
+use crate::components::gui_themed::Themed;
 use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 
 /// Themed panel rendered as a nine-patch background at the entity's `ScreenPosition`.
@@ -31,6 +32,12 @@ impl GuiWindow {
     pub fn with_theme_key(mut self, key: impl Into<Arc<str>>) -> Self {
         self.theme_key = key.into();
         self
+    }
+}
+
+impl Themed for GuiWindow {
+    fn theme_key_mut(&mut self) -> &mut Arc<str> {
+        &mut self.theme_key
     }
 }
 

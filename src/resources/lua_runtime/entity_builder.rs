@@ -10,6 +10,7 @@ use crate::components::guibutton::GuiButton;
 use crate::components::guiimage::GuiImage;
 use crate::components::guilabel::GuiLabel;
 use crate::components::guiwindow::GuiWindow;
+use crate::components::Themed;
 use raylib::prelude::Vector2;
 use super::commands::{CloneCmd, UniformValue};
 use super::runtime::LuaAppData;
@@ -649,13 +650,13 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let key: std::sync::Arc<str> = std::sync::Arc::from(key.as_str());
-            if let Some(window) = this.cmd.gui_window.as_mut() {
-                window.theme_key = key;
-            } else if let Some(button) = this.cmd.gui_button.as_mut() {
-                button.theme_key = key;
-            } else if let Some(label) = this.cmd.gui_label.as_mut() {
-                label.theme_key = key;
-            } else {
+            fn apply<T: Themed>(opt: &mut Option<T>, key: &std::sync::Arc<str>) -> bool {
+                if let Some(t) = opt.as_mut() { *t.theme_key_mut() = key.clone(); true } else { false }
+            }
+            if !apply(&mut this.cmd.gui_window, &key)
+                && !apply(&mut this.cmd.gui_button, &key)
+                && !apply(&mut this.cmd.gui_label, &key)
+            {
                 return Err(LuaError::runtime(
                     "with_gui_theme_key() requires with_gui_window()/with_gui_button()/with_gui_label() first",
                 ));

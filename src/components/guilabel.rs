@@ -13,6 +13,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
+use crate::components::gui_themed::Themed;
 use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 
 /// Static themed label panel, rendered via the named theme (`theme_key`,
@@ -71,6 +72,12 @@ impl GuiLabel {
             *fmt = Some(format.into());
         }
         self
+    }
+}
+
+impl Themed for GuiLabel {
+    fn theme_key_mut(&mut self) -> &mut Arc<str> {
+        &mut self.theme_key
     }
 }
 

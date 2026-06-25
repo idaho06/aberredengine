@@ -57,7 +57,9 @@ pub mod guiimage;
 pub mod guiinteractable;
 pub mod guilabel;
 pub mod guioffset;
+pub mod gui_themed;
 pub mod guiwindow;
+pub use gui_themed::Themed;
 pub mod inputcontrolled;
 #[cfg(feature = "lua")]
 pub mod lua_on_animation_end;
