@@ -33,6 +33,9 @@ local window2_show_mode = SHOW_MODE_SLIDE
 -- Tracks the sword attack cooldown so on_update can display remaining seconds.
 -- Set to the random duration on click; decremented each frame; 0 = not on cooldown.
 local sword_cooldown_secs = 0.0
+-- Last value written to "char_sword_cooldown"; guards against redundant set_string
+-- calls (each call clones the WorldSignals strings map even when value is unchanged).
+local sword_cooldown_last_display = ""
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
@@ -155,8 +158,8 @@ local function check_button_states()
     if buy_id    then engine.entity_set_gui_disabled(buy_id,    gold < 2)     end
 end
 
---- Ends the game: sets game-over flag, displays a final message, stops the
--- enemy timer, and disables all four interactive buttons.
+--- Ends the game: sets game-over flag, displays a final message, stops both
+-- timers, and disables all four interactive buttons.
 local function end_game(message)
     engine.set_flag("char_game_over")
     engine.set_string("char_message", message)
@@ -168,11 +171,13 @@ local function end_game(message)
     local sell_id   = engine.get_entity("char_sell")
 
     if timer_id  then engine.entity_remove_lua_timer(timer_id)        end
+    if sword_id  then engine.entity_remove_lua_timer(sword_id)        end
     if potion_id then engine.entity_set_gui_disabled(potion_id, true) end
     if sword_id  then engine.entity_set_gui_disabled(sword_id,  true) end
     if buy_id    then engine.entity_set_gui_disabled(buy_id,    true) end
     if sell_id   then engine.entity_set_gui_disabled(sell_id,   true) end
     sword_cooldown_secs = 0.0
+    sword_cooldown_last_display = ""
     engine.set_string("char_sword_cooldown", "")
 end
 
@@ -248,6 +253,7 @@ end
 local function on_sword_cooldown_done(ctx)
     engine.entity_remove_lua_timer(ctx.id)
     sword_cooldown_secs = 0.0
+    sword_cooldown_last_display = ""
     engine.set_string("char_sword_cooldown", "")
     if char_game_active() then
         engine.entity_set_gui_disabled(ctx.id, false)
@@ -504,11 +510,16 @@ local function on_update_gui_demo(input, dt)
 
     if sword_cooldown_secs > 0.0 then
         sword_cooldown_secs = sword_cooldown_secs - dt
+        local display
         if sword_cooldown_secs <= 0.0 then
             sword_cooldown_secs = 0.0
-            engine.set_string("char_sword_cooldown", "")
+            display = ""
         else
-            engine.set_string("char_sword_cooldown", math.ceil(sword_cooldown_secs) .. "s")
+            display = math.ceil(sword_cooldown_secs) .. "s"
+        end
+        if display ~= sword_cooldown_last_display then
+            engine.set_string("char_sword_cooldown", display)
+            sword_cooldown_last_display = display
         end
     end
 
@@ -609,6 +620,7 @@ function M.spawn()
     engine.set_string("char_message",        "")
     engine.set_string("char_sword_cooldown", "")
     sword_cooldown_secs = 0.0
+    sword_cooldown_last_display = ""
     engine.clear_flag("char_game_over")
 
     engine.spawn()
