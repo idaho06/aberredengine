@@ -13,7 +13,6 @@
 use bevy_ecs::prelude::*;
 use log::warn;
 
-use crate::components::guiinteractable::GuiInteractable;
 use crate::events::gui_interactable::GuiInteractableClickEvent;
 use crate::systems::GameCtx;
 
@@ -22,25 +21,26 @@ use crate::systems::GameCtx;
 #[cfg(feature = "lua")]
 pub fn gui_interactable_click_observer(
     trigger: On<GuiInteractableClickEvent>,
-    interactables: Query<&GuiInteractable>,
     mut ctx: GameCtx,
     lua_runtime: bevy_ecs::system::NonSend<crate::resources::lua_runtime::LuaRuntime>,
 ) {
     let event = trigger.event();
-    let Ok(interactable) = interactables.get(event.entity) else {
+    let Ok(interactable) = ctx.gui_interactables.get(event.entity) else {
         warn!(
             "gui_interactable_click_observer: entity {:?} not found",
             event.entity
         );
         return;
     };
+    let on_click_callback = interactable.on_click_callback.clone();
+    let on_rust_callback = interactable.on_rust_callback;
 
     // Priority 1: Lua callback
-    if let Some(ref callback_name) = interactable.on_click_callback {
-        if lua_runtime.has_function(callback_name) {
+    if let Some(callback_name) = on_click_callback {
+        if lua_runtime.has_function(&callback_name) {
             let lua_ctx = lua_runtime.lua().create_table().unwrap();
             lua_ctx.set("entity_id", event.entity.to_bits()).unwrap();
-            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
+            if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, lua_ctx) {
                 log::error!(target: "lua", "Error in gui interactable callback '{}': {}", callback_name, e);
             }
         } else {
@@ -50,7 +50,7 @@ pub fn gui_interactable_click_observer(
     }
 
     // Priority 2: Rust callback
-    if let Some(cb) = interactable.on_rust_callback {
+    if let Some(cb) = on_rust_callback {
         cb(event.entity, &mut ctx);
     }
 }
@@ -58,21 +58,18 @@ pub fn gui_interactable_click_observer(
 /// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's Rust
 /// fn-pointer callback (no Lua feature, so no Lua-name lookup).
 #[cfg(not(feature = "lua"))]
-pub fn gui_interactable_click_observer(
-    trigger: On<GuiInteractableClickEvent>,
-    interactables: Query<&GuiInteractable>,
-    mut ctx: GameCtx,
-) {
+pub fn gui_interactable_click_observer(trigger: On<GuiInteractableClickEvent>, mut ctx: GameCtx) {
     let event = trigger.event();
-    let Ok(interactable) = interactables.get(event.entity) else {
+    let Ok(interactable) = ctx.gui_interactables.get(event.entity) else {
         warn!(
             "gui_interactable_click_observer: entity {:?} not found",
             event.entity
         );
         return;
     };
+    let on_rust_callback = interactable.on_rust_callback;
 
-    if let Some(cb) = interactable.on_rust_callback {
+    if let Some(cb) = on_rust_callback {
         cb(event.entity, &mut ctx);
     }
 }
@@ -81,6 +78,7 @@ pub fn gui_interactable_click_observer(
 mod tests {
     use super::*;
     use crate::components::guiimage::GuiImage;
+    use crate::components::guiinteractable::GuiInteractable;
     use crate::resources::appstate::AppState;
     use crate::resources::camerafollowconfig::CameraFollowConfig;
     use crate::resources::gameconfig::GameConfig;

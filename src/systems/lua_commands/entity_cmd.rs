@@ -14,6 +14,7 @@ use raylib::prelude::Vector2;
 use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::guiinteractable::GuiWidgetState;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
@@ -153,6 +154,10 @@ pub fn process_entity_commands(
             | EntityCmd::InsertTtl { .. }) => {
                 process_lifecycle_cmd(cmd, commands, world_signals, systems_store)
             }
+
+            EntityCmd::SetGuiDisabled { entity_id, disabled } => {
+                process_gui_interactable_cmd(entity_id, disabled, queries)
+            }
         }
     }
 }
@@ -241,6 +246,20 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             }
         }
         _ => unreachable!(),
+    }
+}
+
+/// Query-mutation handler for GUI widget enable/disable. Mutates
+/// `GuiInteractable.state` only — never `try_insert`s a fresh component,
+/// since that would wipe `on_click_callback`/`on_rust_callback`/`size`.
+fn process_gui_interactable_cmd(entity_id: u64, disabled: bool, queries: &mut EntityCmdQueries) {
+    let Some(entity) = resolve_entity(entity_id) else { return; };
+    if let Ok(mut interactable) = queries.gui_interactables.get_mut(entity) {
+        interactable.state = if disabled {
+            GuiWidgetState::Disabled
+        } else {
+            GuiWidgetState::Normal
+        };
     }
 }
 
@@ -740,6 +759,7 @@ fn process_lifecycle_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::guiinteractable::GuiInteractable;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 
     #[test]
@@ -862,6 +882,65 @@ mod tests {
         let ct = world.get::<CameraTarget>(entity).unwrap();
         assert_eq!(ct.priority, 5);
         assert_eq!(ct.zoom, 3.0);
+    }
+
+    fn run_gui_disabled_cmd(world: &mut World, cmd: EntityCmd) {
+        run_entity_cmd(world, &mut WorldSignals::default(), cmd);
+    }
+
+    #[test]
+    fn set_gui_disabled_true_sets_state_disabled() {
+        let mut world = World::new();
+        let entity = world
+            .spawn(GuiInteractable::new(80.0, 24.0).with_on_click_callback("on_start_clicked"))
+            .id();
+
+        run_gui_disabled_cmd(
+            &mut world,
+            EntityCmd::SetGuiDisabled {
+                entity_id: entity.to_bits(),
+                disabled: true,
+            },
+        );
+
+        let interactable = world.get::<GuiInteractable>(entity).unwrap();
+        assert_eq!(interactable.state, GuiWidgetState::Disabled);
+        assert_eq!(interactable.on_click_callback.as_deref(), Some("on_start_clicked"));
+    }
+
+    #[test]
+    fn set_gui_disabled_false_resets_to_normal() {
+        let mut world = World::new();
+        let entity = world.spawn(GuiInteractable::new(80.0, 24.0).with_disabled()).id();
+
+        run_gui_disabled_cmd(
+            &mut world,
+            EntityCmd::SetGuiDisabled {
+                entity_id: entity.to_bits(),
+                disabled: false,
+            },
+        );
+
+        let interactable = world.get::<GuiInteractable>(entity).unwrap();
+        assert_eq!(interactable.state, GuiWidgetState::Normal);
+    }
+
+    #[test]
+    fn set_gui_disabled_noop_on_missing_component() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+
+        // Should not panic when the entity has no GuiInteractable (e.g. the
+        // command races the one-frame-later gui_*_spawn_system insertion).
+        run_gui_disabled_cmd(
+            &mut world,
+            EntityCmd::SetGuiDisabled {
+                entity_id: entity.to_bits(),
+                disabled: true,
+            },
+        );
+
+        assert!(world.get::<GuiInteractable>(entity).is_none());
     }
 
     fn run_screen_position_cmd(world: &mut World, cmd: EntityCmd) {

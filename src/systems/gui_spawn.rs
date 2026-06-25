@@ -64,7 +64,11 @@ fn spawn_themed_caption(
     z_index: Option<&ZIndex>,
     signal_binding: Option<&(String, Option<String>)>,
 ) {
-    if text.is_empty() {
+    // Skip the caption when there is no text content AND no signal binding
+    // will ever supply one. When a binding is present the DynamicText child
+    // must still be spawned so the binding has somewhere to attach, even if
+    // the initial text is empty (the binding overwrites it on the first tick).
+    if text.is_empty() && signal_binding.is_none() {
         return;
     }
 

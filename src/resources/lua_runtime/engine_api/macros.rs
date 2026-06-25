@@ -220,6 +220,11 @@ macro_rules! define_entity_cmds {
                 |(entity_id, vx, vy)| (u64, f32, f32), EntityCmd::SetVelocity { entity_id, vx, vy },
                 desc = "Set entity velocity",
                 params = [("entity_id", "integer"), ("vx", "number"), ("vy", "number")]),
+            ("entity_set_gui_disabled",
+                |(entity_id, disabled)| (u64, bool), EntityCmd::SetGuiDisabled { entity_id, disabled },
+                desc = "Enable/disable a GuiButton or GuiImage (cosmetic — gui_hit_test_system stops \
+                        promoting it and skips its click callback; gameplay effects are left to the game)",
+                params = [("entity_id", "integer"), ("disabled", "boolean")]),
             ("entity_insert_stuckto",
                 |(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)|
                 (u64, u64, bool, bool, f32, f32, f32, f32),

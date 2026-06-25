@@ -33,6 +33,7 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
+use crate::components::guiinteractable::GuiInteractable;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -60,6 +61,13 @@ use crate::resources::worldtime::WorldTime;
 /// [`CollisionCallback`](crate::components::collision::CollisionCallback),
 /// [`MenuRustCallback`](crate::components::menu::MenuRustCallback),
 /// and the scene callbacks — receive `&mut GameCtx`.
+///
+/// If your system takes `&mut GameCtx` alongside its own component query,
+/// check whether `GameCtx` already covers that component first — borrow it
+/// from `ctx` instead of adding a sibling query parameter. A sibling query
+/// that overlaps one of `GameCtx`'s queries causes a Bevy `B0001`
+/// query-aliasing panic at startup (see `gui_interactable_click_observer`,
+/// which hit this when `gui_interactables` was added here).
 #[derive(SystemParam)]
 pub struct GameCtx<'w, 's> {
     /// ECS command buffer for spawning, despawning, inserting/removing components.
@@ -77,6 +85,11 @@ pub struct GameCtx<'w, 's> {
     pub shaders: Query<'w, 's, &'static mut EntityShader>,
     /// Mutable access to camera target markers (priority and zoom).
     pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
+    /// Mutable access to GUI widget hit-test/click state (enable/disable, etc.).
+    /// Present here — not only in the click observer — so that any Rust
+    /// callback (`GuiRustCallback`, timer, phase, collision rule) can disable
+    /// or re-enable a widget directly via `ctx.gui_interactables.get_mut(id)`.
+    pub gui_interactables: Query<'w, 's, &'static mut GuiInteractable>,
     // Read-only queries
     /// Read-only access to entity groups.
     pub groups: Query<'w, 's, &'static Group>,

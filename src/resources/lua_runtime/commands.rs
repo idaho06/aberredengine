@@ -165,6 +165,10 @@ pub enum EntityCmd {
     SignalToggleFlag { entity_id: u64, flag: String },
     /// Set entity velocity (RigidBody)
     SetVelocity { entity_id: u64, vx: f32, vy: f32 },
+    /// Enable/disable a GuiButton or GuiImage (cosmetic: gui_hit_test_system stops
+    /// promoting it to Hovered/Pressed and skips firing its click callback; any
+    /// real-world consequence is left to the game's own logic)
+    SetGuiDisabled { entity_id: u64, disabled: bool },
     /// Insert a StuckTo component
     InsertStuckTo {
         entity_id: u64,

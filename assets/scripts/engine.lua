@@ -672,6 +672,11 @@ function engine.collision_entity_set_force_value(entity_id, name, x, y) end
 ---@param friction number
 function engine.collision_entity_set_friction(entity_id, friction) end
 
+---Enable/disable a GuiButton or GuiImage (cosmetic — gui_hit_test_system stops promoting it and skips its click callback; gameplay effects are left to the game)
+---@param entity_id integer
+---@param disabled boolean
+function engine.collision_entity_set_gui_disabled(entity_id, disabled) end
+
 ---Set entity max speed (nil to remove)
 ---@param entity_id integer
 ---@param max_speed number|nil
@@ -993,6 +998,11 @@ function engine.entity_set_force_value(entity_id, name, x, y) end
 ---@param entity_id integer
 ---@param friction number
 function engine.entity_set_friction(entity_id, friction) end
+
+---Enable/disable a GuiButton or GuiImage (cosmetic — gui_hit_test_system stops promoting it and skips its click callback; gameplay effects are left to the game)
+---@param entity_id integer
+---@param disabled boolean
+function engine.entity_set_gui_disabled(entity_id, disabled) end
 
 ---Set entity max speed (nil to remove)
 ---@param entity_id integer
