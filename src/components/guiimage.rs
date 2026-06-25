@@ -30,11 +30,21 @@ pub struct GuiImage {
     pub tex_key: String,
     /// Pixel position of the atlas sub-rect within `tex_key` (mirrors
     /// `Sprite.offset`) — `size` doubles as both the source-rect size and
-    /// the render size, same convention `Sprite` already uses. Single-state
-    /// only for now: this is the "normal" image; per-state
-    /// (hover/pressed/disabled) offsets are a deliberately separate,
-    /// not-yet-implemented follow-up.
+    /// the render size, same convention `Sprite` already uses. This is the
+    /// "normal" state's offset; `offset_hover`/`offset_pressed`/
+    /// `offset_disabled` fall back to this value when unset.
     pub offset: Vector2,
+    /// Atlas offset to use while `GuiInteractable.state == Hovered`. `None`
+    /// falls back to `offset` — same "only normal required" convention as
+    /// `GuiButtonSkin.hover`. Synced to `Sprite.offset` every frame by
+    /// `gui_image_state_sync_system`.
+    pub offset_hover: Option<Vector2>,
+    /// Atlas offset to use while `GuiInteractable.state == Pressed`. `None`
+    /// falls back to `offset`.
+    pub offset_pressed: Option<Vector2>,
+    /// Atlas offset to use while `GuiInteractable.state == Disabled`. `None`
+    /// falls back to `offset`.
+    pub offset_disabled: Option<Vector2>,
     /// Lua callback name, checked first by the click dispatch chain. Empty
     /// string = no callback wired (`GuiInteractable.on_click_callback` stays
     /// `None`) — the image still hit-tests/hovers/presses, it just has
@@ -48,6 +58,9 @@ impl GuiImage {
             size: Vector2::new(width, height),
             tex_key: tex_key.into(),
             offset: Vector2::new(offset_x, offset_y),
+            offset_hover: None,
+            offset_pressed: None,
+            offset_disabled: None,
             callback_name: String::new(),
         }
     }
@@ -70,6 +83,21 @@ impl GuiImage {
             callback_name: callback_name.into(),
             ..Self::new(width, height, tex_key, offset_x, offset_y)
         }
+    }
+
+    pub fn with_offset_hover(mut self, x: f32, y: f32) -> Self {
+        self.offset_hover = Some(Vector2::new(x, y));
+        self
+    }
+
+    pub fn with_offset_pressed(mut self, x: f32, y: f32) -> Self {
+        self.offset_pressed = Some(Vector2::new(x, y));
+        self
+    }
+
+    pub fn with_offset_disabled(mut self, x: f32, y: f32) -> Self {
+        self.offset_disabled = Some(Vector2::new(x, y));
+        self
     }
 }
 
@@ -96,5 +124,24 @@ mod tests {
         assert!((img.offset.x - 64.0).abs() < f32::EPSILON);
         assert!((img.offset.y - 32.0).abs() < f32::EPSILON);
         assert_eq!(img.callback_name, "on_sword_clicked");
+    }
+
+    #[test]
+    fn test_guiimage_new_has_no_per_state_offsets_by_default() {
+        let img = GuiImage::new(32.0, 32.0, "item_sword", 64.0, 32.0);
+        assert!(img.offset_hover.is_none());
+        assert!(img.offset_pressed.is_none());
+        assert!(img.offset_disabled.is_none());
+    }
+
+    #[test]
+    fn test_guiimage_with_offset_builders_set_per_state_offsets() {
+        let img = GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0)
+            .with_offset_hover(16.0, 0.0)
+            .with_offset_pressed(32.0, 0.0)
+            .with_offset_disabled(48.0, 0.0);
+        assert_eq!(img.offset_hover, Some(Vector2::new(16.0, 0.0)));
+        assert_eq!(img.offset_pressed, Some(Vector2::new(32.0, 0.0)));
+        assert_eq!(img.offset_disabled, Some(Vector2::new(48.0, 0.0)));
     }
 }

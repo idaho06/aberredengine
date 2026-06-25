@@ -121,6 +121,7 @@ use crate::systems::gamestate::{
 use crate::systems::gridlayout::gridlayout_spawn_system;
 use crate::systems::group::update_group_counts_system;
 use crate::systems::gui_hit_test::gui_hit_test_system;
+use crate::systems::gui_image_state_sync::gui_image_state_sync_system;
 use crate::systems::gui_layout::gui_layout_system;
 use crate::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
@@ -840,6 +841,11 @@ impl EngineBuilder {
             gui_hit_test_system
                 .after(update_input_state)
                 .after(gui_layout_system)
+                .before(render_system),
+        );
+        update.add_systems(
+            gui_image_state_sync_system
+                .after(gui_hit_test_system)
                 .before(render_system),
         );
         update.add_systems(particle_emitter_system.before(movement));

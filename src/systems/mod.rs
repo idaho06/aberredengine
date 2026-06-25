@@ -59,6 +59,7 @@ pub mod gridlayout;
 pub mod group;
 pub mod gui_interactable_click;
 pub mod gui_hit_test;
+pub mod gui_image_state_sync;
 pub mod gui_layout;
 pub mod gui_spawn;
 pub mod input;
