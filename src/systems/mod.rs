@@ -15,6 +15,7 @@
 //! - [`gui_interactable_click`] – dispatch the Lua/Rust callback chain for a clicked GUI widget (`GuiButton`/`GuiImage`)
 //! - [`gui_hit_test`] – resolve `GuiInteractable` hover/press/click state from cursor + mouse button
 //! - [`gui_layout`] – resolve GUI children's `ScreenPosition` from parent `ScreenPosition` + `GuiOffset`
+//! - [`gui_progressbar_signal_update`] – keep `GuiProgressBar.value` in sync with `WorldSignals` for signal-bound bars
 //! - [`gui_spawn`] – spawn a `GuiButton`/`GuiLabel`/`GuiImage`'s `GuiInteractable`/caption/`Sprite` on `Added<T>`
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
 //! - [`inputsimplecontroller`] – translate input state into velocity on entities
@@ -61,6 +62,7 @@ pub mod gui_interactable_click;
 pub mod gui_hit_test;
 pub mod gui_image_state_sync;
 pub mod gui_layout;
+pub mod gui_progressbar_signal_update;
 pub mod gui_spawn;
 pub mod input;
 pub mod inputaccelerationcontroller;

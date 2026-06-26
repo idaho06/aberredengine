@@ -9,6 +9,7 @@
 use crate::components::guibutton::GuiButton;
 use crate::components::guiimage::GuiImage;
 use crate::components::guilabel::GuiLabel;
+use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use crate::components::guiwindow::GuiWindow;
 use crate::components::Themed;
 use raylib::prelude::Vector2;
@@ -646,7 +647,7 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
-        "with_gui_theme_key", "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.",
+        "with_gui_theme_key", "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let key: std::sync::Arc<str> = std::sync::Arc::from(key.as_str());
@@ -656,9 +657,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             if !apply(&mut this.cmd.gui_window, &key)
                 && !apply(&mut this.cmd.gui_button, &key)
                 && !apply(&mut this.cmd.gui_label, &key)
+                && !apply(&mut this.cmd.gui_progress_bar, &key)
             {
                 return Err(LuaError::runtime(
-                    "with_gui_theme_key() requires with_gui_window()/with_gui_button()/with_gui_label() first",
+                    "with_gui_theme_key() requires with_gui_window()/with_gui_button()/with_gui_label()/with_gui_progress_bar() first",
                 ));
             }
             Ok(())
@@ -716,6 +718,66 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 ));
             };
             img.offset_disabled = Some(Vector2::new(offset_x, offset_y));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_progress_bar", "Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the \"default\" key.",
+        [("width", "number"), ("height", "number"), ("value", "number"), ("max", "number")],
+        |_, this: &mut LuaEntityBuilder, (width, height, value, max): (f32, f32, f32, f32)| {
+            this.cmd.gui_progress_bar = Some(GuiProgressBar::new(width, height, value, max));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_progress_bar_vertical", "Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.",
+        [],
+        |_, this: &mut LuaEntityBuilder, ()| {
+            let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
+                return Err(LuaError::runtime(
+                    "with_gui_progress_bar_vertical() requires with_gui_progress_bar() first",
+                ));
+            };
+            bar.direction = ProgressBarDirection::Vertical;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_progress_bar_reversed", "Reverse the fill anchor of a GuiProgressBar: Horizontal becomes HorizontalReversed (right-to-left), Vertical becomes VerticalReversed (top-to-bottom). Requires :with_gui_progress_bar() first.",
+        [],
+        |_, this: &mut LuaEntityBuilder, ()| {
+            let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
+                return Err(LuaError::runtime(
+                    "with_gui_progress_bar_reversed() requires with_gui_progress_bar() first",
+                ));
+            };
+            bar.direction = match bar.direction {
+                ProgressBarDirection::Horizontal => ProgressBarDirection::HorizontalReversed,
+                ProgressBarDirection::HorizontalReversed => ProgressBarDirection::Horizontal,
+                ProgressBarDirection::Vertical => ProgressBarDirection::VerticalReversed,
+                ProgressBarDirection::VerticalReversed => ProgressBarDirection::Vertical,
+            };
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
+        "with_gui_progress_bar_signal_binding", "Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.",
+        [("key", "string")],
+        |_, this: &mut LuaEntityBuilder, key: String| {
+            let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
+                return Err(LuaError::runtime(
+                    "with_gui_progress_bar_signal_binding() requires with_gui_progress_bar() first",
+                ));
+            };
+            bar.signal_binding = Some(key);
             Ok(())
         }
     );

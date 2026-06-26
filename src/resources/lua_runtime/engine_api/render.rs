@@ -311,6 +311,46 @@ impl LuaRuntime {
             ]
         );
 
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_progress_bar",
+            gui_theme_commands,
+            |(theme_key, part, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)|
+            (String, String, String, f32, f32, f32, f32, i32, i32, i32, i32),
+            RenderCmd::SetGuiThemeProgressBar {
+                theme_key,
+                part,
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom
+            },
+            desc = "Set one part of the named theme's progress bar skin in GuiThemeStore. \
+                    `part` is \"track\" (optional background, None = fill-only bar) or \"fill\" (required foreground). \
+                    Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.",
+            cat = "render",
+            params = [
+                ("theme_key", "string"),
+                ("part", "string"),
+                ("tex_key", "string"),
+                ("source_x", "number"),
+                ("source_y", "number"),
+                ("source_w", "number"),
+                ("source_h", "number"),
+                ("left", "integer"),
+                ("top", "integer"),
+                ("right", "integer"),
+                ("bottom", "integer")
+            ]
+        );
+
         Ok(())
     }
 }

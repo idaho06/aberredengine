@@ -225,6 +225,14 @@ macro_rules! define_entity_cmds {
                 desc = "Enable/disable a GuiButton or GuiImage (cosmetic — gui_hit_test_system stops \
                         promoting it and skips its click callback; gameplay effects are left to the game)",
                 params = [("entity_id", "integer"), ("disabled", "boolean")]),
+            ("entity_set_gui_progress",
+                |(entity_id, value)| (u64, f32), EntityCmd::SetGuiProgress { entity_id, value },
+                desc = "Set the current fill value on a GuiProgressBar (clamped to [0, max] by the handler)",
+                params = [("entity_id", "integer"), ("value", "number")]),
+            ("entity_set_gui_progress_max",
+                |(entity_id, max)| (u64, f32), EntityCmd::SetGuiProgressMax { entity_id, max },
+                desc = "Set the max value on a GuiProgressBar; current value is clamped to the new max",
+                params = [("entity_id", "integer"), ("max", "number")]),
             ("entity_insert_stuckto",
                 |(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)|
                 (u64, u64, bool, bool, f32, f32, f32, f32),

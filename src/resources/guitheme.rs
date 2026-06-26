@@ -51,6 +51,19 @@ pub struct GuiButtonSkin {
     pub disabled: Option<GuiNinePatch>,
 }
 
+/// Nine-patch skin for a `GuiProgressBar`. `fill` is the only required patch
+/// — `track` is optional (set to `None` to render a fill-only bar with no
+/// background). `engine.set_gui_theme_progress_bar` with `part = "track"`
+/// sets `track`, and `part = "fill"` sets `fill`.
+#[derive(Clone, Debug, Default)]
+pub struct GuiProgressBarSkin {
+    /// Background track drawn at the full bar size. `None` = no background.
+    pub track: Option<GuiNinePatch>,
+    /// Fill patch drawn at the proportional width or height. Required — the
+    /// skin is dropped by `drop_invalid_progress_bar_skin` when unset.
+    pub fill: GuiNinePatch,
+}
+
 /// One named theme's worth of GUI styling. `label` is `None` until
 /// `engine.set_gui_theme_label` is called — a `GuiLabel` renders its caption
 /// with no background panel until then. `font`/`font_size`/`text_color`
@@ -66,6 +79,7 @@ pub struct GuiTheme {
     pub panel: GuiNinePatch,
     pub button: Option<GuiButtonSkin>,
     pub label: Option<GuiNinePatch>,
+    pub progress_bar: Option<GuiProgressBarSkin>,
     pub font: Arc<str>,
     pub font_size: f32,
     pub text_color: Color,
@@ -77,6 +91,7 @@ impl Default for GuiTheme {
             panel: GuiNinePatch::default(),
             button: None,
             label: None,
+            progress_bar: None,
             font: Arc::from(""),
             font_size: 16.0,
             text_color: Color::WHITE,
@@ -96,6 +111,22 @@ impl GuiTheme {
             && skin.normal.is_unset()
         {
             self.button = None;
+            return false;
+        }
+        true
+    }
+
+    /// Clears `progress_bar` if its required `fill` patch was never
+    /// configured, or if `track` is `Some` but still unset (a `Some` with an
+    /// empty `tex_key` is a misconfiguration — use `None` for a fill-only
+    /// bar). Returns `false` when the skin is dropped so callers can log a
+    /// warning.
+    pub fn drop_invalid_progress_bar_skin(&mut self) -> bool {
+        let Some(skin) = &self.progress_bar else { return true; };
+        let fill_invalid = skin.fill.is_unset();
+        let track_invalid = skin.track.as_ref().is_some_and(|t| t.is_unset());
+        if fill_invalid || track_invalid {
+            self.progress_bar = None;
             return false;
         }
         true
@@ -131,42 +162,44 @@ impl GuiThemeStore {
 /// per-scene — revisit if a typo fixed mid-session needs to be re-flagged
 /// after a scene switch.
 ///
-/// Two independent domains, two independent sets: "widget references an
-/// unregistered theme_key" (`warn_once`) and "theme's button skin has no
-/// `normal` patch, dropped" (`warn_once_invalid_button_skin`) are unrelated
-/// conditions that both key off the same `theme_key` string. Sharing one set
-/// between them (e.g. via a hand-rolled `"{key}::button"` composite key)
-/// would let a theme literally named `"foo::button"` collide with the
-/// warning key for theme `"foo"`'s button-skin case — kept as two sets
-/// instead, so each domain's key is just the plain `theme_key`.
+/// Three independent domains, three independent sets. All three key off the
+/// same plain `theme_key` string:
+/// - "widget references an unregistered theme_key" (`warn_once`)
+/// - "theme's button skin has no `normal` patch, dropped" (`warn_once_invalid_button_skin`)
+/// - "theme's progress bar skin has no `fill` patch, dropped" (`warn_once_invalid_progress_bar_skin`)
+///
+/// Kept as separate sets so a theme literally named `"foo::button"` cannot
+/// collide with the warning key for theme `"foo"`'s button-skin case, etc.
 #[derive(Resource, Default)]
 pub struct GuiThemeWarnCache {
     warned_keys: FxHashSet<Arc<str>>,
     warned_invalid_button_skins: FxHashSet<Arc<str>>,
+    warned_invalid_progress_bar_skins: FxHashSet<Arc<str>>,
 }
 
 impl GuiThemeWarnCache {
     /// Returns `true` the first time `key` is reported missing, `false` on
     /// every subsequent call for the same key.
     pub fn warn_once(&mut self, key: &str) -> bool {
-        if self.warned_keys.contains(key) {
-            false
-        } else {
-            self.warned_keys.insert(Arc::from(key));
-            true
-        }
+        Self::first_seen(&mut self.warned_keys, key)
     }
 
     /// Returns `true` the first time `key`'s button skin is reported
-    /// invalid (no `normal` patch set), `false` on every subsequent call for
-    /// the same key.
+    /// invalid (no `normal` patch set), `false` on every subsequent call.
     pub fn warn_once_invalid_button_skin(&mut self, key: &str) -> bool {
-        if self.warned_invalid_button_skins.contains(key) {
-            false
-        } else {
-            self.warned_invalid_button_skins.insert(Arc::from(key));
-            true
-        }
+        Self::first_seen(&mut self.warned_invalid_button_skins, key)
+    }
+
+    /// Returns `true` the first time `key`'s progress bar skin is reported
+    /// invalid (no `fill` patch set), `false` on every subsequent call.
+    pub fn warn_once_invalid_progress_bar_skin(&mut self, key: &str) -> bool {
+        Self::first_seen(&mut self.warned_invalid_progress_bar_skins, key)
+    }
+
+    fn first_seen(set: &mut FxHashSet<Arc<str>>, key: &str) -> bool {
+        if set.contains(key) { return false; }
+        set.insert(Arc::from(key));
+        true
     }
 }
 

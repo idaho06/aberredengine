@@ -677,6 +677,16 @@ function engine.collision_entity_set_friction(entity_id, friction) end
 ---@param disabled boolean
 function engine.collision_entity_set_gui_disabled(entity_id, disabled) end
 
+---Set the current fill value on a GuiProgressBar (clamped to [0, max] by the handler)
+---@param entity_id integer
+---@param value number
+function engine.collision_entity_set_gui_progress(entity_id, value) end
+
+---Set the max value on a GuiProgressBar; current value is clamped to the new max
+---@param entity_id integer
+---@param max number
+function engine.collision_entity_set_gui_progress_max(entity_id, max) end
+
 ---Set entity max speed (nil to remove)
 ---@param entity_id integer
 ---@param max_speed number|nil
@@ -1003,6 +1013,16 @@ function engine.entity_set_friction(entity_id, friction) end
 ---@param entity_id integer
 ---@param disabled boolean
 function engine.entity_set_gui_disabled(entity_id, disabled) end
+
+---Set the current fill value on a GuiProgressBar (clamped to [0, max] by the handler)
+---@param entity_id integer
+---@param value number
+function engine.entity_set_gui_progress(entity_id, value) end
+
+---Set the max value on a GuiProgressBar; current value is clamped to the new max
+---@param entity_id integer
+---@param max number
+function engine.entity_set_gui_progress_max(entity_id, max) end
 
 ---Set entity max speed (nil to remove)
 ---@param entity_id integer
@@ -1468,6 +1488,20 @@ function engine.set_gui_theme_label(theme_key, tex_key, source_x, source_y, sour
 ---@param bottom integer
 function engine.set_gui_theme_panel(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
+---Set one part of the named theme's progress bar skin in GuiThemeStore. `part` is "track" (optional background, None = fill-only bar) or "fill" (required foreground). Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.
+---@param theme_key string
+---@param part string
+---@param tex_key string
+---@param source_x number
+---@param source_y number
+---@param source_w number
+---@param source_h number
+---@param left integer
+---@param top integer
+---@param right integer
+---@param bottom integer
+function engine.set_gui_theme_progress_bar(theme_key, part, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+
 ---Snap the camera/view rect to integer pixels before rendering (reduces sprite atlas bleeding; disable for smooth rotation/zoom)
 ---@param enabled boolean
 function engine.set_pixel_snap_camera(enabled) end
@@ -1640,7 +1674,28 @@ function EntityBuilder:with_gui_label_signal_binding_format(format) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_offset(x, y) end
 
----Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.
+---Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the "default" key.
+---@param width number
+---@param height number
+---@param value number
+---@param max number
+---@return EntityBuilder
+function EntityBuilder:with_gui_progress_bar(width, height, value, max) end
+
+---Reverse the fill anchor of a GuiProgressBar: Horizontal becomes HorizontalReversed (right-to-left), Vertical becomes VerticalReversed (top-to-bottom). Requires :with_gui_progress_bar() first.
+---@return EntityBuilder
+function EntityBuilder:with_gui_progress_bar_reversed() end
+
+---Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.
+---@param key string
+---@return EntityBuilder
+function EntityBuilder:with_gui_progress_bar_signal_binding(key) end
+
+---Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.
+---@return EntityBuilder
+function EntityBuilder:with_gui_progress_bar_vertical() end
+
+---Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.
 ---@param key string
 ---@return EntityBuilder
 function EntityBuilder:with_gui_theme_key(key) end
@@ -2184,7 +2239,28 @@ function CollisionEntityBuilder:with_gui_label_signal_binding_format(format) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_offset(x, y) end
 
----Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label() first.
+---Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the "default" key.
+---@param width number
+---@param height number
+---@param value number
+---@param max number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_progress_bar(width, height, value, max) end
+
+---Reverse the fill anchor of a GuiProgressBar: Horizontal becomes HorizontalReversed (right-to-left), Vertical becomes VerticalReversed (top-to-bottom). Requires :with_gui_progress_bar() first.
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_progress_bar_reversed() end
+
+---Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.
+---@param key string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_progress_bar_signal_binding(key) end
+
+---Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_gui_progress_bar_vertical() end
+
+---Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.
 ---@param key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_theme_key(key) end

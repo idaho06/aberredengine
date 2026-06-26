@@ -158,6 +158,21 @@ pub fn process_entity_commands(
             EntityCmd::SetGuiDisabled { entity_id, disabled } => {
                 process_gui_interactable_cmd(entity_id, disabled, queries)
             }
+
+            EntityCmd::SetGuiProgress { entity_id, value } => {
+                let Some(entity) = resolve_entity(entity_id) else { continue; };
+                if let Ok(mut bar) = queries.gui_progress_bars.get_mut(entity) {
+                    bar.value = value.clamp(0.0, bar.max);
+                }
+            }
+
+            EntityCmd::SetGuiProgressMax { entity_id, max } => {
+                let Some(entity) = resolve_entity(entity_id) else { continue; };
+                if let Ok(mut bar) = queries.gui_progress_bars.get_mut(entity) {
+                    bar.max = max.max(0.0);
+                    bar.value = bar.value.min(bar.max);
+                }
+            }
         }
     }
 }

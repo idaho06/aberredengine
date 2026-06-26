@@ -282,6 +282,14 @@ fn drain_common_commands(
                      engine.set_gui_theme_button(\"{key}\", \"normal\", ...) — button theme dropped, buttons render with no background"
                 );
             }
+            if !theme.drop_invalid_progress_bar_skin()
+                && gui_theme_warn_cache.warn_once_invalid_progress_bar_skin(key)
+            {
+                error!(
+                    "GuiTheme '{key}' has progress_bar set but its 'fill' nine-patch was never set via \
+                     engine.set_gui_theme_progress_bar(\"{key}\", \"fill\", ...) — progress bar theme dropped, bars render with no fill"
+                );
+            }
         }
         commands.insert_resource(gui_theme_staging);
     }

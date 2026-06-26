@@ -6,6 +6,7 @@
 use crate::components::guibutton::GuiButton;
 use crate::components::guiimage::GuiImage;
 use crate::components::guilabel::GuiLabel;
+use crate::components::guiprogressbar::GuiProgressBar;
 use crate::components::guiwindow::GuiWindow;
 use crate::resources::uniformvalue::UniformValue;
 
@@ -447,4 +448,7 @@ pub struct SpawnCmd {
     /// `gui_image_spawn_system` reacts on `Added<GuiImage>` to spawn the
     /// co-located `GuiInteractable` + `Sprite`.
     pub gui_image: Option<GuiImage>,
+    /// GuiProgressBar component (size, value, max, direction, theme_key, signal_binding) —
+    /// inserted as-is; rendered directly by `render_system` with no spawn system.
+    pub gui_progress_bar: Option<GuiProgressBar>,
 }

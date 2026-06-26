@@ -32,6 +32,7 @@ use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::guibutton::GuiButton;
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
 use crate::components::guilabel::GuiLabel;
+use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -153,9 +154,21 @@ pub(super) struct ScreenTextBufferItem {
 /// sprites/text drawn on top of them (see [`ScreenDrawItem::variant_rank`]).
 pub(super) struct ScreenPanelBufferItem {
     panel: GuiNinePatch,
-    size: Vector2,
+    dest: Rectangle,
     z_index: ZIndex,
-    pos: ScreenPosition,
+}
+
+/// Screen-space progress bar draw item. Holds both the (optional) track and
+/// the fill as pre-computed `Rectangle` destinations so the dispatch loop can
+/// draw track-then-fill in sequence without any intermediate sort. Using one
+/// item per bar (rather than two `Panel` items) guarantees the track always
+/// renders before the fill regardless of `sort_unstable_by`'s tie-breaking.
+pub(super) struct ScreenProgressBarBufferItem {
+    track: Option<GuiNinePatch>,
+    fill: GuiNinePatch,
+    track_dest: Rectangle,
+    fill_dest: Rectangle,
+    z_index: ZIndex,
 }
 
 /// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
@@ -166,6 +179,7 @@ pub(super) struct ScreenPanelBufferItem {
 /// require restructuring the sort/dispatch skeleton itself.
 pub(super) enum ScreenDrawItem {
     Panel(ScreenPanelBufferItem),
+    ProgressBar(ScreenProgressBarBufferItem),
     Sprite(ScreenSpriteBufferItem),
     Text(ScreenTextBufferItem),
 }
@@ -174,6 +188,7 @@ impl ScreenDrawItem {
     fn z_index(&self) -> ZIndex {
         match self {
             ScreenDrawItem::Panel(p) => p.z_index,
+            ScreenDrawItem::ProgressBar(pb) => pb.z_index,
             ScreenDrawItem::Sprite(s) => s.z_index,
             ScreenDrawItem::Text(t) => t.z_index,
         }
@@ -185,9 +200,13 @@ impl ScreenDrawItem {
     /// tie-break here (rather than relying on `sort_by`'s stability +
     /// insertion order) lets the buffer use the faster in-place
     /// `sort_unstable_by` instead of an allocating stable sort.
+    ///
+    /// `ProgressBar` shares rank 0 with `Panel`: the bar is an opaque
+    /// background element and should appear beneath any screen-space sprite or
+    /// text at the same `ZIndex`.
     fn variant_rank(&self) -> u8 {
         match self {
-            ScreenDrawItem::Panel(_) => 0,
+            ScreenDrawItem::Panel(_) | ScreenDrawItem::ProgressBar(_) => 0,
             ScreenDrawItem::Sprite(_) => 1,
             ScreenDrawItem::Text(_) => 2,
         }
@@ -283,6 +302,7 @@ pub struct RenderQueries<'w, 's> {
         ),
     >,
     pub gui_labels: Query<'w, 's, (&'static GuiLabel, &'static ScreenPosition, &'static ZIndex)>,
+    pub gui_progress_bars: Query<'w, 's, (&'static GuiProgressBar, &'static ScreenPosition, &'static ZIndex)>,
 }
 
 /// Extra resources needed for the imgui debug panels.
@@ -807,6 +827,7 @@ pub fn render_system(
                 &queries.gui_windows,
                 &queries.gui_buttons,
                 &queries.gui_labels,
+                &queries.gui_progress_bars,
                 &res.gui_theme_store,
                 &mut res.gui_theme_warn_cache,
                 textures,
@@ -972,18 +993,8 @@ fn resolve_button_patch(skin: &GuiButtonSkin, state: GuiWidgetState) -> &GuiNine
     }
 }
 
-fn screen_panel_item(
-    panel: GuiNinePatch,
-    size: Vector2,
-    z_index: ZIndex,
-    pos: ScreenPosition,
-) -> ScreenDrawItem {
-    ScreenDrawItem::Panel(ScreenPanelBufferItem {
-        panel,
-        size,
-        z_index,
-        pos,
-    })
+fn screen_panel_item(panel: GuiNinePatch, dest: Rectangle, z_index: ZIndex) -> ScreenDrawItem {
+    ScreenDrawItem::Panel(ScreenPanelBufferItem { panel, dest, z_index })
 }
 
 fn warn_missing_theme(
@@ -1007,6 +1018,7 @@ fn draw_screen_space(
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
     gui_buttons: &Query<(&GuiButton, &GuiInteractable, &ScreenPosition, &ZIndex)>,
     gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
+    gui_progress_bars: &Query<(&GuiProgressBar, &ScreenPosition, &ZIndex)>,
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
     textures: &TextureStore,
@@ -1018,7 +1030,11 @@ fn draw_screen_space(
     buffer.clear();
     for (window, p, z) in gui_windows.iter() {
         match gui_theme_store.get(&window.theme_key) {
-            Some(theme) => buffer.push(screen_panel_item(theme.panel.clone(), window.size, *z, *p)),
+            Some(theme) => buffer.push(screen_panel_item(
+                theme.panel.clone(),
+                Rectangle { x: p.pos.x, y: p.pos.y, width: window.size.x, height: window.size.y },
+                *z,
+            )),
             None => warn_missing_theme(
                 gui_theme_warn_cache,
                 "GuiWindow",
@@ -1034,9 +1050,8 @@ fn draw_screen_space(
         {
             Some(skin) => buffer.push(screen_panel_item(
                 resolve_button_patch(skin, interactable.state).clone(),
-                interactable.size,
+                Rectangle { x: p.pos.x, y: p.pos.y, width: interactable.size.x, height: interactable.size.y },
                 *z,
-                *p,
             )),
             None => warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1051,7 +1066,11 @@ fn draw_screen_space(
             .get(&label.theme_key)
             .and_then(|theme| theme.label.as_ref())
         {
-            Some(patch) => buffer.push(screen_panel_item(patch.clone(), label.size, *z, *p)),
+            Some(patch) => buffer.push(screen_panel_item(
+                patch.clone(),
+                Rectangle { x: p.pos.x, y: p.pos.y, width: label.size.x, height: label.size.y },
+                *z,
+            )),
             None => warn_missing_theme(
                 gui_theme_warn_cache,
                 "GuiLabel",
@@ -1059,6 +1078,49 @@ fn draw_screen_space(
                 " (or that theme has no label patch) — skipping themed background",
             ),
         }
+    }
+    for (bar, p, z) in gui_progress_bars.iter() {
+        let Some(skin) = gui_theme_store
+            .get(&bar.theme_key)
+            .and_then(|theme| theme.progress_bar.as_ref())
+        else {
+            warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiProgressBar",
+                &bar.theme_key,
+                " (or that theme has no progress_bar skin) — skipping bar",
+            );
+            continue;
+        };
+        let x = p.pos.x;
+        let y = p.pos.y;
+        let w = bar.size.x;
+        let h = bar.size.y;
+        let ratio = if bar.max > 0.0 { (bar.value / bar.max).clamp(0.0, 1.0) } else { 0.0 };
+        let track_dest = Rectangle { x, y, width: w, height: h };
+        let fill_dest = match bar.direction {
+            ProgressBarDirection::Horizontal => {
+                Rectangle { x, y, width: w * ratio, height: h }
+            }
+            ProgressBarDirection::HorizontalReversed => {
+                let fill_w = w * ratio;
+                Rectangle { x: x + w - fill_w, y, width: fill_w, height: h }
+            }
+            ProgressBarDirection::Vertical => {
+                let fill_h = h * ratio;
+                Rectangle { x, y: y + h - fill_h, width: w, height: fill_h }
+            }
+            ProgressBarDirection::VerticalReversed => {
+                Rectangle { x, y, width: w, height: h * ratio }
+            }
+        };
+        buffer.push(ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
+            track: skin.track.clone(),
+            fill: skin.fill.clone(),
+            track_dest,
+            fill_dest,
+            z_index: *z,
+        }));
     }
     buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint)| {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
@@ -1086,6 +1148,7 @@ fn draw_screen_space(
     for item in buffer.iter() {
         match item {
             ScreenDrawItem::Panel(p) => draw_screen_panel_item(d, p, textures),
+            ScreenDrawItem::ProgressBar(pb) => gui_panel::draw_screen_progress_bar_item(d, pb, textures),
             ScreenDrawItem::Sprite(s) => draw_screen_sprite_item(d, s, textures, debug_sprites),
             ScreenDrawItem::Text(t) => draw_screen_text_item(d, t, fonts, debug_texts),
         }

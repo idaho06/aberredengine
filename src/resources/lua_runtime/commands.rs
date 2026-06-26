@@ -96,6 +96,21 @@ pub enum RenderCmd {
         b: u8,
         a: u8,
     },
+    /// Set one part of the named theme's progress bar skin.
+    /// `part` is `"track"` (optional background) or `"fill"` (required foreground).
+    SetGuiThemeProgressBar {
+        theme_key: String,
+        part: String,
+        tex_key: String,
+        source_x: f32,
+        source_y: f32,
+        source_w: f32,
+        source_h: f32,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    },
 }
 
 /// Audio commands that Lua can queue.
@@ -169,6 +184,10 @@ pub enum EntityCmd {
     /// promoting it to Hovered/Pressed and skips firing its click callback; any
     /// real-world consequence is left to the game's own logic)
     SetGuiDisabled { entity_id: u64, disabled: bool },
+    /// Set the current fill value on a GuiProgressBar. Clamped to [0, max] by the handler.
+    SetGuiProgress { entity_id: u64, value: f32 },
+    /// Set the max value on a GuiProgressBar; also clamps current value to the new max.
+    SetGuiProgressMax { entity_id: u64, max: f32 },
     /// Insert a StuckTo component
     InsertStuckTo {
         entity_id: u64,

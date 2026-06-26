@@ -42,6 +42,7 @@ use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::guiinteractable::GuiInteractable;
+use crate::components::guiprogressbar::GuiProgressBar;
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
 use crate::components::mapposition::MapPosition;
@@ -253,6 +254,7 @@ pub struct EntityCmdQueries<'w, 's> {
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
     pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
     pub gui_interactables: Query<'w, 's, &'static mut GuiInteractable>,
+    pub gui_progress_bars: Query<'w, 's, &'static mut GuiProgressBar>,
 }
 
 /// Bundled read-only queries for building entity context tables.

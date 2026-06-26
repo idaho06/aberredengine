@@ -16,7 +16,7 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
+use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore};
 use crate::resources::group::TrackedGroups;
 use crate::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
@@ -396,6 +396,32 @@ pub fn process_render_command(
             theme.font = Arc::from(font_key);
             theme.font_size = font_size;
             theme.text_color = Color::new(r, g, b, a);
+        }
+        RenderCmd::SetGuiThemeProgressBar {
+            theme_key,
+            part,
+            tex_key,
+            source_x,
+            source_y,
+            source_w,
+            source_h,
+            left,
+            top,
+            right,
+            bottom,
+        } => {
+            let theme = staged_theme_mut(gui_theme_staging, &theme_key);
+            let skin = theme.progress_bar.get_or_insert_with(GuiProgressBarSkin::default);
+            let patch = build_nine_patch(
+                tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom,
+            );
+            match part.as_str() {
+                "track" => skin.track = Some(patch),
+                "fill" => skin.fill = patch,
+                other => {
+                    warn!("set_gui_theme_progress_bar: unknown part '{}', expected \"track\" or \"fill\"", other);
+                }
+            }
         }
     }
 }

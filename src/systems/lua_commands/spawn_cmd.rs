@@ -90,6 +90,7 @@ pub(super) fn apply_components(
     // co-located GuiInteractable/caption/Sprite are spawned by
     // gui_button_spawn_system/gui_label_spawn_system/gui_image_spawn_system
     // (systems/gui_spawn.rs) reacting on Added<T>.
+    // GuiProgressBar is inserted as-is; rendered directly by render_system.
     if let Some(btn) = cmd.gui_button {
         entity_commands.insert(btn);
     }
@@ -98,6 +99,9 @@ pub(super) fn apply_components(
     }
     if let Some(img) = cmd.gui_image {
         entity_commands.insert(img);
+    }
+    if let Some(bar) = cmd.gui_progress_bar {
+        entity_commands.insert(bar);
     }
 
     apply_transform_components(

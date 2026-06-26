@@ -19,6 +19,7 @@
 //! - [`guiinteractable`] – shared hit-test/click state (size, hover/press/disabled, callbacks) for `GuiButton`/`GuiImage`
 //! - [`guilabel`] – static themed GUI label (text caption, no interaction state)
 //! - [`guioffset`] – child positioning offset for GUI hierarchies, resolved by `gui_layout_system`
+//! - [`guiprogressbar`] – themed progress bar (nine-patch track + fill, signal-bound value, four direction variants)
 //! - [`guiwindow`] – static themed GUI window panel, rendered as a nine-patch background
 //! - [`inputcontrolled`] – input-driven movement intent for keyboard and mouse
 //! - [`mapposition`] – world-space position (pivot) for an entity
@@ -57,6 +58,7 @@ pub mod guiimage;
 pub mod guiinteractable;
 pub mod guilabel;
 pub mod guioffset;
+pub mod guiprogressbar;
 pub mod gui_themed;
 pub mod guiwindow;
 pub use gui_themed::Themed;
