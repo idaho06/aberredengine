@@ -381,14 +381,21 @@ local function build_character_window(ctx)
         :with_zindex(2)
         :build()
 
-    -- HP stat label
+    -- "Player HP" label above the HP bar
     engine.spawn()
-        :with_gui_label(181, 18, "HP: 100")
-        :with_gui_label_signal_binding("char_hp")
-        :with_gui_label_signal_binding_format("HP: {}")
+        :with_gui_label(181, 14, "Player HP")
         :with_gui_theme_key("compact")
         :with_parent(ctx.id)
         :with_gui_offset(8, 162)
+        :with_zindex(2)
+        :build()
+
+    -- HP progress bar (horizontal, "default" theme; max 100 — potions heal up to 100)
+    engine.spawn()
+        :with_gui_progress_bar(181, 16, 30, 100)
+        :with_gui_progress_bar_signal_binding("char_hp")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 178)
         :with_zindex(2)
         :build()
 
@@ -399,18 +406,25 @@ local function build_character_window(ctx)
         :with_gui_label_signal_binding_format("Gold: {}")
         :with_gui_theme_key("compact")
         :with_parent(ctx.id)
-        :with_gui_offset(8, 182)
+        :with_gui_offset(8, 198)
         :with_zindex(2)
         :build()
 
-    -- Enemy HP stat label
+    -- "Enemy HP" label above the Enemy HP bar
     engine.spawn()
-        :with_gui_label(181, 18, "Enemy HP: 50")
-        :with_gui_label_signal_binding("char_enemy_hp")
-        :with_gui_label_signal_binding_format("Enemy HP: {}")
+        :with_gui_label(181, 14, "Enemy HP")
         :with_gui_theme_key("compact")
         :with_parent(ctx.id)
-        :with_gui_offset(8, 202)
+        :with_gui_offset(8, 220)
+        :with_zindex(2)
+        :build()
+
+    -- Enemy HP progress bar (horizontal, "default" theme; max 50)
+    engine.spawn()
+        :with_gui_progress_bar(181, 16, 50, 50)
+        :with_gui_progress_bar_signal_binding("char_enemy_hp")
+        :with_parent(ctx.id)
+        :with_gui_offset(8, 236)
         :with_zindex(2)
         :build()
 end
@@ -528,6 +542,8 @@ local function on_update_gui_demo(input, dt)
     -- Rounded to 1 decimal -- get_scalar's "{}" formatting has no precision
     -- control, so an unrounded f32 can render with many trailing digits.
     engine.set_scalar("wave", math.floor(wave * 10.0 + 0.5) / 10.0)
+    engine.set_scalar("wave_pos", math.max(0.0, wave))
+    engine.set_scalar("wave_neg", math.max(0.0, -wave))
 end
 
 -- ─── Callback registry ──────────────────────────────────────────────────────
@@ -584,13 +600,35 @@ function M.spawn()
         :with_zindex(1)
         :build()
 
-    -- Wave label moved to middle zone (was x=520, would overlap Character window)
+    -- Wave visualizer: stacked vertical bars at screen center (640×360).
+    -- Label at top; positive bar (Vertical, fills upward) directly above
+    -- negative bar (VerticalReversed, fills downward). Bars touch at y=192,
+    -- centering the group on y≈178. x=305 centers the 30px-wide bars on x=320.
     engine.spawn()
         :with_gui_label(110, 24, "0.0")
         :with_gui_label_signal_binding("wave")
         :with_gui_label_signal_binding_format("Wave: {}")
         :with_gui_theme_key("compact")
-        :with_screen_position(225, 10)
+        :with_screen_position(265, 114)
+        :with_zindex(2)
+        :build()
+
+    engine.spawn()
+        :with_gui_progress_bar(30, 50, 0, 100)
+        :with_gui_progress_bar_vertical()
+        :with_gui_progress_bar_signal_binding("wave_pos")
+        :with_gui_theme_key("compact")
+        :with_screen_position(305, 142)
+        :with_zindex(2)
+        :build()
+
+    engine.spawn()
+        :with_gui_progress_bar(30, 50, 0, 100)
+        :with_gui_progress_bar_vertical()
+        :with_gui_progress_bar_reversed()
+        :with_gui_progress_bar_signal_binding("wave_neg")
+        :with_gui_theme_key("compact")
+        :with_screen_position(305, 192)
         :with_zindex(2)
         :build()
 
@@ -613,6 +651,8 @@ function M.spawn()
     -- ── Character window (mini-game) ──────────────────────────────────────
     -- Initialize all game signals so signal-bound labels show correct values
     -- from the first frame, even before the window's LuaSetup fires.
+    engine.set_scalar("wave_pos", 0.0)
+    engine.set_scalar("wave_neg", 0.0)
     engine.set_integer("char_hp",        30)
     engine.set_integer("char_gold",      10)
     engine.set_integer("char_potions",    3)
@@ -624,7 +664,7 @@ function M.spawn()
     engine.clear_flag("char_game_over")
 
     engine.spawn()
-        :with_gui_window(197, 240)
+        :with_gui_window(197, 260)
         :with_screen_position(440, 30)
         :with_zindex(0)
         :with_lua_setup("build_character_window")

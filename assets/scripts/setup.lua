@@ -241,6 +241,9 @@ local function load_gui_demo()
     engine.load_texture("gui-label", "./assets/textures/gui/label_6_6_6_6.png")
     engine.load_texture("gui-potion-btn", "./assets/textures/gui/potion_button.png")
     engine.load_texture("gui-sword-btn", "./assets/textures/gui/sword_button.png")
+    -- progress_bar_8_8_8_8.png: 128×128, 2×2 grid of 64×64 nine-patch cells.
+    -- Top row: horizontal track (left) and fill (right). Bottom row: vertical.
+    engine.load_texture("gui-progress-bars", "./assets/textures/gui/progress_bar_8_8_8_8.png")
 
     -- "default" theme: bluewindow_6_6_6_6.png is 64x64 with 6px nine-patch
     -- borders on all sides (encoded in the filename). Every set_gui_theme_*
@@ -269,6 +272,11 @@ local function load_gui_demo()
     -- :with_gui_label() call.
     engine.set_gui_theme_font("default", "arcade", 16, 255, 255, 255, 255)
 
+    -- Progress bar parts for "default" theme (horizontal bars): top row of the
+    -- progress_bar_8_8_8_8.png atlas (track left cell, fill right cell).
+    engine.set_gui_theme_progress_bar("default", "track", "gui-progress-bars", 0,  0, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_progress_bar("default", "fill",  "gui-progress-bars", 64, 0, 64, 64, 8, 8, 8, 8)
+
     -- "compact" theme: a second named theme, mixed into the same scene
     -- alongside "default" — gui_demo.lua's window 2 and its Hide button
     -- reference it via :with_gui_theme_key("compact") instead of inheriting
@@ -283,6 +291,11 @@ local function load_gui_demo()
     engine.set_gui_theme_button("compact", "pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_button("compact", "disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_font("compact", "arcade", 13, 255, 220, 120, 255)
+
+    -- Progress bar parts for "compact" theme (vertical bars): bottom row of the
+    -- progress_bar_8_8_8_8.png atlas (track left cell, fill right cell).
+    engine.set_gui_theme_progress_bar("compact", "track", "gui-progress-bars", 0,  64, 64, 64, 8, 8, 8, 8)
+    engine.set_gui_theme_progress_bar("compact", "fill",  "gui-progress-bars", 64, 64, 64, 64, 8, 8, 8, 8)
 end
 
 --- Called during the Setup game state to load all assets.
