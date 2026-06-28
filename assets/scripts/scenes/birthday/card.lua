@@ -54,14 +54,9 @@ local function card_hold_on_update(ctx, input, dt)
         engine.spawn()
             :with_position(-50, 400)
             :with_text("Press any key to exit...", "birthday-love", 12 * 2, 255, 32, 32, 255)
+            :with_shadow(2, 2, 0, 0, 0, 128)
             :with_zindex(2)
             :register_as("hold_text")
-            :build()
-        engine.spawn()
-            :with_position(-50 + 2, 400 + 2)
-            :with_text("Press any key to exit...", "birthday-love", 12 * 2, 32, 32, 32, 255)
-            :with_zindex(1.9)
-            :register_as("hold_text_shadow")
             :build()
 
         engine.set_flag("card_hold_text_shown")
@@ -77,10 +72,8 @@ end
 local function card_hold_on_exit(ctx)
     if engine.has_flag("card_hold_text_shown") then
         local hold_text_id = engine.get_entity("hold_text")
-        local hold_text_shadow_id = engine.get_entity("hold_text_shadow")
-        if hold_text_id and hold_text_shadow_id then
+        if hold_text_id then
             engine.entity_despawn(hold_text_id)
-            engine.entity_despawn(hold_text_shadow_id)
             engine.clear_flag("card_hold_text_shown")
         end
     end
@@ -166,15 +159,8 @@ function M.spawn()
         :with_position(line1_pos_x, line1_pos_y)
         :with_zindex(2.0)
         :with_text("Raquel pinta su mundo", "birthday-love", line1_size, 255, 255, 255, 255)
+        :with_shadow(2, 2, 0, 0, 0, 128)
         :register_as("line1")
-        :build()
-
-    engine.spawn()
-        :with_position(line1_pos_x + 2, line1_pos_y + 2)
-        :with_text("Raquel pinta su mundo", "birthday-love", line1_size, 0, 0, 0, 128)
-        :with_zindex(1.0)
-        :with_signals()
-        :register_as("shadow1")
         :build()
 
     local line2_pos_x = -230
@@ -185,15 +171,8 @@ function M.spawn()
         :with_position(line2_pos_x, line2_pos_y)
         :with_zindex(2.0)
         :with_text("Callada y libre.", "birthday-love", line2_size, 255, 255, 255, 255)
+        :with_shadow(2, 2, 0, 0, 0, 128)
         :register_as("line2")
-        :build()
-
-    engine.spawn()
-        :with_position(line2_pos_x + 2, line2_pos_y + 2)
-        :with_text("Callada y libre.", "birthday-love", line2_size, 0, 0, 0, 128)
-        :with_zindex(1.0)
-        :with_signals()
-        :register_as("shadow2")
         :build()
 
     -- Play Harry Styles music

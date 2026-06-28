@@ -145,14 +145,9 @@ local function scene_hold_on_update(ctx, input, dt)
         engine.spawn()
             :with_position(-50, 400)
             :with_text("Press any key to continue...", "birthday-love", 12 * 2, 255, 32, 32, 255)
+            :with_shadow(2, 2, 0, 0, 0, 128)
             :with_zindex(2)
             :register_as("hold_text")
-            :build()
-        engine.spawn()
-            :with_position(-50 + 2, 400 + 2)
-            :with_text("Press any key to continue...", "birthday-love", 12 * 2, 32, 32, 32, 255)
-            :with_zindex(1.9)
-            :register_as("hold_text_shadow")
             :build()
 
         engine.set_flag("intro_hold_text_shown")
@@ -168,10 +163,8 @@ end
 local function scene_hold_on_exit(ctx)
     if engine.has_flag("intro_hold_text_shown") then
         local hold_text_id = engine.get_entity("hold_text")
-        local hold_text_shadow_id = engine.get_entity("hold_text_shadow")
-        if hold_text_id and hold_text_shadow_id then
+        if hold_text_id then
             engine.entity_despawn(hold_text_id)
-            engine.entity_despawn(hold_text_shadow_id)
             engine.clear_flag("intro_hold_text_shown")
         end
     end
@@ -236,15 +229,8 @@ function M.spawn()
         :with_position(-250, -30)
         :with_zindex(2.0)
         :with_text("Quince destellos...", "birthday-love", 15 * 4, 255, 255, 255, 255)
+        :with_shadow(2, 2, 0, 0, 0, 128)
         :register_as("line1")
-        :build()
-
-    engine.spawn()
-        :with_position(-250 + 2, -30 + 2)
-        :with_text("Quince destellos...", "birthday-love", 15 * 4, 0, 0, 0, 128)
-        :with_zindex(1.0)
-        :with_signals()
-        :register_as("shadow1")
         :build()
 
     -- White background
