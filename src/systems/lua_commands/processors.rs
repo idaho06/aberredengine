@@ -10,6 +10,7 @@ use log::{debug, error, warn};
 use raylib::prelude::{Camera2D, Color, Rectangle, Vector2};
 
 use crate::components::phase::Phase;
+use crate::components::shadow::Shadow;
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
@@ -422,6 +423,29 @@ pub fn process_render_command(
                     warn!("set_gui_theme_progress_bar: unknown part '{}', expected \"track\" or \"fill\"", other);
                 }
             }
+        }
+        RenderCmd::SetGuiThemeButtonShadow { theme_key, state, dx, dy, r, g, b, a } => {
+            let theme = staged_theme_mut(gui_theme_staging, &theme_key);
+            let skin = theme.button.get_or_insert_with(GuiButtonSkin::default);
+            let shadow = Some(Shadow::new(dx, dy, r, g, b, a));
+            match state.as_str() {
+                "normal"   => skin.shadow = shadow,
+                "hover"    => skin.hover_shadow = shadow,
+                "pressed"  => skin.pressed_shadow = shadow,
+                "disabled" => skin.disabled_shadow = shadow,
+                other => warn!(
+                    "set_gui_theme_button_shadow: unknown state '{}', expected \"normal\", \"hover\", \"pressed\", or \"disabled\"",
+                    other
+                ),
+            }
+        }
+        RenderCmd::SetGuiThemePanelShadow { theme_key, dx, dy, r, g, b, a } => {
+            staged_theme_mut(gui_theme_staging, &theme_key).panel_shadow =
+                Some(Shadow::new(dx, dy, r, g, b, a));
+        }
+        RenderCmd::SetGuiThemeTextShadow { theme_key, dx, dy, r, g, b, a } => {
+            staged_theme_mut(gui_theme_staging, &theme_key).text_shadow =
+                Some(Shadow::new(dx, dy, r, g, b, a));
         }
     }
 }

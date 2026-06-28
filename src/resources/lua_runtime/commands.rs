@@ -111,6 +111,12 @@ pub enum RenderCmd {
         right: i32,
         bottom: i32,
     },
+    /// Set the named theme's button shadow for one state (offset + color).
+    SetGuiThemeButtonShadow { theme_key: String, state: String, dx: f32, dy: f32, r: u8, g: u8, b: u8, a: u8 },
+    /// Set the named theme's panel drop shadow (offset + color).
+    SetGuiThemePanelShadow { theme_key: String, dx: f32, dy: f32, r: u8, g: u8, b: u8, a: u8 },
+    /// Set the named theme's caption text drop shadow (offset + color).
+    SetGuiThemeTextShadow { theme_key: String, dx: f32, dy: f32, r: u8, g: u8, b: u8, a: u8 },
 }
 
 /// Audio commands that Lua can queue.

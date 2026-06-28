@@ -102,6 +102,12 @@ type MapTextQueryData = (
     Option<&'static GlobalTransform2D>,
 );
 
+type ScreenSpriteQueryData =
+    (&'static Sprite, &'static ScreenPosition, &'static ZIndex, Option<&'static Tint>, Option<&'static Shadow>);
+
+type ScreenTextQueryData =
+    (&'static DynamicText, &'static ScreenPosition, &'static ZIndex, Option<&'static Tint>, Option<&'static Shadow>);
+
 pub(super) struct SpriteBufferItem {
     entity: Entity,
     sprite: Sprite,
@@ -163,6 +169,7 @@ pub(super) struct ScreenPanelBufferItem {
     panel: GuiNinePatch,
     dest: Rectangle,
     z_index: ZIndex,
+    maybe_shadow: Option<Shadow>,
 }
 
 /// Screen-space progress bar draw item. Holds both the (optional) track and
@@ -176,6 +183,7 @@ pub(super) struct ScreenProgressBarBufferItem {
     track_dest: Rectangle,
     fill_dest: Rectangle,
     z_index: ZIndex,
+    maybe_shadow: Option<Shadow>,
 }
 
 /// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
@@ -277,28 +285,8 @@ pub struct RenderQueries<'w, 's> {
     >,
     pub map_texts: Query<'w, 's, MapTextQueryData>,
     pub rigidbodies: Query<'w, 's, &'static RigidBody>,
-    pub screen_texts: Query<
-        'w,
-        's,
-        (
-            &'static DynamicText,
-            &'static ScreenPosition,
-            &'static ZIndex,
-            Option<&'static Tint>,
-            Option<&'static Shadow>,
-        ),
-    >,
-    pub screen_sprites: Query<
-        'w,
-        's,
-        (
-            &'static Sprite,
-            &'static ScreenPosition,
-            &'static ZIndex,
-            Option<&'static Tint>,
-            Option<&'static Shadow>,
-        ),
-    >,
+    pub screen_texts: Query<'w, 's, ScreenTextQueryData>,
+    pub screen_sprites: Query<'w, 's, ScreenSpriteQueryData>,
     pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
     pub gui_buttons: Query<
         'w,
@@ -1022,8 +1010,27 @@ fn resolve_button_patch(skin: &GuiButtonSkin, state: GuiWidgetState) -> &GuiNine
     }
 }
 
-fn screen_panel_item(panel: GuiNinePatch, dest: Rectangle, z_index: ZIndex) -> ScreenDrawItem {
-    ScreenDrawItem::Panel(ScreenPanelBufferItem { panel, dest, z_index })
+fn resolve_button_shadow(
+    skin: &GuiButtonSkin,
+    state: GuiWidgetState,
+    theme_shadow: Option<Shadow>,
+) -> Option<Shadow> {
+    let skin_shadow = match state {
+        GuiWidgetState::Normal => skin.shadow,
+        GuiWidgetState::Hovered => skin.hover_shadow.or(skin.shadow),
+        GuiWidgetState::Pressed => skin.pressed_shadow.or(skin.shadow),
+        GuiWidgetState::Disabled => skin.disabled_shadow.or(skin.shadow),
+    };
+    skin_shadow.or(theme_shadow)
+}
+
+fn screen_panel_item(
+    panel: GuiNinePatch,
+    dest: Rectangle,
+    z_index: ZIndex,
+    maybe_shadow: Option<Shadow>,
+) -> ScreenDrawItem {
+    ScreenDrawItem::Panel(ScreenPanelBufferItem { panel, dest, z_index, maybe_shadow })
 }
 
 fn warn_missing_theme(
@@ -1042,8 +1049,8 @@ fn warn_missing_theme(
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
-    screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>, Option<&Shadow>)>,
-    screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>, Option<&Shadow>)>,
+    screen_sprites: &Query<ScreenSpriteQueryData>,
+    screen_texts: &Query<ScreenTextQueryData>,
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
     gui_buttons: &Query<(&GuiButton, &GuiInteractable, &ScreenPosition, &ZIndex)>,
     gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
@@ -1063,6 +1070,7 @@ fn draw_screen_space(
                 theme.panel.clone(),
                 Rectangle { x: p.pos.x, y: p.pos.y, width: window.size.x, height: window.size.y },
                 *z,
+                theme.panel_shadow,
             )),
             None => warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1073,46 +1081,68 @@ fn draw_screen_space(
         }
     }
     for (button, interactable, p, z) in gui_buttons.iter() {
-        match gui_theme_store
-            .get(&button.theme_key)
-            .and_then(|theme| theme.button.as_ref())
-        {
-            Some(skin) => buffer.push(screen_panel_item(
-                resolve_button_patch(skin, interactable.state).clone(),
-                Rectangle { x: p.pos.x, y: p.pos.y, width: interactable.size.x, height: interactable.size.y },
-                *z,
-            )),
-            None => warn_missing_theme(
+        let Some(theme) = gui_theme_store.get(&button.theme_key) else {
+            warn_missing_theme(
                 gui_theme_warn_cache,
                 "GuiButton",
                 &button.theme_key,
-                " (or that theme has no button skin) — skipping themed background",
-            ),
+                " — skipping themed background",
+            );
+            continue;
+        };
+        if let Some(skin) = theme.button.as_ref() {
+            buffer.push(screen_panel_item(
+                resolve_button_patch(skin, interactable.state).clone(),
+                Rectangle { x: p.pos.x, y: p.pos.y, width: interactable.size.x, height: interactable.size.y },
+                *z,
+                resolve_button_shadow(skin, interactable.state, theme.panel_shadow),
+            ));
+        } else {
+            warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiButton",
+                &button.theme_key,
+                " has no button skin — skipping themed background",
+            );
         }
     }
     for (label, p, z) in gui_labels.iter() {
-        match gui_theme_store
-            .get(&label.theme_key)
-            .and_then(|theme| theme.label.as_ref())
-        {
-            Some(patch) => buffer.push(screen_panel_item(
-                patch.clone(),
-                Rectangle { x: p.pos.x, y: p.pos.y, width: label.size.x, height: label.size.y },
-                *z,
-            )),
-            None => warn_missing_theme(
+        let Some(theme) = gui_theme_store.get(&label.theme_key) else {
+            warn_missing_theme(
                 gui_theme_warn_cache,
                 "GuiLabel",
                 &label.theme_key,
-                " (or that theme has no label patch) — skipping themed background",
-            ),
+                " — skipping themed background",
+            );
+            continue;
+        };
+        if let Some(patch) = theme.label.as_ref() {
+            buffer.push(screen_panel_item(
+                patch.clone(),
+                Rectangle { x: p.pos.x, y: p.pos.y, width: label.size.x, height: label.size.y },
+                *z,
+                theme.panel_shadow,
+            ));
+        } else {
+            warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiLabel",
+                &label.theme_key,
+                " has no label patch — skipping themed background",
+            );
         }
     }
     for (bar, p, z) in gui_progress_bars.iter() {
-        let Some(skin) = gui_theme_store
-            .get(&bar.theme_key)
-            .and_then(|theme| theme.progress_bar.as_ref())
-        else {
+        let Some(theme) = gui_theme_store.get(&bar.theme_key) else {
+            warn_missing_theme(
+                gui_theme_warn_cache,
+                "GuiProgressBar",
+                &bar.theme_key,
+                " (or that theme has no progress_bar skin) — skipping bar",
+            );
+            continue;
+        };
+        let Some(skin) = theme.progress_bar.as_ref() else {
             warn_missing_theme(
                 gui_theme_warn_cache,
                 "GuiProgressBar",
@@ -1149,6 +1179,7 @@ fn draw_screen_space(
             track_dest,
             fill_dest,
             z_index: *z,
+            maybe_shadow: theme.panel_shadow,
         }));
     }
     buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint, maybe_shadow)| {
@@ -1298,6 +1329,7 @@ mod resolve_button_patch_tests {
             hover: Some(patch("hover")),
             pressed: Some(patch("pressed")),
             disabled: Some(patch("disabled")),
+            ..GuiButtonSkin::default()
         }
     }
 
@@ -1326,9 +1358,7 @@ mod resolve_button_patch_tests {
     fn falls_back_to_normal_when_state_patch_unset() {
         let skin = GuiButtonSkin {
             normal: patch("normal"),
-            hover: None,
-            pressed: None,
-            disabled: None,
+            ..GuiButtonSkin::default()
         };
         assert_eq!(
             &*resolve_button_patch(&skin, GuiWidgetState::Hovered).tex_key,

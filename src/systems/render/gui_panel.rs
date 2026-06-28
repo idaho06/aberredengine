@@ -1,6 +1,7 @@
 use raylib::prelude::*;
 
 use super::{ScreenPanelBufferItem, ScreenProgressBarBufferItem};
+use crate::components::shadow::Shadow;
 use crate::resources::guitheme::GuiNinePatch;
 use crate::resources::texturestore::TextureStore;
 
@@ -10,6 +11,9 @@ pub(super) fn draw_screen_panel_item(
     item: &ScreenPanelBufferItem,
     textures: &TextureStore,
 ) {
+    if let Some(shadow) = item.maybe_shadow {
+        draw_nine_patch_tinted(d, &item.panel, shadow_offset_rect(item.dest, shadow), shadow.color, textures);
+    }
     draw_nine_patch(d, &item.panel, item.dest, textures);
 }
 
@@ -22,6 +26,11 @@ pub(super) fn draw_screen_progress_bar_item(
     item: &ScreenProgressBarBufferItem,
     textures: &TextureStore,
 ) {
+    if let Some(shadow) = item.maybe_shadow {
+        let shadow_dest = shadow_offset_rect(item.track_dest, shadow);
+        let shadow_patch = item.track.as_ref().unwrap_or(&item.fill);
+        draw_nine_patch_tinted(d, shadow_patch, shadow_dest, shadow.color, textures);
+    }
     if let Some(track) = &item.track {
         draw_nine_patch(d, track, item.track_dest, textures);
     }
@@ -34,6 +43,20 @@ fn draw_nine_patch(
     d: &mut impl RaylibDraw,
     patch: &GuiNinePatch,
     dest: Rectangle,
+    textures: &TextureStore,
+) {
+    draw_nine_patch_tinted(d, patch, dest, Color::WHITE, textures);
+}
+
+fn shadow_offset_rect(rect: Rectangle, shadow: Shadow) -> Rectangle {
+    Rectangle { x: rect.x + shadow.offset.x, y: rect.y + shadow.offset.y, ..rect }
+}
+
+fn draw_nine_patch_tinted(
+    d: &mut impl RaylibDraw,
+    patch: &GuiNinePatch,
+    dest: Rectangle,
+    color: Color,
     textures: &TextureStore,
 ) {
     if let Some(tex) = textures.get(&patch.tex_key) {
@@ -50,7 +73,7 @@ fn draw_nine_patch(
             dest,
             Vector2::new(0.0, 0.0),
             0.0,
-            Color::WHITE,
+            color,
         );
     }
 }

@@ -291,6 +291,12 @@ local function load_gui_demo()
     engine.set_gui_theme_button("compact", "pressed", "gui-button-atlas", 0, 64, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_button("compact", "disabled", "gui-button-atlas", 64, 64, 64, 64, 8, 8, 8, 8)
     engine.set_gui_theme_font("compact", "arcade", 13, 255, 220, 120, 255)
+    engine.set_gui_theme_panel_shadow("compact", 3, 3, 0, 0, 0, 160)
+    engine.set_gui_theme_text_shadow("compact", 1, 1, 0, 0, 0, 180)
+    engine.set_gui_theme_button_shadow("compact", "normal",   3, 3, 0, 0, 0, 160)
+    engine.set_gui_theme_button_shadow("compact", "hover",    3, 3, 0, 0, 0, 160)
+    engine.set_gui_theme_button_shadow("compact", "pressed",  1, 1, 0, 0, 0, 160)
+    engine.set_gui_theme_button_shadow("compact", "disabled", 2, 2, 0, 0, 0, 80)
 
     -- Progress bar parts for "compact" theme (vertical bars): bottom row of the
     -- progress_bar_8_8_8_8.png atlas (track left cell, fill right cell).

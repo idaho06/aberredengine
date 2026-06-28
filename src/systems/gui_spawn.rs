@@ -108,6 +108,9 @@ fn spawn_themed_caption(
         }
         caption.insert(binding);
     }
+    if let Some(shadow) = theme.text_shadow {
+        caption.insert(shadow);
+    }
 }
 
 /// Spawns entities for newly added [`GuiButton`] components: the

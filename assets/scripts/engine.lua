@@ -1480,6 +1480,17 @@ function engine.set_fullscreen(enabled) end
 ---@param bottom integer
 function engine.set_gui_theme_button(theme_key, state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
+---Set the drop shadow for one state of the named theme's GuiButton skin. state is "normal"/"hover"/"pressed"/"disabled"; unset states fall back to the "normal" shadow, which itself falls back to the theme's panel_shadow. Call from on_setup() — gui_theme_commands has preserve policy.
+---@param theme_key string
+---@param state string
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.set_gui_theme_button_shadow(theme_key, state, dx, dy, r, g, b, a) end
+
 ---Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it
 ---@param theme_key string
 ---@param font_key string
@@ -1516,6 +1527,16 @@ function engine.set_gui_theme_label(theme_key, tex_key, source_x, source_y, sour
 ---@param bottom integer
 function engine.set_gui_theme_panel(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
 
+---Set the named theme's panel drop shadow. All nine-patch backgrounds (GuiWindow, GuiButton, GuiLabel, GuiProgressBar) using this theme will draw a shifted, tinted pre-pass before the main patch. Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.
+---@param theme_key string
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.set_gui_theme_panel_shadow(theme_key, dx, dy, r, g, b, a) end
+
 ---Set one part of the named theme's progress bar skin in GuiThemeStore. `part` is "track" (optional background, None = fill-only bar) or "fill" (required foreground). Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.
 ---@param theme_key string
 ---@param part string
@@ -1529,6 +1550,16 @@ function engine.set_gui_theme_panel(theme_key, tex_key, source_x, source_y, sour
 ---@param right integer
 ---@param bottom integer
 function engine.set_gui_theme_progress_bar(theme_key, part, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom) end
+
+---Set the named theme's caption text drop shadow. The Shadow component is inserted on DynamicText caption children spawned by gui_button_spawn_system/gui_label_spawn_system when this theme is resolved. Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.
+---@param theme_key string
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.set_gui_theme_text_shadow(theme_key, dx, dy, r, g, b, a) end
 
 ---Snap the camera/view rect to integer pixels before rendering (reduces sprite atlas bleeding; disable for smooth rotation/zoom)
 ---@param enabled boolean

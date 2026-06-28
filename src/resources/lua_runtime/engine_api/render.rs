@@ -351,6 +351,77 @@ impl LuaRuntime {
             ]
         );
 
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_button_shadow",
+            gui_theme_commands,
+            |(theme_key, state, dx, dy, r, g, b, a)| (String, String, f32, f32, u8, u8, u8, u8),
+            RenderCmd::SetGuiThemeButtonShadow { theme_key, state, dx, dy, r, g, b, a },
+            desc = "Set the drop shadow for one state of the named theme's GuiButton skin. \
+                    state is \"normal\"/\"hover\"/\"pressed\"/\"disabled\"; unset states fall back to \
+                    the \"normal\" shadow, which itself falls back to the theme's panel_shadow. \
+                    Call from on_setup() — gui_theme_commands has preserve policy.",
+            cat = "render",
+            params = [
+                ("theme_key", "string"),
+                ("state", "string"),
+                ("dx", "number"),
+                ("dy", "number"),
+                ("r", "integer"),
+                ("g", "integer"),
+                ("b", "integer"),
+                ("a", "integer")
+            ]
+        );
+
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_panel_shadow",
+            gui_theme_commands,
+            |(theme_key, dx, dy, r, g, b, a)| (String, f32, f32, u8, u8, u8, u8),
+            RenderCmd::SetGuiThemePanelShadow { theme_key, dx, dy, r, g, b, a },
+            desc = "Set the named theme's panel drop shadow. All nine-patch backgrounds (GuiWindow, GuiButton, GuiLabel, GuiProgressBar) \
+                    using this theme will draw a shifted, tinted pre-pass before the main patch. \
+                    Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.",
+            cat = "render",
+            params = [
+                ("theme_key", "string"),
+                ("dx", "number"),
+                ("dy", "number"),
+                ("r", "integer"),
+                ("g", "integer"),
+                ("b", "integer"),
+                ("a", "integer")
+            ]
+        );
+
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "set_gui_theme_text_shadow",
+            gui_theme_commands,
+            |(theme_key, dx, dy, r, g, b, a)| (String, f32, f32, u8, u8, u8, u8),
+            RenderCmd::SetGuiThemeTextShadow { theme_key, dx, dy, r, g, b, a },
+            desc = "Set the named theme's caption text drop shadow. The Shadow component is inserted on DynamicText caption \
+                    children spawned by gui_button_spawn_system/gui_label_spawn_system when this theme is resolved. \
+                    Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.",
+            cat = "render",
+            params = [
+                ("theme_key", "string"),
+                ("dx", "number"),
+                ("dy", "number"),
+                ("r", "integer"),
+                ("g", "integer"),
+                ("b", "integer"),
+                ("a", "integer")
+            ]
+        );
+
         Ok(())
     }
 }

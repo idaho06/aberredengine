@@ -17,6 +17,8 @@ use bevy_ecs::prelude::Resource;
 use raylib::prelude::{Color, Rectangle};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::components::shadow::Shadow;
+
 /// Default theme key used by widgets that never call `:with_gui_theme_key`.
 pub const DEFAULT_GUI_THEME_KEY: &str = "default";
 
@@ -49,6 +51,10 @@ pub struct GuiButtonSkin {
     pub hover: Option<GuiNinePatch>,
     pub pressed: Option<GuiNinePatch>,
     pub disabled: Option<GuiNinePatch>,
+    pub shadow: Option<Shadow>,
+    pub hover_shadow: Option<Shadow>,
+    pub pressed_shadow: Option<Shadow>,
+    pub disabled_shadow: Option<Shadow>,
 }
 
 /// Nine-patch skin for a `GuiProgressBar`. `fill` is the only required patch
@@ -83,6 +89,8 @@ pub struct GuiTheme {
     pub font: Arc<str>,
     pub font_size: f32,
     pub text_color: Color,
+    pub panel_shadow: Option<Shadow>,
+    pub text_shadow: Option<Shadow>,
 }
 
 impl Default for GuiTheme {
@@ -95,6 +103,8 @@ impl Default for GuiTheme {
             font: Arc::from(""),
             font_size: 16.0,
             text_color: Color::WHITE,
+            panel_shadow: None,
+            text_shadow: None,
         }
     }
 }

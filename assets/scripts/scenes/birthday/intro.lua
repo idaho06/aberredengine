@@ -141,7 +141,7 @@ local function scene_hold_on_enter(ctx, input)
 end
 
 local function scene_hold_on_update(ctx, input, dt)
-    if ctx.time_in_phase >= 5.0 and not engine.has_flag("intro_hold_text_shown") then
+    if ctx.time_in_phase >= 5.0 and not engine.get_entity("hold_text") then
         engine.spawn()
             :with_position(-50, 400)
             :with_text("Press any key to continue...", "birthday-love", 12 * 2, 255, 32, 32, 255)
@@ -149,8 +149,6 @@ local function scene_hold_on_update(ctx, input, dt)
             :with_zindex(2)
             :register_as("hold_text")
             :build()
-
-        engine.set_flag("intro_hold_text_shown")
     end
 
     if (input.digital.action_1.just_pressed or input.digital.action_2.just_pressed
@@ -161,12 +159,9 @@ local function scene_hold_on_update(ctx, input, dt)
 end
 
 local function scene_hold_on_exit(ctx)
-    if engine.has_flag("intro_hold_text_shown") then
-        local hold_text_id = engine.get_entity("hold_text")
-        if hold_text_id then
-            engine.entity_despawn(hold_text_id)
-            engine.clear_flag("intro_hold_text_shown")
-        end
+    local hold_text_id = engine.get_entity("hold_text")
+    if hold_text_id then
+        engine.entity_despawn(hold_text_id)
     end
 end
 
