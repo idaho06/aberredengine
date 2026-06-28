@@ -30,6 +30,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::components::tilemap::TileMap;
+use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
 use crate::components::zindex::ZIndex;
@@ -125,6 +126,7 @@ pub(super) fn apply_components(
         cmd.zindex,
         cmd.shader,
         cmd.tint,
+        cmd.shadow,
     );
     apply_animation_components(
         entity_commands,
@@ -281,6 +283,7 @@ fn apply_render_components(
     zindex: Option<f32>,
     shader: Option<EntityShaderData>,
     tint: Option<(u8, u8, u8, u8)>,
+    shadow: Option<(f32, f32, u8, u8, u8, u8)>,
 ) {
     if let Some(sprite_data) = sprite {
         entity_commands.insert(Sprite {
@@ -311,6 +314,9 @@ fn apply_render_components(
     }
     if let Some((r, g, b, a)) = tint {
         entity_commands.insert(Tint::new(r, g, b, a));
+    }
+    if let Some((dx, dy, r, g, b, a)) = shadow {
+        entity_commands.insert(Shadow::new(dx, dy, r, g, b, a));
     }
 }
 

@@ -1676,6 +1676,16 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
     builder_method!(
         methods, meta,
+        "with_shadow", "Set drop shadow (offset dx/dy and RGBA color 0-255)",
+        [("dx", "number"), ("dy", "number"), ("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")],
+        |_, this: &mut LuaEntityBuilder, (dx, dy, r, g, b, a): (f32, f32, u8, u8, u8, u8)| {
+            this.cmd.shadow = Some((dx, dy, r, g, b, a));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods, meta,
         "with_shader", "Set per-entity shader with optional uniforms",
         [("shader_key", "string"), ("uniforms", "table?")],
         |_, this: &mut LuaEntityBuilder, args: mlua::MultiValue| {

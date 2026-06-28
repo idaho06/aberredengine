@@ -41,6 +41,7 @@ use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::appstate::AppState;
@@ -86,6 +87,7 @@ type MapSpriteQueryData = (
     Option<&'static Rotation>,
     Option<&'static EntityShader>,
     Option<&'static Tint>,
+    Option<&'static Shadow>,
     Option<&'static GlobalTransform2D>,
 );
 
@@ -96,6 +98,7 @@ type MapTextQueryData = (
     &'static ZIndex,
     Option<&'static EntityShader>,
     Option<&'static Tint>,
+    Option<&'static Shadow>,
     Option<&'static GlobalTransform2D>,
 );
 
@@ -108,6 +111,7 @@ pub(super) struct SpriteBufferItem {
     resolved_rot: Option<Rotation>,
     maybe_shader: Option<EntityShader>,
     maybe_tint: Option<Tint>,
+    maybe_shadow: Option<Shadow>,
 }
 
 pub(super) struct TextBufferItem {
@@ -118,6 +122,7 @@ pub(super) struct TextBufferItem {
     text_size: Vector2,
     maybe_shader: Option<EntityShader>,
     maybe_tint: Option<Tint>,
+    maybe_shadow: Option<Shadow>,
 }
 
 /// Screen-space sprite draw item. Simpler than [`SpriteBufferItem`]: screen-space
@@ -128,6 +133,7 @@ pub(super) struct ScreenSpriteBufferItem {
     z_index: ZIndex,
     pos: ScreenPosition,
     maybe_tint: Option<Tint>,
+    maybe_shadow: Option<Shadow>,
 }
 
 /// Screen-space text draw item. Mirrors [`ScreenSpriteBufferItem`]'s simplicity.
@@ -148,6 +154,7 @@ pub(super) struct ScreenTextBufferItem {
     z_index: ZIndex,
     pos: ScreenPosition,
     maybe_tint: Option<Tint>,
+    maybe_shadow: Option<Shadow>,
 }
 
 /// Screen-space GUI window panel draw item. Window backgrounds sit below
@@ -278,6 +285,7 @@ pub struct RenderQueries<'w, 's> {
             &'static ScreenPosition,
             &'static ZIndex,
             Option<&'static Tint>,
+            Option<&'static Shadow>,
         ),
     >,
     pub screen_sprites: Query<
@@ -288,6 +296,7 @@ pub struct RenderQueries<'w, 's> {
             &'static ScreenPosition,
             &'static ZIndex,
             Option<&'static Tint>,
+            Option<&'static Shadow>,
         ),
     >,
     pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
@@ -415,6 +424,7 @@ pub fn render_system(
                         maybe_rot,
                         maybe_shader,
                         maybe_tint,
+                        maybe_shadow,
                         maybe_gt,
                     )| {
                         let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
@@ -443,6 +453,7 @@ pub fn render_system(
                             resolved_rot,
                             maybe_shader: maybe_shader.cloned(),
                             maybe_tint: maybe_tint.copied(),
+                            maybe_shadow: maybe_shadow.copied(),
                         })
                     },
                 ));
@@ -482,6 +493,15 @@ pub fn render_system(
                         let rotation = geom.rotation;
 
                         let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+
+                        if let Some(shadow) = item.maybe_shadow {
+                            let shadow_dest = Rectangle {
+                                x: dest.x + shadow.offset.x,
+                                y: dest.y + shadow.offset.y,
+                                ..dest
+                            };
+                            d2.draw_texture_pro(tex, src, shadow_dest, origin_scaled, rotation, shadow.color);
+                        }
 
                         // Apply entity shader if present
                         if let Some(entity_shader) = &item.maybe_shader {
@@ -587,7 +607,7 @@ pub fn render_system(
                 crate::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
                 text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
-                    |(entity, t, p, z, maybe_shader, maybe_tint, maybe_gt)| {
+                    |(entity, t, p, z, maybe_shader, maybe_tint, maybe_shadow, maybe_gt)| {
                         let resolved_pos =
                             MapPosition::from_vec(maybe_gt.map_or(p.pos, |gt| gt.position));
                         let text_size = t.size();
@@ -609,6 +629,7 @@ pub fn render_system(
                             text_size,
                             maybe_shader: maybe_shader.cloned(),
                             maybe_tint: maybe_tint.copied(),
+                            maybe_shadow: maybe_shadow.copied(),
                         })
                     },
                 ));
@@ -626,6 +647,14 @@ pub fn render_system(
                             .maybe_tint
                             .map(|t| t.multiply(item.text.color))
                             .unwrap_or(item.text.color);
+
+                        if let Some(shadow) = item.maybe_shadow {
+                            let shadow_pos = Vector2 {
+                                x: item.resolved_pos.pos.x + shadow.offset.x,
+                                y: item.resolved_pos.pos.y + shadow.offset.y,
+                            };
+                            d2.draw_text_ex(font, &item.text.text, shadow_pos, item.text.font_size, 1.0, shadow.color);
+                        }
 
                         if let Some(entity_shader) = &item.maybe_shader {
                             if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
@@ -1013,8 +1042,8 @@ fn warn_missing_theme(
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
-    screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>)>,
-    screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>)>,
+    screen_sprites: &Query<(&Sprite, &ScreenPosition, &ZIndex, Option<&Tint>, Option<&Shadow>)>,
+    screen_texts: &Query<(&DynamicText, &ScreenPosition, &ZIndex, Option<&Tint>, Option<&Shadow>)>,
     gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
     gui_buttons: &Query<(&GuiButton, &GuiInteractable, &ScreenPosition, &ZIndex)>,
     gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
@@ -1122,15 +1151,16 @@ fn draw_screen_space(
             z_index: *z,
         }));
     }
-    buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint)| {
+    buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint, maybe_shadow)| {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
             sprite: s.clone(),
             z_index: *z,
             pos: *p,
             maybe_tint: maybe_tint.copied(),
+            maybe_shadow: maybe_shadow.copied(),
         })
     }));
-    buffer.extend(screen_texts.iter().map(|(t, p, z, maybe_tint)| {
+    buffer.extend(screen_texts.iter().map(|(t, p, z, maybe_tint, maybe_shadow)| {
         ScreenDrawItem::Text(ScreenTextBufferItem {
             text: Arc::clone(&t.text),
             font: Arc::clone(&t.font),
@@ -1140,6 +1170,7 @@ fn draw_screen_space(
             z_index: *z,
             pos: *p,
             maybe_tint: maybe_tint.copied(),
+            maybe_shadow: maybe_shadow.copied(),
         })
     }));
 
@@ -1199,6 +1230,7 @@ mod screen_draw_buffer_tests {
             z_index: ZIndex(z),
             pos: ScreenPosition::new(0.0, 0.0),
             maybe_tint: None,
+            maybe_shadow: None,
         })
     }
 
@@ -1212,6 +1244,7 @@ mod screen_draw_buffer_tests {
             z_index: ZIndex(z),
             pos: ScreenPosition::new(0.0, 0.0),
             maybe_tint: None,
+            maybe_shadow: None,
         })
     }
 

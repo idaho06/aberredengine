@@ -16,6 +16,13 @@ pub(super) fn draw_screen_text_item(
             .maybe_tint
             .map(|t| t.multiply(item.color))
             .unwrap_or(item.color);
+        if let Some(shadow) = item.maybe_shadow {
+            let shadow_pos = Vector2 {
+                x: pos.pos.x + shadow.offset.x,
+                y: pos.pos.y + shadow.offset.y,
+            };
+            d.draw_text_ex(font, &item.text, shadow_pos, item.font_size, 1.0, shadow.color);
+        }
         d.draw_text_ex(font, &item.text, pos.pos, item.font_size, 1.0, final_color);
         if debug {
             d.draw_rectangle_lines(

@@ -391,6 +391,18 @@ pub enum EntityCmd {
     RemoveParent { entity_id: u64 },
     /// Remove entity tint
     RemoveTint { entity_id: u64 },
+    /// Set drop shadow with offset and color
+    SetShadow {
+        entity_id: u64,
+        dx: f32,
+        dy: f32,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    },
+    /// Remove entity shadow
+    RemoveShadow { entity_id: u64 },
     /// Set CameraTarget component on an entity. `priority`/`zoom` of `None`
     /// preserve the entity's existing value (or component default if absent).
     SetCameraTarget {

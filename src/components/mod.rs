@@ -85,6 +85,7 @@ pub mod rigidbody;
 pub mod rotation;
 pub mod scale;
 pub mod screenposition;
+pub mod shadow;
 pub mod signalbinding;
 pub mod signals;
 pub mod sprite;

@@ -21,6 +21,7 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::stuckto::StuckTo;
+use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Tween, TweenValue};
@@ -130,7 +131,9 @@ pub fn process_entity_commands(
             | EntityCmd::ShaderClearUniform { .. }
             | EntityCmd::ShaderClearUniforms { .. }
             | EntityCmd::SetTint { .. }
-            | EntityCmd::RemoveTint { .. }) => process_shader_cmd(cmd, commands, queries),
+            | EntityCmd::RemoveTint { .. }
+            | EntityCmd::SetShadow { .. }
+            | EntityCmd::RemoveShadow { .. }) => process_shader_cmd(cmd, commands, queries),
 
             cmd @ (EntityCmd::SetPosition { .. }
             | EntityCmd::SetScreenPosition { .. }
@@ -538,6 +541,16 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
         EntityCmd::RemoveTint { entity_id } => {
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_remove::<Tint>();
+            });
+        }
+        EntityCmd::SetShadow { entity_id, dx, dy, r, g, b, a } => {
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(Shadow::new(dx, dy, r, g, b, a));
+            });
+        }
+        EntityCmd::RemoveShadow { entity_id } => {
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_remove::<Shadow>();
             });
         }
         _ => unreachable!(),

@@ -31,19 +31,19 @@ pub(super) fn draw_screen_sprite_item(
             width: sprite.width,
             height: sprite.height,
         };
+        let origin = Vector2 { x: sprite.origin.x, y: sprite.origin.y };
+
+        if let Some(shadow) = item.maybe_shadow {
+            let shadow_dest = Rectangle {
+                x: dest.x + shadow.offset.x,
+                y: dest.y + shadow.offset.y,
+                ..dest
+            };
+            d.draw_texture_pro(tex, src, shadow_dest, origin, 0.0, shadow.color);
+        }
 
         let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
-        d.draw_texture_pro(
-            tex,
-            src,
-            dest,
-            Vector2 {
-                x: sprite.origin.x,
-                y: sprite.origin.y,
-            },
-            0.0,
-            tint_color,
-        );
+        d.draw_texture_pro(tex, src, dest, origin, 0.0, tint_color);
     }
     if debug {
         d.draw_rectangle_lines(

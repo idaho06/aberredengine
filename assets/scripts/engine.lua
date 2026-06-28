@@ -623,6 +623,10 @@ function engine.collision_entity_remove_screen_position(entity_id) end
 ---@param entity_id integer
 function engine.collision_entity_remove_shader(entity_id) end
 
+---Remove entity shadow
+---@param entity_id integer
+function engine.collision_entity_remove_shadow(entity_id) end
+
 ---Remove entity tint
 ---@param entity_id integer
 function engine.collision_entity_remove_tint(entity_id) end
@@ -724,6 +728,16 @@ function engine.collision_entity_set_screen_position(entity_id, x, y) end
 ---@param entity_id integer
 ---@param key string
 function engine.collision_entity_set_shader(entity_id, key) end
+
+---Set entity drop shadow (offset dx/dy and RGBA color 0-255)
+---@param entity_id integer
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer
@@ -960,6 +974,10 @@ function engine.entity_remove_screen_position(entity_id) end
 ---@param entity_id integer
 function engine.entity_remove_shader(entity_id) end
 
+---Remove entity shadow
+---@param entity_id integer
+function engine.entity_remove_shadow(entity_id) end
+
 ---Remove entity tint
 ---@param entity_id integer
 function engine.entity_remove_tint(entity_id) end
@@ -1061,6 +1079,16 @@ function engine.entity_set_screen_position(entity_id, x, y) end
 ---@param entity_id integer
 ---@param key string
 function engine.entity_set_shader(entity_id, key) end
+
+---Set entity drop shadow (offset dx/dy and RGBA color 0-255)
+---@param entity_id integer
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer
@@ -1870,6 +1898,16 @@ function EntityBuilder:with_screen_position(x, y) end
 ---@return EntityBuilder
 function EntityBuilder:with_shader(shader_key, uniforms) end
 
+---Set drop shadow (offset dx/dy and RGBA color 0-255)
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shadow(dx, dy, r, g, b, a) end
+
 ---Bind text to a WorldSignal value
 ---@param key string
 ---@return EntityBuilder
@@ -2434,6 +2472,16 @@ function CollisionEntityBuilder:with_screen_position(x, y) end
 ---@param uniforms table|nil
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shader(shader_key, uniforms) end
+
+---Set drop shadow (offset dx/dy and RGBA color 0-255)
+---@param dx number
+---@param dy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shadow(dx, dy, r, g, b, a) end
 
 ---Bind text to a WorldSignal value
 ---@param key string
