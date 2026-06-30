@@ -928,10 +928,12 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
 | `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
 | `Tween<ScreenPosition>` | `Tween::new(ScreenPosition::new(from_x, from_y), ScreenPosition::new(to_x, to_y), duration)` |
-| `GuiWindow` | `GuiWindow { size: Vector2::new(w, h) }` |
-| `GuiButton` | `GuiButton::new(width, height, "Caption")` |
-| `GuiLabel` | `GuiLabel::new(width, height, "Text")` |
-| `GuiImage` | `GuiImage::new(width, height, "tex_key")` |
+| `GuiWindow` | `GuiWindow::new(w, h)` — `theme_key` defaults to `"default"`; override with `.with_theme_key("my_theme")` |
+| `GuiButton` | `GuiButton::new(width, height, "Caption")` — add `.with_theme_key(key)` to use a non-default theme |
+| `GuiLabel` | `GuiLabel::new(width, height, "Text")` — add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}") ` to bind text to `WorldSignals` |
+| `GuiImage` | `GuiImage::new(width, height, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets |
+| `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
+| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see §7.7 |
 | `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.6 |
 | `GuiOffset` | `GuiOffset(Vector2::new(x, y))` — position relative to a `ChildOf` parent |
 
@@ -1604,10 +1606,12 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 
 | Component | Shape | Notes |
 |-----------|-------|-------|
-| `GuiWindow` | `{ size: Vector2 }` | Themed panel. Visibility = presence/absence of `ScreenPosition` on the same entity. |
-| `GuiButton` | `GuiButton::new(w, h, "Caption")` | Self-contained; `gui_button_spawn_system` reacts one frame later to insert a `GuiInteractable` (via `insert_if_new`) and, unless the caption is empty, spawn a themed caption `DynamicText` child. |
-| `GuiLabel` | `GuiLabel::new(w, h, "Text")` | Same caption-child pattern as `GuiButton`, minus any interaction — never hit-tested. |
-| `GuiImage` | `GuiImage::new(w, h, "tex_key")` | `gui_image_spawn_system` inserts a co-located `GuiInteractable` + `Sprite` (same entity, no child) referencing `tex_key` in `TextureStore`. No automatic hover/press tint — handle visual feedback yourself (e.g. via the click callback). |
+| `GuiWindow` | `GuiWindow::new(w, h)` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)` | Themed panel. Visibility = presence/absence of `ScreenPosition` on the same entity. |
+| `GuiButton` | `GuiButton::new(w, h, "Caption")` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)` | Self-contained; `gui_button_spawn_system` reacts one frame later to insert a `GuiInteractable` (via `insert_if_new`) and, unless the caption is empty, spawn a themed caption `DynamicText` child. |
+| `GuiLabel` | `GuiLabel::new(w, h, "Text")` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}")` to drive text from `WorldSignals` | Same caption-child pattern as `GuiButton`, minus any interaction — never hit-tested. |
+| `GuiImage` | `GuiImage::new(w, h, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets | `gui_image_spawn_system` inserts a co-located `GuiInteractable` + `Sprite` (same entity, no child). `gui_image_state_sync_system` re-resolves `Sprite.offset` from `GuiInteractable.state` every frame automatically — no game code needed. |
+| `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)` for `WorldSignals` auto-update | No spawn system — rendered directly. Requires `ScreenPosition` + `ZIndex`. `value` clamped to `[0, max]`. `direction` variants: `Horizontal` (default, left→right), `HorizontalReversed`, `Vertical` (bottom→top), `VerticalReversed`. |
+| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` (50% transparent black) | Pre-pass shadow drawn at entity position + offset before the main sprite/text draw. Bypasses entity shaders. Works for both world-space and screen-space entities (`Sprite` and `DynamicText`). |
 | `GuiInteractable` | `GuiInteractable::rust(w, h, callback)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). Use the `::rust()` coercion constructor — mirrors `CollisionRule::rust`/`Timer::rust` — for a Rust fn-pointer callback: `GuiRustCallback = fn(Entity, &mut GameCtx)`. |
 | `GuiOffset` | `GuiOffset(Vector2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every frame; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
 
@@ -1617,15 +1621,16 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 > `GuiButton`/`GuiImage` alone, the inserted default `GuiInteractable` has no Rust callback wired — only the
 > Lua `callback_name`-based dispatch path, which no-ops with no matching Lua function present.
 
-**Theming:** `GuiTheme` is an ordinary `Resource` — set it once (e.g. in a setup system via `ResMut<GuiTheme>`)
-before spawning any windows/buttons/labels:
+**Theming:** Themes are stored in `GuiThemeStore` — a `HashMap<Arc<str>, GuiTheme>` pre-inserted by the engine. Each widget carries a `theme_key: Arc<str>` (default `"default"`) that is resolved against `GuiThemeStore` at render time. Set up themes in your setup system before spawning any widgets:
 
 ```rust
 use aberredengine::bevy_ecs::prelude::ResMut;
 use aberredengine::raylib::prelude::{Color, Rectangle};
-use aberredengine::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme};
+use aberredengine::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
+use std::sync::Arc;
 
-fn setup_gui_theme(mut theme: ResMut<GuiTheme>) {
+fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
+    let theme = theme_store.themes.entry(Arc::from("default")).or_default();
     theme.panel = GuiNinePatch {
         tex_key: "gui_panel".into(),
         source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
@@ -1648,6 +1653,11 @@ fn setup_gui_theme(mut theme: ResMut<GuiTheme>) {
     theme.font = "main_font".into();
     theme.font_size = 16.0;
     theme.text_color = Color::WHITE;
+
+    // Optional: drop shadows. panel_shadow applies to all nine-patch backgrounds;
+    // text_shadow is inserted as a Shadow component on spawned caption DynamicText children.
+    // theme.panel_shadow = Some(Shadow::default_color(2.0, 2.0));
+    // theme.text_shadow = Some(Shadow::default_color(1.0, 1.0));
 }
 ```
 
@@ -1655,6 +1665,31 @@ fn setup_gui_theme(mut theme: ResMut<GuiTheme>) {
 must already be loaded into `TextureStore` (see Section 4). `theme.font` defaults to an empty key — if it's
 still unset when a non-empty caption is about to spawn, the engine logs an `error!`; the caption entity still
 spawns, it just renders no visible glyphs.
+
+**`GuiTheme` fields of note:**
+- `panel: GuiNinePatch` — background patch for `GuiWindow`, `GuiLabel`, `GuiProgressBar`.
+- `button: Option<GuiButtonSkin>` — four nine-patches (`normal`/`hover`/`pressed`/`disabled`); unset states fall back to `normal`. Also has four optional per-state shadows (`shadow`, `hover_shadow`, `pressed_shadow`, `disabled_shadow`); unset states fall back to `shadow` (normal), which itself falls back to `panel_shadow`.
+- `label: Option<GuiNinePatch>` — separate background for `GuiLabel` (falls back to `panel` if unset).
+- `progress_bar: Option<GuiProgressBarSkin>` — `track: Option<GuiNinePatch>` (full-size background, optional) and `fill: GuiNinePatch` (scaled to `value/max`).
+- `panel_shadow: Option<Shadow>` — drop shadow drawn behind all nine-patch backgrounds.
+- `text_shadow: Option<Shadow>` — `Shadow` component inserted on spawned caption `DynamicText` children.
+
+**Multi-theme UIs:** insert additional entries and use `.with_theme_key("my_theme")` on any widget:
+
+```rust
+let hud_theme = theme_store.themes.entry(Arc::from("hud")).or_default();
+hud_theme.panel = GuiNinePatch { tex_key: "hud_panel".into(), /* … */ };
+hud_theme.font = "hud_font".into();
+
+// Spawn a widget using the "hud" theme
+ctx.commands.spawn((
+    GuiWindow::new(200.0, 40.0).with_theme_key("hud"),
+    ScreenPosition::new(10.0, 10.0),
+    ZIndex(5.0),
+));
+```
+
+A missing/unregistered `theme_key` skips the themed background (caption/sprite still renders) and logs a warning once per widget via `GuiThemeWarnCache`.
 
 **Complete example — a panel with one clickable button:**
 
@@ -1677,7 +1712,7 @@ fn spawn_menu_panel(ctx: &mut GameCtx) {
     let panel = ctx
         .commands
         .spawn((
-            GuiWindow { size: Vector2::new(200.0, 100.0) },
+            GuiWindow::new(200.0, 100.0),
             ScreenPosition::new(50.0, 50.0),
             ZIndex(10.0),
         ))
@@ -1732,6 +1767,8 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `TextureStore` | `Res` / `ResMut` | Loaded textures by key |
 | `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
+| `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see §7.7 |
+| `GuiInputState` | `Res` | `click_consumed_this_frame: bool` — set by `gui_hit_test_system` when any `GuiInteractable` absorbs a click; reset each frame |
 
 ### Engine-inserted resources (NonSend)
 

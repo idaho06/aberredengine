@@ -25,6 +25,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Parent-Child Hierarchy](#parent-child-hierarchy)
   - [Camera Target Component](#camera-target-component)
   - [Tween Components](#tween-components)
+  - [Screen-Position Tween](#screen-position-tween)
   - [Particle Emitter Component](#particle-emitter-component)
 - [World Signals](#world-signals)
 - [Entity Commands](#entity-commands)
@@ -37,6 +38,9 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Post-Process Shaders](#post-process-shaders)
 - [Per-Entity Shaders](#per-entity-shaders)
 - [Tint Component](#tint-component)
+- [Shadow Component](#shadow-component)
+- [GUI Widgets](#gui-widgets)
+  - [GUI Theme Configuration](#gui-widget-theme-configuration)
 - [Game Configuration](#game-configuration)
 - [Complete Example: Player Paddle](#complete-example-player-paddle)
 - [Tips and Best Practices](#tips-and-best-practices)
@@ -2142,6 +2146,81 @@ Start scale tween from the end and play in reverse (requires `:with_tween_scale(
 
 ---
 
+### Screen-Position Tween
+
+Tween components for `ScreenPosition` — useful for sliding GUI panels and HUD elements in and out of view.
+
+#### `:with_tween_screen_position(from_x, from_y, to_x, to_y, duration)`
+
+Animate `ScreenPosition` over time. Unlike the world-space tween types, this one also inserts `ScreenPosition` on the entity if absent, seeded at `(from_x, from_y)`. Because GUI widget visibility is controlled by the presence of `ScreenPosition`, an entity without it becomes visible as soon as the tween inserts it.
+
+```lua
+-- Slide a panel in from off the left edge
+engine.spawn()
+    :with_gui_window(200, 80)
+    :with_tween_screen_position(-200, 50, 20, 50, 0.4)
+    :with_tween_screen_position_easing("cubic_out")
+    :with_zindex(10)
+    :build()
+```
+
+#### `:with_tween_screen_position_easing(easing)`
+
+Set easing for the screen-position tween (requires `:with_tween_screen_position()`). Same easing values as `:with_tween_position_easing()`.
+
+```lua
+:with_tween_screen_position_easing("quad_out")
+```
+
+#### `:with_tween_screen_position_loop(loop_mode)`
+
+Set loop behavior (requires `:with_tween_screen_position()`).
+
+```lua
+:with_tween_screen_position_loop("ping_pong")
+```
+
+#### `:with_tween_screen_position_backwards()`
+
+Start from the end and play in reverse (requires `:with_tween_screen_position()`).
+
+```lua
+:with_tween_screen_position(-200, 50, 20, 50, 0.4)
+:with_tween_screen_position_backwards()  -- Starts at (20, 50), slides to (-200, 50)
+```
+
+#### `:with_tween_screen_position_on_finished(fn_name)`
+
+Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_screen_position()`). Fires once for `"once"` mode; never fires for `"loop"` or `"ping_pong"`. Callback signature: `fn(ctx, input)`.
+
+A common pattern: use the `on_finished` callback to call `engine.entity_remove_screen_position` after a hide-tween, which removes `ScreenPosition` and fully hides the widget:
+
+```lua
+-- Spawn a panel that slides in, then call a callback when visible
+engine.spawn()
+    :with_gui_window(200, 80)
+    :with_tween_screen_position(-200, 50, 20, 50, 0.3)
+    :with_tween_screen_position_easing("cubic_out")
+    :with_tween_screen_position_on_finished("on_panel_visible")
+    :with_zindex(10)
+    :build()
+
+function on_panel_visible(ctx, input)
+    -- Panel is now in view
+end
+
+-- Later, hide it by sliding out with on_finished removing ScreenPosition
+local function hide_panel(panel_id)
+    engine.entity_insert_tween_screen_position(panel_id, 20, 50, -200, 50, 0.3, "cubic_in", "once", false, "on_panel_hidden")
+end
+
+function on_panel_hidden(ctx, input)
+    engine.entity_remove_screen_position(ctx.id)
+end
+```
+
+---
+
 ### Particle Emitter Component
 
 The particle emitter component enables entities to spawn particles by cloning template entities at configurable rates, directions, and speeds.
@@ -3071,6 +3150,55 @@ function on_menu_close()
 end
 ```
 
+### `engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)`
+
+Add or replace `TweenScreenPosition` at runtime to animate screen-space position. Unlike the other tween insert functions, this one also inserts `ScreenPosition` on the entity if absent, seeded at `(from_x, from_y)`. The optional `on_finished` trailing argument (a Lua callback name string or nil) fires once when a `"once"` tween finishes — `"loop"` and `"ping_pong"` never fire it. Existing call sites with 9 positional args continue to work without the `on_finished` arg.
+
+**Parameters:**
+
+- `entity_id` - Entity to add tween to
+- `from_x`, `from_y` - Starting screen position
+- `to_x`, `to_y` - Target screen position
+- `duration` - Animation duration in seconds
+- `easing` - Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
+- `loop_mode` - Loop behavior: "once", "loop", "ping_pong"
+- `backwards` - Start from end and play in reverse (boolean)
+- `on_finished` - Optional callback name; fires once when tween ends (omit or pass nil for none)
+
+**Example:**
+
+```lua
+-- Slide a panel off-screen, then remove ScreenPosition to hide it
+local panel_id = engine.get_entity("settings_panel")
+engine.entity_insert_tween_screen_position(panel_id, 20, 50, -200, 50, 0.3, "cubic_in", "once", false, "on_panel_hidden")
+
+function on_panel_hidden(ctx, input)
+    engine.entity_remove_screen_position(ctx.id)
+end
+```
+
+### `engine.entity_remove_tween_screen_position(entity_id)`
+
+Remove `TweenScreenPosition` component from an entity to stop the screen-space animation.
+
+**Parameters:**
+
+- `entity_id` - Entity to remove tween from
+
+```lua
+engine.entity_remove_tween_screen_position(panel_id)
+```
+
+### `engine.entity_remove_screen_position(entity_id)`
+
+Remove `ScreenPosition` from an entity. GUI widget visibility is controlled by the presence or absence of `ScreenPosition` (rather than a visibility flag), so removing it hides the widget without despawning it. Pair with the `on_finished` arg of `entity_insert_tween_screen_position` for animated hide:
+
+```lua
+function on_panel_hidden(ctx, input)
+    engine.entity_remove_screen_position(ctx.id)
+end
+```
+
 ### `engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
 
 Attach entity to another at runtime.
@@ -3324,6 +3452,71 @@ function player_move(player_id, direction)
     local move_accel = 500 * direction
     engine.entity_set_force_value(player_id, "move", move_accel, 0)
 end
+```
+
+### `engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a)`
+
+Add or update the `Shadow` component on an entity. The shadow renders a copy of the entity's sprite or text at `position + offset` before the main draw. Works for both world-space (`MapPosition`) and screen-space (`ScreenPosition`) entities; bypasses per-entity shaders.
+
+**Parameters:**
+
+- `entity_id` - Entity to add shadow to
+- `dx`, `dy` - Shadow offset in pixels (positive = right/down)
+- `r, g, b, a` - Shadow RGBA color (0-255)
+
+```lua
+engine.entity_set_shadow(player_id, 3, 3, 0, 0, 0, 120)
+```
+
+### `engine.entity_remove_shadow(entity_id)`
+
+Remove the `Shadow` component from an entity.
+
+```lua
+engine.entity_remove_shadow(player_id)
+```
+
+### `engine.entity_set_gui_disabled(entity_id, disabled)`
+
+Enable or disable a `GuiButton` or `GuiImage` widget. Sets `GuiInteractable.state` to `Disabled` or `Normal`. A disabled widget still renders and draws its nine-patch skin but stops receiving hover/press/click events and won't fire click callbacks.
+
+**Parameters:**
+
+- `entity_id` - Entity with a `GuiButton` or `GuiImage` component
+- `disabled` - `true` to disable, `false` to re-enable
+
+```lua
+local btn = engine.get_entity("submit_button")
+engine.entity_set_gui_disabled(btn, true)   -- Disable while processing
+engine.entity_set_gui_disabled(btn, false)  -- Re-enable when ready
+```
+
+**Note:** No-ops silently if called the same frame as spawn (before `GuiInteractable` is inserted by `gui_button_spawn_system`/`gui_image_spawn_system`).
+
+### `engine.entity_set_gui_progress(entity_id, value)`
+
+Set the current fill value on a `GuiProgressBar`. Value is clamped to `[0, max]`.
+
+**Parameters:**
+
+- `entity_id` - Entity with `GuiProgressBar` component
+- `value` - New fill value
+
+```lua
+engine.entity_set_gui_progress(hp_bar_id, 75)
+```
+
+### `engine.entity_set_gui_progress_max(entity_id, max)`
+
+Update the maximum value of a `GuiProgressBar`. Use this when the scale changes (e.g. max HP increased).
+
+**Parameters:**
+
+- `entity_id` - Entity with `GuiProgressBar` component
+- `max` - New maximum value
+
+```lua
+engine.entity_set_gui_progress_max(hp_bar_id, 200)  -- Double the max HP
 ```
 
 ---
@@ -4228,6 +4421,65 @@ function on_player_explosion(ctx)
     engine.collision_play_sound("explosion")
 end
 ```
+
+#### `engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)`
+
+Add or replace `TweenScreenPosition` during collision handling. Also inserts `ScreenPosition` if absent (seeded at `from`). See `engine.entity_insert_tween_screen_position` in [Entity Commands](#entity-commands) for parameter details.
+
+```lua
+function on_player_warp_trigger(ctx)
+    local panel_id = engine.get_entity("warp_panel")
+    if panel_id then
+        engine.collision_entity_insert_tween_screen_position(panel_id, -200, 50, 20, 50, 0.3, "cubic_out", "once", false, nil)
+    end
+end
+```
+
+#### `engine.collision_entity_remove_tween_screen_position(entity_id)`
+
+Remove `TweenScreenPosition` during collision handling.
+
+#### `engine.collision_entity_remove_screen_position(entity_id)`
+
+Remove `ScreenPosition` during collision handling. Hides any GUI widget whose visibility depends on the presence of `ScreenPosition`.
+
+#### `engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a)`
+
+Add or update `Shadow` component during collision handling.
+
+```lua
+function on_player_shadow_zone(ctx)
+    engine.collision_entity_set_shadow(ctx.a.id, 4, 4, 0, 0, 0, 160)
+end
+```
+
+#### `engine.collision_entity_remove_shadow(entity_id)`
+
+Remove `Shadow` component during collision handling.
+
+#### `engine.collision_entity_set_gui_disabled(entity_id, disabled)`
+
+Enable or disable a `GuiButton` or `GuiImage` widget during collision handling.
+
+#### `engine.collision_entity_set_gui_progress(entity_id, value)`
+
+Set `GuiProgressBar.value` during collision handling. Value is clamped to `[0, max]`.
+
+```lua
+function on_player_damage(ctx)
+    local hp_bar_id = engine.get_entity("hp_bar")
+    if hp_bar_id then
+        local hp = engine.get_integer("player_hp") or 100
+        local new_hp = math.max(0, hp - 10)
+        engine.collision_set_integer("player_hp", new_hp)
+        engine.collision_entity_set_gui_progress(hp_bar_id, new_hp)
+    end
+end
+```
+
+#### `engine.collision_entity_set_gui_progress_max(entity_id, max)`
+
+Update `GuiProgressBar.max` during collision handling.
 
 ### Example: Ball-Brick Collision
 
@@ -5215,6 +5467,361 @@ function fade_out(ctx)
         engine.entity_signal_set_integer(ctx.id, "alpha", alpha)
         engine.entity_set_tint(ctx.id, 255, 255, 255, alpha)
     end
+end
+```
+
+---
+
+## Shadow Component
+
+The Shadow component draws a copy of the entity's sprite or text at `position + offset` before the main draw, creating a drop shadow effect. It bypasses per-entity shaders (the shadow always renders with the default shader) and works for both world-space and screen-space entities.
+
+### Adding Shadow via Builder
+
+Use `:with_shadow()` when spawning entities:
+
+```lua
+-- World-space entity with drop shadow
+engine.spawn()
+    :with_sprite("player", 32, 32, 16, 16)
+    :with_position(400, 300)
+    :with_shadow(3, 3, 0, 0, 0, 128)   -- dx, dy, r, g, b, a
+    :build()
+
+-- Screen-space text with shadow
+engine.spawn()
+    :with_text("Score", "arcade", 20, 255, 255, 255, 255)
+    :with_screen_position(10, 10)
+    :with_shadow(1, 1, 0, 0, 0, 160)
+    :build()
+```
+
+**Parameters:**
+
+- `dx`, `dy` — pixel offset for the shadow (positive values = right/down)
+- `r, g, b, a` — shadow RGBA color (0-255). Semi-transparent black is the typical choice.
+
+### Runtime Shadow Control
+
+#### `engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a)`
+
+Add or update the Shadow component at runtime. See [Entity Commands](#entity-commands) for full details.
+
+```lua
+-- Add a shadow after the player picks up a powerup
+engine.entity_set_shadow(player_id, 3, 3, 0, 0, 0, 120)
+```
+
+#### `engine.entity_remove_shadow(entity_id)`
+
+Remove the Shadow component.
+
+```lua
+engine.entity_remove_shadow(player_id)
+```
+
+### Collision Context Variants
+
+```lua
+function on_player_dark_zone(ctx)
+    engine.collision_entity_set_shadow(ctx.a.id, 4, 4, 0, 0, 0, 160)
+end
+```
+
+Available collision variants:
+
+- `engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a)`
+- `engine.collision_entity_remove_shadow(entity_id)`
+
+### Notes
+
+- Works for both `Sprite` and `DynamicText` entities.
+- Works in both world-space (`MapPosition`) and screen-space (`ScreenPosition`) entities.
+- Shadow bypasses per-entity shaders — it renders with the default shader regardless of the entity's `EntityShader` component.
+- GUI themes also support drop shadows for all themed widgets (`GuiWindow`, `GuiButton`, `GuiLabel`, `GuiProgressBar`) — see [GUI Widgets](#gui-widgets).
+
+---
+
+## GUI Widgets
+
+The engine provides a complete in-game GUI widget system built on ECS entities. This is distinct from the debug ImGui overlay (`engine.imgui`); it renders in the game's own coordinate space alongside regular game entities.
+
+**Key concepts:**
+
+- **Themes** define the visual appearance (nine-patch backgrounds, button skins, fonts, shadows). Set them up in `on_setup()`.
+- **Widgets** are regular entities spawned with the entity builder. They render when they have a `ScreenPosition` component; removing `ScreenPosition` hides them without despawning.
+- **Child widgets** use `:with_parent()` + `:with_gui_offset()` for positioning relative to a parent `GuiWindow`. `gui_layout_system` resolves the offset into `ScreenPosition` every frame.
+- **Themes are flat** — child widgets do NOT inherit their parent `GuiWindow`'s `theme_key`. Each widget resolves its own theme independently.
+
+### GUI Widget Theme Configuration
+
+All `set_gui_theme_*` calls use a `preserve`-policy queue and can be called from `on_setup()`. They survive scene switches.
+
+```lua
+function on_setup()
+    -- Load GUI textures first
+    engine.load_texture("gui_panel",  "./assets/gui/panel.png")
+    engine.load_texture("gui_btn",    "./assets/gui/buttons.png")
+    engine.load_texture("gui_bar",    "./assets/gui/bar.png")
+    engine.load_font("main_font", "./assets/fonts/arcade.ttf", 32)
+
+    -- Panel nine-patch (used by GuiWindow, GuiLabel background, GuiProgressBar track)
+    engine.set_gui_theme_panel("default",
+        "gui_panel",     -- tex_key
+        0, 0, 64, 64,   -- source rect: x, y, w, h
+        6, 6, 6, 6      -- border: left, top, right, bottom
+    )
+
+    -- Button skins — call once per state
+    -- states: "normal", "hover", "pressed", "disabled"
+    engine.set_gui_theme_button("default", "normal",  "gui_btn",  0, 0, 32, 32, 4, 4, 4, 4)
+    engine.set_gui_theme_button("default", "hover",   "gui_btn", 32, 0, 32, 32, 4, 4, 4, 4)
+    engine.set_gui_theme_button("default", "pressed", "gui_btn", 64, 0, 32, 32, 4, 4, 4, 4)
+    -- "disabled" falls back to "normal" if unset
+
+    -- Label background (optional; skip to use panel nine-patch for labels too)
+    engine.set_gui_theme_label("default", "gui_panel", 0, 0, 64, 64, 6, 6, 6, 6)
+
+    -- Font for all button/label captions on this theme
+    engine.set_gui_theme_font("default", "main_font", 16, 255, 255, 255, 255)
+    -- args: theme_key, font_key, font_size, r, g, b, a
+
+    -- Progress bar (part: "track" = full-size background, "fill" = proportional fill)
+    engine.set_gui_theme_progress_bar("default", "fill",  "gui_bar", 0, 0, 8, 8, 2, 2, 2, 2)
+    engine.set_gui_theme_progress_bar("default", "track", "gui_bar", 8, 0, 8, 8, 2, 2, 2, 2)
+
+    -- Optional shadows (theme-level; applies to all widgets using this theme)
+    engine.set_gui_theme_panel_shadow("default", 2, 2, 0, 0, 0, 120)
+    -- args: theme_key, dx, dy, r, g, b, a
+    engine.set_gui_theme_text_shadow("default", 1, 1, 0, 0, 0, 160)
+    engine.set_gui_theme_button_shadow("default", "normal",  2, 2, 0, 0, 0, 120)
+    engine.set_gui_theme_button_shadow("default", "pressed", 0, 0, 0, 0, 0,   0)
+    -- "pressed" shadow collapsed to (0,0) gives visual "press in" feedback
+end
+```
+
+**Multiple themes:** Call `set_gui_theme_*` with different `theme_key` values to register named themes (e.g., `"hud"`, `"menu"`, `"inventory"`). Widgets use `"default"` unless overridden via `:with_gui_theme_key(key)`.
+
+**Unregistered theme_key:** The widget's nine-patch background is skipped (text/sprite still renders), and a warning is logged once per widget.
+
+### Spawning Widgets
+
+#### GuiWindow
+
+A panel background using a nine-patch. Requires `:with_screen_position()` and `:with_zindex()` to render.
+
+```lua
+local panel_id = engine.spawn()
+    :with_gui_window(200, 120)          -- width, height
+    :with_gui_theme_key("menu")         -- optional; default = "default"
+    :with_screen_position(50, 50)       -- required; absence = hidden
+    :with_zindex(10)
+    :build()
+```
+
+#### GuiButton
+
+A clickable button with an optional text caption. Caption text comes from the theme font/size/color.
+
+```lua
+engine.spawn()
+    :with_gui_button(120, 32, "Start Game", "on_start_clicked")
+    :with_gui_button_disabled()         -- optional; starts in Disabled state
+    :with_gui_theme_key("menu")         -- optional
+    :with_parent(panel_id)              -- parent for cascade despawn
+    :with_gui_offset(40, 44)            -- position relative to parent's top-left
+    :with_zindex(11)
+    :build()
+
+function on_start_clicked(ctx)
+    -- ctx.entity_id = u64 entity ID of the clicked widget
+    engine.change_scene("level01")
+end
+```
+
+**Notes:**
+- Caption is a `DynamicText` child entity spawned one frame after the `GuiButton`.
+- Empty `caption` string skips spawning the caption entirely.
+- Empty `callback_name` ("") disables click dispatch — the button still hit-tests and draws normally.
+- `:with_gui_button_disabled()` requires `:with_gui_button()` first (chaining validation).
+- Click callbacks must be in `M._callbacks`.
+- **Click callback `ctx.entity_id`** (not `button_id`) — renamed when `GuiImage` was added to the same click system.
+
+Runtime: `engine.entity_set_gui_disabled(entity_id, true/false)`
+
+#### GuiLabel
+
+A non-interactive label with optional nine-patch background and optional `WorldSignals` auto-update.
+
+```lua
+engine.spawn()
+    :with_gui_label(120, 20, "Score:")
+    :with_gui_label_signal_binding("score")          -- read integer/scalar each frame
+    :with_gui_label_signal_binding_format("Score: {}")  -- optional format; {} = value
+    :with_gui_theme_key("hud")
+    :with_parent(panel_id)
+    :with_gui_offset(10, 10)
+    :with_zindex(11)
+    :build()
+```
+
+**Notes:**
+- Never hit-tested; display only.
+- Signal binding reads the integer signal each frame (scalar fallback); updates the caption text automatically.
+- Format string `{}` is replaced with the signal value.
+
+#### GuiImage
+
+A clickable image sprite (e.g. inventory slots, icon buttons) with per-state atlas offsets. No nine-patch theme — it's a plain `Sprite` with click support.
+
+```lua
+engine.spawn()
+    :with_gui_image(64, 64, "icons", 0, 0, "on_icon_clicked")
+    -- Per-state atlas offsets within the texture (optional; unset = base offset):
+    :with_gui_image_hover_offset(64, 0)
+    :with_gui_image_pressed_offset(128, 0)
+    :with_gui_image_disabled_offset(192, 0)
+    :with_screen_position(100, 50)
+    :with_zindex(10)
+    :build()
+
+function on_icon_clicked(ctx)
+    -- ctx.entity_id = u64 entity ID
+end
+```
+
+**Notes:**
+- `offset_x`, `offset_y` select the atlas sub-rect pixel position for the `Normal` state.
+- Per-state offsets are auto-applied each frame by `gui_image_state_sync_system`.
+- No theme — does not use `GuiThemeStore`.
+- Empty `callback_name` ("") disables click dispatch.
+
+Runtime: `engine.entity_set_gui_disabled(entity_id, true/false)`
+
+#### GuiProgressBar
+
+A fill bar rendered directly (no spawn system). Requires `:with_screen_position()` and `:with_zindex()`.
+
+```lua
+engine.spawn()
+    :with_gui_progress_bar(160, 12, 75, 100)  -- width, height, value, max
+    :with_gui_progress_bar_signal_binding("player_hp")  -- WorldSignals auto-update
+    :with_gui_theme_key("hud")
+    :with_screen_position(10, 10)
+    :with_zindex(5)
+    :build()
+
+-- Direction variants (chain after :with_gui_progress_bar):
+:with_gui_progress_bar_vertical()    -- fill grows bottom→top
+:with_gui_progress_bar_reversed()    -- flip anchor: H→right-to-left, V→top-to-bottom
+```
+
+**Notes:**
+- Value is clamped to `[0, max]`.
+- Signal binding reads integer signal each frame (scalar fallback).
+- `track` nine-patch is drawn at full bar size (background). `fill` nine-patch is drawn proportionally.
+- `fill` nine-patch is required; skin is skipped if unset.
+
+Runtime:
+- `engine.entity_set_gui_progress(entity_id, value)` — update current value
+- `engine.entity_set_gui_progress_max(entity_id, max)` — update maximum
+- Collision twins: `engine.collision_entity_set_gui_progress(...)`, `engine.collision_entity_set_gui_progress_max(...)`
+
+#### GuiOffset
+
+Child widgets use `:with_gui_offset()` instead of `:with_screen_position()` for positioning relative to their parent. `gui_layout_system` resolves the offset to `ScreenPosition` every frame. `:with_parent()` is required for cascade despawn and layout resolution.
+
+```lua
+engine.spawn()
+    :with_gui_button(80, 24, "OK", "on_ok")
+    :with_parent(panel_id)       -- cascade despawn + layout parent
+    :with_gui_offset(60, 44)     -- pixels from parent's top-left
+    :with_zindex(11)
+    :build()
+```
+
+#### Custom theme key per widget
+
+Override the `"default"` theme on any themed widget:
+
+```lua
+engine.spawn()
+    :with_gui_window(200, 80)
+    :with_gui_theme_key("inventory")   -- resolves against "inventory" entry in GuiThemeStore
+    :with_screen_position(50, 50)
+    :with_zindex(10)
+    :build()
+```
+
+### Show / Hide Widgets
+
+GUI widget visibility = presence of `ScreenPosition`. Remove it to hide; re-add it to show.
+
+```lua
+-- Hide a widget (does not despawn it)
+engine.entity_remove_screen_position(panel_id)
+
+-- Show it again
+engine.entity_set_screen_position(panel_id, 50, 50)
+
+-- Animated show: slide in
+engine.entity_insert_tween_screen_position(panel_id, -200, 50, 20, 50, 0.3, "cubic_out", "once", false, nil)
+
+-- Animated hide: slide out, then remove ScreenPosition
+engine.entity_insert_tween_screen_position(panel_id, 20, 50, -200, 50, 0.3, "cubic_in", "once", false, "on_panel_hidden")
+
+function on_panel_hidden(ctx, input)
+    engine.entity_remove_screen_position(ctx.id)
+end
+```
+
+### Complete GUI Example
+
+```lua
+function M.spawn()
+    -- Create a HUD panel at top-left
+    local panel_id = engine.spawn()
+        :with_gui_window(200, 60)
+        :with_screen_position(10, 10)
+        :with_zindex(20)
+        :build()
+
+    -- HP bar inside the panel
+    engine.spawn()
+        :with_gui_progress_bar(160, 10, 100, 100)
+        :with_gui_progress_bar_signal_binding("player_hp")
+        :with_parent(panel_id)
+        :with_gui_offset(20, 10)
+        :with_zindex(21)
+        :build()
+
+    -- Label showing HP text
+    engine.spawn()
+        :with_gui_label(120, 16, "HP")
+        :with_gui_label_signal_binding("player_hp")
+        :with_gui_label_signal_binding_format("HP: {}")
+        :with_parent(panel_id)
+        :with_gui_offset(20, 28)
+        :with_zindex(21)
+        :build()
+
+    -- A button in its own panel
+    local btn_panel_id = engine.spawn()
+        :with_gui_window(140, 50)
+        :with_screen_position(300, 200)
+        :with_zindex(20)
+        :build()
+
+    engine.spawn()
+        :with_gui_button(120, 30, "Restart", "on_restart")
+        :with_parent(btn_panel_id)
+        :with_gui_offset(10, 10)
+        :with_zindex(21)
+        :build()
+end
+
+function on_restart(ctx)
+    engine.change_scene("level01")
 end
 ```
 
