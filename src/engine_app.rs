@@ -105,6 +105,7 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
+use crate::resources::drawable_snapshot::{build_drawable_snapshot, DrawableSnapshot};
 use crate::resources::worldtime::{FIXED_DT, WorldTime};
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
@@ -700,6 +701,7 @@ impl EngineBuilder {
         world.insert_resource(GuiInputState::default());
         world.insert_resource(GuiThemeStore::default());
         world.insert_resource(GuiThemeWarnCache::default());
+        world.insert_resource(DrawableSnapshot::default());
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = self.lua_script {
@@ -981,6 +983,13 @@ impl EngineBuilder {
 
         fixed.add_systems(animation.after(animation_controller));
         fixed.add_systems(update_timers);
+        // Populates DrawableSnapshot from this substep's fully-settled ECS
+        // state. Phase 2 of the Option B plan (docs/render-simulation-separation-brainstorm.md)
+        // -- nothing consumes this snapshot yet, render_system still reads
+        // live queries directly. Explicit .after(...) (rather than relying on
+        // insertion order) since "fully-settled" is the entire premise later
+        // phases build on.
+        fixed.add_systems(build_drawable_snapshot.after(animation).after(update_timers));
         variable.add_systems(update_world_signals_binding_system);
         variable.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
 

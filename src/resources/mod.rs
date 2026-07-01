@@ -38,6 +38,7 @@ pub mod camera2d;
 pub mod camerafollowconfig;
 pub mod debugmode;
 pub mod debugoverlayconfig;
+pub mod drawable_snapshot;
 pub mod fontstore;
 pub mod fullscreen;
 pub mod gameconfig;
