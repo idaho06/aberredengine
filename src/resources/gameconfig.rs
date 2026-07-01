@@ -48,7 +48,7 @@ const DEFAULT_WINDOW_TITLE: &str = "Aberred Engine";
 /// system will attempt to load values from the configuration file.
 ///
 /// [`apply_gameconfig_changes`]: crate::systems::gameconfig::apply_gameconfig_changes
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, PartialEq)]
 pub struct GameConfig {
     /// Internal render width in pixels.
     pub render_width: u32,

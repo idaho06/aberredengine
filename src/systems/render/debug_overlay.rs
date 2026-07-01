@@ -10,16 +10,20 @@ use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::worldsignals::SignalSnapshot;
 use crate::resources::worldtime::WorldTime;
 use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 
 /// Orchestrates all imgui debug panels drawn at window resolution over the game image.
+///
+/// Reads only snapshot/copied data for display (`SignalSnapshot`, the
+/// `GameConfig` copy from `DrawableSnapshot`) -- Phase 4 of the Option B
+/// plan; no live `WorldSignals`/`Res<GameConfig>` access remains here.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_imgui_debug(
     ui: &ImguiUi,
     overlay_config: &mut DebugOverlayConfig,
-    world_signals: &WorldSignals,
+    signals: &SignalSnapshot,
     input_state: &InputState,
     camera: &Camera2DRes,
     camera_follow: &CameraFollowConfig,
@@ -55,7 +59,7 @@ pub(super) fn draw_imgui_debug(
         shader_count,
     );
     draw_camera_panel(ui, camera, camera_follow);
-    draw_world_signals_panel(ui, world_signals);
+    draw_world_signals_panel(ui, signals);
     draw_input_panel(ui, input_state);
     draw_overlays_panel(ui, overlay_config);
     draw_mouse_config_panel(
@@ -143,30 +147,26 @@ pub(super) fn draw_camera_panel(
         });
 }
 
-pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignals) {
+pub(super) fn draw_world_signals_panel(ui: &ImguiUi, signals: &SignalSnapshot) {
     ui.window("World Signals")
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
             if ui.collapsing_header(
-                format!("Flags ({})", world_signals.get_flags().len()),
+                format!("Flags ({})", signals.flags.len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut flags: Vec<&str> = world_signals
-                    .get_flags()
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect();
+                let mut flags: Vec<&str> = signals.flags.iter().map(|s| s.as_str()).collect();
                 flags.sort_unstable();
                 for flag in flags {
                     ui.text(format!("  {}", flag));
                 }
             }
             if ui.collapsing_header(
-                format!("Scalars ({})", world_signals.get_scalars().len()),
+                format!("Scalars ({})", signals.scalars.len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut entries: Vec<(&str, f32)> = world_signals
-                    .get_scalars()
+                let mut entries: Vec<(&str, f32)> = signals
+                    .scalars
                     .iter()
                     .map(|(k, v)| (k.as_str(), *v))
                     .collect();
@@ -176,11 +176,11 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
                 }
             }
             if ui.collapsing_header(
-                format!("Integers ({})", world_signals.get_integers().len()),
+                format!("Integers ({})", signals.integers.len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut entries: Vec<(&str, i32)> = world_signals
-                    .get_integers()
+                let mut entries: Vec<(&str, i32)> = signals
+                    .integers
                     .iter()
                     .map(|(k, v)| (k.as_str(), *v))
                     .collect();
@@ -190,11 +190,11 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
                 }
             }
             if ui.collapsing_header(
-                format!("Strings ({})", world_signals.get_strings().len()),
+                format!("Strings ({})", signals.strings.len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut entries: Vec<(&str, &str)> = world_signals
-                    .get_strings()
+                let mut entries: Vec<(&str, &str)> = signals
+                    .strings
                     .iter()
                     .map(|(k, v)| (k.as_str(), v.as_str()))
                     .collect();
@@ -204,17 +204,17 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, world_signals: &WorldSignal
                 }
             }
             if ui.collapsing_header(
-                format!("Entities ({})", world_signals.entities.len()),
+                format!("Entities ({})", signals.entities.len()),
                 TreeNodeFlags::empty(),
             ) {
-                let mut entries: Vec<(&str, u64)> = world_signals
+                let mut entries: Vec<(&str, u64)> = signals
                     .entities
                     .iter()
-                    .map(|(k, v)| (k.as_str(), v.to_bits()))
+                    .map(|(k, v)| (k.as_str(), *v))
                     .collect();
                 entries.sort_unstable_by_key(|(k, _)| *k);
-                for (key, bits) in entries {
-                    ui.text(format!("  {} = {:x}", key, bits));
+                for (key, id) in entries {
+                    ui.text(format!("  {} = {:x}", key, id));
                 }
             }
         });

@@ -9,7 +9,8 @@
 //!
 //! When the active scene descriptor provides a [`GuiCallback`], an ImGui frame
 //! is opened every render pass and the callback is invoked. This path is
-//! independent of [`DebugMode`] and is intended for persistent game-developer UI
+//! independent of [`DebugMode`](crate::resources::debugmode::DebugMode) and is
+//! intended for persistent game-developer UI
 //! (HUDs, in-game editors, tool windows).
 
 mod debug_overlay;
@@ -25,18 +26,14 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
 
-use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::guiinteractable::GuiWidgetState;
 use crate::components::guiprogressbar::ProgressBarDirection;
 use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
-use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
@@ -44,14 +41,12 @@ use crate::components::zindex::ZIndex;
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::drawable_snapshot::{
     DrawableSnapshot, GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry,
     ScreenSpriteEntry, ScreenTextEntry,
 };
 use crate::resources::fontstore::FontStore;
-use crate::resources::gameconfig::GameConfig;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
@@ -89,6 +84,7 @@ pub(super) struct SpriteBufferItem {
     maybe_shader: Option<EntityShader>,
     maybe_tint: Option<Tint>,
     maybe_shadow: Option<Shadow>,
+    velocity: Option<Vector2>,
 }
 
 pub(super) struct TextBufferItem {
@@ -100,6 +96,7 @@ pub(super) struct TextBufferItem {
     maybe_shader: Option<EntityShader>,
     maybe_tint: Option<Tint>,
     maybe_shadow: Option<Shadow>,
+    velocity: Option<Vector2>,
 }
 
 /// Screen-space sprite draw item. Simpler than [`SpriteBufferItem`]: screen-space
@@ -225,44 +222,18 @@ pub struct RenderResources<'w> {
     pub textures: Res<'w, TextureStore>,
     pub world_time: Res<'w, WorldTime>,
     pub post_process: Res<'w, PostProcessShader>,
-    pub config: Res<'w, GameConfig>,
-    pub maybe_debug: Option<Res<'w, DebugMode>>,
     pub fonts: NonSend<'w, FontStore>,
     pub gui_theme_store: Res<'w, GuiThemeStore>,
     pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
 }
 
-/// Bundled queries for the render system. Debug-overlay-only -- the main
-/// drawable data (sprites, text, GUI widgets) comes from `DrawableSnapshot`
-/// instead (Phase 3 of the Option B plan, see
-/// `docs/render-simulation-separation-brainstorm.md`). These stay live
-/// queries since debug overlay migration is deferred to Phase 4.
-#[derive(SystemParam)]
-pub struct RenderQueries<'w, 's> {
-    pub colliders: Query<
-        'w,
-        's,
-        (
-            &'static BoxCollider,
-            &'static MapPosition,
-            Option<&'static GlobalTransform2D>,
-        ),
-    >,
-    pub positions: Query<
-        'w,
-        's,
-        (
-            &'static MapPosition,
-            Option<&'static Signals>,
-            Option<&'static GlobalTransform2D>,
-        ),
-    >,
-    pub rigidbodies: Query<'w, 's, &'static RigidBody>,
-}
-
 /// Extra resources needed for the imgui debug panels.
 #[derive(SystemParam)]
 pub(crate) struct DebugResources<'w> {
+    /// Live signals, kept ONLY for the two scene callbacks (`GuiCallback`,
+    /// `WorldDrawCallback`), which *write* intents into it. Read-only debug
+    /// display uses `DrawableSnapshot.signals` instead (Phase 4). Routing
+    /// these writes across threads is part of Phase 5's channel design.
     pub world_signals: ResMut<'w, WorldSignals>,
     pub app_state: Res<'w, AppState>,
     pub input_state: Res<'w, InputState>,
@@ -309,16 +280,12 @@ pub fn render_system(
     mut imgui_bridge: NonSendMut<ImguiBridge>,
     mut shader_store: NonSendMut<ShaderStore>,
     mut res: RenderResources,
-    queries: RenderQueries,
     snapshot: Res<DrawableSnapshot>,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
 ) {
     crate::tracy::tracy_span!("render_system");
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-    let query_colliders = &queries.colliders;
-    let query_positions = &queries.positions;
-    let query_rigidbodies = &queries.rigidbodies;
     let fonts = &res.fonts;
     let RenderLocals {
         sprite_buffer,
@@ -331,18 +298,22 @@ pub fn render_system(
     let screensize = &res.screensize;
     let window_size = &res.window_size;
     let textures = &res.textures;
-    let maybe_debug = &res.maybe_debug;
+    // Single source of truth for "is debug active": the snapshot's debug
+    // payload, captured from DebugMode by build_drawable_snapshot earlier
+    // this frame. render_system takes no live Res<DebugMode> (Phase 5 prep:
+    // the render thread won't have one).
+    let debug_active = snapshot.debug.is_some();
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
         crate::tracy::tracy_span!("render/to_texture");
         let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
-        d.clear_background(snapshot.background_color);
+        d.clear_background(snapshot.game_config.background_color);
 
         {
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
-            let render_cam = if snapshot.pixel_snap_camera {
+            let render_cam = if snapshot.game_config.pixel_snap_camera {
                 Camera2DRes(snapshot.camera).pixel_snapped()
             } else {
                 snapshot.camera
@@ -387,6 +358,7 @@ pub fn render_system(
                         maybe_shader: entry.shader.clone(),
                         maybe_tint: entry.tint,
                         maybe_shadow: entry.shadow,
+                        velocity: entry.velocity,
                     })
                 }));
 
@@ -461,7 +433,7 @@ pub fn render_system(
                                             x: item.sprite.width,
                                             y: item.sprite.height,
                                         },
-                                        query_rigidbodies,
+                                        item.velocity,
                                     );
 
                                     // Set user-defined uniforms
@@ -522,7 +494,7 @@ pub fn render_system(
                             );
                         }
 
-                        if maybe_debug.is_some() && debug_res.overlay_config.show_sprite_bounds {
+                        if debug_active && debug_res.overlay_config.show_sprite_bounds {
                             draw_rotated_rect_lines(
                                 &mut d2,
                                 dest,
@@ -562,6 +534,7 @@ pub fn render_system(
                         maybe_shader: entry.shader.clone(),
                         maybe_tint: entry.tint,
                         maybe_shadow: entry.shadow,
+                        velocity: entry.velocity,
                     })
                 }));
                 text_buffer.sort_unstable_by(|a, b| {
@@ -612,7 +585,7 @@ pub fn render_system(
                                         None,
                                         None,
                                         item.text_size,
-                                        query_rigidbodies,
+                                        item.velocity,
                                     );
                                     for (name, value) in entity_shader.uniforms.iter() {
                                         set_uniform_value(
@@ -670,7 +643,7 @@ pub fn render_system(
                             );
                         }
 
-                        if maybe_debug.is_some() && debug_res.overlay_config.show_text_bounds {
+                        if debug_active && debug_res.overlay_config.show_text_bounds {
                             d2.draw_rectangle_lines(
                                 item.resolved_pos.pos.x as i32,
                                 item.resolved_pos.pos.y as i32,
@@ -683,19 +656,18 @@ pub fn render_system(
                 }
             } // draw_world_texts
 
-            if maybe_debug.is_some() {
+            if let Some(debug_snapshot) = &snapshot.debug {
                 if debug_res.overlay_config.show_collider_boxes {
-                    for (collider, position, maybe_gt) in query_colliders.iter() {
-                        let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
-                        let (x, y, w, h) = collider.get_aabb(world_pos);
+                    for entry in &debug_snapshot.colliders {
+                        let (x, y, w, h) = entry.collider.get_aabb(entry.world_pos);
                         d2.draw_rectangle_lines(x as i32, y as i32, w as i32, h as i32, Color::RED);
                     }
                 }
                 if debug_res.overlay_config.show_position_crosshairs
                     || debug_res.overlay_config.show_entity_signals
                 {
-                    for (position, maybe_signals, maybe_gt) in query_positions.iter() {
-                        let world_pos = maybe_gt.map_or(position.pos, |gt| gt.position);
+                    for entry in &debug_snapshot.positions {
+                        let world_pos = entry.world_pos;
                         if debug_res.overlay_config.show_position_crosshairs {
                             d2.draw_line(
                                 world_pos.x as i32 - 5,
@@ -713,7 +685,7 @@ pub fn render_system(
                             );
                         }
                         if debug_res.overlay_config.show_entity_signals
-                            && let Some(signals) = maybe_signals
+                            && let Some(signals) = &entry.signals
                         {
                             let mut y_offset = 10;
                             let font_size = 10;
@@ -775,9 +747,8 @@ pub fn render_system(
         }
 
         // Draw in screen coordinates (UI layer) - still on the render target
-        let debug = maybe_debug.is_some();
-        let debug_sprites = debug && debug_res.overlay_config.show_sprite_bounds;
-        let debug_texts = debug && debug_res.overlay_config.show_text_bounds;
+        let debug_sprites = debug_active && debug_res.overlay_config.show_sprite_bounds;
+        let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
         {
             crate::tracy::tracy_span!("render/screen_space");
             draw_screen_space(
@@ -801,7 +772,6 @@ pub fn render_system(
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
     crate::tracy::tracy_span!("render/postprocess");
-    let debug_active = maybe_debug.is_some();
 
     // Extract gui_callback from the active scene (fn pointer is Copy — no borrow held).
     // Must be done before taking mutable borrows of other debug_res fields below.
@@ -826,7 +796,7 @@ pub fn render_system(
             screen_sprite_count,
             screen_text_count,
             shader_count,
-        ) = if debug_active {
+        ) = if let Some(debug_snapshot) = &snapshot.debug {
             let fps = rl.get_fps();
             let window_mouse_pos = rl.get_mouse_position();
             let game_mouse_pos = window_size.window_to_game_pos(
@@ -836,9 +806,9 @@ pub fn render_system(
             );
             let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
             let sprite_count = snapshot.map_sprites.len();
-            let collider_count = queries.colliders.iter().count();
-            let position_count = queries.positions.iter().count();
-            let rigidbody_count = queries.rigidbodies.iter().count();
+            let collider_count = debug_snapshot.colliders.len();
+            let position_count = debug_snapshot.positions.len();
+            let rigidbody_count = debug_snapshot.rigidbody_count;
             let screen_sprite_count = snapshot.screen_sprites.len();
             let screen_text_count = snapshot.screen_texts.len();
             let shader_count = shader_store.len();
@@ -868,7 +838,8 @@ pub fn render_system(
         let camera_follow = &*debug_res.camera_follow;
         let scene_manager = debug_res.scene_manager.as_deref();
         let world_time = &*res.world_time;
-        let config = &*res.config;
+        let config = &snapshot.game_config;
+        let signal_snapshot = &*snapshot.signals;
 
         let closure = move |_d: &RaylibDrawHandle<'_>| {
             imgui_bridge.render(|ui| {
@@ -876,7 +847,7 @@ pub fn render_system(
                     draw_imgui_debug(
                         ui,
                         overlay_config,
-                        world_signals,
+                        signal_snapshot,
                         input_state,
                         camera,
                         camera_follow,

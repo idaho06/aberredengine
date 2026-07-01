@@ -5,7 +5,6 @@ use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 
 use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -436,7 +435,7 @@ pub(super) fn set_uniform_value(
 /// - uSpriteSize (vec2) - entity dimensions (sprite size or text bounding box)
 /// - uRotation (float) - rotation degrees (if present)
 /// - uScale (vec2) - scale factor (if present)
-/// - uVelocity (vec2) - velocity (if RigidBody present)
+/// - uVelocity (vec2) - velocity (if RigidBody present at capture time)
 pub(super) fn set_entity_uniforms(
     shader: &mut Shader,
     locations: &mut FxHashMap<String, i32>,
@@ -445,7 +444,7 @@ pub(super) fn set_entity_uniforms(
     rotation: Option<&Rotation>,
     scale: Option<&Scale>,
     size: Vector2,
-    rigidbody_query: &Query<&RigidBody>,
+    velocity: Option<Vector2>,
 ) {
     // uEntityId (int) - use bits representation truncated to i32
     set_int(
@@ -471,8 +470,10 @@ pub(super) fn set_entity_uniforms(
         set_vec2(shader, locations, "uScale", &[s.scale.x, s.scale.y]);
     }
 
-    // uVelocity (vec2) - only if RigidBody component present
-    if let Ok(rb) = rigidbody_query.get(entity) {
-        set_vec2(shader, locations, "uVelocity", &[rb.velocity.x, rb.velocity.y]);
+    // uVelocity (vec2) - only if the entity had a RigidBody at capture time
+    // (velocity comes from the DrawableSnapshot entry, not a live query --
+    // Phase 4)
+    if let Some(velocity) = velocity {
+        set_vec2(shader, locations, "uVelocity", &[velocity.x, velocity.y]);
     }
 }

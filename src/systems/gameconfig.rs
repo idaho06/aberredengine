@@ -1,11 +1,10 @@
 //! Game configuration change detection system.
 //!
-//! Monitors [`GameConfig`] for changes and applies settings to the window,
-//! render target, and screen size resources.
-//!
-//! On initial insertion, loads configuration from the INI file. On subsequent
-//! changes, applies the new settings to the running game.
+//! Monitors the [`GameConfig`] carried in [`DrawableSnapshot`] for changes
+//! and applies settings to the window, render target, and screen size
+//! resources.
 
+use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::resources::fullscreen::FullScreen;
 use crate::resources::gameconfig::GameConfig;
@@ -17,31 +16,45 @@ use raylib::ffi;
 
 /// System that applies game configuration changes.
 ///
-/// This system detects when [`GameConfig`] is added or modified and:
-/// 1. On first addition: loads settings from the config file
-/// 2. On any change: applies render size, window size, and FPS settings
+/// Reads config from [`DrawableSnapshot::game_config`], not
+/// `Res<GameConfig>` (Phase 4 of the Option B plan) -- in Phase 5 this
+/// system moves to the render thread, where received snapshots are the only
+/// config source. Runs on the VARIABLE schedule after
+/// `build_drawable_snapshot` and before `render_system`, so a config change
+/// made this frame (Lua command) is applied before this frame renders.
+///
+/// Change detection is a value diff against the last-applied config
+/// (`Local<Option<GameConfig>>`), replacing the previous
+/// `Res::is_changed()` gate that a snapshot read can't provide. The gate
+/// must not simply be dropped: F10's `switch_fullscreen_observer` toggles
+/// the window and the `FullScreen` resource *without* writing
+/// `GameConfig.fullscreen`, so an ungated `config.fullscreen !=
+/// fullscreen.is_some()` comparison would re-trigger the fullscreen toggle
+/// every frame after F10, fighting the user. With the value diff, a config
+/// that hasn't changed since last application is never re-examined -- same
+/// semantics the `is_changed()` gate gave.
 ///
 /// # Resource Dependencies
-/// - `GameConfig` (optional, mutable) - the configuration to monitor
+/// - `DrawableSnapshot` (read) - source of the config to apply
 /// - `RaylibHandle` (non-send, mutable) - for window operations
 /// - `RaylibThread` (non-send) - required for render texture recreation
 /// - `RenderTarget` (non-send, mutable) - for render resolution changes
 /// - `ScreenSize` (mutable) - updated to match render resolution
 pub fn apply_gameconfig_changes(
-    maybe_config: Option<Res<GameConfig>>,
+    snapshot: Res<DrawableSnapshot>,
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut screen_size: ResMut<ScreenSize>,
     fullscreen: Option<Res<FullScreen>>,
     mut commands: Commands,
+    mut last_applied: Local<Option<GameConfig>>,
 ) {
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-    let Some(config) = maybe_config else {
-        return;
-    };
+    let config = &snapshot.game_config;
 
-    // Apply changes when config is added or modified
-    if config.is_changed() || config.is_added() {
+    // Apply changes on first run (mirrors the old `is_added()` path) or when
+    // the config differs from what was last applied.
+    if last_applied.as_ref() != Some(config) {
         // Apply render size if different from current
         if render_target.game_width != config.render_width
             || render_target.game_height != config.render_height
@@ -101,6 +114,7 @@ pub fn apply_gameconfig_changes(
         // Apply target FPS
         rl.set_target_fps(config.target_fps);
 
+        *last_applied = Some(config.clone());
         debug!("GameConfig changes applied.");
     }
 }

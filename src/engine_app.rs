@@ -874,8 +874,9 @@ impl EngineBuilder {
         let mut fixed = Schedule::default();
         let mut variable = Schedule::default();
 
-        // --- VARIABLE: input/state bookkeeping, config, one-shot spawns ---
-        variable.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
+        // --- VARIABLE: input/state bookkeeping, one-shot spawns ---
+        // (apply_gameconfig_changes is registered further down, after
+        // build_drawable_snapshot -- it reads config from the snapshot.)
         variable.add_systems(menu_spawn_system);
         variable.add_systems(gridlayout_spawn_system);
         variable.add_systems(tilemap_spawn_system);
@@ -1048,6 +1049,21 @@ impl EngineBuilder {
                 .after(process_lua_map_commands);
         }
         variable.add_systems(drawable_snapshot_config);
+
+        // Applies window/render-target settings from the snapshot's
+        // GameConfig copy (Phase 4) -- must run after the snapshot is built
+        // (fresh config, including this frame's Lua config commands) and
+        // before render_system (so a RenderTarget resize is visible the same
+        // frame). Known trade-off: a render-size change updates ScreenSize
+        // here, *after* this frame's gui_hit_test_system already ran -- GUI
+        // hit-testing uses the old resolution for one frame on the rare
+        // resize frame. Inherent to the Phase 5 thread split anyway.
+        variable.add_systems(
+            apply_gameconfig_changes
+                .run_if(state_is_playing)
+                .after(build_drawable_snapshot)
+                .before(render_system),
+        );
 
         variable.add_systems(render_system);
 

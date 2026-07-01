@@ -33,6 +33,20 @@ use std::any::{Any, TypeId};
 /// Generic typed state store for ECS-to-GUI communication.
 ///
 /// See the [module documentation](self) for usage guidelines.
+///
+/// # Not part of `DrawableSnapshot` (Phase 4 deferral)
+///
+/// The Option B render/logic thread split
+/// (`docs/render-simulation-separation-brainstorm.md`) snapshots
+/// render-relevant state into `DrawableSnapshot`, but `AppState` is
+/// deliberately NOT included: `Box<dyn Any>` values cannot be cloned
+/// honestly (an `Arc<dyn Any>` storage would permanently break
+/// [`get_mut`](AppState::get_mut) once a snapshot holds an alias, and
+/// dyn-clone storage imposes a breaking `T: Clone` bound on
+/// [`insert`](AppState::insert)). `GuiCallback`/`WorldDrawCallback` keep
+/// reading the live resource — same `World`, still correct until the Phase 5
+/// thread split, which must pick a cross-thread story (leading candidate:
+/// dyn-clone storage with `T: Clone` on insert).
 #[derive(Resource, Default)]
 pub struct AppState {
     map: FxHashMap<TypeId, Box<dyn Any + Send + Sync>>,
