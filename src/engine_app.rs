@@ -983,13 +983,6 @@ impl EngineBuilder {
 
         fixed.add_systems(animation.after(animation_controller));
         fixed.add_systems(update_timers);
-        // Populates DrawableSnapshot from this substep's fully-settled ECS
-        // state. Phase 2 of the Option B plan (docs/render-simulation-separation-brainstorm.md)
-        // -- nothing consumes this snapshot yet, render_system still reads
-        // live queries directly. Explicit .after(...) (rather than relying on
-        // insertion order) since "fully-settled" is the entire premise later
-        // phases build on.
-        fixed.add_systems(build_drawable_snapshot.after(animation).after(update_timers));
         variable.add_systems(update_world_signals_binding_system);
         variable.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
 
@@ -1021,6 +1014,40 @@ impl EngineBuilder {
                     .after(scene_update_system),
             );
         }
+
+        // Populates DrawableSnapshot from this frame's fully-settled VARIABLE
+        // state -- GUI hit-test/layout, Lua on_update entity repositioning,
+        // camera/config commands, and scene switches are all VARIABLE-schedule,
+        // so this must run after them (not on FIXED, where it ran in an
+        // earlier iteration of Phase 3 -- see the "capture cadence" note in
+        // docs/render-simulation-separation-brainstorm.md for why that left
+        // GUI/camera/config a full frame stale). `.after(...)` on a system not
+        // scheduled in this configuration (e.g. lua-only edges when has_lua is
+        // false) is a vacuous constraint, not an error.
+        //
+        // This is an enumerated stand-in for "after everything in VARIABLE
+        // that can still change this frame's drawable state" -- bevy_ecs 0.19
+        // has no `.after_all()` primitive and this codebase doesn't yet use
+        // `SystemSet`/`configure_sets` to express that generically. If a
+        // future VARIABLE-schedule system starts writing snapshot-relevant
+        // state (a new GUI widget's state-sync system, a new Lua command
+        // queue mutating rendered state), it must also be added to this list
+        // -- nothing enforces that automatically.
+        #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
+        let mut drawable_snapshot_config = build_drawable_snapshot
+            .after(gui_hit_test_system)
+            .after(gui_image_state_sync_system)
+            .after(gui_progressbar_signal_update_system)
+            .after(dynamictext_size_system)
+            .after(scene_switch_poll)
+            .before(render_system);
+        #[cfg(feature = "lua")]
+        {
+            drawable_snapshot_config = drawable_snapshot_config
+                .after(crate::lua_plugin::update)
+                .after(process_lua_map_commands);
+        }
+        variable.add_systems(drawable_snapshot_config);
 
         variable.add_systems(render_system);
 

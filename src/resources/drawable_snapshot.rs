@@ -1,13 +1,21 @@
-//! Render-relevant ECS state, captured once per fixed tick.
+//! Render-relevant ECS state, captured once per render frame.
 //!
 //! Part of the Option B (render/simulation thread split) effort — see
-//! `docs/render-simulation-separation-brainstorm.md`. This is Phase 2:
-//! [`DrawableSnapshot`] is populated by [`build_drawable_snapshot`] at the
-//! end of the fixed schedule, but nothing consumes it yet — `render_system`
-//! (`src/systems/render/mod.rs`) still reads live ECS queries directly.
-//! Phase 3 switches `render_system` over to reading this snapshot (keeping
-//! the last two for interpolation); Phase 5 sends it across a channel to a
-//! separate render thread.
+//! `docs/render-simulation-separation-brainstorm.md`. [`DrawableSnapshot`] is
+//! populated by [`build_drawable_snapshot`] on the VARIABLE schedule,
+//! immediately before `render_system`; `render_system`
+//! (`src/systems/render/mod.rs`) reads it directly instead of live ECS
+//! queries (Phase 3) -- no interpolation between frames (tried and
+//! reverted: it visibly lagged world-space entities repositioned by Lua on
+//! the VARIABLE schedule, e.g. the sidescroller's parallax backgrounds,
+//! since those only change once per render frame, not once per fixed
+//! substep). An earlier iteration of this system captured at the end of the
+//! FIXED schedule instead -- that left GUI hit-test/layout, Lua `on_update`
+//! entity repositioning, and camera/config commands (all VARIABLE-schedule)
+//! a full frame stale, since FIXED runs *before* VARIABLE within a frame;
+//! moving the capture point to VARIABLE (right before `render_system`)
+//! fixed that. Phase 5 sends the snapshot across a channel to a separate
+//! render thread.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -32,13 +40,12 @@ use crate::components::zindex::ZIndex;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::gameconfig::GameConfig;
 
-/// One world-space sprite, owned. Mirrors `MapSpriteQueryData` in
-/// `src/systems/render/mod.rs`.
+/// One world-space sprite, owned. Mirrors the fields `render_system` used to
+/// query directly before Phase 3.
 #[derive(Clone, Debug)]
 pub struct MapSpriteEntry {
-    /// Entity id this entry was captured from. Stable within one `World`'s
-    /// lifetime — used to match entries across snapshots for interpolation
-    /// (Phase 3). Revisit once two separate `World`s exist (Phase 5).
+    /// Entity id this entry was captured from. Carried through so downstream
+    /// consumers (debug overlay, item lookup) don't need a live query.
     pub entity: Entity,
     pub sprite: Sprite,
     pub position: MapPosition,
@@ -123,11 +130,12 @@ pub struct GuiProgressBarEntry {
     pub z_index: ZIndex,
 }
 
-/// Render-relevant ECS state captured once per fixed tick. See the module
+/// Render-relevant ECS state captured once per render frame. See the module
 /// doc comment for how this fits into the Option B plan.
 ///
-/// Overwritten in place each fixed tick (no history retention yet — Phase 3
-/// adds keeping the previous snapshot for interpolation).
+/// Overwritten in place each render frame -- `render_system` always reads
+/// whatever the latest VARIABLE-schedule pass produced, no history
+/// retention.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct DrawableSnapshot {
     pub map_sprites: Vec<MapSpriteEntry>,
@@ -145,11 +153,10 @@ pub struct DrawableSnapshot {
     pub background_color: raylib::prelude::Color,
 }
 
-/// Query data shapes below mirror `MapSpriteQueryData`/`MapTextQueryData`/
-/// `ScreenSpriteQueryData`/`ScreenTextQueryData` in `src/systems/render/mod.rs`,
-/// with a leading `Entity` added (the render queries only fetch it where
-/// `render_system` already needs it for other reasons; the snapshot always
-/// needs it, as the key entries are matched by across ticks).
+/// Query data shapes below mirror the fields `render_system` used to query
+/// directly before Phase 3, with a leading `Entity` added on each (needed so
+/// every `...Entry` struct below can carry the entity id downstream, e.g.
+/// for debug overlay/item lookup, without a live query).
 type MapSpriteQueryData = (
     Entity,
     &'static Sprite,
@@ -230,9 +237,16 @@ fn refill<D: bevy_ecs::query::ReadOnlyQueryData, T>(
 }
 
 /// Populates [`DrawableSnapshot`] from the current ECS state. Pure
-/// data-copying -- no rendering calls. Runs once per fixed tick, at the end
-/// of the fixed schedule (see `EngineBuilder::build_schedules`), so it
-/// captures each substep's fully-settled state.
+/// data-copying -- no rendering calls. Runs once per render frame, on the
+/// VARIABLE schedule immediately before `render_system` (see
+/// `EngineBuilder::build_schedules`), after every system that can still
+/// change this frame's drawable state -- GUI hit-test/layout, Lua
+/// `on_update` entity repositioning, camera/config commands, and scene
+/// switches are all VARIABLE-schedule, not FIXED, so capturing here (rather
+/// than at the end of the FIXED schedule, as an earlier iteration of this
+/// system did) is what actually gets this frame's fully-settled state. See
+/// `docs/render-simulation-separation-brainstorm.md`'s Phase 3 notes for why
+/// the FIXED-tick capture point was wrong.
 pub fn build_drawable_snapshot(
     queries: DrawableSnapshotQueries,
     camera: Res<Camera2DRes>,

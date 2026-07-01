@@ -29,11 +29,8 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::guibutton::GuiButton;
-use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
-use crate::components::guilabel::GuiLabel;
-use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
-use crate::components::guiwindow::GuiWindow;
+use crate::components::guiinteractable::GuiWidgetState;
+use crate::components::guiprogressbar::ProgressBarDirection;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -49,6 +46,10 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
+use crate::resources::drawable_snapshot::{
+    DrawableSnapshot, GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry,
+    ScreenSpriteEntry, ScreenTextEntry,
+};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
@@ -77,36 +78,6 @@ use self::postprocess::{
 use self::gui_panel::draw_screen_panel_item;
 use self::sprite::draw_screen_sprite_item;
 use self::text::draw_screen_text_item;
-
-type MapSpriteQueryData = (
-    Entity,
-    &'static Sprite,
-    &'static MapPosition,
-    &'static ZIndex,
-    Option<&'static Scale>,
-    Option<&'static Rotation>,
-    Option<&'static EntityShader>,
-    Option<&'static Tint>,
-    Option<&'static Shadow>,
-    Option<&'static GlobalTransform2D>,
-);
-
-type MapTextQueryData = (
-    Entity,
-    &'static DynamicText,
-    &'static MapPosition,
-    &'static ZIndex,
-    Option<&'static EntityShader>,
-    Option<&'static Tint>,
-    Option<&'static Shadow>,
-    Option<&'static GlobalTransform2D>,
-);
-
-type ScreenSpriteQueryData =
-    (&'static Sprite, &'static ScreenPosition, &'static ZIndex, Option<&'static Tint>, Option<&'static Shadow>);
-
-type ScreenTextQueryData =
-    (&'static DynamicText, &'static ScreenPosition, &'static ZIndex, Option<&'static Tint>, Option<&'static Shadow>);
 
 pub(super) struct SpriteBufferItem {
     entity: Entity,
@@ -261,10 +232,13 @@ pub struct RenderResources<'w> {
     pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
 }
 
-/// Bundled queries for the render system.
+/// Bundled queries for the render system. Debug-overlay-only -- the main
+/// drawable data (sprites, text, GUI widgets) comes from `DrawableSnapshot`
+/// instead (Phase 3 of the Option B plan, see
+/// `docs/render-simulation-separation-brainstorm.md`). These stay live
+/// queries since debug overlay migration is deferred to Phase 4.
 #[derive(SystemParam)]
 pub struct RenderQueries<'w, 's> {
-    pub map_sprites: Query<'w, 's, MapSpriteQueryData>,
     pub colliders: Query<
         'w,
         's,
@@ -283,23 +257,7 @@ pub struct RenderQueries<'w, 's> {
             Option<&'static GlobalTransform2D>,
         ),
     >,
-    pub map_texts: Query<'w, 's, MapTextQueryData>,
     pub rigidbodies: Query<'w, 's, &'static RigidBody>,
-    pub screen_texts: Query<'w, 's, ScreenTextQueryData>,
-    pub screen_sprites: Query<'w, 's, ScreenSpriteQueryData>,
-    pub gui_windows: Query<'w, 's, (&'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
-    pub gui_buttons: Query<
-        'w,
-        's,
-        (
-            &'static GuiButton,
-            &'static GuiInteractable,
-            &'static ScreenPosition,
-            &'static ZIndex,
-        ),
-    >,
-    pub gui_labels: Query<'w, 's, (&'static GuiLabel, &'static ScreenPosition, &'static ZIndex)>,
-    pub gui_progress_bars: Query<'w, 's, (&'static GuiProgressBar, &'static ScreenPosition, &'static ZIndex)>,
 }
 
 /// Extra resources needed for the imgui debug panels.
@@ -352,15 +310,14 @@ pub fn render_system(
     mut shader_store: NonSendMut<ShaderStore>,
     mut res: RenderResources,
     queries: RenderQueries,
+    snapshot: Res<DrawableSnapshot>,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
 ) {
     crate::tracy::tracy_span!("render_system");
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-    let query_map_sprites = &queries.map_sprites;
     let query_colliders = &queries.colliders;
     let query_positions = &queries.positions;
-    let query_map_dynamic_texts = &queries.map_texts;
     let query_rigidbodies = &queries.rigidbodies;
     let fonts = &res.fonts;
     let RenderLocals {
@@ -380,15 +337,15 @@ pub fn render_system(
     {
         crate::tracy::tracy_span!("render/to_texture");
         let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
-        d.clear_background(res.config.background_color);
+        d.clear_background(snapshot.background_color);
 
         {
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
-            let render_cam = if res.config.pixel_snap_camera {
-                camera.pixel_snapped()
+            let render_cam = if snapshot.pixel_snap_camera {
+                Camera2DRes(snapshot.camera).pixel_snapped()
             } else {
-                camera.0
+                snapshot.camera
             };
             let mut d2 = d.begin_mode2D(render_cam);
 
@@ -402,49 +359,36 @@ pub fn render_system(
             {
                 crate::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
-                sprite_buffer.extend(query_map_sprites.iter().filter_map(
-                    |(
-                        entity,
-                        s,
-                        p,
-                        z,
-                        maybe_scale,
-                        maybe_rot,
-                        maybe_shader,
-                        maybe_tint,
-                        maybe_shadow,
-                        maybe_gt,
-                    )| {
-                        let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
-                            *p,
-                            maybe_scale.copied(),
-                            maybe_rot.copied(),
-                            maybe_gt.copied(),
-                        );
-                        let (min, max) = compute_sprite_cull_bounds(
-                            &resolved_pos,
-                            s,
-                            resolved_scale.as_ref(),
-                            resolved_rot.as_ref(),
-                        );
+                sprite_buffer.extend(snapshot.map_sprites.iter().filter_map(|entry| {
+                    let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
+                        entry.position,
+                        entry.scale,
+                        entry.rotation,
+                        entry.global_transform,
+                    );
+                    let (min, max) = compute_sprite_cull_bounds(
+                        &resolved_pos,
+                        &entry.sprite,
+                        resolved_scale.as_ref(),
+                        resolved_rot.as_ref(),
+                    );
 
-                        let overlap = !(max.x < view_min.x
-                            || min.x > view_max.x
-                            || max.y < view_min.y
-                            || min.y > view_max.y);
-                        overlap.then_some(SpriteBufferItem {
-                            entity,
-                            sprite: s.clone(),
-                            z_index: *z,
-                            resolved_pos,
-                            resolved_scale,
-                            resolved_rot,
-                            maybe_shader: maybe_shader.cloned(),
-                            maybe_tint: maybe_tint.copied(),
-                            maybe_shadow: maybe_shadow.copied(),
-                        })
-                    },
-                ));
+                    let overlap = !(max.x < view_min.x
+                        || min.x > view_max.x
+                        || max.y < view_min.y
+                        || min.y > view_max.y);
+                    overlap.then_some(SpriteBufferItem {
+                        entity: entry.entity,
+                        sprite: entry.sprite.clone(),
+                        z_index: entry.z_index,
+                        resolved_pos,
+                        resolved_scale,
+                        resolved_rot,
+                        maybe_shader: entry.shader.clone(),
+                        maybe_tint: entry.tint,
+                        maybe_shadow: entry.shadow,
+                    })
+                }));
 
                 // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
                 sprite_buffer.sort_unstable_by(|a, b| {
@@ -594,33 +538,32 @@ pub fn render_system(
             {
                 crate::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
-                text_buffer.extend(query_map_dynamic_texts.iter().filter_map(
-                    |(entity, t, p, z, maybe_shader, maybe_tint, maybe_shadow, maybe_gt)| {
-                        let resolved_pos =
-                            MapPosition::from_vec(maybe_gt.map_or(p.pos, |gt| gt.position));
-                        let text_size = t.size();
-                        let min = resolved_pos.pos;
-                        let max = Vector2 {
-                            x: min.x + text_size.x,
-                            y: min.y + text_size.y,
-                        };
+                text_buffer.extend(snapshot.map_texts.iter().filter_map(|entry| {
+                    let resolved_pos = MapPosition::from_vec(
+                        entry.global_transform.map_or(entry.position.pos, |gt| gt.position),
+                    );
+                    let text_size = entry.text.size();
+                    let min = resolved_pos.pos;
+                    let max = Vector2 {
+                        x: min.x + text_size.x,
+                        y: min.y + text_size.y,
+                    };
 
-                        let overlap = !(max.x < view_min.x
-                            || min.x > view_max.x
-                            || max.y < view_min.y
-                            || min.y > view_max.y);
-                        overlap.then_some(TextBufferItem {
-                            entity,
-                            text: t.clone(),
-                            z_index: *z,
-                            resolved_pos,
-                            text_size,
-                            maybe_shader: maybe_shader.cloned(),
-                            maybe_tint: maybe_tint.copied(),
-                            maybe_shadow: maybe_shadow.copied(),
-                        })
-                    },
-                ));
+                    let overlap = !(max.x < view_min.x
+                        || min.x > view_max.x
+                        || max.y < view_min.y
+                        || min.y > view_max.y);
+                    overlap.then_some(TextBufferItem {
+                        entity: entry.entity,
+                        text: entry.text.clone(),
+                        z_index: entry.z_index,
+                        resolved_pos,
+                        text_size,
+                        maybe_shader: entry.shader.clone(),
+                        maybe_tint: entry.tint,
+                        maybe_shadow: entry.shadow,
+                    })
+                }));
                 text_buffer.sort_unstable_by(|a, b| {
                     a.z_index
                         .partial_cmp(&b.z_index)
@@ -839,12 +782,12 @@ pub fn render_system(
             crate::tracy::tracy_span!("render/screen_space");
             draw_screen_space(
                 &mut d,
-                &queries.screen_sprites,
-                &queries.screen_texts,
-                &queries.gui_windows,
-                &queries.gui_buttons,
-                &queries.gui_labels,
-                &queries.gui_progress_bars,
+                &snapshot.screen_sprites,
+                &snapshot.screen_texts,
+                &snapshot.gui_windows,
+                &snapshot.gui_buttons,
+                &snapshot.gui_labels,
+                &snapshot.gui_progress_bars,
                 &res.gui_theme_store,
                 &mut res.gui_theme_warn_cache,
                 textures,
@@ -892,12 +835,12 @@ pub fn render_system(
                 screensize.h as u32,
             );
             let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
-            let sprite_count = queries.map_sprites.iter().count();
+            let sprite_count = snapshot.map_sprites.len();
             let collider_count = queries.colliders.iter().count();
             let position_count = queries.positions.iter().count();
             let rigidbody_count = queries.rigidbodies.iter().count();
-            let screen_sprite_count = queries.screen_sprites.iter().count();
-            let screen_text_count = queries.screen_texts.iter().count();
+            let screen_sprite_count = snapshot.screen_sprites.len();
+            let screen_text_count = snapshot.screen_texts.len();
             let shader_count = shader_store.len();
             (
                 fps,
@@ -1049,12 +992,12 @@ fn warn_missing_theme(
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
-    screen_sprites: &Query<ScreenSpriteQueryData>,
-    screen_texts: &Query<ScreenTextQueryData>,
-    gui_windows: &Query<(&GuiWindow, &ScreenPosition, &ZIndex)>,
-    gui_buttons: &Query<(&GuiButton, &GuiInteractable, &ScreenPosition, &ZIndex)>,
-    gui_labels: &Query<(&GuiLabel, &ScreenPosition, &ZIndex)>,
-    gui_progress_bars: &Query<(&GuiProgressBar, &ScreenPosition, &ZIndex)>,
+    screen_sprites: &[ScreenSpriteEntry],
+    screen_texts: &[ScreenTextEntry],
+    gui_windows: &[GuiWindowEntry],
+    gui_buttons: &[GuiButtonEntry],
+    gui_labels: &[GuiLabelEntry],
+    gui_progress_bars: &[GuiProgressBarEntry],
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
     textures: &TextureStore,
@@ -1064,7 +1007,8 @@ fn draw_screen_space(
     debug_texts: bool,
 ) {
     buffer.clear();
-    for (window, p, z) in gui_windows.iter() {
+    for entry in gui_windows {
+        let (window, p, z) = (&entry.window, &entry.position, &entry.z_index);
         match gui_theme_store.get(&window.theme_key) {
             Some(theme) => buffer.push(screen_panel_item(
                 theme.panel.clone(),
@@ -1080,7 +1024,9 @@ fn draw_screen_space(
             ),
         }
     }
-    for (button, interactable, p, z) in gui_buttons.iter() {
+    for entry in gui_buttons {
+        let (button, interactable, p, z) =
+            (&entry.button, &entry.interactable, &entry.position, &entry.z_index);
         let Some(theme) = gui_theme_store.get(&button.theme_key) else {
             warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1106,7 +1052,8 @@ fn draw_screen_space(
             );
         }
     }
-    for (label, p, z) in gui_labels.iter() {
+    for entry in gui_labels {
+        let (label, p, z) = (&entry.label, &entry.position, &entry.z_index);
         let Some(theme) = gui_theme_store.get(&label.theme_key) else {
             warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1132,7 +1079,8 @@ fn draw_screen_space(
             );
         }
     }
-    for (bar, p, z) in gui_progress_bars.iter() {
+    for entry in gui_progress_bars {
+        let (bar, p, z) = (&entry.progress_bar, &entry.position, &entry.z_index);
         let Some(theme) = gui_theme_store.get(&bar.theme_key) else {
             warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1182,26 +1130,27 @@ fn draw_screen_space(
             maybe_shadow: theme.panel_shadow,
         }));
     }
-    buffer.extend(screen_sprites.iter().map(|(s, p, z, maybe_tint, maybe_shadow)| {
+    buffer.extend(screen_sprites.iter().map(|entry| {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
-            sprite: s.clone(),
-            z_index: *z,
-            pos: *p,
-            maybe_tint: maybe_tint.copied(),
-            maybe_shadow: maybe_shadow.copied(),
+            sprite: entry.sprite.clone(),
+            z_index: entry.z_index,
+            pos: entry.position,
+            maybe_tint: entry.tint,
+            maybe_shadow: entry.shadow,
         })
     }));
-    buffer.extend(screen_texts.iter().map(|(t, p, z, maybe_tint, maybe_shadow)| {
+    buffer.extend(screen_texts.iter().map(|entry| {
+        let t = &entry.text;
         ScreenDrawItem::Text(ScreenTextBufferItem {
             text: Arc::clone(&t.text),
             font: Arc::clone(&t.font),
             font_size: t.font_size,
             color: t.color,
             size: t.size(),
-            z_index: *z,
-            pos: *p,
-            maybe_tint: maybe_tint.copied(),
-            maybe_shadow: maybe_shadow.copied(),
+            z_index: entry.z_index,
+            pos: entry.position,
+            maybe_tint: entry.tint,
+            maybe_shadow: entry.shadow,
         })
     }));
 
