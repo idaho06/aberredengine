@@ -11,6 +11,12 @@ use crate::resources::worldtime::WorldTime;
 /// `dt` is expected to be the unscaled frame delta in seconds. The system
 /// applies the current `time_scale` and writes both `elapsed` and `delta`.
 /// Also increments the frame counter.
+///
+/// Called once per render frame with the real frame delta. During the
+/// fixed-schedule accumulator loop (`EngineBuilder::main_loop`), `delta` is
+/// temporarily overridden to `FIXED_DT * time_scale` for each fixed substep
+/// and restored to the frame delta this function wrote before the variable
+/// schedule runs — `elapsed`/`frame_count` are untouched by that override.
 pub fn update_world_time(world: &mut World, dt: f32) {
     let mut wt = world.resource_mut::<WorldTime>();
     let scaled_dt = dt * wt.time_scale;

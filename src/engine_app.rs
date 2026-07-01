@@ -105,7 +105,7 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::worldtime::{FIXED_DT, WorldTime};
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
 use crate::systems::audio::{
@@ -201,10 +201,12 @@ pub struct EngineBuilder {
     setup_hook: Option<HookRegistrar>,
     enter_play_hook: Option<HookRegistrar>,
     update_hook: Option<UpdateRegistrar>,
+    fixed_update_hook: Option<UpdateRegistrar>,
     switch_scene_hook: Option<HookRegistrar>,
     scenes: Vec<(String, SceneDescriptor)>,
     initial_scene: Option<String>,
     extra_systems: Vec<UpdateRegistrar>,
+    extra_fixed_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
@@ -222,10 +224,12 @@ impl EngineBuilder {
             setup_hook: None,
             enter_play_hook: None,
             update_hook: None,
+            fixed_update_hook: None,
             switch_scene_hook: None,
             scenes: Vec::new(),
             initial_scene: None,
             extra_systems: Vec::new(),
+            extra_fixed_systems: Vec::new(),
             extra_observers: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
@@ -348,6 +352,39 @@ impl EngineBuilder {
         self
     }
 
+
+    /// Add a system to the fixed (240 Hz) simulation schedule.
+    ///
+    /// Use this for custom Rust-side physics/gameplay logic that needs a
+    /// deterministic, render-rate-independent tick -- e.g. a game-specific
+    /// movement modifier that must run alongside [`movement`](crate::systems::movement::movement)
+    /// and before [`collision_detector`](crate::systems::collision_detector::collision_detector).
+    ///
+    /// The system is added with `.run_if(state_is_playing)`, matching
+    /// [`.add_system()`](Self::add_system). For custom ordering relative to
+    /// other fixed-schedule systems, use
+    /// [`configure_fixed_schedule`](Self::configure_fixed_schedule) instead.
+    pub fn add_fixed_system<M>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
+        self.extra_fixed_systems
+            .push(Box::new(move |schedule: &mut Schedule| {
+                schedule.add_systems(system.run_if(state_is_playing));
+            }));
+        self
+    }
+
+    /// Add systems to the fixed (240 Hz) simulation schedule with full control
+    /// over ordering and run conditions.
+    ///
+    /// Mirrors [`configure_schedule`](Self::configure_schedule), but targets
+    /// the fixed schedule instead of the once-per-render-frame one.
+    pub fn configure_fixed_schedule(mut self, f: impl FnOnce(&mut Schedule) + 'static) -> Self {
+        self.extra_fixed_systems.push(Box::new(f));
+        self
+    }
+
     /// Add a persistent observer for a custom (or engine) event.
     ///
     /// The observer is spawned with the [`Persistent`] component and therefore
@@ -422,15 +459,30 @@ impl EngineBuilder {
         self.enter_play_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "enter_play", lua_plugin::enter_play);
         }));
-        // Lua update needs .after(lua_phase_system) in addition to the base constraints
+        // lua_plugin::update runs on the VARIABLE (once-per-render-frame) schedule.
+        // lua_phase_system/camera_follow_system now live on the FIXED schedule, so
+        // ordering against them is no longer expressible (or needed) here -- every
+        // fixed substep for this frame has already completed by the time the
+        // variable schedule runs, so Lua always reads this frame's settled phase
+        // and camera state regardless.
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
                     .run_if(state_is_playing)
                     .after(check_pending_state)
-                    .after(lua_phase_system)
-                    .after(camera_follow_system) // ensures Lua reads current-frame camera state
-                    .before(render_system), // explicit: perturbing the topo-sort makes this necessary
+                    .before(render_system),
+            );
+        }));
+        // lua_plugin::fixed_update runs on the FIXED (240Hz) schedule, once per
+        // substep, before movement/collision -- see lua_plugin::fixed_update's
+        // doc comment and docs/render-simulation-separation-brainstorm.md for
+        // why substep-synchronized Lua logic (e.g. clearing collision-derived
+        // flags) needs this instead of on_update_<scene>.
+        self.fixed_update_hook = Some(Box::new(|schedule: &mut Schedule| {
+            schedule.add_systems(
+                lua_plugin::fixed_update
+                    .run_if(state_is_playing)
+                    .before(movement),
             );
         }));
         self.switch_scene_hook = Some(Box::new(|world, store| {
@@ -468,21 +520,25 @@ impl EngineBuilder {
         let (rl, thread, render_target) = Self::setup_window(&config)?;
 
         let update_hook = self.update_hook.take();
+        let fixed_update_hook = self.fixed_update_hook.take();
         let extra_systems = std::mem::take(&mut self.extra_systems);
+        let extra_fixed_systems = std::mem::take(&mut self.extra_fixed_systems);
         let extra_observers = std::mem::take(&mut self.extra_observers);
 
         let mut world = self.setup_world(config, rl, thread, render_target)?;
         self.register_systems(&mut world, use_scene_manager)?;
         Self::spawn_observers(&mut world, has_lua, extra_observers);
 
-        let mut update = Self::build_schedule(
+        let (mut fixed, mut variable) = Self::build_schedules(
             update_hook,
+            fixed_update_hook,
             extra_systems,
+            extra_fixed_systems,
             &mut world,
             has_lua,
             use_scene_manager,
         )?;
-        Self::main_loop(&mut world, &mut update);
+        Self::main_loop(&mut world, &mut fixed, &mut variable);
 
         Ok(())
     }
@@ -790,29 +846,39 @@ impl EngineBuilder {
         world.flush();
     }
 
-    fn build_schedule(
+    /// Build the two schedules that make up a frame: `fixed` (run 0-8 times
+    /// per render frame at a constant `FIXED_DT` -- deterministic core
+    /// simulation: movement, collision, phases, animation) and `variable`
+    /// (run exactly once per render frame -- scripted gameplay logic, GUI,
+    /// scene lifecycle, and rendering). See
+    /// `docs/render-simulation-separation-brainstorm.md` and
+    /// `.claude/context/system-order.md` for the rationale behind the split
+    /// and the full list of which system lives where.
+    ///
+    /// `bevy_ecs` cannot express `.after()`/`.before()` across two separate
+    /// `Schedule`s, so edges that used to cross what is now the fixed/variable
+    /// boundary are dropped here (the accumulator loop in `main_loop` already
+    /// guarantees every fixed substep for a frame completes before `variable`
+    /// runs, which is the ordering those edges used to express).
+    fn build_schedules(
         update_hook: Option<UpdateRegistrar>,
+        fixed_update_hook: Option<UpdateRegistrar>,
         extra_systems: Vec<UpdateRegistrar>,
+        extra_fixed_systems: Vec<UpdateRegistrar>,
         world: &mut World,
         has_lua: bool,
         use_scene_manager: bool,
-    ) -> Result<Schedule, String> {
-        let mut update = Schedule::default();
-        update.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
-        update.add_systems(menu_spawn_system);
-        update.add_systems(gridlayout_spawn_system);
-        update.add_systems(tilemap_spawn_system);
-        update.add_systems(update_input_state);
-        update.add_systems(check_pending_state);
-        #[cfg(feature = "lua")]
-        if has_lua {
-            update.add_systems(update_group_counts_system.before(lua_phase_system));
-        } else {
-            update.add_systems(update_group_counts_system);
-        }
-        #[cfg(not(feature = "lua"))]
-        update.add_systems(update_group_counts_system);
-        update.add_systems(
+    ) -> Result<(Schedule, Schedule), String> {
+        let mut fixed = Schedule::default();
+        let mut variable = Schedule::default();
+
+        // --- VARIABLE: input/state bookkeeping, config, one-shot spawns ---
+        variable.add_systems(apply_gameconfig_changes.run_if(state_is_playing));
+        variable.add_systems(menu_spawn_system);
+        variable.add_systems(gridlayout_spawn_system);
+        variable.add_systems(tilemap_spawn_system);
+        variable.add_systems(check_pending_state);
+        variable.add_systems(
             (
                 update_bevy_audio_cmds,
                 forward_audio_cmds,
@@ -821,39 +887,20 @@ impl EngineBuilder {
             )
                 .chain(),
         );
-        update.add_systems(input_simple_controller);
-        update.add_systems(input_acceleration_controller);
-        update.add_systems(mouse_controller);
-        update.add_systems(stuck_to_entity_system.after(collision_detector));
-        update.add_systems(tween_system::<MapPosition>);
-        update.add_systems(tween_system::<Rotation>);
-        update.add_systems(tween_system::<Scale>);
-        update.add_systems(tween_system::<ScreenPosition>);
-        update.add_systems(
-            (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
-                .before(gui_layout_system),
-        );
-        update.add_systems(
-            gui_layout_system
-                .after(tween_system::<ScreenPosition>)
-                .before(render_system),
-        );
-        update.add_systems(
-            gui_hit_test_system
-                .after(update_input_state)
-                .after(gui_layout_system)
-                .before(render_system),
-        );
-        update.add_systems(
-            gui_image_state_sync_system
-                .after(gui_hit_test_system)
-                .before(render_system),
-        );
-        update.add_systems(gui_progressbar_signal_update_system.before(render_system));
-        update.add_systems(particle_emitter_system.before(movement));
-        update.add_systems(movement);
-        update.add_systems(ttl_system.after(movement));
-        update.add_systems(
+
+        // --- FIXED: input-driven forces/movement (InputState is sampled once
+        // per render frame in main_loop, before the accumulator loop, and held
+        // constant across every fixed substep that reads it here) ---
+        fixed.add_systems(input_simple_controller);
+        fixed.add_systems(input_acceleration_controller);
+        fixed.add_systems(mouse_controller);
+        fixed.add_systems(particle_emitter_system.before(movement));
+        fixed.add_systems(movement);
+        fixed.add_systems(ttl_system.after(movement));
+        fixed.add_systems(tween_system::<MapPosition>);
+        fixed.add_systems(tween_system::<Rotation>);
+        fixed.add_systems(tween_system::<Scale>);
+        fixed.add_systems(
             propagate_transforms
                 .after(movement)
                 .after(tween_system::<MapPosition>)
@@ -861,95 +908,150 @@ impl EngineBuilder {
                 .after(tween_system::<Scale>)
                 .before(collision_detector),
         );
-        update.add_systems(
+        fixed.add_systems(
             cleanup_orphaned_global_transforms
                 .after(propagate_transforms)
                 .before(collision_detector),
         );
-        update.add_systems(
-            camera_follow_system
-                .after(propagate_transforms)
+        fixed.add_systems(camera_follow_system.after(propagate_transforms));
+        fixed.add_systems(collision_detector.after(mouse_controller).after(movement));
+        fixed.add_systems(stuck_to_entity_system.after(collision_detector));
+        fixed.add_systems(phase_system.after(collision_detector));
+
+        // --- VARIABLE: GUI (tween_system::<ScreenPosition> feeds GUI layout,
+        // not collision, so it moves here unlike its MapPosition/Rotation/Scale
+        // siblings above; its LuaOnTweenFinished<ScreenPosition> callback now
+        // fires once per render frame while the other three fire on FIXED) ---
+        variable.add_systems(tween_system::<ScreenPosition>);
+        variable.add_systems(
+            (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
+                .before(gui_layout_system),
+        );
+        variable.add_systems(
+            gui_layout_system
+                .after(tween_system::<ScreenPosition>)
                 .before(render_system),
         );
-        update.add_systems(collision_detector.after(mouse_controller).after(movement));
-        update.add_systems(phase_system.after(collision_detector));
+        variable.add_systems(gui_hit_test_system.after(gui_layout_system).before(render_system));
+        variable.add_systems(
+            gui_image_state_sync_system
+                .after(gui_hit_test_system)
+                .before(render_system),
+        );
+        variable.add_systems(gui_progressbar_signal_update_system.before(render_system));
 
         #[cfg(feature = "lua")]
         if has_lua {
-            update.add_systems(lua_phase_system.run_if(state_is_playing).after(collision_detector));
-            update.add_systems(
+            fixed.add_systems(update_group_counts_system.before(lua_phase_system));
+            fixed.add_systems(lua_phase_system.run_if(state_is_playing).after(collision_detector));
+            fixed.add_systems(
                 animation_controller
                     .after(lua_phase_system)
                     .after(phase_system),
             );
-            update.add_systems(update_lua_timers);
-            update.add_systems(
+            fixed.add_systems(update_lua_timers);
+            variable.add_systems(
                 process_lua_map_commands
                     .after(crate::lua_plugin::update)
                     .before(render_system),
             );
-            update.add_systems(
+            variable.add_systems(
                 crate::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
                     .after(crate::lua_plugin::update),
             );
-            update.add_systems(
+            variable.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
-                    .after(check_pending_state)
-                    .before(animation_controller),
+                    .after(check_pending_state),
             );
         } else {
-            update.add_systems(animation_controller.after(phase_system));
+            fixed.add_systems(update_group_counts_system);
+            fixed.add_systems(animation_controller.after(phase_system));
         }
 
         #[cfg(not(feature = "lua"))]
         {
-            // `has_lua` only exists to keep the build_schedule signature uniform
+            // `has_lua` only exists to keep the build_schedules signature uniform
             // across feature combinations.
             let _ = has_lua;
-            update.add_systems(animation_controller.after(phase_system));
+            fixed.add_systems(update_group_counts_system);
+            fixed.add_systems(animation_controller.after(phase_system));
         }
 
-        update.add_systems(animation.after(animation_controller));
-        update.add_systems(update_timers);
-        update.add_systems(update_world_signals_binding_system);
-        update.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
+        fixed.add_systems(animation.after(animation_controller));
+        fixed.add_systems(update_timers);
+        variable.add_systems(update_world_signals_binding_system);
+        variable.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
 
         if let Some(update_hook) = update_hook {
-            update_hook(&mut update);
+            update_hook(&mut variable);
+        }
+        if let Some(fixed_update_hook) = fixed_update_hook {
+            fixed_update_hook(&mut fixed);
         }
 
-        // Apply user-registered extra systems (add_system / configure_schedule)
+        // Apply user-registered extra systems (add_system / configure_schedule
+        // target VARIABLE; add_fixed_system / configure_fixed_schedule target FIXED)
         for extra in extra_systems {
-            extra(&mut update);
+            extra(&mut variable);
+        }
+        for extra in extra_fixed_systems {
+            extra(&mut fixed);
         }
 
         if use_scene_manager {
-            update.add_systems(
+            variable.add_systems(
                 scene_update_system
                     .run_if(state_is_playing)
                     .after(check_pending_state),
             );
-            update.add_systems(
+            variable.add_systems(
                 scene_switch_poll
                     .run_if(state_is_playing)
                     .after(scene_update_system),
             );
         }
 
-        update.add_systems(render_system.after(collision_detector));
+        variable.add_systems(render_system);
 
-        update
+        fixed
             .initialize(world)
-            .map_err(|err| format!("Failed to initialize schedule: {err}"))?;
+            .map_err(|err| format!("Failed to initialize fixed schedule: {err}"))?;
+        variable
+            .initialize(world)
+            .map_err(|err| format!("Failed to initialize variable schedule: {err}"))?;
 
-        Ok(update)
+        Ok((fixed, variable))
     }
 
-    fn main_loop(world: &mut World, update: &mut Schedule) {
+    /// Runs the fixed-step accumulator loop described in
+    /// `docs/render-simulation-separation-brainstorm.md`: `fixed` (240 Hz,
+    /// `FIXED_DT`) runs 0-8 times per render frame to drain a real-time
+    /// accumulator, then `variable` runs exactly once. No interpolation in
+    /// this pass -- `variable`/`render_system` simply displays whatever
+    /// simulation state the fixed loop last produced, so a fast render frame
+    /// (accumulator < FIXED_DT) can redraw the same state twice, and a slow
+    /// one catches up via multiple fixed substeps.
+    fn main_loop(world: &mut World, fixed: &mut Schedule, variable: &mut Schedule) {
+        /// Spiral-of-death cap: at most this many fixed substeps run per
+        /// render frame. If a stall needs more, the accumulator keeps the
+        /// remainder rather than trying to catch up all at once.
+        const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
+
         #[cfg(feature = "tracy")]
         let _tracy = tracy_client::Client::start();
+
+        // Built once and reused every frame (mirrors `fixed`/`variable`) rather
+        // than `world.run_system_once(update_input_state)`, which would build
+        // and initialize a fresh temporary system on every single call.
+        let mut input_schedule = Schedule::default();
+        input_schedule.add_systems(update_input_state);
+        input_schedule
+            .initialize(world)
+            .expect("input_schedule should initialize: update_input_state has no unusual system requirements");
+
+        let mut accumulator: f32 = 0.0;
 
         while !world
             .non_send::<raylib::RaylibHandle>()
@@ -959,14 +1061,49 @@ impl EngineBuilder {
                 .non_send::<raylib::RaylibHandle>()
                 .get_frame_time();
 
-            // update_world_time is called directly (not via the schedule) because
-            // WorldTime::delta must be available to all systems in the update pass.
-            // Scheduling it would require ordering constraints on every delta-reading system.
+            // update_world_time is called directly (not via a schedule) because
+            // WorldTime::delta must be available to all systems without ordering
+            // constraints on every delta-reading system. Called once per render
+            // frame: sets elapsed/frame_count and the frame-rate delta; the delta
+            // is temporarily overridden below for each fixed substep.
             update_world_time(world, dt);
+            let frame_delta = world.resource::<WorldTime>().delta;
+
+            // Sample raw input once per render frame, held constant across every
+            // fixed substep below -- not part of either schedule, since running it
+            // inside `fixed` would resample/skip input unpredictably 0-8x per
+            // frame, and running it inside `variable` would leave `fixed`'s input
+            // controllers reading a stale InputState from the previous frame.
+            input_schedule.run(world);
+
+            accumulator += frame_delta;
+
+            // time_scale doesn't change during the substep loop below (no FIXED
+            // system mutates it), so the scaled fixed delta is computed and
+            // written once per render frame rather than re-read/re-written on
+            // every substep.
+            let time_scale = world.resource::<WorldTime>().time_scale;
+            world.resource_mut::<WorldTime>().delta = FIXED_DT * time_scale;
+
+            let mut steps_run = 0;
+            while accumulator >= FIXED_DT && steps_run < MAX_FIXED_STEPS_PER_FRAME {
+                crate::tracy::tracy_span!("fixed_schedule_run");
+                fixed.run(world);
+                accumulator -= FIXED_DT;
+                steps_run += 1;
+            }
+            // Spiral-of-death cap: if MAX_FIXED_STEPS_PER_FRAME wasn't enough to
+            // drain the accumulator, stop -- the remainder is kept (not reset to
+            // zero) so a temporary stall doesn't get silently discarded, it just
+            // takes a couple of frames to fully catch up.
+
+            // Restore the real frame delta for the variable schedule (render,
+            // on_update, GUI) before it runs.
+            world.resource_mut::<WorldTime>().delta = frame_delta;
 
             {
-                crate::tracy::tracy_span!("schedule_run");
-                update.run(world);
+                crate::tracy::tracy_span!("variable_schedule_run");
+                variable.run(world);
             }
 
             world.clear_trackers();
@@ -1165,13 +1302,14 @@ mod tests {
 
     #[cfg(feature = "lua")]
     #[test]
-    fn test_build_schedule_without_lua_runtime_omits_lua_only_systems() {
+    fn test_build_schedules_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
-        let schedule = EngineBuilder::build_schedule(None, Vec::new(), &mut world, false, false)
-            .expect("build_schedule should succeed without Lua runtime");
-        let system_type_ids: Vec<_> = schedule
+        let (fixed, _variable) =
+            EngineBuilder::build_schedules(None, None, Vec::new(), Vec::new(), &mut world, false, false)
+                .expect("build_schedules should succeed without Lua runtime");
+        let fixed_type_ids: Vec<_> = fixed
             .systems()
-            .expect("build_schedule initializes the schedule")
+            .expect("build_schedules initializes the fixed schedule")
             .map(|(_, system)| system.system_type())
             .collect();
         let phase_system_type = IntoSystem::into_system(phase_system).system_type();
@@ -1179,71 +1317,91 @@ mod tests {
         let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).system_type();
         let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).system_type();
 
-        let phase_index = system_type_ids
+        let phase_index = fixed_type_ids
             .iter()
             .position(|type_id| *type_id == phase_system_type)
-            .expect("phase_system should be present");
-        let animation_controller_index = system_type_ids
+            .expect("phase_system should be present in the fixed schedule");
+        let animation_controller_index = fixed_type_ids
             .iter()
             .position(|type_id| *type_id == animation_controller_type)
-            .expect("animation_controller should be present");
+            .expect("animation_controller should be present in the fixed schedule");
 
         assert!(
             animation_controller_index > phase_index,
             "animation_controller should still run after phase_system"
         );
         assert!(
-            !system_type_ids.contains(&lua_phase_system_type),
+            !fixed_type_ids.contains(&lua_phase_system_type),
             "lua_phase_system should be absent when has_lua is false"
         );
         assert!(
-            !system_type_ids.contains(&update_lua_timers_type),
+            !fixed_type_ids.contains(&update_lua_timers_type),
             "update_lua_timers should be absent when has_lua is false"
         );
     }
 
     #[cfg(feature = "lua")]
     #[test]
-    fn test_build_schedule_with_lua_orders_group_counts_before_lua_phase() {
+    fn test_build_schedules_with_lua_orders_group_counts_before_lua_phase() {
         let mut world = World::new();
         let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
-        let schedule =
-            EngineBuilder::build_schedule(builder.update_hook, Vec::new(), &mut world, true, false)
-                .expect("build_schedule should succeed with has_lua=true");
+        let (fixed, variable) = EngineBuilder::build_schedules(
+            builder.update_hook,
+            builder.fixed_update_hook,
+            Vec::new(),
+            Vec::new(),
+            &mut world,
+            true,
+            false,
+        )
+        .expect("build_schedules should succeed with has_lua=true");
 
-        let system_type_ids: Vec<_> = schedule
+        let fixed_type_ids: Vec<_> = fixed
             .systems()
-            .expect("build_schedule initializes the schedule")
+            .expect("build_schedules initializes the fixed schedule")
+            .map(|(_, system)| system.system_type())
+            .collect();
+        let variable_type_ids: Vec<_> = variable
+            .systems()
+            .expect("build_schedules initializes the variable schedule")
             .map(|(_, system)| system.system_type())
             .collect();
 
-        let index_of = |type_id, label| {
-            system_type_ids
+        let index_of = |type_ids: &[std::any::TypeId], type_id, label| -> usize {
+            type_ids
                 .iter()
                 .position(|t| *t == type_id)
                 .unwrap_or_else(|| panic!("{label} should be present"))
         };
 
         let update_group_counts_index = index_of(
+            &fixed_type_ids,
             IntoSystem::into_system(update_group_counts_system).system_type(),
             "update_group_counts_system",
         );
         let lua_phase_index = index_of(
+            &fixed_type_ids,
             IntoSystem::into_system(lua_phase_system).system_type(),
             "lua_phase_system",
-        );
-        let lua_update_index = index_of(
-            IntoSystem::into_system(crate::lua_plugin::update).system_type(),
-            "lua_plugin::update",
         );
 
         assert!(
             update_group_counts_index < lua_phase_index,
-            "update_group_counts_system should run before lua_phase_system"
+            "update_group_counts_system should run before lua_phase_system (both fixed-schedule)"
+        );
+
+        // lua_plugin::update runs once per render frame (variable schedule), while
+        // update_group_counts_system/lua_phase_system run on the fixed 240Hz
+        // schedule -- these are no longer comparable by position in a shared
+        // system list, so just assert each lives in the schedule it should.
+        let lua_update_type = IntoSystem::into_system(crate::lua_plugin::update).system_type();
+        assert!(
+            variable_type_ids.contains(&lua_update_type),
+            "lua_plugin::update should be present in the variable schedule"
         );
         assert!(
-            update_group_counts_index < lua_update_index,
-            "update_group_counts_system should run before lua_plugin::update"
+            !fixed_type_ids.contains(&lua_update_type),
+            "lua_plugin::update should not be present in the fixed schedule"
         );
     }
 
