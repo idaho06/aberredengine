@@ -49,6 +49,7 @@ use crate::systems::mapspawn::load_font_with_mipmaps;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
+use mlua::prelude::LuaTable;
 use raylib::prelude::*;
 use rustc_hash::FxHashSet;
 
@@ -318,6 +319,122 @@ fn drain_common_commands(
     }
 }
 
+/// Refreshes `cached` to `"{prefix}{scene}"`, but only rebuilds it when it
+/// doesn't already match -- avoids reallocating/rewriting the cached callback
+/// name on every call when the scene hasn't changed since the last one.
+/// Shared by [`update`]'s required `on_update_<scene>` and [`fixed_update`]'s
+/// optional `on_fixed_update_<scene>` callback-name resolution.
+fn refresh_cached_callback_name(cached: &mut String, prefix: &str, scene: &str) {
+    if cached.get(prefix.len()..) != Some(scene) {
+        cached.clear();
+        cached.push_str(prefix);
+        cached.push_str(scene);
+    }
+}
+
+/// Builds the Lua input table for this frame/substep from `input`, logging
+/// and returning `None` on failure. Shared by [`update`] and [`fixed_update`]
+/// -- the same `(frame_count, InputSnapshot)` diff-guard inside
+/// `update_input_table` applies regardless of which one calls it first within
+/// a given frame, so repeated calls across substeps are no-ops.
+fn resolve_input_table(
+    lua_runtime: &LuaRuntime,
+    input: &InputState,
+    frame_count: u64,
+) -> Option<LuaTable> {
+    let input_snapshot = InputSnapshot::from_input_state(input);
+    match lua_runtime.update_input_table(&input_snapshot, frame_count) {
+        Ok(table) => Some(table),
+        Err(e) => {
+            error!("Error creating input table: {}", e);
+            None
+        }
+    }
+}
+
+/// Per-fixed-substep update system for scene-specific logic that must stay in
+/// sync with collision/physics (240Hz), not the render frame rate.
+///
+/// Calls `on_fixed_update_<scene>` once per FIXED schedule substep (up to 8x
+/// per render frame) -- **optional**: unlike [`update`]'s `on_update_<scene>`,
+/// scenes that don't define this callback simply skip it silently (no warning
+/// spam every substep). Use this for logic that must be re-evaluated every
+/// substep to stay consistent with collision, e.g. clearing collision-derived
+/// flags (`on_ground`, `touching_wall_*`) right before `collision_detector`
+/// re-derives them this same substep -- clearing them once per render frame
+/// in `on_update_<scene>` instead leaves them stale for however many FIXED
+/// substeps run before the next render frame, which can cause a phase to
+/// transition and immediately revert within the same frame (see
+/// `docs/render-simulation-separation-brainstorm.md`).
+///
+/// Deliberately does not check the `"quit_game"`/`"switch_scene"` flags (unlike
+/// [`update`]) -- scene teardown mid-accumulator-substep is not supported;
+/// queue those from `on_update_<scene>` instead. Also does not refresh the
+/// camera cache -- fixed-substep logic isn't expected to read camera state.
+#[allow(clippy::too_many_arguments, private_interfaces)]
+pub fn fixed_update(
+    time: Res<WorldTime>,
+    input: Res<InputState>,
+    mut commands: Commands,
+    mut scripting: ScriptingContext,
+    mut scene_state: GameSceneState,
+    mut entities: EntityProcessing,
+    mut bindings: ResMut<InputBindings>,
+    mut tracked_groups: ResMut<TrackedGroups>,
+    mut common_bufs: Local<CommonCmdBufs>,
+    mut cached_callback: Local<String>,
+    gui_theme_store: Res<GuiThemeStore>,
+    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
+) {
+    crate::tracy::tracy_span!("lua_fixed_update");
+    let lua_runtime = &scripting.lua_runtime;
+    let delta_sec = time.delta;
+
+    let scene_str = scene_state
+        .world_signals
+        .get_string(sk::SCENE)
+        .map(|s| s.as_str())
+        .unwrap_or(sk::DEFAULT_SCENE);
+
+    refresh_cached_callback_name(&mut cached_callback, "on_fixed_update_", scene_str);
+
+    // Update signal cache for Lua to read current values (world-level signals
+    // can change between substeps via phase/collision callbacks).
+    lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
+
+    // Single cached lookup (unlike a has_function()-then-call_named() pair,
+    // which would resolve the same global twice every substep) -- Ok(None)
+    // means the optional callback isn't defined for this scene, silently
+    // skipped (unlike `update`'s required on_update_<scene>, which warns).
+    match lua_runtime.get_function_cached(cached_callback.as_str()) {
+        Ok(Some(func)) => {
+            if let Some(input_table) =
+                resolve_input_table(lua_runtime, &input, time.frame_count)
+                && let Err(e) = func.call::<()>((input_table, delta_sec))
+            {
+                error!(target: "lua", "Error in {}(): {}", cached_callback.as_str(), e);
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            error!(target: "lua", "Error resolving {}(): {}", cached_callback.as_str(), e);
+        }
+    }
+
+    drain_common_commands(
+        lua_runtime,
+        &mut commands,
+        &mut entities,
+        &mut scene_state,
+        &mut scripting.audio_cmd_writer,
+        &mut bindings,
+        &mut tracked_groups,
+        &mut common_bufs,
+        &gui_theme_store,
+        &mut gui_theme_warn_cache,
+    );
+}
+
 /// Per-frame update system for scene-specific logic.
 ///
 /// This system delegates scene behavior to Lua callbacks:
@@ -353,11 +470,7 @@ pub fn update(
         .map(|s| s.as_str())
         .unwrap_or(sk::DEFAULT_SCENE);
 
-    if cached_callback.get("on_update_".len()..) != Some(scene_str) {
-        cached_callback.clear();
-        cached_callback.push_str("on_update_");
-        cached_callback.push_str(scene_str);
-    }
+    refresh_cached_callback_name(&mut cached_callback, "on_update_", scene_str);
 
     // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
@@ -367,21 +480,16 @@ pub fn update(
         lua_runtime.update_bindings_cache(&bindings);
     }
 
-    // Create input snapshot and Lua table for callbacks
-    let input_snapshot = InputSnapshot::from_input_state(&input);
-    match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
-        Ok(input_table) => {
-            // Call scene-specific update callback with (input, dt)
-            lua_runtime.call_named(cached_callback.as_str(), "Scene", |func| {
-                func.call::<()>((input_table, delta_sec))
-            });
-        }
-        Err(e) => {
-            // Skip the scene callback this frame, but still drain queues and
-            // check quit/switch flags below — commands queued by timers/phase
-            // callbacks earlier this frame must not be lost (P4-2).
-            error!("Error creating input table: {}", e);
-        }
+    // Create input snapshot and Lua table for callbacks. Errors are logged
+    // (inside resolve_input_table) and skip just the scene callback this frame
+    // -- queues still get drained and quit/switch flags still get checked
+    // below, so commands queued by timers/phase callbacks earlier this frame
+    // must not be lost (P4-2).
+    if let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count) {
+        // Call scene-specific update callback with (input, dt)
+        lua_runtime.call_named(cached_callback.as_str(), "Scene", |func| {
+            func.call::<()>((input_table, delta_sec))
+        });
     }
 
     drain_common_commands(
@@ -758,5 +866,76 @@ mod tests {
             player_seen.is_none(),
             "on_switch_scene should see a refreshed snapshot where 'player' was already cleared"
         );
+    }
+
+    /// Builds a [`World`] with all resources [`fixed_update`] depends on
+    /// (superset of [`new_drain_test_world`]'s: also needs `WorldTime`/`InputState`).
+    fn new_fixed_update_test_world() -> World {
+        let mut world = new_drain_test_world();
+        world.insert_resource(WorldTime::default());
+        world.insert_resource(InputState::default());
+        world
+    }
+
+    #[test]
+    fn fixed_update_calls_optional_scene_callback_and_drains_its_commands() {
+        let mut world = new_fixed_update_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "level1");
+
+        let player = world
+            .spawn(crate::components::signals::Signals::default())
+            .id();
+
+        {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load(format!(
+                    "function on_fixed_update_level1(input, dt)\n\
+                         _G.fixed_update_called = true\n\
+                         engine.entity_signal_set_flag({}, \"on_ground\")\n\
+                     end",
+                    player.to_bits()
+                ))
+                .exec()
+                .expect("define on_fixed_update_level1");
+        }
+
+        world.run_system_once(fixed_update).unwrap();
+
+        let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+        let called: Option<bool> = lua_runtime
+            .lua()
+            .globals()
+            .get("fixed_update_called")
+            .expect("fixed_update_called global should be readable");
+        assert_eq!(
+            called,
+            Some(true),
+            "on_fixed_update_<scene> should be called once per fixed_update run"
+        );
+
+        let signals = world
+            .get::<crate::components::signals::Signals>(player)
+            .expect("Signals component should exist after SignalSetFlag drains");
+        assert!(
+            signals.flags.contains("on_ground"),
+            "entity_signal_set_flag queued in on_fixed_update_<scene> should be drained immediately, \
+             same substep -- not deferred to the next on_update_<scene> call"
+        );
+    }
+
+    #[test]
+    fn fixed_update_is_silent_when_scene_callback_is_not_defined() {
+        let mut world = new_fixed_update_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "no_fixed_update_here");
+
+        // Should not panic or spam a "callback not found" warning (unlike `update`'s
+        // required on_update_<scene>) -- on_fixed_update_<scene> is optional.
+        world.run_system_once(fixed_update).unwrap();
     }
 }
