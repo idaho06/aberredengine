@@ -7,41 +7,72 @@
 
 use crate::components::inputcontrolled::MouseControlled;
 use crate::components::mapposition::MapPosition;
-use crate::resources::camera2d::Camera2DRes;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::windowsize::WindowSize;
+use crate::resources::input::InputState;
 use bevy_ecs::prelude::*;
 
-/// Update each mouse-controlled entity's `MapPosition` position based on mouse's world position.
+/// Update each mouse-controlled entity's `MapPosition` based on the mouse's
+/// world position.
 ///
-/// The mouse position is transformed from window space → game space → world space
-/// to correctly handle letterboxing/pillarboxing when the window is resized.
+/// Reads `InputState.mouse_world_x/y` — the window→game→world transformation
+/// (letterbox correction + camera projection) already happened when the
+/// per-frame input snapshot was applied, so this system no longer touches
+/// raylib. Runs on the FIXED schedule: the value is written once per render
+/// frame and held constant across substeps, matching raylib's own
+/// once-per-real-frame mouse refresh.
 pub fn mouse_controller(
     mut query: Query<(&MouseControlled, &mut MapPosition)>,
-    camera_res: Res<Camera2DRes>,
-    window_size: Res<WindowSize>,
-    screen_size: Res<ScreenSize>,
-    rl: NonSend<raylib::RaylibHandle>,
+    input: Res<InputState>,
 ) {
-    // Get mouse position in window coordinates
-    let window_mouse_pos = rl.get_mouse_position();
-
-    // Transform from window space to game/render-target space (accounting for letterboxing)
-    let game_mouse_pos = window_size.window_to_game_pos(
-        window_mouse_pos,
-        screen_size.w as u32,
-        screen_size.h as u32,
-    );
-
-    // Transform from game/screen space to world space using the camera
-    let world_position = rl.get_screen_to_world2D(game_mouse_pos, camera_res.0);
-
     for (mouse_controlled, mut map_position) in query.iter_mut() {
         if mouse_controlled.follow_x {
-            map_position.pos.x = world_position.x;
+            map_position.pos.x = input.mouse_world_x;
         }
         if mouse_controlled.follow_y {
-            map_position.pos.y = world_position.y;
+            map_position.pos.y = input.mouse_world_y;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_ecs::system::RunSystemOnce;
+
+    #[test]
+    fn follows_mouse_world_position_per_axis() {
+        let mut world = World::new();
+        world.insert_resource(InputState {
+            mouse_world_x: 320.0,
+            mouse_world_y: -48.0,
+            ..Default::default()
+        });
+
+        let both = world
+            .spawn((
+                MouseControlled {
+                    follow_x: true,
+                    follow_y: true,
+                },
+                MapPosition::new(1.0, 2.0),
+            ))
+            .id();
+        let x_only = world
+            .spawn((
+                MouseControlled {
+                    follow_x: true,
+                    follow_y: false,
+                },
+                MapPosition::new(1.0, 2.0),
+            ))
+            .id();
+
+        world.run_system_once(mouse_controller).unwrap();
+
+        let pos = world.get::<MapPosition>(both).unwrap();
+        assert_eq!(pos.pos.x, 320.0);
+        assert_eq!(pos.pos.y, -48.0);
+        let pos = world.get::<MapPosition>(x_only).unwrap();
+        assert_eq!(pos.pos.x, 320.0);
+        assert_eq!(pos.pos.y, 2.0);
     }
 }

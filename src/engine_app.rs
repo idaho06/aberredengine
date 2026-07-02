@@ -128,7 +128,8 @@ use crate::systems::gui_progressbar_signal_update::gui_progressbar_signal_update
 use crate::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
 };
-use crate::systems::input::update_input_state;
+use crate::resources::rawinput::LatestInputSnapshot;
+use crate::systems::input::{apply_input_snapshot, sample_input_snapshot};
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::mapspawn::spawn_map_observer;
@@ -673,6 +674,7 @@ impl EngineBuilder {
         world.insert_resource(config);
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
+        world.insert_resource(LatestInputSnapshot::default());
         world.insert_non_send(render_target);
 
         setup_audio(&mut world);
@@ -1095,13 +1097,13 @@ impl EngineBuilder {
         let _tracy = tracy_client::Client::start();
 
         // Built once and reused every frame (mirrors `fixed`/`variable`) rather
-        // than `world.run_system_once(update_input_state)`, which would build
+        // than `world.run_system_once(apply_input_snapshot)`, which would build
         // and initialize a fresh temporary system on every single call.
         let mut input_schedule = Schedule::default();
-        input_schedule.add_systems(update_input_state);
+        input_schedule.add_systems(apply_input_snapshot);
         input_schedule
             .initialize(world)
-            .expect("input_schedule should initialize: update_input_state has no unusual system requirements");
+            .expect("input_schedule should initialize: apply_input_snapshot has no unusual system requirements");
 
         let mut accumulator: f32 = 0.0;
 
@@ -1126,6 +1128,23 @@ impl EngineBuilder {
             // inside `fixed` would resample/skip input unpredictably 0-8x per
             // frame, and running it inside `variable` would leave `fixed`'s input
             // controllers reading a stale InputState from the previous frame.
+            //
+            // Split along the future thread boundary (Phase 5a):
+            // `sample_input_snapshot` is the render-thread half (raylib polls,
+            // no ECS writes), called inline here; `apply_input_snapshot` is the
+            // logic-thread half (InputState + camera-dependent mouse-world +
+            // event triggers), run via the schedule. Phase 5e replaces the
+            // direct resource write with a channel send/receive.
+            {
+                let snapshot = {
+                    let rl = world.non_send::<raylib::RaylibHandle>();
+                    let bindings = world.resource::<InputBindings>();
+                    let window_size = world.resource::<WindowSize>();
+                    let screen_size = world.resource::<ScreenSize>();
+                    sample_input_snapshot(rl, bindings, window_size, screen_size)
+                };
+                world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
+            }
             input_schedule.run(world);
 
             accumulator += frame_delta;

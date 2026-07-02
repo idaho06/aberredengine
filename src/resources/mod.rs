@@ -53,6 +53,7 @@ pub mod input_bindings;
 pub mod lua_runtime;
 pub mod mapdata;
 pub mod postprocessshader;
+pub mod rawinput;
 pub mod rendertarget;
 pub mod scenemanager;
 pub mod screensize;
