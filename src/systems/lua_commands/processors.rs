@@ -6,17 +6,16 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use log::{debug, error, warn};
+use log::{debug, warn};
 use raylib::prelude::{Camera2D, Color, Rectangle, Vector2};
 
 use crate::components::phase::Phase;
 use crate::components::shadow::Shadow;
 use crate::events::audio::AudioCmd;
+use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
-use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore};
 use crate::resources::group::TrackedGroups;
@@ -26,9 +25,7 @@ use crate::resources::lua_runtime::{
     InputCmd, PhaseCmd, RenderCmd, SignalCmd,
 };
 use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturefilter::TextureFilter;
-use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::phase_core::queue_phase_transition;
 
@@ -174,86 +171,76 @@ where
     }
 }
 
-/// Process a single asset command from Lua and load the corresponding asset.
-///
-/// Designed for use during `on_setup` / scene initialization, not hot gameplay paths.
-#[allow(clippy::too_many_arguments)]
-pub fn process_asset_command<F1>(
-    rl: &mut raylib::RaylibHandle,
-    th: &raylib::RaylibThread,
+/// Translate a single Lua-queued [`AssetCmd`] into either an [`AudioCmd`]
+/// (Music/Sound, unchanged) or a [`RenderAssetCmd`] (Texture/Font/Shader).
+/// Contains no GL calls — safe to run in a logic-destined system.
+pub fn translate_asset_command(
     cmd: AssetCmd,
-    tex_store: &mut TextureStore,
-    fonts: &mut FontStore,
-    font_metrics: &mut FontMetricsStore,
-    shader_store: &mut ShaderStore,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
-    load_font_fn: F1,
-) where
-    F1: FnOnce(
-        &mut raylib::RaylibHandle,
-        &raylib::RaylibThread,
-        &str,
-        i32,
-    ) -> Result<raylib::prelude::Font, String>,
-{
+    render_asset_cmd_writer: &mut MessageWriter<RenderAssetCmd>,
+) {
+    match asset_cmd_to_audio_cmd(cmd) {
+        Ok(audio_cmd) => {
+            audio_cmd_writer.write(audio_cmd);
+        }
+        Err(other) => {
+            if let Some(render_cmd) = asset_cmd_to_render_asset_cmd(other) {
+                render_asset_cmd_writer.write(render_cmd);
+            }
+        }
+    }
+}
+
+/// Convert a Music/Sound [`AssetCmd`] into its [`AudioCmd`] equivalent.
+/// Returns the command back (`Err`) for Texture/Font/Shader, which have no
+/// `AudioCmd` equivalent — pass those to [`asset_cmd_to_render_asset_cmd`]
+/// instead. Shared by [`translate_asset_command`] (the per-frame drain
+/// system's path) and [`crate::lua_plugin::setup`] (the one-shot bootstrap
+/// exception), so the Music/Sound branch has exactly one implementation.
+pub fn asset_cmd_to_audio_cmd(cmd: AssetCmd) -> Result<AudioCmd, AssetCmd> {
     match cmd {
-        AssetCmd::Texture { id, path, filter } => match rl.load_texture(th, &path) {
-            Ok(tex) => {
-                debug!("Loaded texture '{}' from '{}'", id, path);
-                let filter = TextureFilter::from_opt_str_or_warn(filter.as_deref(), &id);
-                tex_store.insert(&id, tex, filter, None);
-            }
-            Err(e) => {
-                error!("Failed to load texture '{}': {}", path, e);
-            }
-        },
-        AssetCmd::Font { id, path, size } => match load_font_fn(rl, th, &path, size) {
-            Ok(font) => {
-                debug!("Loaded font '{}' from '{}'", id, path);
-                font_metrics.0.insert(id.clone(), FontMetrics::extract(&font));
-                fonts.add(&id, font);
-            }
-            Err(err) => {
-                error!("Failed to load font '{}' from '{}': {}", id, path, err);
-            }
-        },
         AssetCmd::Music { id, path } => {
             debug!("Queuing music '{}' from '{}'", id, path);
-            audio_cmd_writer.write(AudioCmd::LoadMusic { id, path });
+            Ok(AudioCmd::LoadMusic { id, path })
         }
         AssetCmd::Sound { id, path } => {
             debug!("Queuing sound '{}' from '{}'", id, path);
-            audio_cmd_writer.write(AudioCmd::LoadFx { id, path });
+            Ok(AudioCmd::LoadFx { id, path })
         }
+        other => Err(other),
+    }
+}
+
+/// Convert a Texture/Font/Shader [`AssetCmd`] into its [`RenderAssetCmd`]
+/// equivalent. `skip_if_loaded` is always `false` here (Lua's
+/// `engine.load_font` always reloads) — `spawn_map` builds its own
+/// `RenderAssetCmd::Font { skip_if_loaded: true, .. }` directly since it
+/// has a different reload policy. Music/Sound have no `RenderAssetCmd`
+/// equivalent and return `None`; `TextureFilter` string resolution happens
+/// here (pure string parsing, no GL) so warnings stay attributable to the
+/// right `id`.
+pub fn asset_cmd_to_render_asset_cmd(cmd: AssetCmd) -> Option<RenderAssetCmd> {
+    match cmd {
+        AssetCmd::Texture { id, path, filter } => {
+            let filter = TextureFilter::from_opt_str_or_warn(filter.as_deref(), &id);
+            Some(RenderAssetCmd::Texture { id, path, filter })
+        }
+        AssetCmd::Font { id, path, size } => Some(RenderAssetCmd::Font {
+            id,
+            path,
+            size,
+            skip_if_loaded: false,
+        }),
         AssetCmd::Shader {
             id,
             vs_path,
             fs_path,
-        } => {
-            let vs_path_c = vs_path.as_deref();
-            let fs_path_c = fs_path.as_deref();
-            match rl.load_shader(th, vs_path_c, fs_path_c) {
-                Ok(shader) if shader.is_shader_valid() => {
-                    debug!(
-                        "Loaded shader '{}' (vs: {:?}, fs: {:?})",
-                        id, vs_path, fs_path
-                    );
-                    shader_store.add(&id, shader);
-                }
-                Ok(_) => {
-                    error!(
-                        "Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
-                        id, vs_path, fs_path
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Shader '{}' failed to load: {e} (vs: {:?}, fs: {:?})",
-                        id, vs_path, fs_path
-                    );
-                }
-            }
-        }
+        } => Some(RenderAssetCmd::Shader {
+            id,
+            vs_path,
+            fs_path,
+        }),
+        AssetCmd::Music { .. } | AssetCmd::Sound { .. } => None,
     }
 }
 
@@ -612,14 +599,150 @@ mod tests {
 
     use super::{
         process_animation_command, process_audio_command, process_render_command,
-        process_signal_command,
+        process_signal_command, translate_asset_command,
     };
     use crate::events::audio::AudioCmd;
+    use crate::events::render_assets::RenderAssetCmd;
     use crate::resources::animationstore::AnimationStore;
     use crate::resources::guitheme::GuiThemeStore;
-    use crate::resources::lua_runtime::{AnimationCmd, AudioLuaCmd, RenderCmd, SignalCmd};
+    use crate::resources::lua_runtime::{AnimationCmd, AssetCmd, AudioLuaCmd, RenderCmd, SignalCmd};
     use crate::resources::postprocessshader::PostProcessShader;
+    use crate::resources::texturefilter::TextureFilter;
     use crate::resources::worldsignals::WorldSignals;
+
+    /// Bundled writers for both message types `translate_asset_command`
+    /// can produce, plus a helper to read back what was written.
+    struct AssetCmdTestHarness {
+        world: World,
+    }
+
+    impl AssetCmdTestHarness {
+        fn new() -> Self {
+            let mut world = World::new();
+            world.insert_resource(Messages::<AudioCmd>::default());
+            world.insert_resource(Messages::<RenderAssetCmd>::default());
+            Self { world }
+        }
+
+        fn translate(&mut self, cmd: AssetCmd) {
+            let mut state = SystemState::<(
+                MessageWriter<AudioCmd>,
+                MessageWriter<RenderAssetCmd>,
+            )>::new(&mut self.world);
+            {
+                let (mut audio_writer, mut render_writer) = state
+                    .get_mut(&mut self.world)
+                    .expect("writers should fetch");
+                translate_asset_command(cmd, &mut audio_writer, &mut render_writer);
+            }
+            state.apply(&mut self.world);
+        }
+
+        fn audio_cmds(&mut self) -> Vec<AudioCmd> {
+            self.world.resource_mut::<Messages<AudioCmd>>().update();
+            let mut state = SystemState::<MessageReader<AudioCmd>>::new(&mut self.world);
+            let mut reader = state
+                .get_mut(&mut self.world)
+                .expect("audio reader should fetch");
+            reader.read().cloned().collect()
+        }
+
+        fn render_asset_cmds(&mut self) -> Vec<RenderAssetCmd> {
+            self.world
+                .resource_mut::<Messages<RenderAssetCmd>>()
+                .update();
+            let mut state = SystemState::<MessageReader<RenderAssetCmd>>::new(&mut self.world);
+            let mut reader = state
+                .get_mut(&mut self.world)
+                .expect("render asset reader should fetch");
+            reader.read().cloned().collect()
+        }
+    }
+
+    #[test]
+    fn translate_texture_resolves_filter_and_writes_render_asset_cmd() {
+        let mut h = AssetCmdTestHarness::new();
+        h.translate(AssetCmd::Texture {
+            id: "tex1".into(),
+            path: "assets/tex1.png".into(),
+            filter: Some("bilinear".into()),
+        });
+
+        let render_cmds = h.render_asset_cmds();
+        assert_eq!(render_cmds.len(), 1);
+        match &render_cmds[0] {
+            RenderAssetCmd::Texture { id, path, filter } => {
+                assert_eq!(id, "tex1");
+                assert_eq!(path, "assets/tex1.png");
+                assert_eq!(*filter, TextureFilter::Bilinear);
+            }
+            other => panic!("expected RenderAssetCmd::Texture, got {other:?}"),
+        }
+        assert!(h.audio_cmds().is_empty());
+    }
+
+    #[test]
+    fn translate_font_sets_skip_if_loaded_false() {
+        let mut h = AssetCmdTestHarness::new();
+        h.translate(AssetCmd::Font {
+            id: "font1".into(),
+            path: "assets/font1.ttf".into(),
+            size: 24,
+        });
+
+        let render_cmds = h.render_asset_cmds();
+        assert_eq!(render_cmds.len(), 1);
+        match &render_cmds[0] {
+            RenderAssetCmd::Font {
+                id,
+                path,
+                size,
+                skip_if_loaded,
+            } => {
+                assert_eq!(id, "font1");
+                assert_eq!(path, "assets/font1.ttf");
+                assert_eq!(*size, 24);
+                assert!(!skip_if_loaded, "Lua font loads always reload");
+            }
+            other => panic!("expected RenderAssetCmd::Font, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_shader_writes_render_asset_cmd() {
+        let mut h = AssetCmdTestHarness::new();
+        h.translate(AssetCmd::Shader {
+            id: "shader1".into(),
+            vs_path: Some("a.vs".into()),
+            fs_path: None,
+        });
+
+        let render_cmds = h.render_asset_cmds();
+        assert_eq!(render_cmds.len(), 1);
+        assert!(matches!(&render_cmds[0], RenderAssetCmd::Shader { id, .. } if id == "shader1"));
+    }
+
+    #[test]
+    fn translate_music_and_sound_never_touch_render_asset_queue() {
+        let mut h = AssetCmdTestHarness::new();
+        h.translate(AssetCmd::Music {
+            id: "bgm".into(),
+            path: "a.xm".into(),
+        });
+        h.translate(AssetCmd::Sound {
+            id: "sfx".into(),
+            path: "b.wav".into(),
+        });
+
+        let audio_cmds = h.audio_cmds();
+        assert_eq!(audio_cmds.len(), 2);
+        assert!(matches!(audio_cmds[0], AudioCmd::LoadMusic { .. }));
+        assert!(matches!(audio_cmds[1], AudioCmd::LoadFx { .. }));
+        assert!(
+            h.render_asset_cmds().is_empty(),
+            "Music/Sound must never produce a RenderAssetCmd"
+        );
+    }
 
     fn set_button_cmd(theme_key: &str, state: &str) -> RenderCmd {
         RenderCmd::SetGuiThemeButton {

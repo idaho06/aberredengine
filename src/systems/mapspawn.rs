@@ -30,10 +30,9 @@ use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
+use crate::events::render_assets::RenderAssetCmd;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
-use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
-use crate::resources::fontstore::FontStore;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 #[cfg(feature = "lua")]
@@ -42,57 +41,44 @@ use crate::resources::mapdata::{
     EntityDef, MapData, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
 };
 use crate::resources::texturefilter::TextureFilter;
-use crate::resources::texturestore::TextureStore;
 use crate::resources::worldsignals::WorldSignals;
-use crate::systems::RaylibAccess;
 
 /// Load all assets referenced by `map` into the engine stores, then spawn
 /// entities. Called by [`spawn_map_observer`]; can also be called directly.
+///
+/// Since Phase 5c, GL asset loads are not performed here — instead the
+/// texture/font entries are translated into [`RenderAssetCmd`]s appended to
+/// `render_asset_cmds`, applied later by
+/// `crate::systems::render_assets::process_render_asset_cmds`. This keeps
+/// `spawn_map` callable from contexts with no live GL access (e.g. tests).
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_map(
     commands: &mut Commands,
-    raylib: &mut RaylibAccess,
-    texture_store: &mut TextureStore,
-    font_store: &mut FontStore,
-    font_metrics: &mut FontMetricsStore,
     animation_store: &mut AnimationStore,
     map: &MapData,
     world_signals: &mut WorldSignals,
+    render_asset_cmds: &mut Vec<RenderAssetCmd>,
 ) {
-    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-
     for entry in &map.textures {
-        match rl.load_texture(th, &entry.path) {
-            Ok(tex) => {
-                let filter =
-                    TextureFilter::from_opt_str_or_warn(entry.filter.as_deref(), &entry.key);
-                texture_store.insert(&entry.key, tex, filter, None);
-            }
-            Err(e) => {
-                log::warn!("spawn_map: failed to load texture '{}': {e}", entry.path);
-            }
-        }
+        let filter = TextureFilter::from_opt_str_or_warn(entry.filter.as_deref(), &entry.key);
+        render_asset_cmds.push(RenderAssetCmd::Texture {
+            id: entry.key.clone(),
+            path: entry.path.clone(),
+            filter,
+        });
     }
 
     for entry in &map.fonts {
-        if font_store.meta.contains_key(&entry.key) {
-            continue;
-        }
-        match load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32) {
-            Ok(font) => {
-                font_metrics
-                    .0
-                    .insert(entry.key.clone(), FontMetrics::extract(&font));
-                font_store.add_with_meta(&entry.key, font, entry.path.clone(), entry.font_size);
-            }
-            Err(err) => {
-                log::warn!(
-                    "spawn_map: failed to load font '{}' (key='{}'): {err}",
-                    entry.path,
-                    entry.key
-                );
-            }
-        }
+        // "Already loaded" dedup (previously checked against
+        // `font_store.meta` here) now happens in `apply_render_asset_cmd`,
+        // gated by `skip_if_loaded: true` — spawn_map no longer has
+        // `FontStore` access to check directly.
+        render_asset_cmds.push(RenderAssetCmd::Font {
+            id: entry.key.clone(),
+            path: entry.path.clone(),
+            size: entry.font_size as i32,
+            skip_if_loaded: true,
+        });
     }
 
     for entry in &map.animations {
@@ -310,23 +296,21 @@ fn insert_particle_emitter(
 pub fn spawn_map_observer(
     trigger: On<SpawnMapRequested>,
     mut commands: Commands,
-    mut raylib: RaylibAccess,
-    mut texture_store: ResMut<TextureStore>,
-    mut font_store: NonSendMut<FontStore>,
-    mut font_metrics: ResMut<FontMetricsStore>,
     mut animation_store: ResMut<AnimationStore>,
     mut world_signals: ResMut<WorldSignals>,
+    mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
+    let mut render_asset_cmds = Vec::new();
     spawn_map(
         &mut commands,
-        &mut raylib,
-        &mut texture_store,
-        &mut font_store,
-        &mut font_metrics,
         &mut animation_store,
         &trigger.event().map,
         &mut world_signals,
+        &mut render_asset_cmds,
     );
+    for cmd in render_asset_cmds {
+        render_asset_cmd_writer.write(cmd);
+    }
 }
 
 /// Drains `engine.load_map()` commands queued by Lua and fires
@@ -407,5 +391,72 @@ mod tests {
         assert!(approx_eq(collider.offset.y, 4.0));
         assert!(approx_eq(collider.origin.x, 5.0));
         assert!(approx_eq(collider.origin.y, 6.0));
+    }
+
+    #[test]
+    fn spawn_map_queues_render_asset_cmds_and_spawns_entities() {
+        use crate::resources::mapdata::{FontEntry, TextureEntry};
+
+        let mut world = World::new();
+        let mut queue = CommandQueue::default();
+        let mut animation_store = AnimationStore::default();
+        let mut world_signals = WorldSignals::default();
+        let mut render_asset_cmds = Vec::new();
+
+        let map = MapData {
+            textures: vec![TextureEntry {
+                key: "tex1".into(),
+                path: "assets/tex1.png".into(),
+                filter: None,
+            }],
+            fonts: vec![FontEntry {
+                key: "font1".into(),
+                path: "assets/font1.ttf".into(),
+                font_size: 24.0,
+            }],
+            entities: vec![EntityDef {
+                position: Some([1.0, 2.0]),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        {
+            let mut commands = Commands::new(&mut queue, &world);
+            spawn_map(
+                &mut commands,
+                &mut animation_store,
+                &map,
+                &mut world_signals,
+                &mut render_asset_cmds,
+            );
+        }
+        queue.apply(&mut world);
+
+        assert_eq!(render_asset_cmds.len(), 2);
+        match &render_asset_cmds[0] {
+            RenderAssetCmd::Texture { id, path, .. } => {
+                assert_eq!(id, "tex1");
+                assert_eq!(path, "assets/tex1.png");
+            }
+            other => panic!("expected RenderAssetCmd::Texture, got {other:?}"),
+        }
+        match &render_asset_cmds[1] {
+            RenderAssetCmd::Font {
+                id,
+                path,
+                size,
+                skip_if_loaded,
+            } => {
+                assert_eq!(id, "font1");
+                assert_eq!(path, "assets/font1.ttf");
+                assert_eq!(*size, 24);
+                assert!(skip_if_loaded, "spawn_map fonts should skip if already loaded");
+            }
+            other => panic!("expected RenderAssetCmd::Font, got {other:?}"),
+        }
+
+        let mut position_query = world.query::<&MapPosition>();
+        assert_eq!(position_query.iter(&world).count(), 1);
     }
 }

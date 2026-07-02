@@ -8,7 +8,7 @@ use std::sync::Arc;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use log::warn;
-use raylib::prelude::{Texture2D, Vector2};
+use raylib::prelude::Vector2;
 use serde::Deserialize;
 
 use crate::components::group::Group;
@@ -16,9 +16,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::zindex::ZIndex;
-use crate::resources::texturefilter::TextureFilter;
-use crate::resources::texturestore::TextureStore;
-use crate::systems::RaylibAccess;
+use crate::events::render_assets::RenderAssetCmd;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
 pub const TILES_GROUP: &str = "tiles";
@@ -53,26 +51,34 @@ fn path_stem(path: &str) -> &str {
     path.split('/').next_back().unwrap_or(path)
 }
 
-/// Load a tilemap from a directory produced by Tilesetter 2.1.0.
-///
-/// `path` is a directory; the last path segment is used as the stem for
-/// `<stem>.png` (texture) and `<stem>.txt` (JSON data).
-pub fn load_tilemap(
-    rl: &mut raylib::RaylibHandle,
-    thread: &raylib::RaylibThread,
-    path: &str,
-) -> Result<(Texture2D, Tilemap), String> {
+/// Load tilemap JSON and read atlas PNG dimensions, CPU-only (no GL context
+/// required — Phase 5c). `path` is a directory; the last path segment is
+/// used as the stem for `<stem>.png` (texture) and `<stem>.txt` (JSON
+/// data). Returns the parsed [`Tilemap`], the atlas's pixel dimensions, and
+/// the computed `png_path` (so callers building a
+/// `RenderAssetCmd::TilemapTexture` don't need to recompute it).
+pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), String> {
     let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
-    let texture = rl
-        .load_texture(thread, &png_path)
-        .map_err(|err| format!("Failed to load tilemap texture '{}': {err}", png_path))?;
+
+    // Full CPU pixel decode just to read width/height — raylib has no
+    // header-only image reader. `process_render_asset_cmds`'s
+    // `RenderAssetCmd::TilemapTexture` handler decodes the same PNG a
+    // second time to actually upload it, so a tilemap spawn now decodes
+    // its atlas twice. Accepted: this is one-time, scene-load-time cost
+    // (not a hot path), and atlases are small; revisit with a header-only
+    // reader only if a large atlas makes this measurable.
+    let image = raylib::prelude::Image::load_image(&png_path)
+        .map_err(|err| format!("Failed to read tilemap texture '{}': {err}", png_path))?;
+    let (tex_w, tex_h) = (image.width(), image.height());
+
     let json_string = std::fs::read_to_string(&json_path)
         .map_err(|err| format!("Failed to load tilemap JSON '{}': {err}", json_path))?;
     let tilemap: Tilemap = serde_json::from_str(&json_string)
         .map_err(|err| format!("Failed to parse tilemap JSON '{}': {err}", json_path))?;
-    Ok((texture, tilemap))
+
+    Ok((tilemap, tex_w, tex_h, png_path))
 }
 
 /// Spawn tile entities from a loaded tilemap.
@@ -156,23 +162,23 @@ pub fn spawn_tiles(
     }
 }
 
-/// Watches for newly added [`TileMap`] components, loads the tilemap from disk,
-/// stores the texture in [`TextureStore`], and spawns tile entities as `ChildOf`
-/// children of the root entity.
+/// Watches for newly added [`TileMap`] components, loads the tilemap data
+/// (CPU-only), queues the atlas texture upload via
+/// [`RenderAssetCmd::TilemapTexture`], and spawns tile entities as
+/// `ChildOf` children of the root entity.
 ///
 /// If the root entity has no [`MapPosition`], a default `(0, 0)` one is inserted
 /// so that [`crate::systems::propagate_transforms`] can compute child transforms.
 pub fn tilemap_spawn_system(
     mut commands: Commands,
     query: Query<(Entity, &TileMap, Has<MapPosition>), Added<TileMap>>,
-    mut raylib: RaylibAccess,
-    mut texture_store: ResMut<TextureStore>,
+    mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
     for (entity, tilemap_comp, has_map_pos) in query.iter() {
         let path = &tilemap_comp.path;
         let key: String = path_stem(path).to_owned();
 
-        let (texture, tilemap_data) = match load_tilemap(&mut raylib.rl, &raylib.th, path) {
+        let (tilemap_data, tex_w, tex_h, png_path) = match load_tilemap_data(path) {
             Ok(loaded) => loaded,
             Err(err) => {
                 warn!(
@@ -182,11 +188,11 @@ pub fn tilemap_spawn_system(
                 continue;
             }
         };
-        let tex_w = texture.width;
-        let tex_h = texture.height;
-        if texture_store.get(&key).is_none() {
-            texture_store.insert(&key, texture, TextureFilter::Nearest, None);
-        }
+
+        render_asset_cmd_writer.write(RenderAssetCmd::TilemapTexture {
+            key: key.clone(),
+            png_path,
+        });
 
         if !has_map_pos {
             commands.entity(entity).insert(MapPosition::new(0.0, 0.0));
@@ -200,5 +206,35 @@ pub fn tilemap_spawn_system(
             &tilemap_data,
             Some(entity),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Real tilemap fixture already checked into the repo
+    /// (`assets/tilemaps/sidescroller_test01/`), 192x120 PNG atlas.
+    const FIXTURE_DIR: &str = "assets/tilemaps/sidescroller_test01";
+
+    #[test]
+    fn load_tilemap_data_reads_dimensions_and_parses_json_cpu_only() {
+        let (tilemap, tex_w, tex_h, png_path) =
+            load_tilemap_data(FIXTURE_DIR).expect("fixture should load");
+
+        assert_eq!(tex_w, 192);
+        assert_eq!(tex_h, 120);
+        assert_eq!(
+            png_path,
+            "assets/tilemaps/sidescroller_test01/sidescroller_test01.png"
+        );
+        assert!(tilemap.tile_size > 0);
+        assert!(!tilemap.layers.is_empty());
+    }
+
+    #[test]
+    fn load_tilemap_data_reports_error_for_missing_directory() {
+        let result = load_tilemap_data("assets/tilemaps/does_not_exist");
+        assert!(result.is_err());
     }
 }

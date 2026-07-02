@@ -25,10 +25,11 @@ mod spawn_cmd;
 pub(crate) use context::build_entity_context;
 pub use entity_cmd::process_entity_commands;
 pub use processors::{
-    process_animation_command, process_asset_command, process_audio_command,
-    process_camera_command, process_camera_follow_command, process_gameconfig_command,
-    process_group_command, process_input_command, process_phase_command, process_render_command,
-    process_signal_command,
+    asset_cmd_to_audio_cmd, asset_cmd_to_render_asset_cmd, process_animation_command,
+    process_audio_command, process_camera_command, process_camera_follow_command,
+    process_gameconfig_command, process_group_command, process_input_command,
+    process_phase_command, process_render_command, process_signal_command,
+    translate_asset_command,
 };
 pub use spawn_cmd::{process_clone_command, process_spawn_command};
 

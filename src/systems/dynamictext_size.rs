@@ -46,36 +46,18 @@ pub fn dynamictext_size_system(
 mod tests {
     use super::*;
     use bevy_ecs::system::RunSystemOnce;
-    use rustc_hash::FxHashMap;
 
     use crate::components::dynamictext::DynamicText;
-    use crate::resources::fontmetrics::{FontMetrics, GlyphMetrics};
+    use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
     use raylib::prelude::Color;
 
     fn new_test_world() -> World {
         let mut world = World::new();
 
-        let mut glyphs = FxHashMap::default();
-        for c in 'a'..='z' {
-            glyphs.insert(
-                c as i32,
-                GlyphMetrics {
-                    advance_x: 10,
-                    offset_x: 0,
-                    rec_width: 8.0,
-                },
-            );
-        }
-        let a_glyph = glyphs[&('a' as i32)];
         let mut store = FontMetricsStore::default();
-        store.0.insert(
-            "test_font".to_string(),
-            FontMetrics {
-                base_size: 20,
-                glyphs,
-                first_glyph: Some(a_glyph),
-            },
-        );
+        store
+            .0
+            .insert("test_font".to_string(), lowercase_alphabet_metrics());
         world.insert_resource(store);
         world.insert_resource(FontMetricsWarnCache::default());
         world

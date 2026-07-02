@@ -90,6 +90,7 @@ pub mod phase;
 mod phase_core;
 pub mod propagate_transforms;
 pub mod render;
+pub mod render_assets;
 pub mod rust_collision;
 pub mod scene_dispatch;
 pub mod signalbinding;

@@ -21,16 +21,15 @@ use crate::components::zindex::ZIndex;
 use crate::events::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
-use crate::resources::fontstore::FontStore;
+use crate::events::render_assets::RenderAssetCmd;
+use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::gamestate::GameStates::Quitting;
 use crate::resources::gamestate::NextGameState;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore::SystemsStore;
-use crate::resources::texturefilter::TextureFilter;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::texturestore::load_texture_from_text;
 use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
@@ -80,10 +79,9 @@ fn clear_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool) {
 pub fn menu_spawn_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Menu), Added<Menu>>,
-    font_store: NonSend<FontStore>,
-    mut texture_store: ResMut<TextureStore>,
-    mut rl: NonSendMut<raylib::RaylibHandle>,
-    th: NonSend<raylib::RaylibThread>,
+    font_metrics: Res<FontMetricsStore>,
+    mut warn_cache: ResMut<FontMetricsWarnCache>,
+    mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
     for (entity, mut menu) in query.iter_mut() {
         // Cache immutable data before mutable iteration to satisfy borrow rules
@@ -133,45 +131,40 @@ pub fn menu_spawn_system(
                     menu_item.id
                 );
             } else {
-                // Static text sprite
-                let Some(font_handle) = font_store.get(&font_string) else {
-                    warn!(
-                        "menu_spawn_system: skipping menu item '{}' because font '{}' is missing",
-                        menu_item.id, font_string
-                    );
+                // Static text sprite: measure via FontMetricsStore (CPU-side,
+                // Phase 5b), queue rasterization for process_render_asset_cmds
+                // (render-destined, Phase 5c).
+                let Some(metrics) = font_metrics.0.get(&font_string) else {
+                    if warn_cache.warn_once(&font_string) {
+                        warn!(
+                            "menu_spawn_system: skipping menu item '{}' because font '{}' has no cached metrics",
+                            menu_item.id, font_string
+                        );
+                    }
                     continue;
                 };
-                let Some(texture_handle) = load_texture_from_text(
-                    &mut rl,
-                    &th,
-                    font_handle,
-                    &menu_item.label,
-                    font_size,
-                    1.0,
-                    normal_color,
-                ) else {
-                    warn!(
-                        "menu_spawn_system: skipping menu item '{}' because text texture creation failed",
-                        menu_item.id
-                    );
-                    continue;
-                };
-                let width = texture_handle.width as f32;
-                let height = texture_handle.height as f32;
+                let size = metrics.measure_text(&menu_item.label, font_size, 1.0);
                 let key = format!("menu_{}", menu_item.id);
-                texture_store.insert(&key, texture_handle, TextureFilter::Nearest, None);
+                render_asset_cmd_writer.write(RenderAssetCmd::RasterizeText {
+                    key: key.clone(),
+                    font_key: font_string.clone(),
+                    text: menu_item.label.clone(),
+                    font_size,
+                    spacing: 1.0,
+                    color: normal_color,
+                });
                 ecmd.insert(Sprite {
                     tex_key: Arc::from(key),
-                    width,
-                    height,
+                    width: size.x,
+                    height: size.y,
                     offset: Vector2 { x: 0.0, y: 0.0 },
                     origin: Vector2 { x: 0.0, y: 0.0 },
                     flip_h: false,
                     flip_v: false,
                 });
                 debug!(
-                    "menu_spawn_system: Spawned Sprite for menu item id={}, size=({}, {})",
-                    menu_item.id, width, height
+                    "menu_spawn_system: queued RasterizeText for menu item id={}, size=({}, {})",
+                    menu_item.id, size.x, size.y
                 );
             }
 
@@ -700,5 +693,104 @@ fn dispatch_menu_action(
         MenuAction::Noop => {
             // Do nothing
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_ecs::message::Messages;
+    use bevy_ecs::system::RunSystemOnce;
+    use raylib::prelude::Vector2;
+
+    use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
+
+    fn new_test_world() -> World {
+        let mut world = World::new();
+
+        let mut store = FontMetricsStore::default();
+        store
+            .0
+            .insert("test_font".to_string(), lowercase_alphabet_metrics());
+        world.insert_resource(store);
+        world.insert_resource(FontMetricsWarnCache::default());
+        world.insert_resource(Messages::<RenderAssetCmd>::default());
+        world
+    }
+
+    #[test]
+    fn static_label_queues_rasterize_text_and_sizes_sprite() {
+        let mut world = new_test_world();
+        world.spawn(
+            Menu::new(&[("ok", "ok")], Vector2::zero(), "test_font", 20.0, 4.0, false)
+                .with_dynamic_text(false),
+        );
+
+        world
+            .run_system_once(menu_spawn_system)
+            .expect("system should run");
+        world.resource_mut::<Messages<RenderAssetCmd>>().update();
+
+        let mut reader_state =
+            bevy_ecs::system::SystemState::<MessageReader<RenderAssetCmd>>::new(&mut world);
+        let cmds: Vec<RenderAssetCmd> = {
+            let mut reader = reader_state
+                .get_mut(&mut world)
+                .expect("render asset reader should fetch");
+            reader.read().cloned().collect()
+        };
+        assert_eq!(cmds.len(), 1);
+        match &cmds[0] {
+            RenderAssetCmd::RasterizeText {
+                key,
+                font_key,
+                text,
+                font_size,
+                ..
+            } => {
+                assert_eq!(key, "menu_ok");
+                assert_eq!(font_key, "test_font");
+                assert_eq!(text, "ok");
+                assert_eq!(*font_size, 20.0_f32);
+            }
+            other => panic!("expected RasterizeText, got {other:?}"),
+        }
+
+        let mut sprite_query = world.query::<&Sprite>();
+        let sprite = sprite_query
+            .iter(&world)
+            .next()
+            .expect("sprite should be spawned");
+        // "ok" @ scale 1.0, spacing 1.0: 2*10*1.0 + (2-1)*1.0 = 21.0
+        assert_eq!(sprite.width, 21.0);
+        assert_eq!(sprite.height, 20.0);
+        assert_eq!(&*sprite.tex_key, "menu_ok");
+    }
+
+    #[test]
+    fn missing_font_metrics_skips_item_and_queues_nothing() {
+        let mut world = new_test_world();
+        world.spawn(
+            Menu::new(&[("ok", "ok")], Vector2::zero(), "missing_font", 20.0, 4.0, false)
+                .with_dynamic_text(false),
+        );
+
+        world
+            .run_system_once(menu_spawn_system)
+            .expect("system should run");
+        world.resource_mut::<Messages<RenderAssetCmd>>().update();
+
+        let mut reader_state =
+            bevy_ecs::system::SystemState::<MessageReader<RenderAssetCmd>>::new(&mut world);
+        let cmds: Vec<RenderAssetCmd> = {
+            let mut reader = reader_state
+                .get_mut(&mut world)
+                .expect("render asset reader should fetch");
+            reader.read().cloned().collect()
+        };
+        assert!(cmds.is_empty());
+
+        let mut sprite_query = world.query::<&Sprite>();
+        assert!(sprite_query.iter(&world).next().is_none());
     }
 }

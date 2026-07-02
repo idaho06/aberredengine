@@ -41,12 +41,13 @@ use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
-    drain_and_process_phase_commands, process_animation_command, process_asset_command,
-    process_camera_follow_command, process_gameconfig_command, process_group_command,
-    process_input_command, process_render_command, process_signal_command,
+    DrainScope, EffectCmdBufs, EntityCmdQueries, asset_cmd_to_audio_cmd,
+    asset_cmd_to_render_asset_cmd, drain_and_process_effect_commands,
+    drain_and_process_phase_commands, process_animation_command, process_camera_follow_command,
+    process_gameconfig_command, process_group_command, process_input_command,
+    process_render_command, process_signal_command, translate_asset_command,
 };
-use crate::systems::mapspawn::load_font_with_mipmaps;
+use crate::systems::render_assets::apply_render_asset_cmd;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
@@ -97,6 +98,14 @@ pub(crate) struct CommonCmdBufs {
 }
 
 // This function is meant to load all resources
+//
+// GL asset loading here is a documented exception to the render/logic seam
+// (`RenderAssetCmd`/`process_render_asset_cmds`, Phase 5c): `setup()` runs
+// once, synchronously, before either the FIXED or VARIABLE schedule exists,
+// so there is no logic-vs-render system split to violate yet. It shares its
+// actual GL-loading code with `process_render_asset_cmds` via
+// `apply_render_asset_cmd` rather than duplicating it. Revisit when the
+// render world's bootstrap sequencing is designed (Phase 5e).
 pub fn setup(
     mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
@@ -138,21 +147,30 @@ pub fn setup(
     // Initialize stores
     let mut tex_store = TextureStore::new();
 
-    // Process asset commands queued by Lua (setup runs once; no persistent buffer needed)
+    // Process asset commands queued by Lua (setup runs once; no persistent buffer needed).
+    // GL loads are applied directly (documented seam exception, see this
+    // function's doc comment) rather than routed through `Messages<RenderAssetCmd>`.
     let mut asset_buf = Vec::new();
     lua_runtime.drain_asset_commands_into(&mut asset_buf);
     for cmd in asset_buf {
-        process_asset_command(
-            rl,
-            th,
-            cmd,
-            &mut tex_store,
-            &mut fonts,
-            &mut font_metrics,
-            &mut shaders,
-            &mut scripting.audio_cmd_writer,
-            load_font_with_mipmaps,
-        );
+        match asset_cmd_to_audio_cmd(cmd) {
+            Ok(audio_cmd) => {
+                scripting.audio_cmd_writer.write(audio_cmd);
+            }
+            Err(other) => {
+                if let Some(render_cmd) = asset_cmd_to_render_asset_cmd(other) {
+                    apply_render_asset_cmd(
+                        rl,
+                        th,
+                        render_cmd,
+                        &mut tex_store,
+                        &mut fonts,
+                        &mut font_metrics,
+                        &mut shaders,
+                    );
+                }
+            }
+        }
     }
 
     commands.insert_resource(tex_store);
@@ -600,39 +618,26 @@ pub fn switch_scene(
 }
 
 /// Drains `asset_commands` queued from gameplay (`on_update_*`, `on_switch_scene`, phase/timer/
-/// collision callbacks) and loads them into `TextureStore`/`FontStore`/`ShaderStore`/audio.
+/// collision callbacks) and translates them into `RenderAssetCmd`/`AudioCmd` messages — no GL
+/// calls here (Phase 5c). Actual GL loading happens in
+/// [`crate::systems::render_assets::process_render_asset_cmds`].
 ///
-/// `setup()` drains this queue once for `on_setup`-time loads; this system is the reachable
+/// `setup()` drains this queue once for `on_setup`-time loads (applying GL loads directly, a
+/// documented seam exception — see that function's doc comment); this system is the reachable
 /// drain site for any `engine.load_*` call made after setup. Mirrors
 /// [`crate::systems::mapspawn::process_lua_map_commands`].
-#[allow(clippy::too_many_arguments)]
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,
-    mut raylib: crate::systems::RaylibAccess,
-    mut tex_store: ResMut<TextureStore>,
-    mut fonts: NonSendMut<FontStore>,
-    mut font_metrics: ResMut<FontMetricsStore>,
-    mut shaders: NonSendMut<ShaderStore>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
+    mut render_asset_cmd_writer: MessageWriter<crate::events::render_assets::RenderAssetCmd>,
     mut buf: Local<Vec<AssetCmd>>,
 ) {
     lua_runtime.drain_asset_commands_into(&mut buf);
     if buf.is_empty() {
         return;
     }
-    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
     for cmd in buf.drain(..) {
-        process_asset_command(
-            rl,
-            th,
-            cmd,
-            &mut tex_store,
-            &mut fonts,
-            &mut font_metrics,
-            &mut shaders,
-            &mut audio_cmd_writer,
-            load_font_with_mipmaps,
-        );
+        translate_asset_command(cmd, &mut audio_cmd_writer, &mut render_asset_cmd_writer);
     }
 }
 

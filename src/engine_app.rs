@@ -78,6 +78,7 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
+use crate::events::render_assets::RenderAssetCmd;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::animationstore::AnimationStore;
@@ -136,6 +137,7 @@ use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
+use crate::systems::render_assets::{process_render_asset_cmds, update_bevy_render_asset_cmds};
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::particleemitter::particle_emitter_system;
@@ -690,6 +692,7 @@ impl EngineBuilder {
         world.insert_non_send(imgui_bridge);
         world.insert_non_send(ShaderStore::new());
         world.insert_resource(TextureStore::new());
+        world.insert_resource(Messages::<RenderAssetCmd>::default());
         world.insert_resource(Camera2DRes(Camera2D {
             target: Vector2 { x: 0.0, y: 0.0 },
             offset: Vector2 {
@@ -895,6 +898,7 @@ impl EngineBuilder {
             )
                 .chain(),
         );
+        variable.add_systems(update_bevy_render_asset_cmds);
 
         // --- FIXED: input-driven forces/movement (InputState is sampled once
         // per render frame in main_loop, before the accumulator loop, and held
@@ -1039,6 +1043,28 @@ impl EngineBuilder {
         // state (a new GUI widget's state-sync system, a new Lua command
         // queue mutating rendered state), it must also be added to this list
         // -- nothing enforces that automatically.
+        // Drains RenderAssetCmd (Phase 5c): must see this frame's GL asset
+        // requests from menu/tilemap spawning and (when Lua is enabled) Lua
+        // asset commands + map spawning, before build_drawable_snapshot runs.
+        // Same enumerated-.after()-edges caveat as drawable_snapshot_config
+        // above applies here too: bevy_ecs 0.19 has no `.after_all()` /
+        // SystemSet-based "runs after everything that can still produce a
+        // RenderAssetCmd this frame" primitive, so a future producer must
+        // be added to this edge list by hand -- nothing enforces it.
+        #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
+        let mut process_render_asset_cmds_config = process_render_asset_cmds
+            .after(update_bevy_render_asset_cmds)
+            .after(menu_spawn_system)
+            .after(tilemap_spawn_system)
+            .before(build_drawable_snapshot);
+        #[cfg(feature = "lua")]
+        {
+            process_render_asset_cmds_config = process_render_asset_cmds_config
+                .after(crate::lua_plugin::process_lua_asset_commands)
+                .after(process_lua_map_commands);
+        }
+        variable.add_systems(process_render_asset_cmds_config);
+
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut drawable_snapshot_config = build_drawable_snapshot
             .after(gui_hit_test_system)

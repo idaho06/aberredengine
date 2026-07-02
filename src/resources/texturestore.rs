@@ -23,6 +23,23 @@ use std::ffi::CString;
 /// The `filters` map stores the sampling filter each texture was last
 /// `insert()`ed with. Absence of an entry means [`TextureFilter::default`]
 /// (`Nearest`).
+///
+/// **GPU-handle store.** [`Texture2D`] wraps a live GL texture handle. Since
+/// Phase 5c, the only writer that *loads new* textures is
+/// `crate::systems::render_assets::process_render_asset_cmds` (and
+/// `crate::lua_plugin::setup`'s one-shot bootstrap loading — a documented
+/// exception, see that function's doc comment) — both render-thread-
+/// destined code. `insert`/`set_filter` call `ffi::SetTextureFilter`
+/// directly and must only run from render-destined code. `remove` is pure
+/// `FxHashMap` bookkeeping (no GL call of its own) and may still be called
+/// from logic-adjacent cleanup code (e.g. `menu_despawn`) without violating
+/// the render/logic seam — though the removed `Texture2D` value's `Drop`
+/// impl does release the underlying GPU resource as a side effect of being
+/// dropped, not of `remove`'s own code.
+///
+/// Remains a `Resource` (not `NonSend`) for now — a future render-only
+/// `World` (Phase 5e) will own it exclusively; converting to `NonSend`
+/// today would be churn without benefit.
 pub struct TextureStore {
     pub map: FxHashMap<String, Texture2D>,
     pub paths: FxHashMap<String, String>,

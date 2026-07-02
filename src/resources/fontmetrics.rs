@@ -174,6 +174,39 @@ impl FontMetricsWarnCache {
     }
 }
 
+/// Shared test fixtures, usable from other modules' `#[cfg(test)]` code
+/// (e.g. `dynamictext_size.rs`, `menu.rs`) so a single "synthetic font"
+/// glyph table doesn't get re-derived per module.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::{FontMetrics, GlyphMetrics};
+    use rustc_hash::FxHashMap;
+
+    /// A synthetic `FontMetrics` covering `'a'..='z'` with uniform
+    /// `advance_x: 10, offset_x: 0, rec_width: 8.0` glyphs and
+    /// `base_size: 20`. Intended to be inserted under a `"test_font"` key
+    /// in a `FontMetricsStore` fixture.
+    pub(crate) fn lowercase_alphabet_metrics() -> FontMetrics {
+        let mut glyphs = FxHashMap::default();
+        for c in 'a'..='z' {
+            glyphs.insert(
+                c as i32,
+                GlyphMetrics {
+                    advance_x: 10,
+                    offset_x: 0,
+                    rec_width: 8.0,
+                },
+            );
+        }
+        let a_glyph = glyphs[&('a' as i32)];
+        FontMetrics {
+            base_size: 20,
+            glyphs,
+            first_glyph: Some(a_glyph),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
