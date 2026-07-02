@@ -42,6 +42,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
+use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -203,11 +204,15 @@ pub struct DrawableSnapshot {
     /// `build_drawable_snapshot` pass can't act on a bogus 0x0 render size.
     pub game_config: GameConfig,
     /// This frame's [`WorldSignals`] snapshot (Phase 4). Read-only consumers
-    /// on the render side (the debug world-signals panel) use this; the two
-    /// scene callbacks (`GuiCallback`, `WorldDrawCallback`) still take the
-    /// live resource because they *write* intents into it -- routing those
-    /// writes across threads is part of Phase 5's channel design.
+    /// on the render side (the debug world-signals panel, and now the two
+    /// scene callbacks' read-only `SignalSnapshot` param, Phase 5d) use this.
     pub signals: Arc<SignalSnapshot>,
+    /// Cloned [`AppState`] (Phase 5d). `render_system`'s two scene callbacks
+    /// (`GuiCallback`, `WorldDrawCallback`) read this instead of the live
+    /// resource -- writes go through `SignalIntents` instead, applied
+    /// logic-side by `apply_signal_intents`. `build_drawable_snapshot` skips
+    /// the clone on frames where `AppState::generation()` hasn't changed.
+    pub app_state: AppState,
     /// Debug-overlay payload; `Some` only while `DebugMode` is active.
     pub debug: Option<DebugSnapshot>,
 }
@@ -325,11 +330,14 @@ fn refill<D: bevy_ecs::query::ReadOnlyQueryData, T>(
 /// system did) is what actually gets this frame's fully-settled state. See
 /// `docs/render-simulation-separation-brainstorm.md`'s Phase 3 notes for why
 /// the FIXED-tick capture point was wrong.
+#[allow(clippy::too_many_arguments)]
 pub fn build_drawable_snapshot(
     queries: DrawableSnapshotQueries,
     camera: Res<Camera2DRes>,
     config: Res<GameConfig>,
     mut world_signals: ResMut<WorldSignals>,
+    app_state: Res<AppState>,
+    mut last_app_state_generation: Local<u64>,
     debug_mode: Option<Res<DebugMode>>,
     overlay_config: Res<DebugOverlayConfig>,
     mut snapshot: ResMut<DrawableSnapshot>,
@@ -463,6 +471,12 @@ pub fn build_drawable_snapshot(
     // Lazy Arc bump when no signal domain changed this frame; a real rebuild
     // only happens for dirty domains (see WorldSignals::snapshot).
     snapshot.signals = world_signals.snapshot();
+    // Cheap generation compare skips the (potentially expensive, per-user-type) AppState
+    // clone on every frame where nothing was inserted/get_mut/removed since the last capture.
+    if app_state.generation() != *last_app_state_generation {
+        snapshot.app_state = app_state.clone();
+        *last_app_state_generation = app_state.generation();
+    }
 
     if debug_mode.is_some() {
         // get_or_insert_with keeps the payload's Vec capacity alive across
@@ -515,6 +529,7 @@ mod tests {
         }));
         world.insert_resource(GameConfig::default());
         world.insert_resource(WorldSignals::default());
+        world.insert_resource(AppState::default());
         world.insert_resource(DebugOverlayConfig::default());
         world.insert_resource(DrawableSnapshot::default());
         world
@@ -645,6 +660,47 @@ mod tests {
         let snapshot = world.resource::<DrawableSnapshot>();
         assert!(snapshot.signals.flags.contains("paused"));
         assert_eq!(snapshot.signals.integers.get("score"), Some(&42));
+    }
+
+    #[test]
+    fn app_state_cloned_only_when_generation_changes() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct CountingClone(Arc<AtomicUsize>);
+        impl Clone for CountingClone {
+            fn clone(&self) -> Self {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                CountingClone(self.0.clone())
+            }
+        }
+
+        // The generation-gate `Local<u64>` only persists across calls within the same
+        // `Schedule` instance -- `run_system_once` builds a fresh temporary system (and
+        // therefore a fresh `Local`) on every call, which would always see generation 0
+        // and always reclone. A real `Schedule`, run multiple times, is what
+        // `build_drawable_snapshot` actually gets in production (registered once in
+        // `EngineBuilder::build_schedules`, run once per render frame).
+        let mut schedule = Schedule::default();
+        schedule.add_systems(build_drawable_snapshot);
+
+        let mut world = new_test_world();
+        let counter = Arc::new(AtomicUsize::new(0));
+        world
+            .resource_mut::<AppState>()
+            .insert(CountingClone(counter.clone()));
+
+        // First capture: generation changed from the insert above, so it must clone.
+        schedule.run(&mut world);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Second capture, nothing touched AppState in between: must skip the clone.
+        schedule.run(&mut world);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Mutating through get_mut bumps generation, so the next capture clones again.
+        world.resource_mut::<AppState>().get_mut::<CountingClone>();
+        schedule.run(&mut world);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 
     #[test]

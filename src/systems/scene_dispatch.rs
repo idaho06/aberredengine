@@ -37,10 +37,11 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::signal_intents::SignalIntents;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturestore::TextureStore;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
 
@@ -59,29 +60,34 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
 /// Called every frame to draw the scene's ImGui GUI.
 ///
-/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a mutable
-/// reference to [`WorldSignals`] for reading current state and writing user
-/// actions back to game logic, read-only access to the [`TextureStore`]
-/// for displaying texture previews, read-only access to the [`FontStore`]
-/// for displaying font previews, and read-only access to [`AppState`]
-/// for typed Rust objects published by ECS observers.
+/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a read-only
+/// [`SignalSnapshot`] for reading current signal state, a mutable
+/// [`SignalIntents`] buffer for queuing writes back to game logic, read-only
+/// access to the [`TextureStore`] for displaying texture previews, read-only
+/// access to the [`FontStore`] for displaying font previews, and read-only
+/// access to [`AppState`] for typed Rust objects published by ECS observers.
 ///
 /// # Contract
 /// - Called from inside the render system's ImGui frame — after the game world
 ///   is drawn, at window resolution (not render-target resolution).
 /// - Called whether or not debug mode (F11) is active.
-/// - Interaction results must be communicated via `WorldSignals` (action flags,
-///   pending edit values). `AppState` is read-only from the GUI's perspective.
+/// - Interaction results must be communicated via [`SignalIntents`] (action flags,
+///   pending edit values); queued intents are applied to `WorldSignals` at the top
+///   of the next frame's VARIABLE schedule by `apply_signal_intents` (Phase 5d,
+///   `docs/render-simulation-separation-brainstorm.md`) — one frame of latency,
+///   same as before this callback stopped holding a live `&mut WorldSignals`.
+///   `AppState` is read-only from the GUI's perspective — it's a snapshot clone,
+///   not the live resource.
 /// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.
 ///
 /// # Example
 /// ```rust,ignore
-/// fn my_gui(ui: &ImguiUi, signals: &mut WorldSignals, _textures: &TextureStore, _fonts: &FontStore, app_state: &AppState) {
+/// fn my_gui(ui: &ImguiUi, signals: &SignalSnapshot, intents: &mut SignalIntents, _textures: &TextureStore, _fonts: &FontStore, app_state: &AppState) {
 ///     if let Some(snap) = app_state.get::<MySnapshot>() {
 ///         ui.text(format!("value: {}", snap.value));
 ///     }
 ///     if ui.button("Save") {
-///         signals.set_flag("gui:action:file:save");
+///         intents.set_flag("gui:action:file:save");
 ///     }
 /// }
 /// ```
@@ -128,11 +134,21 @@ impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
     }
 }
 
-pub type GuiCallback = fn(&ImguiUi, &mut WorldSignals, &TextureStore, &FontStore, &AppState);
+pub type GuiCallback = fn(
+    &ImguiUi,
+    &SignalSnapshot,
+    &mut SignalIntents,
+    &TextureStore,
+    &FontStore,
+    &AppState,
+);
 
 /// Called every frame inside `begin_mode2D` in camera-transformed world space.
+///
+/// The [`SignalSnapshot`] param is read-only, mirroring [`GuiCallback`]'s switch away from a
+/// live `&WorldSignals` (Phase 5d).
 pub type WorldDrawCallback =
-    fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &WorldSignals);
+    fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
 
 // ---------------------------------------------------------------------------
 // SceneDescriptor
@@ -383,7 +399,8 @@ mod tests {
         fn enter(_ctx: &mut GameCtx) {}
         fn my_gui(
             _ui: &ImguiUi,
-            _signals: &mut WorldSignals,
+            _signals: &SignalSnapshot,
+            _intents: &mut SignalIntents,
             _textures: &TextureStore,
             _fonts: &FontStore,
             _app_state: &AppState,
@@ -408,7 +425,8 @@ mod tests {
         fn enter(_ctx: &mut GameCtx) {}
         fn my_gui(
             _ui: &ImguiUi,
-            _signals: &mut WorldSignals,
+            _signals: &SignalSnapshot,
+            _intents: &mut SignalIntents,
             _textures: &TextureStore,
             _fonts: &FontStore,
             _app_state: &AppState,

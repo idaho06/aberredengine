@@ -25,6 +25,7 @@
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
+//! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturefilter`] – texture sampling filter mode shared by render target and texture store
 //! - [`texturestore`] – loaded textures keyed by string IDs
@@ -60,6 +61,7 @@ pub mod rendertarget;
 pub mod scenemanager;
 pub mod screensize;
 pub mod shaderstore;
+pub mod signal_intents;
 pub mod signal_keys;
 pub mod systemsstore;
 pub mod texturefilter;

@@ -30,6 +30,7 @@
 //! - [`rust_collision`] – Rust-native collision observer and callback dispatch
 //! - [`scene_dispatch`] – scene switch and update systems for `SceneManager`-based games
 //! - [`render`] – draw world and debug overlays using Raylib
+//! - [`signal_intents`] – apply buffered `SignalIntent`s queued by render-side scene callbacks
 //! - [`signalbinding`] – update DynamicText components based on signal values
 //! - [`stuckto`] – keep entities attached to other entities
 //! - [`time`] – update simulation time and delta
@@ -93,6 +94,7 @@ pub mod render;
 pub mod render_assets;
 pub mod rust_collision;
 pub mod scene_dispatch;
+pub mod signal_intents;
 pub mod signalbinding;
 pub mod stuckto;
 pub mod tilemap;

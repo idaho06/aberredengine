@@ -109,6 +109,7 @@ use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::drawable_snapshot::{build_drawable_snapshot, DrawableSnapshot};
 use crate::resources::worldtime::{FIXED_DT, WorldTime};
+use crate::resources::signal_intents::SignalIntents;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
 use crate::systems::audio::{
@@ -147,6 +148,7 @@ use crate::systems::propagate_transforms::{
 };
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
+use crate::systems::signal_intents::apply_signal_intents;
 use crate::systems::scene_dispatch::{
     SceneDescriptor, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
 };
@@ -665,6 +667,7 @@ impl EngineBuilder {
         world.insert_resource(WorldTime::default().with_time_scale(1.0));
         world.insert_resource(WorldSignals::default());
         world.insert_resource(AppState::default());
+        world.insert_resource(SignalIntents::default());
         world.insert_resource(TrackedGroups::default());
         world.insert_resource(ScreenSize {
             w: render_width as i32,
@@ -885,6 +888,10 @@ impl EngineBuilder {
         // --- VARIABLE: input/state bookkeeping, one-shot spawns ---
         // (apply_gameconfig_changes is registered further down, after
         // build_drawable_snapshot -- it reads config from the snapshot.)
+        // apply_signal_intents runs first: intents queued by last frame's
+        // GuiCallback (inside render_system, the last VARIABLE system) must be
+        // visible to this frame's scene logic (Phase 5d).
+        variable.add_systems(apply_signal_intents.before(check_pending_state));
         variable.add_systems(menu_spawn_system);
         variable.add_systems(gridlayout_spawn_system);
         variable.add_systems(tilemap_spawn_system);

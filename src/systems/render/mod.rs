@@ -38,7 +38,7 @@ use crate::components::sprite::Sprite;
 use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
-use crate::resources::appstate::AppState;
+use crate::resources::signal_intents::SignalIntents;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -57,7 +57,6 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
-use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::scene_dispatch::GuiCallback;
 use log::warn;
@@ -230,12 +229,12 @@ pub struct RenderResources<'w> {
 /// Extra resources needed for the imgui debug panels.
 #[derive(SystemParam)]
 pub(crate) struct DebugResources<'w> {
-    /// Live signals, kept ONLY for the two scene callbacks (`GuiCallback`,
-    /// `WorldDrawCallback`), which *write* intents into it. Read-only debug
-    /// display uses `DrawableSnapshot.signals` instead (Phase 4). Routing
-    /// these writes across threads is part of Phase 5's channel design.
-    pub world_signals: ResMut<'w, WorldSignals>,
-    pub app_state: Res<'w, AppState>,
+    /// Buffered writes queued by `GuiCallback` (Phase 5d) -- applied to `WorldSignals`
+    /// logic-side by `apply_signal_intents` at the top of the next frame's VARIABLE
+    /// schedule. `GuiCallback`/`WorldDrawCallback` reads come from `DrawableSnapshot`
+    /// (`signals`, `app_state`), not a live resource -- `render_system` holds no
+    /// `ResMut<WorldSignals>`/`Res<AppState>` at all.
+    pub signal_intents: ResMut<'w, SignalIntents>,
     pub input_state: Res<'w, InputState>,
     pub camera_follow: Res<'w, CameraFollowConfig>,
     pub scene_manager: Option<Res<'w, SceneManager>>,
@@ -734,14 +733,12 @@ pub fn render_system(
                 .and_then(|sm| sm.active_scene.as_deref().and_then(|name| sm.get(name)))
                 .and_then(|desc| desc.world_draw_callback)
             {
-                let app_state = &*debug_res.app_state;
-                let world_signals = &*debug_res.world_signals;
                 cb(
                     &mut d2,
                     &camera.0,
                     &res.screensize,
-                    app_state,
-                    world_signals,
+                    &snapshot.app_state,
+                    &snapshot.signals,
                 );
             }
         }
@@ -832,8 +829,8 @@ pub fn render_system(
 
         // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
         let overlay_config = &mut *debug_res.overlay_config;
-        let world_signals = &mut *debug_res.world_signals;
-        let app_state = &*debug_res.app_state;
+        let signal_intents = &mut *debug_res.signal_intents;
+        let app_state = &snapshot.app_state;
         let input_state = &*debug_res.input_state;
         let camera_follow = &*debug_res.camera_follow;
         let scene_manager = debug_res.scene_manager.as_deref();
@@ -872,7 +869,7 @@ pub fn render_system(
                 }
 
                 if let Some(cb) = gui_callback {
-                    cb(ui, world_signals, textures, fonts, app_state);
+                    cb(ui, signal_snapshot, signal_intents, textures, fonts, app_state);
                 }
             });
         };
