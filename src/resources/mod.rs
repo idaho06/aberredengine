@@ -13,6 +13,7 @@
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
+//! - [`fontmetrics`] – CPU-side glyph metrics for text measurement without a GL context
 //! - [`fontstore`] – loaded fonts keyed by string IDs
 //! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
@@ -39,6 +40,7 @@ pub mod camerafollowconfig;
 pub mod debugmode;
 pub mod debugoverlayconfig;
 pub mod drawable_snapshot;
+pub mod fontmetrics;
 pub mod fontstore;
 pub mod fullscreen;
 pub mod gameconfig;
@@ -63,6 +65,7 @@ pub mod systemsstore;
 pub mod texturefilter;
 pub mod texturestore;
 pub mod uniformvalue;
+pub mod warn_once;
 pub mod windowsize;
 pub mod worldsignals;
 pub mod worldtime;

@@ -19,6 +19,7 @@ use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
+use crate::resources::fontmetrics::FontMetricsStore;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
@@ -101,6 +102,7 @@ pub fn setup(
     mut next_state: ResMut<NextGameState>,
     mut raylib: crate::systems::RaylibAccess,
     mut fonts: NonSendMut<FontStore>,
+    mut font_metrics: ResMut<FontMetricsStore>,
     mut shaders: NonSendMut<ShaderStore>,
     mut scripting: ScriptingContext,
 ) {
@@ -146,6 +148,7 @@ pub fn setup(
             cmd,
             &mut tex_store,
             &mut fonts,
+            &mut font_metrics,
             &mut shaders,
             &mut scripting.audio_cmd_writer,
             load_font_with_mipmaps,
@@ -608,6 +611,7 @@ pub fn process_lua_asset_commands(
     mut raylib: crate::systems::RaylibAccess,
     mut tex_store: ResMut<TextureStore>,
     mut fonts: NonSendMut<FontStore>,
+    mut font_metrics: ResMut<FontMetricsStore>,
     mut shaders: NonSendMut<ShaderStore>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
     mut buf: Local<Vec<AssetCmd>>,
@@ -624,6 +628,7 @@ pub fn process_lua_asset_commands(
             cmd,
             &mut tex_store,
             &mut fonts,
+            &mut font_metrics,
             &mut shaders,
             &mut audio_cmd_writer,
             load_font_with_mipmaps,

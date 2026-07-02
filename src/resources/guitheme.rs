@@ -191,25 +191,19 @@ impl GuiThemeWarnCache {
     /// Returns `true` the first time `key` is reported missing, `false` on
     /// every subsequent call for the same key.
     pub fn warn_once(&mut self, key: &str) -> bool {
-        Self::first_seen(&mut self.warned_keys, key)
+        crate::resources::warn_once::first_seen(&mut self.warned_keys, key)
     }
 
     /// Returns `true` the first time `key`'s button skin is reported
     /// invalid (no `normal` patch set), `false` on every subsequent call.
     pub fn warn_once_invalid_button_skin(&mut self, key: &str) -> bool {
-        Self::first_seen(&mut self.warned_invalid_button_skins, key)
+        crate::resources::warn_once::first_seen(&mut self.warned_invalid_button_skins, key)
     }
 
     /// Returns `true` the first time `key`'s progress bar skin is reported
     /// invalid (no `fill` patch set), `false` on every subsequent call.
     pub fn warn_once_invalid_progress_bar_skin(&mut self, key: &str) -> bool {
-        Self::first_seen(&mut self.warned_invalid_progress_bar_skins, key)
-    }
-
-    fn first_seen(set: &mut FxHashSet<Arc<str>>, key: &str) -> bool {
-        if set.contains(key) { return false; }
-        set.insert(Arc::from(key));
-        true
+        crate::resources::warn_once::first_seen(&mut self.warned_invalid_progress_bar_skins, key)
     }
 }
 

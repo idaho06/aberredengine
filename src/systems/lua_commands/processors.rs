@@ -15,6 +15,7 @@ use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
+use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore};
@@ -183,6 +184,7 @@ pub fn process_asset_command<F1>(
     cmd: AssetCmd,
     tex_store: &mut TextureStore,
     fonts: &mut FontStore,
+    font_metrics: &mut FontMetricsStore,
     shader_store: &mut ShaderStore,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     load_font_fn: F1,
@@ -208,6 +210,7 @@ pub fn process_asset_command<F1>(
         AssetCmd::Font { id, path, size } => match load_font_fn(rl, th, &path, size) {
             Ok(font) => {
                 debug!("Loaded font '{}' from '{}'", id, path);
+                font_metrics.0.insert(id.clone(), FontMetrics::extract(&font));
                 fonts.add(&id, font);
             }
             Err(err) => {

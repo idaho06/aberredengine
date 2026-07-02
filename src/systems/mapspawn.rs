@@ -32,6 +32,7 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
+use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
 use crate::resources::fontstore::FontStore;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
@@ -47,11 +48,13 @@ use crate::systems::RaylibAccess;
 
 /// Load all assets referenced by `map` into the engine stores, then spawn
 /// entities. Called by [`spawn_map_observer`]; can also be called directly.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_map(
     commands: &mut Commands,
     raylib: &mut RaylibAccess,
     texture_store: &mut TextureStore,
     font_store: &mut FontStore,
+    font_metrics: &mut FontMetricsStore,
     animation_store: &mut AnimationStore,
     map: &MapData,
     world_signals: &mut WorldSignals,
@@ -77,6 +80,9 @@ pub fn spawn_map(
         }
         match load_font_with_mipmaps(rl, th, &entry.path, entry.font_size as i32) {
             Ok(font) => {
+                font_metrics
+                    .0
+                    .insert(entry.key.clone(), FontMetrics::extract(&font));
                 font_store.add_with_meta(&entry.key, font, entry.path.clone(), entry.font_size);
             }
             Err(err) => {
@@ -300,12 +306,14 @@ fn insert_particle_emitter(
 
 /// Bevy observer registered by the engine. Fires on
 /// [`SpawnMapRequested`] and delegates to [`spawn_map`].
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_map_observer(
     trigger: On<SpawnMapRequested>,
     mut commands: Commands,
     mut raylib: RaylibAccess,
     mut texture_store: ResMut<TextureStore>,
     mut font_store: NonSendMut<FontStore>,
+    mut font_metrics: ResMut<FontMetricsStore>,
     mut animation_store: ResMut<AnimationStore>,
     mut world_signals: ResMut<WorldSignals>,
 ) {
@@ -314,6 +322,7 @@ pub fn spawn_map_observer(
         &mut raylib,
         &mut texture_store,
         &mut font_store,
+        &mut font_metrics,
         &mut animation_store,
         &trigger.event().map,
         &mut world_signals,

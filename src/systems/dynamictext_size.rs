@@ -6,45 +6,113 @@
 
 use bevy_ecs::change_detection::DetectChangesMut;
 use bevy_ecs::prelude::*;
-use raylib::ffi;
-use raylib::math::Vector2;
 
 use log::{debug, warn};
 
 use crate::components::dynamictext::DynamicText;
-use crate::resources::fontstore::FontStore;
+use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 
 /// Recalculates the cached size for any [`DynamicText`] that was added or changed.
 ///
 /// Uses `bypass_change_detection` when updating the size field to avoid
 /// re-triggering this system on the next frame.
+///
+/// Measures text CPU-side via [`FontMetricsStore`] instead of the GL-bound
+/// `FontStore`/`ffi::MeasureTextEx`, so this system has no GL-context
+/// dependency.
 pub fn dynamictext_size_system(
     mut query: Query<&mut DynamicText, Changed<DynamicText>>,
-    fonts: NonSend<FontStore>,
+    metrics: Res<FontMetricsStore>,
+    mut warn_cache: ResMut<FontMetricsWarnCache>,
 ) {
     for mut text in query.iter_mut() {
         debug!("Calculating size for DynamicText: '{}'", text.text);
-        let Some(font) = fonts.get(&*text.font) else {
-            warn!(
-                "Font '{}' not found in FontStore, text size will be zero",
-                text.font
-            );
+        let Some(font_metrics) = metrics.0.get(&*text.font) else {
+            if warn_cache.warn_once(&text.font) {
+                warn!(
+                    "Font '{}' not found in FontMetricsStore, text size will be zero",
+                    text.font
+                );
+            }
             continue;
         };
 
-        let Ok(text_c_string) = std::ffi::CString::new(text.text.as_bytes()) else {
-            warn!(
-                "DynamicText content for font '{}' contains a NUL byte; size unchanged",
-                text.font
-            );
-            continue;
-        };
-
-        let measured =
-            unsafe { ffi::MeasureTextEx(**font, text_c_string.as_ptr(), text.font_size, 1.0) };
-
-        // Convert ffi::Vector2 to math::Vector2
-        let size = Vector2::new(measured.x, measured.y);
+        let size = font_metrics.measure_text(&text.text, text.font_size, 1.0);
         text.bypass_change_detection().set_size(size);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_ecs::system::RunSystemOnce;
+    use rustc_hash::FxHashMap;
+
+    use crate::components::dynamictext::DynamicText;
+    use crate::resources::fontmetrics::{FontMetrics, GlyphMetrics};
+    use raylib::prelude::Color;
+
+    fn new_test_world() -> World {
+        let mut world = World::new();
+
+        let mut glyphs = FxHashMap::default();
+        for c in 'a'..='z' {
+            glyphs.insert(
+                c as i32,
+                GlyphMetrics {
+                    advance_x: 10,
+                    offset_x: 0,
+                    rec_width: 8.0,
+                },
+            );
+        }
+        let a_glyph = glyphs[&('a' as i32)];
+        let mut store = FontMetricsStore::default();
+        store.0.insert(
+            "test_font".to_string(),
+            FontMetrics {
+                base_size: 20,
+                glyphs,
+                first_glyph: Some(a_glyph),
+            },
+        );
+        world.insert_resource(store);
+        world.insert_resource(FontMetricsWarnCache::default());
+        world
+    }
+
+    #[test]
+    fn writes_fixture_predicted_size() {
+        let mut world = new_test_world();
+        world.spawn(DynamicText::new("abc", "test_font", 20.0, Color::WHITE));
+
+        world
+            .run_system_once(dynamictext_size_system)
+            .expect("system should run");
+
+        let mut query = world.query::<&DynamicText>();
+        let text = query.single(&world).unwrap();
+        // "abc" @ scale 1.0, spacing 1.0: 3*10*1.0 + (3-1)*1.0 = 32.0
+        assert_eq!(text.size().x, 32.0);
+        assert_eq!(text.size().y, 20.0);
+    }
+
+    #[test]
+    fn missing_font_key_leaves_size_zero_and_does_not_panic() {
+        let mut world = new_test_world();
+        world.spawn(DynamicText::new("abc", "missing_font", 20.0, Color::WHITE));
+
+        // Run twice to exercise the warn-once path without panicking.
+        world
+            .run_system_once(dynamictext_size_system)
+            .expect("system should run");
+        world
+            .run_system_once(dynamictext_size_system)
+            .expect("system should run");
+
+        let mut query = world.query::<&DynamicText>();
+        let text = query.single(&world).unwrap();
+        assert_eq!(text.size().x, 0.0);
+        assert_eq!(text.size().y, 0.0);
     }
 }

@@ -86,6 +86,7 @@ use crate::resources::audio::{setup_audio, shutdown_audio};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
+use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
@@ -682,6 +683,8 @@ impl EngineBuilder {
         world.insert_resource(GameState::new());
         world.insert_resource(NextGameState::new());
         world.insert_non_send(FontStore::new());
+        world.insert_resource(FontMetricsStore::default());
+        world.insert_resource(FontMetricsWarnCache::default());
         let imgui_bridge = ImguiBridge::new_dark()
             .map_err(|err| format!("Failed to initialize imgui bridge: {err}"))?;
         world.insert_non_send(imgui_bridge);
