@@ -22,10 +22,12 @@ use crate::resources::signal_intents::SignalIntent;
 #[derive(Debug, Clone)]
 pub enum LogicMsg {
     /// One raw input sample per render frame. Carries the current OS window
-    /// dimensions so the logic world's `WindowSize` mirror stays fresh
-    /// without a separate message.
+    /// dimensions plus that render frame's real delta so the logic world's
+    /// `WindowSize` mirror stays fresh and VARIABLE systems can observe the
+    /// same frame delta the render loop just measured.
     Input {
         snapshot: RawInputSnapshot,
+        frame_dt: f32,
         window_w: i32,
         window_h: i32,
     },

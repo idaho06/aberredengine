@@ -83,6 +83,22 @@ pub fn gui_hit_test_system(
         let was_pressed = interactable.state == GuiWidgetState::Pressed;
         let mouse_down = input.mouse_left_button.active;
         let released = input.mouse_left_button.just_released;
+        // A coalesced input backlog (logic thread behind, e.g. a render
+        // stall) can merge a full press+release into one pass: `active`
+        // reflects only the newest sample (so `mouse_down` reads false) but
+        // `just_pressed` still records that a press edge occurred during the
+        // backlog. Treat that edge the same as an already-Pressed state so
+        // the click isn't silently dropped.
+        // Known trade-off: the merged snapshot carries only the newest
+        // cursor position, not per-edge history, so if the press and release
+        // land on two different widgets within one coalesced backlog (press
+        // widget A, drag, release over widget B, all before the logic thread
+        // catches up), the click is attributed to whichever widget is under
+        // the cursor now (B) rather than where the press actually started.
+        // This requires an active render stall plus a drag between widgets
+        // inside that stall — narrow enough to accept versus guaranteeing a
+        // dropped click for the far more common same-widget case.
+        let pressed_this_pass = was_pressed || input.mouse_left_button.just_pressed;
 
         interactable.state = if mouse_down {
             GuiWidgetState::Pressed
@@ -90,7 +106,7 @@ pub fn gui_hit_test_system(
             GuiWidgetState::Hovered
         };
 
-        if was_pressed && released {
+        if pressed_this_pass && released {
             commands.trigger(GuiInteractableClickEvent { entity });
             gui_input.click_consumed_this_frame = true;
         }

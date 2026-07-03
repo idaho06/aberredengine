@@ -70,12 +70,15 @@ use std::time::{Duration, Instant};
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
+use bevy_ecs::system::RunSystemOnce;
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, unbounded};
 use raylib::ffi::TraceLogLevel;
 
 use crate::events::logic_bridge::{LogicMsg, RenderMsg};
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
-use crate::resources::logic_bridge::{LogicBridge, LogicTx, RenderTx, shutdown_logic};
+use crate::resources::logic_bridge::{
+    LogicBridge, LogicTx, RenderTx, shutdown_logic, shutdown_logic_bridge,
+};
 use crate::resources::rawinput::RawInputSnapshot;
 use crate::systems::input::merge_input_snapshots;
 use crate::systems::logic_bridge::{
@@ -746,17 +749,26 @@ impl EngineBuilder {
         if let Some(table) = render_scene_table {
             world.insert_resource(table);
         }
-        world.insert_resource(LogicTx(bridge.tx_logic.clone()));
-        world.insert_resource(bridge);
-
         world.insert_non_send(render_target);
         world.insert_non_send(FontStore::new());
-        let imgui_bridge = ImguiBridge::new_dark()
-            .map_err(|err| format!("Failed to initialize imgui bridge: {err}"))?;
+        // Created before `bridge` is handed to the world: on failure here the
+        // logic thread (already spawned by the caller) is still reachable
+        // through the locally-owned `bridge` and can be shut down explicitly,
+        // rather than being leaked by a dropped, never-populated World.
+        let imgui_bridge = match ImguiBridge::new_dark() {
+            Ok(imgui_bridge) => imgui_bridge,
+            Err(err) => {
+                shutdown_logic_bridge(bridge);
+                return Err(format!("Failed to initialize imgui bridge: {err}"));
+            }
+        };
         world.insert_non_send(imgui_bridge);
         world.insert_non_send(ShaderStore::new());
         world.insert_non_send(rl);
         world.insert_non_send(thread);
+
+        world.insert_resource(LogicTx(bridge.tx_logic.clone()));
+        world.insert_resource(bridge);
 
         world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
         world.flush();
@@ -1269,6 +1281,7 @@ impl EngineBuilder {
         let mut quit_requested = false;
         let mut last_screen_size = *world.resource::<ScreenSize>();
         let mut last_overlay_config = world.resource::<DebugOverlayConfig>().clone();
+        let mut last_render_instant = Instant::now();
         // Crossbeam endpoints are Clone: hold them directly so the loop body
         // never has to re-fetch (and re-borrow) the LogicBridge resource.
         let (tx_logic, rx_render) = {
@@ -1281,6 +1294,10 @@ impl EngineBuilder {
             .window_should_close()
             && !quit_requested
         {
+            let now = Instant::now();
+            let frame_dt = now.duration_since(last_render_instant).as_secs_f32();
+            last_render_instant = now;
+
             // Refresh WindowSize from the OS before sampling (letterbox math).
             let (window_w, window_h) = {
                 let rl = world.non_send::<raylib::RaylibHandle>();
@@ -1318,6 +1335,7 @@ impl EngineBuilder {
             if tx_logic
                 .send(LogicMsg::Input {
                     snapshot,
+                    frame_dt,
                     window_w,
                     window_h,
                 })
@@ -1469,6 +1487,11 @@ fn advance_simulation(
     world.resource_mut::<WorldTime>().delta = frame_delta;
 }
 
+fn set_variable_delta_from_render_frame(world: &mut World, frame_dt: f32) {
+    let time_scale = world.resource::<WorldTime>().time_scale;
+    world.resource_mut::<WorldTime>().delta = frame_dt * time_scale;
+}
+
 /// The logic thread's event-driven loop: build the gameplay world +
 /// schedules, then block on `rx_logic` with a `FIXED_DT` timeout so the
 /// 240Hz simulation stays honest even when the render thread stalls (window
@@ -1519,20 +1542,23 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                 // snapshot (never a snapshot a previous pass already
                 // consumed — that would double-fire edges); the other
                 // message kinds apply to their mirrors immediately.
-                let mut pending_input: Option<(RawInputSnapshot, i32, i32)> = None;
+                let mut pending_input: Option<(RawInputSnapshot, f32, i32, i32)> = None;
+                let mut shutdown_requested = false;
                 for msg in std::iter::once(first).chain(rx_logic.try_iter()) {
                     match msg {
                         LogicMsg::Input {
                             snapshot,
+                            frame_dt,
                             window_w,
                             window_h,
                         } => match &mut pending_input {
-                            Some((merged, w, h)) => {
+                            Some((merged, dt, w, h)) => {
                                 merge_input_snapshots(merged, &snapshot);
+                                *dt = frame_dt;
                                 *w = window_w;
                                 *h = window_h;
                             }
-                            None => pending_input = Some((snapshot, window_w, window_h)),
+                            None => pending_input = Some((snapshot, frame_dt, window_w, window_h)),
                         },
                         LogicMsg::ScreenSize { w, h } => {
                             let mut screen_size = world.resource_mut::<ScreenSize>();
@@ -1556,11 +1582,23 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                         LogicMsg::SignalIntents(intents) => {
                             world.resource_mut::<SignalIntents>().0.extend(intents);
                         }
-                        LogicMsg::Shutdown => break 'main,
+                        LogicMsg::Shutdown => shutdown_requested = true,
                     }
                 }
 
-                if let Some((snapshot, window_w, window_h)) = pending_input {
+                if shutdown_requested {
+                    // Mirrors the pre-split behavior of exiting immediately on
+                    // Shutdown (no FIXED/VARIABLE work runs after it) — the
+                    // messages loop above already applied everything in this
+                    // batch to its resource, including any SignalIntents, so
+                    // flush those into WorldSignals directly instead of
+                    // running a full (now-pointless) simulation pass just to
+                    // reach apply_signal_intents inside VARIABLE.
+                    let _ = world.run_system_once(apply_signal_intents);
+                    break 'main;
+                }
+
+                if let Some((snapshot, frame_dt, window_w, window_h)) = pending_input {
                     {
                         let mut window_size = world.resource_mut::<WindowSize>();
                         window_size.w = window_w;
@@ -1572,6 +1610,10 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                     // read it, then one VARIABLE pass.
                     input_schedule.run(&mut world);
                     advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
+                    // VARIABLE systems should see the render-frame delta that
+                    // produced this input sample, not the most recent 240 Hz
+                    // logic-thread wakeup delta from advance_simulation().
+                    set_variable_delta_from_render_frame(&mut world, frame_dt);
                     {
                         crate::tracy::tracy_span!("variable_schedule_run");
                         variable.run(&mut world);
@@ -1796,6 +1838,7 @@ mod tests {
         tx_logic
             .send(LogicMsg::Input {
                 snapshot,
+                frame_dt: 1.0 / 60.0,
                 window_w: 800,
                 window_h: 600,
             })
@@ -1818,6 +1861,21 @@ mod tests {
         assert!(builder.enter_play_hook.is_some());
         assert!(builder.update_hook.is_some());
         assert!(builder.switch_scene_hook.is_some());
+    }
+
+    #[test]
+    fn variable_delta_uses_render_frame_dt() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            elapsed: 0.0,
+            delta: FIXED_DT,
+            time_scale: 1.5,
+            frame_count: 0,
+        });
+
+        set_variable_delta_from_render_frame(&mut world, 1.0 / 60.0);
+
+        assert!((world.resource::<WorldTime>().delta - (1.0 / 40.0)).abs() < 1e-6);
     }
 
     #[test]

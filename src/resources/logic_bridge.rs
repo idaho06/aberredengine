@@ -48,9 +48,19 @@ pub struct RenderTx(pub Sender<RenderMsg>);
 /// thread first), and removes the resource from the world.
 pub fn shutdown_logic(world: &mut World) {
     if let Some(bridge) = world.remove_resource::<LogicBridge>() {
-        let _ = bridge.tx_logic.send(LogicMsg::Shutdown);
-        if bridge.handle.join().is_err() {
-            log::error!("Logic thread panicked during shutdown");
-        }
+        shutdown_logic_bridge(bridge);
+    }
+}
+
+/// Send [`LogicMsg::Shutdown`] and join the logic thread from an owned
+/// [`LogicBridge`] that hasn't (yet) been inserted as a world resource — e.g.
+/// a render-world setup step that fails after the logic thread was already
+/// spawned but before the bridge was handed to the `World`. Without this,
+/// dropping the bridge leaks the thread: `JoinHandle::drop` detaches rather
+/// than joining, so the thread would keep running forever.
+pub fn shutdown_logic_bridge(bridge: LogicBridge) {
+    let _ = bridge.tx_logic.send(LogicMsg::Shutdown);
+    if bridge.handle.join().is_err() {
+        log::error!("Logic thread panicked during shutdown");
     }
 }
