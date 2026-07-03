@@ -11,8 +11,9 @@
 //! - [`apply_input_snapshot`] — a system that copies the latest snapshot into
 //!   [`InputState`], fills in the camera-dependent `mouse_world_x/y`
 //!   projection, and emits the input events ([`InputEvent`],
-//!   [`SwitchDebugEvent`], [`SwitchFullScreenEvent`]) from the snapshot's
-//!   edge flags. Logic-side work: no raylib handle involved.
+//!   [`SwitchDebugEvent`]) from the snapshot's edge flags (F10's
+//!   `SwitchFullScreenEvent` is render-side-only since Phase 5e). Logic-side
+//!   work: no raylib handle involved.
 
 use bevy_ecs::prelude::*;
 
@@ -23,7 +24,6 @@ use raylib::prelude::Camera2D;
 
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
-use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::{BoolState, InputState};
 use crate::resources::input_bindings::{InputBinding, InputBindings};
@@ -171,11 +171,13 @@ pub fn sample_input_snapshot(
 /// Copy the latest [`RawInputSnapshot`] into [`InputState`], compute the
 /// world-space mouse from the logic-owned camera, and emit input events.
 ///
-/// Event semantics match the pre-split `update_input_state` exactly: one
-/// [`InputEvent`] per action `just_pressed`/`just_released` edge;
-/// `mode_debug`/`fullscreen_toggle` emit no `InputEvent` and instead trigger
-/// [`SwitchDebugEvent`]/[`SwitchFullScreenEvent`] on `just_pressed`; the raw
-/// `mouse_left_button` emits nothing.
+/// Event semantics match the pre-split `update_input_state` except for F10:
+/// one [`InputEvent`] per action `just_pressed`/`just_released` edge;
+/// `mode_debug` emits no `InputEvent` and instead triggers
+/// [`SwitchDebugEvent`] on `just_pressed`; `fullscreen_toggle` triggers
+/// nothing here (Phase 5e — the render loop handles F10 on its own world,
+/// where `switch_fullscreen_observer` lives); the raw `mouse_left_button`
+/// emits nothing.
 pub fn apply_input_snapshot(
     latest: Res<LatestInputSnapshot>,
     mut input: ResMut<InputState>,
@@ -240,16 +242,60 @@ pub fn apply_input_snapshot(
     emit_action!(input.action_3, InputAction::Action3);
     emit_action!(input.action_special, InputAction::Special);
 
-    // mode_debug and fullscreen_toggle don't emit InputEvent; they trigger
-    // their own dedicated events so existing observers don't need to change.
+    // mode_debug doesn't emit InputEvent; it triggers its own dedicated event
+    // so existing observers don't need to change. fullscreen_toggle triggers
+    // NOTHING here since Phase 5e: F10 is render-side-only (the render loop
+    // triggers SwitchFullScreenEvent on its own world from the sampled edge —
+    // switch_fullscreen_observer and the FullScreen resource live there).
     if input.mode_debug.just_pressed {
         debug!("Debug mode key pressed");
         commands.trigger(SwitchDebugEvent {});
     }
-    if input.fullscreen_toggle.just_pressed {
-        debug!("Fullscreen toggle key pressed");
-        commands.trigger(SwitchFullScreenEvent {});
+}
+
+/// Merge a newer raw input sample into `base` (Phase 5e input-backlog
+/// coalescing).
+///
+/// When the logic thread falls behind the render thread, multiple
+/// `LogicMsg::Input` messages can be pending for one logic pass. Processing
+/// only the newest would silently drop `just_pressed`/`just_released` edges
+/// carried by the intermediate samples, so the backlog is folded into one
+/// snapshot: edges are OR-ed (an edge seen in ANY unprocessed sample fires
+/// once), `active` and analog values take the newest sample, and `scroll_y`
+/// (a per-frame delta) is summed.
+///
+/// IMPORTANT: only ever merge samples that no logic pass has consumed yet —
+/// merging an already-applied snapshot would double-fire its edges.
+pub fn merge_input_snapshots(base: &mut RawInputSnapshot, next: &RawInputSnapshot) {
+    fn merge_bool(base: &mut BoolState, next: &BoolState) {
+        base.just_pressed |= next.just_pressed;
+        base.just_released |= next.just_released;
+        base.active = next.active;
     }
+
+    let b = &mut base.state;
+    let n = &next.state;
+    merge_bool(&mut b.maindirection_up, &n.maindirection_up);
+    merge_bool(&mut b.maindirection_down, &n.maindirection_down);
+    merge_bool(&mut b.maindirection_left, &n.maindirection_left);
+    merge_bool(&mut b.maindirection_right, &n.maindirection_right);
+    merge_bool(&mut b.secondarydirection_up, &n.secondarydirection_up);
+    merge_bool(&mut b.secondarydirection_down, &n.secondarydirection_down);
+    merge_bool(&mut b.secondarydirection_left, &n.secondarydirection_left);
+    merge_bool(&mut b.secondarydirection_right, &n.secondarydirection_right);
+    merge_bool(&mut b.action_back, &n.action_back);
+    merge_bool(&mut b.action_1, &n.action_1);
+    merge_bool(&mut b.action_2, &n.action_2);
+    merge_bool(&mut b.action_3, &n.action_3);
+    merge_bool(&mut b.mode_debug, &n.mode_debug);
+    merge_bool(&mut b.fullscreen_toggle, &n.fullscreen_toggle);
+    merge_bool(&mut b.action_special, &n.action_special);
+    merge_bool(&mut b.mouse_left_button, &n.mouse_left_button);
+    b.scroll_y += n.scroll_y;
+    b.mouse_x = n.mouse_x;
+    b.mouse_y = n.mouse_y;
+    // mouse_world_x/y are 0.0 inside raw snapshots (camera-dependent, filled
+    // in by apply_input_snapshot) — nothing to merge.
 }
 
 #[cfg(test)]
@@ -323,7 +369,7 @@ mod tests {
         world.add_observer(|_: On<SwitchDebugEvent>, mut log: ResMut<EventLog>| {
             log.debug_switches += 1;
         });
-        world.add_observer(|_: On<SwitchFullScreenEvent>, mut log: ResMut<EventLog>| {
+        world.add_observer(|_: On<crate::events::switchfullscreen::SwitchFullScreenEvent>, mut log: ResMut<EventLog>| {
             log.fullscreen_switches += 1;
         });
         world
@@ -372,8 +418,72 @@ mod tests {
         assert_eq!(log.fullscreen_switches, 0);
     }
 
+    // --- Phase 5e: input-backlog coalescing ---
+
     #[test]
-    fn apply_triggers_debug_and_fullscreen_switches() {
+    fn merge_preserves_edges_from_both_samples() {
+        // Sample A: press edge. Sample B (newer): release edge, key up.
+        let mut a = RawInputSnapshot::default();
+        a.state.action_1.just_pressed = true;
+        a.state.action_1.active = true;
+        let mut b = RawInputSnapshot::default();
+        b.state.action_1.just_released = true;
+        b.state.action_1.active = false;
+
+        merge_input_snapshots(&mut a, &b);
+
+        // Both edges survive (each unprocessed sample's edge fires exactly
+        // once in the single coalesced pass); `active` takes the newest.
+        assert!(a.state.action_1.just_pressed);
+        assert!(a.state.action_1.just_released);
+        assert!(!a.state.action_1.active);
+    }
+
+    #[test]
+    fn merge_takes_newest_analog_and_sums_scroll() {
+        let mut a = RawInputSnapshot::default();
+        a.state.mouse_x = 10.0;
+        a.state.mouse_y = 20.0;
+        a.state.scroll_y = 1.0;
+        let mut b = RawInputSnapshot::default();
+        b.state.mouse_x = 30.0;
+        b.state.mouse_y = 40.0;
+        b.state.scroll_y = -0.5;
+
+        merge_input_snapshots(&mut a, &b);
+
+        assert_eq!(a.state.mouse_x, 30.0);
+        assert_eq!(a.state.mouse_y, 40.0);
+        // scroll_y is a per-frame delta: the two frames' wheel movement adds up.
+        assert_eq!(a.state.scroll_y, 0.5);
+    }
+
+    #[test]
+    fn merged_backlog_fires_edge_exactly_once_through_apply() {
+        // Regression guard for the double-fire risk: two backlogged samples
+        // — one carrying the press edge, a newer one without it — coalesce
+        // into ONE snapshot whose single apply emits the edge event once.
+        let mut older = RawInputSnapshot::default();
+        older.state.action_1.just_pressed = true;
+        older.state.action_1.active = true;
+        let mut newer = RawInputSnapshot::default();
+        newer.state.action_1.active = true; // held, no new edge
+
+        merge_input_snapshots(&mut older, &newer);
+
+        let mut world = build_world(older, test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        world.run_system_once(apply_input_snapshot).unwrap();
+
+        let log = world.resource::<EventLog>();
+        assert_eq!(
+            log.input_events,
+            vec![(InputAction::Action1, true)],
+            "coalesced backlog must emit the press edge exactly once"
+        );
+    }
+
+    #[test]
+    fn apply_triggers_debug_switch_but_not_fullscreen() {
         let mut snapshot = RawInputSnapshot::default();
         snapshot.state.mode_debug.just_pressed = true;
         snapshot.state.fullscreen_toggle.just_pressed = true;
@@ -383,7 +493,9 @@ mod tests {
 
         let log = world.resource::<EventLog>();
         assert_eq!(log.debug_switches, 1);
-        assert_eq!(log.fullscreen_switches, 1);
+        // F10 is render-side-only since Phase 5e: the logic-side apply must
+        // NOT trigger SwitchFullScreenEvent even when the edge is set.
+        assert_eq!(log.fullscreen_switches, 0);
         // toggles never emit plain InputEvents
         assert!(log.input_events.is_empty());
     }

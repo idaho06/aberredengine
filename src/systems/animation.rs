@@ -28,7 +28,7 @@ use crate::components::sprite::Sprite;
 use crate::events::animation::AnimationFinishedEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::signal_keys as sk;
-use crate::resources::texturestore::TextureStore;
+use crate::resources::texturedims::TextureDimsStore;
 use crate::resources::worldtime::WorldTime;
 
 /// Advance animation playback and update the sprite frame.
@@ -48,7 +48,7 @@ pub fn animation(
         With<MapPosition>,
     >,
     animation_store: Res<AnimationStore>,
-    texture_store: Res<TextureStore>,
+    texture_dims: Res<TextureDimsStore>,
     time: Res<WorldTime>,
     mut commands: Commands,
 ) {
@@ -92,12 +92,13 @@ pub fn animation(
                 }
             }
 
-            // Compute sprite offset for the current frame.
+            // Compute sprite offset for the current frame. The atlas width
+            // comes from the CPU-side dims mirror (Phase 5e) — the GPU
+            // TextureStore lives in the render world only.
             let tex_width = if animation.vertical_displacement > 0.0 {
-                texture_store
-                    .map
-                    .get(animation.tex_key.as_ref())
-                    .map(|t| t.width as f32)
+                texture_dims
+                    .width(animation.tex_key.as_ref())
+                    .map(|w| w as f32)
             } else {
                 None
             };
@@ -856,7 +857,7 @@ mod tests {
             delta: 0.11,
             ..WorldTime::default()
         });
-        world.insert_resource(TextureStore::default());
+        world.insert_resource(TextureDimsStore::default());
         world.insert_resource(EventCount::default());
 
         let mut anim_store = AnimationStore::default();
@@ -955,7 +956,7 @@ mod tests {
             delta: 0.11,
             ..WorldTime::default()
         });
-        world.insert_resource(TextureStore::default());
+        world.insert_resource(TextureDimsStore::default());
 
         let mut anim_store = AnimationStore::default();
         anim_store.animations.insert(
@@ -1056,7 +1057,7 @@ mod tests {
             delta: 0.11,
             ..WorldTime::default()
         });
-        world.insert_resource(TextureStore::default());
+        world.insert_resource(TextureDimsStore::default());
 
         let mut anim_store = AnimationStore::default();
         // 4-frame animation: ticks 1–4 advance frames; tick 4 hits overflow and finishes.

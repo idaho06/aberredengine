@@ -66,6 +66,7 @@ pub mod gui_layout;
 pub mod gui_progressbar_signal_update;
 pub mod gui_spawn;
 pub mod input;
+pub mod logic_bridge;
 pub mod inputaccelerationcontroller;
 pub mod inputsimplecontroller;
 #[cfg(feature = "lua")]

@@ -43,6 +43,7 @@ use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::resources::texturedims::TextureDimsStore;
 use aberredengine::resources::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
@@ -84,6 +85,7 @@ fn make_world(delta: f32) -> World {
     world.insert_resource(AppState::default());
     world.init_resource::<Messages<AudioCmd>>();
     world.init_resource::<TextureStore>();
+    world.init_resource::<TextureDimsStore>();
     world.insert_resource(GameConfig::default());
     world.init_resource::<PostProcessShader>();
     world.insert_resource(CameraFollowConfig::default());
@@ -3092,11 +3094,11 @@ fn animation_wraps_rows_with_vertical_displacement() {
     );
     world.insert_resource(anim_store);
 
-    // Insert a mock texture so the system can look up the width.
+    // Record the atlas dims so the system can look up the width (Phase 5e:
+    // animation reads TextureDimsStore, not the GPU TextureStore).
     world
-        .resource_mut::<TextureStore>()
-        .map
-        .insert("sheet".to_string(), make_dummy_texture(256, 256));
+        .resource_mut::<TextureDimsStore>()
+        .insert("sheet", 256, 256);
 
     let entity = world
         .spawn((
@@ -3197,9 +3199,8 @@ fn animation_wraps_with_partial_first_row() {
     world.insert_resource(anim_store);
 
     world
-        .resource_mut::<TextureStore>()
-        .map
-        .insert("sheet".to_string(), make_dummy_texture(256, 256));
+        .resource_mut::<TextureDimsStore>()
+        .insert("sheet", 256, 256);
 
     let entity = world
         .spawn((
@@ -3321,9 +3322,8 @@ fn animation_single_frame_per_row_wrapping() {
     world.insert_resource(anim_store);
 
     world
-        .resource_mut::<TextureStore>()
-        .map
-        .insert("sheet".to_string(), make_dummy_texture(64, 256));
+        .resource_mut::<TextureDimsStore>()
+        .insert("sheet", 64, 256);
 
     let entity = world
         .spawn((

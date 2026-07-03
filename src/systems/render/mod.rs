@@ -40,7 +40,6 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::camera2d::Camera2DRes;
-use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::drawable_snapshot::{
     DrawableSnapshot, GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry,
@@ -50,14 +49,12 @@ use crate::resources::fontstore::FontStore;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::input::InputState;
-use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
-use crate::resources::scenemanager::SceneManager;
+use crate::resources::scenemanager::RenderSceneTable;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
-use crate::resources::worldtime::WorldTime;
 use crate::systems::scene_dispatch::GuiCallback;
 use log::warn;
 
@@ -215,14 +212,13 @@ pub struct RenderLocals {
 /// Bundled render resources to reduce system parameter count.
 #[derive(SystemParam)]
 pub struct RenderResources<'w> {
-    pub camera: Res<'w, Camera2DRes>,
+    // Camera2D, WorldTime, PostProcessShader and GuiThemeStore are read from
+    // DrawableSnapshot since Phase 5e — the live resources are
+    // logic-world-only.
     pub screensize: Res<'w, ScreenSize>,
     pub window_size: Res<'w, WindowSize>,
     pub textures: Res<'w, TextureStore>,
-    pub world_time: Res<'w, WorldTime>,
-    pub post_process: Res<'w, PostProcessShader>,
     pub fonts: NonSend<'w, FontStore>,
-    pub gui_theme_store: Res<'w, GuiThemeStore>,
     pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
 }
 
@@ -235,9 +231,15 @@ pub(crate) struct DebugResources<'w> {
     /// (`signals`, `app_state`), not a live resource -- `render_system` holds no
     /// `ResMut<WorldSignals>`/`Res<AppState>` at all.
     pub signal_intents: ResMut<'w, SignalIntents>,
+    /// Post Phase 5e this is the render side's own mirror, written by the
+    /// render loop from its `sample_input_snapshot` result (freshest sample,
+    /// no channel round-trip); `CameraFollowConfig` reads come from
+    /// `DrawableSnapshot.camera_follow`.
     pub input_state: Res<'w, InputState>,
-    pub camera_follow: Res<'w, CameraFollowConfig>,
-    pub scene_manager: Option<Res<'w, SceneManager>>,
+    /// Render-side scene-callback table (Phase 5e) — resolved against
+    /// `DrawableSnapshot.active_scene` instead of the logic-world-only
+    /// `SceneManager`.
+    pub scene_table: Option<Res<'w, RenderSceneTable>>,
     pub overlay_config: ResMut<'w, DebugOverlayConfig>,
 }
 
@@ -293,7 +295,6 @@ pub fn render_system(
     } = &mut *locals;
 
     // Unpack bundled resources for easier access
-    let camera = &res.camera;
     let screensize = &res.screensize;
     let window_size = &res.window_size;
     let textures = &res.textures;
@@ -414,7 +415,7 @@ pub fn render_system(
                                     set_standard_uniforms(
                                         &mut entry.shader,
                                         &mut entry.locations,
-                                        &res.world_time,
+                                        &snapshot.world_time,
                                         screensize,
                                         window_size,
                                         &dest,
@@ -571,7 +572,7 @@ pub fn render_system(
                                     set_standard_uniforms(
                                         &mut entry.shader,
                                         &mut entry.locations,
-                                        &res.world_time,
+                                        &snapshot.world_time,
                                         screensize,
                                         window_size,
                                         &dest,
@@ -728,14 +729,15 @@ pub fn render_system(
             }
 
             if let Some(cb) = debug_res
-                .scene_manager
+                .scene_table
                 .as_deref()
-                .and_then(|sm| sm.active_scene.as_deref().and_then(|name| sm.get(name)))
+                .zip(snapshot.active_scene.as_deref())
+                .and_then(|(table, name)| table.get(name))
                 .and_then(|desc| desc.world_draw_callback)
             {
                 cb(
                     &mut d2,
-                    &camera.0,
+                    &snapshot.camera,
                     &res.screensize,
                     &snapshot.app_state,
                     &snapshot.signals,
@@ -756,7 +758,7 @@ pub fn render_system(
                 &snapshot.gui_buttons,
                 &snapshot.gui_labels,
                 &snapshot.gui_progress_bars,
-                &res.gui_theme_store,
+                &snapshot.gui_themes,
                 &mut res.gui_theme_warn_cache,
                 textures,
                 fonts,
@@ -773,9 +775,10 @@ pub fn render_system(
     // Extract gui_callback from the active scene (fn pointer is Copy — no borrow held).
     // Must be done before taking mutable borrows of other debug_res fields below.
     let gui_callback: Option<GuiCallback> = debug_res
-        .scene_manager
+        .scene_table
         .as_deref()
-        .and_then(|sm| sm.active_scene.as_deref().and_then(|name| sm.get(name)))
+        .zip(snapshot.active_scene.as_deref())
+        .and_then(|(table, name)| table.get(name))
         .and_then(|desc| desc.gui_callback);
 
     let needs_imgui = needs_imgui(debug_active, gui_callback.is_some());
@@ -801,7 +804,7 @@ pub fn render_system(
                 screensize.w as u32,
                 screensize.h as u32,
             );
-            let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, camera.0);
+            let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, snapshot.camera);
             let sprite_count = snapshot.map_sprites.len();
             let collider_count = debug_snapshot.colliders.len();
             let position_count = debug_snapshot.positions.len();
@@ -832,11 +835,12 @@ pub fn render_system(
         let signal_intents = &mut *debug_res.signal_intents;
         let app_state = &snapshot.app_state;
         let input_state = &*debug_res.input_state;
-        let camera_follow = &*debug_res.camera_follow;
-        let scene_manager = debug_res.scene_manager.as_deref();
-        let world_time = &*res.world_time;
+        let camera_follow = &snapshot.camera_follow;
+        let active_scene = snapshot.active_scene.as_deref();
+        let world_time = &snapshot.world_time;
         let config = &snapshot.game_config;
         let signal_snapshot = &*snapshot.signals;
+        let camera = &snapshot.camera;
 
         let closure = move |_d: &RaylibDrawHandle<'_>| {
             imgui_bridge.render(|ui| {
@@ -848,7 +852,7 @@ pub fn render_system(
                         input_state,
                         camera,
                         camera_follow,
-                        scene_manager,
+                        active_scene,
                         textures,
                         fonts,
                         shader_count,
@@ -878,7 +882,7 @@ pub fn render_system(
             th,
             &mut render_target,
             &mut shader_store,
-            &res.post_process,
+            &snapshot.post_process,
             world_time,
             &res.screensize,
             &res.window_size,
@@ -890,8 +894,8 @@ pub fn render_system(
             th,
             &mut render_target,
             &mut shader_store,
-            &res.post_process,
-            &res.world_time,
+            &snapshot.post_process,
+            &snapshot.world_time,
             &res.screensize,
             &res.window_size,
             None::<fn(&RaylibDrawHandle<'_>)>,

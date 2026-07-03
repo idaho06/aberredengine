@@ -25,7 +25,7 @@ pub const RESERVED_UNIFORMS: &[&str] = &[
 ///
 /// When `keys` is non-empty, the render system will apply the named shaders
 /// in sequence during the final blit. When empty, no post-processing is applied.
-#[derive(Resource, Default)]
+#[derive(Resource, Clone, Debug, Default)]
 pub struct PostProcessShader {
     /// Ordered list of shader keys to apply (empty = no post-processing).
     pub keys: Vec<Arc<str>>,

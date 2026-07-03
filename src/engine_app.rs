@@ -65,11 +65,22 @@
 //! ```
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, unbounded};
 use raylib::ffi::TraceLogLevel;
+
+use crate::events::logic_bridge::{LogicMsg, RenderMsg};
+use crate::events::switchfullscreen::SwitchFullScreenEvent;
+use crate::resources::logic_bridge::{LogicBridge, LogicTx, RenderTx, shutdown_logic};
+use crate::resources::rawinput::RawInputSnapshot;
+use crate::systems::input::merge_input_snapshots;
+use crate::systems::logic_bridge::{
+    forward_render_asset_cmds, send_drawable_snapshot, send_input_bindings_on_change,
+};
 
 use crate::components::mapposition::MapPosition;
 use crate::components::screenposition::ScreenPosition;
@@ -100,10 +111,11 @@ use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rendertarget::RenderTarget;
-use crate::resources::scenemanager::SceneManager;
+use crate::resources::scenemanager::{RenderSceneTable, SceneManager};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
+use crate::resources::texturedims::TextureDimsStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
@@ -180,15 +192,19 @@ use crate::systems::mapspawn::process_lua_map_commands;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
-type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore)>;
+/// `Send` because these are carried into the logic thread via `LogicInit`
+/// (Phase 5e).
+type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + Send>;
 
 /// Closure that adds a game-update system to the [`Schedule`].
 /// Deferred until `run()` when the schedule is being built.
-type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule)>;
+/// `Send`: see [`HookRegistrar`].
+type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 
 /// Closure that spawns an observer entity into the [`World`].
 /// Deferred until `run()` when the world exists.
-type ObserverRegistrar = Box<dyn FnOnce(&mut World)>;
+/// `Send`: see [`HookRegistrar`].
+type ObserverRegistrar = Box<dyn FnOnce(&mut World) + Send>;
 
 /// Builder for bootstrapping the engine.
 ///
@@ -354,7 +370,7 @@ impl EngineBuilder {
     ///     );
     /// })
     /// ```
-    pub fn configure_schedule(mut self, f: impl FnOnce(&mut Schedule) + 'static) -> Self {
+    pub fn configure_schedule(mut self, f: impl FnOnce(&mut Schedule) + Send + 'static) -> Self {
         self.extra_systems.push(Box::new(f));
         self
     }
@@ -387,7 +403,7 @@ impl EngineBuilder {
     ///
     /// Mirrors [`configure_schedule`](Self::configure_schedule), but targets
     /// the fixed schedule instead of the once-per-render-frame one.
-    pub fn configure_fixed_schedule(mut self, f: impl FnOnce(&mut Schedule) + 'static) -> Self {
+    pub fn configure_fixed_schedule(mut self, f: impl FnOnce(&mut Schedule) + Send + 'static) -> Self {
         self.extra_fixed_systems.push(Box::new(f));
         self
     }
@@ -513,39 +529,77 @@ impl EngineBuilder {
     ///
     /// This variant returns startup errors to the caller instead of logging
     /// them internally.
+    ///
+    /// Phase 5e: two `World`s on two threads. The main thread owns the raylib
+    /// window plus a small render `World` (GL stores, latest received
+    /// [`DrawableSnapshot`]); the spawned logic thread builds the gameplay
+    /// `World` inside its own closure (so NonSend `LuaRuntime` is created on,
+    /// and pinned to, that thread) and runs the FIXED 240Hz accumulator on
+    /// its own wall clock. Communication is crossbeam channels only
+    /// ([`LogicMsg`]/[`RenderMsg`] — fully `Send` enums). Logic-thread
+    /// startup errors are logged from that thread and surface as an
+    /// immediate `RenderMsg::Quit`, not as an `Err` here.
     pub fn try_run(mut self) -> Result<(), String> {
         log::info!("Hello, world! This is the Aberred Engine!");
 
         let use_scene_manager = !self.scenes.is_empty();
-        #[cfg(feature = "lua")]
-        let has_lua = self.lua_script.is_some();
-        #[cfg(not(feature = "lua"))]
-        let has_lua = false;
 
         self.validate_builder(use_scene_manager)?;
         let config = self.load_config()?;
         let (rl, thread, render_target) = Self::setup_window(&config)?;
 
-        let update_hook = self.update_hook.take();
-        let fixed_update_hook = self.fixed_update_hook.take();
-        let extra_systems = std::mem::take(&mut self.extra_systems);
-        let extra_fixed_systems = std::mem::take(&mut self.extra_fixed_systems);
-        let extra_observers = std::mem::take(&mut self.extra_observers);
+        let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
+        let (tx_render, rx_render) = unbounded::<RenderMsg>();
 
-        let mut world = self.setup_world(config, rl, thread, render_target)?;
-        self.register_systems(&mut world, use_scene_manager)?;
-        Self::spawn_observers(&mut world, has_lua, extra_observers);
+        // Render-side clone of the scene-descriptor table (fn pointers, cheap)
+        // for gui/world-draw callback resolution against snapshot.active_scene.
+        let render_scene_table = use_scene_manager.then(|| {
+            RenderSceneTable(
+                self.scenes
+                    .iter()
+                    .map(|(name, desc)| (name.clone(), desc.clone()))
+                    .collect(),
+            )
+        });
 
-        let (mut fixed, mut variable) = Self::build_schedules(
-            update_hook,
-            fixed_update_hook,
-            extra_systems,
-            extra_fixed_systems,
-            &mut world,
-            has_lua,
-            use_scene_manager,
+        let init = LogicInit {
+            config: config.clone(),
+            setup_hook: self.setup_hook.take(),
+            enter_play_hook: self.enter_play_hook.take(),
+            switch_scene_hook: self.switch_scene_hook.take(),
+            update_hook: self.update_hook.take(),
+            fixed_update_hook: self.fixed_update_hook.take(),
+            extra_systems: std::mem::take(&mut self.extra_systems),
+            extra_fixed_systems: std::mem::take(&mut self.extra_fixed_systems),
+            extra_observers: std::mem::take(&mut self.extra_observers),
+            scenes: std::mem::take(&mut self.scenes),
+            initial_scene: self.initial_scene.take(),
+            #[cfg(feature = "lua")]
+            lua_script: self.lua_script.take(),
+            window_w: rl.get_screen_width(),
+            window_h: rl.get_screen_height(),
+            tx_render,
+            rx_logic,
+        };
+        let handle = std::thread::Builder::new()
+            .name("aberred-logic".into())
+            .spawn(move || logic_thread(init))
+            .map_err(|err| format!("Failed to spawn logic thread: {err}"))?;
+
+        let mut render_world = Self::setup_render_world(
+            config,
+            rl,
+            thread,
+            render_target,
+            render_scene_table,
+            LogicBridge {
+                tx_logic,
+                rx_render,
+                handle,
+            },
         )?;
-        Self::main_loop(&mut world, &mut fixed, &mut variable);
+        let mut render_schedule = Self::build_render_schedule(&mut render_world)?;
+        Self::render_main_loop(&mut render_world, &mut render_schedule);
 
         Ok(())
     }
@@ -651,17 +705,76 @@ impl EngineBuilder {
         Ok((rl, thread, render_target))
     }
 
-    fn setup_world(
-        &self,
+    /// Build the render (main-thread) `World` (Phase 5e): raylib window +
+    /// GL/NonSend stores + the latest received [`DrawableSnapshot`], plus
+    /// the render-owned mirrors (`InputState`/`InputBindings` written by the
+    /// render loop, `DebugOverlayConfig` edited by the imgui panel). Holds
+    /// NO entities and no gameplay resources.
+    fn setup_render_world(
         config: GameConfig,
         rl: raylib::RaylibHandle,
         thread: raylib::RaylibThread,
         render_target: RenderTarget,
+        render_scene_table: Option<RenderSceneTable>,
+        bridge: LogicBridge,
     ) -> Result<World, String> {
+        let mut world = World::new();
+        world.insert_resource(ScreenSize {
+            w: config.render_width as i32,
+            h: config.render_height as i32,
+        });
+        world.insert_resource(WindowSize {
+            w: rl.get_screen_width(),
+            h: rl.get_screen_height(),
+        });
+        // Seed the snapshot's config with the REAL loaded config, not
+        // DrawableSnapshot::default()'s baked-in defaults: apply_gameconfig_changes
+        // reads config exclusively from the snapshot, and the first logic-built
+        // snapshot arrives a frame or two later — a default-seeded copy would
+        // briefly apply the wrong render/window size at startup.
+        world.insert_resource(DrawableSnapshot {
+            game_config: config,
+            ..Default::default()
+        });
+        world.insert_resource(InputState::default());
+        world.insert_resource(InputBindings::default());
+        world.insert_resource(TextureStore::new());
+        world.insert_resource(GuiThemeWarnCache::default());
+        world.insert_resource(DebugOverlayConfig::default());
+        world.insert_resource(SignalIntents::default());
+        world.insert_resource(Messages::<RenderAssetCmd>::default());
+        if let Some(table) = render_scene_table {
+            world.insert_resource(table);
+        }
+        world.insert_resource(LogicTx(bridge.tx_logic.clone()));
+        world.insert_resource(bridge);
+
+        world.insert_non_send(render_target);
+        world.insert_non_send(FontStore::new());
+        let imgui_bridge = ImguiBridge::new_dark()
+            .map_err(|err| format!("Failed to initialize imgui bridge: {err}"))?;
+        world.insert_non_send(imgui_bridge);
+        world.insert_non_send(ShaderStore::new());
+        world.insert_non_send(rl);
+        world.insert_non_send(thread);
+
+        world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
+        world.flush();
+
+        Ok(world)
+    }
+
+    /// Build the logic-thread gameplay `World` (Phase 5e): everything the old
+    /// single `setup_world` inserted except GL/window state, plus the
+    /// message-fed mirrors (`ScreenSize`/`WindowSize`/`DebugOverlayConfig`)
+    /// and the logic-owned stores fed by render notifications
+    /// (`FontMetricsStore`/`TextureDimsStore`). Runs INSIDE the thread
+    /// closure so NonSend `LuaRuntime` is created on (and pinned to) the
+    /// logic thread.
+    fn setup_logic_world(init: &LogicInit) -> Result<World, String> {
+        let config = init.config.clone();
         let render_width = config.render_width;
         let render_height = config.render_height;
-        let window_width = rl.get_screen_width();
-        let window_height = rl.get_screen_height();
 
         let mut world = World::new();
         world.insert_resource(WorldTime::default().with_time_scale(1.0));
@@ -674,27 +787,21 @@ impl EngineBuilder {
             h: render_height as i32,
         });
         world.insert_resource(WindowSize {
-            w: window_width,
-            h: window_height,
+            w: init.window_w,
+            h: init.window_h,
         });
         world.insert_resource(config);
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
         world.insert_resource(LatestInputSnapshot::default());
-        world.insert_non_send(render_target);
 
         setup_audio(&mut world);
 
         world.insert_resource(GameState::new());
         world.insert_resource(NextGameState::new());
-        world.insert_non_send(FontStore::new());
         world.insert_resource(FontMetricsStore::default());
         world.insert_resource(FontMetricsWarnCache::default());
-        let imgui_bridge = ImguiBridge::new_dark()
-            .map_err(|err| format!("Failed to initialize imgui bridge: {err}"))?;
-        world.insert_non_send(imgui_bridge);
-        world.insert_non_send(ShaderStore::new());
-        world.insert_resource(TextureStore::new());
+        world.insert_resource(TextureDimsStore::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
         world.insert_resource(Camera2DRes(Camera2D {
             target: Vector2 { x: 0.0, y: 0.0 },
@@ -713,9 +820,10 @@ impl EngineBuilder {
         world.insert_resource(GuiThemeStore::default());
         world.insert_resource(GuiThemeWarnCache::default());
         world.insert_resource(DrawableSnapshot::default());
+        world.insert_resource(RenderTx(init.tx_render.clone()));
 
         #[cfg(feature = "lua")]
-        if let Some(ref script_path) = self.lua_script {
+        if let Some(ref script_path) = init.lua_script {
             let lua_runtime =
                 LuaRuntime::new().map_err(|err| format!("Failed to create Lua runtime: {err}"))?;
             if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
@@ -724,8 +832,6 @@ impl EngineBuilder {
             world.insert_non_send(lua_runtime);
         }
 
-        world.insert_non_send(rl);
-        world.insert_non_send(thread);
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
 
         Ok(world)
@@ -757,28 +863,37 @@ impl EngineBuilder {
         }
     }
 
-    fn register_systems(self, world: &mut World, use_scene_manager: bool) -> Result<(), String> {
+    /// Register the hook/scene one-shot systems into the LOGIC world (runs on
+    /// the logic thread; consumes the hooks out of `init`). The render-side
+    /// scene table was already cloned off before `init` crossed the thread
+    /// boundary.
+    fn register_logic_systems(
+        init: &mut LogicInit,
+        world: &mut World,
+        use_scene_manager: bool,
+    ) -> Result<(), String> {
         let mut systems_store = SystemsStore::new();
         #[cfg(feature = "lua")]
-        let requires_switch_scene =
-            use_scene_manager || self.switch_scene_hook.is_some() || self.lua_script.is_some();
+        let requires_switch_scene = use_scene_manager
+            || init.switch_scene_hook.is_some()
+            || init.lua_script.is_some();
         #[cfg(not(feature = "lua"))]
-        let requires_switch_scene = use_scene_manager || self.switch_scene_hook.is_some();
+        let requires_switch_scene = use_scene_manager || init.switch_scene_hook.is_some();
 
-        if let Some(hook) = self.setup_hook {
+        if let Some(hook) = init.setup_hook.take() {
             hook(world, &mut systems_store);
         }
-        if let Some(hook) = self.enter_play_hook {
+        if let Some(hook) = init.enter_play_hook.take() {
             hook(world, &mut systems_store);
         }
-        if let Some(hook) = self.switch_scene_hook {
+        if let Some(hook) = init.switch_scene_hook.take() {
             hook(world, &mut systems_store);
         }
 
         if use_scene_manager {
             let mut scene_manager = SceneManager::new();
-            scene_manager.initial_scene = self.initial_scene;
-            for (name, descriptor) in self.scenes {
+            scene_manager.initial_scene = init.initial_scene.take();
+            for (name, descriptor) in init.scenes.drain(..) {
                 scene_manager.insert(name, descriptor);
             }
             world.insert_resource(scene_manager);
@@ -827,7 +942,8 @@ impl EngineBuilder {
         }
         world.spawn((Observer::new(rust_collision_observer), Persistent));
         world.spawn((Observer::new(switch_debug_observer), Persistent));
-        world.spawn((Observer::new(switch_fullscreen_observer), Persistent));
+        // switch_fullscreen_observer is NOT here: it lives in the RENDER
+        // world (Phase 5e) — F10 toggles the window, which only exists there.
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
         world.spawn((Observer::new(gui_interactable_click_observer), Persistent));
@@ -873,7 +989,7 @@ impl EngineBuilder {
     /// boundary are dropped here (the accumulator loop in `main_loop` already
     /// guarantees every fixed substep for a frame completes before `variable`
     /// runs, which is the ordering those edges used to express).
-    fn build_schedules(
+    fn build_logic_schedules(
         update_hook: Option<UpdateRegistrar>,
         fixed_update_hook: Option<UpdateRegistrar>,
         extra_systems: Vec<UpdateRegistrar>,
@@ -1050,27 +1166,31 @@ impl EngineBuilder {
         // state (a new GUI widget's state-sync system, a new Lua command
         // queue mutating rendered state), it must also be added to this list
         // -- nothing enforces that automatically.
-        // Drains RenderAssetCmd (Phase 5c): must see this frame's GL asset
-        // requests from menu/tilemap spawning and (when Lua is enabled) Lua
-        // asset commands + map spawning, before build_drawable_snapshot runs.
+        // Forwards RenderAssetCmd to the render thread (Phase 5e; the GL
+        // drain itself, process_render_asset_cmds, now lives on the render
+        // schedule): must see this frame's asset requests from menu/tilemap
+        // spawning and (when Lua is enabled) Lua asset commands + map
+        // spawning, and must run before send_drawable_snapshot so a frame's
+        // asset loads reach the render thread before the snapshot that
+        // references them (single sender => FIFO ordering holds).
         // Same enumerated-.after()-edges caveat as drawable_snapshot_config
         // above applies here too: bevy_ecs 0.19 has no `.after_all()` /
         // SystemSet-based "runs after everything that can still produce a
         // RenderAssetCmd this frame" primitive, so a future producer must
         // be added to this edge list by hand -- nothing enforces it.
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
-        let mut process_render_asset_cmds_config = process_render_asset_cmds
+        let mut forward_render_asset_cmds_config = forward_render_asset_cmds
             .after(update_bevy_render_asset_cmds)
             .after(menu_spawn_system)
             .after(tilemap_spawn_system)
-            .before(build_drawable_snapshot);
+            .before(send_drawable_snapshot);
         #[cfg(feature = "lua")]
         {
-            process_render_asset_cmds_config = process_render_asset_cmds_config
+            forward_render_asset_cmds_config = forward_render_asset_cmds_config
                 .after(crate::lua_plugin::process_lua_asset_commands)
                 .after(process_lua_map_commands);
         }
-        variable.add_systems(process_render_asset_cmds_config);
+        variable.add_systems(forward_render_asset_cmds_config);
 
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut drawable_snapshot_config = build_drawable_snapshot
@@ -1088,22 +1208,14 @@ impl EngineBuilder {
         }
         variable.add_systems(drawable_snapshot_config);
 
-        // Applies window/render-target settings from the snapshot's
-        // GameConfig copy (Phase 4) -- must run after the snapshot is built
-        // (fresh config, including this frame's Lua config commands) and
-        // before render_system (so a RenderTarget resize is visible the same
-        // frame). Known trade-off: a render-size change updates ScreenSize
-        // here, *after* this frame's gui_hit_test_system already ran -- GUI
-        // hit-testing uses the old resolution for one frame on the rare
-        // resize frame. Inherent to the Phase 5 thread split anyway.
-        variable.add_systems(
-            apply_gameconfig_changes
-                .run_if(state_is_playing)
-                .after(build_drawable_snapshot)
-                .before(render_system),
-        );
-
-        variable.add_systems(render_system);
+        // Tail of the logic VARIABLE schedule (Phase 5e): ship this frame's
+        // fully-settled snapshot to the render thread, and refresh the render
+        // side's InputBindings mirror when it changed (once per VARIABLE pass
+        // so it catches both Lua rebinds and GameCtx mutations from FIXED
+        // callbacks). apply_gameconfig_changes + render_system now live on
+        // the render thread's schedule (build_render_schedule).
+        variable.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
+        variable.add_systems(send_input_bindings_on_change);
 
         fixed
             .initialize(world)
@@ -1115,119 +1227,376 @@ impl EngineBuilder {
         Ok((fixed, variable))
     }
 
-    /// Runs the fixed-step accumulator loop described in
-    /// `docs/render-simulation-separation-brainstorm.md`: `fixed` (240 Hz,
-    /// `FIXED_DT`) runs 0-8 times per render frame to drain a real-time
-    /// accumulator, then `variable` runs exactly once. No interpolation in
-    /// this pass -- `variable`/`render_system` simply displays whatever
-    /// simulation state the fixed loop last produced, so a fast render frame
-    /// (accumulator < FIXED_DT) can redraw the same state twice, and a slow
-    /// one catches up via multiple fixed substeps.
-    fn main_loop(world: &mut World, fixed: &mut Schedule, variable: &mut Schedule) {
-        /// Spiral-of-death cap: at most this many fixed substeps run per
-        /// render frame. If a stall needs more, the accumulator keeps the
-        /// remainder rather than trying to catch up all at once.
-        const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
+    /// Build the render thread's single per-frame schedule (Phase 5e):
+    /// message-queue aging, GL asset loads, snapshot-driven config
+    /// application, then the render pass. `apply_gameconfig_changes` loses
+    /// its old `run_if(state_is_playing)` gate — the render world has no
+    /// `GameState`; the snapshot's config is seeded with the real loaded
+    /// config at startup, so early application is a no-op, not a downgrade.
+    fn build_render_schedule(world: &mut World) -> Result<Schedule, String> {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(
+            (
+                update_bevy_render_asset_cmds,
+                process_render_asset_cmds,
+                apply_gameconfig_changes,
+                render_system,
+            )
+                .chain(),
+        );
+        schedule
+            .initialize(world)
+            .map_err(|err| format!("Failed to initialize render schedule: {err}"))?;
+        Ok(schedule)
+    }
 
+    /// Render (main) thread loop (Phase 5e): refresh window state, sample
+    /// input, ship it to the logic thread, drain logic->render messages
+    /// (keeping only the newest snapshot), run the render schedule, then
+    /// diff-and-send the render-owned mirrors (`ScreenSize`,
+    /// `DebugOverlayConfig`) and the `SignalIntents` queued by this frame's
+    /// `GuiCallback`.
+    ///
+    /// Shutdown ordering: window close (or `RenderMsg::Quit`) -> send
+    /// `LogicMsg::Shutdown` -> join the logic thread (which runs
+    /// `shutdown_audio` and drops `LuaRuntime` on its own thread) -> the
+    /// render world drops here (`ImguiBridge` teardown with the GL context
+    /// alive) -> `RaylibHandle` drops last, closing the window.
+    fn render_main_loop(world: &mut World, schedule: &mut Schedule) {
         #[cfg(feature = "tracy")]
         let _tracy = tracy_client::Client::start();
 
-        // Built once and reused every frame (mirrors `fixed`/`variable`) rather
-        // than `world.run_system_once(apply_input_snapshot)`, which would build
-        // and initialize a fresh temporary system on every single call.
-        let mut input_schedule = Schedule::default();
-        input_schedule.add_systems(apply_input_snapshot);
-        input_schedule
-            .initialize(world)
-            .expect("input_schedule should initialize: apply_input_snapshot has no unusual system requirements");
-
-        let mut accumulator: f32 = 0.0;
+        let mut quit_requested = false;
+        let mut last_screen_size = *world.resource::<ScreenSize>();
+        let mut last_overlay_config = world.resource::<DebugOverlayConfig>().clone();
+        // Crossbeam endpoints are Clone: hold them directly so the loop body
+        // never has to re-fetch (and re-borrow) the LogicBridge resource.
+        let (tx_logic, rx_render) = {
+            let bridge = world.resource::<LogicBridge>();
+            (bridge.tx_logic.clone(), bridge.rx_render.clone())
+        };
 
         while !world
             .non_send::<raylib::RaylibHandle>()
             .window_should_close()
+            && !quit_requested
         {
-            let dt = world
-                .non_send::<raylib::RaylibHandle>()
-                .get_frame_time();
-
-            // update_world_time is called directly (not via a schedule) because
-            // WorldTime::delta must be available to all systems without ordering
-            // constraints on every delta-reading system. Called once per render
-            // frame: sets elapsed/frame_count and the frame-rate delta; the delta
-            // is temporarily overridden below for each fixed substep.
-            update_world_time(world, dt);
-            let frame_delta = world.resource::<WorldTime>().delta;
-
-            // Sample raw input once per render frame, held constant across every
-            // fixed substep below -- not part of either schedule, since running it
-            // inside `fixed` would resample/skip input unpredictably 0-8x per
-            // frame, and running it inside `variable` would leave `fixed`'s input
-            // controllers reading a stale InputState from the previous frame.
-            //
-            // Split along the future thread boundary (Phase 5a):
-            // `sample_input_snapshot` is the render-thread half (raylib polls,
-            // no ECS writes), called inline here; `apply_input_snapshot` is the
-            // logic-thread half (InputState + camera-dependent mouse-world +
-            // event triggers), run via the schedule. Phase 5e replaces the
-            // direct resource write with a channel send/receive.
-            {
-                let snapshot = {
-                    let rl = world.non_send::<raylib::RaylibHandle>();
-                    let bindings = world.resource::<InputBindings>();
-                    let window_size = world.resource::<WindowSize>();
-                    let screen_size = world.resource::<ScreenSize>();
-                    sample_input_snapshot(rl, bindings, window_size, screen_size)
-                };
-                world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
-            }
-            input_schedule.run(world);
-
-            accumulator += frame_delta;
-
-            // time_scale doesn't change during the substep loop below (no FIXED
-            // system mutates it), so the scaled fixed delta is computed and
-            // written once per render frame rather than re-read/re-written on
-            // every substep.
-            let time_scale = world.resource::<WorldTime>().time_scale;
-            world.resource_mut::<WorldTime>().delta = FIXED_DT * time_scale;
-
-            let mut steps_run = 0;
-            while accumulator >= FIXED_DT && steps_run < MAX_FIXED_STEPS_PER_FRAME {
-                crate::tracy::tracy_span!("fixed_schedule_run");
-                fixed.run(world);
-                accumulator -= FIXED_DT;
-                steps_run += 1;
-            }
-            // Spiral-of-death cap: if MAX_FIXED_STEPS_PER_FRAME wasn't enough to
-            // drain the accumulator, stop -- the remainder is kept (not reset to
-            // zero) so a temporary stall doesn't get silently discarded, it just
-            // takes a couple of frames to fully catch up.
-
-            // Restore the real frame delta for the variable schedule (render,
-            // on_update, GUI) before it runs.
-            world.resource_mut::<WorldTime>().delta = frame_delta;
-
-            {
-                crate::tracy::tracy_span!("variable_schedule_run");
-                variable.run(world);
-            }
-
-            world.clear_trackers();
-            crate::tracy::tracy_frame_mark!();
-
-            let (new_w, new_h) = {
+            // Refresh WindowSize from the OS before sampling (letterbox math).
+            let (window_w, window_h) = {
                 let rl = world.non_send::<raylib::RaylibHandle>();
                 (rl.get_screen_width(), rl.get_screen_height())
             };
             {
                 let mut window_size = world.resource_mut::<WindowSize>();
-                window_size.w = new_w;
-                window_size.h = new_h;
+                window_size.w = window_w;
+                window_size.h = window_h;
             }
+
+            // Sample raw input once per render frame (the only input code
+            // touching the raylib handle; bindings come from the logic-fed
+            // mirror, refreshed below via RenderMsg::Bindings).
+            let snapshot = {
+                let rl = world.non_send::<raylib::RaylibHandle>();
+                let bindings = world.resource::<InputBindings>();
+                let window_size = world.resource::<WindowSize>();
+                let screen_size = world.resource::<ScreenSize>();
+                sample_input_snapshot(rl, bindings, window_size, screen_size)
+            };
+
+            // F10 is render-side-only: the window (and switch_fullscreen_observer)
+            // live here; the logic-side apply_input_snapshot no longer triggers it.
+            if snapshot.state.fullscreen_toggle.just_pressed {
+                world.trigger(SwitchFullScreenEvent {});
+                world.flush();
+            }
+
+            // Mirror InputState for the imgui input panel (freshest possible
+            // sample; mouse_world stays 0 here — the panel doesn't show it).
+            *world.resource_mut::<InputState>() = snapshot.state.clone();
+
+            // Ship the sample (+ current window dims for logic's mirror).
+            if tx_logic
+                .send(LogicMsg::Input {
+                    snapshot,
+                    window_w,
+                    window_h,
+                })
+                .is_err()
+            {
+                // Logic thread is gone (startup failure or panic) — exit.
+                log::error!("Logic thread disconnected; shutting down");
+                quit_requested = true;
+            }
+
+            // Drain logic -> render messages. Only the NEWEST snapshot is
+            // kept (no interpolation); asset commands are re-queued into this
+            // world's Messages<RenderAssetCmd> for process_render_asset_cmds.
+            let mut newest_snapshot: Option<Box<DrawableSnapshot>> = None;
+            let mut newest_bindings: Option<InputBindings> = None;
+            let mut asset_cmds: Vec<RenderAssetCmd> = Vec::new();
+            for msg in rx_render.try_iter() {
+                match msg {
+                    RenderMsg::Snapshot(snapshot) => newest_snapshot = Some(snapshot),
+                    RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
+                    RenderMsg::Bindings(bindings) => newest_bindings = Some(bindings),
+                    RenderMsg::Quit => quit_requested = true,
+                }
+            }
+            if let Some(snapshot) = newest_snapshot {
+                *world.resource_mut::<DrawableSnapshot>() = *snapshot;
+            }
+            if let Some(bindings) = newest_bindings {
+                *world.resource_mut::<InputBindings>() = bindings;
+            }
+            if !asset_cmds.is_empty() {
+                world
+                    .resource_mut::<Messages<RenderAssetCmd>>()
+                    .write_batch(asset_cmds);
+            }
+
+            {
+                crate::tracy::tracy_span!("render_schedule_run");
+                schedule.run(world);
+            }
+
+            // Diff-and-send the render-owned mirrors back to logic.
+            let screen_size = *world.resource::<ScreenSize>();
+            if screen_size != last_screen_size {
+                last_screen_size = screen_size;
+                let _ = tx_logic.send(LogicMsg::ScreenSize {
+                    w: screen_size.w,
+                    h: screen_size.h,
+                });
+            }
+            let overlay_config = world.resource::<DebugOverlayConfig>();
+            if *overlay_config != last_overlay_config {
+                last_overlay_config = overlay_config.clone();
+                let _ = tx_logic.send(LogicMsg::OverlayConfig(last_overlay_config.clone()));
+            }
+            let intents = std::mem::take(&mut world.resource_mut::<SignalIntents>().0);
+            if !intents.is_empty() {
+                let _ = tx_logic.send(LogicMsg::SignalIntents(intents));
+            }
+
+            world.clear_trackers();
+            crate::tracy::tracy_frame_mark!();
         }
-        shutdown_audio(world);
+
+        // Shutdown: stop the logic thread first (it owns the audio bridge and
+        // LuaRuntime), then let the render world / window drop after return.
+        shutdown_logic(world);
     }
+}
+
+/// Everything the logic thread needs to build the gameplay `World` and its
+/// schedules inside its own closure (Phase 5e). Must be `Send`: hooks are
+/// `Box<dyn FnOnce + Send>`, scene descriptors are fn pointers, and the
+/// channel endpoints are crossbeam handles.
+struct LogicInit {
+    config: GameConfig,
+    setup_hook: Option<HookRegistrar>,
+    enter_play_hook: Option<HookRegistrar>,
+    switch_scene_hook: Option<HookRegistrar>,
+    update_hook: Option<UpdateRegistrar>,
+    fixed_update_hook: Option<UpdateRegistrar>,
+    extra_systems: Vec<UpdateRegistrar>,
+    extra_fixed_systems: Vec<UpdateRegistrar>,
+    extra_observers: Vec<ObserverRegistrar>,
+    scenes: Vec<(String, SceneDescriptor)>,
+    initial_scene: Option<String>,
+    #[cfg(feature = "lua")]
+    lua_script: Option<PathBuf>,
+    /// Initial WindowSize mirror values (refreshed per-frame via `LogicMsg::Input`).
+    window_w: i32,
+    window_h: i32,
+    tx_render: Sender<RenderMsg>,
+    rx_logic: Receiver<LogicMsg>,
+}
+
+/// Logic thread entry point. Startup errors can't propagate to
+/// `EngineBuilder::try_run` (the thread is already detached from it), so they
+/// are logged and converted into a `RenderMsg::Quit` so the render loop exits
+/// instead of showing a frozen window.
+fn logic_thread(init: LogicInit) {
+    let tx_render = init.tx_render.clone();
+    if let Err(err) = logic_thread_main(init) {
+        log::error!("Logic thread failed: {err}");
+        let _ = tx_render.send(RenderMsg::Quit);
+    }
+}
+
+/// Spiral-of-death cap: at most this many fixed substeps run per catch-up.
+/// If a stall needs more, the accumulator keeps the remainder rather than
+/// trying to catch up all at once.
+const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
+
+/// Pop up to [`MAX_FIXED_STEPS_PER_FRAME`] whole `FIXED_DT` steps off the
+/// accumulator, returning how many to run. Pure — unit-testable headless.
+fn take_fixed_substeps(accumulator: &mut f32) -> u32 {
+    let mut steps = 0;
+    while *accumulator >= FIXED_DT && steps < MAX_FIXED_STEPS_PER_FRAME {
+        *accumulator -= FIXED_DT;
+        steps += 1;
+    }
+    steps
+}
+
+/// Advance `WorldTime` by the real elapsed time since `last_instant`, add it
+/// to the accumulator, and run the due FIXED substeps (`WorldTime.delta` is
+/// temporarily the scaled `FIXED_DT` during substeps, restored after).
+fn advance_simulation(
+    world: &mut World,
+    fixed: &mut Schedule,
+    accumulator: &mut f32,
+    last_instant: &mut Instant,
+) {
+    let now = Instant::now();
+    let dt = now.duration_since(*last_instant).as_secs_f32();
+    *last_instant = now;
+
+    // Sets elapsed/frame_count and the scaled frame delta; the delta is
+    // temporarily overridden below for each fixed substep.
+    update_world_time(world, dt);
+    let frame_delta = world.resource::<WorldTime>().delta;
+    *accumulator += frame_delta;
+
+    let time_scale = world.resource::<WorldTime>().time_scale;
+    world.resource_mut::<WorldTime>().delta = FIXED_DT * time_scale;
+    for _ in 0..take_fixed_substeps(accumulator) {
+        crate::tracy::tracy_span!("fixed_schedule_run");
+        fixed.run(world);
+    }
+    world.resource_mut::<WorldTime>().delta = frame_delta;
+}
+
+/// The logic thread's event-driven loop: build the gameplay world +
+/// schedules, then block on `rx_logic` with a `FIXED_DT` timeout so the
+/// 240Hz simulation stays honest even when the render thread stalls (window
+/// drag, GL hiccups). One VARIABLE pass runs per received input sample; a
+/// backlog of input samples is coalesced edge-preservingly first (see
+/// `merge_input_snapshots`). Non-input messages just update the logic-side
+/// mirrors/stores.
+fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
+    let use_scene_manager = !init.scenes.is_empty();
+    #[cfg(feature = "lua")]
+    let has_lua = init.lua_script.is_some();
+    #[cfg(not(feature = "lua"))]
+    let has_lua = false;
+
+    let mut world = EngineBuilder::setup_logic_world(&init)?;
+    EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
+    EngineBuilder::spawn_observers(&mut world, has_lua, std::mem::take(&mut init.extra_observers));
+
+    let (mut fixed, mut variable) = EngineBuilder::build_logic_schedules(
+        init.update_hook.take(),
+        init.fixed_update_hook.take(),
+        std::mem::take(&mut init.extra_systems),
+        std::mem::take(&mut init.extra_fixed_systems),
+        &mut world,
+        has_lua,
+        use_scene_manager,
+    )?;
+
+    // Built once and reused (mirrors `fixed`/`variable`) rather than
+    // `world.run_system_once(apply_input_snapshot)`, which would build and
+    // initialize a fresh temporary system on every call.
+    let mut input_schedule = Schedule::default();
+    input_schedule.add_systems(apply_input_snapshot);
+    input_schedule
+        .initialize(&mut world)
+        .map_err(|err| format!("Failed to initialize input schedule: {err}"))?;
+
+    let rx_logic = init.rx_logic;
+    let mut accumulator: f32 = 0.0;
+    let mut last_instant = Instant::now();
+    let recv_timeout = Duration::from_secs_f32(FIXED_DT);
+
+    'main: loop {
+        match rx_logic.recv_timeout(recv_timeout) {
+            Ok(first) => {
+                // Coalesce the whole pending backlog before advancing the
+                // sim. Input samples merge edge-preservingly into ONE
+                // snapshot (never a snapshot a previous pass already
+                // consumed — that would double-fire edges); the other
+                // message kinds apply to their mirrors immediately.
+                let mut pending_input: Option<(RawInputSnapshot, i32, i32)> = None;
+                for msg in std::iter::once(first).chain(rx_logic.try_iter()) {
+                    match msg {
+                        LogicMsg::Input {
+                            snapshot,
+                            window_w,
+                            window_h,
+                        } => match &mut pending_input {
+                            Some((merged, w, h)) => {
+                                merge_input_snapshots(merged, &snapshot);
+                                *w = window_w;
+                                *h = window_h;
+                            }
+                            None => pending_input = Some((snapshot, window_w, window_h)),
+                        },
+                        LogicMsg::ScreenSize { w, h } => {
+                            let mut screen_size = world.resource_mut::<ScreenSize>();
+                            screen_size.w = w;
+                            screen_size.h = h;
+                        }
+                        LogicMsg::FontLoaded { key, metrics } => {
+                            world
+                                .resource_mut::<FontMetricsStore>()
+                                .0
+                                .insert(key, metrics);
+                        }
+                        LogicMsg::TextureLoaded { key, width, height } => {
+                            world
+                                .resource_mut::<TextureDimsStore>()
+                                .insert(key, width, height);
+                        }
+                        LogicMsg::OverlayConfig(config) => {
+                            *world.resource_mut::<DebugOverlayConfig>() = config;
+                        }
+                        LogicMsg::SignalIntents(intents) => {
+                            world.resource_mut::<SignalIntents>().0.extend(intents);
+                        }
+                        LogicMsg::Shutdown => break 'main,
+                    }
+                }
+
+                if let Some((snapshot, window_w, window_h)) = pending_input {
+                    {
+                        let mut window_size = world.resource_mut::<WindowSize>();
+                        window_size.w = window_w;
+                        window_size.h = window_h;
+                    }
+                    world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
+                    // Same per-frame order as the pre-split loop: apply input
+                    // (InputState + events) BEFORE the fixed substeps that
+                    // read it, then one VARIABLE pass.
+                    input_schedule.run(&mut world);
+                    advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
+                    {
+                        crate::tracy::tracy_span!("variable_schedule_run");
+                        variable.run(&mut world);
+                    }
+                } else {
+                    // Mirror/store updates only — no new input, so no VARIABLE
+                    // pass; still run due FIXED substeps to hold 240Hz.
+                    advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Render is stalled (window drag, etc.): the simulation keeps
+                // ticking at 240Hz; Lua on_update pauses until input flows
+                // again (documented design intent).
+                advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+        world.clear_trackers();
+    }
+
+    // Logic owns the audio bridge: stop the audio thread before this world
+    // (and the LuaRuntime pinned to this thread) drops.
+    shutdown_audio(&mut world);
+    Ok(())
 }
 
 impl Default for EngineBuilder {
@@ -1362,6 +1731,82 @@ mod tests {
     fn dummy_update() {}
     fn dummy_switch_scene() {}
 
+    // --- Phase 5e: fixed-substep accumulator math (pure helper) ---
+
+    #[test]
+    fn take_fixed_substeps_zero_when_below_one_step() {
+        let mut accumulator = FIXED_DT * 0.5;
+        assert_eq!(take_fixed_substeps(&mut accumulator), 0);
+        assert!((accumulator - FIXED_DT * 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn take_fixed_substeps_pops_whole_steps_and_keeps_remainder() {
+        let mut accumulator = FIXED_DT * 3.25;
+        assert_eq!(take_fixed_substeps(&mut accumulator), 3);
+        assert!(
+            (accumulator - FIXED_DT * 0.25).abs() < 1e-6,
+            "remainder should be kept, got {accumulator}"
+        );
+    }
+
+    #[test]
+    fn take_fixed_substeps_caps_at_max_and_keeps_backlog() {
+        // A long stall: 20 steps' worth of time must not run 20 substeps.
+        let mut accumulator = FIXED_DT * 20.0;
+        assert_eq!(take_fixed_substeps(&mut accumulator), MAX_FIXED_STEPS_PER_FRAME);
+        // The undrained backlog stays (not reset to zero) so catch-up
+        // continues over the next iterations.
+        assert!(
+            (accumulator - FIXED_DT * 12.0).abs() < 1e-4,
+            "backlog should remain, got {accumulator}"
+        );
+        assert_eq!(take_fixed_substeps(&mut accumulator), MAX_FIXED_STEPS_PER_FRAME);
+        // Third call fully drains the backlog (3 or 4 steps depending on f32
+        // rounding of 20*FIXED_DT), leaving less than one step behind.
+        let final_steps = take_fixed_substeps(&mut accumulator);
+        assert!((3..=4).contains(&final_steps), "got {final_steps}");
+        assert!(accumulator < FIXED_DT);
+    }
+
+    // --- Phase 5e: channel enum round-trip smoke test ---
+
+    #[test]
+    fn logic_and_render_msgs_round_trip_across_a_thread() {
+        let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
+        let (tx_render, rx_render) = unbounded::<RenderMsg>();
+
+        let echo = std::thread::spawn(move || {
+            // Receive until Shutdown, echoing a Quit back.
+            loop {
+                match rx_logic.recv().expect("sender alive") {
+                    LogicMsg::Shutdown => break,
+                    LogicMsg::Input { snapshot, .. } => {
+                        assert!(snapshot.state.action_1.just_pressed);
+                    }
+                    LogicMsg::ScreenSize { w, h } => assert_eq!((w, h), (320, 200)),
+                    _ => {}
+                }
+            }
+            let _ = tx_render.send(RenderMsg::Quit);
+        });
+
+        let mut snapshot = RawInputSnapshot::default();
+        snapshot.state.action_1.just_pressed = true;
+        tx_logic
+            .send(LogicMsg::Input {
+                snapshot,
+                window_w: 800,
+                window_h: 600,
+            })
+            .unwrap();
+        tx_logic.send(LogicMsg::ScreenSize { w: 320, h: 200 }).unwrap();
+        tx_logic.send(LogicMsg::Shutdown).unwrap();
+
+        echo.join().expect("echo thread should exit cleanly");
+        assert!(matches!(rx_render.recv().unwrap(), RenderMsg::Quit));
+    }
+
     #[test]
     fn test_builder_hooks_set() {
         let builder = EngineBuilder::new()
@@ -1409,14 +1854,14 @@ mod tests {
 
     #[cfg(feature = "lua")]
     #[test]
-    fn test_build_schedules_without_lua_runtime_omits_lua_only_systems() {
+    fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
         let (fixed, _variable) =
-            EngineBuilder::build_schedules(None, None, Vec::new(), Vec::new(), &mut world, false, false)
-                .expect("build_schedules should succeed without Lua runtime");
+            EngineBuilder::build_logic_schedules(None, None, Vec::new(), Vec::new(), &mut world, false, false)
+                .expect("build_logic_schedules should succeed without Lua runtime");
         let fixed_type_ids: Vec<_> = fixed
             .systems()
-            .expect("build_schedules initializes the fixed schedule")
+            .expect("build_logic_schedules initializes the fixed schedule")
             .map(|(_, system)| system.system_type())
             .collect();
         let phase_system_type = IntoSystem::into_system(phase_system).system_type();
@@ -1449,10 +1894,10 @@ mod tests {
 
     #[cfg(feature = "lua")]
     #[test]
-    fn test_build_schedules_with_lua_orders_group_counts_before_lua_phase() {
+    fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
         let mut world = World::new();
         let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
-        let (fixed, variable) = EngineBuilder::build_schedules(
+        let (fixed, variable) = EngineBuilder::build_logic_schedules(
             builder.update_hook,
             builder.fixed_update_hook,
             Vec::new(),
@@ -1461,16 +1906,16 @@ mod tests {
             true,
             false,
         )
-        .expect("build_schedules should succeed with has_lua=true");
+        .expect("build_logic_schedules should succeed with has_lua=true");
 
         let fixed_type_ids: Vec<_> = fixed
             .systems()
-            .expect("build_schedules initializes the fixed schedule")
+            .expect("build_logic_schedules initializes the fixed schedule")
             .map(|(_, system)| system.system_type())
             .collect();
         let variable_type_ids: Vec<_> = variable
             .systems()
-            .expect("build_schedules initializes the variable schedule")
+            .expect("build_logic_schedules initializes the variable schedule")
             .map(|(_, system)| system.system_type())
             .collect();
 

@@ -44,10 +44,15 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::guitheme::GuiThemeStore;
+use crate::resources::postprocessshader::PostProcessShader;
+use crate::resources::scenemanager::SceneManager;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
+use crate::resources::worldtime::WorldTime;
 
 /// One world-space sprite, owned. Mirrors the fields `render_system` used to
 /// query directly before Phase 3.
@@ -215,6 +220,27 @@ pub struct DrawableSnapshot {
     pub app_state: AppState,
     /// Debug-overlay payload; `Some` only while `DebugMode` is active.
     pub debug: Option<DebugSnapshot>,
+    /// Active scene name (Phase 5e). The render side resolves
+    /// `gui_callback`/`world_draw_callback` against its own cloned
+    /// scene-descriptor table using this key; `None` when no SceneManager is
+    /// in use or no scene is active yet.
+    pub active_scene: Option<Arc<str>>,
+    /// This frame's [`WorldTime`] (Phase 5e). Render-side consumers (shader
+    /// time uniforms, the imgui performance panel) read this instead of the
+    /// logic-world resource, preserving time_scale semantics for shader
+    /// animation.
+    pub world_time: WorldTime,
+    /// Post-process shader chain + uniforms (Phase 5e). Logic-owned
+    /// (`GameCtx.post_process`, Lua render commands); captured on change.
+    pub post_process: PostProcessShader,
+    /// GUI themes (Phase 5e). Logic-owned (`set_gui_theme_*` Lua commands
+    /// re-insert the resource); captured on change — themes mutate rarely.
+    pub gui_themes: GuiThemeStore,
+    /// Camera-follow config copy (Phase 5e). Display-only, for the imgui
+    /// camera panel — same top-level mirror shape as `world_time`/
+    /// `post_process` (copied unconditionally; the follow velocity mutates
+    /// every FIXED substep, so change-gating would never skip anyway).
+    pub camera_follow: CameraFollowConfig,
 }
 
 /// Query data shapes below mirror the fields `render_system` used to query
@@ -340,6 +366,11 @@ pub fn build_drawable_snapshot(
     mut last_app_state_generation: Local<u64>,
     debug_mode: Option<Res<DebugMode>>,
     overlay_config: Res<DebugOverlayConfig>,
+    world_time: Res<WorldTime>,
+    post_process: Res<PostProcessShader>,
+    gui_themes: Res<GuiThemeStore>,
+    camera_follow: Res<CameraFollowConfig>,
+    scene_manager: Option<Res<SceneManager>>,
     mut snapshot: ResMut<DrawableSnapshot>,
 ) {
     refill(&mut snapshot.map_sprites, &queries.map_sprites, |(
@@ -477,6 +508,25 @@ pub fn build_drawable_snapshot(
         snapshot.app_state = app_state.clone();
         *last_app_state_generation = app_state.generation();
     }
+    snapshot.world_time = *world_time;
+    snapshot.camera_follow = camera_follow.clone();
+    // Bevy change detection gates the two rarely-mutated clones: Lua theme
+    // commands re-insert GuiThemeStore (marking it changed) and post-process
+    // writes go through ResMut deref_mut. is_changed() is also true on the
+    // first run after insertion, so the initial capture is covered.
+    if post_process.is_changed() {
+        snapshot.post_process = post_process.clone();
+    }
+    if gui_themes.is_changed() {
+        snapshot.gui_themes = gui_themes.clone();
+    }
+    // Arc rebuild only when the active scene actually switched.
+    let active_scene = scene_manager
+        .as_ref()
+        .and_then(|sm| sm.active_scene.as_deref());
+    if snapshot.active_scene.as_deref() != active_scene {
+        snapshot.active_scene = active_scene.map(Arc::from);
+    }
 
     if debug_mode.is_some() {
         // get_or_insert_with keeps the payload's Vec capacity alive across
@@ -531,6 +581,10 @@ mod tests {
         world.insert_resource(WorldSignals::default());
         world.insert_resource(AppState::default());
         world.insert_resource(DebugOverlayConfig::default());
+        world.insert_resource(WorldTime::default());
+        world.insert_resource(PostProcessShader::default());
+        world.insert_resource(GuiThemeStore::default());
+        world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DrawableSnapshot::default());
         world
     }

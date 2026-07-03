@@ -12,7 +12,7 @@ use bevy_ecs::prelude::Resource;
 pub const FIXED_DT: f32 = 1.0 / 240.0;
 
 /// World time accumulator and frame delta.
-#[derive(Resource, Clone, Copy)]
+#[derive(Resource, Clone, Copy, Debug)]
 pub struct WorldTime {
     /// Total elapsed time since start (seconds).
     pub elapsed: f32,

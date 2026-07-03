@@ -29,7 +29,7 @@ use crate::resources::gamestate::NextGameState;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore::SystemsStore;
-use crate::resources::texturestore::TextureStore;
+use crate::resources::texturedims::TextureDimsStore;
 use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
@@ -288,7 +288,8 @@ pub fn menu_despawn(
     In(target): In<Entity>,
     mut commands: Commands,
     query: Query<&Menu>,
-    mut texture_store: ResMut<TextureStore>,
+    mut render_asset_writer: MessageWriter<RenderAssetCmd>,
+    mut texture_dims: ResMut<TextureDimsStore>,
 ) {
     let Ok(menu) = query.get(target) else {
         warn!(
@@ -300,9 +301,14 @@ pub fn menu_despawn(
 
     // Despawn menu item entities and clean up textures
     for item in menu.items.iter() {
-        // Remove texture if it exists (only non-dynamic items have textures)
+        // Remove the rasterized label texture if it exists (only non-dynamic
+        // items have one). Queued as a RenderAssetCmd (Phase 5e): TextureStore
+        // is render-world-only, so even the GL-free `remove()` bookkeeping
+        // can't be called from logic-side cleanup anymore. The dims mirror is
+        // logic-owned and dropped directly.
         let texture_key = format!("menu_{}", item.id);
-        texture_store.remove(&texture_key);
+        texture_dims.remove(&texture_key);
+        render_asset_writer.write(RenderAssetCmd::RemoveTexture { key: texture_key });
 
         if let Some(item_entity) = item.entity {
             commands.entity(item_entity).try_despawn();

@@ -12,9 +12,11 @@
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
 
+use crate::events::logic_bridge::LogicMsg;
 use crate::events::render_assets::RenderAssetCmd;
-use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
+use crate::resources::fontmetrics::FontMetrics;
 use crate::resources::fontstore::FontStore;
+use crate::resources::logic_bridge::LogicTx;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::RaylibAccess;
@@ -35,8 +37,9 @@ pub fn process_render_asset_cmds(
     mut raylib: RaylibAccess,
     mut tex_store: ResMut<TextureStore>,
     mut fonts: NonSendMut<FontStore>,
-    mut font_metrics: ResMut<FontMetricsStore>,
     mut shaders: NonSendMut<ShaderStore>,
+    logic_tx: Res<LogicTx>,
+    mut notifications: Local<Vec<LogicMsg>>,
 ) {
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
     for cmd in reader.read() {
@@ -46,30 +49,46 @@ pub fn process_render_asset_cmds(
             cmd.clone(),
             &mut tex_store,
             &mut fonts,
-            &mut font_metrics,
             &mut shaders,
+            &mut notifications,
         );
+    }
+    // FontMetricsStore/TextureDimsStore are logic-world-owned (Phase 5e):
+    // ship each load's metrics/dims across the channel instead of writing a
+    // local resource. Send errors only occur during shutdown — ignored.
+    for msg in notifications.drain(..) {
+        let _ = logic_tx.0.send(msg);
     }
 }
 
-/// Performs the GL load/upload for a single [`RenderAssetCmd`]. Shared by
-/// [`process_render_asset_cmds`] (per-frame drain) and
-/// [`crate::lua_plugin::setup`]'s one-shot bootstrap loading (a documented
-/// exception to the render/logic seam — see that function's doc comment).
+/// Performs the GL load/upload for a single [`RenderAssetCmd`].
+///
+/// Successful font/texture loads push a [`LogicMsg::FontLoaded`]/
+/// [`LogicMsg::TextureLoaded`] notification into `notifications` instead of
+/// writing `FontMetricsStore`/`TextureDimsStore` directly — those stores are
+/// logic-owned, while this function runs on the render thread; the caller
+/// ([`process_render_asset_cmds`]) ships each notification across the
+/// `LogicTx` channel.
 pub(crate) fn apply_render_asset_cmd(
     rl: &mut raylib::RaylibHandle,
     th: &raylib::RaylibThread,
     cmd: RenderAssetCmd,
     tex_store: &mut TextureStore,
     fonts: &mut FontStore,
-    font_metrics: &mut FontMetricsStore,
     shaders: &mut ShaderStore,
+    notifications: &mut Vec<LogicMsg>,
 ) {
     match cmd {
         RenderAssetCmd::Texture { id, path, filter } => match rl.load_texture(th, &path) {
             Ok(tex) => {
                 debug!("Loaded texture '{}' from '{}'", id, path);
+                let (width, height) = (tex.width, tex.height);
                 tex_store.insert(&id, tex, filter, None);
+                notifications.push(LogicMsg::TextureLoaded {
+                    key: id,
+                    width,
+                    height,
+                });
             }
             Err(e) => error!("Failed to load texture '{}': {}", path, e),
         },
@@ -89,8 +108,9 @@ pub(crate) fn apply_render_asset_cmd(
             match load_font_with_mipmaps(rl, th, &path, size) {
                 Ok(font) => {
                     debug!("Loaded font '{}' from '{}'", id, path);
-                    font_metrics.0.insert(id.clone(), FontMetrics::extract(&font));
+                    let metrics = FontMetrics::extract(&font);
                     fonts.add(&id, font);
+                    notifications.push(LogicMsg::FontLoaded { key: id, metrics });
                 }
                 Err(err) => error!("Failed to load font '{}' from '{}': {}", id, path, err),
             }
@@ -137,12 +157,18 @@ pub(crate) fn apply_render_asset_cmd(
             };
             match load_texture_from_text(rl, th, font, &text, font_size, spacing, color) {
                 Some(tex) => {
+                    let (width, height) = (tex.width, tex.height);
                     tex_store.insert(
                         &key,
                         tex,
                         crate::resources::texturefilter::TextureFilter::Nearest,
                         None,
                     );
+                    notifications.push(LogicMsg::TextureLoaded {
+                        key,
+                        width,
+                        height,
+                    });
                 }
                 None => warn!(
                     "process_render_asset_cmds: failed to rasterize text for '{}'",
@@ -155,17 +181,28 @@ pub(crate) fn apply_render_asset_cmd(
                 return;
             }
             match rl.load_texture(th, &png_path) {
-                Ok(tex) => tex_store.insert(
-                    &key,
-                    tex,
-                    crate::resources::texturefilter::TextureFilter::Nearest,
-                    None,
-                ),
+                Ok(tex) => {
+                    let (width, height) = (tex.width, tex.height);
+                    tex_store.insert(
+                        &key,
+                        tex,
+                        crate::resources::texturefilter::TextureFilter::Nearest,
+                        None,
+                    );
+                    notifications.push(LogicMsg::TextureLoaded {
+                        key,
+                        width,
+                        height,
+                    });
+                }
                 Err(e) => warn!(
                     "process_render_asset_cmds: failed to load tilemap texture '{}': {e}",
                     png_path
                 ),
             }
+        }
+        RenderAssetCmd::RemoveTexture { key } => {
+            tex_store.remove(&key);
         }
     }
 }

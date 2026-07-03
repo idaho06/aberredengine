@@ -6,7 +6,7 @@
 use bevy_ecs::prelude::Resource;
 
 /// Current screen size in pixels.
-#[derive(Resource, Clone, Copy)]
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ScreenSize {
     /// Width in pixels.
     pub w: i32,

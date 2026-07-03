@@ -14,9 +14,10 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
+use crate::events::logic_bridge::RenderMsg;
+use crate::resources::logic_bridge::RenderTx;
 use bevy_ecs::prelude::*;
 use log::info;
-use raylib::RaylibHandle;
 
 /// If a state transition is pending, trigger a `GameStateChangedEvent`.
 pub fn check_pending_state(
@@ -36,11 +37,15 @@ pub fn state_is_playing(state: Res<GameState>) -> bool {
     matches!(state.get(), GameStates::Playing)
 }
 
-/// Signal application exit via raylib and set the `quit_game` world signal flag.
-pub fn quit_game(mut world_signals: ResMut<WorldSignals>, mut rl: NonSendMut<RaylibHandle>) {
+/// Set the `quit_game` world signal flag and ask the render thread to exit.
+///
+/// Phase 5e: this runs on the logic thread (no raylib handle exists there);
+/// `RenderMsg::Quit` makes the render loop break, which then sends
+/// `LogicMsg::Shutdown` back — same teardown path as a window close.
+pub fn quit_game(mut world_signals: ResMut<WorldSignals>, render_tx: Res<RenderTx>) {
     info!("Quitting game...");
     world_signals.set_flag(sk::QUIT_GAME);
-    rl.request_quit();
+    let _ = render_tx.0.send(RenderMsg::Quit);
 }
 
 /// Despawn all entities that are not marked [`Persistent`].

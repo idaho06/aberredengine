@@ -7,7 +7,7 @@ use bevy_ecs::prelude::Resource;
 /// Controls which world-space debug overlays are rendered.
 ///
 /// All fields default to `true` (everything visible when debug mode is on).
-#[derive(Resource, Debug, Clone)]
+#[derive(Resource, Debug, Clone, PartialEq)]
 pub struct DebugOverlayConfig {
     /// Red AABB outlines around box colliders.
     pub show_collider_boxes: bool,

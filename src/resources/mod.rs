@@ -22,6 +22,7 @@
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`imgui_bridge`] – internal Dear ImGui backend that replaces raylib's removed feature
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
+//! - [`logic_bridge`] – channel endpoints between the render and logic threads
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
@@ -29,6 +30,7 @@
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturefilter`] – texture sampling filter mode shared by render target and texture store
 //! - [`texturestore`] – loaded textures keyed by string IDs
+//! - [`texturedims`] – CPU-side texture dimensions mirror for the logic thread
 //! - [`windowsize`] – actual window dimensions for letterbox calculations
 //! - [`worldsignals`] – global signal storage for cross-system communication
 //! - [`worldtime`] – simulation time and delta
@@ -54,6 +56,7 @@ pub mod input;
 pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
+pub mod logic_bridge;
 pub mod mapdata;
 pub mod postprocessshader;
 pub mod rawinput;
@@ -64,6 +67,7 @@ pub mod shaderstore;
 pub mod signal_intents;
 pub mod signal_keys;
 pub mod systemsstore;
+pub mod texturedims;
 pub mod texturefilter;
 pub mod texturestore;
 pub mod uniformvalue;

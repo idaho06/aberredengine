@@ -18,9 +18,8 @@ use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::events::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
+use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::fontmetrics::FontMetricsStore;
-use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
@@ -33,9 +32,7 @@ use crate::resources::lua_runtime::{
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
-use crate::resources::texturestore::TextureStore;
 
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
@@ -47,7 +44,6 @@ use crate::systems::lua_commands::{
     process_gameconfig_command, process_group_command, process_input_command,
     process_render_command, process_signal_command, translate_asset_command,
 };
-use crate::systems::render_assets::apply_render_asset_cmd;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
@@ -99,36 +95,28 @@ pub(crate) struct CommonCmdBufs {
 
 // This function is meant to load all resources
 //
-// GL asset loading here is a documented exception to the render/logic seam
-// (`RenderAssetCmd`/`process_render_asset_cmds`, Phase 5c): `setup()` runs
-// once, synchronously, before either the FIXED or VARIABLE schedule exists,
-// so there is no logic-vs-render system split to violate yet. It shares its
-// actual GL-loading code with `process_render_asset_cmds` via
-// `apply_render_asset_cmd` rather than duplicating it. Revisit when the
-// render world's bootstrap sequencing is designed (Phase 5e).
+// Since Phase 5e, `setup()` is an ordinary `RenderAssetCmd` producer: it
+// queues asset loads into `Messages<RenderAssetCmd>` (forwarded to the
+// render thread, which performs the GL work and replies with
+// `FontLoaded`/`TextureLoaded` notifications). The pre-5e "apply GL loads
+// directly" bootstrap exception is gone — the logic world has no GL
+// resources at all, so bootstrap fonts' metrics arrive asynchronously
+// (dynamictext/menu measurement retries each frame until they land).
 pub fn setup(
     mut commands: Commands,
     mut next_state: ResMut<NextGameState>,
-    mut raylib: crate::systems::RaylibAccess,
-    mut fonts: NonSendMut<FontStore>,
-    mut font_metrics: ResMut<FontMetricsStore>,
-    mut shaders: NonSendMut<ShaderStore>,
+    screen_size: Res<ScreenSize>,
+    mut render_asset_writer: MessageWriter<RenderAssetCmd>,
     mut scripting: ScriptingContext,
 ) {
-    // This function sets up the game world, loading resources
-    let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-
     // Default camera. Needed to start the engine before entering play state
-    // The camera will be overridden later in the scene setup
+    // The camera will be overridden later in the scene setup. Offset centers
+    // on the internal render resolution (same default `setup_world` uses).
     let camera = Camera2D {
-        target: Vector2 {
-            x: 0.0,
-            y: 0.0, //x: 0.0,
-                    //y: 0.0,
-        },
+        target: Vector2 { x: 0.0, y: 0.0 },
         offset: Vector2 {
-            x: rl.get_screen_width() as f32 * 0.5,
-            y: rl.get_screen_height() as f32 * 0.5,
+            x: screen_size.w as f32 * 0.5,
+            y: screen_size.h as f32 * 0.5,
         },
         rotation: 0.0,
         zoom: 1.0,
@@ -144,12 +132,9 @@ pub fn setup(
         error!("Error calling on_setup: {}", e);
     }
 
-    // Initialize stores
-    let mut tex_store = TextureStore::new();
-
-    // Process asset commands queued by Lua (setup runs once; no persistent buffer needed).
-    // GL loads are applied directly (documented seam exception, see this
-    // function's doc comment) rather than routed through `Messages<RenderAssetCmd>`.
+    // Process asset commands queued by Lua (setup runs once; no persistent
+    // buffer needed): Music/Sound to the audio thread, the rest queued as
+    // RenderAssetCmds for the render side.
     let mut asset_buf = Vec::new();
     lua_runtime.drain_asset_commands_into(&mut asset_buf);
     for cmd in asset_buf {
@@ -159,21 +144,11 @@ pub fn setup(
             }
             Err(other) => {
                 if let Some(render_cmd) = asset_cmd_to_render_asset_cmd(other) {
-                    apply_render_asset_cmd(
-                        rl,
-                        th,
-                        render_cmd,
-                        &mut tex_store,
-                        &mut fonts,
-                        &mut font_metrics,
-                        &mut shaders,
-                    );
+                    render_asset_writer.write(render_cmd);
                 }
             }
         }
     }
-
-    commands.insert_resource(tex_store);
 
     // Process animation registration commands from Lua
     let mut anim_store = AnimationStore::default();

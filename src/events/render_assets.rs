@@ -69,4 +69,9 @@ pub enum RenderAssetCmd {
     /// data was already parsed CPU-side by the caller before this command
     /// was queued.
     TilemapTexture { key: String, png_path: String },
+    /// Remove the texture stored under `key` (drops the GPU handle).
+    /// Phase 5e: logic-side cleanup (`menu_despawn`'s rasterized labels)
+    /// can no longer touch `TextureStore` directly — even its GL-free
+    /// `remove()` — because the resource only exists in the render world.
+    RemoveTexture { key: String },
 }

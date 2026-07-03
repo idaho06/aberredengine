@@ -1,12 +1,10 @@
-use raylib::prelude::Vector2;
+use raylib::prelude::{Camera2D, Vector2};
 
-use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
-use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
@@ -25,9 +23,9 @@ pub(super) fn draw_imgui_debug(
     overlay_config: &mut DebugOverlayConfig,
     signals: &SignalSnapshot,
     input_state: &InputState,
-    camera: &Camera2DRes,
+    camera: &Camera2D,
     camera_follow: &CameraFollowConfig,
-    scene_manager: Option<&SceneManager>,
+    active_scene: Option<&str>,
     textures: &TextureStore,
     fonts: &FontStore,
     shader_count: usize,
@@ -69,7 +67,7 @@ pub(super) fn draw_imgui_debug(
         screensize,
         window_size,
         config,
-        scene_manager,
+        active_scene,
     );
 }
 
@@ -121,13 +119,13 @@ pub(super) fn draw_ecs_panel(
 
 pub(super) fn draw_camera_panel(
     ui: &ImguiUi,
-    camera: &Camera2DRes,
+    camera: &Camera2D,
     camera_follow: &CameraFollowConfig,
 ) {
     ui.window("Camera")
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
-            let cam = &camera.0;
+            let cam = camera;
             ui.text(format!(
                 "Target:   ({:.1}, {:.1})",
                 cam.target.x, cam.target.y
@@ -294,7 +292,7 @@ pub(super) fn draw_mouse_config_panel(
     screensize: &ScreenSize,
     window_size: &WindowSize,
     config: &GameConfig,
-    scene_manager: Option<&SceneManager>,
+    active_scene: Option<&str>,
 ) {
     ui.window("Mouse & Config")
         .collapsed(true, Condition::FirstUseEver)
@@ -313,13 +311,9 @@ pub(super) fn draw_mouse_config_panel(
             ui.separator();
             ui.text(format!("FPS target: {}", config.target_fps));
             ui.text(format!("VSync: {}", config.vsync));
-            if let Some(sm) = scene_manager {
+            if let Some(current) = active_scene {
                 ui.separator();
-                if let Some(ref current) = sm.active_scene {
-                    ui.text(format!("Scene: {}", current));
-                } else {
-                    ui.text("Scene: (none)");
-                }
+                ui.text(format!("Scene: {}", current));
             }
         });
 }
