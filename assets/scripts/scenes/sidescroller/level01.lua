@@ -87,31 +87,17 @@ end
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
---- Called each frame when sidescroller level01 scene is active.
---- This is called AFTER collision and phase callbacks!
---- @param input InputSnapshot Input state table
---- @param dt number Delta time in seconds
-local function on_update_sidescroller_level01(input, dt)
-    if input.digital.back.just_pressed then
-        engine.change_scene("menu")
-    end
-
-    -- Pin background layers to the camera view each frame
-    local rect = engine.get_camera_view_rect()
-    update_parallax_background("bg_layer01", rect)
-    update_parallax_background("bg_layer02", rect)
-    update_parallax_background("bg_layer03", rect)
-end
-
---- Called once per FIXED (240Hz) substep, before movement/collision -- NOT
---- once per render frame like on_update_sidescroller_level01 above.
+--- Called once per FIXED (240Hz) substep, before movement/collision -- can
+--- fire up to 8x per render frame, and keeps running through a render stall.
+--- `dt` is always the fixed delta time (constant, 1/240s), never a variable
+--- render-frame value.
 ---
 --- Collision-derived flags (on_ground, touching_wall_*) must be cleared here,
---- not in on_update: collision_solid_player (below) re-sets them every FIXED
---- substep the player's box still overlaps a solid, and player_*_on_update
---- phase callbacks (also FIXED) read them to decide phase transitions. If the
---- clear only happened once per render frame, a stale on_ground=true could
---- survive across several substeps after a jump impulse was applied (the
+--- before collision_solid_player (below) re-sets them every FIXED substep the
+--- player's box still overlaps a solid, and player_*_on_update phase
+--- callbacks (also FIXED) read them to decide phase transitions. Clearing
+--- them any less often than every substep could leave a stale on_ground=true
+--- surviving across several substeps after a jump impulse was applied (the
 --- player hasn't moved far enough yet to actually clear the AABB overlap),
 --- causing player_jumping_on_update to immediately see on_ground=true and
 --- revert to "idle" within the same frame -- before render ever draws the
@@ -119,7 +105,17 @@ end
 --- visibly moves the player.
 --- @param input InputSnapshot Input state table
 --- @param dt number Fixed delta time in seconds (constant, 1/240s)
-local function on_fixed_update_sidescroller_level01(input, dt)
+local function on_update_sidescroller_level01(input, dt)
+    if input.digital.back.just_pressed then
+        engine.change_scene("menu")
+    end
+
+    -- Pin background layers to the camera view every substep.
+    local rect = engine.get_camera_view_rect()
+    update_parallax_background("bg_layer01", rect)
+    update_parallax_background("bg_layer02", rect)
+    update_parallax_background("bg_layer03", rect)
+
     local player_id = engine.get_entity("player")
     if player_id then
         engine.entity_signal_clear_flag(player_id, "on_ground")
@@ -127,7 +123,7 @@ local function on_fixed_update_sidescroller_level01(input, dt)
         engine.entity_signal_clear_flag(player_id, "touching_wall_right")
         engine.entity_signal_clear_flag(player_id, "touching_ceiling")
         log_debug(string.format(
-            "on_fixed_update: cleared flags for player_id=%d dt=%.4f", player_id, dt))
+            "on_update: cleared flags for player_id=%d dt=%.4f", player_id, dt))
     end
 end
 
@@ -567,7 +563,6 @@ end
 
 M._callbacks = {
     on_update_sidescroller_level01 = on_update_sidescroller_level01,
-    on_fixed_update_sidescroller_level01 = on_fixed_update_sidescroller_level01,
     player_running_on_enter = player_running_on_enter,
     player_running_on_update = player_running_on_update,
     player_running_on_exit = player_running_on_exit,
