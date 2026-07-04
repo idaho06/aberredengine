@@ -1480,11 +1480,26 @@ fn advance_simulation(
 
     let time_scale = world.resource::<WorldTime>().time_scale;
     world.resource_mut::<WorldTime>().delta = FIXED_DT * time_scale;
-    for _ in 0..take_fixed_substeps(accumulator) {
+    run_fixed_substeps(world, fixed, take_fixed_substeps(accumulator));
+    world.resource_mut::<WorldTime>().delta = frame_delta;
+}
+
+/// Run `steps` FIXED substeps, clearing `InputState`'s one-shot edge flags
+/// (`just_pressed`/`just_released`) after each one so an edge set by the
+/// current render frame's input sample is delivered to exactly one substep —
+/// whichever runs first — regardless of how many substeps this frame runs.
+/// `active` (held state) is left untouched and freely re-readable every
+/// substep. A frame with zero due substeps leaves the edge untouched,
+/// carrying it forward to next frame's first substep (nothing was ever "in
+/// flight" to lose). Extracted from `advance_simulation` so it can be
+/// exercised directly in unit tests without needing a real `Instant`/
+/// `WorldTime` elapsed-time drive.
+fn run_fixed_substeps(world: &mut World, fixed: &mut Schedule, steps: u32) {
+    for _ in 0..steps {
         crate::tracy::tracy_span!("fixed_schedule_run");
         fixed.run(world);
+        world.resource_mut::<InputState>().clear_edges();
     }
-    world.resource_mut::<WorldTime>().delta = frame_delta;
 }
 
 fn set_variable_delta_from_render_frame(world: &mut World, frame_dt: f32) {
@@ -1809,6 +1824,104 @@ mod tests {
         let final_steps = take_fixed_substeps(&mut accumulator);
         assert!((3..=4).contains(&final_steps), "got {final_steps}");
         assert!(accumulator < FIXED_DT);
+    }
+
+    // --- Phase 6a: input edge-latch (run_fixed_substeps) ---
+
+    /// Counts how many times `InputState.action_1`/`mouse_left_button` were
+    /// observed with an edge set, for asserting "fires exactly once".
+    #[derive(Resource, Default)]
+    struct EdgeFireCounts {
+        action_1_pressed: u32,
+        action_1_released: u32,
+        mouse_pressed: u32,
+    }
+
+    fn count_edges_system(input: Res<InputState>, mut counts: ResMut<EdgeFireCounts>) {
+        if input.action_1.just_pressed {
+            counts.action_1_pressed += 1;
+        }
+        if input.action_1.just_released {
+            counts.action_1_released += 1;
+        }
+        if input.mouse_left_button.just_pressed {
+            counts.mouse_pressed += 1;
+        }
+    }
+
+    fn build_edge_test_world() -> (World, Schedule) {
+        let mut world = World::new();
+        world.insert_resource(InputState::default());
+        world.insert_resource(EdgeFireCounts::default());
+        let mut schedule = Schedule::default();
+        schedule.add_systems(count_edges_system);
+        schedule.initialize(&mut world).expect("schedule init");
+        (world, schedule)
+    }
+
+    #[test]
+    fn run_fixed_substeps_fires_edge_exactly_once_regardless_of_step_count() {
+        // Covers both action_1 (rebindable digital input) and mouse_left_button
+        // (raw, non-rebindable) in one pass -- clear_edges() treats every
+        // digital field identically, so exercising two of them together is
+        // enough to confirm the mechanism isn't field-specific.
+        for steps in [0u32, 1, 8] {
+            let (mut world, mut schedule) = build_edge_test_world();
+            {
+                let mut input = world.resource_mut::<InputState>();
+                input.action_1.active = true;
+                input.action_1.just_pressed = true;
+                input.mouse_left_button.active = true;
+                input.mouse_left_button.just_pressed = true;
+            }
+
+            run_fixed_substeps(&mut world, &mut schedule, steps);
+
+            let counts = world.resource::<EdgeFireCounts>();
+            let expected = if steps == 0 { 0 } else { 1 };
+            assert_eq!(
+                counts.action_1_pressed, expected,
+                "steps={steps}: edge must fire exactly once when any substep runs, zero when none do"
+            );
+            assert_eq!(counts.mouse_pressed, expected, "steps={steps}: mouse edge");
+
+            let input = world.resource::<InputState>();
+            assert!(
+                input.action_1.active,
+                "steps={steps}: active/held state must never be cleared"
+            );
+            assert!(input.mouse_left_button.active, "steps={steps}: mouse active must be untouched");
+            if steps == 0 {
+                assert!(
+                    input.action_1.just_pressed,
+                    "steps=0: edge must be carried forward untouched, not dropped"
+                );
+                assert!(input.mouse_left_button.just_pressed, "steps=0: mouse edge carried forward");
+            } else {
+                assert!(
+                    !input.action_1.just_pressed,
+                    "steps={steps}: edge must be consumed (cleared) after the first substep sees it"
+                );
+                assert!(!input.mouse_left_button.just_pressed, "steps={steps}: mouse edge consumed");
+            }
+        }
+    }
+
+    #[test]
+    fn run_fixed_substeps_delivers_press_and_release_in_same_sample() {
+        let (mut world, mut schedule) = build_edge_test_world();
+        {
+            // A fast tap within one render frame: both edges present at once.
+            let mut input = world.resource_mut::<InputState>();
+            input.action_1.just_pressed = true;
+            input.action_1.just_released = true;
+        }
+
+        run_fixed_substeps(&mut world, &mut schedule, 8);
+
+        let counts = world.resource::<EdgeFireCounts>();
+        assert_eq!(counts.action_1_pressed, 1, "press edge must fire exactly once");
+        assert_eq!(counts.action_1_released, 1, "release edge must fire exactly once");
     }
 
     // --- Phase 5e: channel enum round-trip smoke test ---

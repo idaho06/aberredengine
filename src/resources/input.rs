@@ -60,6 +60,50 @@ pub struct InputState {
     pub mouse_left_button: BoolState,
 }
 
+impl BoolState {
+    /// Clear the one-shot edge flags, leaving `active` (held state) untouched.
+    pub fn clear_edge(&mut self) {
+        self.just_pressed = false;
+        self.just_released = false;
+    }
+}
+
+impl InputState {
+    /// All digital `BoolState` fields, including `mouse_left_button`, as
+    /// mutable references. Single source of truth for "every digital field"
+    /// so `clear_edges` and its test enumerate the field list exactly once.
+    fn bool_fields_mut(&mut self) -> [&mut BoolState; 16] {
+        [
+            &mut self.maindirection_up,
+            &mut self.maindirection_left,
+            &mut self.maindirection_down,
+            &mut self.maindirection_right,
+            &mut self.secondarydirection_up,
+            &mut self.secondarydirection_down,
+            &mut self.secondarydirection_left,
+            &mut self.secondarydirection_right,
+            &mut self.action_back,
+            &mut self.action_1,
+            &mut self.action_2,
+            &mut self.action_3,
+            &mut self.mode_debug,
+            &mut self.fullscreen_toggle,
+            &mut self.action_special,
+            &mut self.mouse_left_button,
+        ]
+    }
+
+    /// Clear `just_pressed`/`just_released` on every digital field (including
+    /// `mouse_left_button`), leaving `active` untouched. Called once per FIXED
+    /// substep so an edge is delivered to exactly one substep regardless of
+    /// how many substeps run in a given render frame.
+    pub fn clear_edges(&mut self) {
+        for bs in self.bool_fields_mut() {
+            bs.clear_edge();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +150,38 @@ mod tests {
         assert!(!input.mouse_left_button.active);
         assert!(!input.mouse_left_button.just_pressed);
         assert!(!input.mouse_left_button.just_released);
+    }
+
+    #[test]
+    fn test_clear_edges_zeroes_every_field_but_keeps_active() {
+        let mut input = InputState::default();
+        // Set active + both edges on every field, including mouse_left_button
+        // (reuses the same field enumeration `clear_edges` itself uses).
+        for bs in input.bool_fields_mut() {
+            bs.active = true;
+            bs.just_pressed = true;
+            bs.just_released = true;
+        }
+
+        input.clear_edges();
+
+        for bs in input.bool_fields_mut() {
+            assert!(bs.active, "active must be untouched by clear_edges");
+            assert!(!bs.just_pressed, "just_pressed must be cleared");
+            assert!(!bs.just_released, "just_released must be cleared");
+        }
+    }
+
+    #[test]
+    fn test_clear_edge_leaves_active_untouched() {
+        let mut bs = BoolState {
+            active: true,
+            just_pressed: true,
+            just_released: true,
+        };
+        bs.clear_edge();
+        assert!(bs.active);
+        assert!(!bs.just_pressed);
+        assert!(!bs.just_released);
     }
 }
