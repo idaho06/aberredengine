@@ -626,7 +626,11 @@ pub fn switch_scene(
 /// `setup()` drains this queue once for `on_setup`-time loads (applying GL loads directly, a
 /// documented seam exception — see that function's doc comment); this system is the reachable
 /// drain site for any `engine.load_*` call made after setup. Mirrors
-/// [`crate::systems::mapspawn::process_lua_map_commands`].
+/// [`crate::systems::mapspawn::process_lua_map_commands`], including its Phase 6c move to FIXED
+/// for uniformity with the other 14 non-collision Lua queues — unlike the map-command case, this
+/// doesn't buy a same-tick latency win on its own: the `RenderAssetCmd`s produced here still only
+/// reach the render thread once per render frame, via `forward_render_asset_cmds`, which stays on
+/// VARIABLE (see that system's registration in `engine_app.rs`).
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
@@ -1011,5 +1015,44 @@ mod tests {
             level2_called, None,
             "level2's callback must not run until switch_scene has actually despawned level1's entities and update() clears SWITCH_SCENE -- fixed_update alone must never invoke it"
         );
+    }
+
+    #[test]
+    fn process_lua_asset_commands_translates_load_texture_same_call() {
+        // Phase 6c moved process_lua_asset_commands from VARIABLE to FIXED.
+        // The system itself is unchanged (schedule-agnostic: NonSend<LuaRuntime>
+        // + MessageWriters + Local<Vec<_>>) -- this confirms an
+        // engine.load_texture() call queued immediately before the system
+        // runs is still translated into a RenderAssetCmd::Texture correctly.
+        // It does NOT exercise the schedule-membership/ordering change itself
+        // (that's covered by the full schedule build in
+        // tests/engine_tick_integration.rs); it would pass unchanged if this
+        // system were still registered on VARIABLE.
+        let mut world = new_drain_test_world();
+        world.insert_resource(Messages::<crate::events::render_assets::RenderAssetCmd>::default());
+
+        {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load("engine.load_texture('boss', 'assets/boss.png')")
+                .exec()
+                .expect("queue load_texture");
+        }
+
+        world.run_system_once(process_lua_asset_commands).unwrap();
+
+        let cmds: Vec<_> = world
+            .resource_mut::<Messages<crate::events::render_assets::RenderAssetCmd>>()
+            .drain()
+            .collect();
+        assert_eq!(cmds.len(), 1, "expected exactly one RenderAssetCmd");
+        match &cmds[0] {
+            crate::events::render_assets::RenderAssetCmd::Texture { id, path, .. } => {
+                assert_eq!(id, "boss");
+                assert_eq!(path, "assets/boss.png");
+            }
+            other => panic!("expected RenderAssetCmd::Texture, got {other:?}"),
+        }
     }
 }

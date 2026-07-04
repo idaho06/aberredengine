@@ -1097,15 +1097,25 @@ impl EngineBuilder {
                     .after(phase_system),
             );
             fixed.add_systems(update_lua_timers);
-            variable.add_systems(
+            // Phase 6c (see .claude/context/system-order.md): moved from
+            // VARIABLE to FIXED, uniform with the other 14 non-collision Lua
+            // queues. Enumerated `.after(...)` list (bevy_ecs 0.19 has no
+            // `.after_all()`, same caveat as forward_render_asset_cmds_config
+            // below) rather than a single anchor -- `.after(update_timers)`
+            // alone wouldn't work since update_timers carries no ordering
+            // constraint of its own, so it wouldn't transitively cover the
+            // actual Lua-command producers.
+            fixed.add_systems(
                 process_lua_map_commands
-                    .after(crate::lua_plugin::update)
+                    .after(lua_phase_system)
+                    .after(update_lua_timers)
                     .before(render_system),
             );
-            variable.add_systems(
+            fixed.add_systems(
                 crate::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
-                    .after(crate::lua_plugin::update),
+                    .after(lua_phase_system)
+                    .after(update_lua_timers),
             );
             variable.add_systems(
                 lua_setup_entity_system
@@ -1190,6 +1200,12 @@ impl EngineBuilder {
         // SystemSet-based "runs after everything that can still produce a
         // RenderAssetCmd this frame" primitive, so a future producer must
         // be added to this edge list by hand -- nothing enforces it.
+        //
+        // Phase 6c moved process_lua_asset_commands/process_lua_map_commands to
+        // FIXED, so the two `.after()` edges below are vacuous cross-schedule
+        // markers (same convention as `.before(render_system)` below) -- kept
+        // for doc value only; see .claude/context/system-order.md for why this
+        // system stays on VARIABLE regardless.
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut forward_render_asset_cmds_config = forward_render_asset_cmds
             .after(update_bevy_render_asset_cmds)

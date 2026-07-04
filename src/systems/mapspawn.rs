@@ -317,8 +317,11 @@ pub fn spawn_map_observer(
 /// [`SpawnMapRequested`] for each, letting [`spawn_map_observer`] handle the
 /// Raylib-dependent asset loading and entity spawning.
 ///
-/// Registered by [`crate::engine_app::EngineBuilder::with_lua`] and runs
-/// every frame during the Playing state, after `lua_plugin::update`.
+/// Registered by [`crate::engine_app::EngineBuilder::with_lua`]. Since Phase
+/// 6c, runs on FIXED (240Hz, tail of the schedule) rather than VARIABLE, so a
+/// map load queued from `on_update_<scene>`/phase/timer/collision callbacks
+/// (all FIXED-scheduled or FIXED-effective since 6a/6b) is picked up the same
+/// substep instead of waiting for the next VARIABLE pass.
 #[cfg(feature = "lua")]
 pub fn process_lua_map_commands(
     mut commands: Commands,
