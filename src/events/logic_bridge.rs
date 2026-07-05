@@ -14,6 +14,7 @@ use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::FontMetrics;
+use crate::resources::imgui_bridge::ImguiCaptureState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::rawinput::RawInputSnapshot;
 use crate::resources::signal_intents::SignalIntent;
@@ -24,12 +25,18 @@ pub enum LogicMsg {
     /// One raw input sample per render frame. Carries the current OS window
     /// dimensions plus that render frame's real delta so the logic world's
     /// `WindowSize` mirror stays fresh and the `PRESENT` schedule can observe
-    /// the same frame delta the render loop just measured.
+    /// the same frame delta the render loop just measured. `capture` is the
+    /// PREVIOUS render frame's imgui capture state (`ImguiBridge::render`
+    /// runs after this message is sent each frame, so it's one frame behind,
+    /// same latency class as `SignalIntents` -- Phase 6e); used by
+    /// `apply_input_snapshot` to mask gameplay input while the debug overlay
+    /// has focus.
     Input {
         snapshot: RawInputSnapshot,
         frame_dt: f32,
         window_w: i32,
         window_h: i32,
+        capture: ImguiCaptureState,
     },
     /// Sent after `apply_gameconfig_changes` recreates the render target;
     /// the logic world mirrors it (`camera_follow_system` and input math

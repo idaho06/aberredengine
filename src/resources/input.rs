@@ -66,6 +66,16 @@ impl BoolState {
         self.just_pressed = false;
         self.just_released = false;
     }
+
+
+    /// Force this action to read as not-held/not-just-pressed, without
+    /// touching `just_released`. Used to mask input meant for the F11 debug
+    /// imgui overlay (Phase 6e) -- `just_released` must never be suppressed,
+    /// or gameplay sees a "stuck held" input once imgui grabs focus mid-press.
+    pub fn force_inactive(&mut self) {
+        self.active = false;
+        self.just_pressed = false;
+    }
 }
 
 impl InputState {
@@ -90,6 +100,33 @@ impl InputState {
             &mut self.fullscreen_toggle,
             &mut self.action_special,
             &mut self.mouse_left_button,
+        ]
+    }
+
+
+    /// All keyboard-sourced digital fields (everything [`bool_fields_mut`](Self::bool_fields_mut)
+    /// returns except `mouse_left_button`), as mutable references. Reused by
+    /// `apply_input_snapshot`'s imgui keyboard-capture masking (Phase 6e) so
+    /// that list isn't hand-duplicated in a second place -- see
+    /// `bool_fields_mut`'s doc comment for why a single enumerated source
+    /// matters.
+    pub(crate) fn keyboard_bool_fields_mut(&mut self) -> [&mut BoolState; 15] {
+        [
+            &mut self.maindirection_up,
+            &mut self.maindirection_left,
+            &mut self.maindirection_down,
+            &mut self.maindirection_right,
+            &mut self.secondarydirection_up,
+            &mut self.secondarydirection_down,
+            &mut self.secondarydirection_left,
+            &mut self.secondarydirection_right,
+            &mut self.action_back,
+            &mut self.action_1,
+            &mut self.action_2,
+            &mut self.action_3,
+            &mut self.mode_debug,
+            &mut self.fullscreen_toggle,
+            &mut self.action_special,
         ]
     }
 

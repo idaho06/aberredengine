@@ -109,7 +109,7 @@ use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
 use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use crate::systems::gui_interactable_click::gui_interactable_click_observer;
-use crate::resources::imgui_bridge::ImguiBridge;
+use crate::resources::imgui_bridge::{ImguiBridge, ImguiCaptureState};
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
@@ -146,7 +146,7 @@ use crate::systems::gui_progressbar_signal_update::gui_progressbar_signal_update
 use crate::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
 };
-use crate::resources::rawinput::LatestInputSnapshot;
+use crate::resources::rawinput::{ImguiCaptureMirror, LatestInputSnapshot};
 use crate::systems::input::{apply_input_snapshot, sample_input_snapshot};
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
@@ -820,6 +820,7 @@ impl EngineBuilder {
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
         world.insert_resource(LatestInputSnapshot::default());
+        world.insert_resource(ImguiCaptureMirror::default());
 
         setup_audio(&mut world);
 
@@ -1333,6 +1334,11 @@ impl EngineBuilder {
         let mut last_screen_size = *world.resource::<ScreenSize>();
         let mut last_overlay_config = world.resource::<DebugOverlayConfig>().clone();
         let mut last_render_instant = Instant::now();
+        // Previous iteration's imgui capture state (Phase 6e) -- updated
+        // after the render schedule runs each iteration, read into the NEXT
+        // iteration's `LogicMsg::Input` send below. One frame of lag, same
+        // latency class as `SignalIntents`.
+        let mut imgui_capture = ImguiCaptureState::default();
         // Crossbeam endpoints are Clone: hold them directly so the loop body
         // never has to re-fetch (and re-borrow) the LogicBridge resource.
         let (tx_logic, rx_render) = {
@@ -1382,13 +1388,15 @@ impl EngineBuilder {
             // sample; mouse_world stays 0 here — the panel doesn't show it).
             *world.resource_mut::<InputState>() = snapshot.state.clone();
 
-            // Ship the sample (+ current window dims for logic's mirror).
+            // Ship the sample (+ current window dims for logic's mirror, +
+            // last iteration's imgui capture state).
             if tx_logic
                 .send(LogicMsg::Input {
                     snapshot,
                     frame_dt,
                     window_w,
                     window_h,
+                    capture: imgui_capture,
                 })
                 .is_err()
             {
@@ -1427,6 +1435,9 @@ impl EngineBuilder {
                 crate::tracy::tracy_span!("render_schedule_run");
                 schedule.run(world);
             }
+
+            // Refresh for the NEXT iteration's LogicMsg::Input send (Phase 6e).
+            imgui_capture = world.non_send::<ImguiBridge>().capture_state();
 
             // Diff-and-send the render-owned mirrors back to logic.
             let screen_size = *world.resource::<ScreenSize>();
@@ -1608,7 +1619,8 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                 // snapshot (never a snapshot a previous pass already
                 // consumed — that would double-fire edges); the other
                 // message kinds apply to their mirrors immediately.
-                let mut pending_input: Option<(RawInputSnapshot, f32, i32, i32)> = None;
+                let mut pending_input: Option<(RawInputSnapshot, f32, i32, i32, ImguiCaptureState)> =
+                    None;
                 let mut shutdown_requested = false;
                 for msg in std::iter::once(first).chain(rx_logic.try_iter()) {
                     match msg {
@@ -1617,14 +1629,19 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                             frame_dt,
                             window_w,
                             window_h,
+                            capture,
                         } => match &mut pending_input {
-                            Some((merged, dt, w, h)) => {
+                            Some((merged, dt, w, h, cap)) => {
                                 merge_input_snapshots(merged, &snapshot);
                                 *dt = frame_dt;
                                 *w = window_w;
                                 *h = window_h;
+                                *cap = capture;
                             }
-                            None => pending_input = Some((snapshot, frame_dt, window_w, window_h)),
+                            None => {
+                                pending_input =
+                                    Some((snapshot, frame_dt, window_w, window_h, capture))
+                            }
                         },
                         LogicMsg::ScreenSize { w, h } => {
                             let mut screen_size = world.resource_mut::<ScreenSize>();
@@ -1664,13 +1681,14 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                     break 'main;
                 }
 
-                if let Some((snapshot, frame_dt, window_w, window_h)) = pending_input {
+                if let Some((snapshot, frame_dt, window_w, window_h, capture)) = pending_input {
                     {
                         let mut window_size = world.resource_mut::<WindowSize>();
                         window_size.w = window_w;
                         window_size.h = window_h;
                     }
                     world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
+                    world.resource_mut::<ImguiCaptureMirror>().0 = capture;
                     // Same per-frame order as the pre-split loop: apply input
                     // (InputState + events) BEFORE the fixed substeps that
                     // read it, then one `present` pass.
@@ -2008,6 +2026,7 @@ mod tests {
                 frame_dt: 1.0 / 60.0,
                 window_w: 800,
                 window_h: 600,
+                capture: ImguiCaptureState::default(),
             })
             .unwrap();
         tx_logic.send(LogicMsg::ScreenSize { w: 320, h: 200 }).unwrap();

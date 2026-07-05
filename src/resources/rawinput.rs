@@ -40,3 +40,11 @@ pub struct RawInputSnapshot {
 /// `LogicMsg::Input` messages on the logic thread.
 #[derive(Resource, Debug, Clone, Default)]
 pub struct LatestInputSnapshot(pub RawInputSnapshot);
+
+
+/// Logic-side mirror of the render thread's [`crate::resources::imgui_bridge::ImguiCaptureState`]
+/// (Phase 6e). Updated from `LogicMsg::Input::capture` alongside
+/// [`LatestInputSnapshot`], and read by `apply_input_snapshot` to mask
+/// gameplay input while the debug overlay has focus.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct ImguiCaptureMirror(pub crate::resources::imgui_bridge::ImguiCaptureState);

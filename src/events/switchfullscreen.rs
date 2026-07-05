@@ -5,8 +5,8 @@
 //! fullscreen and windowed mode, using the [`FullScreen`] marker resource to
 //! track the current state.
 
+use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fullscreen::FullScreen;
-use crate::resources::gameconfig::GameConfig;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use log::{debug, info};
@@ -28,13 +28,13 @@ pub fn switch_fullscreen_observer(
     mut rl: NonSendMut<raylib::RaylibHandle>,
     mut commands: Commands,
     fullscreen: Option<Res<FullScreen>>,
-    config: Res<GameConfig>,
+    snapshot: Res<DrawableSnapshot>,
 ) {
     debug!("SwitchFullScreenEvent triggered");
     if fullscreen.is_some() {
         commands.remove_resource::<FullScreen>();
         rl.toggle_borderless_windowed();
-        let (w, h) = config.window_size();
+        let (w, h) = snapshot.game_config.window_size();
         rl.set_window_size(w as i32, h as i32);
         info!("Full screen disabled");
     } else {

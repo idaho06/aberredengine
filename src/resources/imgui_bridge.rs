@@ -174,6 +174,20 @@ impl ClipboardBackend for RaylibClipboardBackend {
     }
 }
 
+/// Whether the debug imgui overlay currently wants to capture mouse/keyboard
+/// input this frame. Read from the render thread after `ImguiBridge::render`
+/// runs, carried one frame across the thread boundary via
+/// `LogicMsg::Input::capture` (same latency class as `SignalIntents`), and
+/// used by `apply_input_snapshot` to mask gameplay input while the debug
+/// panel has focus (Phase 6e). Scoped to the F11 debug overlay only -- the
+/// in-house `GuiButton`/`GuiWindow` system does its own hit-testing and isn't
+/// imgui.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ImguiCaptureState {
+    pub mouse: bool,
+    pub keyboard: bool,
+}
+
 /// Non-send ImGui backend resource owned by the engine.
 pub struct ImguiBridge {
     context: Context,
@@ -185,6 +199,12 @@ pub struct ImguiBridge {
     prev_mouse_draw_cursor: bool,
     warned_reset_render_state: bool,
     warned_raw_callback: bool,
+    /// Snapshot of `io().want_capture_mouse`/`want_capture_keyboard`, taken at
+    /// the end of [`ImguiBridge::render`] (Phase 6e). `false`/`false` until
+    /// `render` first runs, and reset by [`ImguiBridge::clear_capture`] on
+    /// frames where the debug overlay doesn't run at all -- otherwise these
+    /// would freeze at their last computed value.
+    capture: ImguiCaptureState,
 }
 
 impl ImguiBridge {
@@ -220,23 +240,65 @@ impl ImguiBridge {
             prev_mouse_draw_cursor: false,
             warned_reset_render_state: false,
             warned_raw_callback: false,
+            capture: ImguiCaptureState::default(),
         })
     }
 
     /// Run an ImGui frame and render the resulting draw data through rlgl.
-    pub fn render<F>(&mut self, callback: F)
+    ///
+    /// `debug_active` scopes capture-state tracking (Phase 6e) to the F11
+    /// debug overlay only, per `ImguiCaptureState`'s doc comment: a scene's
+    /// own `gui_callback` (persistent dev UI -- HUDs, editors, tool windows)
+    /// also opens an imgui frame through this same method, but its capture
+    /// is a GLOBAL flag, not spatial -- treating it as gameplay-input-masking
+    /// too would suppress in-house `GuiButton`/`GuiInteractable` clicks
+    /// anywhere on screen the instant the mouse merely hovers the HUD,
+    /// regardless of whether the click is anywhere near it. Pass `false` when
+    /// this frame was opened only for a `gui_callback` (not debug mode) to
+    /// keep capture tracking off for it.
+    pub fn render<F>(&mut self, debug_active: bool, callback: F)
     where
         F: FnOnce(&Ui),
     {
         self.prepare_frame();
         let ui = self.context.new_frame();
         callback(ui);
+        // Snapshot capture flags now, while this frame's widget interactions
+        // are reflected in `io()` -- see `capture_state`/`clear_capture`'s
+        // doc comments (Phase 6e). Scoped to `debug_active` -- see this
+        // method's own doc comment above for why.
+        self.capture = if debug_active {
+            let io = self.context.io();
+            ImguiCaptureState {
+                mouse: io.want_capture_mouse,
+                keyboard: io.want_capture_keyboard,
+            }
+        } else {
+            ImguiCaptureState::default()
+        };
         let draw_data = self.context.render();
         render_draw_data(
             draw_data,
             &mut self.warned_reset_render_state,
             &mut self.warned_raw_callback,
         );
+    }
+
+    /// This frame's imgui capture state, as of the last [`ImguiBridge::render`]
+    /// call. Read by the render loop after the render schedule runs, and
+    /// mirrored across the thread boundary via `LogicMsg::Input::capture`
+    /// (Phase 6e) so gameplay input can be masked while the debug overlay has
+    /// focus.
+    pub fn capture_state(&self) -> ImguiCaptureState {
+        self.capture
+    }
+
+    /// Reset capture state to `false`/`false`. Call this on frames where
+    /// `render` does NOT run (i.e. `needs_imgui()` was false) -- otherwise
+    /// the flags would freeze at whatever `render` last computed, even after
+    /// the debug overlay closes.
+    pub fn clear_capture(&mut self) {
+        self.capture = ImguiCaptureState::default();
     }
 
     fn prepare_frame(&mut self) {

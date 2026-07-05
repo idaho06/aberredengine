@@ -844,7 +844,7 @@ pub fn render_system(
         let camera = &snapshot.camera;
 
         let closure = move |_d: &RaylibDrawHandle<'_>| {
-            imgui_bridge.render(|ui| {
+            imgui_bridge.render(debug_active, |ui| {
                 if debug_active {
                     draw_imgui_debug(
                         ui,
@@ -890,6 +890,11 @@ pub fn render_system(
             Some(closure),
         );
     } else {
+        // needs_imgui was false this frame, so `render()` (and therefore the
+        // capture snapshot it takes) doesn't run -- clear explicitly so
+        // capture flags don't freeze at their last computed value once the
+        // debug overlay closes (Phase 6e).
+        imgui_bridge.clear_capture();
         apply_postprocess_passes(
             rl,
             th,

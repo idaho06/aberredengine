@@ -27,7 +27,7 @@ use crate::events::switchdebug::SwitchDebugEvent;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::input::{BoolState, InputState};
 use crate::resources::input_bindings::{InputBinding, InputBindings};
-use crate::resources::rawinput::{LatestInputSnapshot, RawInputSnapshot};
+use crate::resources::rawinput::{ImguiCaptureMirror, LatestInputSnapshot, RawInputSnapshot};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
 
@@ -178,25 +178,89 @@ pub fn sample_input_snapshot(
 /// nothing here (Phase 5e — the render loop handles F10 on its own world,
 /// where `switch_fullscreen_observer` lives); the raw `mouse_left_button`
 /// emits nothing.
+///
+/// Masks input meant for the F11 debug imgui overlay before any of the above
+/// (Phase 6e, `ImguiCaptureMirror`) — mouse fields when `capture.mouse`,
+/// keyboard-sourced digital fields when `capture.keyboard` — so gameplay
+/// doesn't also react to clicks/keys meant for the debug panel:
+/// - Mouse position/world-position are FROZEN at their pre-capture values
+///   (not zeroed) while masked: zeroing would still hand `mouse_world_x/y` a
+///   real, camera-projected coordinate (wherever screen-origin maps to), not
+///   "no data," and any `MouseControlled` entity reads that field
+///   unconditionally (`mouse_controller`, `src/systems/mousecontroller.rs`)
+///   — freezing means such an entity simply stops following instead of
+///   snapping to a bogus position.
+/// - `mode_debug` (F11) is restored to its real, unmasked edge state after
+///   the general keyboard mask: F11 is the debug overlay's own escape hatch
+///   and must always work, even while an imgui widget in that same overlay
+///   holds keyboard focus — masking it away would lock the user out of
+///   closing the very panel that's capturing keyboard.
+/// - Never suppresses `just_released`: a button masked mid-press must still
+///   deliver its release, or gameplay sees a "stuck held" input once imgui
+///   grabs focus mid-press.
+///
+/// **Known, accepted edge cases** (both are consequences of the one-frame
+/// cross-thread lag on `capture` itself, documented at its send site in
+/// `render_main_loop`, `engine_app.rs` — deliberately not eliminated, since
+/// doing so would need the "elaborate same-frame reordering machinery" the
+/// design explicitly avoids for a debug-only overlay):
+/// - A click/keypress can leak through unmasked on the exact render frame the
+///   cursor/focus first lands on an imgui widget (capture is still `false`
+///   from the prior frame), and conversely a legitimate gameplay press can be
+///   masked on the frame focus leaves (capture is still `true`).
+/// - If a press and its release both land in the same coalesced input sample
+///   while masked (e.g. a fast click during a backlog), the press is masked
+///   but `just_released` is not (per the rule above), so an observer sees an
+///   isolated release with no preceding press. No current `InputEvent`
+///   consumer relies on press/release pairing (`menu_controller_observer`
+///   ignores all release events), but a future one might.
 pub fn apply_input_snapshot(
     latest: Res<LatestInputSnapshot>,
+    imgui_capture: Res<ImguiCaptureMirror>,
     mut input: ResMut<InputState>,
     camera: Res<Camera2DRes>,
     mut commands: Commands,
 ) {
+    let capture = imgui_capture.0;
+    // Saved BEFORE the overwrite below so mouse masking can freeze at the
+    // pre-capture position rather than leaking a bogus new one (see doc
+    // comment above).
+    let frozen_mouse = capture
+        .mouse
+        .then(|| (input.mouse_x, input.mouse_y, input.mouse_world_x, input.mouse_world_y));
+
     *input = latest.0.state.clone();
 
-    // World-space: game-space projected through the current camera.
-    // Matches MapPosition entity coordinates.
-    let world_mouse_pos = screen_to_world2d(
-        Vector2 {
-            x: input.mouse_x,
-            y: input.mouse_y,
-        },
-        &camera.0,
-    );
-    input.mouse_world_x = world_mouse_pos.x;
-    input.mouse_world_y = world_mouse_pos.y;
+    if let Some((mouse_x, mouse_y, mouse_world_x, mouse_world_y)) = frozen_mouse {
+        input.mouse_x = mouse_x;
+        input.mouse_y = mouse_y;
+        input.mouse_world_x = mouse_world_x;
+        input.mouse_world_y = mouse_world_y;
+        input.scroll_y = 0.0;
+        input.mouse_left_button.force_inactive();
+    } else {
+        // World-space: game-space projected through the current camera.
+        // Matches MapPosition entity coordinates.
+        let world_mouse_pos = screen_to_world2d(
+            Vector2 {
+                x: input.mouse_x,
+                y: input.mouse_y,
+            },
+            &camera.0,
+        );
+        input.mouse_world_x = world_mouse_pos.x;
+        input.mouse_world_y = world_mouse_pos.y;
+    }
+
+    if capture.keyboard {
+        let mode_debug_edge = input.mode_debug;
+        for bs in input.keyboard_bool_fields_mut() {
+            bs.force_inactive();
+        }
+        // F11 must always work as the debug overlay's escape hatch -- see
+        // doc comment above.
+        input.mode_debug = mode_debug_edge;
+    }
 
     // Inline macro: emit InputEvents for one action's edges.
     macro_rules! emit_action {
@@ -301,6 +365,7 @@ pub fn merge_input_snapshots(base: &mut RawInputSnapshot, next: &RawInputSnapsho
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::imgui_bridge::ImguiCaptureState;
     use bevy_ecs::system::RunSystemOnce;
     use raylib::prelude::Camera2D;
 
@@ -361,6 +426,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(InputState::default());
         world.insert_resource(LatestInputSnapshot(snapshot));
+        world.insert_resource(ImguiCaptureMirror::default());
         world.insert_resource(Camera2DRes(camera));
         world.insert_resource(EventLog::default());
         world.add_observer(|trigger: On<InputEvent>, mut log: ResMut<EventLog>| {
@@ -393,6 +459,138 @@ mod tests {
         assert!(input.action_1.active);
         assert!((input.mouse_world_x - 150.0).abs() < 1e-3);
         assert!((input.mouse_world_y - 50.0).abs() < 1e-3);
+    }
+
+
+    #[test]
+    fn apply_masks_mouse_left_press_when_imgui_captures_mouse_but_always_delivers_release() {
+        // Frame 1: imgui has mouse capture (e.g. hovering the F11 debug
+        // panel) while the left mouse button is freshly pressed -- gameplay
+        // must not see it.
+        let mut snapshot = RawInputSnapshot::default();
+        snapshot.state.mouse_left_button.active = true;
+        snapshot.state.mouse_left_button.just_pressed = true;
+        let mut world = build_world(snapshot, test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        world.insert_resource(ImguiCaptureMirror(ImguiCaptureState {
+            mouse: true,
+            keyboard: false,
+        }));
+
+        world.run_system_once(apply_input_snapshot).unwrap();
+
+        let input = world.resource::<InputState>();
+        assert!(
+            !input.mouse_left_button.active && !input.mouse_left_button.just_pressed,
+            "mouse_left_button press must be masked while imgui has mouse capture"
+        );
+
+        // Frame 2: imgui releases capture (panel closed/unfocused) while the
+        // same physical press is now releasing. This must NOT be masked --
+        // gameplay needs the release to avoid seeing a "stuck held" button.
+        let mut released = RawInputSnapshot::default();
+        released.state.mouse_left_button.just_released = true;
+        world.resource_mut::<LatestInputSnapshot>().0 = released;
+        world.resource_mut::<ImguiCaptureMirror>().0 = ImguiCaptureState::default();
+
+        world.run_system_once(apply_input_snapshot).unwrap();
+
+        let input = world.resource::<InputState>();
+        assert!(
+            input.mouse_left_button.just_released,
+            "just_released must never be masked, even though it followed a masked press"
+        );
+    }
+
+    #[test]
+    fn apply_masks_keyboard_actions_when_imgui_captures_keyboard() {
+        let mut snapshot = RawInputSnapshot::default();
+        snapshot.state.action_1.active = true;
+        snapshot.state.action_1.just_pressed = true;
+        let mut world = build_world(snapshot, test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        world.insert_resource(ImguiCaptureMirror(ImguiCaptureState {
+            mouse: false,
+            keyboard: true,
+        }));
+
+        world.run_system_once(apply_input_snapshot).unwrap();
+
+        let input = world.resource::<InputState>();
+        assert!(
+            !input.action_1.active && !input.action_1.just_pressed,
+            "keyboard-sourced action must be masked while imgui has keyboard capture"
+        );
+    }
+
+
+    #[test]
+    fn apply_freezes_mouse_position_instead_of_leaking_screen_origin_world_pos_when_captured() {
+        // Frame 1: no capture -- establish a real, non-origin cursor position.
+        let mut snapshot = RawInputSnapshot::default();
+        snapshot.state.mouse_x = 500.0;
+        snapshot.state.mouse_y = 300.0;
+        // camera: target (100, 50), offset (400, 300), zoom 2 (same as
+        // apply_copies_state_and_computes_mouse_world).
+        let mut world = build_world(snapshot, test_camera((100.0, 50.0), (400.0, 300.0), 2.0, 0.0));
+        world.run_system_once(apply_input_snapshot).unwrap();
+        let established = world.resource::<InputState>().clone();
+        assert_ne!(established.mouse_x, 0.0, "sanity: a real cursor position was established");
+
+        // Frame 2: imgui captures the mouse, and the raw snapshot (as if the
+        // cursor had moved) reports a different, non-zero position -- this
+        // must NOT reach InputState. Freezing at the pre-capture position
+        // (rather than zeroing, which would still project to a real
+        // camera-space coordinate at screen-origin) is what stops
+        // MouseControlled entities from snapping to a bogus position.
+        let mut moved = RawInputSnapshot::default();
+        moved.state.mouse_x = 999.0;
+        moved.state.mouse_y = 999.0;
+        world.resource_mut::<LatestInputSnapshot>().0 = moved;
+        world.resource_mut::<ImguiCaptureMirror>().0 = ImguiCaptureState {
+            mouse: true,
+            keyboard: false,
+        };
+
+        world.run_system_once(apply_input_snapshot).unwrap();
+
+        let input = world.resource::<InputState>();
+        assert_eq!(
+            (input.mouse_x, input.mouse_y),
+            (established.mouse_x, established.mouse_y),
+            "mouse position must freeze at its pre-capture value, not adopt the new raw sample"
+        );
+        assert_eq!(
+            (input.mouse_world_x, input.mouse_world_y),
+            (established.mouse_world_x, established.mouse_world_y),
+            "mouse_world_x/y must also freeze -- MouseControlled entities read this field \
+             unconditionally, so leaking a fresh (even zeroed) projection would still visibly \
+             snap them to wherever screen-origin maps to in world space"
+        );
+    }
+
+    #[test]
+    fn apply_never_masks_mode_debug_so_f11_always_toggles_the_overlay() {
+        let mut snapshot = RawInputSnapshot::default();
+        snapshot.state.mode_debug.active = true;
+        snapshot.state.mode_debug.just_pressed = true;
+        let mut world = build_world(snapshot, test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        world.insert_resource(ImguiCaptureMirror(ImguiCaptureState {
+            mouse: false,
+            keyboard: true,
+        }));
+
+        world.run_system_once(apply_input_snapshot).unwrap();
+
+        let input = world.resource::<InputState>();
+        assert!(
+            input.mode_debug.active && input.mode_debug.just_pressed,
+            "F11 (mode_debug) must never be masked -- it's the debug overlay's own escape hatch \
+             and must work even while an imgui widget in that overlay holds keyboard capture"
+        );
+        let log = world.resource::<EventLog>();
+        assert_eq!(
+            log.debug_switches, 1,
+            "SwitchDebugEvent must still fire for F11 while keyboard capture is active"
+        );
     }
 
     #[test]
