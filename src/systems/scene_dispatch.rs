@@ -73,9 +73,11 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 /// - Called whether or not debug mode (F11) is active.
 /// - Interaction results must be communicated via [`SignalIntents`] (action flags,
 ///   pending edit values); queued intents are applied to `WorldSignals` at the top
-///   of the next frame's VARIABLE schedule by `apply_signal_intents` (Phase 5d,
-///   `docs/render-simulation-separation-brainstorm.md`) — one frame of latency,
-///   same as before this callback stopped holding a live `&mut WorldSignals`.
+///   of the next FIXED substep by `apply_signal_intents` (Phase 5d,
+///   `docs/render-simulation-separation-brainstorm.md`; moved from the next
+///   frame's VARIABLE schedule to the next FIXED substep in Phase 6d) —
+///   one substep of latency, same as before this callback stopped holding a
+///   live `&mut WorldSignals`.
 ///   `AppState` is read-only from the GUI's perspective — it's a snapshot clone,
 ///   not the live resource.
 /// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.

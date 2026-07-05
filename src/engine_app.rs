@@ -303,9 +303,13 @@ impl EngineBuilder {
         self
     }
 
-    /// Register the `update` hook (runs every frame when `state_is_playing`).
+    /// Register the `update` hook.
     ///
-    /// The system is added to the schedule with
+    /// Since Phase 6d, this runs on the FIXED (240Hz) schedule -- up to 8 times
+    /// per render frame (one call per FIXED substep), not once. Treat it
+    /// as idempotent/edge-triggered the same way Lua's `on_update_<scene>` must
+    /// be (`.claude/context/system-order.md`): gate one-shot effects on an edge,
+    /// not on "runs once per visible frame". The system is added with
     /// `.run_if(state_is_playing).after(check_pending_state)`.
     pub fn on_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
@@ -327,9 +331,13 @@ impl EngineBuilder {
         self
     }
 
-    /// Add a per-frame system to the schedule.
+    /// Add a system to the FIXED (240Hz) schedule alongside `on_update`/Lua's
+    /// `on_update_<scene>`.
     ///
-    /// The system is added with `.run_if(state_is_playing).after(check_pending_state)`,
+    /// Since Phase 6d this is the FIXED schedule, not a once-per-render-frame
+    /// one -- see [`.on_update()`](Self::on_update)'s doc for the cadence
+    /// implications. The system is added with
+    /// `.run_if(state_is_playing).after(check_pending_state)`,
     /// matching the behaviour of [`.on_update()`](Self::on_update). Can be called
     /// multiple times to register several systems.
     ///
@@ -356,10 +364,13 @@ impl EngineBuilder {
         self
     }
 
-    /// Add systems to the per-frame schedule with full control over ordering and
+    /// Add systems to the FIXED schedule with full control over ordering and
     /// run conditions.
     ///
-    /// The closure receives a `&mut Schedule` and can call `schedule.add_systems(…)`
+    /// Since Phase 6d this targets the same FIXED (240Hz) schedule as
+    /// [`add_system`](Self::add_system) -- there is no longer a separate
+    /// once-per-render-frame schedule to target. The closure receives a
+    /// `&mut Schedule` and can call `schedule.add_systems(…)`
     /// with any configuration. No automatic constraints are applied — the developer
     /// is responsible for `.run_if()`, `.after()`, `.before()` etc.
     ///
@@ -485,17 +496,20 @@ impl EngineBuilder {
         self.enter_play_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "enter_play", lua_plugin::enter_play);
         }));
-        // lua_plugin::update runs on the VARIABLE (once-per-render-frame) schedule.
-        // lua_phase_system/camera_follow_system now live on the FIXED schedule, so
-        // ordering against them is no longer expressible (or needed) here -- every
-        // fixed substep for this frame has already completed by the time the
-        // variable schedule runs, so Lua always reads this frame's settled phase
-        // and camera state regardless.
+        // Since Phase 6d, lua_plugin::update runs on FIXED too (build_logic_schedules
+        // installs update_hook into `fixed`), ordered last among Lua-touching
+        // FIXED systems each substep -- see lua_plugin::update's own doc
+        // comment for why and for the mid-substep-batch scene-switch consequence.
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
                     .run_if(state_is_playing)
                     .after(check_pending_state)
+                    .after(lua_plugin::fixed_update)
+                    .after(lua_phase_system)
+                    .after(update_lua_timers)
+                    .after(process_lua_map_commands)
+                    .after(lua_plugin::process_lua_asset_commands)
                     .before(render_system),
             );
         }));
@@ -988,19 +1002,27 @@ impl EngineBuilder {
     }
 
     /// Build the two schedules that make up a frame: `fixed` (run 0-8 times
-    /// per render frame at a constant `FIXED_DT` -- deterministic core
-    /// simulation: movement, collision, phases, animation) and `variable`
-    /// (run exactly once per render frame -- scripted gameplay logic, GUI,
-    /// scene lifecycle, and rendering). See
-    /// `docs/render-simulation-separation-brainstorm.md` and
-    /// `.claude/context/system-order.md` for the rationale behind the split
-    /// and the full list of which system lives where.
+    /// per render frame at a constant `FIXED_DT` -- since Phase 6d, this is
+    /// where essentially all gameplay logic lives: movement, collision,
+    /// phases, animation, Lua scripting, GUI layout/hit-test, scene
+    /// lifecycle, and per-substep housekeeping) and `present` (run exactly
+    /// once per render frame -- package the frame's fully-settled state into
+    /// a `DrawableSnapshot` and ship it; nothing else). See
+    /// `docs/render-simulation-separation-brainstorm.md`,
+    /// `docs/render-logic-simplification-brainstorm.md`'s "Collapsing
+    /// VARIABLE" section, and `.claude/context/system-order.md` for the
+    /// rationale behind the split and the full list of which system lives
+    /// where. `present` was called `variable` before Phase 6d; the old name
+    /// stopped describing anything running there once nearly everything
+    /// moved to `fixed`.
     ///
     /// `bevy_ecs` cannot express `.after()`/`.before()` across two separate
-    /// `Schedule`s, so edges that used to cross what is now the fixed/variable
-    /// boundary are dropped here (the accumulator loop in `main_loop` already
-    /// guarantees every fixed substep for a frame completes before `variable`
-    /// runs, which is the ordering those edges used to express).
+    /// `Schedule`s, so edges that cross the fixed/present boundary (e.g.
+    /// `build_drawable_snapshot`'s `.after()` list below) are vacuous
+    /// doc-value markers, not real constraints -- the accumulator loop in
+    /// `logic_thread_main` guarantees every fixed substep for a frame
+    /// completes before `present` runs, which is the ordering those edges
+    /// express.
     fn build_logic_schedules(
         update_hook: Option<UpdateRegistrar>,
         fixed_update_hook: Option<UpdateRegistrar>,
@@ -1011,20 +1033,27 @@ impl EngineBuilder {
         use_scene_manager: bool,
     ) -> Result<(Schedule, Schedule), String> {
         let mut fixed = Schedule::default();
-        let mut variable = Schedule::default();
+        let mut present = Schedule::default();
 
-        // --- VARIABLE: input/state bookkeeping, one-shot spawns ---
-        // (apply_gameconfig_changes is registered further down, after
-        // build_drawable_snapshot -- it reads config from the snapshot.)
-        // apply_signal_intents runs first: intents queued by last frame's
-        // GuiCallback (inside render_system, the last VARIABLE system) must be
-        // visible to this frame's scene logic (Phase 5d).
-        variable.add_systems(apply_signal_intents.before(check_pending_state));
-        variable.add_systems(menu_spawn_system);
-        variable.add_systems(gridlayout_spawn_system);
-        variable.add_systems(tilemap_spawn_system);
-        variable.add_systems(check_pending_state);
-        variable.add_systems(
+        // --- FIXED: signal intents + state bookkeeping, one-shot spawns ---
+        // apply_signal_intents runs first, before everything else this
+        // substep (in particular before fixed_update/on_update_<scene>,
+        // see the cfg(lua) edge below): intents queued by the render
+        // thread's GuiCallback (inside render_system) each frame must be
+        // visible to this substep's scene logic (Phase 5d).
+        #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
+        let mut apply_signal_intents_config = apply_signal_intents.before(check_pending_state);
+        #[cfg(feature = "lua")]
+        {
+            apply_signal_intents_config =
+                apply_signal_intents_config.before(crate::lua_plugin::fixed_update);
+        }
+        fixed.add_systems(apply_signal_intents_config);
+        fixed.add_systems(menu_spawn_system);
+        fixed.add_systems(gridlayout_spawn_system);
+        fixed.add_systems(tilemap_spawn_system);
+        fixed.add_systems(check_pending_state);
+        fixed.add_systems(
             (
                 update_bevy_audio_cmds,
                 forward_audio_cmds,
@@ -1033,7 +1062,11 @@ impl EngineBuilder {
             )
                 .chain(),
         );
-        variable.add_systems(update_bevy_render_asset_cmds);
+        // update_bevy_render_asset_cmds stays paired with forward_render_asset_cmds
+        // on `present` (both once/frame), unlike its producers -- see
+        // forward_render_asset_cmds_config below, same reasoning as Phase 6c's
+        // "stays on VARIABLE permanently" call for that system.
+        present.add_systems(update_bevy_render_asset_cmds);
 
         // --- FIXED: input-driven forces/movement (InputState is sampled once
         // per render frame in main_loop, before the accumulator loop, and held
@@ -1065,27 +1098,30 @@ impl EngineBuilder {
         fixed.add_systems(stuck_to_entity_system.after(collision_detector));
         fixed.add_systems(phase_system.after(collision_detector));
 
-        // --- VARIABLE: GUI (tween_system::<ScreenPosition> feeds GUI layout,
-        // not collision, so it moves here unlike its MapPosition/Rotation/Scale
-        // siblings above; its LuaOnTweenFinished<ScreenPosition> callback now
-        // fires once per render frame while the other three fire on FIXED) ---
-        variable.add_systems(tween_system::<ScreenPosition>);
-        variable.add_systems(
+        // --- FIXED: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
+        // collision, so it's grouped with the GUI chain rather than its
+        // MapPosition/Rotation/Scale siblings above; since Phase 6d all four
+        // TweenValue type parameters share FIXED cadence, so
+        // LuaOnTweenFinished<ScreenPosition> no longer fires at a different
+        // rate than the other three). `.before(render_system)` below is a
+        // vacuous cross-thread marker (see this function's doc comment).
+        fixed.add_systems(tween_system::<ScreenPosition>);
+        fixed.add_systems(
             (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
                 .before(gui_layout_system),
         );
-        variable.add_systems(
+        fixed.add_systems(
             gui_layout_system
                 .after(tween_system::<ScreenPosition>)
                 .before(render_system),
         );
-        variable.add_systems(gui_hit_test_system.after(gui_layout_system).before(render_system));
-        variable.add_systems(
+        fixed.add_systems(gui_hit_test_system.after(gui_layout_system).before(render_system));
+        fixed.add_systems(
             gui_image_state_sync_system
                 .after(gui_hit_test_system)
                 .before(render_system),
         );
-        variable.add_systems(gui_progressbar_signal_update_system.before(render_system));
+        fixed.add_systems(gui_progressbar_signal_update_system.before(render_system));
 
         #[cfg(feature = "lua")]
         if has_lua {
@@ -1117,7 +1153,12 @@ impl EngineBuilder {
                     .after(lua_phase_system)
                     .after(update_lua_timers),
             );
-            variable.add_systems(
+            // Phase 6d: moved from VARIABLE to FIXED alongside everything
+            // else. "Fires the substep after spawn" replaces the old "fires
+            // the frame after spawn" -- a strictly tighter latency (up to
+            // 1/240s instead of up to ~16ms at 60fps), not a regression; see
+            // docs/plans/phase6d-variable-collapse.md.
+            fixed.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
                     .after(check_pending_state),
@@ -1138,74 +1179,65 @@ impl EngineBuilder {
 
         fixed.add_systems(animation.after(animation_controller));
         fixed.add_systems(update_timers);
-        variable.add_systems(update_world_signals_binding_system);
-        variable.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
+        fixed.add_systems(update_world_signals_binding_system);
+        fixed.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
 
+        // Phase 6d: update_hook/extra_systems (on_update/add_system/
+        // configure_schedule) now target FIXED too -- see those methods' doc
+        // comments for the up-to-8x/frame cadence implication for downstream
+        // Rust games. fixed_update_hook/extra_fixed_systems already targeted
+        // FIXED and are unchanged.
         if let Some(update_hook) = update_hook {
-            update_hook(&mut variable);
+            update_hook(&mut fixed);
         }
         if let Some(fixed_update_hook) = fixed_update_hook {
             fixed_update_hook(&mut fixed);
         }
 
-        // Apply user-registered extra systems (add_system / configure_schedule
-        // target VARIABLE; add_fixed_system / configure_fixed_schedule target FIXED)
         for extra in extra_systems {
-            extra(&mut variable);
+            extra(&mut fixed);
         }
         for extra in extra_fixed_systems {
             extra(&mut fixed);
         }
 
+        // Phase 6d: moved from VARIABLE to FIXED. Accepted consequence: a
+        // scene switch resolved mid-substep-batch (e.g. substep 3 of an
+        // 8-substep catch-up) runs the remaining substeps against the
+        // newly-spawned scene, so the snapshot sent at the end of that frame
+        // may show it partially constructed -- same accepted tradeoff as the
+        // Lua-direct switch path (see lua_plugin::update's doc comment and
+        // with_lua()'s update_hook installation above). `.add_scene()`
+        // (use_scene_manager) and Lua's `.with_lua()` are mutually exclusive
+        // (validate_builder rejects both switch_scene_hook and
+        // use_scene_manager), so this and the Lua-direct path never run
+        // together.
         if use_scene_manager {
-            variable.add_systems(
+            fixed.add_systems(
                 scene_update_system
                     .run_if(state_is_playing)
                     .after(check_pending_state),
             );
-            variable.add_systems(
+            fixed.add_systems(
                 scene_switch_poll
                     .run_if(state_is_playing)
                     .after(scene_update_system),
             );
         }
 
-        // Populates DrawableSnapshot from this frame's fully-settled VARIABLE
-        // state -- GUI hit-test/layout, Lua on_update entity repositioning,
-        // camera/config commands, and scene switches are all VARIABLE-schedule,
-        // so this must run after them (not on FIXED, where it ran in an
-        // earlier iteration of Phase 3 -- see the "capture cadence" note in
-        // docs/render-simulation-separation-brainstorm.md for why that left
-        // GUI/camera/config a full frame stale). `.after(...)` on a system not
-        // scheduled in this configuration (e.g. lua-only edges when has_lua is
-        // false) is a vacuous constraint, not an error.
-        //
-        // This is an enumerated stand-in for "after everything in VARIABLE
-        // that can still change this frame's drawable state" -- bevy_ecs 0.19
-        // has no `.after_all()` primitive and this codebase doesn't yet use
-        // `SystemSet`/`configure_sets` to express that generically. If a
-        // future VARIABLE-schedule system starts writing snapshot-relevant
-        // state (a new GUI widget's state-sync system, a new Lua command
-        // queue mutating rendered state), it must also be added to this list
-        // -- nothing enforces that automatically.
         // Forwards RenderAssetCmd to the render thread (Phase 5e; the GL
         // drain itself, process_render_asset_cmds, now lives on the render
-        // schedule): must see this frame's asset requests from menu/tilemap
-        // spawning and (when Lua is enabled) Lua asset commands + map
-        // spawning, and must run before send_drawable_snapshot so a frame's
+        // schedule): must run before send_drawable_snapshot so a frame's
         // asset loads reach the render thread before the snapshot that
         // references them (single sender => FIFO ordering holds).
-        // Same enumerated-.after()-edges caveat as drawable_snapshot_config
-        // above applies here too: bevy_ecs 0.19 has no `.after_all()` /
-        // SystemSet-based "runs after everything that can still produce a
-        // RenderAssetCmd this frame" primitive, so a future producer must
-        // be added to this edge list by hand -- nothing enforces it.
-        //
-        // Phase 6c moved process_lua_asset_commands/process_lua_map_commands to
-        // FIXED, so the two `.after()` edges below are vacuous cross-schedule
-        // markers (same convention as `.before(render_system)` below) -- kept
-        // for doc value only; see .claude/context/system-order.md for why this
-        // system stays on VARIABLE regardless.
+        // `.after(update_bevy_render_asset_cmds)` is the one REAL
+        // same-schedule edge below -- that system stays paired with this one
+        // on `present` (see its own comment above). Every other `.after()`
+        // edge here and on build_drawable_snapshot below (menu/tilemap
+        // spawning, GUI hit-test/layout, Lua on_update, scene switches -- all
+        // FIXED-schedule since Phase 6d) is a vacuous cross-schedule marker,
+        // same convention as `.before(render_system)`: see this function's
+        // doc comment for the real ordering guarantee.
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut forward_render_asset_cmds_config = forward_render_asset_cmds
             .after(update_bevy_render_asset_cmds)
@@ -1218,7 +1250,7 @@ impl EngineBuilder {
                 .after(crate::lua_plugin::process_lua_asset_commands)
                 .after(process_lua_map_commands);
         }
-        variable.add_systems(forward_render_asset_cmds_config);
+        present.add_systems(forward_render_asset_cmds_config);
 
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut drawable_snapshot_config = build_drawable_snapshot
@@ -1234,25 +1266,28 @@ impl EngineBuilder {
                 .after(crate::lua_plugin::update)
                 .after(process_lua_map_commands);
         }
-        variable.add_systems(drawable_snapshot_config);
+        present.add_systems(drawable_snapshot_config);
 
-        // Tail of the logic VARIABLE schedule (Phase 5e): ship this frame's
-        // fully-settled snapshot to the render thread, and refresh the render
-        // side's InputBindings mirror when it changed (once per VARIABLE pass
-        // so it catches both Lua rebinds and GameCtx mutations from FIXED
-        // callbacks). apply_gameconfig_changes + render_system now live on
-        // the render thread's schedule (build_render_schedule).
-        variable.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
-        variable.add_systems(send_input_bindings_on_change);
+        // Tail of the logic `present` schedule (Phase 5e; renamed from
+        // `variable` in Phase 6d): ship this frame's fully-settled snapshot to
+        // the render thread, and refresh the render side's InputBindings
+        // mirror when it changed. apply_gameconfig_changes + render_system
+        // live on the render thread's own schedule (build_render_schedule).
+        present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
+        // Phase 6d: send_input_bindings_on_change moved to FIXED (no cost, no
+        // benefit -- diffing 8x/frame against state that changes far less
+        // often buys nothing, but a cheap diff-and-compare costs nothing
+        // either); moved purely for the "everything defaults to FIXED" rule.
+        fixed.add_systems(send_input_bindings_on_change);
 
         fixed
             .initialize(world)
             .map_err(|err| format!("Failed to initialize fixed schedule: {err}"))?;
-        variable
+        present
             .initialize(world)
-            .map_err(|err| format!("Failed to initialize variable schedule: {err}"))?;
+            .map_err(|err| format!("Failed to initialize present schedule: {err}"))?;
 
-        Ok((fixed, variable))
+        Ok((fixed, present))
     }
 
     /// Build the render thread's single per-frame schedule (Phase 5e):
@@ -1518,7 +1553,7 @@ fn run_fixed_substeps(world: &mut World, fixed: &mut Schedule, steps: u32) {
     }
 }
 
-fn set_variable_delta_from_render_frame(world: &mut World, frame_dt: f32) {
+fn set_present_delta_from_render_frame(world: &mut World, frame_dt: f32) {
     let time_scale = world.resource::<WorldTime>().time_scale;
     world.resource_mut::<WorldTime>().delta = frame_dt * time_scale;
 }
@@ -1526,7 +1561,7 @@ fn set_variable_delta_from_render_frame(world: &mut World, frame_dt: f32) {
 /// The logic thread's event-driven loop: build the gameplay world +
 /// schedules, then block on `rx_logic` with a `FIXED_DT` timeout so the
 /// 240Hz simulation stays honest even when the render thread stalls (window
-/// drag, GL hiccups). One VARIABLE pass runs per received input sample; a
+/// drag, GL hiccups). One `present` pass runs per received input sample; a
 /// backlog of input samples is coalesced edge-preservingly first (see
 /// `merge_input_snapshots`). Non-input messages just update the logic-side
 /// mirrors/stores.
@@ -1541,7 +1576,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
     EngineBuilder::spawn_observers(&mut world, has_lua, std::mem::take(&mut init.extra_observers));
 
-    let (mut fixed, mut variable) = EngineBuilder::build_logic_schedules(
+    let (mut fixed, mut present) = EngineBuilder::build_logic_schedules(
         init.update_hook.take(),
         init.fixed_update_hook.take(),
         std::mem::take(&mut init.extra_systems),
@@ -1551,7 +1586,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         use_scene_manager,
     )?;
 
-    // Built once and reused (mirrors `fixed`/`variable`) rather than
+    // Built once and reused (mirrors `fixed`/`present`) rather than
     // `world.run_system_once(apply_input_snapshot)`, which would build and
     // initialize a fresh temporary system on every call.
     let mut input_schedule = Schedule::default();
@@ -1619,12 +1654,12 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
 
                 if shutdown_requested {
                     // Mirrors the pre-split behavior of exiting immediately on
-                    // Shutdown (no FIXED/VARIABLE work runs after it) — the
+                    // Shutdown (no FIXED/present work runs after it) — the
                     // messages loop above already applied everything in this
                     // batch to its resource, including any SignalIntents, so
                     // flush those into WorldSignals directly instead of
                     // running a full (now-pointless) simulation pass just to
-                    // reach apply_signal_intents inside VARIABLE.
+                    // reach apply_signal_intents inside FIXED.
                     let _ = world.run_system_once(apply_signal_intents);
                     break 'main;
                 }
@@ -1638,19 +1673,22 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                     world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
                     // Same per-frame order as the pre-split loop: apply input
                     // (InputState + events) BEFORE the fixed substeps that
-                    // read it, then one VARIABLE pass.
+                    // read it, then one `present` pass.
                     input_schedule.run(&mut world);
                     advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
-                    // VARIABLE systems should see the render-frame delta that
-                    // produced this input sample, not the most recent 240 Hz
-                    // logic-thread wakeup delta from advance_simulation().
-                    set_variable_delta_from_render_frame(&mut world, frame_dt);
+                    // `present` (just build_drawable_snapshot/send_drawable_snapshot/
+                    // forward_render_asset_cmds since Phase 6d) should see the
+                    // render-frame delta that produced this input sample, not the
+                    // most recent 240 Hz logic-thread wakeup delta from
+                    // advance_simulation() -- it's captured into the snapshot for
+                    // render-side use (shader time uniforms, perf panel).
+                    set_present_delta_from_render_frame(&mut world, frame_dt);
                     {
-                        crate::tracy::tracy_span!("variable_schedule_run");
-                        variable.run(&mut world);
+                        crate::tracy::tracy_span!("present_schedule_run");
+                        present.run(&mut world);
                     }
                 } else {
-                    // Mirror/store updates only — no new input, so no VARIABLE
+                    // Mirror/store updates only — no new input, so no `present`
                     // pass; still run due FIXED substeps to hold 240Hz.
                     advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
                 }
@@ -1993,7 +2031,7 @@ mod tests {
     }
 
     #[test]
-    fn variable_delta_uses_render_frame_dt() {
+    fn present_delta_uses_render_frame_dt() {
         let mut world = World::new();
         world.insert_resource(WorldTime {
             elapsed: 0.0,
@@ -2002,7 +2040,7 @@ mod tests {
             frame_count: 0,
         });
 
-        set_variable_delta_from_render_frame(&mut world, 1.0 / 60.0);
+        set_present_delta_from_render_frame(&mut world, 1.0 / 60.0);
 
         assert!((world.resource::<WorldTime>().delta - (1.0 / 40.0)).abs() < 1e-6);
     }
@@ -2043,7 +2081,7 @@ mod tests {
     #[test]
     fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
-        let (fixed, _variable) =
+        let (fixed, _present) =
             EngineBuilder::build_logic_schedules(None, None, Vec::new(), Vec::new(), &mut world, false, false)
                 .expect("build_logic_schedules should succeed without Lua runtime");
         let fixed_type_ids: Vec<_> = fixed
@@ -2084,7 +2122,7 @@ mod tests {
     fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
         let mut world = World::new();
         let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
-        let (fixed, variable) = EngineBuilder::build_logic_schedules(
+        let (fixed, present) = EngineBuilder::build_logic_schedules(
             builder.update_hook,
             builder.fixed_update_hook,
             Vec::new(),
@@ -2100,9 +2138,9 @@ mod tests {
             .expect("build_logic_schedules initializes the fixed schedule")
             .map(|(_, system)| system.system_type())
             .collect();
-        let variable_type_ids: Vec<_> = variable
+        let present_type_ids: Vec<_> = present
             .systems()
-            .expect("build_logic_schedules initializes the variable schedule")
+            .expect("build_logic_schedules initializes the present schedule")
             .map(|(_, system)| system.system_type())
             .collect();
 
@@ -2129,18 +2167,27 @@ mod tests {
             "update_group_counts_system should run before lua_phase_system (both fixed-schedule)"
         );
 
-        // lua_plugin::update runs once per render frame (variable schedule), while
-        // update_group_counts_system/lua_phase_system run on the fixed 240Hz
-        // schedule -- these are no longer comparable by position in a shared
-        // system list, so just assert each lives in the schedule it should.
+        // Since Phase 6d, lua_plugin::update runs on the FIXED (240Hz) schedule
+        // too, alongside update_group_counts_system/lua_phase_system -- the
+        // `present` schedule now contains only forward_render_asset_cmds/
+        // build_drawable_snapshot/send_drawable_snapshot.
         let lua_update_type = IntoSystem::into_system(crate::lua_plugin::update).system_type();
         assert!(
-            variable_type_ids.contains(&lua_update_type),
-            "lua_plugin::update should be present in the variable schedule"
+            fixed_type_ids.contains(&lua_update_type),
+            "lua_plugin::update should be present in the fixed schedule"
         );
         assert!(
-            !fixed_type_ids.contains(&lua_update_type),
-            "lua_plugin::update should not be present in the fixed schedule"
+            !present_type_ids.contains(&lua_update_type),
+            "lua_plugin::update should not be present in the present schedule"
+        );
+        assert!(
+            fixed_type_ids
+                .iter()
+                .position(|t| *t == lua_update_type)
+                .unwrap()
+                > lua_phase_index,
+            "lua_plugin::update should run after lua_phase_system (ordered last among \
+             Lua-touching FIXED systems each substep)"
         );
     }
 

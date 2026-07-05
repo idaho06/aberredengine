@@ -16,9 +16,10 @@ use crate::resources::worldtime::WorldTime;
 /// Called once per logic-thread wakeup to advance the simulation clock.
 /// During the fixed-schedule accumulator loop, `delta` is temporarily
 /// overridden to `FIXED_DT * time_scale` for each fixed substep. Before the
-/// VARIABLE schedule runs, the main loop overwrites `delta` again with the
-/// latest render-frame delta carried by `LogicMsg::Input`, so variable
-/// systems observe render-frame time rather than the last 240 Hz wakeup.
+/// `PRESENT` schedule runs (`VARIABLE` through Phase 6c), the main loop
+/// overwrites `delta` again with the latest render-frame delta carried by
+/// `LogicMsg::Input`, so `build_drawable_snapshot`'s captured `WorldTime`
+/// reflects render-frame time rather than the last 240 Hz wakeup.
 pub fn update_world_time(world: &mut World, dt: f32) {
     let mut wt = world.resource_mut::<WorldTime>();
     let scaled_dt = dt * wt.time_scale;

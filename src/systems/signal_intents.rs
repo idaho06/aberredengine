@@ -5,9 +5,10 @@
 //! (`docs/render-simulation-separation-brainstorm.md`): `GuiCallback` runs inside
 //! `render_system` and can no longer write directly to a live `WorldSignals`, so it queues
 //! [`SignalIntent`](crate::resources::signal_intents::SignalIntent)s instead. This system
-//! drains that buffer at the top of the VARIABLE schedule, before `check_pending_state` and
-//! everything that follows from it, so a write queued during last frame's `render_system` is
-//! visible to this frame's scene logic.
+//! drains that buffer at the top of the FIXED schedule (Phase 6d; was the top of `VARIABLE`
+//! pre-6d), before `check_pending_state`/`fixed_update` and everything that follows from them,
+//! so a write queued during last frame's `render_system` is visible to this substep's scene
+//! logic.
 
 use bevy_ecs::prelude::*;
 

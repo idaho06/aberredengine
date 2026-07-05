@@ -226,8 +226,9 @@ pub struct RenderResources<'w> {
 #[derive(SystemParam)]
 pub(crate) struct DebugResources<'w> {
     /// Buffered writes queued by `GuiCallback` (Phase 5d) -- applied to `WorldSignals`
-    /// logic-side by `apply_signal_intents` at the top of the next frame's VARIABLE
-    /// schedule. `GuiCallback`/`WorldDrawCallback` reads come from `DrawableSnapshot`
+    /// logic-side by `apply_signal_intents` at the top of the next FIXED substep
+    /// (Phase 6d; was "the next frame's VARIABLE schedule" pre-6d).
+    /// `GuiCallback`/`WorldDrawCallback` reads come from `DrawableSnapshot`
     /// (`signals`, `app_state`), not a live resource -- `render_system` holds no
     /// `ResMut<WorldSignals>`/`Res<AppState>` at all.
     pub signal_intents: ResMut<'w, SignalIntents>,

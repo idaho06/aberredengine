@@ -1,18 +1,22 @@
 //! Logic-side channel systems for the render/logic thread split (Phase 5e).
 //!
-//! These run at the tail of the logic thread's VARIABLE schedule and push
-//! state across the [`RenderTx`] channel:
+//! These push state across the [`RenderTx`] channel:
 //!
 //! - [`forward_render_asset_cmds`] — drains the logic world's
 //!   `Messages<RenderAssetCmd>` into `RenderMsg::Asset` (mirrors
-//!   `forward_audio_cmds`); ordered before [`send_drawable_snapshot`] so a
-//!   frame's asset loads always reach the render thread before the snapshot
-//!   that references them (single sender, FIFO channel).
+//!   `forward_audio_cmds`, itself FIXED-scheduled since Phase 6d); ordered
+//!   before [`send_drawable_snapshot`] so a frame's asset loads always reach
+//!   the render thread before the snapshot that references them (single
+//!   sender, FIFO channel). Runs at the tail of the logic thread's `PRESENT`
+//!   schedule (called `VARIABLE` through Phase 6c).
 //! - [`send_drawable_snapshot`] — ships this frame's [`DrawableSnapshot`].
+//!   Also `PRESENT`-scheduled, immediately after `forward_render_asset_cmds`.
 //! - [`send_input_bindings_on_change`] — value-diffed mirror refresh for the
-//!   render side's `sample_input_snapshot`; runs once per VARIABLE pass so it
-//!   catches both Lua rebinds and `GameCtx.input_bindings` mutations from
-//!   FIXED-schedule Rust callbacks.
+//!   render side's `sample_input_snapshot`. Moved to FIXED in Phase 6d (no
+//!   cost or benefit either way -- moved purely for schedule uniformity), so
+//!   it now runs once per FIXED substep rather than once per `PRESENT` pass;
+//!   still catches both Lua rebinds and `GameCtx.input_bindings` mutations
+//!   from FIXED-schedule Rust callbacks.
 
 use bevy_ecs::prelude::*;
 

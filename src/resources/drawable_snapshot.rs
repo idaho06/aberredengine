@@ -2,20 +2,15 @@
 //!
 //! Part of the Option B (render/simulation thread split) effort — see
 //! `docs/render-simulation-separation-brainstorm.md`. [`DrawableSnapshot`] is
-//! populated by [`build_drawable_snapshot`] on the VARIABLE schedule,
-//! immediately before `render_system`; `render_system`
-//! (`src/systems/render/mod.rs`) reads it directly instead of live ECS
-//! queries (Phase 3) -- no interpolation between frames (tried and
-//! reverted: it visibly lagged world-space entities repositioned by Lua on
-//! the VARIABLE schedule, e.g. the sidescroller's parallax backgrounds,
-//! since those only change once per render frame, not once per fixed
-//! substep). An earlier iteration of this system captured at the end of the
-//! FIXED schedule instead -- that left GUI hit-test/layout, Lua `on_update`
-//! entity repositioning, and camera/config commands (all VARIABLE-schedule)
-//! a full frame stale, since FIXED runs *before* VARIABLE within a frame;
-//! moving the capture point to VARIABLE (right before `render_system`)
-//! fixed that. Phase 5 sends the snapshot across a channel to a separate
-//! render thread.
+//! populated by [`build_drawable_snapshot`] on the `PRESENT` schedule
+//! (called `VARIABLE` through Phase 6c), immediately before `render_system`
+//! reads it (`src/systems/render/mod.rs`) instead of live ECS queries
+//! (Phase 3) -- no interpolation between frames (tried and reverted: it
+//! visibly lagged repositioned entities, e.g. parallax backgrounds). `PRESENT`
+//! runs once, after all of a frame's FIXED substeps have completed, which is
+//! the guarantee this capture needs regardless of which schedule GUI/Lua/scene
+//! systems happen to run on (see `build_drawable_snapshot`'s doc comment).
+//! Phase 5 sends the snapshot across a channel to a separate render thread.
 
 use std::sync::Arc;
 
@@ -188,7 +183,7 @@ pub struct DebugSnapshot {
 /// doc comment for how this fits into the Option B plan.
 ///
 /// Overwritten in place each render frame -- `render_system` always reads
-/// whatever the latest VARIABLE-schedule pass produced, no history
+/// whatever the latest `PRESENT`-schedule pass produced, no history
 /// retention.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct DrawableSnapshot {
@@ -347,15 +342,19 @@ fn refill<D: bevy_ecs::query::ReadOnlyQueryData, T>(
 
 /// Populates [`DrawableSnapshot`] from the current ECS state. Pure
 /// data-copying -- no rendering calls. Runs once per render frame, on the
-/// VARIABLE schedule immediately before `render_system` (see
-/// `EngineBuilder::build_schedules`), after every system that can still
-/// change this frame's drawable state -- GUI hit-test/layout, Lua
-/// `on_update` entity repositioning, camera/config commands, and scene
-/// switches are all VARIABLE-schedule, not FIXED, so capturing here (rather
-/// than at the end of the FIXED schedule, as an earlier iteration of this
-/// system did) is what actually gets this frame's fully-settled state. See
+/// `PRESENT` schedule immediately before `render_system` (see
+/// `EngineBuilder::build_logic_schedules`), which by construction always runs
+/// after every FIXED substep this frame has completed -- since Phase 6d that
+/// includes GUI hit-test/layout, Lua `on_update`, and scene switches (all
+/// FIXED now), so this still captures fully-settled state via the
+/// schedule-ordering guarantee, not because those systems share a schedule
+/// with this one. The `.after(...)` edges below name what has to have
+/// settled but are vacuous cross-schedule markers now that those systems
+/// have moved -- see the module doc comment. An earlier iteration of this
+/// system captured at the end of FIXED instead, before any of the above
+/// existed there -- see
 /// `docs/render-simulation-separation-brainstorm.md`'s Phase 3 notes for why
-/// the FIXED-tick capture point was wrong.
+/// that capture point was wrong at the time.
 #[allow(clippy::too_many_arguments)]
 pub fn build_drawable_snapshot(
     queries: DrawableSnapshotQueries,

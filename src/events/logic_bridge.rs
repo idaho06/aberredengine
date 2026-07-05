@@ -23,8 +23,8 @@ use crate::resources::signal_intents::SignalIntent;
 pub enum LogicMsg {
     /// One raw input sample per render frame. Carries the current OS window
     /// dimensions plus that render frame's real delta so the logic world's
-    /// `WindowSize` mirror stays fresh and VARIABLE systems can observe the
-    /// same frame delta the render loop just measured.
+    /// `WindowSize` mirror stays fresh and the `PRESENT` schedule can observe
+    /// the same frame delta the render loop just measured.
     Input {
         snapshot: RawInputSnapshot,
         frame_dt: f32,
@@ -55,7 +55,7 @@ pub enum LogicMsg {
     /// `SignalIntents` drained from the render world after `render_system`
     /// each frame (queued by `GuiCallback`, Phase 5d); applied to
     /// `WorldSignals` by `apply_signal_intents` at the top of the next logic
-    /// VARIABLE pass.
+    /// FIXED substep (Phase 6d; was "the next VARIABLE pass" pre-6d).
     SignalIntents(Vec<SignalIntent>),
     /// The window is closing; the logic thread breaks its loop, shuts down
     /// audio, and joins.
@@ -65,7 +65,7 @@ pub enum LogicMsg {
 /// Logic thread -> render thread messages.
 #[derive(Debug, Clone)]
 pub enum RenderMsg {
-    /// One full drawable snapshot per logic VARIABLE pass. The render loop
+    /// One full drawable snapshot per logic `PRESENT` pass. The render loop
     /// `try_iter()`s and keeps only the newest (no interpolation).
     Snapshot(Box<DrawableSnapshot>),
     /// A GL asset load/upload/remove request forwarded from the logic
