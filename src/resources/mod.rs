@@ -8,7 +8,6 @@
 //! Overview
 //! - [`animationstore`] – definitions for sprite animations reused across entities
 //! - [`appstate`] – typed state store passed to `GuiCallback`; one slot per Rust type
-//! - [`audio`] – bridge and channels for the background audio thread
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
@@ -22,7 +21,6 @@
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`imgui_bridge`] – internal Dear ImGui backend that replaces raylib's removed feature
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
-//! - [`logic_bridge`] – channel endpoints between the render and logic threads
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
@@ -37,7 +35,6 @@
 
 pub mod animationstore;
 pub mod appstate;
-pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
 pub mod debugmode;
@@ -56,7 +53,6 @@ pub mod input;
 pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
-pub mod logic_bridge;
 pub mod mapdata;
 pub mod postprocessshader;
 pub mod rawinput;

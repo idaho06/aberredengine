@@ -42,7 +42,7 @@ use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::appstate::AppState;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;

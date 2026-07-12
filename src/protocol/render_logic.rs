@@ -7,7 +7,7 @@
 //! `World`s never exchange NonSend data.
 //!
 //! See `docs/plans/phase5e-thread-cutover.md` for the full channel spec and
-//! `src/resources/logic_bridge.rs` for the bridge resources holding the
+//! `src/protocol/endpoints.rs` for the bridge resources holding the
 //! endpoints.
 
 use crate::events::render_assets::RenderAssetCmd;

@@ -11,6 +11,7 @@ pub use raylib;
 pub mod components;
 pub mod engine_app;
 pub mod events;
+pub mod protocol;
 #[cfg(feature = "lua")]
 pub mod lua_plugin;
 #[cfg(feature = "lua")]

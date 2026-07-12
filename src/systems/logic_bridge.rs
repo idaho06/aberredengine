@@ -20,11 +20,11 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::events::logic_bridge::RenderMsg;
+use crate::protocol::render_logic::RenderMsg;
 use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::input_bindings::InputBindings;
-use crate::resources::logic_bridge::RenderTx;
+use crate::protocol::endpoints::RenderTx;
 
 /// Forward queued [`RenderAssetCmd`]s to the render thread. Send errors are
 /// ignored (they only occur during shutdown, when the render side is gone).

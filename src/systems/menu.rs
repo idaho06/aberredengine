@@ -18,7 +18,7 @@ use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
 use crate::events::render_assets::RenderAssetCmd;

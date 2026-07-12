@@ -22,7 +22,7 @@ use bevy_ecs::prelude::*;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::components::luaphase::LuaPhase;
 use crate::components::tween::TweenValue;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::events::tween::TweenFinishedEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;

@@ -4,7 +4,7 @@
 //! Lua callback → Rust callback → `MenuActions`.
 
 use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
-use aberredengine::events::audio::AudioCmd;
+use aberredengine::protocol::audio::AudioCmd;
 use aberredengine::events::menu::MenuSelectionEvent;
 use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::camerafollowconfig::CameraFollowConfig;

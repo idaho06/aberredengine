@@ -99,7 +99,7 @@ mod tests {
         world.insert_resource(PostProcessShader::default());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(InputBindings::default());
-        world.insert_resource(Messages::<crate::events::audio::AudioCmd>::default());
+        world.insert_resource(Messages::<crate::protocol::audio::AudioCmd>::default());
         #[cfg(feature = "lua")]
         world.insert_non_send(
             crate::resources::lua_runtime::LuaRuntime::new().expect("LuaRuntime::new"),

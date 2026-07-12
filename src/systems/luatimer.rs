@@ -35,7 +35,7 @@ use mlua::prelude::*;
 
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;

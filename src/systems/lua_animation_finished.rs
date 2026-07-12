@@ -19,7 +19,7 @@ use bevy_ecs::prelude::*;
 use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
 use crate::components::luaphase::LuaPhase;
 use crate::events::animation::AnimationFinishedEvent;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};

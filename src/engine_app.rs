@@ -74,9 +74,9 @@ use bevy_ecs::system::RunSystemOnce;
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, unbounded};
 use raylib::ffi::TraceLogLevel;
 
-use crate::events::logic_bridge::{LogicMsg, RenderMsg};
+use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
-use crate::resources::logic_bridge::{
+use crate::protocol::endpoints::{
     LogicBridge, LogicTx, RenderTx, shutdown_logic, shutdown_logic_bridge,
 };
 use crate::resources::rawinput::RawInputSnapshot;
@@ -97,7 +97,7 @@ use crate::events::switchdebug::switch_debug_observer;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
-use crate::resources::audio::{setup_audio, shutdown_audio};
+use crate::protocol::endpoints::{setup_audio, shutdown_audio};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -557,6 +557,7 @@ impl EngineBuilder {
     /// startup errors are logged from that thread and surface as an
     /// immediate `RenderMsg::Quit`, not as an `Err` here.
     pub fn try_run(mut self) -> Result<(), String> {
+        crate::protocol::shutdown::install_panic_hook();
         log::info!("Hello, world! This is the Aberred Engine!");
 
         let use_scene_manager = !self.scenes.is_empty();
@@ -1350,6 +1351,7 @@ impl EngineBuilder {
             .non_send::<raylib::RaylibHandle>()
             .window_should_close()
             && !quit_requested
+            && crate::protocol::shutdown::running()
         {
             let now = Instant::now();
             let frame_dt = now.duration_since(last_render_instant).as_secs_f32();
@@ -1612,6 +1614,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     let recv_timeout = Duration::from_secs_f32(FIXED_DT);
 
     'main: loop {
+        if !crate::protocol::shutdown::running() {
+            break 'main;
+        }
         match rx_logic.recv_timeout(recv_timeout) {
             Ok(first) => {
                 // Coalesce the whole pending backlog before advancing the

@@ -26,7 +26,7 @@ use aberredengine::components::stuckto::StuckTo;
 use aberredengine::components::timer::{Timer, TimerCallback};
 use aberredengine::components::ttl::Ttl;
 use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use aberredengine::events::audio::AudioCmd;
+use aberredengine::protocol::audio::AudioCmd;
 use aberredengine::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
 use aberredengine::events::luatimer::LuaTimerEvent;

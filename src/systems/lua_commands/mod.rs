@@ -56,7 +56,7 @@ use crate::components::sprite::Sprite;
 use crate::components::stuckto::StuckTo;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,

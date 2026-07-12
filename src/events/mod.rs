@@ -6,12 +6,10 @@
 //! dependencies.
 //!
 //! Submodules:
-//! - [`audio`] – commands and messages for the background audio thread
 //! - [`collision`] – collision notifications emitted by the physics/collision system
 //! - [`gamestate`] – state transition notifications for the high-level game flow
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
 //! - [`input`] – input action events (key press/release)
-//! - [`logic_bridge`] – channel messages between the render and logic threads
 //! - [`menu`] – menu selection events
 //! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
 //! - [`render_assets`] – GL asset-load commands consumed by `process_render_asset_cmds`
@@ -21,12 +19,10 @@
 //! See each submodule for concrete event data, semantics, and example usage.
 
 pub mod animation;
-pub mod audio;
 pub mod collision;
 pub mod gamestate;
 pub mod gui_interactable;
 pub mod input;
-pub mod logic_bridge;
 #[cfg(feature = "lua")]
 pub mod luatimer;
 pub mod menu;

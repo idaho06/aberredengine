@@ -12,7 +12,7 @@ use log::error;
 
 use crate::components::luaphase::LuaPhase;
 use crate::components::luasetup::LuaSetup;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;

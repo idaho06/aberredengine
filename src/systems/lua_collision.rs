@@ -44,7 +44,7 @@ use crate::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
 use crate::components::signals::Signals;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::events::collision::CollisionEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{

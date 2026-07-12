@@ -12,11 +12,11 @@
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
 
-use crate::events::logic_bridge::LogicMsg;
+use crate::protocol::render_logic::LogicMsg;
 use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::FontMetrics;
 use crate::resources::fontstore::FontStore;
-use crate::resources::logic_bridge::LogicTx;
+use crate::protocol::endpoints::LogicTx;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::RaylibAccess;

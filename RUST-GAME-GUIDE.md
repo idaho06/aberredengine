@@ -549,7 +549,7 @@ use aberredengine::resources::shaderstore::ShaderStore;
 use aberredengine::resources::animationstore::{AnimationStore, AnimationResource};
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::raylib::prelude::*;
-use aberredengine::events::audio::AudioCmd;
+use aberredengine::protocol::audio::AudioCmd;
 use std::sync::Arc;
 
 fn setup(

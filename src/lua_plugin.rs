@@ -15,7 +15,7 @@
 
 use crate::components::luaphase::LuaPhase;
 use crate::components::persistent::{CleanableEntity, Persistent};
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
 use crate::events::render_assets::RenderAssetCmd;

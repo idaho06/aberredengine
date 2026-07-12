@@ -14,8 +14,8 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
-use crate::events::logic_bridge::RenderMsg;
-use crate::resources::logic_bridge::RenderTx;
+use crate::protocol::render_logic::RenderMsg;
+use crate::protocol::endpoints::RenderTx;
 use bevy_ecs::prelude::*;
 use log::info;
 

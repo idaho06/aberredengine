@@ -14,8 +14,8 @@
 //!
 //! Notes
 //! - The audio thread must be created once via
-//!   [`crate::resources::audio::setup_audio`] and joined/terminated via
-//!   [`crate::resources::audio::shutdown_audio`].
+//!   [`crate::protocol::endpoints::setup_audio`] and joined/terminated via
+//!   [`crate::protocol::endpoints::shutdown_audio`].
 //! - All file I/O (load) and control (play/stop/pause/volume) happen on the
 //!   audio thread in response to commands.
 //! - Music streaming requires periodic `update_stream()` calls; this loop takes
@@ -24,10 +24,10 @@
 //!   message arrival (with a 10ms timeout only while streaming work is pending),
 //!   minimizing command latency and idle CPU usage.
 //!
-//! See also: [`crate::events::audio`] and [`crate::resources::audio`].
+//! See also: [`crate::protocol::audio`] and [`crate::protocol::endpoints`].
 
-use crate::events::audio::{AudioCmd, AudioMessage};
-use crate::resources::audio::AudioBridge;
+use crate::protocol::audio::{AudioCmd, AudioMessage};
+use crate::protocol::endpoints::AudioBridge;
 use bevy_ecs::prelude::Messages;
 use bevy_ecs::{
     prelude::{MessageWriter, Res},
@@ -126,6 +126,9 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let mut active_aliases: Vec<ffi::Sound> = Vec::new();
 
     'run: loop {
+        if !crate::protocol::shutdown::running() {
+            break 'run;
+        }
         // Block waiting for work instead of busy-polling on a fixed sleep.
         //
         // - While streaming work is pending (music playing or sound aliases

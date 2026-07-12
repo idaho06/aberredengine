@@ -13,7 +13,7 @@ use raylib::prelude::Vector2;
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_keys as sk;
 use crate::resources::worldtime::WorldTime;

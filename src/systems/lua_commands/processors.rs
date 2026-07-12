@@ -11,7 +11,7 @@ use raylib::prelude::{Camera2D, Color, Rectangle, Vector2};
 
 use crate::components::phase::Phase;
 use crate::components::shadow::Shadow;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
@@ -601,7 +601,7 @@ mod tests {
         process_animation_command, process_audio_command, process_render_command,
         process_signal_command, translate_asset_command,
     };
-    use crate::events::audio::AudioCmd;
+    use crate::protocol::audio::AudioCmd;
     use crate::events::render_assets::RenderAssetCmd;
     use crate::resources::animationstore::AnimationStore;
     use crate::resources::guitheme::GuiThemeStore;

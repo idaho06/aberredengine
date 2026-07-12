@@ -29,7 +29,7 @@ use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::system::SystemState;
 
 use aberredengine::components::persistent::Persistent;
-use aberredengine::events::audio::AudioCmd;
+use aberredengine::protocol::audio::AudioCmd;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
 
 /// Set up a minimal world with all resources needed by `GameCtx`,

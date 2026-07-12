@@ -38,7 +38,7 @@ use bevy_ecs::system::Local;
 use mlua::prelude::*;
 
 use crate::components::luaphase::LuaPhase;
-use crate::events::audio::AudioCmd;
+use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
 use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
