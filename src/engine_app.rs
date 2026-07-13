@@ -79,6 +79,7 @@ use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::protocol::endpoints::{
     LogicBridge, LogicTx, RenderTx, shutdown_logic, shutdown_logic_bridge,
 };
+use crate::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use crate::resources::rawinput::RawInputSnapshot;
 use crate::systems::input::merge_input_snapshots;
 use crate::systems::logic_bridge::{
@@ -620,6 +621,15 @@ impl EngineBuilder {
 
         let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
+        // Phase 7c: the DrawableSnapshot itself travels via a triple buffer,
+        // not the RenderMsg channel above -- sim writes `snap_in`, render
+        // reads `snap_out`, latest-wins, no queue growth. Seeded with
+        // `DrawableSnapshot::default()`; the render world's actual
+        // `DrawableSnapshot` resource is seeded separately with the real
+        // loaded config below, so this initial buffer value is never read
+        // before the sim's first real publish (`Output::update()` gates it).
+        let (snap_in, snap_out) =
+            triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
 
         // Render-side clone of the scene-descriptor table (fn pointers, cheap)
         // for gui/world-draw callback resolution against snapshot.active_scene.
@@ -650,6 +660,7 @@ impl EngineBuilder {
             window_h: rl.get_screen_height(),
             tx_render,
             rx_logic,
+            snapshot_publisher: Some(SnapshotPublisher(snap_in)),
         };
         let handle = std::thread::Builder::new()
             .name("aberred-logic".into())
@@ -662,6 +673,7 @@ impl EngineBuilder {
             thread,
             render_target,
             render_scene_table,
+            SnapshotConsumer(snap_out),
             LogicBridge {
                 tx_logic,
                 rx_render,
@@ -786,6 +798,7 @@ impl EngineBuilder {
         thread: raylib::RaylibThread,
         render_target: RenderTarget,
         render_scene_table: Option<RenderSceneTable>,
+        snapshot_consumer: SnapshotConsumer,
         bridge: LogicBridge,
     ) -> Result<World, String> {
         let mut world = World::new();
@@ -806,6 +819,7 @@ impl EngineBuilder {
             game_config: config,
             ..Default::default()
         });
+        world.insert_resource(snapshot_consumer);
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
         world.insert_resource(TextureStore::new());
@@ -850,7 +864,7 @@ impl EngineBuilder {
     /// (`FontMetricsStore`/`TextureDimsStore`). Runs INSIDE the thread
     /// closure so NonSend `LuaRuntime` is created on (and pinned to) the
     /// logic thread.
-    fn setup_logic_world(init: &LogicInit) -> Result<World, String> {
+    fn setup_logic_world(init: &mut LogicInit) -> Result<World, String> {
         let config = init.config.clone();
         let render_width = config.render_width;
         let render_height = config.render_height;
@@ -902,6 +916,11 @@ impl EngineBuilder {
         world.insert_resource(GuiThemeWarnCache::default());
         world.insert_resource(DrawableSnapshot::default());
         world.insert_resource(RenderTx(init.tx_render.clone()));
+        world.insert_resource(
+            init.snapshot_publisher
+                .take()
+                .expect("snapshot_publisher is set once in try_run and taken exactly once here"),
+        );
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = init.lua_script {
@@ -1063,15 +1082,18 @@ impl EngineBuilder {
     /// scene lifecycle, and per-tick housekeeping; the binding still called
     /// `fixed` returned from this function is bound to `sim` by its caller,
     /// `logic_thread_main`, since ticks are no longer fixed-duration) and
-    /// `present` (run once per received input sample -- package the tick's
-    /// fully-settled state into a `DrawableSnapshot` and ship it; nothing
-    /// else). See `docs/render-simulation-separation-brainstorm.md`,
+    /// `present` (Phase 7c: decimated to `[simulation] snapshot_hz`, not run
+    /// once per received input sample anymore -- package the tick's
+    /// fully-settled state into a `DrawableSnapshot` and publish it into the
+    /// `SnapshotPublisher` triple buffer; nothing else). See
+    /// `docs/render-simulation-separation-brainstorm.md`,
     /// `docs/render-logic-simplification-brainstorm.md`'s "Collapsing
     /// VARIABLE" section, `docs/plans/phase7b-pacing-configurable-frequencies.md`,
-    /// and `.claude/context/system-order.md` for the rationale behind the
-    /// split and the full list of which system lives where. `present` was
-    /// called `variable` before Phase 6d; the old name stopped describing
-    /// anything running there once nearly everything moved to `fixed`.
+    /// `docs/plans/phase7c-triple-buffer-snapshot.md`, and
+    /// `.claude/context/system-order.md` for the rationale behind the split
+    /// and the full list of which system lives where. `present` was called
+    /// `variable` before Phase 6d; the old name stopped describing anything
+    /// running there once nearly everything moved to `fixed`.
     ///
     /// `fixed`'s internal ordering is expressed via [`SimSet`] (Phase 7b Step
     /// 0) rather than per-system `.after()`/`.before()` edges: one
@@ -1145,11 +1167,15 @@ impl EngineBuilder {
                 .chain()
                 .in_set(SimSet::AudioPump),
         );
-        // update_bevy_render_asset_cmds stays paired with forward_render_asset_cmds
-        // on `present` (both once/frame), unlike its producers -- see
-        // forward_render_asset_cmds_config below, same reasoning as Phase 6c's
-        // "stays on VARIABLE permanently" call for that system.
-        present.add_systems(update_bevy_render_asset_cmds);
+        // update_bevy_render_asset_cmds + forward_render_asset_cmds moved off
+        // `present` onto the tail of `fixed` in Phase 7c (SimSet::Bookkeeping,
+        // added further down alongside send_input_bindings_on_change): with
+        // `present` now decimated to `[simulation] snapshot_hz` (see
+        // `logic_thread_main`), asset loads must still reach the render
+        // thread every sim tick, not just on a publish tick, or a texture
+        // could sit queued for several ticks before a snapshot referencing
+        // it is even built. See that block's own comment for the real
+        // `.after()` edge between the pair.
 
         // --- FIXED: input-driven forces/movement (InputState is sampled once
         // per render frame in main_loop, before the accumulator loop, and held
@@ -1308,30 +1334,23 @@ impl EngineBuilder {
 
         // Forwards RenderAssetCmd to the render thread (Phase 5e; the GL
         // drain itself, process_render_asset_cmds, now lives on the render
-        // schedule): must run before send_drawable_snapshot so a frame's
-        // asset loads reach the render thread before the snapshot that
-        // references them (single sender => FIFO ordering holds).
-        // `.after(update_bevy_render_asset_cmds)` is the one REAL
-        // same-schedule edge below -- that system stays paired with this one
-        // on `present` (see its own comment above). Every other `.after()`
-        // edge here and on build_drawable_snapshot below (menu/tilemap
-        // spawning, GUI hit-test/layout, Lua on_update, scene switches -- all
-        // FIXED-schedule since Phase 6d) is a vacuous cross-schedule marker,
-        // same convention as `.before(render_system)`: see this function's
-        // doc comment for the real ordering guarantee.
-        #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
-        let mut forward_render_asset_cmds_config = forward_render_asset_cmds
-            .after(update_bevy_render_asset_cmds)
-            .after(menu_spawn_system)
-            .after(tilemap_spawn_system)
-            .before(send_drawable_snapshot);
-        #[cfg(feature = "lua")]
-        {
-            forward_render_asset_cmds_config = forward_render_asset_cmds_config
-                .after(crate::lua_plugin::process_lua_asset_commands)
-                .after(process_lua_map_commands);
-        }
-        present.add_systems(forward_render_asset_cmds_config);
+        // schedule). Phase 7c: this pair moved off `present` onto the tail
+        // of `fixed` (SimSet::Bookkeeping) so it runs every sim tick,
+        // independent of the now-decimated `present`/snapshot-publish rate
+        // (see `logic_thread_main`'s doc comment) -- a tick's asset loads
+        // must not sit queued for several ticks waiting for the next
+        // publish. `.after(update_bevy_render_asset_cmds)` is now a REAL
+        // same-schedule edge (both land in `SimSet::Bookkeeping`); ordering
+        // relative to menu/tilemap spawning and the Lua asset/map command
+        // drains (all in earlier `SimSet`s) is guaranteed by the
+        // `configure_sets((...).chain())` pipeline itself -- no per-system
+        // edge needed for those anymore.
+        fixed.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
+        fixed.add_systems(
+            forward_render_asset_cmds
+                .after(update_bevy_render_asset_cmds)
+                .in_set(SimSet::Bookkeeping),
+        );
 
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut drawable_snapshot_config = build_drawable_snapshot
@@ -1480,22 +1499,19 @@ impl EngineBuilder {
                 quit_requested = true;
             }
 
-            // Drain logic -> render messages. Only the NEWEST snapshot is
-            // kept (no interpolation); asset commands are re-queued into this
-            // world's Messages<RenderAssetCmd> for process_render_asset_cmds.
-            let mut newest_snapshot: Option<Box<DrawableSnapshot>> = None;
+            // Drain logic -> render messages: asset commands are re-queued
+            // into this world's Messages<RenderAssetCmd> for
+            // process_render_asset_cmds. The DrawableSnapshot itself no
+            // longer travels this channel (Phase 7c) -- see the triple
+            // buffer read below.
             let mut newest_bindings: Option<InputBindings> = None;
             let mut asset_cmds: Vec<RenderAssetCmd> = Vec::new();
             for msg in rx_render.try_iter() {
                 match msg {
-                    RenderMsg::Snapshot(snapshot) => newest_snapshot = Some(snapshot),
                     RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
                     RenderMsg::Bindings(bindings) => newest_bindings = Some(bindings),
                     RenderMsg::Quit => quit_requested = true,
                 }
-            }
-            if let Some(snapshot) = newest_snapshot {
-                *world.resource_mut::<DrawableSnapshot>() = *snapshot;
             }
             if let Some(bindings) = newest_bindings {
                 *world.resource_mut::<InputBindings>() = bindings;
@@ -1504,6 +1520,25 @@ impl EngineBuilder {
                 world
                     .resource_mut::<Messages<RenderAssetCmd>>()
                     .write_batch(asset_cmds);
+            }
+
+            // Read the newest published snapshot from the triple buffer
+            // (Phase 7c; latest-wins, no interpolation -- same property the
+            // old channel-based "try_iter() + keep newest" drain had).
+            // `update()` swaps in the sim's most recent publish iff one
+            // arrived since the last read; a fast render frame with no new
+            // publish simply redraws the same DrawableSnapshot again. Done
+            // BEFORE the render schedule runs (which drains the asset cmds
+            // queued above via process_render_asset_cmds, then reads this
+            // resource via apply_gameconfig_changes/render_system), so this
+            // frame's asset loads and the snapshot referencing them are both
+            // visible to the same schedule.run() pass.
+            let new_snapshot = {
+                let mut consumer = world.resource_mut::<SnapshotConsumer>();
+                consumer.0.update().then(|| consumer.0.output_buffer().clone())
+            };
+            if let Some(snapshot) = new_snapshot {
+                *world.resource_mut::<DrawableSnapshot>() = snapshot;
             }
 
             {
@@ -1566,6 +1601,11 @@ struct LogicInit {
     window_h: i32,
     tx_render: Sender<RenderMsg>,
     rx_logic: Receiver<LogicMsg>,
+    /// The sim thread's write end of the snapshot triple buffer (Phase 7c).
+    /// `Option` so [`EngineBuilder::setup_logic_world`] can `.take()` it into
+    /// the logic world's [`SnapshotPublisher`] resource -- `Input<T>` isn't
+    /// `Clone`, unlike the `Sender`/`Receiver` fields above.
+    snapshot_publisher: Option<SnapshotPublisher>,
 }
 
 /// Logic thread entry point. Startup errors can't propagate to
@@ -1610,13 +1650,20 @@ fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 /// determinism is consciously dropped on this branch (see
 /// `docs/plans/phase7b-pacing-configurable-frequencies.md`).
 ///
-/// One `present` pass runs per received input sample; a backlog of pending
-/// input samples (whenever `sim_hz` trails the render frame rate, or a sim
-/// stall) is coalesced edge-preservingly first (`merge_input_snapshots`).
-/// Non-input messages just update the logic-side mirrors/stores. The sim
-/// still ticks every `Pacer` wakeup even when no input arrived (holding the
-/// configured rate through a render stall), it just skips `present` that
-/// tick.
+/// A backlog of pending input samples (whenever `sim_hz` trails the render
+/// frame rate, or a sim stall) is coalesced edge-preservingly first
+/// (`merge_input_snapshots`). Non-input messages just update the logic-side
+/// mirrors/stores. The sim still ticks every `Pacer` wakeup even when no
+/// input arrived (holding the configured rate through a render stall).
+///
+/// `present` (build + publish this tick's [`DrawableSnapshot`]) no longer
+/// runs once per received input sample (Phase 7c) — it's decimated to
+/// `[simulation] snapshot_hz`, checked independently of whether input
+/// arrived this tick (see [`snapshot_publish_due`]), so the render thread
+/// keeps receiving fresh snapshots during input droughts too. Forwarding
+/// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) moved off
+/// `present` onto the tail of `sim` for the same reason: asset loads must
+/// reach the render thread every tick, not just on a publish tick.
 fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     let use_scene_manager = !init.scenes.is_empty();
     #[cfg(feature = "lua")]
@@ -1625,8 +1672,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     let has_lua = false;
 
     let sim_hz = init.config.sim_hz;
+    let snapshot_hz = init.config.snapshot_hz;
 
-    let mut world = EngineBuilder::setup_logic_world(&init)?;
+    let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
     EngineBuilder::spawn_observers(&mut world, has_lua, std::mem::take(&mut init.extra_observers));
 
@@ -1651,6 +1699,11 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
 
     let rx_logic = init.rx_logic;
     let mut pacer = Pacer::new(sim_hz);
+    // Phase 7c: a second, non-blocking `Pacer` decimates `present`/snapshot
+    // publishing independently of the sim's own pacing above -- `due()`
+    // never sleeps, it just reports whether a `snapshot_hz` period has
+    // elapsed since it last fired.
+    let mut snapshot_pacer = Pacer::new(snapshot_hz);
 
     'main: loop {
         if !crate::protocol::shutdown::running() {
@@ -1725,7 +1778,6 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
             break 'main;
         }
 
-        let got_input = pending_input.is_some();
         if let Some((snapshot, window_w, window_h, capture)) = pending_input {
             {
                 let mut window_size = world.resource_mut::<WindowSize>();
@@ -1745,11 +1797,14 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         update_world_time(&mut world, dt);
         run_sim_tick(&mut world, &mut sim);
 
-        if got_input {
-            // `present` sees the same real dt this tick measured (no
-            // separate render-frame-delta override anymore) -- captured
-            // into the snapshot for render-side use (shader time uniforms,
-            // perf panel).
+        // Phase 7c: `present` runs at the configured `snapshot_hz`, not once
+        // per received input sample -- independent of whether input arrived
+        // this tick, so the render thread keeps receiving fresh snapshots
+        // during input droughts too. `present` sees the same real dt this
+        // tick measured (no separate render-frame-delta override) -- that
+        // dt is captured into the snapshot for render-side use (shader time
+        // uniforms, perf panel), even on ticks that don't publish.
+        if snapshot_pacer.due() {
             crate::tracy::tracy_span!("present_schedule_run");
             present.run(&mut world);
         }
@@ -2021,6 +2076,33 @@ mod tests {
         assert!(matches!(rx_render.recv().unwrap(), RenderMsg::Quit));
     }
 
+    // --- Phase 7c: triple_buffer snapshot transport ---
+
+    #[test]
+    fn snapshot_triple_buffer_round_trips_across_a_thread() {
+        let (snap_in, mut snap_out) =
+            triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
+        let mut publisher = SnapshotPublisher(snap_in);
+
+        let writer = std::thread::spawn(move || {
+            for i in 0..8 {
+                let mut snapshot = DrawableSnapshot::default();
+                snapshot.camera.zoom = i as f32;
+                publisher.0.write(snapshot);
+            }
+        });
+        writer.join().expect("writer thread should exit cleanly");
+
+        // Latest-wins: after the writer is done, the next read must observe
+        // the LAST published value, not an intermediate one queued up
+        // somewhere -- there's no queue to begin with.
+        assert!(snap_out.update(), "a publish should be pending");
+        assert_eq!(snap_out.output_buffer().camera.zoom, 7.0);
+
+        // A second read with no new publish in between reports no update.
+        assert!(!snap_out.update());
+    }
+
     #[test]
     fn test_builder_hooks_set() {
         let builder = EngineBuilder::new()
@@ -2157,9 +2239,9 @@ mod tests {
         );
 
         // Since Phase 6d, lua_plugin::update runs on the FIXED (240Hz) schedule
-        // too, alongside update_group_counts_system/lua_phase_system -- the
-        // `present` schedule now contains only forward_render_asset_cmds/
-        // build_drawable_snapshot/send_drawable_snapshot.
+        // too, alongside update_group_counts_system/lua_phase_system -- and
+        // since Phase 7c, `present` contains only build_drawable_snapshot/
+        // send_drawable_snapshot (forward_render_asset_cmds moved to FIXED).
         let lua_update_type = IntoSystem::into_system(crate::lua_plugin::update).system_type();
         assert!(
             fixed_type_ids.contains(&lua_update_type),

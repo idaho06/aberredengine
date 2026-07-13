@@ -12,7 +12,6 @@
 
 use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::FontMetrics;
 use crate::resources::imgui_bridge::ImguiCaptureState;
 use crate::resources::input_bindings::InputBindings;
@@ -71,11 +70,12 @@ pub enum LogicMsg {
 }
 
 /// Logic thread -> render thread messages.
+///
+/// The `DrawableSnapshot` itself no longer travels here (Phase 7c) — it's
+/// published through the `triple_buffer` transport in
+/// [`crate::protocol::snapshot`] instead, latest-wins with no queue growth.
 #[derive(Debug, Clone)]
 pub enum RenderMsg {
-    /// One full drawable snapshot per logic `PRESENT` pass. The render loop
-    /// `try_iter()`s and keeps only the newest (no interpolation).
-    Snapshot(Box<DrawableSnapshot>),
     /// A GL asset load/upload/remove request forwarded from the logic
     /// world's `Messages<RenderAssetCmd>` queue by
     /// `forward_render_asset_cmds`; re-queued into the render world's own

@@ -21,6 +21,7 @@
 //!
 //! [simulation]
 //! hz = 240
+//! ; snapshot_hz = 60   ; optional; defaults to [window] target_fps
 //!
 //! [audio]
 //! hz = 100
@@ -107,6 +108,20 @@ pub struct GameConfig {
     /// Read once at startup by the audio thread's `Pacer` (Phase 7b) — same
     /// startup-only caveat as [`sim_hz`](Self::sim_hz).
     pub audio_hz: f64,
+    /// Rate at which the sim thread publishes a [`DrawableSnapshot`] into the
+    /// render triple buffer (`[simulation] snapshot_hz`, Phase 7c).
+    ///
+    /// Decimated relative to `sim_hz`: the sim ticks gameplay at `sim_hz` but
+    /// only packages+publishes a snapshot at this (usually much lower) rate.
+    /// Defaults to `target_fps` (no point publishing faster than the render
+    /// thread can display) when `target_fps > 0`, else `60.0`; this default
+    /// is re-resolved from the current `target_fps` on every config load that
+    /// doesn't set `snapshot_hz` explicitly. Clamped the same as `sim_hz`/
+    /// `audio_hz`. Read once at startup by the logic thread's decimation
+    /// timer — same startup-only caveat as [`sim_hz`](Self::sim_hz).
+    ///
+    /// [`DrawableSnapshot`]: crate::resources::drawable_snapshot::DrawableSnapshot
+    pub snapshot_hz: f64,
 }
 
 /// Clamp a parsed `[simulation] hz` / `[audio] hz` value to
@@ -118,6 +133,14 @@ fn clamp_tick_hz(hz: f64, field: &str) -> f64 {
         warn!("{field} = {hz} out of range [{MIN_TICK_HZ}, {MAX_TICK_HZ}]; clamped to {clamped}");
     }
     clamped
+}
+
+/// `snapshot_hz`'s implicit default (Phase 7c): track `target_fps` (no point
+/// publishing snapshots faster than the render thread can display), falling
+/// back to a flat 60 if `target_fps` is unset/zero. Shared by `new()` and
+/// `apply_ini`'s no-explicit-override path so the two can't drift.
+fn default_snapshot_hz(target_fps: u32) -> f64 {
+    if target_fps > 0 { target_fps as f64 } else { 60.0 }
 }
 
 impl Default for GameConfig {
@@ -144,6 +167,7 @@ impl GameConfig {
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
             sim_hz: DEFAULT_SIM_HZ,
             audio_hz: DEFAULT_AUDIO_HZ,
+            snapshot_hz: default_snapshot_hz(DEFAULT_TARGET_FPS),
         }
     }
 
@@ -230,8 +254,18 @@ impl GameConfig {
         if let Some(hz) = config.getfloat("audio", "hz").ok().flatten() {
             self.audio_hz = clamp_tick_hz(hz, "audio.hz");
         }
+        // snapshot_hz: an explicit key wins; otherwise re-resolve the
+        // target_fps-tracking default every load (this field's default isn't
+        // flat, unlike sim_hz/audio_hz, so "missing key" and "recompute from
+        // the value target_fps just took" are the same branch).
+        let snapshot_hz = config
+            .getfloat("simulation", "snapshot_hz")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| default_snapshot_hz(self.target_fps));
+        self.snapshot_hz = clamp_tick_hz(snapshot_hz, "simulation.snapshot_hz");
         info!(
-            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}",
+            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_hz={}",
             self.render_width,
             self.render_height,
             self.window_width,
@@ -241,7 +275,8 @@ impl GameConfig {
             self.fullscreen,
             self.window_title,
             self.sim_hz,
-            self.audio_hz
+            self.audio_hz,
+            self.snapshot_hz
         );
     }
 
@@ -468,6 +503,45 @@ mod tests {
         let mut config = GameConfig::new();
         config.load_from_str("[audio]\nhz = 100000\n").unwrap();
         assert_eq!(config.audio_hz, MAX_TICK_HZ);
+    }
+
+    #[test]
+    fn test_new_defaults_snapshot_hz_to_target_fps() {
+        let config = GameConfig::new();
+        assert_eq!(config.snapshot_hz, DEFAULT_TARGET_FPS as f64);
+    }
+
+    #[test]
+    fn test_snapshot_hz_explicit_override() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[simulation]\nsnapshot_hz = 30\n")
+            .unwrap();
+        assert_eq!(config.snapshot_hz, 30.0);
+    }
+
+    #[test]
+    fn test_snapshot_hz_tracks_target_fps_when_unset() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[window]\ntarget_fps = 90\n")
+            .unwrap();
+        assert_eq!(config.snapshot_hz, 90.0);
+    }
+
+    #[test]
+    fn test_snapshot_hz_out_of_range_is_clamped() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[simulation]\nsnapshot_hz = 1\n")
+            .unwrap();
+        assert_eq!(config.snapshot_hz, MIN_TICK_HZ);
+
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[simulation]\nsnapshot_hz = 5000\n")
+            .unwrap();
+        assert_eq!(config.snapshot_hz, MAX_TICK_HZ);
     }
 
     #[test]

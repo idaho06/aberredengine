@@ -16,6 +16,10 @@
 //!   payloads (also used as bevy `Message`s in `Messages<T>` queues)
 //! - [`endpoints`] – `LogicBridge`/`LogicTx`/`RenderTx`/`AudioBridge` bridge
 //!   resources plus their setup/shutdown helpers
+//! - [`snapshot`] – `SnapshotPublisher`/`SnapshotConsumer`, the `triple_buffer`
+//!   transport for `DrawableSnapshot` (Phase 7c) — the one exception to
+//!   "everything here is a crossbeam channel payload": `Input`/`Output` are
+//!   still plain `Send + Sync` data, just not channel-shaped.
 //! - [`shutdown`] – global running flag + panic hook, the emergency-path
 //!   shutdown signal checked by every thread's loop alongside the primary
 //!   message-based shutdown path
@@ -24,3 +28,4 @@ pub mod audio;
 pub mod endpoints;
 pub mod render_logic;
 pub mod shutdown;
+pub mod snapshot;

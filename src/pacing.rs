@@ -46,6 +46,21 @@ impl Pacer {
         self.last = now;
         dt
     }
+
+    /// Non-blocking check: has at least one period elapsed since the last
+    /// `due()` call (or construction)? Unlike `tick()`, never sleeps -- resets
+    /// the internal clock and returns `true` only when a period has actually
+    /// elapsed. For decimating a less-frequent task inside a loop paced by a
+    /// different `Pacer` (e.g. "publish a snapshot at `snapshot_hz` from
+    /// inside a loop ticking at `sim_hz`"), not for pacing the loop itself.
+    pub fn due(&mut self) -> bool {
+        if self.last.elapsed() >= self.period {
+            self.last = Instant::now();
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -85,5 +100,29 @@ mod tests {
         // time from `last` -- an externally-added 5ms sleep before the
         // second tick should be reflected (not truncated away).
         assert!(dt >= 0.004, "dt too small: {dt}");
+    }
+
+    #[test]
+    fn due_false_before_period_elapses() {
+        let mut pacer = Pacer::new(60.0); // period ~16.67ms
+        assert!(!pacer.due());
+    }
+
+    #[test]
+    fn due_true_once_period_elapses() {
+        let mut pacer = Pacer::new(1000.0); // period 1ms
+        std::thread::sleep(Duration::from_millis(2));
+        assert!(pacer.due());
+    }
+
+    #[test]
+    fn due_resets_after_firing() {
+        let mut pacer = Pacer::new(1000.0);
+        std::thread::sleep(Duration::from_millis(2));
+        assert!(pacer.due(), "first check after the sleep should fire");
+        assert!(
+            !pacer.due(),
+            "immediately re-checking must not fire again until another period elapses"
+        );
     }
 }

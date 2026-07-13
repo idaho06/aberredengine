@@ -1,30 +1,33 @@
 //! Logic-side channel systems for the render/logic thread split (Phase 5e).
 //!
-//! These push state across the [`RenderTx`] channel:
-//!
 //! - [`forward_render_asset_cmds`] — drains the logic world's
 //!   `Messages<RenderAssetCmd>` into `RenderMsg::Asset` (mirrors
-//!   `forward_audio_cmds`, itself FIXED-scheduled since Phase 6d); ordered
-//!   before [`send_drawable_snapshot`] so a frame's asset loads always reach
-//!   the render thread before the snapshot that references them (single
-//!   sender, FIFO channel). Runs at the tail of the logic thread's `PRESENT`
-//!   schedule (called `VARIABLE` through Phase 6c).
-//! - [`send_drawable_snapshot`] — ships this frame's [`DrawableSnapshot`].
-//!   Also `PRESENT`-scheduled, immediately after `forward_render_asset_cmds`.
+//!   `forward_audio_cmds`, itself FIXED-scheduled since Phase 6d), pushed
+//!   across the [`RenderTx`] channel. Moved onto the tail of the sim schedule
+//!   in Phase 7c (`SimSet::Bookkeeping`, alongside `update_bevy_render_asset_cmds`)
+//!   so it runs every sim tick regardless of the `present`/snapshot-publish
+//!   decimation below — a tick's asset loads must not be starved by how often
+//!   the snapshot itself publishes.
+//! - [`send_drawable_snapshot`] — publishes this frame's [`DrawableSnapshot`]
+//!   into the sim thread's [`SnapshotPublisher`] (the `triple_buffer` write
+//!   end, Phase 7c; replaces the old `RenderMsg::Snapshot` channel send).
+//!   Still `PRESENT`-scheduled, now decimated to `[simulation] snapshot_hz`
+//!   rather than running once per received input sample.
 //! - [`send_input_bindings_on_change`] — value-diffed mirror refresh for the
-//!   render side's `sample_input_snapshot`. Moved to FIXED in Phase 6d (no
-//!   cost or benefit either way -- moved purely for schedule uniformity), so
-//!   it now runs once per FIXED substep rather than once per `PRESENT` pass;
-//!   still catches both Lua rebinds and `GameCtx.input_bindings` mutations
-//!   from FIXED-schedule Rust callbacks.
+//!   render side's `sample_input_snapshot`, pushed across [`RenderTx`]. Moved
+//!   to FIXED in Phase 6d (no cost or benefit either way -- moved purely for
+//!   schedule uniformity), so it now runs once per FIXED substep rather than
+//!   once per `PRESENT` pass; still catches both Lua rebinds and
+//!   `GameCtx.input_bindings` mutations from FIXED-schedule Rust callbacks.
 
 use bevy_ecs::prelude::*;
 
-use crate::protocol::render_logic::RenderMsg;
 use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::endpoints::RenderTx;
+use crate::protocol::render_logic::RenderMsg;
+use crate::protocol::snapshot::SnapshotPublisher;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::input_bindings::InputBindings;
-use crate::protocol::endpoints::RenderTx;
 
 /// Forward queued [`RenderAssetCmd`]s to the render thread. Send errors are
 /// ignored (they only occur during shutdown, when the render side is gone).
@@ -37,11 +40,15 @@ pub fn forward_render_asset_cmds(
     }
 }
 
-/// Ship this frame's fully-settled [`DrawableSnapshot`] to the render thread.
-/// The render loop `try_iter()`s and keeps only the newest, so a slow render
-/// frame simply skips intermediate snapshots.
-pub fn send_drawable_snapshot(snapshot: Res<DrawableSnapshot>, tx: Res<RenderTx>) {
-    let _ = tx.0.send(RenderMsg::Snapshot(Box::new(snapshot.clone())));
+/// Publish this frame's fully-settled [`DrawableSnapshot`] into the
+/// [`SnapshotPublisher`] triple buffer (Phase 7c). The render loop reads the
+/// latest publish once per frame (`Output::update`), so a slow render frame
+/// simply redraws the last one and a fast render frame sees no new data.
+pub fn send_drawable_snapshot(
+    snapshot: Res<DrawableSnapshot>,
+    mut publisher: ResMut<SnapshotPublisher>,
+) {
+    publisher.0.write(snapshot.clone());
 }
 
 /// Send the render side a fresh [`InputBindings`] mirror whenever the
