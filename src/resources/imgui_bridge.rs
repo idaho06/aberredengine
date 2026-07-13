@@ -177,9 +177,10 @@ impl ClipboardBackend for RaylibClipboardBackend {
 /// Whether the debug imgui overlay currently wants to capture mouse/keyboard
 /// input this frame. Read from the render thread after `ImguiBridge::render`
 /// runs, carried one frame across the thread boundary via
-/// `LogicMsg::Input::capture` (same latency class as `SignalIntents`), and
-/// used by `apply_input_snapshot` to mask gameplay input while the debug
-/// panel has focus (Phase 6e). Scoped to the F11 debug overlay only -- the
+/// `InputSample::capture` (same latency class as `SignalIntents`; Phase 7d:
+/// rides the dedicated bounded input channel), and used by
+/// `resolve_input_backlog` to mask gameplay input while the debug panel has
+/// focus (Phase 6e). Scoped to the F11 debug overlay only -- the
 /// in-house `GuiButton`/`GuiWindow` system does its own hit-testing and isn't
 /// imgui.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -286,9 +287,9 @@ impl ImguiBridge {
 
     /// This frame's imgui capture state, as of the last [`ImguiBridge::render`]
     /// call. Read by the render loop after the render schedule runs, and
-    /// mirrored across the thread boundary via `LogicMsg::Input::capture`
-    /// (Phase 6e) so gameplay input can be masked while the debug overlay has
-    /// focus.
+    /// mirrored across the thread boundary via `InputSample::capture` (Phase
+    /// 6e; Phase 7d: rides the dedicated bounded input channel) so gameplay
+    /// input can be masked while the debug overlay has focus.
     pub fn capture_state(&self) -> ImguiCaptureState {
         self.capture
     }

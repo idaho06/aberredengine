@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{Receiver, TryRecvError};
+use crossbeam_channel::{Receiver, TryRecvError, TrySendError};
 
 /// True once every sender for `rx` has been dropped.
 ///
@@ -17,6 +17,14 @@ use crossbeam_channel::{Receiver, TryRecvError};
 /// call this once to detect the latter and exit their loop.
 pub fn channel_disconnected<T>(rx: &Receiver<T>) -> bool {
     matches!(rx.try_recv(), Err(TryRecvError::Disconnected))
+}
+
+/// Sender-side counterpart to [`channel_disconnected`]: true when a
+/// `try_send` result means the receiver is gone, as opposed to the channel
+/// merely being momentarily full (expected, non-fatal backpressure on a
+/// bounded channel -- see `LogicBridge::tx_input`, Phase 7d).
+pub fn send_channel_disconnected<T>(result: &Result<(), TrySendError<T>>) -> bool {
+    matches!(result, Err(TrySendError::Disconnected(_)))
 }
 
 /// Paces a loop to a target frequency, returning the real elapsed dt.

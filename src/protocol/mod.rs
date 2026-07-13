@@ -16,6 +16,9 @@
 //!   payloads (also used as bevy `Message`s in `Messages<T>` queues)
 //! - [`endpoints`] – `LogicBridge`/`LogicTx`/`RenderTx`/`AudioBridge` bridge
 //!   resources plus their setup/shutdown helpers
+//! - [`raw_input`] – `RawDeviceSnapshot`/`InputSample` (Phase 7d), the
+//!   dedicated bounded-channel payload carrying unresolved device input from
+//!   the render thread to the sim thread
 //! - [`snapshot`] – `SnapshotPublisher`/`SnapshotConsumer`, the `triple_buffer`
 //!   transport for `DrawableSnapshot` (Phase 7c) — the one exception to
 //!   "everything here is a crossbeam channel payload": `Input`/`Output` are
@@ -26,6 +29,7 @@
 
 pub mod audio;
 pub mod endpoints;
+pub mod raw_input;
 pub mod render_logic;
 pub mod shutdown;
 pub mod snapshot;

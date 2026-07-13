@@ -14,6 +14,7 @@
 //! the thread itself. Teardown does live here ([`shutdown_logic`], the
 //! `shutdown_audio` counterpart).
 
+use crate::protocol::raw_input::InputSample;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{Receiver, Sender};
@@ -23,6 +24,11 @@ use crossbeam_channel::{Receiver, Sender};
 pub struct LogicBridge {
     /// Sender for [`LogicMsg`] (render -> logic).
     pub tx_logic: Sender<LogicMsg>,
+    /// Sender for [`InputSample`] (render -> logic), on its own bounded
+    /// channel (Phase 7d) separate from `tx_logic`'s unbounded one — a stalled
+    /// sim drops the oldest-queued samples instead of growing an unbounded
+    /// backlog.
+    pub tx_input: Sender<InputSample>,
     /// Receiver for [`RenderMsg`] (logic -> render).
     pub rx_render: Receiver<RenderMsg>,
     /// Join handle for the logic thread; joined during shutdown, after

@@ -48,7 +48,6 @@ use crate::resources::drawable_snapshot::{
 use crate::resources::fontstore::FontStore;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
-use crate::resources::input::InputState;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::scenemanager::RenderSceneTable;
 use crate::resources::screensize::ScreenSize;
@@ -232,11 +231,6 @@ pub(crate) struct DebugResources<'w> {
     /// (`signals`, `app_state`), not a live resource -- `render_system` holds no
     /// `ResMut<WorldSignals>`/`Res<AppState>` at all.
     pub signal_intents: ResMut<'w, SignalIntents>,
-    /// Post Phase 5e this is the render side's own mirror, written by the
-    /// render loop from its `sample_input_snapshot` result (freshest sample,
-    /// no channel round-trip); `CameraFollowConfig` reads come from
-    /// `DrawableSnapshot.camera_follow`.
-    pub input_state: Res<'w, InputState>,
     /// Render-side scene-callback table (Phase 5e) — resolved against
     /// `DrawableSnapshot.active_scene` instead of the logic-world-only
     /// `SceneManager`.
@@ -835,7 +829,10 @@ pub fn render_system(
         let overlay_config = &mut *debug_res.overlay_config;
         let signal_intents = &mut *debug_res.signal_intents;
         let app_state = &snapshot.app_state;
-        let input_state = &*debug_res.input_state;
+        // Only `Some` while DebugMode is active (`debug_active`); the
+        // closure below only reads it inside `if debug_active`, mirroring
+        // the dummy-values pattern used for fps/sprite_count/etc. above.
+        let input_state = snapshot.debug.as_ref().map(|d| &d.input_state);
         let camera_follow = &snapshot.camera_follow;
         let active_scene = snapshot.active_scene.as_deref();
         let world_time = &snapshot.world_time;
@@ -850,7 +847,7 @@ pub fn render_system(
                         ui,
                         overlay_config,
                         signal_snapshot,
-                        input_state,
+                        input_state.expect("debug_active implies snapshot.debug is Some"),
                         camera,
                         camera_follow,
                         active_scene,

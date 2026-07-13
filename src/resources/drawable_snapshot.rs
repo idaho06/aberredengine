@@ -44,6 +44,7 @@ use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::guitheme::GuiThemeStore;
+use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
@@ -177,6 +178,12 @@ pub struct DebugSnapshot {
     pub colliders: Vec<DebugColliderEntry>,
     pub positions: Vec<DebugPositionEntry>,
     pub rigidbody_count: usize,
+    /// Resolved `InputState` for the F11 imgui input panel (Phase 7d). The
+    /// render thread no longer resolves input itself (bindings/edges moved
+    /// sim-side), so this is its only way to show live per-action state —
+    /// debug-mode-gated like the rest of `DebugSnapshot`, zero cost when
+    /// debug mode is off.
+    pub input_state: InputState,
 }
 
 /// Render-relevant ECS state captured once per render frame. See the module
@@ -370,6 +377,7 @@ pub fn build_drawable_snapshot(
     gui_themes: Res<GuiThemeStore>,
     camera_follow: Res<CameraFollowConfig>,
     scene_manager: Option<Res<SceneManager>>,
+    input_state: Res<InputState>,
     mut snapshot: ResMut<DrawableSnapshot>,
 ) {
     refill(&mut snapshot.map_sprites, &queries.map_sprites, |(
@@ -554,6 +562,7 @@ pub fn build_drawable_snapshot(
             },
         );
         debug.rigidbody_count = queries.debug_rigidbodies.iter().count();
+        debug.input_state = input_state.clone();
     } else {
         snapshot.debug = None;
     }
@@ -584,6 +593,7 @@ mod tests {
         world.insert_resource(PostProcessShader::default());
         world.insert_resource(GuiThemeStore::default());
         world.insert_resource(CameraFollowConfig::default());
+        world.insert_resource(InputState::default());
         world.insert_resource(DrawableSnapshot::default());
         world
     }

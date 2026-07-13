@@ -13,30 +13,18 @@
 use crate::events::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::FontMetrics;
-use crate::resources::imgui_bridge::ImguiCaptureState;
-use crate::resources::input_bindings::InputBindings;
-use crate::resources::rawinput::RawInputSnapshot;
 use crate::resources::signal_intents::SignalIntent;
 
 /// Render thread -> logic thread messages.
+///
+/// Phase 7d moved raw input off this enum entirely — it now travels as
+/// [`crate::protocol::raw_input::InputSample`] over its own dedicated bounded
+/// channel (`LogicBridge::tx_input` / `LogicInit::rx_input`), separate from
+/// this unbounded channel, so a stalled sim drops the oldest-queued input
+/// samples instead of growing an unbounded backlog of every other message
+/// kind here too.
 #[derive(Debug, Clone)]
 pub enum LogicMsg {
-    /// One raw input sample per render frame. Carries the current OS window
-    /// dimensions so the logic world's `WindowSize` mirror stays fresh.
-    /// `capture` is the PREVIOUS render frame's imgui capture state
-    /// (`ImguiBridge::render` runs after this message is sent each frame, so
-    /// it's one frame behind, same latency class as `SignalIntents` -- Phase
-    /// 6e); used by `apply_input_snapshot` to mask gameplay input while the
-    /// debug overlay has focus. Phase 7b removed the `frame_dt` field this
-    /// carried through Phase 6d/6e -- the `present` schedule now sees
-    /// whatever real dt the sim's own `Pacer` measured for that tick,
-    /// there's no separate render-frame-delta override anymore.
-    Input {
-        snapshot: RawInputSnapshot,
-        window_w: i32,
-        window_h: i32,
-        capture: ImguiCaptureState,
-    },
     /// Sent after `apply_gameconfig_changes` recreates the render target;
     /// the logic world mirrors it (`camera_follow_system` and input math
     /// read `ScreenSize`).
@@ -81,10 +69,15 @@ pub enum RenderMsg {
     /// `forward_render_asset_cmds`; re-queued into the render world's own
     /// `Messages<RenderAssetCmd>` and drained by `process_render_asset_cmds`.
     Asset(RenderAssetCmd),
-    /// Input bindings changed logic-side (Lua `rebind_action`/`add_binding`
-    /// or `GameCtx.input_bindings`); the render side updates the mirror its
-    /// `sample_input_snapshot` call reads. Sent on change only.
-    Bindings(InputBindings),
+    /// F10's edge fired sim-side (`resolve_input_backlog`); the render loop
+    /// triggers `SwitchFullScreenEvent` on its own world in response
+    /// (`switch_fullscreen_observer` and the `FullScreen` resource live
+    /// there — the window only exists render-side). Phase 7d: bindings
+    /// (hence F10 resolution) moved sim-side, so the render thread can no
+    /// longer detect this edge itself; this costs one sim tick of latency
+    /// (~4ms at the default 240Hz `sim_hz`), imperceptible for a manual
+    /// toggle.
+    ToggleFullscreen,
     /// Game-initiated quit (`quit_game`); the render loop breaks, same path
     /// as a window close.
     Quit,
@@ -92,8 +85,11 @@ pub enum RenderMsg {
 
 /// Both message enums must stay fully `Send` — this is the structural
 /// guarantee that no NonSend (GL/Lua) data ever crosses the thread boundary.
+/// [`crate::protocol::raw_input::InputSample`] is asserted alongside them
+/// since it crosses the same thread boundary, just on its own channel.
 const _: () = {
     const fn assert_send<T: Send>() {}
     assert_send::<LogicMsg>();
     assert_send::<RenderMsg>();
+    assert_send::<crate::protocol::raw_input::InputSample>();
 };

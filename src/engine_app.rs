@@ -70,21 +70,18 @@ use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 use bevy_ecs::system::RunSystemOnce;
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
 
 use crate::pacing::Pacer;
+use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::protocol::endpoints::{
     LogicBridge, LogicTx, RenderTx, shutdown_logic, shutdown_logic_bridge,
 };
 use crate::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
-use crate::resources::rawinput::RawInputSnapshot;
-use crate::systems::input::merge_input_snapshots;
-use crate::systems::logic_bridge::{
-    forward_render_asset_cmds, send_drawable_snapshot, send_input_bindings_on_change,
-};
+use crate::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
 
 use crate::components::mapposition::MapPosition;
 use crate::components::screenposition::ScreenPosition;
@@ -147,8 +144,8 @@ use crate::systems::gui_progressbar_signal_update::gui_progressbar_signal_update
 use crate::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
 };
-use crate::resources::rawinput::{ImguiCaptureMirror, LatestInputSnapshot};
-use crate::systems::input::{apply_input_snapshot, sample_input_snapshot};
+use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
+use crate::systems::input::{resolve_input_backlog, sample_raw_device_snapshot};
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::mapspawn::spawn_map_observer;
@@ -621,6 +618,9 @@ impl EngineBuilder {
 
         let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
+        // Phase 7d: input gets its own dedicated bounded channel, separate
+        // from the unbounded LogicMsg channel above — see LogicBridge::tx_input.
+        let (tx_input, rx_input) = bounded::<InputSample>(8);
         // Phase 7c: the DrawableSnapshot itself travels via a triple buffer,
         // not the RenderMsg channel above -- sim writes `snap_in`, render
         // reads `snap_out`, latest-wins, no queue growth. Seeded with
@@ -660,6 +660,7 @@ impl EngineBuilder {
             window_h: rl.get_screen_height(),
             tx_render,
             rx_logic,
+            rx_input,
             snapshot_publisher: Some(SnapshotPublisher(snap_in)),
         };
         let handle = std::thread::Builder::new()
@@ -676,6 +677,7 @@ impl EngineBuilder {
             SnapshotConsumer(snap_out),
             LogicBridge {
                 tx_logic,
+                tx_input,
                 rx_render,
                 handle,
             },
@@ -789,9 +791,12 @@ impl EngineBuilder {
 
     /// Build the render (main-thread) `World` (Phase 5e): raylib window +
     /// GL/NonSend stores + the latest received [`DrawableSnapshot`], plus
-    /// the render-owned mirrors (`InputState`/`InputBindings` written by the
-    /// render loop, `DebugOverlayConfig` edited by the imgui panel). Holds
-    /// NO entities and no gameplay resources.
+    /// the render-owned `InputState` mirror (written by the render loop from
+    /// its `sample_raw_device_snapshot` result — Phase 7d: this no longer
+    /// carries resolved bindings/edges, see `DebugResources::input_state`'s
+    /// doc comment) and `DebugOverlayConfig` (edited by the imgui panel).
+    /// `InputBindings` became logic-thread-only in Phase 7d — no render-side
+    /// mirror. Holds NO entities and no gameplay resources.
     fn setup_render_world(
         config: GameConfig,
         rl: raylib::RaylibHandle,
@@ -820,8 +825,6 @@ impl EngineBuilder {
             ..Default::default()
         });
         world.insert_resource(snapshot_consumer);
-        world.insert_resource(InputState::default());
-        world.insert_resource(InputBindings::default());
         world.insert_resource(TextureStore::new());
         world.insert_resource(GuiThemeWarnCache::default());
         world.insert_resource(DebugOverlayConfig::default());
@@ -887,7 +890,7 @@ impl EngineBuilder {
         world.insert_resource(config);
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
-        world.insert_resource(LatestInputSnapshot::default());
+        world.insert_resource(PrevRawSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
 
         setup_audio(&mut world, audio_hz);
@@ -1168,9 +1171,8 @@ impl EngineBuilder {
                 .in_set(SimSet::AudioPump),
         );
         // update_bevy_render_asset_cmds + forward_render_asset_cmds moved off
-        // `present` onto the tail of `fixed` in Phase 7c (SimSet::Bookkeeping,
-        // added further down alongside send_input_bindings_on_change): with
-        // `present` now decimated to `[simulation] snapshot_hz` (see
+        // `present` onto the tail of `fixed` in Phase 7c (SimSet::Bookkeeping):
+        // with `present` now decimated to `[simulation] snapshot_hz` (see
         // `logic_thread_main`), asset loads must still reach the render
         // thread every sim tick, not just on a publish tick, or a texture
         // could sit queued for several ticks before a snapshot referencing
@@ -1370,15 +1372,12 @@ impl EngineBuilder {
 
         // Tail of the logic `present` schedule (Phase 5e; renamed from
         // `variable` in Phase 6d): ship this frame's fully-settled snapshot to
-        // the render thread, and refresh the render side's InputBindings
-        // mirror when it changed. apply_gameconfig_changes + render_system
-        // live on the render thread's own schedule (build_render_schedule).
+        // the render thread. apply_gameconfig_changes + render_system live on
+        // the render thread's own schedule (build_render_schedule).
+        // Phase 7d: InputBindings became logic-thread-only (no render-side
+        // mirror to refresh), so the send_input_bindings_on_change system
+        // this schedule used to carry is gone.
         present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
-        // Phase 6d: send_input_bindings_on_change moved to FIXED (no cost, no
-        // benefit -- diffing 8x/frame against state that changes far less
-        // often buys nothing, but a cheap diff-and-compare costs nothing
-        // either); moved purely for the "everything defaults to FIXED" rule.
-        fixed.add_systems(send_input_bindings_on_change.in_set(SimSet::Bookkeeping));
 
         fixed
             .initialize(world)
@@ -1434,14 +1433,18 @@ impl EngineBuilder {
         let mut last_overlay_config = world.resource::<DebugOverlayConfig>().clone();
         // Previous iteration's imgui capture state (Phase 6e) -- updated
         // after the render schedule runs each iteration, read into the NEXT
-        // iteration's `LogicMsg::Input` send below. One frame of lag, same
+        // iteration's `InputSample` send below. One frame of lag, same
         // latency class as `SignalIntents`.
         let mut imgui_capture = ImguiCaptureState::default();
         // Crossbeam endpoints are Clone: hold them directly so the loop body
         // never has to re-fetch (and re-borrow) the LogicBridge resource.
-        let (tx_logic, rx_render) = {
+        let (tx_logic, tx_input, rx_render) = {
             let bridge = world.resource::<LogicBridge>();
-            (bridge.tx_logic.clone(), bridge.rx_render.clone())
+            (
+                bridge.tx_logic.clone(),
+                bridge.tx_input.clone(),
+                bridge.rx_render.clone(),
+            )
         };
 
         while !world
@@ -1461,40 +1464,24 @@ impl EngineBuilder {
                 window_size.h = window_h;
             }
 
-            // Sample raw input once per render frame (the only input code
-            // touching the raylib handle; bindings come from the logic-fed
-            // mirror, refreshed below via RenderMsg::Bindings).
-            let snapshot = {
+            // Sample the raw device state once per render frame (the only
+            // input code touching the raylib handle; Phase 7d: no bindings,
+            // no letterbox math, no edges here -- the sim thread resolves
+            // all of that from the raw bits below).
+            let raw = {
                 let rl = world.non_send::<raylib::RaylibHandle>();
-                let bindings = world.resource::<InputBindings>();
-                let window_size = world.resource::<WindowSize>();
-                let screen_size = world.resource::<ScreenSize>();
-                sample_input_snapshot(rl, bindings, window_size, screen_size)
+                sample_raw_device_snapshot(rl, window_w, window_h)
             };
 
-            // F10 is render-side-only: the window (and switch_fullscreen_observer)
-            // live here; the logic-side apply_input_snapshot no longer triggers it.
-            if snapshot.state.fullscreen_toggle.just_pressed {
-                world.trigger(SwitchFullScreenEvent {});
-                world.flush();
-            }
-
-            // Mirror InputState for the imgui input panel (freshest possible
-            // sample; mouse_world stays 0 here — the panel doesn't show it).
-            *world.resource_mut::<InputState>() = snapshot.state.clone();
-
-            // Ship the sample (+ current window dims for logic's mirror, +
-            // last iteration's imgui capture state).
-            if tx_logic
-                .send(LogicMsg::Input {
-                    snapshot,
-                    window_w,
-                    window_h,
-                    capture: imgui_capture,
-                })
-                .is_err()
-            {
-                // Logic thread is gone (startup failure or panic) — exit.
+            // Ship the sample (+ last iteration's imgui capture state) over
+            // the dedicated bounded input channel. A momentarily full queue
+            // (sim stalled for 8+ render frames) drops the sample rather
+            // than growing an unbounded backlog -- the sim diffs consecutive
+            // samples, so at worst this loses a sub-frame tap during a
+            // multi-frame stall, which was already unwinnable. Disconnected
+            // (logic thread gone) is the one outcome that ends the loop.
+            let result = tx_input.try_send(InputSample { raw, capture: imgui_capture });
+            if crate::pacing::send_channel_disconnected(&result) {
                 log::error!("Logic thread disconnected; shutting down");
                 quit_requested = true;
             }
@@ -1503,18 +1490,21 @@ impl EngineBuilder {
             // into this world's Messages<RenderAssetCmd> for
             // process_render_asset_cmds. The DrawableSnapshot itself no
             // longer travels this channel (Phase 7c) -- see the triple
-            // buffer read below.
-            let mut newest_bindings: Option<InputBindings> = None;
+            // buffer read below. Phase 7d: F10 decisions arrive here too
+            // (ToggleFullscreen) -- bindings moved sim-side, so the render
+            // thread can no longer detect the F10 edge itself.
             let mut asset_cmds: Vec<RenderAssetCmd> = Vec::new();
+            let mut toggle_fullscreen = false;
             for msg in rx_render.try_iter() {
                 match msg {
                     RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
-                    RenderMsg::Bindings(bindings) => newest_bindings = Some(bindings),
+                    RenderMsg::ToggleFullscreen => toggle_fullscreen = true,
                     RenderMsg::Quit => quit_requested = true,
                 }
             }
-            if let Some(bindings) = newest_bindings {
-                *world.resource_mut::<InputBindings>() = bindings;
+            if toggle_fullscreen {
+                world.trigger(SwitchFullScreenEvent {});
+                world.flush();
             }
             if !asset_cmds.is_empty() {
                 world
@@ -1546,7 +1536,7 @@ impl EngineBuilder {
                 schedule.run(world);
             }
 
-            // Refresh for the NEXT iteration's LogicMsg::Input send (Phase 6e).
+            // Refresh for the NEXT iteration's InputSample send (Phase 6e).
             imgui_capture = world.non_send::<ImguiBridge>().capture_state();
 
             // Diff-and-send the render-owned mirrors back to logic.
@@ -1596,11 +1586,13 @@ struct LogicInit {
     initial_scene: Option<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
-    /// Initial WindowSize mirror values (refreshed per-frame via `LogicMsg::Input`).
+    /// Initial WindowSize mirror values (refreshed per-frame via `InputSample`).
     window_w: i32,
     window_h: i32,
     tx_render: Sender<RenderMsg>,
     rx_logic: Receiver<LogicMsg>,
+    /// Receiver for the dedicated bounded input channel (Phase 7d).
+    rx_input: Receiver<InputSample>,
     /// The sim thread's write end of the snapshot triple buffer (Phase 7c).
     /// `Option` so [`EngineBuilder::setup_logic_world`] can `.take()` it into
     /// the logic world's [`SnapshotPublisher`] resource -- `Input<T>` isn't
@@ -1650,11 +1642,13 @@ fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 /// determinism is consciously dropped on this branch (see
 /// `docs/plans/phase7b-pacing-configurable-frequencies.md`).
 ///
-/// A backlog of pending input samples (whenever `sim_hz` trails the render
-/// frame rate, or a sim stall) is coalesced edge-preservingly first
-/// (`merge_input_snapshots`). Non-input messages just update the logic-side
-/// mirrors/stores. The sim still ticks every `Pacer` wakeup even when no
-/// input arrived (holding the configured rate through a render stall).
+/// A backlog of pending raw input samples (whenever `sim_hz` trails the
+/// render frame rate, or a sim stall) is resolved sequentially, oldest to
+/// newest, against `PrevRawSnapshot` (`resolve_input_backlog`, Phase 7d --
+/// replaces the old merge-then-apply-once `merge_input_snapshots` model).
+/// Non-input messages just update the logic-side mirrors/stores. The sim
+/// still ticks every `Pacer` wakeup even when no input arrived (holding the
+/// configured rate through a render stall).
 ///
 /// `present` (build + publish this tick's [`DrawableSnapshot`]) no longer
 /// runs once per received input sample (Phase 7c) — it's decimated to
@@ -1688,22 +1682,19 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         use_scene_manager,
     )?;
 
-    // Built once and reused (mirrors `sim`/`present`) rather than
-    // `world.run_system_once(apply_input_snapshot)`, which would build and
-    // initialize a fresh temporary system on every call.
-    let mut input_schedule = Schedule::default();
-    input_schedule.add_systems(apply_input_snapshot);
-    input_schedule
-        .initialize(&mut world)
-        .map_err(|err| format!("Failed to initialize input schedule: {err}"))?;
-
     let rx_logic = init.rx_logic;
+    let rx_input = init.rx_input;
     let mut pacer = Pacer::new(sim_hz);
     // Phase 7c: a second, non-blocking `Pacer` decimates `present`/snapshot
     // publishing independently of the sim's own pacing above -- `due()`
     // never sleeps, it just reports whether a `snapshot_hz` period has
     // elapsed since it last fired.
     let mut snapshot_pacer = Pacer::new(snapshot_hz);
+    // Reused across ticks (`.clear()` below) instead of a fresh `Vec` per
+    // tick -- this drains at up to `sim_hz` (default 240/s) whenever input
+    // is flowing, so keeping its allocation avoids reallocating on the hot
+    // path.
+    let mut input_backlog: Vec<RawDeviceSnapshot> = Vec::new();
 
     'main: loop {
         if !crate::protocol::shutdown::running() {
@@ -1711,31 +1702,25 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         }
         let dt = pacer.tick().min(DT_CLAMP_SECONDS);
 
-        // Drain everything currently queued (non-blocking -- the Pacer
-        // already did the waiting). Coalesce the whole pending backlog
-        // before ticking the sim: input samples merge edge-preservingly
-        // into ONE snapshot (never a snapshot a previous tick already
-        // consumed -- that would double-fire edges); the other message
-        // kinds apply to their mirrors immediately.
-        let mut pending_input: Option<(RawInputSnapshot, i32, i32, ImguiCaptureState)> = None;
+        // Drain the dedicated bounded input channel: this tick's backlog of
+        // raw samples, oldest to newest -- resolve_input_backlog processes
+        // them sequentially against PrevRawSnapshot (see its doc comment for
+        // why merge-then-diff-once can't replace this). `capture` rides with
+        // each sample; only the newest matters (one render-frame stale
+        // either way, same as before Phase 7d).
+        input_backlog.clear();
+        let mut newest_capture: Option<ImguiCaptureState> = None;
+        for sample in rx_input.try_iter() {
+            newest_capture = Some(sample.capture);
+            input_backlog.push(sample.raw);
+        }
+
+        // Drain everything else currently queued (non-blocking -- the Pacer
+        // already did the waiting). Message kinds apply to their mirrors
+        // immediately.
         let mut shutdown_requested = false;
         for msg in rx_logic.try_iter() {
             match msg {
-                LogicMsg::Input {
-                    snapshot,
-                    window_w,
-                    window_h,
-                    capture,
-                    ..
-                } => match &mut pending_input {
-                    Some((merged, w, h, cap)) => {
-                        merge_input_snapshots(merged, &snapshot);
-                        *w = window_w;
-                        *h = window_h;
-                        *cap = capture;
-                    }
-                    None => pending_input = Some((snapshot, window_w, window_h, capture)),
-                },
                 LogicMsg::ScreenSize { w, h } => {
                     let mut screen_size = world.resource_mut::<ScreenSize>();
                     screen_size.w = w;
@@ -1778,17 +1763,23 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
             break 'main;
         }
 
-        if let Some((snapshot, window_w, window_h, capture)) = pending_input {
-            {
-                let mut window_size = world.resource_mut::<WindowSize>();
-                window_size.w = window_w;
-                window_size.h = window_h;
-            }
-            world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
+        if let Some(newest) = input_backlog.last() {
+            let mut window_size = world.resource_mut::<WindowSize>();
+            window_size.w = newest.window_w;
+            window_size.h = newest.window_h;
+        }
+        if let Some(capture) = newest_capture {
             world.resource_mut::<ImguiCaptureMirror>().0 = capture;
-            // Apply input (InputState + events) BEFORE the sim tick that
-            // reads it, same order as before Phase 7b.
-            input_schedule.run(&mut world);
+        }
+        // Resolve bindings + edges (InputState + events) BEFORE the sim tick
+        // that reads it, same order as before Phase 7b. A F10 edge (post
+        // imgui-capture-mask) means the caller, not the resolver, ships
+        // RenderMsg::ToggleFullscreen -- see resolve_input_backlog's doc
+        // comment for why it stays free of channel sends.
+        resolve_input_backlog(&mut world, &input_backlog);
+        if world.resource::<InputState>().fullscreen_toggle.just_pressed {
+            let tx_render = world.resource::<RenderTx>().0.clone();
+            let _ = tx_render.send(RenderMsg::ToggleFullscreen);
         }
 
         // The sim ticks every Pacer wakeup regardless of whether new input
@@ -2049,9 +2040,6 @@ mod tests {
             loop {
                 match rx_logic.recv().expect("sender alive") {
                     LogicMsg::Shutdown => break,
-                    LogicMsg::Input { snapshot, .. } => {
-                        assert!(snapshot.state.action_1.just_pressed);
-                    }
                     LogicMsg::ScreenSize { w, h } => assert_eq!((w, h), (320, 200)),
                     _ => {}
                 }
@@ -2059,21 +2047,40 @@ mod tests {
             let _ = tx_render.send(RenderMsg::Quit);
         });
 
-        let mut snapshot = RawInputSnapshot::default();
-        snapshot.state.action_1.just_pressed = true;
-        tx_logic
-            .send(LogicMsg::Input {
-                snapshot,
-                window_w: 800,
-                window_h: 600,
-                capture: ImguiCaptureState::default(),
-            })
-            .unwrap();
         tx_logic.send(LogicMsg::ScreenSize { w: 320, h: 200 }).unwrap();
         tx_logic.send(LogicMsg::Shutdown).unwrap();
 
         echo.join().expect("echo thread should exit cleanly");
         assert!(matches!(rx_render.recv().unwrap(), RenderMsg::Quit));
+    }
+
+    // --- Phase 7d: dedicated bounded input channel round-trip smoke test ---
+
+    #[test]
+    fn input_sample_round_trips_across_a_thread() {
+        let (tx_input, rx_input) = bounded::<InputSample>(8);
+
+        let echo = std::thread::spawn(move || {
+            let sample = rx_input.recv().expect("sender alive");
+            assert_eq!(sample.raw.window_w, 800);
+            assert_eq!(sample.raw.window_h, 600);
+            assert!(sample.raw.is_key_down(raylib::ffi::KeyboardKey::KEY_SPACE as u32));
+        });
+
+        let mut raw = RawDeviceSnapshot {
+            window_w: 800,
+            window_h: 600,
+            ..Default::default()
+        };
+        raw.set_key(raylib::ffi::KeyboardKey::KEY_SPACE as u32);
+        tx_input
+            .try_send(InputSample {
+                raw,
+                capture: ImguiCaptureState::default(),
+            })
+            .unwrap();
+
+        echo.join().expect("echo thread should exit cleanly");
     }
 
     // --- Phase 7c: triple_buffer snapshot transport ---

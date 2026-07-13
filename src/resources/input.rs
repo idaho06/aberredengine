@@ -76,6 +76,17 @@ impl BoolState {
         self.active = false;
         self.just_pressed = false;
     }
+
+    /// OR a `was -> now` transition's edges into this state (never clearing
+    /// an edge an earlier diff already set) and take `now` as the held
+    /// state. Used by the sim-side input resolver (Phase 7d,
+    /// `systems/input.rs`) to diff a backlogged raw device sample against
+    /// the previous one, once per bound action.
+    pub fn apply_edge(&mut self, was: bool, now: bool) {
+        self.just_pressed |= now && !was;
+        self.just_released |= !now && was;
+        self.active = now;
+    }
 }
 
 impl InputState {
@@ -106,7 +117,7 @@ impl InputState {
 
     /// All keyboard-sourced digital fields (everything [`bool_fields_mut`](Self::bool_fields_mut)
     /// returns except `mouse_left_button`), as mutable references. Reused by
-    /// `apply_input_snapshot`'s imgui keyboard-capture masking (Phase 6e) so
+    /// `resolve_input_backlog`'s imgui keyboard-capture masking (Phase 6e) so
     /// that list isn't hand-duplicated in a second place -- see
     /// `bool_fields_mut`'s doc comment for why a single enumerated source
     /// matters.

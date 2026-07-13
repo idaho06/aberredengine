@@ -48,15 +48,6 @@ pub struct InputBindings {
     dirty: bool,
 }
 
-/// Compares only the actual bindings, not the `dirty` bookkeeping flag —
-/// `send_input_bindings_on_change`'s value diff (Phase 5e) must not treat a
-/// flag flip (e.g. `take_dirty` in `lua_plugin::update`) as a binding change.
-impl PartialEq for InputBindings {
-    fn eq(&self, other: &Self) -> bool {
-        self.map == other.map
-    }
-}
-
 impl InputBindings {
     /// Replace all current bindings for `action` with a single new `binding`.
     ///
