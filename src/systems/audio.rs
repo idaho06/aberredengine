@@ -20,12 +20,16 @@
 //!   audio thread in response to commands.
 //! - Music streaming requires periodic `update_stream()` calls; this loop takes
 //!   care of it while tracks are playing.
-//! - The loop is event-driven: it blocks on the command channel and wakes on
-//!   message arrival (with a 10ms timeout only while streaming work is pending),
-//!   minimizing command latency and idle CPU usage.
+//! - The loop is `Pacer`-driven (Phase 7b): it wakes at a configurable
+//!   `[audio] hz` rate (`config.ini`) rather than blocking on the command
+//!   channel, draining all pending commands non-blockingly each tick and
+//!   then pumping music streams / cleaning up finished sound aliases.
+//!   Accepted tradeoff: constant wakeups at `audio_hz` instead of blocking
+//!   while idle (negligible at the default 100Hz with `spin_sleep`).
 //!
 //! See also: [`crate::protocol::audio`] and [`crate::protocol::endpoints`].
 
+use crate::pacing::Pacer;
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::AudioBridge;
 use bevy_ecs::prelude::Messages;
@@ -33,18 +37,12 @@ use bevy_ecs::{
     prelude::{MessageWriter, Res},
     system::ResMut,
 };
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
+use crossbeam_channel::{Receiver, Sender};
 use log::{debug, error, info};
 use raylib::core::audio::{Music, RaylibAudio};
 use raylib::ffi;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::ffi::CString;
-use std::time::Duration;
-
-/// How often the audio thread wakes to pump music streams while playback is
-/// active. Raylib's `update_stream()` must be called at roughly this cadence to
-/// keep buffers fed. While idle (nothing playing) the thread blocks instead.
-const STREAM_PUMP_INTERVAL: Duration = Duration::from_millis(10);
 
 // FxPlayingState removed; we now track only the set of FX ids considered playing.
 
@@ -100,13 +98,15 @@ pub fn update_bevy_audio_cmds(mut msgs: ResMut<Messages<AudioCmd>>) {
 ///
 /// Concurrency model:
 /// - Uses `crossbeam_channel` for lock-free message passing.
-/// - The loop blocks on the command channel (idle) or waits with a 10ms timeout
-///   (while music/aliases are active, to keep pumping streams), waking on
-///   message arrival rather than busy-polling on a fixed sleep.
+/// - The loop is paced by a [`Pacer`] at `audio_hz` (Phase 7b): each tick
+///   drains all pending commands non-blockingly, then pumps music streams
+///   and cleans up finished sound aliases -- constant wakeups replace the
+///   old blocking-while-idle / 10ms-timeout-while-streaming split.
 ///
-/// This function blocks until it receives [`AudioCmd::Shutdown`], at which
-/// point it unloads resources and exits cleanly.
-pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
+/// This function runs until it receives [`AudioCmd::Shutdown`] (or the
+/// channel disconnects), at which point it unloads resources and exits
+/// cleanly.
+pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, audio_hz: f64) {
     let audio = match RaylibAudio::init_audio_device() {
         Ok(device) => device,
         Err(e) => {
@@ -125,38 +125,19 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
     let mut sounds: FxHashMap<String, ffi::Sound> = FxHashMap::default();
     let mut active_aliases: Vec<ffi::Sound> = Vec::new();
 
+    let mut pacer = Pacer::new(audio_hz);
+
     'run: loop {
         if !crate::protocol::shutdown::running() {
             break 'run;
         }
-        // Block waiting for work instead of busy-polling on a fixed sleep.
-        //
-        // - While streaming work is pending (music playing or sound aliases
-        //   still active) we wait with a 10ms timeout so `update_stream()` and
-        //   alias cleanup keep running at their required cadence, yet a freshly
-        //   sent command still wakes us immediately.
-        // - When idle (nothing playing) we block indefinitely on `recv()`,
-        //   consuming zero CPU and waking the instant a command arrives.
-        //
-        // A `Disconnected` result means every sender was dropped (ECS gone), so
-        // we exit cleanly.
-        let busy = !playing.is_empty() || !active_aliases.is_empty();
-        let first = if busy {
-            match rx_cmd.recv_timeout(STREAM_PUMP_INTERVAL) {
-                Ok(cmd) => Some(cmd),
-                Err(RecvTimeoutError::Timeout) => None,
-                Err(RecvTimeoutError::Disconnected) => break 'run,
-            }
-        } else {
-            match rx_cmd.recv() {
-                Ok(cmd) => Some(cmd),
-                Err(_) => break 'run, // disconnected
-            }
-        };
+        pacer.tick();
 
-        // 1) Drain commands: the one we just blocked for (if any), plus any
-        //    others already queued behind it.
-        for cmd in first.into_iter().chain(rx_cmd.try_iter()) {
+        // 1) Drain all pending commands non-blockingly. `try_iter()` alone
+        //    can't distinguish "empty" from "disconnected", so check
+        //    explicitly afterward -- a `Disconnected` result means every
+        //    sender was dropped (ECS gone), so we exit cleanly.
+        for cmd in rx_cmd.try_iter() {
             match cmd {
                 AudioCmd::LoadMusic { id, path } => match audio.new_music(&path) {
                     Ok(music) => {
@@ -349,6 +330,10 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) {
                 }
             }
         }
+        if crate::pacing::channel_disconnected(&rx_cmd) {
+            break 'run;
+        }
+
         // 2) Pump streaming + detect ends
         //    `update_stream()` must be called regularly while playing.
         //    If a track ended and isn't looped, emit Finished exactly once.

@@ -349,17 +349,20 @@ fn resolve_input_table(
     }
 }
 
-/// Per-fixed-substep update system for scene gameplay logic: calls
-/// `on_update_<scene>` once per FIXED schedule substep (240Hz, up to 8x per
-/// render frame), then drains common command queues.
+/// Per-sim-tick update system for scene gameplay logic: calls
+/// `on_update_<scene>` once per sim tick (Phase 7b: `[simulation] hz`,
+/// real-dt, no more fixed-substep accumulator), then drains common command
+/// queues.
 ///
 /// Since Phase 6b this is the *only* place `on_update_<scene>` is invoked --
 /// the old `on_fixed_update_<scene>`/[`update`]-callback split existed only
-/// because edge-triggered input wasn't safe to read from every FIXED substep;
+/// because edge-triggered input wasn't safe to read from every tick;
 /// Phase 6a's edge-latch fix (`InputState::clear_edges`) removed that
-/// constraint. `dt` is always `FIXED_DT` here, never a variable render-frame
-/// value, and "continuous while held" logic now fires up to 8x/frame instead
-/// of once -- every shipped scene script was checked for both effects
+/// constraint. `dt` is the real elapsed time since the previous sim tick
+/// (clamped, scaled by `time_scale`) -- no longer a constant -- and
+/// "continuous while held" logic fires once per sim tick, which can still be
+/// faster than the render frame rate; every shipped scene script was checked
+/// for both effects
 /// (`docs/plans/phase6b-callback-merge.md`); all were safe as-is except
 /// `bunnymark/{screen,map}_loop.lua`, whose held-spawn loops now spawn up to
 /// 8x as fast while the mouse button is held -- left unmitigated, a

@@ -95,14 +95,16 @@ pub struct AudioBridge {
 ///
 /// This function:
 /// - Creates command/event channels.
-/// - Spawns the background thread running [`audio_thread`].
+/// - Spawns the background thread running [`audio_thread`], paced at
+///   `audio_hz` (Phase 7b; read once here, at spawn time -- a runtime
+///   change to `GameConfig::audio_hz` after startup has no effect).
 /// - Inserts [`AudioBridge`] and initializes `Messages<AudioMessage>` so that
 ///   systems can send commands and poll for events.
-pub fn setup_audio(world: &mut World) {
+pub fn setup_audio(world: &mut World, audio_hz: f64) {
     let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
     let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
 
-    let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_msg));
+    let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_msg, audio_hz));
 
     world.insert_resource(AudioBridge {
         tx_cmd,

@@ -5,22 +5,18 @@
 
 use bevy_ecs::prelude::Resource;
 
-/// Fixed simulation tick duration in seconds (240 Hz). Used by the fixed-step
-/// accumulator loop in `EngineBuilder::main_loop` to advance core simulation
-/// systems (movement, collision, phases, animation, ...) deterministically,
-/// independent of the render frame rate.
-pub const FIXED_DT: f32 = 1.0 / 240.0;
-
 /// World time accumulator and frame delta.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct WorldTime {
     /// Total elapsed time since start (seconds).
     pub elapsed: f32,
-    /// Scaled delta time for the last update (seconds). During a fixed-schedule
-    /// substep this is `FIXED_DT * time_scale`; while the variable schedule
-    /// runs it is the real render-frame delta `* time_scale`. Systems don't
-    /// need to know which — they just read whichever value is current for
-    /// the schedule that's running them.
+    /// Scaled delta time for the last update (seconds): the real elapsed
+    /// time since the previous sim tick (as measured by the logic thread's
+    /// `Pacer`, targeting `[simulation] hz` in `config.ini`), clamped
+    /// (`DT_CLAMP_SECONDS`) and multiplied by `time_scale`. There is no
+    /// longer a distinct "fixed substep" delta vs. "variable frame" delta
+    /// (Phase 7b removed the FIXED_DT accumulator/substep model) — one tick,
+    /// one delta.
     pub delta: f32,
     /// Multiplier applied by systems that honor time scaling.
     pub time_scale: f32,

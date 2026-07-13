@@ -65,15 +65,15 @@
 //! ```
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 use bevy_ecs::system::RunSystemOnce;
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, unbounded};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use raylib::ffi::TraceLogLevel;
 
+use crate::pacing::Pacer;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::protocol::endpoints::{
@@ -123,7 +123,7 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::drawable_snapshot::{build_drawable_snapshot, DrawableSnapshot};
-use crate::resources::worldtime::{FIXED_DT, WorldTime};
+use crate::resources::worldtime::WorldTime;
 use crate::resources::signal_intents::SignalIntents;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
@@ -203,6 +203,55 @@ type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + Send>;
 /// Deferred until `run()` when the schedule is being built.
 /// `Send`: see [`HookRegistrar`].
 type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
+
+/// System sets partitioning the logic thread's `fixed` schedule pipeline
+/// (Phase 7b Step 0). Replaces the old hand-enumerated `.after()`/`.before()`
+/// edges between individual systems: [`EngineBuilder`]'s
+/// `build_logic_schedules` declares one `configure_sets((...).chain())` over
+/// this list as the single source of ordering truth between groups; edges
+/// *within* a group that are still load-bearing remain explicit `.after()`
+/// calls (see that function's doc comment for the convention).
+///
+/// Exported so [`configure_schedule`](EngineBuilder::configure_schedule) /
+/// [`configure_fixed_schedule`](EngineBuilder::configure_fixed_schedule)
+/// closures can position custom systems relative to engine groups, e.g.
+/// `.in_set(SimSet::Movement)` or `.before(SimSet::Collision)`.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SimSet {
+    /// Drain `SignalIntents` queued by the render thread's `GuiCallback` into
+    /// `WorldSignals`, before anything this substep reads them.
+    ApplyIntents,
+    /// One-shot spawns reacting to `Added<T>` (menu/gridlayout/tilemap) and
+    /// game-state bookkeeping (`check_pending_state`).
+    Spawn,
+    /// Audio command/message pump (`update_bevy_audio_cmds` ->
+    /// `forward_audio_cmds` -> `poll_audio_messages` ->
+    /// `update_bevy_audio_messages`, kept as an explicit `.chain()`).
+    AudioPump,
+    /// Lua `on_update_<scene>` / `fixed_update_hook`, and downstream
+    /// `on_update`/`add_system`/`add_fixed_system` hooks.
+    ScriptUpdate,
+    /// Input-driven force/velocity controllers.
+    Controllers,
+    /// Particle emission, movement integration, TTL, and position/rotation/
+    /// scale tweens.
+    Movement,
+    /// World-space transform propagation and camera follow.
+    Transforms,
+    /// Collision detection and its direct reactions (`stuck_to`, `phase`).
+    Collision,
+    /// GUI layout, hit-test, and per-state visual sync.
+    Gui,
+    /// Group counts, Lua phase callbacks, and animation controller
+    /// resolution -- all downstream of this substep's collision results.
+    PostCollision,
+    /// Lua command-queue draining (map/asset commands, entity setup) and
+    /// scene lifecycle polling.
+    Drain,
+    /// Tail-of-substep housekeeping: signal bindings, text sizing, input
+    /// binding change notification, and (for Lua games) `lua_plugin::update`.
+    Bookkeeping,
+}
 
 /// Closure that spawns an observer entity into the [`World`].
 /// Deferred until `run()` when the world exists.
@@ -305,15 +354,15 @@ impl EngineBuilder {
 
     /// Register the `update` hook.
     ///
-    /// Since Phase 6d, this runs on the FIXED (240Hz) schedule -- up to 8 times
-    /// per render frame (one call per FIXED substep), not once. Treat it
-    /// as idempotent/edge-triggered the same way Lua's `on_update_<scene>` must
-    /// be (`.claude/context/system-order.md`): gate one-shot effects on an edge,
-    /// not on "runs once per visible frame". The system is added with
-    /// `.run_if(state_is_playing).after(check_pending_state)`.
+    /// Runs once per sim tick (`[simulation] hz` in `config.ini`, Phase 7b),
+    /// in [`SimSet::ScriptUpdate`]. Treat it as idempotent/edge-triggered the
+    /// same way Lua's `on_update_<scene>` must be
+    /// (`.claude/context/system-order.md`): gate one-shot effects on an edge,
+    /// not on "runs once per visible frame" -- the sim ticks faster than the
+    /// render thread. The system is added with `.run_if(state_is_playing)`.
     pub fn on_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
+            schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
         }));
         self
     }
@@ -331,15 +380,14 @@ impl EngineBuilder {
         self
     }
 
-    /// Add a system to the FIXED (240Hz) schedule alongside `on_update`/Lua's
+    /// Add a system to the sim schedule alongside `on_update`/Lua's
     /// `on_update_<scene>`.
     ///
-    /// Since Phase 6d this is the FIXED schedule, not a once-per-render-frame
-    /// one -- see [`.on_update()`](Self::on_update)'s doc for the cadence
-    /// implications. The system is added with
-    /// `.run_if(state_is_playing).after(check_pending_state)`,
-    /// matching the behaviour of [`.on_update()`](Self::on_update). Can be called
-    /// multiple times to register several systems.
+    /// Runs once per sim tick, in [`SimSet::ScriptUpdate`] -- see
+    /// [`.on_update()`](Self::on_update)'s doc for the cadence implications.
+    /// The system is added with `.run_if(state_is_playing)`, matching the
+    /// behaviour of [`.on_update()`](Self::on_update). Can be called multiple
+    /// times to register several systems.
     ///
     /// For custom ordering relative to other engine systems (e.g. `.after(movement)`)
     /// or for systems with different run conditions, use
@@ -359,28 +407,29 @@ impl EngineBuilder {
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.extra_systems
             .push(Box::new(move |schedule: &mut Schedule| {
-                schedule.add_systems(system.run_if(state_is_playing).after(check_pending_state));
+                schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
             }));
         self
     }
 
-    /// Add systems to the FIXED schedule with full control over ordering and
+    /// Add systems to the sim schedule with full control over ordering and
     /// run conditions.
     ///
-    /// Since Phase 6d this targets the same FIXED (240Hz) schedule as
-    /// [`add_system`](Self::add_system) -- there is no longer a separate
-    /// once-per-render-frame schedule to target. The closure receives a
-    /// `&mut Schedule` and can call `schedule.add_systems(…)`
-    /// with any configuration. No automatic constraints are applied — the developer
-    /// is responsible for `.run_if()`, `.after()`, `.before()` etc.
+    /// Targets the same sim schedule as [`add_system`](Self::add_system). The
+    /// closure receives a `&mut Schedule` and can call
+    /// `schedule.add_systems(…)` with any configuration, including
+    /// `.in_set(SimSet::X)` (the sets used by the engine's own pipeline are
+    /// exported as [`SimSet`] specifically for this). No automatic
+    /// constraints are applied — the developer is responsible for
+    /// `.run_if()`, `.after()`, `.before()`, `.in_set()` etc.
     ///
     /// ```rust,ignore
     /// .configure_schedule(|schedule| {
     ///     schedule.add_systems(
     ///         my_system
     ///             .run_if(state_is_playing)
-    ///             .after(movement)
-    ///             .before(render_system),
+    ///             .in_set(SimSet::Movement)
+    ///             .before(SimSet::Collision),
     ///     );
     /// })
     /// ```
@@ -390,7 +439,7 @@ impl EngineBuilder {
     }
 
 
-    /// Add a system to the fixed (240 Hz) simulation schedule.
+    /// Add a system to the sim schedule.
     ///
     /// Use this for custom Rust-side physics/gameplay logic that needs a
     /// deterministic, render-rate-independent tick -- e.g. a game-specific
@@ -398,9 +447,11 @@ impl EngineBuilder {
     /// and before [`collision_detector`](crate::systems::collision_detector::collision_detector).
     ///
     /// The system is added with `.run_if(state_is_playing)`, matching
-    /// [`.add_system()`](Self::add_system). For custom ordering relative to
-    /// other fixed-schedule systems, use
-    /// [`configure_fixed_schedule`](Self::configure_fixed_schedule) instead.
+    /// [`.add_system()`](Self::add_system), but with no `SimSet` membership
+    /// of its own -- it runs unordered relative to the engine's pipeline
+    /// unless you also constrain it. For ordering relative to `SimSet`
+    /// groups, use [`configure_fixed_schedule`](Self::configure_fixed_schedule)
+    /// instead.
     pub fn add_fixed_system<M>(
         mut self,
         system: impl IntoSystem<(), (), M> + Send + 'static,
@@ -412,11 +463,14 @@ impl EngineBuilder {
         self
     }
 
-    /// Add systems to the fixed (240 Hz) simulation schedule with full control
-    /// over ordering and run conditions.
+    /// Add systems to the sim schedule with full control over ordering and
+    /// run conditions.
     ///
-    /// Mirrors [`configure_schedule`](Self::configure_schedule), but targets
-    /// the fixed schedule instead of the once-per-render-frame one.
+    /// Mirrors [`configure_schedule`](Self::configure_schedule), including
+    /// `SimSet` availability; kept as a separate builder method for games
+    /// that want to distinguish "custom fixed-tick systems" from "custom
+    /// scripted-update systems" in their own code organization, even though
+    /// both target the same schedule.
     pub fn configure_fixed_schedule(mut self, f: impl FnOnce(&mut Schedule) + Send + 'static) -> Self {
         self.extra_fixed_systems.push(Box::new(f));
         self
@@ -496,33 +550,31 @@ impl EngineBuilder {
         self.enter_play_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "enter_play", lua_plugin::enter_play);
         }));
-        // Since Phase 6d, lua_plugin::update runs on FIXED too (build_logic_schedules
-        // installs update_hook into `fixed`), ordered last among Lua-touching
-        // FIXED systems each substep -- see lua_plugin::update's own doc
-        // comment for why and for the mid-substep-batch scene-switch consequence.
+        // lua_plugin::update runs once per sim tick, in SimSet::Bookkeeping
+        // (last among the engine's own groups) -- see lua_plugin::update's
+        // own doc comment for why and for the mid-tick scene-switch
+        // consequence. Its old .after() chain (check_pending_state,
+        // lua_plugin::fixed_update, lua_phase_system, update_lua_timers,
+        // process_lua_map_commands, process_lua_asset_commands) is now
+        // implied by SimSet ordering (Phase 7b Step 0).
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
                     .run_if(state_is_playing)
-                    .after(check_pending_state)
-                    .after(lua_plugin::fixed_update)
-                    .after(lua_phase_system)
-                    .after(update_lua_timers)
-                    .after(process_lua_map_commands)
-                    .after(lua_plugin::process_lua_asset_commands)
-                    .before(render_system),
+                    .in_set(SimSet::Bookkeeping),
             );
         }));
-        // lua_plugin::fixed_update runs on the FIXED (240Hz) schedule, once per
-        // substep, before movement/collision -- see lua_plugin::fixed_update's
-        // doc comment and docs/render-simulation-separation-brainstorm.md for
-        // why substep-synchronized Lua logic (e.g. clearing collision-derived
+        // lua_plugin::fixed_update runs once per sim tick, in
+        // SimSet::ScriptUpdate (before movement/collision) -- see
+        // lua_plugin::fixed_update's doc comment and
+        // docs/render-simulation-separation-brainstorm.md for why
+        // tick-synchronized Lua logic (e.g. clearing collision-derived
         // flags) needs this instead of on_update_<scene>.
         self.fixed_update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::fixed_update
                     .run_if(state_is_playing)
-                    .before(movement),
+                    .in_set(SimSet::ScriptUpdate),
             );
         }));
         self.switch_scene_hook = Some(Box::new(|world, store| {
@@ -802,6 +854,7 @@ impl EngineBuilder {
         let config = init.config.clone();
         let render_width = config.render_width;
         let render_height = config.render_height;
+        let audio_hz = config.audio_hz;
 
         let mut world = World::new();
         world.insert_resource(WorldTime::default().with_time_scale(1.0));
@@ -823,7 +876,7 @@ impl EngineBuilder {
         world.insert_resource(LatestInputSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
 
-        setup_audio(&mut world);
+        setup_audio(&mut world, audio_hz);
 
         world.insert_resource(GameState::new());
         world.insert_resource(NextGameState::new());
@@ -1003,28 +1056,38 @@ impl EngineBuilder {
         world.flush();
     }
 
-    /// Build the two schedules that make up a frame: `fixed` (run 0-8 times
-    /// per render frame at a constant `FIXED_DT` -- since Phase 6d, this is
-    /// where essentially all gameplay logic lives: movement, collision,
-    /// phases, animation, Lua scripting, GUI layout/hit-test, scene
-    /// lifecycle, and per-substep housekeeping) and `present` (run exactly
-    /// once per render frame -- package the frame's fully-settled state into
-    /// a `DrawableSnapshot` and ship it; nothing else). See
-    /// `docs/render-simulation-separation-brainstorm.md`,
+    /// Build the two schedules the logic thread runs: `fixed` (Phase 7b:
+    /// runs once per `Pacer`-paced sim tick at `[simulation] hz`, real dt --
+    /// this is where essentially all gameplay logic lives: movement,
+    /// collision, phases, animation, Lua scripting, GUI layout/hit-test,
+    /// scene lifecycle, and per-tick housekeeping; the binding still called
+    /// `fixed` returned from this function is bound to `sim` by its caller,
+    /// `logic_thread_main`, since ticks are no longer fixed-duration) and
+    /// `present` (run once per received input sample -- package the tick's
+    /// fully-settled state into a `DrawableSnapshot` and ship it; nothing
+    /// else). See `docs/render-simulation-separation-brainstorm.md`,
     /// `docs/render-logic-simplification-brainstorm.md`'s "Collapsing
-    /// VARIABLE" section, and `.claude/context/system-order.md` for the
-    /// rationale behind the split and the full list of which system lives
-    /// where. `present` was called `variable` before Phase 6d; the old name
-    /// stopped describing anything running there once nearly everything
-    /// moved to `fixed`.
+    /// VARIABLE" section, `docs/plans/phase7b-pacing-configurable-frequencies.md`,
+    /// and `.claude/context/system-order.md` for the rationale behind the
+    /// split and the full list of which system lives where. `present` was
+    /// called `variable` before Phase 6d; the old name stopped describing
+    /// anything running there once nearly everything moved to `fixed`.
+    ///
+    /// `fixed`'s internal ordering is expressed via [`SimSet`] (Phase 7b Step
+    /// 0) rather than per-system `.after()`/`.before()` edges: one
+    /// `configure_sets((...).chain())` call declares the pipeline, and each
+    /// system joins its group with `.in_set(SimSet::X)`. Only *intra*-set
+    /// edges that are still load-bearing (e.g.
+    /// `cleanup_orphaned_global_transforms.after(propagate_transforms)`
+    /// within `Transforms`) are kept explicit -- every edge that used to
+    /// cross groups is now implied by set order and was deleted.
     ///
     /// `bevy_ecs` cannot express `.after()`/`.before()` across two separate
-    /// `Schedule`s, so edges that cross the fixed/present boundary (e.g.
-    /// `build_drawable_snapshot`'s `.after()` list below) are vacuous
-    /// doc-value markers, not real constraints -- the accumulator loop in
-    /// `logic_thread_main` guarantees every fixed substep for a frame
-    /// completes before `present` runs, which is the ordering those edges
-    /// express.
+    /// `Schedule`s, so `present`'s `.after()` markers referencing `fixed`
+    /// systems (e.g. `build_drawable_snapshot`'s list below) remain vacuous
+    /// doc-value markers, not real constraints -- `logic_thread_main`'s loop
+    /// structure guarantees the tick's `fixed`/`sim` run completes before
+    /// `present` runs, which is the ordering those edges express.
     fn build_logic_schedules(
         update_hook: Option<UpdateRegistrar>,
         fixed_update_hook: Option<UpdateRegistrar>,
@@ -1037,24 +1100,41 @@ impl EngineBuilder {
         let mut fixed = Schedule::default();
         let mut present = Schedule::default();
 
+        // Single source of truth for cross-group ordering within `fixed`
+        // (Phase 7b Step 0) -- see `SimSet`'s doc comment for what each
+        // group holds. Systems join a group via `.in_set(SimSet::X)`; only
+        // load-bearing *intra*-group edges remain as explicit `.after()`
+        // calls below.
+        fixed.configure_sets(
+            (
+                SimSet::ApplyIntents,
+                SimSet::Spawn,
+                SimSet::AudioPump,
+                SimSet::ScriptUpdate,
+                SimSet::Controllers,
+                SimSet::Movement,
+                SimSet::Transforms,
+                SimSet::Collision,
+                SimSet::Gui,
+                SimSet::PostCollision,
+                SimSet::Drain,
+                SimSet::Bookkeeping,
+            )
+                .chain(),
+        );
+
         // --- FIXED: signal intents + state bookkeeping, one-shot spawns ---
         // apply_signal_intents runs first, before everything else this
         // substep (in particular before fixed_update/on_update_<scene>,
-        // see the cfg(lua) edge below): intents queued by the render
-        // thread's GuiCallback (inside render_system) each frame must be
-        // visible to this substep's scene logic (Phase 5d).
-        #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
-        let mut apply_signal_intents_config = apply_signal_intents.before(check_pending_state);
-        #[cfg(feature = "lua")]
-        {
-            apply_signal_intents_config =
-                apply_signal_intents_config.before(crate::lua_plugin::fixed_update);
-        }
-        fixed.add_systems(apply_signal_intents_config);
-        fixed.add_systems(menu_spawn_system);
-        fixed.add_systems(gridlayout_spawn_system);
-        fixed.add_systems(tilemap_spawn_system);
-        fixed.add_systems(check_pending_state);
+        // both ScriptUpdate): intents queued by the render thread's
+        // GuiCallback (inside render_system) each frame must be visible to
+        // this substep's scene logic (Phase 5d). The ordering is now implied
+        // by SimSet::ApplyIntents preceding every later group in the chain.
+        fixed.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
+        fixed.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
+        fixed.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
+        fixed.add_systems(tilemap_spawn_system.in_set(SimSet::Spawn));
+        fixed.add_systems(check_pending_state.in_set(SimSet::Spawn));
         fixed.add_systems(
             (
                 update_bevy_audio_cmds,
@@ -1062,7 +1142,8 @@ impl EngineBuilder {
                 poll_audio_messages,
                 update_bevy_audio_messages,
             )
-                .chain(),
+                .chain()
+                .in_set(SimSet::AudioPump),
         );
         // update_bevy_render_asset_cmds stays paired with forward_render_asset_cmds
         // on `present` (both once/frame), unlike its producers -- see
@@ -1073,87 +1154,81 @@ impl EngineBuilder {
         // --- FIXED: input-driven forces/movement (InputState is sampled once
         // per render frame in main_loop, before the accumulator loop, and held
         // constant across every fixed substep that reads it here) ---
-        fixed.add_systems(input_simple_controller);
-        fixed.add_systems(input_acceleration_controller);
-        fixed.add_systems(mouse_controller);
-        fixed.add_systems(particle_emitter_system.before(movement));
-        fixed.add_systems(movement);
-        fixed.add_systems(ttl_system.after(movement));
-        fixed.add_systems(tween_system::<MapPosition>);
-        fixed.add_systems(tween_system::<Rotation>);
-        fixed.add_systems(tween_system::<Scale>);
+        fixed.add_systems(input_simple_controller.in_set(SimSet::Controllers));
+        fixed.add_systems(input_acceleration_controller.in_set(SimSet::Controllers));
+        fixed.add_systems(mouse_controller.in_set(SimSet::Controllers));
         fixed.add_systems(
-            propagate_transforms
-                .after(movement)
-                .after(tween_system::<MapPosition>)
-                .after(tween_system::<Rotation>)
-                .after(tween_system::<Scale>)
-                .before(collision_detector),
+            particle_emitter_system
+                .before(movement)
+                .in_set(SimSet::Movement),
         );
+        fixed.add_systems(movement.in_set(SimSet::Movement));
+        fixed.add_systems(ttl_system.after(movement).in_set(SimSet::Movement));
+        fixed.add_systems(tween_system::<MapPosition>.in_set(SimSet::Movement));
+        fixed.add_systems(tween_system::<Rotation>.in_set(SimSet::Movement));
+        fixed.add_systems(tween_system::<Scale>.in_set(SimSet::Movement));
+        // propagate_transforms/collision_detector's old .after(movement)/
+        // .after(tween_system::<T>) edges are now implied by
+        // SimSet::Movement preceding SimSet::Transforms/Collision.
+        fixed.add_systems(propagate_transforms.in_set(SimSet::Transforms));
         fixed.add_systems(
             cleanup_orphaned_global_transforms
                 .after(propagate_transforms)
-                .before(collision_detector),
+                .in_set(SimSet::Transforms),
         );
-        fixed.add_systems(camera_follow_system.after(propagate_transforms));
-        fixed.add_systems(collision_detector.after(mouse_controller).after(movement));
-        fixed.add_systems(stuck_to_entity_system.after(collision_detector));
-        fixed.add_systems(phase_system.after(collision_detector));
+        fixed.add_systems(camera_follow_system.after(propagate_transforms).in_set(SimSet::Transforms));
+        fixed.add_systems(collision_detector.in_set(SimSet::Collision));
+        fixed.add_systems(stuck_to_entity_system.after(collision_detector).in_set(SimSet::Collision));
+        fixed.add_systems(phase_system.after(collision_detector).in_set(SimSet::Collision));
 
         // --- FIXED: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
         // collision, so it's grouped with the GUI chain rather than its
         // MapPosition/Rotation/Scale siblings above; since Phase 6d all four
         // TweenValue type parameters share FIXED cadence, so
         // LuaOnTweenFinished<ScreenPosition> no longer fires at a different
-        // rate than the other three). `.before(render_system)` below is a
-        // vacuous cross-thread marker (see this function's doc comment).
-        fixed.add_systems(tween_system::<ScreenPosition>);
+        // rate than the other three).
+        fixed.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));
         fixed.add_systems(
             (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
-                .before(gui_layout_system),
+                .before(gui_layout_system)
+                .in_set(SimSet::Gui),
         );
         fixed.add_systems(
             gui_layout_system
                 .after(tween_system::<ScreenPosition>)
-                .before(render_system),
+                .in_set(SimSet::Gui),
         );
-        fixed.add_systems(gui_hit_test_system.after(gui_layout_system).before(render_system));
+        fixed.add_systems(gui_hit_test_system.after(gui_layout_system).in_set(SimSet::Gui));
         fixed.add_systems(
             gui_image_state_sync_system
                 .after(gui_hit_test_system)
-                .before(render_system),
+                .in_set(SimSet::Gui),
         );
-        fixed.add_systems(gui_progressbar_signal_update_system.before(render_system));
+        fixed.add_systems(gui_progressbar_signal_update_system.in_set(SimSet::Gui));
 
         #[cfg(feature = "lua")]
         if has_lua {
-            fixed.add_systems(update_group_counts_system.before(lua_phase_system));
-            fixed.add_systems(lua_phase_system.run_if(state_is_playing).after(collision_detector));
+            fixed.add_systems(
+                update_group_counts_system
+                    .before(lua_phase_system)
+                    .in_set(SimSet::PostCollision),
+            );
+            fixed.add_systems(
+                lua_phase_system
+                    .run_if(state_is_playing)
+                    .in_set(SimSet::PostCollision),
+            );
             fixed.add_systems(
                 animation_controller
                     .after(lua_phase_system)
-                    .after(phase_system),
+                    .in_set(SimSet::PostCollision),
             );
-            fixed.add_systems(update_lua_timers);
-            // Phase 6c (see .claude/context/system-order.md): moved from
-            // VARIABLE to FIXED, uniform with the other 14 non-collision Lua
-            // queues. Enumerated `.after(...)` list (bevy_ecs 0.19 has no
-            // `.after_all()`, same caveat as forward_render_asset_cmds_config
-            // below) rather than a single anchor -- `.after(update_timers)`
-            // alone wouldn't work since update_timers carries no ordering
-            // constraint of its own, so it wouldn't transitively cover the
-            // actual Lua-command producers.
-            fixed.add_systems(
-                process_lua_map_commands
-                    .after(lua_phase_system)
-                    .after(update_lua_timers)
-                    .before(render_system),
-            );
+            fixed.add_systems(update_lua_timers.in_set(SimSet::PostCollision));
+            fixed.add_systems(process_lua_map_commands.in_set(SimSet::Drain));
             fixed.add_systems(
                 crate::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
-                    .after(lua_phase_system)
-                    .after(update_lua_timers),
+                    .in_set(SimSet::Drain),
             );
             // Phase 6d: moved from VARIABLE to FIXED alongside everything
             // else. "Fires the substep after spawn" replaces the old "fires
@@ -1163,11 +1238,11 @@ impl EngineBuilder {
             fixed.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
-                    .after(check_pending_state),
+                    .in_set(SimSet::Drain),
             );
         } else {
-            fixed.add_systems(update_group_counts_system);
-            fixed.add_systems(animation_controller.after(phase_system));
+            fixed.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
+            fixed.add_systems(animation_controller.in_set(SimSet::PostCollision));
         }
 
         #[cfg(not(feature = "lua"))]
@@ -1175,20 +1250,27 @@ impl EngineBuilder {
             // `has_lua` only exists to keep the build_schedules signature uniform
             // across feature combinations.
             let _ = has_lua;
-            fixed.add_systems(update_group_counts_system);
-            fixed.add_systems(animation_controller.after(phase_system));
+            fixed.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
+            fixed.add_systems(animation_controller.in_set(SimSet::PostCollision));
         }
 
-        fixed.add_systems(animation.after(animation_controller));
-        fixed.add_systems(update_timers);
-        fixed.add_systems(update_world_signals_binding_system);
-        fixed.add_systems(dynamictext_size_system.after(update_world_signals_binding_system));
+        fixed.add_systems(animation.in_set(SimSet::Drain));
+        fixed.add_systems(update_timers.in_set(SimSet::Drain));
+        fixed.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
+        fixed.add_systems(
+            dynamictext_size_system
+                .after(update_world_signals_binding_system)
+                .in_set(SimSet::Bookkeeping),
+        );
 
-        // Phase 6d: update_hook/extra_systems (on_update/add_system/
-        // configure_schedule) now target FIXED too -- see those methods' doc
-        // comments for the up-to-8x/frame cadence implication for downstream
-        // Rust games. fixed_update_hook/extra_fixed_systems already targeted
-        // FIXED and are unchanged.
+        // update_hook/extra_systems (on_update/add_system/configure_schedule)
+        // and fixed_update_hook/extra_fixed_systems (add_fixed_system/
+        // configure_fixed_schedule) all target `fixed` -- see those methods'
+        // doc comments for the once-per-sim-tick cadence. Each closure
+        // supplies its own `.in_set(SimSet::X)` (see `on_update`/`add_system`/
+        // `with_lua`'s hook installation for the concrete sets used);
+        // `configure_schedule`/`configure_fixed_schedule` closures are free
+        // to pick any `SimSet` (exported for exactly this).
         if let Some(update_hook) = update_hook {
             update_hook(&mut fixed);
         }
@@ -1215,15 +1297,12 @@ impl EngineBuilder {
         // use_scene_manager), so this and the Lua-direct path never run
         // together.
         if use_scene_manager {
-            fixed.add_systems(
-                scene_update_system
-                    .run_if(state_is_playing)
-                    .after(check_pending_state),
-            );
+            fixed.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
             fixed.add_systems(
                 scene_switch_poll
                     .run_if(state_is_playing)
-                    .after(scene_update_system),
+                    .after(scene_update_system)
+                    .in_set(SimSet::Drain),
             );
         }
 
@@ -1280,7 +1359,7 @@ impl EngineBuilder {
         // benefit -- diffing 8x/frame against state that changes far less
         // often buys nothing, but a cheap diff-and-compare costs nothing
         // either); moved purely for the "everything defaults to FIXED" rule.
-        fixed.add_systems(send_input_bindings_on_change);
+        fixed.add_systems(send_input_bindings_on_change.in_set(SimSet::Bookkeeping));
 
         fixed
             .initialize(world)
@@ -1334,7 +1413,6 @@ impl EngineBuilder {
         let mut quit_requested = false;
         let mut last_screen_size = *world.resource::<ScreenSize>();
         let mut last_overlay_config = world.resource::<DebugOverlayConfig>().clone();
-        let mut last_render_instant = Instant::now();
         // Previous iteration's imgui capture state (Phase 6e) -- updated
         // after the render schedule runs each iteration, read into the NEXT
         // iteration's `LogicMsg::Input` send below. One frame of lag, same
@@ -1353,10 +1431,6 @@ impl EngineBuilder {
             && !quit_requested
             && crate::protocol::shutdown::running()
         {
-            let now = Instant::now();
-            let frame_dt = now.duration_since(last_render_instant).as_secs_f32();
-            last_render_instant = now;
-
             // Refresh WindowSize from the OS before sampling (letterbox math).
             let (window_w, window_h) = {
                 let rl = world.non_send::<raylib::RaylibHandle>();
@@ -1395,7 +1469,6 @@ impl EngineBuilder {
             if tx_logic
                 .send(LogicMsg::Input {
                     snapshot,
-                    frame_dt,
                     window_w,
                     window_h,
                     capture: imgui_capture,
@@ -1507,77 +1580,43 @@ fn logic_thread(init: LogicInit) {
     }
 }
 
-/// Spiral-of-death cap: at most this many fixed substeps run per catch-up.
-/// If a stall needs more, the accumulator keeps the remainder rather than
-/// trying to catch up all at once.
-const MAX_FIXED_STEPS_PER_FRAME: u32 = 8;
+/// Cap on a single sim tick's real dt (Phase 7b): protects against a huge dt
+/// after a debugger pause or long stall producing an unrealistic physics
+/// step (tunneling through colliders, teleporting) on the next tick. The POC
+/// reference implementation leaves this unclamped; this engine clamps it (a
+/// 2026-07-13 decision) since a stall is far more likely in practice than in
+/// the POC's demo loop.
+const DT_CLAMP_SECONDS: f32 = 0.25;
 
-/// Pop up to [`MAX_FIXED_STEPS_PER_FRAME`] whole `FIXED_DT` steps off the
-/// accumulator, returning how many to run. Pure — unit-testable headless.
-fn take_fixed_substeps(accumulator: &mut f32) -> u32 {
-    let mut steps = 0;
-    while *accumulator >= FIXED_DT && steps < MAX_FIXED_STEPS_PER_FRAME {
-        *accumulator -= FIXED_DT;
-        steps += 1;
-    }
-    steps
+/// Run one `sim` schedule tick and clear `InputState`'s one-shot edge flags
+/// (`just_pressed`/`just_released`) afterward, so an edge delivered by the
+/// current tick's input sample is consumed exactly once. `active` (held
+/// state) is left untouched and freely re-readable every tick. Extracted
+/// from `logic_thread_main` so this property stays independently testable
+/// without a real `Pacer`/`Instant` drive.
+fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
+    crate::tracy::tracy_span!("sim_schedule_run");
+    sim.run(world);
+    world.resource_mut::<InputState>().clear_edges();
 }
 
-/// Advance `WorldTime` by the real elapsed time since `last_instant`, add it
-/// to the accumulator, and run the due FIXED substeps (`WorldTime.delta` is
-/// temporarily the scaled `FIXED_DT` during substeps, restored after).
-fn advance_simulation(
-    world: &mut World,
-    fixed: &mut Schedule,
-    accumulator: &mut f32,
-    last_instant: &mut Instant,
-) {
-    let now = Instant::now();
-    let dt = now.duration_since(*last_instant).as_secs_f32();
-    *last_instant = now;
-
-    // Sets elapsed/frame_count and the scaled frame delta; the delta is
-    // temporarily overridden below for each fixed substep.
-    update_world_time(world, dt);
-    let frame_delta = world.resource::<WorldTime>().delta;
-    *accumulator += frame_delta;
-
-    let time_scale = world.resource::<WorldTime>().time_scale;
-    world.resource_mut::<WorldTime>().delta = FIXED_DT * time_scale;
-    run_fixed_substeps(world, fixed, take_fixed_substeps(accumulator));
-    world.resource_mut::<WorldTime>().delta = frame_delta;
-}
-
-/// Run `steps` FIXED substeps, clearing `InputState`'s one-shot edge flags
-/// (`just_pressed`/`just_released`) after each one so an edge set by the
-/// current render frame's input sample is delivered to exactly one substep —
-/// whichever runs first — regardless of how many substeps this frame runs.
-/// `active` (held state) is left untouched and freely re-readable every
-/// substep. A frame with zero due substeps leaves the edge untouched,
-/// carrying it forward to next frame's first substep (nothing was ever "in
-/// flight" to lose). Extracted from `advance_simulation` so it can be
-/// exercised directly in unit tests without needing a real `Instant`/
-/// `WorldTime` elapsed-time drive.
-fn run_fixed_substeps(world: &mut World, fixed: &mut Schedule, steps: u32) {
-    for _ in 0..steps {
-        crate::tracy::tracy_span!("fixed_schedule_run");
-        fixed.run(world);
-        world.resource_mut::<InputState>().clear_edges();
-    }
-}
-
-fn set_present_delta_from_render_frame(world: &mut World, frame_dt: f32) {
-    let time_scale = world.resource::<WorldTime>().time_scale;
-    world.resource_mut::<WorldTime>().delta = frame_dt * time_scale;
-}
-
-/// The logic thread's event-driven loop: build the gameplay world +
-/// schedules, then block on `rx_logic` with a `FIXED_DT` timeout so the
-/// 240Hz simulation stays honest even when the render thread stalls (window
-/// drag, GL hiccups). One `present` pass runs per received input sample; a
-/// backlog of input samples is coalesced edge-preservingly first (see
-/// `merge_input_snapshots`). Non-input messages just update the logic-side
-/// mirrors/stores.
+/// The logic thread's `Pacer`-driven loop (Phase 7b): one `sim` tick per
+/// `Pacer` wakeup at `[simulation] hz`, `dt` the real elapsed time since the
+/// previous tick (clamped to [`DT_CLAMP_SECONDS`], scaled by `time_scale`
+/// inside [`update_world_time`]). Unlike the old
+/// `recv_timeout(FIXED_DT)` + accumulator/substep-cap model, there is no
+/// catch-up: a stall simply produces one larger (clamped) dt on the next
+/// tick rather than several replayed substeps -- strict fixed-step
+/// determinism is consciously dropped on this branch (see
+/// `docs/plans/phase7b-pacing-configurable-frequencies.md`).
+///
+/// One `present` pass runs per received input sample; a backlog of pending
+/// input samples (whenever `sim_hz` trails the render frame rate, or a sim
+/// stall) is coalesced edge-preservingly first (`merge_input_snapshots`).
+/// Non-input messages just update the logic-side mirrors/stores. The sim
+/// still ticks every `Pacer` wakeup even when no input arrived (holding the
+/// configured rate through a render stall), it just skips `present` that
+/// tick.
 fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     let use_scene_manager = !init.scenes.is_empty();
     #[cfg(feature = "lua")]
@@ -1585,11 +1624,13 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     #[cfg(not(feature = "lua"))]
     let has_lua = false;
 
+    let sim_hz = init.config.sim_hz;
+
     let mut world = EngineBuilder::setup_logic_world(&init)?;
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
     EngineBuilder::spawn_observers(&mut world, has_lua, std::mem::take(&mut init.extra_observers));
 
-    let (mut fixed, mut present) = EngineBuilder::build_logic_schedules(
+    let (mut sim, mut present) = EngineBuilder::build_logic_schedules(
         init.update_hook.take(),
         init.fixed_update_hook.take(),
         std::mem::take(&mut init.extra_systems),
@@ -1599,7 +1640,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         use_scene_manager,
     )?;
 
-    // Built once and reused (mirrors `fixed`/`present`) rather than
+    // Built once and reused (mirrors `sim`/`present`) rather than
     // `world.run_system_once(apply_input_snapshot)`, which would build and
     // initialize a fresh temporary system on every call.
     let mut input_schedule = Schedule::default();
@@ -1609,121 +1650,110 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         .map_err(|err| format!("Failed to initialize input schedule: {err}"))?;
 
     let rx_logic = init.rx_logic;
-    let mut accumulator: f32 = 0.0;
-    let mut last_instant = Instant::now();
-    let recv_timeout = Duration::from_secs_f32(FIXED_DT);
+    let mut pacer = Pacer::new(sim_hz);
 
     'main: loop {
         if !crate::protocol::shutdown::running() {
             break 'main;
         }
-        match rx_logic.recv_timeout(recv_timeout) {
-            Ok(first) => {
-                // Coalesce the whole pending backlog before advancing the
-                // sim. Input samples merge edge-preservingly into ONE
-                // snapshot (never a snapshot a previous pass already
-                // consumed — that would double-fire edges); the other
-                // message kinds apply to their mirrors immediately.
-                let mut pending_input: Option<(RawInputSnapshot, f32, i32, i32, ImguiCaptureState)> =
-                    None;
-                let mut shutdown_requested = false;
-                for msg in std::iter::once(first).chain(rx_logic.try_iter()) {
-                    match msg {
-                        LogicMsg::Input {
-                            snapshot,
-                            frame_dt,
-                            window_w,
-                            window_h,
-                            capture,
-                        } => match &mut pending_input {
-                            Some((merged, dt, w, h, cap)) => {
-                                merge_input_snapshots(merged, &snapshot);
-                                *dt = frame_dt;
-                                *w = window_w;
-                                *h = window_h;
-                                *cap = capture;
-                            }
-                            None => {
-                                pending_input =
-                                    Some((snapshot, frame_dt, window_w, window_h, capture))
-                            }
-                        },
-                        LogicMsg::ScreenSize { w, h } => {
-                            let mut screen_size = world.resource_mut::<ScreenSize>();
-                            screen_size.w = w;
-                            screen_size.h = h;
-                        }
-                        LogicMsg::FontLoaded { key, metrics } => {
-                            world
-                                .resource_mut::<FontMetricsStore>()
-                                .0
-                                .insert(key, metrics);
-                        }
-                        LogicMsg::TextureLoaded { key, width, height } => {
-                            world
-                                .resource_mut::<TextureDimsStore>()
-                                .insert(key, width, height);
-                        }
-                        LogicMsg::OverlayConfig(config) => {
-                            *world.resource_mut::<DebugOverlayConfig>() = config;
-                        }
-                        LogicMsg::SignalIntents(intents) => {
-                            world.resource_mut::<SignalIntents>().0.extend(intents);
-                        }
-                        LogicMsg::Shutdown => shutdown_requested = true,
-                    }
-                }
+        let dt = pacer.tick().min(DT_CLAMP_SECONDS);
 
-                if shutdown_requested {
-                    // Mirrors the pre-split behavior of exiting immediately on
-                    // Shutdown (no FIXED/present work runs after it) — the
-                    // messages loop above already applied everything in this
-                    // batch to its resource, including any SignalIntents, so
-                    // flush those into WorldSignals directly instead of
-                    // running a full (now-pointless) simulation pass just to
-                    // reach apply_signal_intents inside FIXED.
-                    let _ = world.run_system_once(apply_signal_intents);
-                    break 'main;
-                }
-
-                if let Some((snapshot, frame_dt, window_w, window_h, capture)) = pending_input {
-                    {
-                        let mut window_size = world.resource_mut::<WindowSize>();
-                        window_size.w = window_w;
-                        window_size.h = window_h;
+        // Drain everything currently queued (non-blocking -- the Pacer
+        // already did the waiting). Coalesce the whole pending backlog
+        // before ticking the sim: input samples merge edge-preservingly
+        // into ONE snapshot (never a snapshot a previous tick already
+        // consumed -- that would double-fire edges); the other message
+        // kinds apply to their mirrors immediately.
+        let mut pending_input: Option<(RawInputSnapshot, i32, i32, ImguiCaptureState)> = None;
+        let mut shutdown_requested = false;
+        for msg in rx_logic.try_iter() {
+            match msg {
+                LogicMsg::Input {
+                    snapshot,
+                    window_w,
+                    window_h,
+                    capture,
+                    ..
+                } => match &mut pending_input {
+                    Some((merged, w, h, cap)) => {
+                        merge_input_snapshots(merged, &snapshot);
+                        *w = window_w;
+                        *h = window_h;
+                        *cap = capture;
                     }
-                    world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
-                    world.resource_mut::<ImguiCaptureMirror>().0 = capture;
-                    // Same per-frame order as the pre-split loop: apply input
-                    // (InputState + events) BEFORE the fixed substeps that
-                    // read it, then one `present` pass.
-                    input_schedule.run(&mut world);
-                    advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
-                    // `present` (just build_drawable_snapshot/send_drawable_snapshot/
-                    // forward_render_asset_cmds since Phase 6d) should see the
-                    // render-frame delta that produced this input sample, not the
-                    // most recent 240 Hz logic-thread wakeup delta from
-                    // advance_simulation() -- it's captured into the snapshot for
-                    // render-side use (shader time uniforms, perf panel).
-                    set_present_delta_from_render_frame(&mut world, frame_dt);
-                    {
-                        crate::tracy::tracy_span!("present_schedule_run");
-                        present.run(&mut world);
-                    }
-                } else {
-                    // Mirror/store updates only — no new input, so no `present`
-                    // pass; still run due FIXED substeps to hold 240Hz.
-                    advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
+                    None => pending_input = Some((snapshot, window_w, window_h, capture)),
+                },
+                LogicMsg::ScreenSize { w, h } => {
+                    let mut screen_size = world.resource_mut::<ScreenSize>();
+                    screen_size.w = w;
+                    screen_size.h = h;
                 }
+                LogicMsg::FontLoaded { key, metrics } => {
+                    world
+                        .resource_mut::<FontMetricsStore>()
+                        .0
+                        .insert(key, metrics);
+                }
+                LogicMsg::TextureLoaded { key, width, height } => {
+                    world
+                        .resource_mut::<TextureDimsStore>()
+                        .insert(key, width, height);
+                }
+                LogicMsg::OverlayConfig(config) => {
+                    *world.resource_mut::<DebugOverlayConfig>() = config;
+                }
+                LogicMsg::SignalIntents(intents) => {
+                    world.resource_mut::<SignalIntents>().0.extend(intents);
+                }
+                LogicMsg::Shutdown => shutdown_requested = true,
             }
-            Err(RecvTimeoutError::Timeout) => {
-                // Render is stalled (window drag, etc.): the simulation keeps
-                // ticking at 240Hz; Lua on_update pauses until input flows
-                // again (documented design intent).
-                advance_simulation(&mut world, &mut fixed, &mut accumulator, &mut last_instant);
-            }
-            Err(RecvTimeoutError::Disconnected) => break,
         }
+
+        if shutdown_requested {
+            // Mirrors the pre-7b behavior of exiting immediately on
+            // Shutdown (no sim/present work runs after it) — the messages
+            // loop above already applied everything in this batch to its
+            // resource, including any SignalIntents, so flush those into
+            // WorldSignals directly instead of running a full
+            // (now-pointless) simulation tick just to reach
+            // apply_signal_intents inside `sim`.
+            let _ = world.run_system_once(apply_signal_intents);
+            break 'main;
+        }
+
+        if crate::pacing::channel_disconnected(&rx_logic) {
+            break 'main;
+        }
+
+        let got_input = pending_input.is_some();
+        if let Some((snapshot, window_w, window_h, capture)) = pending_input {
+            {
+                let mut window_size = world.resource_mut::<WindowSize>();
+                window_size.w = window_w;
+                window_size.h = window_h;
+            }
+            world.resource_mut::<LatestInputSnapshot>().0 = snapshot;
+            world.resource_mut::<ImguiCaptureMirror>().0 = capture;
+            // Apply input (InputState + events) BEFORE the sim tick that
+            // reads it, same order as before Phase 7b.
+            input_schedule.run(&mut world);
+        }
+
+        // The sim ticks every Pacer wakeup regardless of whether new input
+        // arrived this tick, holding the configured `sim_hz` through a
+        // render stall (mirrors the old "Timeout => run FIXED only" arm).
+        update_world_time(&mut world, dt);
+        run_sim_tick(&mut world, &mut sim);
+
+        if got_input {
+            // `present` sees the same real dt this tick measured (no
+            // separate render-frame-delta override anymore) -- captured
+            // into the snapshot for render-side use (shader time uniforms,
+            // perf panel).
+            crate::tracy::tracy_span!("present_schedule_run");
+            present.run(&mut world);
+        }
+
         world.clear_trackers();
     }
 
@@ -1865,45 +1895,13 @@ mod tests {
     fn dummy_update() {}
     fn dummy_switch_scene() {}
 
-    // --- Phase 5e: fixed-substep accumulator math (pure helper) ---
-
-    #[test]
-    fn take_fixed_substeps_zero_when_below_one_step() {
-        let mut accumulator = FIXED_DT * 0.5;
-        assert_eq!(take_fixed_substeps(&mut accumulator), 0);
-        assert!((accumulator - FIXED_DT * 0.5).abs() < 1e-9);
-    }
-
-    #[test]
-    fn take_fixed_substeps_pops_whole_steps_and_keeps_remainder() {
-        let mut accumulator = FIXED_DT * 3.25;
-        assert_eq!(take_fixed_substeps(&mut accumulator), 3);
-        assert!(
-            (accumulator - FIXED_DT * 0.25).abs() < 1e-6,
-            "remainder should be kept, got {accumulator}"
-        );
-    }
-
-    #[test]
-    fn take_fixed_substeps_caps_at_max_and_keeps_backlog() {
-        // A long stall: 20 steps' worth of time must not run 20 substeps.
-        let mut accumulator = FIXED_DT * 20.0;
-        assert_eq!(take_fixed_substeps(&mut accumulator), MAX_FIXED_STEPS_PER_FRAME);
-        // The undrained backlog stays (not reset to zero) so catch-up
-        // continues over the next iterations.
-        assert!(
-            (accumulator - FIXED_DT * 12.0).abs() < 1e-4,
-            "backlog should remain, got {accumulator}"
-        );
-        assert_eq!(take_fixed_substeps(&mut accumulator), MAX_FIXED_STEPS_PER_FRAME);
-        // Third call fully drains the backlog (3 or 4 steps depending on f32
-        // rounding of 20*FIXED_DT), leaving less than one step behind.
-        let final_steps = take_fixed_substeps(&mut accumulator);
-        assert!((3..=4).contains(&final_steps), "got {final_steps}");
-        assert!(accumulator < FIXED_DT);
-    }
-
-    // --- Phase 6a: input edge-latch (run_fixed_substeps) ---
+    // --- Phase 7b: input edge-latch (run_sim_tick) ---
+    //
+    // The old accumulator/substep-cap tests (`take_fixed_substeps_*`,
+    // `run_fixed_substeps_*` across 0/1/8 substeps) are gone with the
+    // machinery they exercised -- Phase 7b's paced loop runs exactly one
+    // `sim` tick per `Pacer` wakeup, so "fires exactly once regardless of
+    // batch size" collapses to "fires exactly once", covered below.
 
     /// Counts how many times `InputState.action_1`/`mouse_left_button` were
     /// observed with an edge set, for asserting "fires exactly once".
@@ -1937,55 +1935,38 @@ mod tests {
     }
 
     #[test]
-    fn run_fixed_substeps_fires_edge_exactly_once_regardless_of_step_count() {
+    fn run_sim_tick_fires_edge_exactly_once_and_clears_it() {
         // Covers both action_1 (rebindable digital input) and mouse_left_button
         // (raw, non-rebindable) in one pass -- clear_edges() treats every
         // digital field identically, so exercising two of them together is
         // enough to confirm the mechanism isn't field-specific.
-        for steps in [0u32, 1, 8] {
-            let (mut world, mut schedule) = build_edge_test_world();
-            {
-                let mut input = world.resource_mut::<InputState>();
-                input.action_1.active = true;
-                input.action_1.just_pressed = true;
-                input.mouse_left_button.active = true;
-                input.mouse_left_button.just_pressed = true;
-            }
-
-            run_fixed_substeps(&mut world, &mut schedule, steps);
-
-            let counts = world.resource::<EdgeFireCounts>();
-            let expected = if steps == 0 { 0 } else { 1 };
-            assert_eq!(
-                counts.action_1_pressed, expected,
-                "steps={steps}: edge must fire exactly once when any substep runs, zero when none do"
-            );
-            assert_eq!(counts.mouse_pressed, expected, "steps={steps}: mouse edge");
-
-            let input = world.resource::<InputState>();
-            assert!(
-                input.action_1.active,
-                "steps={steps}: active/held state must never be cleared"
-            );
-            assert!(input.mouse_left_button.active, "steps={steps}: mouse active must be untouched");
-            if steps == 0 {
-                assert!(
-                    input.action_1.just_pressed,
-                    "steps=0: edge must be carried forward untouched, not dropped"
-                );
-                assert!(input.mouse_left_button.just_pressed, "steps=0: mouse edge carried forward");
-            } else {
-                assert!(
-                    !input.action_1.just_pressed,
-                    "steps={steps}: edge must be consumed (cleared) after the first substep sees it"
-                );
-                assert!(!input.mouse_left_button.just_pressed, "steps={steps}: mouse edge consumed");
-            }
+        let (mut world, mut schedule) = build_edge_test_world();
+        {
+            let mut input = world.resource_mut::<InputState>();
+            input.action_1.active = true;
+            input.action_1.just_pressed = true;
+            input.mouse_left_button.active = true;
+            input.mouse_left_button.just_pressed = true;
         }
+
+        run_sim_tick(&mut world, &mut schedule);
+
+        let counts = world.resource::<EdgeFireCounts>();
+        assert_eq!(counts.action_1_pressed, 1, "edge must fire exactly once");
+        assert_eq!(counts.mouse_pressed, 1, "mouse edge must fire exactly once");
+
+        let input = world.resource::<InputState>();
+        assert!(input.action_1.active, "active/held state must never be cleared");
+        assert!(input.mouse_left_button.active, "mouse active must be untouched");
+        assert!(
+            !input.action_1.just_pressed,
+            "edge must be consumed (cleared) after the tick sees it"
+        );
+        assert!(!input.mouse_left_button.just_pressed, "mouse edge consumed");
     }
 
     #[test]
-    fn run_fixed_substeps_delivers_press_and_release_in_same_sample() {
+    fn run_sim_tick_delivers_press_and_release_in_same_sample() {
         let (mut world, mut schedule) = build_edge_test_world();
         {
             // A fast tap within one render frame: both edges present at once.
@@ -1994,7 +1975,7 @@ mod tests {
             input.action_1.just_released = true;
         }
 
-        run_fixed_substeps(&mut world, &mut schedule, 8);
+        run_sim_tick(&mut world, &mut schedule);
 
         let counts = world.resource::<EdgeFireCounts>();
         assert_eq!(counts.action_1_pressed, 1, "press edge must fire exactly once");
@@ -2028,7 +2009,6 @@ mod tests {
         tx_logic
             .send(LogicMsg::Input {
                 snapshot,
-                frame_dt: 1.0 / 60.0,
                 window_w: 800,
                 window_h: 600,
                 capture: ImguiCaptureState::default(),
@@ -2052,21 +2032,6 @@ mod tests {
         assert!(builder.enter_play_hook.is_some());
         assert!(builder.update_hook.is_some());
         assert!(builder.switch_scene_hook.is_some());
-    }
-
-    #[test]
-    fn present_delta_uses_render_frame_dt() {
-        let mut world = World::new();
-        world.insert_resource(WorldTime {
-            elapsed: 0.0,
-            delta: FIXED_DT,
-            time_scale: 1.5,
-            frame_count: 0,
-        });
-
-        set_present_delta_from_render_frame(&mut world, 1.0 / 60.0);
-
-        assert!((world.resource::<WorldTime>().delta - (1.0 / 40.0)).abs() < 1e-6);
     }
 
     #[test]

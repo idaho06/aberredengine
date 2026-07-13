@@ -23,17 +23,17 @@ use crate::resources::signal_intents::SignalIntent;
 #[derive(Debug, Clone)]
 pub enum LogicMsg {
     /// One raw input sample per render frame. Carries the current OS window
-    /// dimensions plus that render frame's real delta so the logic world's
-    /// `WindowSize` mirror stays fresh and the `PRESENT` schedule can observe
-    /// the same frame delta the render loop just measured. `capture` is the
-    /// PREVIOUS render frame's imgui capture state (`ImguiBridge::render`
-    /// runs after this message is sent each frame, so it's one frame behind,
-    /// same latency class as `SignalIntents` -- Phase 6e); used by
-    /// `apply_input_snapshot` to mask gameplay input while the debug overlay
-    /// has focus.
+    /// dimensions so the logic world's `WindowSize` mirror stays fresh.
+    /// `capture` is the PREVIOUS render frame's imgui capture state
+    /// (`ImguiBridge::render` runs after this message is sent each frame, so
+    /// it's one frame behind, same latency class as `SignalIntents` -- Phase
+    /// 6e); used by `apply_input_snapshot` to mask gameplay input while the
+    /// debug overlay has focus. Phase 7b removed the `frame_dt` field this
+    /// carried through Phase 6d/6e -- the `present` schedule now sees
+    /// whatever real dt the sim's own `Pacer` measured for that tick,
+    /// there's no separate render-frame-delta override anymore.
     Input {
         snapshot: RawInputSnapshot,
-        frame_dt: f32,
         window_w: i32,
         window_h: i32,
         capture: ImguiCaptureState,
@@ -61,8 +61,9 @@ pub enum LogicMsg {
     OverlayConfig(DebugOverlayConfig),
     /// `SignalIntents` drained from the render world after `render_system`
     /// each frame (queued by `GuiCallback`, Phase 5d); applied to
-    /// `WorldSignals` by `apply_signal_intents` at the top of the next logic
-    /// FIXED substep (Phase 6d; was "the next VARIABLE pass" pre-6d).
+    /// `WorldSignals` by `apply_signal_intents` at the top of the next sim
+    /// tick (Phase 7b; was "the next FIXED substep" through Phase 6d, and
+    /// "the next VARIABLE pass" pre-6d).
     SignalIntents(Vec<SignalIntent>),
     /// The window is closing; the logic thread breaks its loop, shuts down
     /// audio, and joins.

@@ -18,11 +18,17 @@
 //! vsync = true
 //! target_fps = 120
 //! title = Aberred Engine
+//!
+//! [simulation]
+//! hz = 240
+//!
+//! [audio]
+//! hz = 100
 //! ```
 
 use bevy_ecs::prelude::*;
 use configparser::ini::Ini;
-use log::{debug, info};
+use log::{debug, info, warn};
 use raylib::prelude::Color;
 use std::path::PathBuf;
 
@@ -40,6 +46,14 @@ const DEFAULT_PIXEL_SNAP_CAMERA: bool = true;
 const DEFAULT_BACKGROUND_COLOR: Color = Color::new(80, 80, 80, 255);
 const DEFAULT_CONFIG_PATH: &str = "./config.ini";
 const DEFAULT_WINDOW_TITLE: &str = "Aberred Engine";
+/// Matches the old FIXED_DT constant (1/240s) this replaces (Phase 7b).
+const DEFAULT_SIM_HZ: f64 = 240.0;
+/// Matches the old STREAM_PUMP_INTERVAL (10ms) this replaces (Phase 7b).
+const DEFAULT_AUDIO_HZ: f64 = 100.0;
+/// Sim/audio tick rate clamp range (Phase 7b): below 15Hz gameplay feels
+/// broken, above 1000Hz is almost certainly a config typo.
+const MIN_TICK_HZ: f64 = 15.0;
+const MAX_TICK_HZ: f64 = 1000.0;
 
 /// Game configuration resource.
 ///
@@ -82,6 +96,28 @@ pub struct GameConfig {
     pub window_title: String,
     /// Path to the configuration file.
     pub config_path: PathBuf,
+    /// Game/sim thread tick rate in Hz (`[simulation] hz`, default `240.0`).
+    ///
+    /// Read once at startup by the logic thread's `Pacer` (Phase 7b) — a
+    /// runtime *change* to this field after startup has no effect, since the
+    /// thread loop constructs its `Pacer` before entering its loop.
+    pub sim_hz: f64,
+    /// Audio thread tick rate in Hz (`[audio] hz`, default `100.0`).
+    ///
+    /// Read once at startup by the audio thread's `Pacer` (Phase 7b) — same
+    /// startup-only caveat as [`sim_hz`](Self::sim_hz).
+    pub audio_hz: f64,
+}
+
+/// Clamp a parsed `[simulation] hz` / `[audio] hz` value to
+/// `MIN_TICK_HZ..=MAX_TICK_HZ`, warning (and keeping the clamped value,
+/// rather than rejecting the whole config load) when out of range.
+fn clamp_tick_hz(hz: f64, field: &str) -> f64 {
+    let clamped = hz.clamp(MIN_TICK_HZ, MAX_TICK_HZ);
+    if clamped != hz {
+        warn!("{field} = {hz} out of range [{MIN_TICK_HZ}, {MAX_TICK_HZ}]; clamped to {clamped}");
+    }
+    clamped
 }
 
 impl Default for GameConfig {
@@ -106,6 +142,8 @@ impl GameConfig {
             background_color: DEFAULT_BACKGROUND_COLOR,
             window_title: DEFAULT_WINDOW_TITLE.to_string(),
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
+            sim_hz: DEFAULT_SIM_HZ,
+            audio_hz: DEFAULT_AUDIO_HZ,
         }
     }
 
@@ -186,8 +224,14 @@ impl GameConfig {
         if let Some(title) = config.get("window", "title") {
             self.window_title = title;
         }
+        if let Some(hz) = config.getfloat("simulation", "hz").ok().flatten() {
+            self.sim_hz = clamp_tick_hz(hz, "simulation.hz");
+        }
+        if let Some(hz) = config.getfloat("audio", "hz").ok().flatten() {
+            self.audio_hz = clamp_tick_hz(hz, "audio.hz");
+        }
         info!(
-            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}",
+            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}",
             self.render_width,
             self.render_height,
             self.window_width,
@@ -195,7 +239,9 @@ impl GameConfig {
             self.target_fps,
             self.vsync,
             self.fullscreen,
-            self.window_title
+            self.window_title,
+            self.sim_hz,
+            self.audio_hz
         );
     }
 
@@ -375,6 +421,53 @@ mod tests {
         assert!(config.load_from_str("[window]\ntarget_fps = 45\n").is_ok());
         assert_eq!(config.target_fps, 45);
         assert_eq!(config.render_width, DEFAULT_RENDER_WIDTH);
+    }
+
+    #[test]
+    fn test_new_defaults_sim_and_audio_hz() {
+        let config = GameConfig::new();
+        assert_eq!(config.sim_hz, DEFAULT_SIM_HZ);
+        assert_eq!(config.audio_hz, DEFAULT_AUDIO_HZ);
+    }
+
+    #[test]
+    fn test_load_sim_and_audio_hz_from_str() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[simulation]\nhz = 120\n\n[audio]\nhz = 50\n")
+            .unwrap();
+        assert_eq!(config.sim_hz, 120.0);
+        assert_eq!(config.audio_hz, 50.0);
+    }
+
+    #[test]
+    fn test_sim_and_audio_hz_missing_keep_defaults() {
+        let mut config = GameConfig::new();
+        config.load_from_str("[render]\nwidth = 800\n").unwrap();
+        assert_eq!(config.sim_hz, DEFAULT_SIM_HZ);
+        assert_eq!(config.audio_hz, DEFAULT_AUDIO_HZ);
+    }
+
+    #[test]
+    fn test_sim_hz_out_of_range_is_clamped() {
+        let mut config = GameConfig::new();
+        config.load_from_str("[simulation]\nhz = 5\n").unwrap();
+        assert_eq!(config.sim_hz, MIN_TICK_HZ);
+
+        let mut config = GameConfig::new();
+        config.load_from_str("[simulation]\nhz = 5000\n").unwrap();
+        assert_eq!(config.sim_hz, MAX_TICK_HZ);
+    }
+
+    #[test]
+    fn test_audio_hz_out_of_range_is_clamped() {
+        let mut config = GameConfig::new();
+        config.load_from_str("[audio]\nhz = 0\n").unwrap();
+        assert_eq!(config.audio_hz, MIN_TICK_HZ);
+
+        let mut config = GameConfig::new();
+        config.load_from_str("[audio]\nhz = 100000\n").unwrap();
+        assert_eq!(config.audio_hz, MAX_TICK_HZ);
     }
 
     #[test]

@@ -16,6 +16,7 @@ pub mod protocol;
 pub mod lua_plugin;
 #[cfg(feature = "lua")]
 pub mod luarc_generator;
+pub(crate) mod pacing;
 pub mod resources;
 #[cfg(feature = "lua")]
 pub mod stub_generator;
