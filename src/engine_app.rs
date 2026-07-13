@@ -226,8 +226,11 @@ pub enum SimSet {
     /// `forward_audio_cmds` -> `poll_audio_messages` ->
     /// `update_bevy_audio_messages`, kept as an explicit `.chain()`).
     AudioPump,
-    /// Lua `on_update_<scene>` / `fixed_update_hook`, and downstream
-    /// `on_update`/`add_system`/`add_fixed_system` hooks.
+    /// User `on_update`/`add_system`/`add_fixed_system` hooks. Lua's
+    /// `on_update_<scene>` no longer lives here -- it's dispatched from
+    /// `lua_plugin::update` in `SimSet::Bookkeeping` instead, restoring the
+    /// pre-thread-split engine's ordering (after camera-follow/collision, not
+    /// before).
     ScriptUpdate,
     /// Input-driven force/velocity controllers.
     Controllers,
@@ -549,30 +552,16 @@ impl EngineBuilder {
             register_persistent_system(world, store, "enter_play", lua_plugin::enter_play);
         }));
         // lua_plugin::update runs once per sim tick, in SimSet::Bookkeeping
-        // (last among the engine's own groups) -- see lua_plugin::update's
-        // own doc comment for why and for the mid-tick scene-switch
-        // consequence. Its old .after() chain (check_pending_state,
-        // lua_plugin::fixed_update, lua_phase_system, update_lua_timers,
-        // process_lua_map_commands, process_lua_asset_commands) is now
-        // implied by SimSet ordering (Phase 7b Step 0).
+        // (last among the engine's own groups) -- this is also where
+        // on_update_<scene> itself is dispatched now, restoring the
+        // pre-thread-split engine's explicit `.after(camera_follow_system)`
+        // guarantee (see lua_plugin::update's own doc comment for the full
+        // rationale and the mid-tick scene-switch consequence).
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
                     .run_if(state_is_playing)
                     .in_set(SimSet::Bookkeeping),
-            );
-        }));
-        // lua_plugin::fixed_update runs once per sim tick, in
-        // SimSet::ScriptUpdate (before movement/collision) -- see
-        // lua_plugin::fixed_update's doc comment and
-        // docs/render-simulation-separation-brainstorm.md for why
-        // tick-synchronized Lua logic (e.g. clearing collision-derived
-        // flags) needs this instead of on_update_<scene>.
-        self.fixed_update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(
-                lua_plugin::fixed_update
-                    .run_if(state_is_playing)
-                    .in_set(SimSet::ScriptUpdate),
             );
         }));
         self.switch_scene_hook = Some(Box::new(|world, store| {
@@ -1150,11 +1139,12 @@ impl EngineBuilder {
 
         // --- FIXED: signal intents + state bookkeeping, one-shot spawns ---
         // apply_signal_intents runs first, before everything else this
-        // substep (in particular before fixed_update/on_update_<scene>,
-        // both ScriptUpdate): intents queued by the render thread's
-        // GuiCallback (inside render_system) each frame must be visible to
-        // this substep's scene logic (Phase 5d). The ordering is now implied
-        // by SimSet::ApplyIntents preceding every later group in the chain.
+        // tick (in particular before on_update_<scene>, dispatched from
+        // lua_plugin::update in SimSet::Bookkeeping): intents queued by the
+        // render thread's GuiCallback (inside render_system) each frame must
+        // be visible to this tick's scene logic (Phase 5d). The ordering is
+        // now implied by SimSet::ApplyIntents preceding every later group in
+        // the chain.
         fixed.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
         fixed.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
         fixed.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
@@ -1252,11 +1242,26 @@ impl EngineBuilder {
                     .in_set(SimSet::PostCollision),
             );
             fixed.add_systems(update_lua_timers.in_set(SimSet::PostCollision));
-            fixed.add_systems(process_lua_map_commands.in_set(SimSet::Drain));
+            // Mirrors the pre-thread-split engine's explicit
+            // `.after(lua_plugin::update)` constraint on both systems: a
+            // queued map/asset load is drained after on_update_<scene> has
+            // had a chance to queue it this same tick, not before.
+            // `.before(update_bevy_render_asset_cmds)` keeps a same-tick map
+            // load's RenderAssetCmd forwarded to the render thread this same
+            // tick rather than lagging one tick (both now share
+            // SimSet::Bookkeeping, so this ordering needs an explicit edge).
+            fixed.add_systems(
+                process_lua_map_commands
+                    .after(crate::lua_plugin::update)
+                    .before(update_bevy_render_asset_cmds)
+                    .in_set(SimSet::Bookkeeping),
+            );
             fixed.add_systems(
                 crate::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
-                    .in_set(SimSet::Drain),
+                    .after(crate::lua_plugin::update)
+                    .before(update_bevy_render_asset_cmds)
+                    .in_set(SimSet::Bookkeeping),
             );
             // Phase 6d: moved from VARIABLE to FIXED alongside everything
             // else. "Fires the substep after spawn" replaces the old "fires
@@ -1341,12 +1346,15 @@ impl EngineBuilder {
         // independent of the now-decimated `present`/snapshot-publish rate
         // (see `logic_thread_main`'s doc comment) -- a tick's asset loads
         // must not sit queued for several ticks waiting for the next
-        // publish. `.after(update_bevy_render_asset_cmds)` is now a REAL
+        // publish. `.after(update_bevy_render_asset_cmds)` is a REAL
         // same-schedule edge (both land in `SimSet::Bookkeeping`); ordering
-        // relative to menu/tilemap spawning and the Lua asset/map command
-        // drains (all in earlier `SimSet`s) is guaranteed by the
-        // `configure_sets((...).chain())` pipeline itself -- no per-system
-        // edge needed for those anymore.
+        // relative to menu/tilemap spawning (earlier `SimSet`s, via the
+        // `configure_sets((...).chain())` pipeline) is implicit, but the Lua
+        // asset/map command drains now share this same `SimSet` too (moved
+        // here to run `.after(lua_plugin::update)`, restoring old-engine
+        // ordering) and need their own explicit
+        // `.before(update_bevy_render_asset_cmds)` edge so a same-tick load
+        // still forwards this tick instead of lagging one.
         fixed.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
         fixed.add_systems(
             forward_render_asset_cmds

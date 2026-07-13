@@ -5,7 +5,7 @@
 //! - [`setup`] – calls `on_setup` in Lua to queue asset loads, then drains them into stores
 //! - [`enter_play`] – calls `on_enter_play`, processes initial signals/groups, triggers first scene switch
 //! - [`switch_scene`] – despawns non-persistent entities, calls `on_switch_scene`, drains all command queues
-//! - [`update`] – refreshes Lua caches, drains command queues, handles quit/scene-switch flags (Phase 6b: `on_update_<scene>` itself now runs from [`fixed_update`])
+//! - [`update`] – refreshes Lua caches, calls `on_update_<scene>`, drains command queues, handles quit/scene-switch flags
 //!
 //! # SystemParam Bundles
 //!
@@ -319,7 +319,7 @@ fn drain_common_commands(
 /// Refreshes `cached` to `"on_update_{scene}"`, but only rebuilds it when it
 /// doesn't already match -- avoids reallocating/rewriting the cached callback
 /// name on every call when the scene hasn't changed since the last one.
-/// [`fixed_update`]'s only caller, since Phase 6b.
+/// [`update`]'s only caller.
 fn refresh_cached_callback_name(cached: &mut String, scene: &str) {
     const PREFIX: &str = "on_update_";
     if cached.get(PREFIX.len()..) != Some(scene) {
@@ -329,11 +329,10 @@ fn refresh_cached_callback_name(cached: &mut String, scene: &str) {
     }
 }
 
-/// Builds the Lua input table for this substep from `input`, logging and
-/// returning `None` on failure. Called once per FIXED substep by
-/// [`fixed_update`] (its only caller since Phase 6b) -- the `(frame_count,
-/// InputSnapshot)` diff-guard inside `update_input_table` makes repeated
-/// calls across substeps within the same wakeup no-ops.
+/// Builds the Lua input table for this tick from `input`, logging and
+/// returning `None` on failure. Called once per sim tick by [`update`] (its
+/// only caller) -- the `(frame_count, InputSnapshot)` diff-guard inside
+/// `update_input_table` makes repeated calls within the same tick no-ops.
 fn resolve_input_table(
     lua_runtime: &LuaRuntime,
     input: &InputState,
@@ -349,63 +348,51 @@ fn resolve_input_table(
     }
 }
 
-/// Per-sim-tick update system for scene gameplay logic: calls
-/// `on_update_<scene>` once per sim tick (Phase 7b: `[simulation] hz`,
-/// real-dt, no more fixed-substep accumulator), then drains common command
-/// queues.
+/// Per-sim-tick update system for scene gameplay logic: refreshes Lua caches,
+/// calls `on_update_<scene>` once per sim tick, drains common command queues,
+/// then reacts to flags Lua may have set ("switch_scene", "quit_game").
 ///
-/// Since Phase 6b this is the *only* place `on_update_<scene>` is invoked --
-/// the old `on_fixed_update_<scene>`/[`update`]-callback split existed only
-/// because edge-triggered input wasn't safe to read from every tick;
-/// Phase 6a's edge-latch fix (`InputState::clear_edges`) removed that
-/// constraint. `dt` is the real elapsed time since the previous sim tick
-/// (clamped, scaled by `time_scale`) -- no longer a constant -- and
-/// "continuous while held" logic fires once per sim tick, which can still be
-/// faster than the render frame rate; every shipped scene script was checked
-/// for both effects
-/// (`docs/plans/phase6b-callback-merge.md`); all were safe as-is except
-/// `bunnymark/{screen,map}_loop.lua`, whose held-spawn loops now spawn up to
-/// 8x as fast while the mouse button is held -- left unmitigated, a
-/// deliberate/disclosed tradeoff for a stress-test scene, not an oversight
-/// (see `docs/render-logic-simplification-brainstorm.md`). A missing callback now warns
-/// rather than skipping silently, since forgetting `on_update_<scene>`
-/// entirely is an authoring error worth flagging -- deduped by name (at most
-/// once per distinct missing callback, not once per substep) since this site
-/// runs up to 8x/frame, unlike every other [`LuaRuntime::call_named`] caller.
+/// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
+/// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
+/// already updated `Camera2DRes` for this tick) and after `Collision`/
+/// `PostCollision` (so `collision_detector`/`lua_phase_system` have already
+/// run). This restores the ordering guarantee the pre-thread-split engine
+/// had via an explicit `.after(camera_follow_system)` constraint on its
+/// single `lua_plugin::update` ("ensures Lua reads current-frame camera
+/// state") -- scene logic that reads `engine.get_camera()`/
+/// `get_camera_view_rect()` (e.g. parallax pinning) sees this tick's fresh
+/// camera, not a stale one.
 ///
-/// Logic that must be re-evaluated every substep to stay consistent with
-/// collision -- e.g. clearing collision-derived flags (`on_ground`,
-/// `touching_wall_*`) right before `collision_detector` re-derives them this
-/// same substep -- belongs here now rather than in a separate callback;
-/// clearing them only once per render frame would leave them stale for
-/// however many FIXED substeps run before the next render frame, which can
-/// cause a phase to transition and immediately revert within the same frame
-/// (see `docs/render-simulation-separation-brainstorm.md`).
+/// Collision-derived flags (`on_ground`, `touching_wall_*`) are cleared here
+/// too, since `collision_detector` only ever *sets* them on overlap and never
+/// clears them -- something has to reset them exactly once per tick, or a
+/// flag would survive after the corresponding overlap ends. Clearing here
+/// (after this tick's `collision_detector`/`lua_phase_system` have already
+/// consumed the fresh flags) is equivalent to clearing before next tick's
+/// `collision_detector` runs: nothing between here and then reads these
+/// flags, so "before this tick's detection" and "after this tick's
+/// consumption, before next tick's detection" describe the same window.
 ///
-/// Refreshes the camera cache every substep -- scene logic that reads
-/// `engine.get_camera()`/`get_camera_view_rect()` (e.g. parallax pinning)
-/// needs a same-substep-fresh camera, not a stale snapshot.
-///
-/// **Scene-switch guard (likely vestigial since Phase 6d, kept defensively):**
-/// written when [`update`]'s `take_flag(SWITCH_SCENE)` check ran once per
-/// render frame, strictly after every FIXED substep in that wakeup -- a
-/// switch requested mid-batch left `WorldSignals` "pending, old scene still
-/// alive" for the rest of that wakeup, and calling a scene callback against
-/// that in-between state was unsafe. Since Phase 6d, [`update`] is
-/// FIXED-scheduled too, immediately after this system within the *same*
-/// substep (`with_lua()`'s `update_hook`, `engine_app.rs`), so the switch
-/// should already be fully processed by the next substep and
-/// `switch_or_quit_pending` below should never observe a pending switch in
-/// practice. Kept as a cheap defensive check rather than proven-unreachable
-/// and removed -- see `fixed_update_then_update_processes_scene_switch_within_the_same_substep`
-/// for the case this guard was originally written to cover.
+/// `dt` is the real elapsed time since the previous sim tick (clamped,
+/// scaled by `time_scale`), not a constant, and "continuous while held"
+/// logic fires once per sim tick -- every shipped scene script was checked
+/// for this (`docs/plans/phase6b-callback-merge.md`); all were safe as-is
+/// except `bunnymark/{screen,map}_loop.lua`, whose held-spawn loops spawn as
+/// fast as `sim_hz` allows while the mouse button is held -- left
+/// unmitigated, a deliberate/disclosed tradeoff for a stress-test scene, not
+/// an oversight (see `docs/render-logic-simplification-brainstorm.md`). A
+/// missing callback warns rather than skipping silently, since forgetting
+/// `on_update_<scene>` entirely is an authoring error worth flagging --
+/// deduped by name so a genuinely-missing callback logs once, not every
+/// tick.
 #[allow(clippy::too_many_arguments, private_interfaces)]
-pub fn fixed_update(
+pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
     camera: Res<Camera2DRes>,
     screen: Res<ScreenSize>,
     mut commands: Commands,
+    mut next_game_state: ResMut<NextGameState>,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
     mut entities: EntityProcessing,
@@ -417,7 +404,7 @@ pub fn fixed_update(
     gui_theme_store: Res<GuiThemeStore>,
     mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
 ) {
-    crate::tracy::tracy_span!("lua_fixed_update");
+    crate::tracy::tracy_span!("lua_update");
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
 
@@ -429,28 +416,15 @@ pub fn fixed_update(
 
     refresh_cached_callback_name(&mut cached_callback, scene_str);
 
-    // Update signal cache for Lua to read current values (world-level signals
-    // can change between substeps via phase/collision callbacks).
+    // Update signal cache for Lua to read current values
     lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
+    lua_runtime.update_gameconfig_cache(&scene_state.config);
     lua_runtime.update_camera_cache(&camera, &screen, scene_state.config.pixel_snap_camera);
+    if bindings.take_dirty() {
+        lua_runtime.update_bindings_cache(&bindings);
+    }
 
-    // A prior substep this same wakeup may have already requested a scene
-    // switch/quit (change_scene()/quit() drain synchronously into WorldSignals
-    // via drain_common_commands below) -- see the scene-switch guard note
-    // above. Skip invoking any scene callback until `update` processes it.
-    let switch_or_quit_pending = scene_state.world_signals.has_flag(sk::SWITCH_SCENE)
-        || scene_state.world_signals.has_flag(sk::QUIT_GAME);
-
-    if !switch_or_quit_pending
-        && let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count)
-    {
-        // `call_named` warns unconditionally on a missing callback -- fine for
-        // its other (once-per-event) callers, but this site runs up to 8x per
-        // render frame, so a genuinely-missing on_update_<scene> would log up
-        // to 8x/frame instead of once. Dedup by name (mirrors the warn-once
-        // convention used by GuiThemeWarnCache/FontMetricsWarnCache elsewhere)
-        // so it's the found path (still routed through call_named for the
-        // shared error handling) that repeats every substep, not the warning.
+    if let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count) {
         match lua_runtime.get_function_cached(cached_callback.as_str()) {
             Ok(Some(_)) => {
                 missing_callback_warned.clear();
@@ -469,65 +443,6 @@ pub fn fixed_update(
                 error!(target: "lua", "Error resolving {}(): {}", cached_callback.as_str(), e);
             }
         }
-    }
-
-    drain_common_commands(
-        lua_runtime,
-        &mut commands,
-        &mut entities,
-        &mut scene_state,
-        &mut scripting.audio_cmd_writer,
-        &mut bindings,
-        &mut tracked_groups,
-        &mut common_bufs,
-        &gui_theme_store,
-        &mut gui_theme_warn_cache,
-    );
-}
-
-/// Scene-lifecycle/cache-refresh system for Lua games.
-///
-/// Since Phase 6b, `on_update_<scene>` itself is called from [`fixed_update`]
-/// instead of here. Since Phase 6d, this system is FIXED-scheduled too (up to
-/// 8x per render frame), installed by `with_lua()`'s `update_hook` ordered
-/// immediately after [`fixed_update`]/`lua_phase_system`/`update_lua_timers`/
-/// the Lua command-queue translators within the same substep -- see that
-/// installation's doc comment in `engine_app.rs` for why. This system:
-/// - Refreshes the camera/gameconfig/bindings Lua caches
-/// - Processes signal commands from Lua (via [`drain_common_commands`] below
-///   -- redundant with [`fixed_update`]'s own drain in the common case, both
-///   early-out on empty queues, but still the correct catch-all for a
-///   phase/timer/collision callback that queues into a command on the *last*
-///   substep of a wakeup with no further FIXED pass to drain it; do not
-///   remove as an apparent duplicate)
-/// - Reacts to flags set by Lua: "switch_scene" (triggers `switch_scene`,
-///   which can now run mid-substep-batch -- see `fixed_update`'s
-///   scene-switch guard doc comment for the accepted consequence),
-///   "quit_game"
-#[allow(clippy::too_many_arguments, private_interfaces)]
-pub fn update(
-    camera: Res<Camera2DRes>,
-    screen: Res<ScreenSize>,
-    mut commands: Commands,
-    mut next_game_state: ResMut<NextGameState>,
-    mut scripting: ScriptingContext,
-    mut scene_state: GameSceneState,
-    mut entities: EntityProcessing,
-    mut bindings: ResMut<InputBindings>,
-    mut tracked_groups: ResMut<TrackedGroups>,
-    mut common_bufs: Local<CommonCmdBufs>,
-    gui_theme_store: Res<GuiThemeStore>,
-    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
-) {
-    crate::tracy::tracy_span!("lua_update");
-    let lua_runtime = &scripting.lua_runtime;
-
-    // Update signal cache for Lua to read current values
-    lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
-    lua_runtime.update_gameconfig_cache(&scene_state.config);
-    lua_runtime.update_camera_cache(&camera, &screen, scene_state.config.pixel_snap_camera);
-    if bindings.take_dirty() {
-        lua_runtime.update_bindings_cache(&bindings);
     }
 
     drain_common_commands(
@@ -900,10 +815,10 @@ mod tests {
     }
 
 
-    /// Builds a [`World`] with all resources [`fixed_update`] depends on
+    /// Builds a [`World`] with all resources [`update`] depends on
     /// (superset of [`new_drain_test_world`]'s: also needs `WorldTime`/`InputState`/
     /// `Camera2DRes`/`ScreenSize`).
-    fn new_fixed_update_test_world() -> World {
+    fn new_update_test_world() -> World {
         let mut world = new_drain_test_world();
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
@@ -914,6 +829,7 @@ mod tests {
             rotation: 0.0,
             zoom: 1.0,
         }));
+        world.insert_resource(NextGameState::default());
         world
     }
 
@@ -939,8 +855,8 @@ mod tests {
     }
 
     #[test]
-    fn fixed_update_calls_scene_callback_and_drains_its_commands() {
-        let mut world = new_fixed_update_test_world();
+    fn update_calls_scene_callback_and_drains_its_commands() {
+        let mut world = new_update_test_world();
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, "level1");
@@ -955,7 +871,7 @@ mod tests {
                 .lua()
                 .load(format!(
                     "function on_update_level1(input, dt)\n\
-                         _G.fixed_update_called = true\n\
+                         _G.update_called = true\n\
                          engine.entity_signal_set_flag({}, \"on_ground\")\n\
                      end",
                     player.to_bits()
@@ -964,18 +880,18 @@ mod tests {
                 .expect("define on_update_level1");
         }
 
-        world.run_system_once(fixed_update).unwrap();
+        world.run_system_once(update).unwrap();
 
         let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
         let called: Option<bool> = lua_runtime
             .lua()
             .globals()
-            .get("fixed_update_called")
-            .expect("fixed_update_called global should be readable");
+            .get("update_called")
+            .expect("update_called global should be readable");
         assert_eq!(
             called,
             Some(true),
-            "on_update_<scene> should be called once per fixed_update run (Phase 6b: the only call site)"
+            "on_update_<scene> should be called once per update() run (the only call site)"
         );
 
         let signals = world
@@ -984,80 +900,33 @@ mod tests {
         assert!(
             signals.flags.contains("on_ground"),
             "entity_signal_set_flag queued in on_update_<scene> should be drained immediately, \
-             same substep"
+             same tick"
         );
     }
 
     #[test]
-    fn fixed_update_warns_when_scene_callback_is_not_defined() {
-        let mut world = new_fixed_update_test_world();
+    fn update_warns_when_scene_callback_is_not_defined() {
+        let mut world = new_update_test_world();
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, "no_update_here");
 
-        // Since Phase 6b, on_update_<scene> is the only (required) scene
-        // callback -- a missing one now warns via LuaRuntime::call_named
-        // rather than skipping silently, but must still not panic.
-        world.run_system_once(fixed_update).unwrap();
+        // on_update_<scene> is the only (required) scene callback -- a
+        // missing one warns via LuaRuntime::call_named rather than skipping
+        // silently, but must still not panic.
+        world.run_system_once(update).unwrap();
     }
 
+    /// `on_update_<scene>` and the switch/quit flag check now live in the
+    /// same system call (no more early/late split), so a switch requested by
+    /// this tick's callback is fully processed (`switch_scene` run,
+    /// `SWITCH_SCENE` cleared) before `update()` returns -- restoring the
+    /// pre-thread-split engine's single-`lua_plugin::update` behavior, which
+    /// had no separate guard for a "switch requested earlier this tick"
+    /// case because there was only one call site to begin with.
     #[test]
-    fn fixed_update_skips_scene_callback_for_remaining_substeps_after_a_switch_is_requested() {
-        let mut world = new_fixed_update_test_world();
-        world
-            .resource_mut::<WorldSignals>()
-            .set_string(sk::SCENE, "level1");
-
-        define_level1_switches_to_level2_lua_callbacks(&world);
-
-        // Substep 1 of this wakeup: level1's callback runs and requests a
-        // switch to level2. change_scene() queues SetString{SCENE}/
-        // SetFlag{SWITCH_SCENE}, drained synchronously into WorldSignals by
-        // drain_common_commands before this call returns.
-        world.run_system_once(fixed_update).unwrap();
-
-        // Substeps 2-3 of the SAME wakeup, with `update()` never called (this
-        // test exercises `fixed_update`'s guard in isolation -- the switch
-        // hasn't actually been processed, since only `update()` runs
-        // `switch_scene`; see `fixed_update_then_update_processes_scene_switch_within_the_same_substep`
-        // below for the full picture once `update()` also runs each substep):
-        // must NOT call level2's callback against level1's still-alive
-        // entities, and must not re-call level1's either, since a switch is
-        // pending.
-        world.run_system_once(fixed_update).unwrap();
-        world.run_system_once(fixed_update).unwrap();
-
-        let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
-        let level1_called: Option<i64> = lua_runtime.lua().globals().get("level1_called").unwrap();
-        let level2_called: Option<i64> = lua_runtime.lua().globals().get("level2_called").unwrap();
-        assert_eq!(
-            level1_called,
-            Some(1),
-            "level1's callback must run exactly once (the substep that requested the switch), not be re-invoked while the switch is pending"
-        );
-        assert_eq!(
-            level2_called, None,
-            "level2's callback must not run until switch_scene has actually despawned level1's entities and update() clears SWITCH_SCENE -- fixed_update alone must never invoke it"
-        );
-    }
-
-    /// Phase 6d regression test: `update()` is now FIXED-scheduled, ordered
-    /// immediately after `fixed_update` within the same substep (see
-    /// `with_lua()`'s `update_hook` installation, `engine_app.rs`). This
-    /// exercises the scenario `fixed_update`'s "scene-switch guard" doc
-    /// comment says should now be unreachable: a switch requested by
-    /// substep N's `on_update_<scene>` call should be fully processed
-    /// (`switch_scene` run, `SWITCH_SCENE` cleared) by `update()` before
-    /// substep N+1 ever calls `fixed_update` again -- so level2's callback
-    /// SHOULD run starting the very next substep, not stay suppressed for
-    /// the rest of the wakeup the way it would have pre-6d (see the previous
-    /// test, `fixed_update_skips_scene_callback_for_remaining_substeps_after_a_switch_is_requested`,
-    /// which never calls `update()` between substeps and is the pre-6d
-    /// baseline this test is deliberately the mirror image of).
-    #[test]
-    fn fixed_update_then_update_processes_scene_switch_within_the_same_substep() {
-        let mut world = new_fixed_update_test_world();
-        world.insert_resource(NextGameState::default());
+    fn update_processes_scene_switch_within_the_same_tick() {
+        let mut world = new_update_test_world();
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, "level1");
@@ -1069,18 +938,13 @@ mod tests {
 
         define_level1_switches_to_level2_lua_callbacks(&world);
 
-        // Substep 1: level1's callback requests the switch; update() (run
-        // right after, same substep in the real schedule) processes it --
-        // switch_scene despawns/re-inits and SWITCH_SCENE is cleared.
-        world.run_system_once(fixed_update).unwrap();
+        // Tick 1: level1's callback requests the switch; switch_scene runs
+        // and SWITCH_SCENE is cleared before this same call returns.
         world.run_system_once(update).unwrap();
 
-        // Substeps 2-3 of the SAME wakeup: the switch already happened, so
-        // these should run against level2, not skip due to a stale pending
-        // flag.
-        world.run_system_once(fixed_update).unwrap();
+        // Ticks 2-3: the switch already happened, so these run against
+        // level2, not level1.
         world.run_system_once(update).unwrap();
-        world.run_system_once(fixed_update).unwrap();
         world.run_system_once(update).unwrap();
 
         let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
@@ -1089,18 +953,16 @@ mod tests {
         assert_eq!(
             level1_called,
             Some(1),
-            "level1's callback should run exactly once, the substep that requested the switch"
+            "level1's callback should run exactly once, the tick that requested the switch"
         );
         assert_eq!(
             level2_called,
             Some(2),
-            "level2's callback should run starting the substep immediately after the switch \
-             (substeps 2 and 3), since update() -- and therefore switch_scene -- now runs \
-             within the same substep as fixed_update, not one full wakeup later"
+            "level2's callback should run on the two ticks after the switch"
         );
         assert!(
             !world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE),
-            "SWITCH_SCENE should be cleared by update() the same substep it was set"
+            "SWITCH_SCENE should be cleared by update() the same tick it was set"
         );
     }
 
