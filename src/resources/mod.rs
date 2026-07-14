@@ -23,6 +23,7 @@
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`pending_imgui_capture`] – one-frame-lag imgui capture state pending send to the logic thread
 //! - [`quit_requested`] – render-loop quit flag read by the loop's `while` condition
+//! - [`render_mirrors`] – render-world mirrors of `DrawableSnapshot`'s global fields
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
@@ -60,6 +61,7 @@ pub mod pending_imgui_capture;
 pub mod postprocessshader;
 pub mod quit_requested;
 pub mod rawinput;
+pub mod render_mirrors;
 pub mod rendertarget;
 pub mod scenemanager;
 pub mod screensize;

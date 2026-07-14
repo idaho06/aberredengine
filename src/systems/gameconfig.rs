@@ -1,13 +1,13 @@
 //! Game configuration change detection system.
 //!
-//! Monitors the [`GameConfig`] carried in [`DrawableSnapshot`] for changes
+//! Monitors the [`GameConfig`] mirrored into [`RenderGameConfig`] for changes
 //! and applies settings to the window, render target, and screen size
 //! resources.
 
-use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::resources::fullscreen::FullScreen;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::render_mirrors::RenderGameConfig;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use bevy_ecs::prelude::*;
@@ -16,12 +16,13 @@ use raylib::ffi;
 
 /// System that applies game configuration changes.
 ///
-/// Reads config from [`DrawableSnapshot::game_config`], not
-/// `Res<GameConfig>` (Phase 4 of the Option B plan) -- in Phase 5 this
-/// system moves to the render thread, where received snapshots are the only
-/// config source. Runs on the VARIABLE schedule after
-/// `build_drawable_snapshot` and before `render_system`, so a config change
-/// made this frame (Lua command) is applied before this frame renders.
+/// Reads config from [`RenderGameConfig`] (Phase 7f-2; was
+/// `DrawableSnapshot::game_config` before the split), not `Res<GameConfig>`
+/// (Phase 4 of the Option B plan) -- in Phase 5 this system moved to the
+/// render thread, where received snapshots are the only config source. Runs
+/// on the render schedule after `receive_snapshot` and before
+/// `render_system`, so a config change made this frame (Lua command) is
+/// applied before this frame renders.
 ///
 /// Change detection is a value diff against the last-applied config
 /// (`Local<Option<GameConfig>>`), replacing the previous
@@ -35,13 +36,13 @@ use raylib::ffi;
 /// semantics the `is_changed()` gate gave.
 ///
 /// # Resource Dependencies
-/// - `DrawableSnapshot` (read) - source of the config to apply
+/// - `RenderGameConfig` (read) - source of the config to apply
 /// - `RaylibHandle` (non-send, mutable) - for window operations
 /// - `RaylibThread` (non-send) - required for render texture recreation
 /// - `RenderTarget` (non-send, mutable) - for render resolution changes
 /// - `ScreenSize` (mutable) - updated to match render resolution
 pub fn apply_gameconfig_changes(
-    snapshot: Res<DrawableSnapshot>,
+    render_game_config: Res<RenderGameConfig>,
     mut raylib: crate::systems::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut screen_size: ResMut<ScreenSize>,
@@ -50,7 +51,7 @@ pub fn apply_gameconfig_changes(
     mut last_applied: Local<Option<GameConfig>>,
 ) {
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
-    let config = &snapshot.game_config;
+    let config = &render_game_config.0;
 
     // Apply changes on first run (mirrors the old `is_added()` path) or when
     // the config differs from what was last applied.

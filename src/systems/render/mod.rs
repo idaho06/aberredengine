@@ -48,6 +48,10 @@ use crate::resources::drawable_snapshot::{
 use crate::resources::fontstore::FontStore;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
+use crate::resources::render_mirrors::{
+    RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
+    RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
+};
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::scenemanager::RenderSceneTable;
 use crate::resources::screensize::ScreenSize;
@@ -211,14 +215,22 @@ pub struct RenderLocals {
 /// Bundled render resources to reduce system parameter count.
 #[derive(SystemParam)]
 pub struct RenderResources<'w> {
-    // Camera2D, WorldTime, PostProcessShader and GuiThemeStore are read from
-    // DrawableSnapshot since Phase 5e — the live resources are
-    // logic-world-only.
     pub screensize: Res<'w, ScreenSize>,
     pub window_size: Res<'w, WindowSize>,
     pub textures: Res<'w, TextureStore>,
     pub fonts: NonSend<'w, FontStore>,
     pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
+    // Phase 7f-2: mirrors of DrawableSnapshot's global fields, fanned out by
+    // receive_snapshot (src/engine_app.rs) -- see src/resources/render_mirrors.rs.
+    // These are render-world-only snapshot copies, not the live sim resources
+    // of the same underlying type.
+    pub camera: Res<'w, RenderCamera>,
+    pub game_config: Res<'w, RenderGameConfig>,
+    pub world_time: Res<'w, RenderWorldTime>,
+    pub post_process: Res<'w, RenderPostProcess>,
+    pub gui_themes: Res<'w, RenderGuiThemes>,
+    pub app_state: Res<'w, RenderAppState>,
+    pub signals: Res<'w, RenderSignalSnapshot>,
 }
 
 /// Extra resources needed for the imgui debug panels.
@@ -227,15 +239,21 @@ pub(crate) struct DebugResources<'w> {
     /// Buffered writes queued by `GuiCallback` (Phase 5d) -- applied to `WorldSignals`
     /// logic-side by `apply_signal_intents` at the top of the next FIXED substep
     /// (Phase 6d; was "the next frame's VARIABLE schedule" pre-6d).
-    /// `GuiCallback`/`WorldDrawCallback` reads come from `DrawableSnapshot`
+    /// `GuiCallback`/`WorldDrawCallback` reads come from `RenderResources`
     /// (`signals`, `app_state`), not a live resource -- `render_system` holds no
     /// `ResMut<WorldSignals>`/`Res<AppState>` at all.
     pub signal_intents: ResMut<'w, SignalIntents>,
     /// Render-side scene-callback table (Phase 5e) — resolved against
-    /// `DrawableSnapshot.active_scene` instead of the logic-world-only
-    /// `SceneManager`.
+    /// `RenderActiveScene` instead of the logic-world-only `SceneManager`.
     pub scene_table: Option<Res<'w, RenderSceneTable>>,
     pub overlay_config: ResMut<'w, DebugOverlayConfig>,
+    // Phase 7f-2: active_scene kept alongside scene_table since both are
+    // always read together (world_draw_callback/gui_callback dispatch);
+    // debug_snapshot/camera_follow are read only inside the imgui debug
+    // overlay (draw_imgui_debug, gated on debug_active).
+    pub active_scene: Res<'w, RenderActiveScene>,
+    pub debug_snapshot: Res<'w, RenderDebugSnapshot>,
+    pub camera_follow: Res<'w, RenderCameraFollow>,
 }
 
 /// Tracks which render buffer is the current source during multi-pass
@@ -293,25 +311,25 @@ pub fn render_system(
     let screensize = &res.screensize;
     let window_size = &res.window_size;
     let textures = &res.textures;
-    // Single source of truth for "is debug active": the snapshot's debug
-    // payload, captured from DebugMode by build_drawable_snapshot earlier
-    // this frame. render_system takes no live Res<DebugMode> (Phase 5 prep:
-    // the render thread won't have one).
-    let debug_active = snapshot.debug.is_some();
+    // Single source of truth for "is debug active": the debug snapshot
+    // mirror's presence, captured from DebugMode by build_drawable_snapshot
+    // earlier this frame. render_system takes no live Res<DebugMode> (Phase 5
+    // prep: the render thread won't have one).
+    let debug_active = debug_res.debug_snapshot.0.is_some();
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
         crate::tracy::tracy_span!("render/to_texture");
         let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
-        d.clear_background(snapshot.game_config.background_color);
+        d.clear_background(res.game_config.0.background_color);
 
         {
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
-            let render_cam = if snapshot.game_config.pixel_snap_camera {
-                Camera2DRes(snapshot.camera).pixel_snapped()
+            let render_cam = if res.game_config.0.pixel_snap_camera {
+                Camera2DRes(res.camera.0).pixel_snapped()
             } else {
-                snapshot.camera
+                res.camera.0
             };
             let mut d2 = d.begin_mode2D(render_cam);
 
@@ -410,7 +428,7 @@ pub fn render_system(
                                     set_standard_uniforms(
                                         &mut entry.shader,
                                         &mut entry.locations,
-                                        &snapshot.world_time,
+                                        &res.world_time.0,
                                         screensize,
                                         window_size,
                                         &dest,
@@ -567,7 +585,7 @@ pub fn render_system(
                                     set_standard_uniforms(
                                         &mut entry.shader,
                                         &mut entry.locations,
-                                        &snapshot.world_time,
+                                        &res.world_time.0,
                                         screensize,
                                         window_size,
                                         &dest,
@@ -651,7 +669,7 @@ pub fn render_system(
                 }
             } // draw_world_texts
 
-            if let Some(debug_snapshot) = &snapshot.debug {
+            if let Some(debug_snapshot) = &debug_res.debug_snapshot.0 {
                 if debug_res.overlay_config.show_collider_boxes {
                     for entry in &debug_snapshot.colliders {
                         let (x, y, w, h) = entry.collider.get_aabb(entry.world_pos);
@@ -726,16 +744,16 @@ pub fn render_system(
             if let Some(cb) = debug_res
                 .scene_table
                 .as_deref()
-                .zip(snapshot.active_scene.as_deref())
+                .zip(debug_res.active_scene.0.as_deref())
                 .and_then(|(table, name)| table.get(name))
                 .and_then(|desc| desc.world_draw_callback)
             {
                 cb(
                     &mut d2,
-                    &snapshot.camera,
+                    &res.camera.0,
                     &res.screensize,
-                    &snapshot.app_state,
-                    &snapshot.signals,
+                    &res.app_state.0,
+                    &res.signals.0,
                 );
             }
         }
@@ -753,7 +771,7 @@ pub fn render_system(
                 &snapshot.gui_buttons,
                 &snapshot.gui_labels,
                 &snapshot.gui_progress_bars,
-                &snapshot.gui_themes,
+                &res.gui_themes.0,
                 &mut res.gui_theme_warn_cache,
                 textures,
                 fonts,
@@ -772,7 +790,7 @@ pub fn render_system(
     let gui_callback: Option<GuiCallback> = debug_res
         .scene_table
         .as_deref()
-        .zip(snapshot.active_scene.as_deref())
+        .zip(debug_res.active_scene.0.as_deref())
         .and_then(|(table, name)| table.get(name))
         .and_then(|desc| desc.gui_callback);
 
@@ -791,7 +809,7 @@ pub fn render_system(
             screen_sprite_count,
             screen_text_count,
             shader_count,
-        ) = if let Some(debug_snapshot) = &snapshot.debug {
+        ) = if let Some(debug_snapshot) = &debug_res.debug_snapshot.0 {
             let fps = rl.get_fps();
             let window_mouse_pos = rl.get_mouse_position();
             let game_mouse_pos = window_size.window_to_game_pos(
@@ -799,7 +817,7 @@ pub fn render_system(
                 screensize.w as u32,
                 screensize.h as u32,
             );
-            let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, snapshot.camera);
+            let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, res.camera.0);
             let sprite_count = snapshot.map_sprites.len();
             let collider_count = debug_snapshot.colliders.len();
             let position_count = debug_snapshot.positions.len();
@@ -828,17 +846,17 @@ pub fn render_system(
         // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
         let overlay_config = &mut *debug_res.overlay_config;
         let signal_intents = &mut *debug_res.signal_intents;
-        let app_state = &snapshot.app_state;
+        let app_state = &res.app_state.0;
         // Only `Some` while DebugMode is active (`debug_active`); the
         // closure below only reads it inside `if debug_active`, mirroring
         // the dummy-values pattern used for fps/sprite_count/etc. above.
-        let input_state = snapshot.debug.as_ref().map(|d| &d.input_state);
-        let camera_follow = &snapshot.camera_follow;
-        let active_scene = snapshot.active_scene.as_deref();
-        let world_time = &snapshot.world_time;
-        let config = &snapshot.game_config;
-        let signal_snapshot = &*snapshot.signals;
-        let camera = &snapshot.camera;
+        let input_state = debug_res.debug_snapshot.0.as_ref().map(|d| &d.input_state);
+        let camera_follow = &debug_res.camera_follow.0;
+        let active_scene = debug_res.active_scene.0.as_deref();
+        let world_time = &res.world_time.0;
+        let config = &res.game_config.0;
+        let signal_snapshot = &*res.signals.0;
+        let camera = &res.camera.0;
 
         let closure = move |_d: &RaylibDrawHandle<'_>| {
             imgui_bridge.render(debug_active, |ui| {
@@ -847,7 +865,7 @@ pub fn render_system(
                         ui,
                         overlay_config,
                         signal_snapshot,
-                        input_state.expect("debug_active implies snapshot.debug is Some"),
+                        input_state.expect("debug_active implies debug_snapshot is Some"),
                         camera,
                         camera_follow,
                         active_scene,
@@ -880,7 +898,7 @@ pub fn render_system(
             th,
             &mut render_target,
             &mut shader_store,
-            &snapshot.post_process,
+            &res.post_process.0,
             world_time,
             &res.screensize,
             &res.window_size,
@@ -897,8 +915,8 @@ pub fn render_system(
             th,
             &mut render_target,
             &mut shader_store,
-            &snapshot.post_process,
-            &snapshot.world_time,
+            &res.post_process.0,
+            &res.world_time.0,
             &res.screensize,
             &res.window_size,
             None::<fn(&RaylibDrawHandle<'_>)>,
