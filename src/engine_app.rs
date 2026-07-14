@@ -70,7 +70,6 @@ use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 use bevy_ecs::system::RunSystemOnce;
-use bevy_ecs::system::SystemParam;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
 
@@ -165,6 +164,10 @@ use crate::systems::particleemitter::particle_emitter_system;
 use crate::systems::phase::phase_system;
 use crate::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
+};
+use crate::systems::render::mirror::{
+    SimIdMap, reconcile_map_sprites, reconcile_map_texts, reconcile_screen_sprites,
+    reconcile_screen_texts,
 };
 use crate::systems::render::render_system;
 use crate::systems::rust_collision::rust_collision_observer;
@@ -793,7 +796,13 @@ impl EngineBuilder {
     /// carries resolved bindings/edges, see `DebugResources::input_state`'s
     /// doc comment) and `DebugOverlayConfig` (edited by the imgui panel).
     /// `InputBindings` became logic-thread-only in Phase 7d — no render-side
-    /// mirror. Holds NO entities and no gameplay resources.
+    /// mirror. Holds no gameplay resources. Since Phase 7f-3 this world DOES
+    /// hold entities: retained map-sprite mirror entities (`SimMirror` +
+    /// `MirrorMapSprite`, `src/systems/render/mirror.rs`), reconciled
+    /// write-only from `DrawableSnapshot` by `receive_snapshot` -- never
+    /// gameplay entities. (The pre-existing fullscreen-toggle `Observer`
+    /// entity spawned below is infrastructure, not a drawable, and predates
+    /// this note.)
     fn setup_render_world(
         config: GameConfig,
         rl: raylib::RaylibHandle,
@@ -842,6 +851,11 @@ impl EngineBuilder {
         world.insert_resource(RenderPostProcess::default());
         world.insert_resource(RenderGuiThemes::default());
         world.insert_resource(RenderCameraFollow::default());
+        // Phase 7f-3: backs the map-sprite mirror-entity reconciliation done
+        // by receive_snapshot/reconcile_map_sprites. Must be inserted before
+        // the first snapshot arrives -- reconcile_map_sprites' resource_scope
+        // panics if this resource is absent.
+        world.insert_resource(SimIdMap::default());
         if let Some(table) = render_scene_table {
             world.insert_resource(table);
         }
@@ -1595,42 +1609,53 @@ fn pump_render_msgs(world: &mut World) {
 /// point is routing those reads through the mirrors instead); only the 8
 /// `Vec<...Entry>` fields and the cheap `camera`/`world_time` copies above
 /// are still consulted from `*snapshot` itself.
-fn receive_snapshot(
-    mut consumer: ResMut<SnapshotConsumer>,
-    mut snapshot: ResMut<DrawableSnapshot>,
-    mut mirrors: SnapshotMirrors,
-) {
-    if consumer.0.update() {
-        let mut new_snapshot = consumer.0.output_buffer().clone();
-        mirrors.camera.0 = new_snapshot.camera;
-        mirrors.game_config.0 = std::mem::take(&mut new_snapshot.game_config);
-        mirrors.signals.0 = new_snapshot.signals.clone();
-        mirrors.app_state.0 = std::mem::take(&mut new_snapshot.app_state);
-        mirrors.debug.0 = std::mem::take(&mut new_snapshot.debug);
-        mirrors.active_scene.0 = new_snapshot.active_scene.clone();
-        mirrors.world_time.0 = new_snapshot.world_time;
-        mirrors.post_process.0 = std::mem::take(&mut new_snapshot.post_process);
-        mirrors.gui_themes.0 = std::mem::take(&mut new_snapshot.gui_themes);
-        mirrors.camera_follow.0 = std::mem::take(&mut new_snapshot.camera_follow);
-        *snapshot = new_snapshot;
+///
+/// Phase 7f-3: this system is now exclusive (`fn(&mut World)`) because
+/// reconciling mirror entities needs simultaneous spawn/despawn plus
+/// resource access, which an ordinary `SystemParam` bundle can't express
+/// (same justification `drain_cmds` uses in `src/systems/audio/systems.rs`).
+/// The `SnapshotMirrors` bundle from 7f-2 is gone -- exclusive systems can't
+/// take `SystemParam` bundles, only `&mut World` plus `ExclusiveSystemParam`s
+/// -- replaced by explicit `world.resource_mut::<Render*>()` calls, same 10
+/// fields, same order, same `mem::take`-vs-`.clone()` choice per field as
+/// before. Checkpoint 1 migrated map sprites; checkpoint 2 fans the same
+/// pattern out to map texts, screen sprites, and screen texts. None of the 4
+/// migrated categories' `Vec` fields are `mem::take`n before or after their
+/// `reconcile_*` call, unlike the six taken global fields below -- the debug
+/// overlay still reads `snapshot.map_sprites.len()`/`.screen_sprites.len()`/
+/// `.screen_texts.len()` directly (`src/systems/render/mod.rs`), so all 4
+/// Vecs must keep flowing through into `*snapshot` unchanged, exactly like
+/// the 4 still-Vec-based GUI categories (7f-4). Only `render_system`'s
+/// draw-prep for these 4 categories switches to querying mirror entities.
+fn receive_snapshot(world: &mut World) {
+    let should_update = world.resource_mut::<SnapshotConsumer>().0.update();
+    if !should_update {
+        return;
     }
-}
 
-/// Bundled write targets for `receive_snapshot`'s field fan-out (Phase
-/// 7f-2), mirroring `RenderResources`/`DebugResources`'s existing
-/// param-bundling convention (`src/systems/render/mod.rs`).
-#[derive(SystemParam)]
-struct SnapshotMirrors<'w> {
-    camera: ResMut<'w, RenderCamera>,
-    game_config: ResMut<'w, RenderGameConfig>,
-    signals: ResMut<'w, RenderSignalSnapshot>,
-    app_state: ResMut<'w, RenderAppState>,
-    debug: ResMut<'w, RenderDebugSnapshot>,
-    active_scene: ResMut<'w, RenderActiveScene>,
-    world_time: ResMut<'w, RenderWorldTime>,
-    post_process: ResMut<'w, RenderPostProcess>,
-    gui_themes: ResMut<'w, RenderGuiThemes>,
-    camera_follow: ResMut<'w, RenderCameraFollow>,
+    let mut new_snapshot = world
+        .resource_mut::<SnapshotConsumer>()
+        .0
+        .output_buffer()
+        .clone();
+
+    reconcile_map_sprites(world, &new_snapshot.map_sprites);
+    reconcile_map_texts(world, &new_snapshot.map_texts);
+    reconcile_screen_sprites(world, &new_snapshot.screen_sprites);
+    reconcile_screen_texts(world, &new_snapshot.screen_texts);
+
+    world.resource_mut::<RenderCamera>().0 = new_snapshot.camera;
+    world.resource_mut::<RenderGameConfig>().0 = std::mem::take(&mut new_snapshot.game_config);
+    world.resource_mut::<RenderSignalSnapshot>().0 = new_snapshot.signals.clone();
+    world.resource_mut::<RenderAppState>().0 = std::mem::take(&mut new_snapshot.app_state);
+    world.resource_mut::<RenderDebugSnapshot>().0 = std::mem::take(&mut new_snapshot.debug);
+    world.resource_mut::<RenderActiveScene>().0 = new_snapshot.active_scene.clone();
+    world.resource_mut::<RenderWorldTime>().0 = new_snapshot.world_time;
+    world.resource_mut::<RenderPostProcess>().0 = std::mem::take(&mut new_snapshot.post_process);
+    world.resource_mut::<RenderGuiThemes>().0 = std::mem::take(&mut new_snapshot.gui_themes);
+    world.resource_mut::<RenderCameraFollow>().0 = std::mem::take(&mut new_snapshot.camera_follow);
+
+    *world.resource_mut::<DrawableSnapshot>() = new_snapshot;
 }
 
 /// Diffs the render-owned mirrors (`ScreenSize`, `DebugOverlayConfig`)

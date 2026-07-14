@@ -16,6 +16,7 @@
 mod debug_overlay;
 pub mod geometry;
 mod gui_panel;
+pub mod mirror;
 mod postprocess;
 mod sprite;
 mod text;
@@ -43,11 +44,11 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::drawable_snapshot::{
     DrawableSnapshot, GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry,
-    ScreenSpriteEntry, ScreenTextEntry,
 };
 use crate::resources::fontstore::FontStore;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
+use self::mirror::MirrorQueries;
 use crate::resources::render_mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
@@ -102,6 +103,13 @@ pub(super) struct TextBufferItem {
 /// has no Scale/Rotation/GlobalTransform2D resolution, no `EntityShader` support
 /// (screen-space shaders are out of scope), and no view-bounds culling.
 pub(super) struct ScreenSpriteBufferItem {
+    /// Sim entity (Phase 7f-3 checkpoint 2), used only as
+    /// [`ScreenDrawItem::sort_key`]'s tie-break -- mirror query iteration
+    /// order carries no ordering guarantee, unlike the old snapshot Vec's
+    /// build order. Same field name/type as [`SpriteBufferItem::entity`]/
+    /// [`TextBufferItem::entity`], which tie-break the same way (`Entity`'s
+    /// own `Ord` impl) two structs above -- no separate `u64` mechanism.
+    entity: Entity,
     sprite: Sprite,
     z_index: ZIndex,
     pos: ScreenPosition,
@@ -119,6 +127,8 @@ pub(super) struct ScreenSpriteBufferItem {
 /// included) smaller, which matters for cache density when sorting/iterating
 /// tens of thousands of items per frame.
 pub(super) struct ScreenTextBufferItem {
+    /// See [`ScreenSpriteBufferItem::entity`].
+    entity: Entity,
     text: Arc<str>,
     font: Arc<str>,
     font_size: f32,
@@ -194,14 +204,34 @@ impl ScreenDrawItem {
         }
     }
 
-    /// Draw-order comparator: ascending `z_index`, then `variant_rank` as the
-    /// tie-break. Shared by `draw_screen_space` and its tests so the two
-    /// can't drift apart.
+    /// Tertiary sort key (Phase 7f-3 checkpoint 2), used only to break ties
+    /// at equal `(z_index, variant_rank)`: the mirror-sourced `Sprite`/`Text`
+    /// variants' sim entity, ascending. `Panel`/`ProgressBar` (still
+    /// Vec-sourced, unmigrated, and structurally have no entity to compare)
+    /// return `None`, which sorts before every `Some(_)` -- but since they
+    /// only ever tie against items of the SAME variant_rank (0, shared only
+    /// with each other), and both always return `None`, their relative
+    /// order stays whatever `sort_unstable_by` happens to produce, exactly
+    /// as before this phase (`sort_unstable_by` gives no stability guarantee
+    /// for equal keys) -- `Option<Entity>` makes "not yet migrated" a
+    /// type-level fact instead of a magic sentinel value.
+    fn sort_key(&self) -> Option<Entity> {
+        match self {
+            ScreenDrawItem::Panel(_) | ScreenDrawItem::ProgressBar(_) => None,
+            ScreenDrawItem::Sprite(s) => Some(s.entity),
+            ScreenDrawItem::Text(t) => Some(t.entity),
+        }
+    }
+
+    /// Draw-order comparator: ascending `z_index`, then `variant_rank`, then
+    /// `sort_key` as tie-breaks. Shared by `draw_screen_space` and its tests
+    /// so the two can't drift apart.
     fn cmp_draw_order(a: &Self, b: &Self) -> std::cmp::Ordering {
         a.z_index()
             .partial_cmp(&b.z_index())
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
+            .then_with(|| a.sort_key().cmp(&b.sort_key()))
     }
 }
 
@@ -209,6 +239,13 @@ impl ScreenDrawItem {
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
     text_buffer: Vec<TextBufferItem>,
+    // Phase 7f-3 checkpoint 2: scratch buffers for the mirror-query-sourced
+    // screen sprite/text items, drained into screen_draw_buffer by
+    // draw_screen_space (rather than passing the query directly, this keeps
+    // the existing Local-buffer-capacity-reuse convention the other 2
+    // buffers above already use).
+    screen_sprite_buffer: Vec<ScreenSpriteBufferItem>,
+    screen_text_buffer: Vec<ScreenTextBufferItem>,
     screen_draw_buffer: Vec<ScreenDrawItem>,
 }
 
@@ -297,6 +334,12 @@ pub fn render_system(
     snapshot: Res<DrawableSnapshot>,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
+    // Phase 7f-3: draw prep for map sprites/texts and screen sprites/texts
+    // sources from retained mirror entities instead of the corresponding
+    // snapshot.<field> Vec. `snapshot` above is still needed for the debug
+    // sprite/screen-sprite/screen-text counts and the 4 GUI categories not
+    // yet migrated (7f-4).
+    mirrors: MirrorQueries,
 ) {
     crate::tracy::tracy_span!("render_system");
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
@@ -304,6 +347,8 @@ pub fn render_system(
     let RenderLocals {
         sprite_buffer,
         text_buffer,
+        screen_sprite_buffer,
+        screen_text_buffer,
         screen_draw_buffer,
     } = &mut *locals;
 
@@ -343,43 +388,54 @@ pub fn render_system(
             {
                 crate::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
-                sprite_buffer.extend(snapshot.map_sprites.iter().filter_map(|entry| {
-                    let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
-                        entry.position,
-                        entry.scale,
-                        entry.rotation,
-                        entry.global_transform,
-                    );
-                    let (min, max) = compute_sprite_cull_bounds(
-                        &resolved_pos,
-                        &entry.sprite,
-                        resolved_scale.as_ref(),
-                        resolved_rot.as_ref(),
-                    );
+                sprite_buffer.extend(mirrors.map_sprites.iter().filter_map(
+                    |(mirror, sprite, position, z_index, scale, rotation, shader, tint, shadow, global_transform, velocity)| {
+                        let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
+                            *position,
+                            scale.copied(),
+                            rotation.copied(),
+                            global_transform.copied(),
+                        );
+                        let (min, max) = compute_sprite_cull_bounds(
+                            &resolved_pos,
+                            sprite,
+                            resolved_scale.as_ref(),
+                            resolved_rot.as_ref(),
+                        );
 
-                    let overlap = !(max.x < view_min.x
-                        || min.x > view_max.x
-                        || max.y < view_min.y
-                        || min.y > view_max.y);
-                    overlap.then_some(SpriteBufferItem {
-                        entity: entry.entity,
-                        sprite: entry.sprite.clone(),
-                        z_index: entry.z_index,
-                        resolved_pos,
-                        resolved_scale,
-                        resolved_rot,
-                        maybe_shader: entry.shader.clone(),
-                        maybe_tint: entry.tint,
-                        maybe_shadow: entry.shadow,
-                        velocity: entry.velocity,
-                    })
-                }));
+                        let overlap = !(max.x < view_min.x
+                            || min.x > view_max.x
+                            || max.y < view_min.y
+                            || min.y > view_max.y);
+                        overlap.then_some(SpriteBufferItem {
+                            entity: mirror.0,
+                            sprite: sprite.clone(),
+                            z_index: *z_index,
+                            resolved_pos,
+                            resolved_scale,
+                            resolved_rot,
+                            maybe_shader: shader.cloned(),
+                            maybe_tint: tint.copied(),
+                            maybe_shadow: shadow.copied(),
+                            velocity: velocity.map(|v| v.0),
+                        })
+                    },
+                ));
 
-                // sprite_buffer.sort_unstable_by_key(|item| item.z_index);
+                // Tie-break by sim entity (equivalent to sorting by
+                // Entity::to_bits(), since Entity: Ord is defined that way)
+                // after the primary z_index sort: mirror-entity query
+                // iteration order carries no guarantee, unlike the old
+                // snapshot Vec's stable (if arbitrary) build order. This
+                // makes draw order deterministic again -- note for
+                // reviewers: sprites sharing an exact z_index now draw in
+                // ascending sim-Entity order rather than snapshot-build
+                // iteration order, a minor observable ordering change.
                 sprite_buffer.sort_unstable_by(|a, b| {
                     a.z_index
                         .partial_cmp(&b.z_index)
                         .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| a.entity.cmp(&b.entity))
                 });
             } // build_sprite_buffer
             {
@@ -523,37 +579,43 @@ pub fn render_system(
             {
                 crate::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
-                text_buffer.extend(snapshot.map_texts.iter().filter_map(|entry| {
-                    let resolved_pos = MapPosition::from_vec(
-                        entry.global_transform.map_or(entry.position.pos, |gt| gt.position),
-                    );
-                    let text_size = entry.text.size();
-                    let min = resolved_pos.pos;
-                    let max = Vector2 {
-                        x: min.x + text_size.x,
-                        y: min.y + text_size.y,
-                    };
+                text_buffer.extend(mirrors.map_texts.iter().filter_map(
+                    |(mirror, text, position, z_index, shader, tint, shadow, global_transform, velocity)| {
+                        let resolved_pos = MapPosition::from_vec(
+                            global_transform.map_or(position.pos, |gt| gt.position),
+                        );
+                        let text_size = text.size();
+                        let min = resolved_pos.pos;
+                        let max = Vector2 {
+                            x: min.x + text_size.x,
+                            y: min.y + text_size.y,
+                        };
 
-                    let overlap = !(max.x < view_min.x
-                        || min.x > view_max.x
-                        || max.y < view_min.y
-                        || min.y > view_max.y);
-                    overlap.then_some(TextBufferItem {
-                        entity: entry.entity,
-                        text: entry.text.clone(),
-                        z_index: entry.z_index,
-                        resolved_pos,
-                        text_size,
-                        maybe_shader: entry.shader.clone(),
-                        maybe_tint: entry.tint,
-                        maybe_shadow: entry.shadow,
-                        velocity: entry.velocity,
-                    })
-                }));
+                        let overlap = !(max.x < view_min.x
+                            || min.x > view_max.x
+                            || max.y < view_min.y
+                            || min.y > view_max.y);
+                        overlap.then_some(TextBufferItem {
+                            entity: mirror.0,
+                            text: text.clone(),
+                            z_index: *z_index,
+                            resolved_pos,
+                            text_size,
+                            maybe_shader: shader.cloned(),
+                            maybe_tint: tint.copied(),
+                            maybe_shadow: shadow.copied(),
+                            velocity: velocity.map(|v| v.0),
+                        })
+                    },
+                ));
+                // Tie-break by sim entity, same rationale as sprite_buffer's
+                // sort above -- mirror query iteration order carries no
+                // ordering guarantee.
                 text_buffer.sort_unstable_by(|a, b| {
                     a.z_index
                         .partial_cmp(&b.z_index)
                         .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| a.entity.cmp(&b.entity))
                 });
             } // build_text_buffer
             {
@@ -763,10 +825,43 @@ pub fn render_system(
         let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
         {
             crate::tracy::tracy_span!("render/screen_space");
+            // Phase 7f-3 checkpoint 2: screen sprites/texts source from
+            // retained mirror entities. Built into their own scratch
+            // buffers (not directly into screen_draw_buffer) so
+            // draw_screen_space can stay agnostic to where its sprite/text
+            // items came from -- it just drains whatever's here, same as
+            // it reads gui_windows/gui_buttons/etc. from the still-Vec-based
+            // GUI categories below.
+            screen_sprite_buffer.clear();
+            screen_sprite_buffer.extend(mirrors.screen_sprites.iter().map(
+                |(mirror, sprite, pos, z_index, tint, shadow)| ScreenSpriteBufferItem {
+                    entity: mirror.0,
+                    sprite: sprite.clone(),
+                    z_index: *z_index,
+                    pos: *pos,
+                    maybe_tint: tint.copied(),
+                    maybe_shadow: shadow.copied(),
+                },
+            ));
+            screen_text_buffer.clear();
+            screen_text_buffer.extend(mirrors.screen_texts.iter().map(
+                |(mirror, text, pos, z_index, tint, shadow)| ScreenTextBufferItem {
+                    entity: mirror.0,
+                    text: Arc::clone(&text.text),
+                    font: Arc::clone(&text.font),
+                    font_size: text.font_size,
+                    color: text.color,
+                    size: text.size(),
+                    z_index: *z_index,
+                    pos: *pos,
+                    maybe_tint: tint.copied(),
+                    maybe_shadow: shadow.copied(),
+                },
+            ));
             draw_screen_space(
                 &mut d,
-                &snapshot.screen_sprites,
-                &snapshot.screen_texts,
+                screen_sprite_buffer,
+                screen_text_buffer,
                 &snapshot.gui_windows,
                 &snapshot.gui_buttons,
                 &snapshot.gui_labels,
@@ -985,8 +1080,13 @@ fn warn_missing_theme(
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space(
     d: &mut impl RaylibDraw,
-    screen_sprites: &[ScreenSpriteEntry],
-    screen_texts: &[ScreenTextEntry],
+    // Phase 7f-3 checkpoint 2: already-resolved mirror-query-sourced items,
+    // drained (not iterated) into `buffer` -- draining reuses each item's
+    // capacity for the caller's next-frame scratch buffer with zero clone,
+    // matching the Local-buffer-reuse convention `sprite_buffer`/
+    // `text_buffer` already use above.
+    screen_sprites: &mut Vec<ScreenSpriteBufferItem>,
+    screen_texts: &mut Vec<ScreenTextBufferItem>,
     gui_windows: &[GuiWindowEntry],
     gui_buttons: &[GuiButtonEntry],
     gui_labels: &[GuiLabelEntry],
@@ -1123,29 +1223,8 @@ fn draw_screen_space(
             maybe_shadow: theme.panel_shadow,
         }));
     }
-    buffer.extend(screen_sprites.iter().map(|entry| {
-        ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
-            sprite: entry.sprite.clone(),
-            z_index: entry.z_index,
-            pos: entry.position,
-            maybe_tint: entry.tint,
-            maybe_shadow: entry.shadow,
-        })
-    }));
-    buffer.extend(screen_texts.iter().map(|entry| {
-        let t = &entry.text;
-        ScreenDrawItem::Text(ScreenTextBufferItem {
-            text: Arc::clone(&t.text),
-            font: Arc::clone(&t.font),
-            font_size: t.font_size,
-            color: t.color,
-            size: t.size(),
-            z_index: entry.z_index,
-            pos: entry.position,
-            maybe_tint: entry.tint,
-            maybe_shadow: entry.shadow,
-        })
-    }));
+    buffer.extend(screen_sprites.drain(..).map(ScreenDrawItem::Sprite));
+    buffer.extend(screen_texts.drain(..).map(ScreenDrawItem::Text));
 
     buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
 
@@ -1190,7 +1269,12 @@ mod screen_draw_buffer_tests {
     use crate::components::screenposition::ScreenPosition;
 
     fn sprite_item(z: f32) -> ScreenDrawItem {
+        sprite_item_with_entity(z, Entity::from_raw_u32(0).unwrap())
+    }
+
+    fn sprite_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
+            entity,
             sprite: Sprite {
                 tex_key: std::sync::Arc::from("tex"),
                 width: 1.0,
@@ -1208,7 +1292,12 @@ mod screen_draw_buffer_tests {
     }
 
     fn text_item(z: f32) -> ScreenDrawItem {
+        text_item_with_entity(z, Entity::from_raw_u32(0).unwrap())
+    }
+
+    fn text_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
         ScreenDrawItem::Text(ScreenTextBufferItem {
+            entity,
             text: Arc::from("hi"),
             font: Arc::from("font"),
             font_size: 12.0,
@@ -1250,6 +1339,47 @@ mod screen_draw_buffer_tests {
         let sorted = sort(buffer);
         assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
         assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
+    }
+
+    #[test]
+    fn equal_zindex_and_variant_ties_break_ascending_by_entity() {
+        // Phase 7f-3 checkpoint 2: two sprites at the same z_index (so
+        // variant_rank ties too) must order deterministically by
+        // Entity's own Ord impl, since mirror query iteration order
+        // carries no guarantee, unlike the old snapshot Vec's build order.
+        // Compares against `entities.sort()` rather than a hand-guessed
+        // order: Entity's internal bit layout (NonMaxU32-niched index) does
+        // NOT correlate monotonically with `from_raw_u32`'s input, so the
+        // only correct oracle for "ascending by Entity" is `Entity`'s own
+        // `Ord` impl, not raw index magnitude.
+        let mut entities: Vec<Entity> = [42, 7, 100]
+            .into_iter()
+            .map(|i| Entity::from_raw_u32(i).unwrap())
+            .collect();
+        let buffer: Vec<ScreenDrawItem> = entities
+            .iter()
+            .map(|&e| sprite_item_with_entity(1.0, e))
+            .collect();
+        let sorted = sort(buffer);
+        let ids: Vec<Option<Entity>> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
+
+        entities.sort();
+        assert_eq!(ids, entities.into_iter().map(Some).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn equal_zindex_and_variant_ties_break_ascending_by_entity_for_text() {
+        let mut entities: Vec<Entity> =
+            [9, 3].into_iter().map(|i| Entity::from_raw_u32(i).unwrap()).collect();
+        let buffer: Vec<ScreenDrawItem> = entities
+            .iter()
+            .map(|&e| text_item_with_entity(1.0, e))
+            .collect();
+        let sorted = sort(buffer);
+        let ids: Vec<Option<Entity>> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
+
+        entities.sort();
+        assert_eq!(ids, entities.into_iter().map(Some).collect::<Vec<_>>());
     }
 }
 
