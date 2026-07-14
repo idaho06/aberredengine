@@ -110,7 +110,9 @@ use crate::systems::gui_interactable_click::gui_interactable_click_observer;
 use crate::resources::imgui_bridge::{ImguiBridge, ImguiCaptureState};
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
+use crate::resources::pending_imgui_capture::PendingImguiCapture;
 use crate::resources::postprocessshader::PostProcessShader;
+use crate::resources::quit_requested::QuitRequested;
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::scenemanager::{RenderSceneTable, SceneManager};
 use crate::resources::screensize::ScreenSize;
@@ -819,6 +821,8 @@ impl EngineBuilder {
         world.insert_resource(DebugOverlayConfig::default());
         world.insert_resource(SignalIntents::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
+        world.insert_resource(QuitRequested::default());
+        world.insert_resource(PendingImguiCapture::default());
         if let Some(table) = render_scene_table {
             world.insert_resource(table);
         }
@@ -1397,20 +1401,25 @@ impl EngineBuilder {
         Ok((fixed, present))
     }
 
-    /// Build the render thread's single per-frame schedule (Phase 5e):
-    /// message-queue aging, GL asset loads, snapshot-driven config
-    /// application, then the render pass. `apply_gameconfig_changes` loses
-    /// its old `run_if(state_is_playing)` gate — the render world has no
+    /// Build the render thread's single per-frame schedule (Phase 7f-1: every
+    /// per-frame step, including the ones that used to be hand-written in
+    /// `render_main_loop`, is now a system in this chain). `apply_gameconfig_changes`
+    /// loses its old `run_if(state_is_playing)` gate — the render world has no
     /// `GameState`; the snapshot's config is seeded with the real loaded
     /// config at startup, so early application is a no-op, not a downgrade.
     fn build_render_schedule(world: &mut World) -> Result<Schedule, String> {
         let mut schedule = Schedule::default();
         schedule.add_systems(
             (
+                refresh_window_size,
+                sample_and_send_input,
+                pump_render_msgs,
                 update_bevy_render_asset_cmds,
                 process_render_asset_cmds,
+                receive_snapshot,
                 apply_gameconfig_changes,
                 render_system,
+                send_render_mirrors,
             )
                 .chain(),
         );
@@ -1420,12 +1429,9 @@ impl EngineBuilder {
         Ok(schedule)
     }
 
-    /// Render (main) thread loop (Phase 5e): refresh window state, sample
-    /// input, ship it to the logic thread, drain logic->render messages
-    /// (keeping only the newest snapshot), run the render schedule, then
-    /// diff-and-send the render-owned mirrors (`ScreenSize`,
-    /// `DebugOverlayConfig`) and the `SignalIntents` queued by this frame's
-    /// `GuiCallback`.
+    /// Render (main) thread loop (Phase 7f-1: shrunk to just running the
+    /// schedule -- every step that used to be hand-written here is now a
+    /// system in `build_render_schedule`'s chain, see that fn's doc comment).
     ///
     /// Shutdown ordering: window close (or `RenderMsg::Quit`) -> send
     /// `LogicMsg::Shutdown` -> join the logic thread (which runs
@@ -1436,136 +1442,16 @@ impl EngineBuilder {
         #[cfg(feature = "tracy")]
         let _tracy = tracy_client::Client::start();
 
-        let mut quit_requested = false;
-        let mut last_screen_size = *world.resource::<ScreenSize>();
-        let mut last_overlay_config = world.resource::<DebugOverlayConfig>().clone();
-        // Previous iteration's imgui capture state (Phase 6e) -- updated
-        // after the render schedule runs each iteration, read into the NEXT
-        // iteration's `InputSample` send below. One frame of lag, same
-        // latency class as `SignalIntents`.
-        let mut imgui_capture = ImguiCaptureState::default();
-        // Crossbeam endpoints are Clone: hold them directly so the loop body
-        // never has to re-fetch (and re-borrow) the LogicBridge resource.
-        let (tx_logic, tx_input, rx_render) = {
-            let bridge = world.resource::<LogicBridge>();
-            (
-                bridge.tx_logic.clone(),
-                bridge.tx_input.clone(),
-                bridge.rx_render.clone(),
-            )
-        };
-
         while !world
             .non_send::<raylib::RaylibHandle>()
             .window_should_close()
-            && !quit_requested
+            && !world.resource::<QuitRequested>().0
             && crate::protocol::shutdown::running()
         {
-            // Refresh WindowSize from the OS before sampling (letterbox math).
-            let (window_w, window_h) = {
-                let rl = world.non_send::<raylib::RaylibHandle>();
-                (rl.get_screen_width(), rl.get_screen_height())
-            };
-            {
-                let mut window_size = world.resource_mut::<WindowSize>();
-                window_size.w = window_w;
-                window_size.h = window_h;
-            }
-
-            // Sample the raw device state once per render frame (the only
-            // input code touching the raylib handle; Phase 7d: no bindings,
-            // no letterbox math, no edges here -- the sim thread resolves
-            // all of that from the raw bits below).
-            let raw = {
-                let rl = world.non_send::<raylib::RaylibHandle>();
-                sample_raw_device_snapshot(rl, window_w, window_h)
-            };
-
-            // Ship the sample (+ last iteration's imgui capture state) over
-            // the dedicated bounded input channel. A momentarily full queue
-            // (sim stalled for 8+ render frames) drops the sample rather
-            // than growing an unbounded backlog -- the sim diffs consecutive
-            // samples, so at worst this loses a sub-frame tap during a
-            // multi-frame stall, which was already unwinnable. Disconnected
-            // (logic thread gone) is the one outcome that ends the loop.
-            let result = tx_input.try_send(InputSample { raw, capture: imgui_capture });
-            if crate::pacing::send_channel_disconnected(&result) {
-                log::error!("Logic thread disconnected; shutting down");
-                quit_requested = true;
-            }
-
-            // Drain logic -> render messages: asset commands are re-queued
-            // into this world's Messages<RenderAssetCmd> for
-            // process_render_asset_cmds. The DrawableSnapshot itself no
-            // longer travels this channel (Phase 7c) -- see the triple
-            // buffer read below. Phase 7d: F10 decisions arrive here too
-            // (ToggleFullscreen) -- bindings moved sim-side, so the render
-            // thread can no longer detect the F10 edge itself.
-            let mut asset_cmds: Vec<RenderAssetCmd> = Vec::new();
-            let mut toggle_fullscreen = false;
-            for msg in rx_render.try_iter() {
-                match msg {
-                    RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
-                    RenderMsg::ToggleFullscreen => toggle_fullscreen = true,
-                    RenderMsg::Quit => quit_requested = true,
-                }
-            }
-            if toggle_fullscreen {
-                world.trigger(SwitchFullScreenEvent {});
-                world.flush();
-            }
-            if !asset_cmds.is_empty() {
-                world
-                    .resource_mut::<Messages<RenderAssetCmd>>()
-                    .write_batch(asset_cmds);
-            }
-
-            // Read the newest published snapshot from the triple buffer
-            // (Phase 7c; latest-wins, no interpolation -- same property the
-            // old channel-based "try_iter() + keep newest" drain had).
-            // `update()` swaps in the sim's most recent publish iff one
-            // arrived since the last read; a fast render frame with no new
-            // publish simply redraws the same DrawableSnapshot again. Done
-            // BEFORE the render schedule runs (which drains the asset cmds
-            // queued above via process_render_asset_cmds, then reads this
-            // resource via apply_gameconfig_changes/render_system), so this
-            // frame's asset loads and the snapshot referencing them are both
-            // visible to the same schedule.run() pass.
-            let new_snapshot = {
-                let mut consumer = world.resource_mut::<SnapshotConsumer>();
-                consumer.0.update().then(|| consumer.0.output_buffer().clone())
-            };
-            if let Some(snapshot) = new_snapshot {
-                *world.resource_mut::<DrawableSnapshot>() = snapshot;
-            }
-
             {
                 crate::tracy::tracy_span!("render_schedule_run");
                 schedule.run(world);
             }
-
-            // Refresh for the NEXT iteration's InputSample send (Phase 6e).
-            imgui_capture = world.non_send::<ImguiBridge>().capture_state();
-
-            // Diff-and-send the render-owned mirrors back to logic.
-            let screen_size = *world.resource::<ScreenSize>();
-            if screen_size != last_screen_size {
-                last_screen_size = screen_size;
-                let _ = tx_logic.send(LogicMsg::ScreenSize {
-                    w: screen_size.w,
-                    h: screen_size.h,
-                });
-            }
-            let overlay_config = world.resource::<DebugOverlayConfig>();
-            if *overlay_config != last_overlay_config {
-                last_overlay_config = overlay_config.clone();
-                let _ = tx_logic.send(LogicMsg::OverlayConfig(last_overlay_config.clone()));
-            }
-            let intents = std::mem::take(&mut world.resource_mut::<SignalIntents>().0);
-            if !intents.is_empty() {
-                let _ = tx_logic.send(LogicMsg::SignalIntents(intents));
-            }
-
             world.clear_trackers();
             crate::tracy::tracy_frame_mark!();
         }
@@ -1574,6 +1460,140 @@ impl EngineBuilder {
         // LuaRuntime), then let the render world / window drop after return.
         shutdown_logic(world);
     }
+}
+
+/// Refreshes `WindowSize` from the OS before input sampling (Phase 7f-1;
+/// first step of the render schedule, since `sample_and_send_input` needs
+/// the up-to-date size for its letterbox math).
+fn refresh_window_size(rl: NonSend<raylib::RaylibHandle>, mut window_size: ResMut<WindowSize>) {
+    window_size.w = rl.get_screen_width();
+    window_size.h = rl.get_screen_height();
+}
+
+/// Samples the raw device state once per render frame (the only system
+/// touching the raylib handle for input; Phase 7d: no bindings, no edges
+/// here -- the sim thread resolves all of that) and ships it (+ the
+/// previous frame's imgui capture state, one-frame lag via
+/// `PendingImguiCapture`) to the logic thread over the dedicated bounded
+/// input channel. A momentarily full queue (sim stalled for 8+ render
+/// frames) drops the sample rather than growing an unbounded backlog; a
+/// disconnected channel (logic thread gone) sets `QuitRequested`.
+fn sample_and_send_input(
+    rl: NonSend<raylib::RaylibHandle>,
+    window_size: Res<WindowSize>,
+    capture: Res<PendingImguiCapture>,
+    bridge: Res<LogicBridge>,
+    mut quit: ResMut<QuitRequested>,
+) {
+    let raw = sample_raw_device_snapshot(&rl, window_size.w, window_size.h);
+    let result = bridge.tx_input.try_send(InputSample {
+        raw,
+        capture: capture.0,
+    });
+    if crate::pacing::send_channel_disconnected(&result) {
+        log::error!("Logic thread disconnected; shutting down");
+        quit.0 = true;
+    }
+}
+
+/// Drains logic->render messages once per frame: re-queues asset commands
+/// into this world's `Messages<RenderAssetCmd>` for `process_render_asset_cmds`,
+/// triggers `SwitchFullScreenEvent` (Phase 7d: F10 decisions arrive here,
+/// bindings having moved sim-side), and sets `QuitRequested` on
+/// `RenderMsg::Quit`. EXCLUSIVE system (`fn(&mut World)`, not a
+/// `SystemParam`-based one): the fullscreen toggle's `world.trigger(...)` +
+/// `world.flush()` must apply synchronously so it's visible to
+/// `render_system` later in this same schedule run -- a regular system's
+/// `Commands::trigger` would only apply at a scheduler-inserted sync point,
+/// not deterministically before the next chained system.
+fn pump_render_msgs(world: &mut World) {
+    let msgs: Vec<RenderMsg> = {
+        let bridge = world.resource::<LogicBridge>();
+        bridge.rx_render.try_iter().collect()
+    };
+
+    let mut asset_cmds: Vec<RenderAssetCmd> = Vec::new();
+    let mut toggle_fullscreen = false;
+    for msg in msgs {
+        match msg {
+            RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
+            RenderMsg::ToggleFullscreen => toggle_fullscreen = true,
+            RenderMsg::Quit => world.resource_mut::<QuitRequested>().0 = true,
+        }
+    }
+    if toggle_fullscreen {
+        world.trigger(SwitchFullScreenEvent {});
+        world.flush();
+    }
+    if !asset_cmds.is_empty() {
+        world
+            .resource_mut::<Messages<RenderAssetCmd>>()
+            .write_batch(asset_cmds);
+    }
+}
+
+/// Reads the newest published snapshot off the triple buffer (Phase 7c;
+/// latest-wins, no interpolation), cloning it into `DrawableSnapshot` if a
+/// new one arrived since the last read (still a full clone, not
+/// zero-copy). Runs after `update_bevy_render_asset_cmds`/
+/// `process_render_asset_cmds` rather than before them (order changed from
+/// pre-7f-1); safe because neither of those systems reads or writes
+/// `DrawableSnapshot` (verified: no reference to it in
+/// `src/systems/render_assets.rs`) -- only `apply_gameconfig_changes`/
+/// `render_system` do, and both still run after this system either way, so
+/// this frame's asset loads and this frame's snapshot are visible together
+/// regardless of this reordering. This system's name is deliberately kept
+/// stable for 7f-3/7f-4, which will expand its body into full mirror-entity
+/// reconciliation without renaming it.
+fn receive_snapshot(mut consumer: ResMut<SnapshotConsumer>, mut snapshot: ResMut<DrawableSnapshot>) {
+    if consumer.0.update() {
+        *snapshot = consumer.0.output_buffer().clone();
+    }
+}
+
+/// Diffs the render-owned mirrors (`ScreenSize`, `DebugOverlayConfig`)
+/// against their previous-frame values and sends `LogicMsg`s on change;
+/// drains `SignalIntents` queued by this frame's `GuiCallback`; refreshes
+/// `PendingImguiCapture` for `sample_and_send_input`'s NEXT frame read (the
+/// one-frame imgui-capture lag, unchanged since Phase 6e). The `Local<Option<T>>`s
+/// replace the loop-local `last_screen_size`/`last_overlay_config` bindings
+/// -- both are read AND written by this same system across repeated
+/// `schedule.run()` calls, which is exactly what `Local<T>` is for; wrapped
+/// in `Option` so this compiles without requiring `ScreenSize`/
+/// `DebugOverlayConfig` to implement `Default` (neither does today) --
+/// `Option<T>: Default` holds unconditionally. Consequence: frame 1 always
+/// sees `None != Some(current)` and sends once even if nothing changed
+/// since startup -- harmless, the logic thread already expects an initial
+/// `ScreenSize`/`OverlayConfig` update.
+#[allow(clippy::too_many_arguments)]
+fn send_render_mirrors(
+    screen_size: Res<ScreenSize>,
+    mut last_screen_size: Local<Option<ScreenSize>>,
+    overlay_config: Res<DebugOverlayConfig>,
+    mut last_overlay_config: Local<Option<DebugOverlayConfig>>,
+    mut intents: ResMut<SignalIntents>,
+    bridge: Res<LogicBridge>,
+    imgui: NonSend<ImguiBridge>,
+    mut pending_capture: ResMut<PendingImguiCapture>,
+) {
+    if *last_screen_size != Some(*screen_size) {
+        *last_screen_size = Some(*screen_size);
+        let _ = bridge.tx_logic.send(LogicMsg::ScreenSize {
+            w: screen_size.w,
+            h: screen_size.h,
+        });
+    }
+    if last_overlay_config.as_ref() != Some(&*overlay_config) {
+        *last_overlay_config = Some(overlay_config.clone());
+        let _ = bridge
+            .tx_logic
+            .send(LogicMsg::OverlayConfig(overlay_config.clone()));
+    }
+    let intents_taken = std::mem::take(&mut intents.0);
+    if !intents_taken.is_empty() {
+        let _ = bridge.tx_logic.send(LogicMsg::SignalIntents(intents_taken));
+    }
+    pending_capture.0 = imgui.capture_state();
 }
 
 /// Everything the logic thread needs to build the gameplay `World` and its

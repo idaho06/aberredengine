@@ -21,6 +21,8 @@
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`imgui_bridge`] – internal Dear ImGui backend that replaces raylib's removed feature
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
+//! - [`pending_imgui_capture`] – one-frame-lag imgui capture state pending send to the logic thread
+//! - [`quit_requested`] – render-loop quit flag read by the loop's `while` condition
 //! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
@@ -54,7 +56,9 @@ pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
 pub mod mapdata;
+pub mod pending_imgui_capture;
 pub mod postprocessshader;
+pub mod quit_requested;
 pub mod rawinput;
 pub mod rendertarget;
 pub mod scenemanager;
