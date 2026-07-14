@@ -29,8 +29,11 @@ use raylib::prelude::*;
 
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
-use crate::components::guiinteractable::GuiWidgetState;
-use crate::components::guiprogressbar::ProgressBarDirection;
+use crate::components::guibutton::GuiButton;
+use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
+use crate::components::guilabel::GuiLabel;
+use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
+use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -42,13 +45,10 @@ use crate::components::zindex::ZIndex;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::drawable_snapshot::{
-    DrawableSnapshot, GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry,
-};
 use crate::resources::fontstore::FontStore;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::imgui_bridge::ImguiBridge;
-use self::mirror::MirrorQueries;
+use self::mirror::{MirrorQueries, SimMirror};
 use crate::resources::render_mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
@@ -143,6 +143,9 @@ pub(super) struct ScreenTextBufferItem {
 /// Screen-space GUI window panel draw item. Window backgrounds sit below
 /// sprites/text drawn on top of them (see [`ScreenDrawItem::variant_rank`]).
 pub(super) struct ScreenPanelBufferItem {
+    /// Sim entity (Phase 7f-4), used only as [`ScreenDrawItem::sort_key`]'s
+    /// tie-break -- see [`ScreenSpriteBufferItem::entity`].
+    entity: Entity,
     panel: GuiNinePatch,
     dest: Rectangle,
     z_index: ZIndex,
@@ -155,6 +158,8 @@ pub(super) struct ScreenPanelBufferItem {
 /// item per bar (rather than two `Panel` items) guarantees the track always
 /// renders before the fill regardless of `sort_unstable_by`'s tie-breaking.
 pub(super) struct ScreenProgressBarBufferItem {
+    /// See [`ScreenPanelBufferItem::entity`].
+    entity: Entity,
     track: Option<GuiNinePatch>,
     fill: GuiNinePatch,
     track_dest: Rectangle,
@@ -204,22 +209,20 @@ impl ScreenDrawItem {
         }
     }
 
-    /// Tertiary sort key (Phase 7f-3 checkpoint 2), used only to break ties
-    /// at equal `(z_index, variant_rank)`: the mirror-sourced `Sprite`/`Text`
-    /// variants' sim entity, ascending. `Panel`/`ProgressBar` (still
-    /// Vec-sourced, unmigrated, and structurally have no entity to compare)
-    /// return `None`, which sorts before every `Some(_)` -- but since they
-    /// only ever tie against items of the SAME variant_rank (0, shared only
-    /// with each other), and both always return `None`, their relative
-    /// order stays whatever `sort_unstable_by` happens to produce, exactly
-    /// as before this phase (`sort_unstable_by` gives no stability guarantee
-    /// for equal keys) -- `Option<Entity>` makes "not yet migrated" a
-    /// type-level fact instead of a magic sentinel value.
-    fn sort_key(&self) -> Option<Entity> {
+    /// Tertiary sort key (Phase 7f-4: all 4 variants are mirror-sourced now,
+    /// each carrying its sim entity), used only to break ties at equal
+    /// `(z_index, variant_rank)`: ascending sim entity. Mirror query
+    /// iteration order carries no ordering guarantee, unlike the old
+    /// snapshot `Vec`'s build order, so this makes draw order deterministic
+    /// -- including among `Panel`/`ProgressBar` items that previously had no
+    /// entity to compare and tied in whatever order `sort_unstable_by`
+    /// happened to produce.
+    fn sort_key(&self) -> Entity {
         match self {
-            ScreenDrawItem::Panel(_) | ScreenDrawItem::ProgressBar(_) => None,
-            ScreenDrawItem::Sprite(s) => Some(s.entity),
-            ScreenDrawItem::Text(t) => Some(t.entity),
+            ScreenDrawItem::Panel(p) => p.entity,
+            ScreenDrawItem::ProgressBar(pb) => pb.entity,
+            ScreenDrawItem::Sprite(s) => s.entity,
+            ScreenDrawItem::Text(t) => t.entity,
         }
     }
 
@@ -239,8 +242,8 @@ impl ScreenDrawItem {
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
     text_buffer: Vec<TextBufferItem>,
-    // Phase 7f-3 checkpoint 2: scratch buffers for the mirror-query-sourced
-    // screen sprite/text items, drained into screen_draw_buffer by
+    // Phase 7f-3/7f-4: scratch buffers for the mirror-query-sourced
+    // screen-space items, drained into screen_draw_buffer by
     // draw_screen_space (rather than passing the query directly, this keeps
     // the existing Local-buffer-capacity-reuse convention the other 2
     // buffers above already use).
@@ -331,14 +334,11 @@ pub fn render_system(
     mut imgui_bridge: NonSendMut<ImguiBridge>,
     mut shader_store: NonSendMut<ShaderStore>,
     mut res: RenderResources,
-    snapshot: Res<DrawableSnapshot>,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
-    // Phase 7f-3: draw prep for map sprites/texts and screen sprites/texts
-    // sources from retained mirror entities instead of the corresponding
-    // snapshot.<field> Vec. `snapshot` above is still needed for the debug
-    // sprite/screen-sprite/screen-text counts and the 4 GUI categories not
-    // yet migrated (7f-4).
+    // Phase 7f-3/7f-4: draw prep for all 8 drawable categories sources from
+    // retained mirror entities instead of a DrawableSnapshot Vec -- there is
+    // no render-world DrawableSnapshot resource any more.
     mirrors: MirrorQueries,
 ) {
     crate::tracy::tracy_span!("render_system");
@@ -825,13 +825,11 @@ pub fn render_system(
         let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
         {
             crate::tracy::tracy_span!("render/screen_space");
-            // Phase 7f-3 checkpoint 2: screen sprites/texts source from
+            // Phase 7f-3/7f-4: all 8 screen-space categories source from
             // retained mirror entities. Built into their own scratch
             // buffers (not directly into screen_draw_buffer) so
-            // draw_screen_space can stay agnostic to where its sprite/text
-            // items came from -- it just drains whatever's here, same as
-            // it reads gui_windows/gui_buttons/etc. from the still-Vec-based
-            // GUI categories below.
+            // draw_screen_space can stay agnostic to where its items came
+            // from -- it just drains/iterates whatever's here.
             screen_sprite_buffer.clear();
             screen_sprite_buffer.extend(mirrors.screen_sprites.iter().map(
                 |(mirror, sprite, pos, z_index, tint, shadow)| ScreenSpriteBufferItem {
@@ -858,14 +856,19 @@ pub fn render_system(
                     maybe_shadow: shadow.copied(),
                 },
             ));
+            // GUI categories are read straight off their mirror queries
+            // (borrowed, not cloned into an owned scratch buffer) --
+            // unlike sprites/texts above, several GuiX component fields
+            // (caption, callback_name, ...) are heap-allocated Strings that
+            // a per-frame Vec<Entry> rebuild would needlessly clone.
             draw_screen_space(
                 &mut d,
                 screen_sprite_buffer,
                 screen_text_buffer,
-                &snapshot.gui_windows,
-                &snapshot.gui_buttons,
-                &snapshot.gui_labels,
-                &snapshot.gui_progress_bars,
+                mirrors.gui_windows.iter(),
+                mirrors.gui_buttons.iter(),
+                mirrors.gui_labels.iter(),
+                mirrors.gui_progress_bars.iter(),
                 &res.gui_themes.0,
                 &mut res.gui_theme_warn_cache,
                 textures,
@@ -913,12 +916,15 @@ pub fn render_system(
                 screensize.h as u32,
             );
             let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, res.camera.0);
-            let sprite_count = snapshot.map_sprites.len();
+            // Query::count() (not .iter().count()) takes the optimized path for
+            // archetypal queries -- table/archetype-count arithmetic instead of
+            // walking every matched entity, closer to the old Vec::len() cost.
+            let sprite_count = mirrors.map_sprites.count();
             let collider_count = debug_snapshot.colliders.len();
             let position_count = debug_snapshot.positions.len();
             let rigidbody_count = debug_snapshot.rigidbody_count;
-            let screen_sprite_count = snapshot.screen_sprites.len();
-            let screen_text_count = snapshot.screen_texts.len();
+            let screen_sprite_count = mirrors.screen_sprites.count();
+            let screen_text_count = mirrors.screen_texts.count();
             let shader_count = shader_store.len();
             (
                 fps,
@@ -1056,12 +1062,13 @@ fn resolve_button_shadow(
 }
 
 fn screen_panel_item(
+    entity: Entity,
     panel: GuiNinePatch,
     dest: Rectangle,
     z_index: ZIndex,
     maybe_shadow: Option<Shadow>,
 ) -> ScreenDrawItem {
-    ScreenDrawItem::Panel(ScreenPanelBufferItem { panel, dest, z_index, maybe_shadow })
+    ScreenDrawItem::Panel(ScreenPanelBufferItem { entity, panel, dest, z_index, maybe_shadow })
 }
 
 fn warn_missing_theme(
@@ -1078,7 +1085,7 @@ fn warn_missing_theme(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn draw_screen_space(
+fn draw_screen_space<'m>(
     d: &mut impl RaylibDraw,
     // Phase 7f-3 checkpoint 2: already-resolved mirror-query-sourced items,
     // drained (not iterated) into `buffer` -- draining reuses each item's
@@ -1087,10 +1094,18 @@ fn draw_screen_space(
     // `text_buffer` already use above.
     screen_sprites: &mut Vec<ScreenSpriteBufferItem>,
     screen_texts: &mut Vec<ScreenTextBufferItem>,
-    gui_windows: &[GuiWindowEntry],
-    gui_buttons: &[GuiButtonEntry],
-    gui_labels: &[GuiLabelEntry],
-    gui_progress_bars: &[GuiProgressBarEntry],
+    // Phase 7f-4: read straight off the mirror query iterators (borrowed,
+    // no per-frame Vec<Entry> materialization) -- several GuiX component
+    // fields (caption, callback_name, ...) are heap-allocated Strings that
+    // an owned scratch-buffer rebuild would needlessly clone every frame.
+    gui_windows: impl Iterator<Item = (&'m SimMirror, &'m GuiWindow, &'m ScreenPosition, &'m ZIndex)>,
+    gui_buttons: impl Iterator<
+        Item = (&'m SimMirror, &'m GuiButton, &'m GuiInteractable, &'m ScreenPosition, &'m ZIndex),
+    >,
+    gui_labels: impl Iterator<Item = (&'m SimMirror, &'m GuiLabel, &'m ScreenPosition, &'m ZIndex)>,
+    gui_progress_bars: impl Iterator<
+        Item = (&'m SimMirror, &'m GuiProgressBar, &'m ScreenPosition, &'m ZIndex),
+    >,
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
     textures: &TextureStore,
@@ -1100,10 +1115,10 @@ fn draw_screen_space(
     debug_texts: bool,
 ) {
     buffer.clear();
-    for entry in gui_windows {
-        let (window, p, z) = (&entry.window, &entry.position, &entry.z_index);
+    for (mirror, window, p, z) in gui_windows {
         match gui_theme_store.get(&window.theme_key) {
             Some(theme) => buffer.push(screen_panel_item(
+                mirror.0,
                 theme.panel.clone(),
                 Rectangle { x: p.pos.x, y: p.pos.y, width: window.size.x, height: window.size.y },
                 *z,
@@ -1117,9 +1132,7 @@ fn draw_screen_space(
             ),
         }
     }
-    for entry in gui_buttons {
-        let (button, interactable, p, z) =
-            (&entry.button, &entry.interactable, &entry.position, &entry.z_index);
+    for (mirror, button, interactable, p, z) in gui_buttons {
         let Some(theme) = gui_theme_store.get(&button.theme_key) else {
             warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1131,6 +1144,7 @@ fn draw_screen_space(
         };
         if let Some(skin) = theme.button.as_ref() {
             buffer.push(screen_panel_item(
+                mirror.0,
                 resolve_button_patch(skin, interactable.state).clone(),
                 Rectangle { x: p.pos.x, y: p.pos.y, width: interactable.size.x, height: interactable.size.y },
                 *z,
@@ -1145,8 +1159,7 @@ fn draw_screen_space(
             );
         }
     }
-    for entry in gui_labels {
-        let (label, p, z) = (&entry.label, &entry.position, &entry.z_index);
+    for (mirror, label, p, z) in gui_labels {
         let Some(theme) = gui_theme_store.get(&label.theme_key) else {
             warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1158,6 +1171,7 @@ fn draw_screen_space(
         };
         if let Some(patch) = theme.label.as_ref() {
             buffer.push(screen_panel_item(
+                mirror.0,
                 patch.clone(),
                 Rectangle { x: p.pos.x, y: p.pos.y, width: label.size.x, height: label.size.y },
                 *z,
@@ -1172,8 +1186,7 @@ fn draw_screen_space(
             );
         }
     }
-    for entry in gui_progress_bars {
-        let (bar, p, z) = (&entry.progress_bar, &entry.position, &entry.z_index);
+    for (mirror, bar, p, z) in gui_progress_bars {
         let Some(theme) = gui_theme_store.get(&bar.theme_key) else {
             warn_missing_theme(
                 gui_theme_warn_cache,
@@ -1215,6 +1228,7 @@ fn draw_screen_space(
             }
         };
         buffer.push(ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
+            entity: mirror.0,
             track: skin.track.clone(),
             fill: skin.fill.clone(),
             track_dest,
@@ -1310,9 +1324,57 @@ mod screen_draw_buffer_tests {
         })
     }
 
+    fn panel_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
+        ScreenDrawItem::Panel(ScreenPanelBufferItem {
+            entity,
+            panel: GuiNinePatch::default(),
+            dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
+            z_index: ZIndex(z),
+            maybe_shadow: None,
+        })
+    }
+
+    fn progress_bar_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
+        ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
+            entity,
+            track: None,
+            fill: GuiNinePatch::default(),
+            track_dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
+            fill_dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
+            z_index: ZIndex(z),
+            maybe_shadow: None,
+        })
+    }
+
     fn sort(mut buffer: Vec<ScreenDrawItem>) -> Vec<ScreenDrawItem> {
         buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
         buffer
+    }
+
+    /// Phase 7f-4: all 4 `ScreenDrawItem` variants are mirror-sourced now
+    /// (GUI windows/buttons/labels all become `Panel` items, progress bars
+    /// their own variant), so ties at equal `(z_index, variant_rank)` must
+    /// resolve deterministically via `sort_key()`'s `Entity` ordering across
+    /// EVERY variant, not just within `Sprite`/`Text` as before this phase.
+    /// `Panel`/`ProgressBar` share `variant_rank` 0, so this specifically
+    /// exercises their tie-break against each other, which used to be
+    /// unspecified (`sort_key()` returned `None` for both).
+    #[test]
+    fn all_four_variants_tie_break_ascending_by_entity_at_equal_rank() {
+        let mut entities: Vec<Entity> =
+            [50, 1, 20].into_iter().map(|i| Entity::from_raw_u32(i).unwrap()).collect();
+        // Panel and ProgressBar share variant_rank 0 -- build one of each
+        // sharing this entity set so their relative order is exercised.
+        let buffer: Vec<ScreenDrawItem> = vec![
+            panel_item_with_entity(1.0, entities[0]),
+            progress_bar_item_with_entity(1.0, entities[1]),
+            panel_item_with_entity(1.0, entities[2]),
+        ];
+        let sorted = sort(buffer);
+        let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
+
+        entities.sort();
+        assert_eq!(ids, entities, "Panel/ProgressBar ties must now resolve by ascending Entity");
     }
 
     #[test]
@@ -1361,10 +1423,10 @@ mod screen_draw_buffer_tests {
             .map(|&e| sprite_item_with_entity(1.0, e))
             .collect();
         let sorted = sort(buffer);
-        let ids: Vec<Option<Entity>> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
+        let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
 
         entities.sort();
-        assert_eq!(ids, entities.into_iter().map(Some).collect::<Vec<_>>());
+        assert_eq!(ids, entities);
     }
 
     #[test]
@@ -1376,10 +1438,10 @@ mod screen_draw_buffer_tests {
             .map(|&e| text_item_with_entity(1.0, e))
             .collect();
         let sorted = sort(buffer);
-        let ids: Vec<Option<Entity>> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
+        let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
 
         entities.sort();
-        assert_eq!(ids, entities.into_iter().map(Some).collect::<Vec<_>>());
+        assert_eq!(ids, entities);
     }
 }
 

@@ -3,13 +3,12 @@
 //! reconciled every time a new `DrawableSnapshot` arrives instead of rebuilt
 //! from a `Vec` every frame.
 //!
-//! Checkpoint 1 covered map sprites; checkpoint 2 adds map texts, screen
-//! sprites, and screen texts -- the mechanical fan-out of checkpoint 1's
-//! pattern the source plan called for. All 4 GUI categories (7f-4) still
-//! read their `DrawableSnapshot` `Vec` fields directly in `render_system`.
-//! This dual-path state is intentional during the migration, not a TODO: do
-//! not remove the old `Vec`-iteration path for an unmigrated category while
-//! working in this file.
+//! Checkpoint 1 covered map sprites; checkpoint 2 added map texts, screen
+//! sprites, and screen texts; 7f-4 added the 4 GUI categories (windows,
+//! buttons, labels, progress bars). All 8 `DrawableSnapshot` drawable
+//! categories are now mirrored -- the render-world `DrawableSnapshot`
+//! *resource* itself no longer exists (the type survives only as the sim
+//! thread's wire format, see `src/protocol/snapshot.rs`).
 //!
 //! Write-only from the snapshot: reconciliation must never read or mutate
 //! anything that would make the render world start carrying gameplay logic
@@ -23,6 +22,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::guibutton::GuiButton;
+use crate::components::guiinteractable::GuiInteractable;
+use crate::components::guilabel::GuiLabel;
+use crate::components::guiprogressbar::GuiProgressBar;
+use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -32,7 +36,8 @@ use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::resources::drawable_snapshot::{
-    MapSpriteEntry, MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
+    GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
+    MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
 };
 
 /// Foreign key back to the sim entity a mirror entity was reconciled from.
@@ -57,6 +62,14 @@ pub struct MirrorMapText;
 pub struct MirrorScreenSprite;
 #[derive(Component, Debug, Default)]
 pub struct MirrorScreenText;
+#[derive(Component, Debug, Default)]
+pub struct MirrorGuiWindow;
+#[derive(Component, Debug, Default)]
+pub struct MirrorGuiButton;
+#[derive(Component, Debug, Default)]
+pub struct MirrorGuiLabel;
+#[derive(Component, Debug, Default)]
+pub struct MirrorGuiProgressBar;
 
 /// `RigidBody.velocity`, captured as a plain component on the mirror entity.
 /// Lives here rather than under `src/components/` because it's a
@@ -81,6 +94,10 @@ pub struct SimIdMap {
     pub map_texts: FxHashMap<u64, Entity>,
     pub screen_sprites: FxHashMap<u64, Entity>,
     pub screen_texts: FxHashMap<u64, Entity>,
+    pub gui_windows: FxHashMap<u64, Entity>,
+    pub gui_buttons: FxHashMap<u64, Entity>,
+    pub gui_labels: FxHashMap<u64, Entity>,
+    pub gui_progress_bars: FxHashMap<u64, Entity>,
     scratch_seen: FxHashSet<u64>,
 }
 
@@ -109,6 +126,26 @@ impl SimEntry for ScreenSpriteEntry {
     }
 }
 impl SimEntry for ScreenTextEntry {
+    fn sim_entity(&self) -> Entity {
+        self.entity
+    }
+}
+impl SimEntry for GuiWindowEntry {
+    fn sim_entity(&self) -> Entity {
+        self.entity
+    }
+}
+impl SimEntry for GuiButtonEntry {
+    fn sim_entity(&self) -> Entity {
+        self.entity
+    }
+}
+impl SimEntry for GuiLabelEntry {
+    fn sim_entity(&self) -> Entity {
+        self.entity
+    }
+}
+impl SimEntry for GuiProgressBarEntry {
     fn sim_entity(&self) -> Entity {
         self.entity
     }
@@ -272,6 +309,87 @@ pub fn reconcile_screen_texts(world: &mut World, entries: &[ScreenTextEntry]) {
     });
 }
 
+/// Reconcile the render world's GUI-window mirror entities against this
+/// snapshot tick's `GuiWindowEntry` list. Simpler than every prior category:
+/// `GuiWindowEntry` has no `Option<...>` fields, so the whole bundle is a
+/// single `.insert()`, no `set_optional` calls needed.
+pub fn reconcile_gui_windows(world: &mut World, entries: &[GuiWindowEntry]) {
+    world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
+        let SimIdMap { gui_windows, scratch_seen, .. } = &mut *id_map;
+        reconcile::<MirrorGuiWindow, _>(
+            world,
+            gui_windows,
+            scratch_seen,
+            entries,
+            |entry, entity_mut| {
+                entity_mut.insert((entry.window.clone(), entry.position, entry.z_index));
+            },
+        );
+    });
+}
+
+/// Reconcile the render world's GUI-button mirror entities against this
+/// snapshot tick's `GuiButtonEntry` list. `GuiButton` and `GuiInteractable`
+/// are two components required to coexist on the same sim entity (not a
+/// cross-entity join); both land on the mirror via one whole-bundle
+/// `.insert()`, same shape as any other multi-component apply closure here.
+pub fn reconcile_gui_buttons(world: &mut World, entries: &[GuiButtonEntry]) {
+    world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
+        let SimIdMap { gui_buttons, scratch_seen, .. } = &mut *id_map;
+        reconcile::<MirrorGuiButton, _>(
+            world,
+            gui_buttons,
+            scratch_seen,
+            entries,
+            |entry, entity_mut| {
+                entity_mut.insert((
+                    entry.button.clone(),
+                    entry.interactable.clone(),
+                    entry.position,
+                    entry.z_index,
+                ));
+            },
+        );
+    });
+}
+
+/// Reconcile the render world's GUI-label mirror entities against this
+/// snapshot tick's `GuiLabelEntry` list. Mirrors [`reconcile_gui_windows`]
+/// exactly, swapping `GuiWindow` for `GuiLabel`.
+pub fn reconcile_gui_labels(world: &mut World, entries: &[GuiLabelEntry]) {
+    world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
+        let SimIdMap { gui_labels, scratch_seen, .. } = &mut *id_map;
+        reconcile::<MirrorGuiLabel, _>(
+            world,
+            gui_labels,
+            scratch_seen,
+            entries,
+            |entry, entity_mut| {
+                entity_mut.insert((entry.label.clone(), entry.position, entry.z_index));
+            },
+        );
+    });
+}
+
+/// Reconcile the render world's GUI-progress-bar mirror entities against
+/// this snapshot tick's `GuiProgressBarEntry` list. Mirrors
+/// [`reconcile_gui_windows`] exactly, swapping `GuiWindow` for
+/// `GuiProgressBar`.
+pub fn reconcile_gui_progress_bars(world: &mut World, entries: &[GuiProgressBarEntry]) {
+    world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
+        let SimIdMap { gui_progress_bars, scratch_seen, .. } = &mut *id_map;
+        reconcile::<MirrorGuiProgressBar, _>(
+            world,
+            gui_progress_bars,
+            scratch_seen,
+            entries,
+            |entry, entity_mut| {
+                entity_mut.insert((entry.progress_bar.clone(), entry.position, entry.z_index));
+            },
+        );
+    });
+}
+
 type MirrorMapSpriteQueryData = (
     &'static SimMirror,
     &'static Sprite,
@@ -316,6 +434,35 @@ type MirrorScreenTextQueryData = (
     Option<&'static Shadow>,
 );
 
+type MirrorGuiWindowQueryData = (
+    &'static SimMirror,
+    &'static GuiWindow,
+    &'static ScreenPosition,
+    &'static ZIndex,
+);
+
+type MirrorGuiButtonQueryData = (
+    &'static SimMirror,
+    &'static GuiButton,
+    &'static GuiInteractable,
+    &'static ScreenPosition,
+    &'static ZIndex,
+);
+
+type MirrorGuiLabelQueryData = (
+    &'static SimMirror,
+    &'static GuiLabel,
+    &'static ScreenPosition,
+    &'static ZIndex,
+);
+
+type MirrorGuiProgressBarQueryData = (
+    &'static SimMirror,
+    &'static GuiProgressBar,
+    &'static ScreenPosition,
+    &'static ZIndex,
+);
+
 /// Bundled mirror-entity draw-prep queries for `render_system`, mirroring
 /// `DrawableSnapshotQueries`' bundling convention
 /// (`src/resources/drawable_snapshot.rs`) and `RenderResources`/
@@ -329,11 +476,17 @@ pub struct MirrorQueries<'w, 's> {
     pub map_texts: Query<'w, 's, MirrorMapTextQueryData, With<MirrorMapText>>,
     pub screen_sprites: Query<'w, 's, MirrorScreenSpriteQueryData, With<MirrorScreenSprite>>,
     pub screen_texts: Query<'w, 's, MirrorScreenTextQueryData, With<MirrorScreenText>>,
+    pub gui_windows: Query<'w, 's, MirrorGuiWindowQueryData, With<MirrorGuiWindow>>,
+    pub gui_buttons: Query<'w, 's, MirrorGuiButtonQueryData, With<MirrorGuiButton>>,
+    pub gui_labels: Query<'w, 's, MirrorGuiLabelQueryData, With<MirrorGuiLabel>>,
+    pub gui_progress_bars: Query<'w, 's, MirrorGuiProgressBarQueryData, With<MirrorGuiProgressBar>>,
 }
 
 #[cfg(test)]
 mod mirror_tests {
     use super::*;
+    use crate::components::guiinteractable::GuiWidgetState;
+    use std::sync::Arc;
 
     fn new_test_world() -> World {
         let mut world = World::new();
@@ -818,5 +971,350 @@ mod mirror_tests {
         assert!(world.resource::<SimIdMap>().map_sprites.is_empty());
         assert!(world.get_entity(text_mirror).is_ok());
         assert_eq!(world.resource::<SimIdMap>().screen_texts.len(), 1);
+    }
+
+    // ---- GUI windows: mechanical repeat, no optional fields at all ----
+
+    fn make_gui_window_entry(entity: Entity, z_index: f32) -> GuiWindowEntry {
+        GuiWindowEntry {
+            entity,
+            window: GuiWindow::new(100.0, 50.0),
+            position: ScreenPosition::new(1.0, 2.0),
+            z_index: ZIndex(z_index),
+        }
+    }
+
+    #[test]
+    fn gui_window_spawns_mirror_on_new_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 1.0)]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_windows.len(), 1);
+        let mirror_entity = *id_map.gui_windows.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
+        assert!(world.get::<MirrorGuiWindow>(mirror_entity).is_some());
+        assert_eq!(world.get::<ZIndex>(mirror_entity).unwrap().0, 1.0);
+    }
+
+    #[test]
+    fn gui_window_updates_existing_mirror_in_place() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 1.0)]);
+        let mirror_first = *world.resource::<SimIdMap>().gui_windows.get(&sim_entity.to_bits()).unwrap();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 2.0)]);
+        let id_map = world.resource::<SimIdMap>();
+        let mirror_second = *id_map.gui_windows.get(&sim_entity.to_bits()).unwrap();
+
+        assert_eq!(mirror_first, mirror_second);
+        assert_eq!(id_map.gui_windows.len(), 1);
+        assert_eq!(world.get::<ZIndex>(mirror_second).unwrap().0, 2.0);
+    }
+
+    #[test]
+    fn gui_window_despawns_mirror_on_vanished_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 1.0)]);
+        let mirror_entity = *world.resource::<SimIdMap>().gui_windows.get(&sim_entity.to_bits()).unwrap();
+
+        reconcile_gui_windows(&mut world, &[]);
+
+        assert!(world.get_entity(mirror_entity).is_err());
+        assert!(world.resource::<SimIdMap>().gui_windows.is_empty());
+    }
+
+    #[test]
+    fn gui_window_respawn_after_despawn_gets_new_mirror() {
+        let mut world = new_test_world();
+        let (e1, e2) = generation_reuse_pair();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(e1, 1.0)]);
+        let mirror_1 = *world.resource::<SimIdMap>().gui_windows.get(&e1.to_bits()).unwrap();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(e2, 1.0)]);
+
+        assert!(world.get_entity(mirror_1).is_err());
+        let id_map = world.resource::<SimIdMap>();
+        assert!(!id_map.gui_windows.contains_key(&e1.to_bits()));
+        assert_ne!(mirror_1, *id_map.gui_windows.get(&e2.to_bits()).unwrap());
+    }
+
+    // ---- GUI buttons: mechanical repeat, plus a two-component bundle test ----
+
+    fn make_gui_button_entry(entity: Entity, z_index: f32) -> GuiButtonEntry {
+        GuiButtonEntry {
+            entity,
+            button: GuiButton::new(100.0, 30.0, "Play"),
+            interactable: GuiInteractable {
+                size: Vector2::new(100.0, 30.0),
+                state: GuiWidgetState::Normal,
+                on_click_callback: None,
+                on_rust_callback: None,
+            },
+            position: ScreenPosition::new(1.0, 2.0),
+            z_index: ZIndex(z_index),
+        }
+    }
+
+    #[test]
+    fn gui_button_spawns_mirror_on_new_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_buttons(&mut world, &[make_gui_button_entry(sim_entity, 1.0)]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_buttons.len(), 1);
+        let mirror_entity = *id_map.gui_buttons.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
+        assert!(world.get::<MirrorGuiButton>(mirror_entity).is_some());
+        assert_eq!(world.get::<GuiButton>(mirror_entity).unwrap().caption, "Play");
+        assert_eq!(
+            world.get::<GuiInteractable>(mirror_entity).unwrap().state,
+            GuiWidgetState::Normal
+        );
+    }
+
+    /// `GuiButton`+`GuiInteractable` are two required components on one
+    /// mirror entity (not a cross-entity join) -- reconciling with both
+    /// `button.theme_key` and `interactable.state` changed must update BOTH
+    /// on the same mirror entity in one pass, proving the whole-bundle
+    /// `.insert()` doesn't drop or stagger either field.
+    #[test]
+    fn gui_button_updates_both_bundled_components_together() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_buttons(&mut world, &[make_gui_button_entry(sim_entity, 1.0)]);
+        let mirror_first = *world.resource::<SimIdMap>().gui_buttons.get(&sim_entity.to_bits()).unwrap();
+
+        let mut second = make_gui_button_entry(sim_entity, 2.0);
+        second.button.theme_key = Arc::from("changed");
+        second.interactable.state = GuiWidgetState::Hovered;
+        reconcile_gui_buttons(&mut world, &[second]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_buttons.len(), 1);
+        let mirror_second = *id_map.gui_buttons.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(mirror_first, mirror_second, "must update the same mirror, not spawn a new one");
+
+        assert_eq!(&*world.get::<GuiButton>(mirror_second).unwrap().theme_key, "changed");
+        assert_eq!(
+            world.get::<GuiInteractable>(mirror_second).unwrap().state,
+            GuiWidgetState::Hovered
+        );
+        assert_eq!(world.get::<ZIndex>(mirror_second).unwrap().0, 2.0);
+    }
+
+    #[test]
+    fn gui_button_despawns_mirror_on_vanished_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_buttons(&mut world, &[make_gui_button_entry(sim_entity, 1.0)]);
+        let mirror_entity = *world.resource::<SimIdMap>().gui_buttons.get(&sim_entity.to_bits()).unwrap();
+
+        reconcile_gui_buttons(&mut world, &[]);
+
+        assert!(world.get_entity(mirror_entity).is_err());
+        assert!(world.resource::<SimIdMap>().gui_buttons.is_empty());
+    }
+
+    #[test]
+    fn gui_button_respawn_after_despawn_gets_new_mirror() {
+        let mut world = new_test_world();
+        let (e1, e2) = generation_reuse_pair();
+
+        reconcile_gui_buttons(&mut world, &[make_gui_button_entry(e1, 1.0)]);
+        let mirror_1 = *world.resource::<SimIdMap>().gui_buttons.get(&e1.to_bits()).unwrap();
+
+        reconcile_gui_buttons(&mut world, &[make_gui_button_entry(e2, 1.0)]);
+
+        assert!(world.get_entity(mirror_1).is_err());
+        let id_map = world.resource::<SimIdMap>();
+        assert!(!id_map.gui_buttons.contains_key(&e1.to_bits()));
+        assert_ne!(mirror_1, *id_map.gui_buttons.get(&e2.to_bits()).unwrap());
+    }
+
+    // ---- GUI labels: mechanical repeat ----
+
+    fn make_gui_label_entry(entity: Entity, z_index: f32) -> GuiLabelEntry {
+        GuiLabelEntry {
+            entity,
+            label: GuiLabel::new(80.0, 20.0, "Score"),
+            position: ScreenPosition::new(1.0, 2.0),
+            z_index: ZIndex(z_index),
+        }
+    }
+
+    #[test]
+    fn gui_label_spawns_mirror_on_new_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_labels(&mut world, &[make_gui_label_entry(sim_entity, 1.0)]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_labels.len(), 1);
+        let mirror_entity = *id_map.gui_labels.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
+        assert!(world.get::<MirrorGuiLabel>(mirror_entity).is_some());
+        assert_eq!(world.get::<GuiLabel>(mirror_entity).unwrap().caption, "Score");
+    }
+
+    #[test]
+    fn gui_label_updates_existing_mirror_in_place() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_labels(&mut world, &[make_gui_label_entry(sim_entity, 1.0)]);
+        let mirror_first = *world.resource::<SimIdMap>().gui_labels.get(&sim_entity.to_bits()).unwrap();
+
+        let mut second = make_gui_label_entry(sim_entity, 2.0);
+        second.label.caption = "Changed".to_string();
+        reconcile_gui_labels(&mut world, &[second]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_labels.len(), 1);
+        let mirror_second = *id_map.gui_labels.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(mirror_first, mirror_second);
+        assert_eq!(world.get::<GuiLabel>(mirror_second).unwrap().caption, "Changed");
+        assert_eq!(world.get::<ZIndex>(mirror_second).unwrap().0, 2.0);
+    }
+
+    #[test]
+    fn gui_label_despawns_mirror_on_vanished_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_labels(&mut world, &[make_gui_label_entry(sim_entity, 1.0)]);
+        let mirror_entity = *world.resource::<SimIdMap>().gui_labels.get(&sim_entity.to_bits()).unwrap();
+
+        reconcile_gui_labels(&mut world, &[]);
+
+        assert!(world.get_entity(mirror_entity).is_err());
+        assert!(world.resource::<SimIdMap>().gui_labels.is_empty());
+    }
+
+    #[test]
+    fn gui_label_respawn_after_despawn_gets_new_mirror() {
+        let mut world = new_test_world();
+        let (e1, e2) = generation_reuse_pair();
+
+        reconcile_gui_labels(&mut world, &[make_gui_label_entry(e1, 1.0)]);
+        let mirror_1 = *world.resource::<SimIdMap>().gui_labels.get(&e1.to_bits()).unwrap();
+
+        reconcile_gui_labels(&mut world, &[make_gui_label_entry(e2, 1.0)]);
+
+        assert!(world.get_entity(mirror_1).is_err());
+        let id_map = world.resource::<SimIdMap>();
+        assert!(!id_map.gui_labels.contains_key(&e1.to_bits()));
+        assert_ne!(mirror_1, *id_map.gui_labels.get(&e2.to_bits()).unwrap());
+    }
+
+    // ---- GUI progress bars: mechanical repeat ----
+
+    fn make_gui_progress_bar_entry(entity: Entity, z_index: f32) -> GuiProgressBarEntry {
+        GuiProgressBarEntry {
+            entity,
+            progress_bar: GuiProgressBar::new(50.0, 8.0, 3.0, 10.0),
+            position: ScreenPosition::new(1.0, 2.0),
+            z_index: ZIndex(z_index),
+        }
+    }
+
+    #[test]
+    fn gui_progress_bar_spawns_mirror_on_new_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(sim_entity, 1.0)]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_progress_bars.len(), 1);
+        let mirror_entity = *id_map.gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
+        assert!(world.get::<MirrorGuiProgressBar>(mirror_entity).is_some());
+        assert_eq!(world.get::<GuiProgressBar>(mirror_entity).unwrap().value, 3.0);
+    }
+
+    #[test]
+    fn gui_progress_bar_updates_existing_mirror_in_place() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(sim_entity, 1.0)]);
+        let mirror_first =
+            *world.resource::<SimIdMap>().gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
+
+        let mut second = make_gui_progress_bar_entry(sim_entity, 2.0);
+        second.progress_bar.value = 7.0;
+        reconcile_gui_progress_bars(&mut world, &[second]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.gui_progress_bars.len(), 1);
+        let mirror_second = *id_map.gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
+        assert_eq!(mirror_first, mirror_second);
+        assert_eq!(world.get::<GuiProgressBar>(mirror_second).unwrap().value, 7.0);
+        assert_eq!(world.get::<ZIndex>(mirror_second).unwrap().0, 2.0);
+    }
+
+    #[test]
+    fn gui_progress_bar_despawns_mirror_on_vanished_id() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(sim_entity, 1.0)]);
+        let mirror_entity =
+            *world.resource::<SimIdMap>().gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
+
+        reconcile_gui_progress_bars(&mut world, &[]);
+
+        assert!(world.get_entity(mirror_entity).is_err());
+        assert!(world.resource::<SimIdMap>().gui_progress_bars.is_empty());
+    }
+
+    #[test]
+    fn gui_progress_bar_respawn_after_despawn_gets_new_mirror() {
+        let mut world = new_test_world();
+        let (e1, e2) = generation_reuse_pair();
+
+        reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(e1, 1.0)]);
+        let mirror_1 = *world.resource::<SimIdMap>().gui_progress_bars.get(&e1.to_bits()).unwrap();
+
+        reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(e2, 1.0)]);
+
+        assert!(world.get_entity(mirror_1).is_err());
+        let id_map = world.resource::<SimIdMap>();
+        assert!(!id_map.gui_progress_bars.contains_key(&e1.to_bits()));
+        assert_ne!(mirror_1, *id_map.gui_progress_bars.get(&e2.to_bits()).unwrap());
+    }
+
+    /// Sibling to `despawn_on_vanish_is_scoped_to_its_own_category` covering
+    /// the 4 new GUI categories specifically: reconciling `gui_windows`
+    /// empty must not touch a co-existing `gui_buttons` mirror.
+    #[test]
+    fn gui_despawn_on_vanish_is_scoped_to_its_own_category() {
+        let mut world = new_test_world();
+        let window_entity = world.spawn_empty().id();
+        let button_entity = world.spawn_empty().id();
+
+        reconcile_gui_windows(&mut world, &[make_gui_window_entry(window_entity, 1.0)]);
+        reconcile_gui_buttons(&mut world, &[make_gui_button_entry(button_entity, 1.0)]);
+        let button_mirror =
+            *world.resource::<SimIdMap>().gui_buttons.get(&button_entity.to_bits()).unwrap();
+
+        reconcile_gui_windows(&mut world, &[]);
+
+        assert!(world.resource::<SimIdMap>().gui_windows.is_empty());
+        assert!(world.get_entity(button_mirror).is_ok());
+        assert_eq!(world.resource::<SimIdMap>().gui_buttons.len(), 1);
     }
 }

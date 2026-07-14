@@ -166,7 +166,8 @@ use crate::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use crate::systems::render::mirror::{
-    SimIdMap, reconcile_map_sprites, reconcile_map_texts, reconcile_screen_sprites,
+    SimIdMap, reconcile_gui_buttons, reconcile_gui_labels, reconcile_gui_progress_bars,
+    reconcile_gui_windows, reconcile_map_sprites, reconcile_map_texts, reconcile_screen_sprites,
     reconcile_screen_texts,
 };
 use crate::systems::render::render_system;
@@ -597,8 +598,10 @@ impl EngineBuilder {
     /// them internally.
     ///
     /// Phase 5e: two `World`s on two threads. The main thread owns the raylib
-    /// window plus a small render `World` (GL stores, latest received
-    /// [`DrawableSnapshot`]); the spawned logic thread builds the gameplay
+    /// window plus a small render `World` (GL stores, mirror entities
+    /// reconciled from each received [`DrawableSnapshot`] -- no
+    /// `DrawableSnapshot` resource itself since Phase 7f-4); the spawned
+    /// logic thread builds the gameplay
     /// `World` inside its own closure (so NonSend `LuaRuntime` is created on,
     /// and pinned to, that thread) and runs the FIXED 240Hz accumulator on
     /// its own wall clock. Communication is crossbeam channels only
@@ -623,10 +626,11 @@ impl EngineBuilder {
         // Phase 7c: the DrawableSnapshot itself travels via a triple buffer,
         // not the RenderMsg channel above -- sim writes `snap_in`, render
         // reads `snap_out`, latest-wins, no queue growth. Seeded with
-        // `DrawableSnapshot::default()`; the render world's actual
-        // `DrawableSnapshot` resource is seeded separately with the real
-        // loaded config below, so this initial buffer value is never read
-        // before the sim's first real publish (`Output::update()` gates it).
+        // `DrawableSnapshot::default()`; never read before the sim's first
+        // real publish (`Output::update()` gates it) -- the render world
+        // seeds `RenderGameConfig` separately with the real loaded config
+        // (`setup_render_world`), so this initial buffer value being a bare
+        // default is harmless either way.
         let (snap_in, snap_out) =
             triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
 
@@ -790,19 +794,20 @@ impl EngineBuilder {
     }
 
     /// Build the render (main-thread) `World` (Phase 5e): raylib window +
-    /// GL/NonSend stores + the latest received [`DrawableSnapshot`], plus
-    /// the render-owned `InputState` mirror (written by the render loop from
-    /// its `sample_raw_device_snapshot` result — Phase 7d: this no longer
-    /// carries resolved bindings/edges, see `DebugResources::input_state`'s
-    /// doc comment) and `DebugOverlayConfig` (edited by the imgui panel).
-    /// `InputBindings` became logic-thread-only in Phase 7d — no render-side
-    /// mirror. Holds no gameplay resources. Since Phase 7f-3 this world DOES
-    /// hold entities: retained map-sprite mirror entities (`SimMirror` +
-    /// `MirrorMapSprite`, `src/systems/render/mirror.rs`), reconciled
-    /// write-only from `DrawableSnapshot` by `receive_snapshot` -- never
-    /// gameplay entities. (The pre-existing fullscreen-toggle `Observer`
-    /// entity spawned below is infrastructure, not a drawable, and predates
-    /// this note.)
+    /// GL/NonSend stores, plus the render-owned `InputState` mirror (written
+    /// by the render loop from its `sample_raw_device_snapshot` result —
+    /// Phase 7d: this no longer carries resolved bindings/edges, see
+    /// `DebugResources::input_state`'s doc comment) and `DebugOverlayConfig`
+    /// (edited by the imgui panel). `InputBindings` became logic-thread-only
+    /// in Phase 7d — no render-side mirror. Holds no gameplay resources.
+    /// Since Phase 7f-3 (extended by 7f-4 to all 8 categories) this world
+    /// DOES hold entities: retained mirror entities (`SimMirror` + one
+    /// marker per category, `src/systems/render/mirror.rs`), reconciled
+    /// write-only from each tick's `DrawableSnapshot` clone by
+    /// `receive_snapshot` -- never stored as a resource, never gameplay
+    /// entities. (The pre-existing fullscreen-toggle `Observer` entity
+    /// spawned below is infrastructure, not a drawable, and predates this
+    /// note.)
     fn setup_render_world(
         config: GameConfig,
         rl: raylib::RaylibHandle,
@@ -821,19 +826,12 @@ impl EngineBuilder {
             w: rl.get_screen_width(),
             h: rl.get_screen_height(),
         });
-        // Seed the snapshot's config with the REAL loaded config, not
-        // DrawableSnapshot::default()'s baked-in defaults: apply_gameconfig_changes
-        // reads config exclusively from the snapshot, and the first logic-built
-        // snapshot arrives a frame or two later — a default-seeded copy would
-        // briefly apply the wrong render/window size at startup.
-        // RenderGameConfig gets the same real-config seed as DrawableSnapshot
-        // just below, for the same reason: apply_gameconfig_changes reads it
-        // from frame 1, before the first logic-built snapshot arrives.
-        world.insert_resource(RenderGameConfig(config.clone()));
-        world.insert_resource(DrawableSnapshot {
-            game_config: config,
-            ..Default::default()
-        });
+        // Seed RenderGameConfig with the REAL loaded config, not ::default()'s
+        // baked-in defaults: apply_gameconfig_changes reads config exclusively
+        // from this resource, and the first logic-built snapshot arrives a
+        // frame or two later — a default-seeded copy would briefly apply the
+        // wrong render/window size at startup.
+        world.insert_resource(RenderGameConfig(config));
         world.insert_resource(snapshot_consumer);
         world.insert_resource(TextureStore::new());
         world.insert_resource(GuiThemeWarnCache::default());
@@ -851,10 +849,10 @@ impl EngineBuilder {
         world.insert_resource(RenderPostProcess::default());
         world.insert_resource(RenderGuiThemes::default());
         world.insert_resource(RenderCameraFollow::default());
-        // Phase 7f-3: backs the map-sprite mirror-entity reconciliation done
-        // by receive_snapshot/reconcile_map_sprites. Must be inserted before
-        // the first snapshot arrives -- reconcile_map_sprites' resource_scope
-        // panics if this resource is absent.
+        // Phase 7f-3/7f-4: backs all 8 categories' mirror-entity
+        // reconciliation done by receive_snapshot/reconcile_*. Must be
+        // inserted before the first snapshot arrives -- each reconcile_*'s
+        // resource_scope panics if this resource is absent.
         world.insert_resource(SimIdMap::default());
         if let Some(table) = render_scene_table {
             world.insert_resource(table);
@@ -1566,51 +1564,29 @@ fn pump_render_msgs(world: &mut World) {
 }
 
 /// Reads the newest published snapshot off the triple buffer (Phase 7c;
-/// latest-wins, no interpolation), cloning it into `DrawableSnapshot` if a
-/// new one arrived since the last read (still a full clone, not
-/// zero-copy). Runs after `update_bevy_render_asset_cmds`/
+/// latest-wins, no interpolation) into a local `new_snapshot` clone (still a
+/// full clone, not zero-copy). Runs after `update_bevy_render_asset_cmds`/
 /// `process_render_asset_cmds` rather than before them (order changed from
 /// pre-7f-1); safe because neither of those systems reads or writes
 /// `DrawableSnapshot` (verified: no reference to it in
 /// `src/systems/render_assets.rs`) -- only `apply_gameconfig_changes`/
 /// `render_system` do, and both still run after this system either way, so
 /// this frame's asset loads and this frame's snapshot are visible together
-/// regardless of this reordering. This system's name is deliberately kept
-/// stable for 7f-3/7f-4, which will expand its body into full mirror-entity
-/// reconciliation without renaming it.
+/// regardless of this reordering.
 ///
-/// Phase 7f-2: in addition to the `DrawableSnapshot` clone-assign above
-/// (kept as-is -- `render_system` still reads its 8 `Vec<...Entry>` fields
-/// directly, and `DrawableSnapshot` itself is not shrunk by this phase, see
-/// `src/resources/render_mirrors.rs`'s module doc), this system also fans
-/// out each of `DrawableSnapshot`'s 10 "global" fields into its own
-/// dedicated `Render*` resource (bundled as `SnapshotMirrors`, mirroring
-/// `RenderResources`/`DebugResources`'s existing param-bundling pattern).
-/// `render_system` reads those instead of `snapshot.<field>` for anything
-/// other than the 8 Vecs. Unconditional, same as the `DrawableSnapshot`
-/// assignment -- no `is_changed()`-style gating, since nothing downstream
-/// needs it and it would be a behavior change (`apply_gameconfig_changes`
-/// does its own `Local`-based diff independently either way).
+/// `new_snapshot`'s 8 `Vec<...Entry>` drawable-list fields feed the 8
+/// `reconcile_*` calls below (`src/systems/render/mirror.rs`), which write
+/// their results into retained mirror entities rather than a resource. Its
+/// 10 remaining "global" fields are each moved (by value, `new_snapshot` is
+/// consumed here and never stored) into a dedicated `Render*` resource
+/// (mirroring `RenderResources`/`DebugResources`'s existing param-bundling
+/// pattern) -- `render_system` reads those instead of a `DrawableSnapshot`
+/// resource for anything global. Unconditional, no `is_changed()`-style
+/// gating, since nothing downstream needs it and it would be a behavior
+/// change (`apply_gameconfig_changes` does its own `Local`-based diff
+/// independently either way).
 ///
-/// `camera`/`world_time` are `Copy`, and `signals`/`active_scene` are
-/// already `Arc`-wrapped in `DrawableSnapshot`, so mirroring those four is a
-/// cheap copy/refcount bump. The other six fields
-/// (`game_config`/`app_state`/`debug`/`post_process`/`gui_themes`/
-/// `camera_follow`) are moved out of `new_snapshot` via `mem::take` rather
-/// than `.clone()`d a second time -- `new_snapshot` already holds one deep
-/// clone of each from the `output_buffer().clone()` above, so cloning again
-/// into the mirror would deep-copy the same data twice per snapshot arrival
-/// (notably `AppState::clone()`, which walks every typed entry, and
-/// `DebugSnapshot`'s collider/position `Vec`s, which scale with live entity
-/// count while F11 debug mode is on). `mem::take` leaves each of these six
-/// fields at its `Default` value inside the render world's `DrawableSnapshot`
-/// afterward, which is fine: nothing in the render world reads
-/// `snapshot.<one of these six>` any more (confirmed -- this phase's whole
-/// point is routing those reads through the mirrors instead); only the 8
-/// `Vec<...Entry>` fields and the cheap `camera`/`world_time` copies above
-/// are still consulted from `*snapshot` itself.
-///
-/// Phase 7f-3: this system is now exclusive (`fn(&mut World)`) because
+/// Phase 7f-3/7f-4: this system is exclusive (`fn(&mut World)`) because
 /// reconciling mirror entities needs simultaneous spawn/despawn plus
 /// resource access, which an ordinary `SystemParam` bundle can't express
 /// (same justification `drain_cmds` uses in `src/systems/audio/systems.rs`).
@@ -1618,22 +1594,19 @@ fn pump_render_msgs(world: &mut World) {
 /// take `SystemParam` bundles, only `&mut World` plus `ExclusiveSystemParam`s
 /// -- replaced by explicit `world.resource_mut::<Render*>()` calls, same 10
 /// fields, same order, same `mem::take`-vs-`.clone()` choice per field as
-/// before. Checkpoint 1 migrated map sprites; checkpoint 2 fans the same
-/// pattern out to map texts, screen sprites, and screen texts. None of the 4
-/// migrated categories' `Vec` fields are `mem::take`n before or after their
-/// `reconcile_*` call, unlike the six taken global fields below -- the debug
-/// overlay still reads `snapshot.map_sprites.len()`/`.screen_sprites.len()`/
-/// `.screen_texts.len()` directly (`src/systems/render/mod.rs`), so all 4
-/// Vecs must keep flowing through into `*snapshot` unchanged, exactly like
-/// the 4 still-Vec-based GUI categories (7f-4). Only `render_system`'s
-/// draw-prep for these 4 categories switches to querying mirror entities.
+/// before. All 8 `DrawableSnapshot` drawable categories are now
+/// mirror-reconciled (7f-3 landed map sprites/texts + screen sprites/texts;
+/// 7f-4 added GUI windows/buttons/labels/progress bars) -- there is no
+/// longer a render-world `DrawableSnapshot` resource to write into at the
+/// end; `new_snapshot` only lives long enough to source the 8 `reconcile_*`
+/// calls and the 10 global-field fan-out below, then drops.
 fn receive_snapshot(world: &mut World) {
     let should_update = world.resource_mut::<SnapshotConsumer>().0.update();
     if !should_update {
         return;
     }
 
-    let mut new_snapshot = world
+    let new_snapshot = world
         .resource_mut::<SnapshotConsumer>()
         .0
         .output_buffer()
@@ -1643,19 +1616,21 @@ fn receive_snapshot(world: &mut World) {
     reconcile_map_texts(world, &new_snapshot.map_texts);
     reconcile_screen_sprites(world, &new_snapshot.screen_sprites);
     reconcile_screen_texts(world, &new_snapshot.screen_texts);
+    reconcile_gui_windows(world, &new_snapshot.gui_windows);
+    reconcile_gui_buttons(world, &new_snapshot.gui_buttons);
+    reconcile_gui_labels(world, &new_snapshot.gui_labels);
+    reconcile_gui_progress_bars(world, &new_snapshot.gui_progress_bars);
 
     world.resource_mut::<RenderCamera>().0 = new_snapshot.camera;
-    world.resource_mut::<RenderGameConfig>().0 = std::mem::take(&mut new_snapshot.game_config);
-    world.resource_mut::<RenderSignalSnapshot>().0 = new_snapshot.signals.clone();
-    world.resource_mut::<RenderAppState>().0 = std::mem::take(&mut new_snapshot.app_state);
-    world.resource_mut::<RenderDebugSnapshot>().0 = std::mem::take(&mut new_snapshot.debug);
-    world.resource_mut::<RenderActiveScene>().0 = new_snapshot.active_scene.clone();
+    world.resource_mut::<RenderGameConfig>().0 = new_snapshot.game_config;
+    world.resource_mut::<RenderSignalSnapshot>().0 = new_snapshot.signals;
+    world.resource_mut::<RenderAppState>().0 = new_snapshot.app_state;
+    world.resource_mut::<RenderDebugSnapshot>().0 = new_snapshot.debug;
+    world.resource_mut::<RenderActiveScene>().0 = new_snapshot.active_scene;
     world.resource_mut::<RenderWorldTime>().0 = new_snapshot.world_time;
-    world.resource_mut::<RenderPostProcess>().0 = std::mem::take(&mut new_snapshot.post_process);
-    world.resource_mut::<RenderGuiThemes>().0 = std::mem::take(&mut new_snapshot.gui_themes);
-    world.resource_mut::<RenderCameraFollow>().0 = std::mem::take(&mut new_snapshot.camera_follow);
-
-    *world.resource_mut::<DrawableSnapshot>() = new_snapshot;
+    world.resource_mut::<RenderPostProcess>().0 = new_snapshot.post_process;
+    world.resource_mut::<RenderGuiThemes>().0 = new_snapshot.gui_themes;
+    world.resource_mut::<RenderCameraFollow>().0 = new_snapshot.camera_follow;
 }
 
 /// Diffs the render-owned mirrors (`ScreenSize`, `DebugOverlayConfig`)
