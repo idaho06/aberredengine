@@ -30,7 +30,7 @@ impl AnimationStore {
 /// positions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnimationResource {
-    /// Texture key in [`crate::resources::texturestore::TextureStore`].
+    /// Texture key in [`crate::resources::render::texturestore::TextureStore`].
     pub tex_key: Arc<str>,
     /// Pixel origin within the texture where frame 0 starts (texture-space, not world/screen).
     pub position: Vector2,

@@ -54,7 +54,7 @@ pub struct MapData {
     pub entities: Vec<EntityDef>,
 }
 
-/// A texture asset to load into [`crate::resources::texturestore::TextureStore`].
+/// A texture asset to load into [`crate::resources::render::texturestore::TextureStore`].
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TextureEntry {
     /// Key used to look up the texture in `TextureStore`.
@@ -68,7 +68,7 @@ pub struct TextureEntry {
     pub filter: Option<String>,
 }
 
-/// A font asset to load into [`crate::resources::fontstore::FontStore`].
+/// A font asset to load into [`crate::resources::render::fontstore::FontStore`].
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FontEntry {
     pub key: String,

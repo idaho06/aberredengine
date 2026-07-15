@@ -177,12 +177,11 @@ impl ClipboardBackend for RaylibClipboardBackend {
 /// Whether the debug imgui overlay currently wants to capture mouse/keyboard
 /// input this frame. Read from the render thread after `ImguiBridge::render`
 /// runs, carried one frame across the thread boundary via
-/// `InputSample::capture` (same latency class as `SignalIntents`; Phase 7d:
-/// rides the dedicated bounded input channel), and used by
-/// `resolve_input_backlog` to mask gameplay input while the debug panel has
-/// focus (Phase 6e). Scoped to the F11 debug overlay only -- the
-/// in-house `GuiButton`/`GuiWindow` system does its own hit-testing and isn't
-/// imgui.
+/// `InputSample::capture` (same latency class as `SignalIntents`, riding the
+/// dedicated bounded input channel), and used by `resolve_input_backlog` to
+/// mask gameplay input while the debug panel has focus. Scoped to the F11
+/// debug overlay only -- the in-house `GuiButton`/`GuiWindow` system does its
+/// own hit-testing and isn't imgui.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ImguiCaptureState {
     pub mouse: bool,
@@ -201,16 +200,16 @@ pub struct ImguiBridge {
     warned_reset_render_state: bool,
     warned_raw_callback: bool,
     /// Snapshot of `io().want_capture_mouse`/`want_capture_keyboard`, taken at
-    /// the end of [`ImguiBridge::render`] (Phase 6e). `false`/`false` until
-    /// `render` first runs, and reset by [`ImguiBridge::clear_capture`] on
-    /// frames where the debug overlay doesn't run at all -- otherwise these
-    /// would freeze at their last computed value.
+    /// the end of [`ImguiBridge::render`]. `false`/`false` until `render`
+    /// first runs, and reset by [`ImguiBridge::clear_capture`] on frames
+    /// where the debug overlay doesn't run at all -- otherwise these would
+    /// freeze at their last computed value.
     capture: ImguiCaptureState,
 }
 
 impl ImguiBridge {
-    /// Create a new bridge using the dark style that the engine previously
-    /// requested from `sola-raylib`.
+    /// Create a new bridge using the dark style the engine requests from
+    /// `sola-raylib`.
     pub fn new_dark() -> Result<Self, String> {
         let mut context = Context::create();
         context.set_platform_name(Some("imgui_impl_raylib".to_string()));
@@ -247,8 +246,8 @@ impl ImguiBridge {
 
     /// Run an ImGui frame and render the resulting draw data through rlgl.
     ///
-    /// `debug_active` scopes capture-state tracking (Phase 6e) to the F11
-    /// debug overlay only, per `ImguiCaptureState`'s doc comment: a scene's
+    /// `debug_active` scopes capture-state tracking to the F11 debug overlay
+    /// only, per `ImguiCaptureState`'s doc comment: a scene's
     /// own `gui_callback` (persistent dev UI -- HUDs, editors, tool windows)
     /// also opens an imgui frame through this same method, but its capture
     /// is a GLOBAL flag, not spatial -- treating it as gameplay-input-masking
@@ -287,9 +286,9 @@ impl ImguiBridge {
 
     /// This frame's imgui capture state, as of the last [`ImguiBridge::render`]
     /// call. Read by the render loop after the render schedule runs, and
-    /// mirrored across the thread boundary via `InputSample::capture` (Phase
-    /// 6e; Phase 7d: rides the dedicated bounded input channel) so gameplay
-    /// input can be masked while the debug overlay has focus.
+    /// mirrored across the thread boundary via `InputSample::capture` (riding
+    /// the dedicated bounded input channel) so gameplay input can be masked
+    /// while the debug overlay has focus.
     pub fn capture_state(&self) -> ImguiCaptureState {
         self.capture
     }

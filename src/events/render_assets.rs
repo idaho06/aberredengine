@@ -9,10 +9,10 @@
 //! `RenderAssetCmd` additionally carries requests that never existed as
 //! `AssetCmd` variants: menu label rasterization and tilemap atlas uploads.
 //!
-//! Part of the Option B render/logic thread split (Phase 5c —
-//! `docs/render-simulation-separation-brainstorm.md`). Until Phase 5e this
-//! stays an intra-process `Messages<RenderAssetCmd>` queue; in 5e the same
-//! commands cross the `LogicBridge` as `RenderMsg::Asset(...)`.
+//! Part of the render/logic thread split: producers on the logic thread
+//! queue commands into `Messages<RenderAssetCmd>`, which cross the
+//! `LogicBridge` as `RenderMsg::Asset(...)` to the render thread for
+//! consumption.
 
 use bevy_ecs::message::Message;
 use raylib::prelude::Color;
@@ -34,14 +34,12 @@ pub enum RenderAssetCmd {
     ///
     /// `skip_if_loaded`: when `true`, the load is skipped if `id` is
     /// already present in `FontStore`'s metadata (preserves `spawn_map`'s
-    /// existing "don't reload a font shared across maps" behavior). Lua's
-    /// `engine.load_font` always sets this `false` (always reloads),
-    /// matching pre-Phase-5c behavior. This flag is likely permanent, not
-    /// just a Phase 5c transitional wart: `spawn_map` deliberately has no
-    /// `FontStore` access (that's the whole point of this seam), and post
-    /// Phase 5e the producer will run on the logic thread while `FontStore`
-    /// lives on the render thread — synchronously checking "already
-    /// loaded" from the producer side won't become possible later either.
+    /// "don't reload a font shared across maps" behavior). Lua's
+    /// `engine.load_font` always sets this `false` (always reloads).
+    /// `spawn_map` deliberately has no `FontStore` access (that's the whole
+    /// point of this seam), and the producer runs on the logic thread while
+    /// `FontStore` lives on the render thread, so synchronously checking
+    /// "already loaded" from the producer side isn't possible.
     Font {
         id: String,
         path: String,
@@ -70,8 +68,8 @@ pub enum RenderAssetCmd {
     /// was queued.
     TilemapTexture { key: String, png_path: String },
     /// Remove the texture stored under `key` (drops the GPU handle).
-    /// Phase 5e: logic-side cleanup (`menu_despawn`'s rasterized labels)
-    /// can no longer touch `TextureStore` directly — even its GL-free
-    /// `remove()` — because the resource only exists in the render world.
+    /// Logic-side cleanup (`menu_despawn`'s rasterized labels) cannot touch
+    /// `TextureStore` directly — even its GL-free `remove()` — because the
+    /// resource only exists in the render world.
     RemoveTexture { key: String },
 }

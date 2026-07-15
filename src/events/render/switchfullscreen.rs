@@ -5,8 +5,8 @@
 //! fullscreen and windowed mode, using the [`FullScreen`] marker resource to
 //! track the current state.
 
-use crate::resources::fullscreen::FullScreen;
-use crate::resources::render_mirrors::RenderGameConfig;
+use crate::resources::render::fullscreen::FullScreen;
+use crate::resources::render::mirrors::RenderGameConfig;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use log::{debug, info};

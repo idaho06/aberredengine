@@ -11,6 +11,12 @@ use raylib::prelude::*;
 /// This represents the actual OS window dimensions, not the game's internal
 /// render resolution. Use this for letterbox/pillarbox calculations when
 /// scaling the render target to fit the window.
+///
+/// Inserted independently in both `setup_logic_world` and
+/// `setup_render_world` -- two separate instances of this same type, not a
+/// `RenderX`-style wrapper mirroring one authoritative copy. That's why it
+/// stays in flat `src/resources/` rather than `src/resources/render/`
+/// alongside the render-exclusive resources.
 #[derive(Resource, Clone, Copy)]
 pub struct WindowSize {
     /// Width in pixels.

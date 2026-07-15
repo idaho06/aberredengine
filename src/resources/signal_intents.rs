@@ -1,10 +1,9 @@
 //! Deferred `WorldSignals` writes produced by render-side scene callbacks.
 //!
-//! [`GuiCallback`](crate::systems::scene_dispatch::GuiCallback) runs inside `render_system`
-//! (Phase 5d, `docs/render-simulation-separation-brainstorm.md`), which no longer holds a live
-//! `&mut WorldSignals` — reads come from the snapshot's `SignalSnapshot`, and writes are
-//! buffered here instead, applied logic-side by `apply_signal_intents` at the top of the next
-//! FIXED substep (Phase 6d; was "the next frame's VARIABLE schedule" pre-6d).
+//! [`GuiCallback`](crate::systems::scene_dispatch::GuiCallback) runs inside `render_system`,
+//! which holds no live `&mut WorldSignals` — reads come from the snapshot's `SignalSnapshot`,
+//! and writes are buffered here instead, applied logic-side by `apply_signal_intents` at the
+//! top of the next sim tick.
 //!
 //! Keep the [`SignalIntent`] variant set minimal; extend on demand as real `GuiCallback` bodies
 //! need more `WorldSignals` methods.

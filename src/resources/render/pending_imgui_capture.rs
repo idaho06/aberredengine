@@ -3,9 +3,8 @@
 //! Written by `send_render_mirrors` from `ImguiBridge::capture_state()`
 //! after `render_system` runs each frame; read by `sample_and_send_input`
 //! at the start of the *next* frame's schedule run. This resource is the
-//! cross-system carrier for that one-frame lag (Phase 6e semantics,
-//! unchanged by Phase 7f-1) -- a `Local<T>` would not work here since the
-//! writer and reader are different systems.
+//! cross-system carrier for that one-frame lag -- a `Local<T>` would not
+//! work here since the writer and reader are different systems.
 
 use bevy_ecs::prelude::Resource;
 

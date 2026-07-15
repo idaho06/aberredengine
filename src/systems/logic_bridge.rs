@@ -1,22 +1,19 @@
-//! Logic-side channel systems for the render/logic thread split (Phase 5e).
+//! Logic-side channel systems for the render/logic thread split.
 //!
 //! - [`forward_render_asset_cmds`] — drains the logic world's
-//!   `Messages<RenderAssetCmd>` into `RenderMsg::Asset` (mirrors
-//!   `forward_audio_cmds`, itself FIXED-scheduled since Phase 6d), pushed
-//!   across the [`RenderTx`] channel. Moved onto the tail of the sim schedule
-//!   in Phase 7c (`SimSet::Bookkeeping`, alongside `update_bevy_render_asset_cmds`)
-//!   so it runs every sim tick regardless of the `present`/snapshot-publish
+//!   `Messages<RenderAssetCmd>` into `RenderMsg::Asset`, pushed across the
+//!   [`RenderTx`] channel. Runs on the tail of the sim schedule
+//!   (`SimSet::Bookkeeping`, alongside `update_bevy_render_asset_cmds`) so it
+//!   runs every sim tick regardless of the `present`/snapshot-publish
 //!   decimation below — a tick's asset loads must not be starved by how often
 //!   the snapshot itself publishes.
 //! - [`send_drawable_snapshot`] — publishes this frame's [`DrawableSnapshot`]
 //!   into the sim thread's [`SnapshotPublisher`] (the `triple_buffer` write
-//!   end, Phase 7c; replaces the old `RenderMsg::Snapshot` channel send).
-//!   Still `PRESENT`-scheduled, now decimated to `[simulation] snapshot_hz`
+//!   end). Still `PRESENT`-scheduled, decimated to `[simulation] snapshot_hz`
 //!   rather than running once per received input sample.
 //!
-//! Phase 7d deleted `send_input_bindings_on_change`: `InputBindings` became
-//! logic-thread-only (no render-side mirror to refresh), since binding
-//! resolution itself moved to the sim thread.
+//! `InputBindings` is logic-thread-only (no render-side mirror to refresh),
+//! since binding resolution itself happens on the sim thread.
 
 use bevy_ecs::prelude::*;
 
@@ -38,7 +35,7 @@ pub fn forward_render_asset_cmds(
 }
 
 /// Publish this frame's fully-settled [`DrawableSnapshot`] into the
-/// [`SnapshotPublisher`] triple buffer (Phase 7c). The render loop reads the
+/// [`SnapshotPublisher`] triple buffer. The render loop reads the
 /// latest publish once per frame (`Output::update`), so a slow render frame
 /// simply redraws the last one and a fast render frame sees no new data.
 pub fn send_drawable_snapshot(

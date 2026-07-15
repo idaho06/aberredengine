@@ -89,9 +89,7 @@ pub enum AudioCmd {
 /// Events sent *back* from the audio thread
 ///
 /// No `FxFinished` variant exists: FX-alias completion is silent by design
-/// (see `pump_fx` in `crate::systems::audio`), matching pre-Phase-7e
-/// behavior. Adding one is out of scope for that phase's "unchanged
-/// surface" constraint -- see `docs/plans/phase7e-audio-ecs-world.md`.
+/// (see `pump_fx` in `crate::systems::audio`).
 #[allow(dead_code)] // variants are forward-looking API; not all are consumed by game code yet
 #[derive(Message, Debug, Clone)]
 pub enum AudioMessage {

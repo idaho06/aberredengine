@@ -6,7 +6,8 @@
 //! Submodules overview
 //! - [`animation`] – advance sprite animations and select tracks via rules
 //! - [`camera_follow`] – move the camera to track entities with `CameraTarget`
-//! - [`audio`] – bridge with the audio thread (poll/update message queues)
+//! - [`audio`] – dedicated audio thread and its own `bevy_ecs::World`
+//! - [`audio_bridge`] – logic-thread systems that shuttle `AudioCmd`/`AudioMessage` with the audio thread
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
 //! - [`lua_collision`] – *(feature = "lua")* Lua-based collision observer and callback dispatch
 //! - [`gamestate`] – check for pending state transitions and trigger events
@@ -36,26 +37,16 @@
 //! - [`time`] – update simulation time and delta
 //! - [`tween`] – animate position, rotation, and scale over time
 
-use bevy_ecs::prelude::*;
-use bevy_ecs::system::SystemParam;
-
 pub use game_ctx::GameCtx;
-
-/// Bundled Raylib handle + thread to reduce system parameter count.
-#[derive(SystemParam)]
-pub struct RaylibAccess<'w> {
-    pub rl: NonSendMut<'w, raylib::RaylibHandle>,
-    pub th: NonSend<'w, raylib::RaylibThread>,
-}
 
 pub mod animation;
 pub mod audio;
+pub mod audio_bridge;
 pub mod camera_follow;
 pub mod collision;
 pub mod collision_detector;
 pub mod dynamictext_size;
 pub mod game_ctx;
-pub mod gameconfig;
 pub mod gamestate;
 pub mod gridlayout;
 pub mod group;

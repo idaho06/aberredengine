@@ -4,11 +4,11 @@
 //! and applies settings to the window, render target, and screen size
 //! resources.
 
-use crate::events::switchfullscreen::SwitchFullScreenEvent;
-use crate::resources::fullscreen::FullScreen;
+use crate::events::render::switchfullscreen::SwitchFullScreenEvent;
 use crate::resources::gameconfig::GameConfig;
-use crate::resources::render_mirrors::RenderGameConfig;
-use crate::resources::rendertarget::RenderTarget;
+use crate::resources::render::fullscreen::FullScreen;
+use crate::resources::render::mirrors::RenderGameConfig;
+use crate::resources::render::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
 use bevy_ecs::prelude::*;
 use log::{debug, error};
@@ -16,24 +16,21 @@ use raylib::ffi;
 
 /// System that applies game configuration changes.
 ///
-/// Reads config from [`RenderGameConfig`] (Phase 7f-2; was
-/// `DrawableSnapshot::game_config` before the split), not `Res<GameConfig>`
-/// (Phase 4 of the Option B plan) -- in Phase 5 this system moved to the
-/// render thread, where received snapshots are the only config source. Runs
-/// on the render schedule after `receive_snapshot` and before
-/// `render_system`, so a config change made this frame (Lua command) is
-/// applied before this frame renders.
+/// Reads config from [`RenderGameConfig`], not `Res<GameConfig>` -- the
+/// render thread has no live `GameConfig` resource of its own; received
+/// snapshots are its only config source. Runs on the render schedule after
+/// `receive_snapshot` and before `render_system`, so a config change made
+/// this frame (Lua command) is applied before this frame renders.
 ///
 /// Change detection is a value diff against the last-applied config
-/// (`Local<Option<GameConfig>>`), replacing the previous
-/// `Res::is_changed()` gate that a snapshot read can't provide. The gate
-/// must not simply be dropped: F10's `switch_fullscreen_observer` toggles
+/// (`Local<Option<GameConfig>>`) -- a mirrored snapshot read has no
+/// `Res::is_changed()` to lean on, so this system tracks its own baseline
+/// instead. The gate matters: F10's `switch_fullscreen_observer` toggles
 /// the window and the `FullScreen` resource *without* writing
 /// `GameConfig.fullscreen`, so an ungated `config.fullscreen !=
 /// fullscreen.is_some()` comparison would re-trigger the fullscreen toggle
 /// every frame after F10, fighting the user. With the value diff, a config
-/// that hasn't changed since last application is never re-examined -- same
-/// semantics the `is_changed()` gate gave.
+/// that hasn't changed since last application is never re-examined.
 ///
 /// # Resource Dependencies
 /// - `RenderGameConfig` (read) - source of the config to apply
@@ -43,7 +40,7 @@ use raylib::ffi;
 /// - `ScreenSize` (mutable) - updated to match render resolution
 pub fn apply_gameconfig_changes(
     render_game_config: Res<RenderGameConfig>,
-    mut raylib: crate::systems::RaylibAccess,
+    mut raylib: super::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
     mut screen_size: ResMut<ScreenSize>,
     fullscreen: Option<Res<FullScreen>>,

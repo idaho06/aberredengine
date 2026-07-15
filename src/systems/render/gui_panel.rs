@@ -1,9 +1,9 @@
 use raylib::prelude::*;
 
-use super::{ScreenPanelBufferItem, ScreenProgressBarBufferItem};
+use super::render::{ScreenPanelBufferItem, ScreenProgressBarBufferItem};
 use crate::components::shadow::Shadow;
 use crate::resources::guitheme::GuiNinePatch;
-use crate::resources::texturestore::TextureStore;
+use crate::resources::render::texturestore::TextureStore;
 
 /// Draw one already-resolved screen-space GUI panel item (window background).
 pub(super) fn draw_screen_panel_item(

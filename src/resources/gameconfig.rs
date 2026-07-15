@@ -47,12 +47,12 @@ const DEFAULT_PIXEL_SNAP_CAMERA: bool = true;
 const DEFAULT_BACKGROUND_COLOR: Color = Color::new(80, 80, 80, 255);
 const DEFAULT_CONFIG_PATH: &str = "./config.ini";
 const DEFAULT_WINDOW_TITLE: &str = "Aberred Engine";
-/// Matches the old FIXED_DT constant (1/240s) this replaces (Phase 7b).
+/// Default sim tick rate, equivalent to a 1/240s fixed step.
 const DEFAULT_SIM_HZ: f64 = 240.0;
-/// Matches the old STREAM_PUMP_INTERVAL (10ms) this replaces (Phase 7b).
+/// Default audio tick rate, equivalent to a 10ms pump interval.
 const DEFAULT_AUDIO_HZ: f64 = 100.0;
-/// Sim/audio tick rate clamp range (Phase 7b): below 15Hz gameplay feels
-/// broken, above 1000Hz is almost certainly a config typo.
+/// Sim/audio tick rate clamp range: below 15Hz gameplay feels broken, above
+/// 1000Hz is almost certainly a config typo.
 const MIN_TICK_HZ: f64 = 15.0;
 const MAX_TICK_HZ: f64 = 1000.0;
 
@@ -62,7 +62,7 @@ const MAX_TICK_HZ: f64 = 1000.0;
 /// On first insertion into the ECS world, the [`apply_gameconfig_changes`]
 /// system will attempt to load values from the configuration file.
 ///
-/// [`apply_gameconfig_changes`]: crate::systems::gameconfig::apply_gameconfig_changes
+/// [`apply_gameconfig_changes`]: crate::systems::render::apply_gameconfig_changes
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub struct GameConfig {
     /// Internal render width in pixels.
@@ -99,17 +99,17 @@ pub struct GameConfig {
     pub config_path: PathBuf,
     /// Game/sim thread tick rate in Hz (`[simulation] hz`, default `240.0`).
     ///
-    /// Read once at startup by the logic thread's `Pacer` (Phase 7b) — a
-    /// runtime *change* to this field after startup has no effect, since the
-    /// thread loop constructs its `Pacer` before entering its loop.
+    /// Read once at startup by the logic thread's `Pacer` — a runtime
+    /// *change* to this field after startup has no effect, since the thread
+    /// loop constructs its `Pacer` before entering its loop.
     pub sim_hz: f64,
     /// Audio thread tick rate in Hz (`[audio] hz`, default `100.0`).
     ///
-    /// Read once at startup by the audio thread's `Pacer` (Phase 7b) — same
+    /// Read once at startup by the audio thread's `Pacer` — same
     /// startup-only caveat as [`sim_hz`](Self::sim_hz).
     pub audio_hz: f64,
     /// Rate at which the sim thread publishes a [`DrawableSnapshot`] into the
-    /// render triple buffer (`[simulation] snapshot_hz`, Phase 7c).
+    /// render triple buffer (`[simulation] snapshot_hz`).
     ///
     /// Decimated relative to `sim_hz`: the sim ticks gameplay at `sim_hz` but
     /// only packages+publishes a snapshot at this (usually much lower) rate.
@@ -135,7 +135,7 @@ fn clamp_tick_hz(hz: f64, field: &str) -> f64 {
     clamped
 }
 
-/// `snapshot_hz`'s implicit default (Phase 7c): track `target_fps` (no point
+/// `snapshot_hz`'s implicit default: track `target_fps` (no point
 /// publishing snapshots faster than the render thread can display), falling
 /// back to a flat 60 if `target_fps` is unset/zero. Shared by `new()` and
 /// `apply_ini`'s no-explicit-override path so the two can't drift.

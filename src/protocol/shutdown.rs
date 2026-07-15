@@ -1,6 +1,6 @@
-//! Global shutdown flag + panic hook (Phase 7a).
+//! Global shutdown flag + panic hook.
 //!
-//! Today's shutdown is purely message-based: `RenderMsg::Quit`,
+//! Ordinary shutdown is purely message-based: `RenderMsg::Quit`,
 //! `LogicMsg::Shutdown`, and `AudioCmd::Shutdown` remain the primary,
 //! ordering-preserving path (they let each thread drain intents / tear down
 //! audio / drop `LuaRuntime` before exiting) and this module does not

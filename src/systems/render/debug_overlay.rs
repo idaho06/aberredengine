@@ -2,11 +2,11 @@ use raylib::prelude::{Camera2D, Vector2};
 
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::fontstore::FontStore;
+use crate::resources::render::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::texturestore::TextureStore;
+use crate::resources::render::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::SignalSnapshot;
 use crate::resources::worldtime::WorldTime;
@@ -15,8 +15,8 @@ use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 /// Orchestrates all imgui debug panels drawn at window resolution over the game image.
 ///
 /// Reads only snapshot/copied data for display (`SignalSnapshot`, the
-/// `GameConfig` copy from `DrawableSnapshot`) -- Phase 4 of the Option B
-/// plan; no live `WorldSignals`/`Res<GameConfig>` access remains here.
+/// `GameConfig` copy from `DrawableSnapshot`); it has no live
+/// `WorldSignals`/`Res<GameConfig>` access.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_imgui_debug(
     ui: &ImguiUi,

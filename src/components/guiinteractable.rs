@@ -1,10 +1,10 @@
 //! Shared hit-test/click state for clickable GUI widgets.
 //!
 //! [`GuiInteractable`] is the shared hit-test/click runtime state for
-//! clickable GUI widgets — extracted out of `GuiButton` so a second
-//! clickable widget (`GuiImage`) can reuse `gui_hit_test_system`/the
-//! click-dispatch observer without duplicating the winner-resolution
-//! algorithm. `GuiButton`/`GuiImage` still carry their own full spawn-time
+//! clickable GUI widgets, letting `gui_hit_test_system`/the click-dispatch
+//! observer serve any clickable widget (`GuiButton`, `GuiImage`) without
+//! duplicating the winner-resolution algorithm. `GuiButton`/`GuiImage` still
+//! carry their own full spawn-time
 //! data (size, caption/tex_key, callback_name, theme_key); the
 //! `gui_button_spawn_system`/`gui_image_spawn_system` reactive spawn systems
 //! (`systems/gui_spawn.rs`) react on `Added<GuiButton>`/`Added<GuiImage>` to
@@ -30,8 +30,8 @@ pub enum GuiWidgetState {
     Disabled,
 }
 
-/// Type alias for a Rust click callback. Generalized from the former
-/// `GuiButtonRustCallback` — same shape, now widget-agnostic.
+/// Type alias for a Rust click callback, widget-agnostic (shared by
+/// `GuiButton` and `GuiImage`).
 ///
 /// Mirrors [`MenuRustCallback`](super::menu::MenuRustCallback)'s shape: the
 /// click edge itself is the signal, so no raw input access is needed beyond

@@ -44,7 +44,7 @@ use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturedims::TextureDimsStore;
-use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::animation::{animation, animation_controller};

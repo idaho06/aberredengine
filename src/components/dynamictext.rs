@@ -35,7 +35,7 @@
 //! # Related
 //!
 //! - [`crate::components::signalbinding::SignalBinding`] – binds text to signal values
-//! - [`crate::resources::fontstore::FontStore`] – font registry
+//! - [`crate::resources::render::fontstore::FontStore`] – font registry
 
 use std::sync::Arc;
 

@@ -1,14 +1,11 @@
 //! Input systems.
 //!
-//! Since Phase 7d (`docs/plans/phase7d-raw-input-ownership.md`) the
-//! render/logic split for input is:
+//! The render/logic split for input is:
 //!
-//! - [`sample_raw_device_snapshot`] — a plain function (not a system) that
-//!   polls raylib's whole keyboard + mouse held state into a
-//!   [`RawDeviceSnapshot`], with NO binding resolution and NO edges. The only
-//!   input code that touches the `RaylibHandle`. Called directly by the
-//!   render loop once per render frame and shipped over the dedicated
-//!   bounded input channel.
+//! - Raw device sampling (whole keyboard + mouse held state into a
+//!   [`RawDeviceSnapshot`], with NO binding resolution and NO edges) is
+//!   render-thread-only and lives in `crate::systems::render::input` — the
+//!   only input code that touches the `RaylibHandle`.
 //! - [`resolve_input_backlog`] — resolves a sim tick's queued
 //!   [`RawDeviceSnapshot`]s against [`InputBindings`] and
 //!   [`PrevRawSnapshot`], sequentially (oldest to newest, see its doc comment
@@ -46,63 +43,6 @@ use crate::resources::windowsize::WindowSize;
 /// world-space mouse without a `RaylibHandle`.
 pub fn screen_to_world2d(position: Vector2, camera: &Camera2D) -> Vector2 {
     unsafe { raylib::ffi::GetScreenToWorld2D(position.into(), (*camera).into()).into() }
-}
-
-// ---------------------------------------------------------------------------
-// Render-side sampling (plain function, not a system)
-// ---------------------------------------------------------------------------
-
-/// Highest raylib keyboard key code in use today (`KEY_KB_MENU`).
-const MAX_KEY_CODE: u32 = 348;
-
-/// Number of raylib mouse button codes (`MOUSE_BUTTON_LEFT..=MOUSE_BUTTON_BACK`).
-const MOUSE_BUTTON_COUNT: u8 = 7;
-
-/// Poll raylib's whole keyboard + mouse held state into a
-/// [`RawDeviceSnapshot`]. NO [`InputBindings`] resolution and NO
-/// `just_pressed`/`just_released` edges — both are computed sim-side by
-/// [`resolve_input_backlog`].
-///
-/// Iterates every raw key code `0..=348` and mouse button code `0..=6`
-/// directly via raylib's FFI (`IsKeyDown`/`IsMouseButtonDown` take a bare
-/// `int`, not the `KeyboardKey`/`MouseButton` enum) rather than a
-/// hand-maintained key table — ~355 cheap FFI calls/frame, negligible, and
-/// zero-maintenance if raylib ever adds keys.
-///
-/// Must run on the thread that owns the raylib window. Touches no ECS state.
-pub fn sample_raw_device_snapshot(
-    rl: &raylib::RaylibHandle,
-    window_w: i32,
-    window_h: i32,
-) -> RawDeviceSnapshot {
-    let mut raw = RawDeviceSnapshot {
-        window_w,
-        window_h,
-        ..Default::default()
-    };
-
-    for code in 0..=MAX_KEY_CODE {
-        // SAFETY: IsKeyDown reads raylib's in-memory key-state array; no
-        // preconditions beyond an initialized window, which the render
-        // thread guarantees.
-        if unsafe { raylib::ffi::IsKeyDown(code as i32) } {
-            raw.set_key(code);
-        }
-    }
-
-    for button in 0..MOUSE_BUTTON_COUNT {
-        // SAFETY: same as IsKeyDown above.
-        if unsafe { raylib::ffi::IsMouseButtonDown(button as i32) } {
-            raw.set_mouse_button(button);
-        }
-    }
-
-    raw.scroll_y = rl.get_mouse_wheel_move();
-    let mouse_pos = rl.get_mouse_position();
-    raw.mouse_x = mouse_pos.x;
-    raw.mouse_y = mouse_pos.y;
-
-    raw
 }
 
 // ---------------------------------------------------------------------------
@@ -180,11 +120,8 @@ fn resolve_sample_into(
 /// state.
 ///
 /// **Why sequential per-sample resolution, not merge-then-diff-once:** edge
-/// computation is a *diff* against the previous raw state, not a *merge* of
-/// already-resolved edges (that was the old `merge_input_snapshots` model,
-/// which worked because the render side had already resolved edges from
-/// raylib's own per-key edge tracking). Diffing two *raw* snapshots directly
-/// against each other — first backlogged sample vs. last — would silently
+/// computation is a *diff* against the previous raw state, not a merge of
+/// already-resolved edges. Diffing two *raw* snapshots directly
 /// lose any transition in between: e.g. a key going down, up, then down again
 /// across 3 backlogged samples must fire two separate `just_pressed` edges,
 /// but a first-vs-last diff would see "still down" and report none. Each
@@ -194,9 +131,8 @@ fn resolve_sample_into(
 /// edge fired by any backlogged sample is delivered exactly once this tick.
 /// `active`/analog fields take the newest sample (last-sample-wins).
 ///
-/// Multi-binding actions get a strictly saner edge semantic than the old
-/// per-key raylib polling could express: rolling from one bound key to
-/// another (e.g. both Z and X bound to the same action, tap-hold-Z-then-X)
+/// Multi-binding actions get a sane edge semantic: rolling from one bound key
+/// to another (e.g. both Z and X bound to the same action, tap-hold-Z-then-X)
 /// never double-fires `just_pressed`, since `active` (any-bound-down) stays
 /// `true` across the handoff.
 ///
@@ -363,7 +299,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::imgui_bridge::ImguiCaptureState;
+    use crate::resources::render::imgui_bridge::ImguiCaptureState;
     use raylib::ffi::KeyboardKey;
     use raylib::prelude::Camera2D;
 

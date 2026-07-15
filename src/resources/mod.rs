@@ -8,29 +8,23 @@
 //! Overview
 //! - [`animationstore`] – definitions for sprite animations reused across entities
 //! - [`appstate`] – typed state store passed to `GuiCallback`; one slot per Rust type
+//! - [`audio`] – resources used only by the audio thread's own `bevy_ecs::World`
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
 //! - [`fontmetrics`] – CPU-side glyph metrics for text measurement without a GL context
-//! - [`fontstore`] – loaded fonts keyed by string IDs
-//! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`gamestate`] – authoritative and pending high-level game state
 //! - [`group`] – set of group names tracked for entity counting
 //! - [`guiinputstate`] – per-frame scratch state for GUI click consumption
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
-//! - [`imgui_bridge`] – internal Dear ImGui backend that replaces raylib's removed feature
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
-//! - [`pending_imgui_capture`] – one-frame-lag imgui capture state pending send to the logic thread
-//! - [`quit_requested`] – render-loop quit flag read by the loop's `while` condition
-//! - [`render_mirrors`] – render-world mirrors of `DrawableSnapshot`'s global fields
-//! - [`rendertarget`] – render texture for fixed-resolution rendering with scaling
+//! - [`render`] – resources used only by the render (main) thread's `bevy_ecs::World`
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturefilter`] – texture sampling filter mode shared by render target and texture store
-//! - [`texturestore`] – loaded textures keyed by string IDs
 //! - [`texturedims`] – CPU-side texture dimensions mirror for the logic thread
 //! - [`windowsize`] – actual window dimensions for letterbox calculations
 //! - [`worldsignals`] – global signal storage for cross-system communication
@@ -38,40 +32,33 @@
 
 pub mod animationstore;
 pub mod appstate;
+pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
 pub mod debugmode;
 pub mod debugoverlayconfig;
 pub mod drawable_snapshot;
 pub mod fontmetrics;
-pub mod fontstore;
-pub mod fullscreen;
 pub mod gameconfig;
 pub mod gamestate;
 pub mod group;
 pub mod guiinputstate;
 pub mod guitheme;
-pub mod imgui_bridge;
 pub mod input;
 pub mod input_bindings;
 #[cfg(feature = "lua")]
 pub mod lua_runtime;
 pub mod mapdata;
-pub mod pending_imgui_capture;
 pub mod postprocessshader;
-pub mod quit_requested;
 pub mod rawinput;
-pub mod render_mirrors;
-pub mod rendertarget;
+pub mod render;
 pub mod scenemanager;
 pub mod screensize;
-pub mod shaderstore;
 pub mod signal_intents;
 pub mod signal_keys;
 pub mod systemsstore;
 pub mod texturedims;
 pub mod texturefilter;
-pub mod texturestore;
 pub mod uniformvalue;
 pub mod warn_once;
 pub mod windowsize;

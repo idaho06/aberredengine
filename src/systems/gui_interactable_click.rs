@@ -84,7 +84,7 @@ mod tests {
     use crate::resources::gameconfig::GameConfig;
     use crate::resources::input_bindings::InputBindings;
     use crate::resources::postprocessshader::PostProcessShader;
-    use crate::resources::texturestore::TextureStore;
+    use crate::resources::render::texturestore::TextureStore;
     use crate::resources::worldsignals::WorldSignals;
     use crate::resources::worldtime::WorldTime;
     use bevy_ecs::message::Messages;

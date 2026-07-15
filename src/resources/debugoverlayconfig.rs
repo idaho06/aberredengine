@@ -7,6 +7,15 @@ use bevy_ecs::prelude::Resource;
 /// Controls which world-space debug overlays are rendered.
 ///
 /// All fields default to `true` (everything visible when debug mode is on).
+///
+/// Inserted independently in both `setup_logic_world` and
+/// `setup_render_world` -- two separate instances of this same type, not a
+/// `RenderX`-style wrapper mirroring one authoritative copy. That's why it
+/// stays in flat `src/resources/` rather than `src/resources/render/`
+/// alongside the render-exclusive resources: imgui edits happen render-side,
+/// but the render loop diffs and ships changes to the logic side as
+/// `LogicMsg::OverlayConfig` (`send_render_mirrors`), rather than the logic
+/// side reading a `RenderDebugOverlayConfig` mirror.
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub struct DebugOverlayConfig {
     /// Red AABB outlines around box colliders.

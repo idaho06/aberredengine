@@ -2,7 +2,7 @@
 //!
 //! [`FontMetricsStore`] holds per-glyph measurement data extracted from each
 //! loaded font at load time, keyed by the same string ID used by
-//! [`FontStore`](crate::resources::fontstore::FontStore). This lets
+//! [`FontStore`](crate::resources::render::fontstore::FontStore). This lets
 //! logic-side systems (e.g. `dynamictext_size_system`) measure text without
 //! touching the GL-bound `FontStore`/`NonSend<RaylibHandle>` — a requirement
 //! for splitting simulation logic onto its own thread, separate from the

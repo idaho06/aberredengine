@@ -76,7 +76,6 @@ use raylib::ffi::TraceLogLevel;
 use crate::pacing::Pacer;
 use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
-use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::protocol::endpoints::{
     LogicBridge, LogicTx, RenderTx, shutdown_logic, shutdown_logic_bridge,
 };
@@ -92,7 +91,7 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::render_assets::RenderAssetCmd;
 use crate::events::switchdebug::switch_debug_observer;
-use crate::events::switchfullscreen::switch_fullscreen_observer;
+use crate::events::render::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
 use crate::protocol::endpoints::{setup_audio, shutdown_audio};
@@ -100,30 +99,31 @@ use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
-use crate::resources::fontstore::FontStore;
+use crate::resources::render::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
 use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use crate::systems::gui_interactable_click::gui_interactable_click_observer;
-use crate::resources::imgui_bridge::{ImguiBridge, ImguiCaptureState};
+use crate::resources::render::imgui_bridge::{ImguiBridge, ImguiCaptureState};
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
-use crate::resources::pending_imgui_capture::PendingImguiCapture;
+use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
 use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::quit_requested::QuitRequested;
-use crate::resources::render_mirrors::{
+use crate::resources::render::quit_requested::QuitRequested;
+use crate::resources::render::mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
-use crate::resources::rendertarget::RenderTarget;
-use crate::resources::scenemanager::{RenderSceneTable, SceneManager};
+use crate::resources::render::rendertarget::RenderTarget;
+use crate::resources::render::scene_table::RenderSceneTable;
+use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::shaderstore::ShaderStore;
+use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturedims::TextureDimsStore;
-use crate::resources::texturestore::TextureStore;
+use crate::resources::render::texturestore::TextureStore;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::drawable_snapshot::{build_drawable_snapshot, DrawableSnapshot};
@@ -131,13 +131,12 @@ use crate::resources::worldtime::WorldTime;
 use crate::resources::signal_intents::SignalIntents;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
-use crate::systems::audio::{
+use crate::systems::audio_bridge::{
     forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
 };
 use crate::systems::camera_follow::camera_follow_system;
 use crate::systems::collision_detector::collision_detector;
 use crate::systems::dynamictext_size::dynamictext_size_system;
-use crate::systems::gameconfig::apply_gameconfig_changes;
 use crate::systems::gamestate::{
     check_pending_state, clean_all_entities, quit_game, state_is_playing,
 };
@@ -151,13 +150,13 @@ use crate::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
 };
 use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
-use crate::systems::input::{resolve_input_backlog, sample_raw_device_snapshot};
+use crate::systems::input::resolve_input_backlog;
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
 use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::menu::menu_selection_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
-use crate::systems::render_assets::{process_render_asset_cmds, update_bevy_render_asset_cmds};
+use crate::systems::render_assets::update_bevy_render_asset_cmds;
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
 use crate::systems::particleemitter::particle_emitter_system;
@@ -165,12 +164,15 @@ use crate::systems::phase::phase_system;
 use crate::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
-use crate::systems::render::mirror::{
-    SimIdMap, reconcile_gui_buttons, reconcile_gui_labels, reconcile_gui_progress_bars,
-    reconcile_gui_windows, reconcile_map_sprites, reconcile_map_texts, reconcile_screen_sprites,
-    reconcile_screen_texts,
-};
+use crate::resources::render::sim_id_map::SimIdMap;
+use crate::systems::render::apply_gameconfig_changes;
+use crate::systems::render::input::sample_and_send_input;
+use crate::systems::render::messages::pump_render_msgs;
+use crate::systems::render::output::send_render_mirrors;
+use crate::systems::render::process_render_asset_cmds;
 use crate::systems::render::render_system;
+use crate::systems::render::snapshot::receive_snapshot;
+use crate::systems::render::window::refresh_window_size;
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::signal_intents::apply_signal_intents;
 use crate::systems::scene_dispatch::{
@@ -204,8 +206,7 @@ use crate::systems::mapspawn::process_lua_map_commands;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
-/// `Send` because these are carried into the logic thread via `LogicInit`
-/// (Phase 5e).
+/// `Send` because these are carried into the logic thread via `LogicInit`.
 type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + Send>;
 
 /// Closure that adds a game-update system to the [`Schedule`].
@@ -213,9 +214,8 @@ type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + Send>;
 /// `Send`: see [`HookRegistrar`].
 type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 
-/// System sets partitioning the logic thread's `fixed` schedule pipeline
-/// (Phase 7b Step 0). Replaces the old hand-enumerated `.after()`/`.before()`
-/// edges between individual systems: [`EngineBuilder`]'s
+/// System sets partitioning the logic thread's `fixed` schedule pipeline.
+/// [`EngineBuilder`]'s
 /// `build_logic_schedules` declares one `configure_sets((...).chain())` over
 /// this list as the single source of ordering truth between groups; edges
 /// *within* a group that are still load-bearing remain explicit `.after()`
@@ -238,10 +238,9 @@ pub enum SimSet {
     /// `update_bevy_audio_messages`, kept as an explicit `.chain()`).
     AudioPump,
     /// User `on_update`/`add_system`/`add_fixed_system` hooks. Lua's
-    /// `on_update_<scene>` no longer lives here -- it's dispatched from
-    /// `lua_plugin::update` in `SimSet::Bookkeeping` instead, restoring the
-    /// pre-thread-split engine's ordering (after camera-follow/collision, not
-    /// before).
+    /// `on_update_<scene>` is dispatched separately, from
+    /// `lua_plugin::update` in `SimSet::Bookkeeping`, so it runs after
+    /// camera-follow/collision rather than before.
     ScriptUpdate,
     /// Input-driven force/velocity controllers.
     Controllers,
@@ -366,7 +365,7 @@ impl EngineBuilder {
 
     /// Register the `update` hook.
     ///
-    /// Runs once per sim tick (`[simulation] hz` in `config.ini`, Phase 7b),
+    /// Runs once per sim tick (`[simulation] hz` in `config.ini`),
     /// in [`SimSet::ScriptUpdate`]. Treat it as idempotent/edge-triggered the
     /// same way Lua's `on_update_<scene>` must be
     /// (`.claude/context/system-order.md`): gate one-shot effects on an edge,
@@ -597,14 +596,14 @@ impl EngineBuilder {
     /// This variant returns startup errors to the caller instead of logging
     /// them internally.
     ///
-    /// Phase 5e: two `World`s on two threads. The main thread owns the raylib
+    /// Two `World`s run on two threads. The main thread owns the raylib
     /// window plus a small render `World` (GL stores, mirror entities
-    /// reconciled from each received [`DrawableSnapshot`] -- no
-    /// `DrawableSnapshot` resource itself since Phase 7f-4); the spawned
+    /// reconciled from each received [`DrawableSnapshot`] -- there is no
+    /// `DrawableSnapshot` resource on the render side); the spawned
     /// logic thread builds the gameplay
     /// `World` inside its own closure (so NonSend `LuaRuntime` is created on,
-    /// and pinned to, that thread) and runs the FIXED 240Hz accumulator on
-    /// its own wall clock. Communication is crossbeam channels only
+    /// and pinned to, that thread) and runs its sim schedule on its own
+    /// `Pacer`-paced wall clock. Communication is crossbeam channels only
     /// ([`LogicMsg`]/[`RenderMsg`] — fully `Send` enums). Logic-thread
     /// startup errors are logged from that thread and surface as an
     /// immediate `RenderMsg::Quit`, not as an `Err` here.
@@ -793,21 +792,19 @@ impl EngineBuilder {
         Ok((rl, thread, render_target))
     }
 
-    /// Build the render (main-thread) `World` (Phase 5e): raylib window +
+    /// Build the render (main-thread) `World`: raylib window +
     /// GL/NonSend stores, plus the render-owned `InputState` mirror (written
     /// by the render loop from its `sample_raw_device_snapshot` result —
-    /// Phase 7d: this no longer carries resolved bindings/edges, see
+    /// it carries no resolved bindings/edges, see
     /// `DebugResources::input_state`'s doc comment) and `DebugOverlayConfig`
-    /// (edited by the imgui panel). `InputBindings` became logic-thread-only
-    /// in Phase 7d — no render-side mirror. Holds no gameplay resources.
-    /// Since Phase 7f-3 (extended by 7f-4 to all 8 categories) this world
-    /// DOES hold entities: retained mirror entities (`SimMirror` + one
-    /// marker per category, `src/systems/render/mirror.rs`), reconciled
+    /// (edited by the imgui panel). `InputBindings` is logic-thread-only —
+    /// there is no render-side mirror. Holds no gameplay resources.
+    /// This world DOES hold entities: retained mirror entities (`SimMirror` +
+    /// one marker per category, `src/systems/render/mirror.rs`), reconciled
     /// write-only from each tick's `DrawableSnapshot` clone by
     /// `receive_snapshot` -- never stored as a resource, never gameplay
-    /// entities. (The pre-existing fullscreen-toggle `Observer` entity
-    /// spawned below is infrastructure, not a drawable, and predates this
-    /// note.)
+    /// entities. (The fullscreen-toggle `Observer` entity spawned below is
+    /// infrastructure, not a drawable.)
     fn setup_render_world(
         config: GameConfig,
         rl: raylib::RaylibHandle,
@@ -884,8 +881,8 @@ impl EngineBuilder {
         Ok(world)
     }
 
-    /// Build the logic-thread gameplay `World` (Phase 5e): everything the old
-    /// single `setup_world` inserted except GL/window state, plus the
+    /// Build the logic-thread gameplay `World`: gameplay resources/entities,
+    /// excluding GL/window state, plus the
     /// message-fed mirrors (`ScreenSize`/`WindowSize`/`DebugOverlayConfig`)
     /// and the logic-owned stores fed by render notifications
     /// (`FontMetricsStore`/`TextureDimsStore`). Runs INSIDE the thread
@@ -1102,34 +1099,28 @@ impl EngineBuilder {
         world.flush();
     }
 
-    /// Build the two schedules the logic thread runs: `fixed` (Phase 7b:
-    /// runs once per `Pacer`-paced sim tick at `[simulation] hz`, real dt --
+    /// Build the two schedules the logic thread runs: `fixed`
+    /// (runs once per `Pacer`-paced sim tick at `[simulation] hz`, real dt --
     /// this is where essentially all gameplay logic lives: movement,
     /// collision, phases, animation, Lua scripting, GUI layout/hit-test,
     /// scene lifecycle, and per-tick housekeeping; the binding still called
     /// `fixed` returned from this function is bound to `sim` by its caller,
-    /// `logic_thread_main`, since ticks are no longer fixed-duration) and
-    /// `present` (Phase 7c: decimated to `[simulation] snapshot_hz`, not run
-    /// once per received input sample anymore -- package the tick's
+    /// `logic_thread_main`, since ticks are not fixed-duration) and
+    /// `present` (decimated to `[simulation] snapshot_hz`, not run
+    /// once per received input sample -- package the tick's
     /// fully-settled state into a `DrawableSnapshot` and publish it into the
     /// `SnapshotPublisher` triple buffer; nothing else). See
-    /// `docs/render-simulation-separation-brainstorm.md`,
-    /// `docs/render-logic-simplification-brainstorm.md`'s "Collapsing
-    /// VARIABLE" section, `docs/plans/phase7b-pacing-configurable-frequencies.md`,
-    /// `docs/plans/phase7c-triple-buffer-snapshot.md`, and
     /// `.claude/context/system-order.md` for the rationale behind the split
-    /// and the full list of which system lives where. `present` was called
-    /// `variable` before Phase 6d; the old name stopped describing anything
-    /// running there once nearly everything moved to `fixed`.
+    /// and the full list of which system lives where.
     ///
-    /// `fixed`'s internal ordering is expressed via [`SimSet`] (Phase 7b Step
-    /// 0) rather than per-system `.after()`/`.before()` edges: one
+    /// `fixed`'s internal ordering is expressed via [`SimSet`]
+    /// rather than per-system `.after()`/`.before()` edges: one
     /// `configure_sets((...).chain())` call declares the pipeline, and each
     /// system joins its group with `.in_set(SimSet::X)`. Only *intra*-set
     /// edges that are still load-bearing (e.g.
     /// `cleanup_orphaned_global_transforms.after(propagate_transforms)`
-    /// within `Transforms`) are kept explicit -- every edge that used to
-    /// cross groups is now implied by set order and was deleted.
+    /// within `Transforms`) are kept explicit -- cross-group ordering is
+    /// implied by set order.
     ///
     /// `bevy_ecs` cannot express `.after()`/`.before()` across two separate
     /// `Schedule`s, so `present`'s `.after()` markers referencing `fixed`
@@ -1432,10 +1423,9 @@ impl EngineBuilder {
         Ok((fixed, present))
     }
 
-    /// Build the render thread's single per-frame schedule (Phase 7f-1: every
-    /// per-frame step, including the ones that used to be hand-written in
-    /// `render_main_loop`, is now a system in this chain). `apply_gameconfig_changes`
-    /// loses its old `run_if(state_is_playing)` gate — the render world has no
+    /// Build the render thread's single per-frame schedule: every
+    /// per-frame step is a system in this chain. `apply_gameconfig_changes`
+    /// has no `run_if(state_is_playing)` gate — the render world has no
     /// `GameState`; the snapshot's config is seeded with the real loaded
     /// config at startup, so early application is a no-op, not a downgrade.
     fn build_render_schedule(world: &mut World) -> Result<Schedule, String> {
@@ -1460,9 +1450,9 @@ impl EngineBuilder {
         Ok(schedule)
     }
 
-    /// Render (main) thread loop (Phase 7f-1: shrunk to just running the
-    /// schedule -- every step that used to be hand-written here is now a
-    /// system in `build_render_schedule`'s chain, see that fn's doc comment).
+    /// Render (main) thread loop: runs the schedule built by
+    /// `build_render_schedule` each frame (see that fn's doc comment for the
+    /// per-frame steps).
     ///
     /// Shutdown ordering: window close (or `RenderMsg::Quit`) -> send
     /// `LogicMsg::Shutdown` -> join the logic thread (which runs
@@ -1493,193 +1483,8 @@ impl EngineBuilder {
     }
 }
 
-/// Refreshes `WindowSize` from the OS before input sampling (Phase 7f-1;
-/// first step of the render schedule, since `sample_and_send_input` needs
-/// the up-to-date size for its letterbox math).
-fn refresh_window_size(rl: NonSend<raylib::RaylibHandle>, mut window_size: ResMut<WindowSize>) {
-    window_size.w = rl.get_screen_width();
-    window_size.h = rl.get_screen_height();
-}
-
-/// Samples the raw device state once per render frame (the only system
-/// touching the raylib handle for input; Phase 7d: no bindings, no edges
-/// here -- the sim thread resolves all of that) and ships it (+ the
-/// previous frame's imgui capture state, one-frame lag via
-/// `PendingImguiCapture`) to the logic thread over the dedicated bounded
-/// input channel. A momentarily full queue (sim stalled for 8+ render
-/// frames) drops the sample rather than growing an unbounded backlog; a
-/// disconnected channel (logic thread gone) sets `QuitRequested`.
-fn sample_and_send_input(
-    rl: NonSend<raylib::RaylibHandle>,
-    window_size: Res<WindowSize>,
-    capture: Res<PendingImguiCapture>,
-    bridge: Res<LogicBridge>,
-    mut quit: ResMut<QuitRequested>,
-) {
-    let raw = sample_raw_device_snapshot(&rl, window_size.w, window_size.h);
-    let result = bridge.tx_input.try_send(InputSample {
-        raw,
-        capture: capture.0,
-    });
-    if crate::pacing::send_channel_disconnected(&result) {
-        log::error!("Logic thread disconnected; shutting down");
-        quit.0 = true;
-    }
-}
-
-/// Drains logic->render messages once per frame: re-queues asset commands
-/// into this world's `Messages<RenderAssetCmd>` for `process_render_asset_cmds`,
-/// triggers `SwitchFullScreenEvent` (Phase 7d: F10 decisions arrive here,
-/// bindings having moved sim-side), and sets `QuitRequested` on
-/// `RenderMsg::Quit`. EXCLUSIVE system (`fn(&mut World)`, not a
-/// `SystemParam`-based one): the fullscreen toggle's `world.trigger(...)` +
-/// `world.flush()` must apply synchronously so it's visible to
-/// `render_system` later in this same schedule run -- a regular system's
-/// `Commands::trigger` would only apply at a scheduler-inserted sync point,
-/// not deterministically before the next chained system.
-fn pump_render_msgs(world: &mut World) {
-    let msgs: Vec<RenderMsg> = {
-        let bridge = world.resource::<LogicBridge>();
-        bridge.rx_render.try_iter().collect()
-    };
-
-    let mut asset_cmds: Vec<RenderAssetCmd> = Vec::new();
-    let mut toggle_fullscreen = false;
-    for msg in msgs {
-        match msg {
-            RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
-            RenderMsg::ToggleFullscreen => toggle_fullscreen = true,
-            RenderMsg::Quit => world.resource_mut::<QuitRequested>().0 = true,
-        }
-    }
-    if toggle_fullscreen {
-        world.trigger(SwitchFullScreenEvent {});
-        world.flush();
-    }
-    if !asset_cmds.is_empty() {
-        world
-            .resource_mut::<Messages<RenderAssetCmd>>()
-            .write_batch(asset_cmds);
-    }
-}
-
-/// Reads the newest published snapshot off the triple buffer (Phase 7c;
-/// latest-wins, no interpolation) into a local `new_snapshot` clone (still a
-/// full clone, not zero-copy). Runs after `update_bevy_render_asset_cmds`/
-/// `process_render_asset_cmds` rather than before them (order changed from
-/// pre-7f-1); safe because neither of those systems reads or writes
-/// `DrawableSnapshot` (verified: no reference to it in
-/// `src/systems/render_assets.rs`) -- only `apply_gameconfig_changes`/
-/// `render_system` do, and both still run after this system either way, so
-/// this frame's asset loads and this frame's snapshot are visible together
-/// regardless of this reordering.
-///
-/// `new_snapshot`'s 8 `Vec<...Entry>` drawable-list fields feed the 8
-/// `reconcile_*` calls below (`src/systems/render/mirror.rs`), which write
-/// their results into retained mirror entities rather than a resource. Its
-/// 10 remaining "global" fields are each moved (by value, `new_snapshot` is
-/// consumed here and never stored) into a dedicated `Render*` resource
-/// (mirroring `RenderResources`/`DebugResources`'s existing param-bundling
-/// pattern) -- `render_system` reads those instead of a `DrawableSnapshot`
-/// resource for anything global. Unconditional, no `is_changed()`-style
-/// gating, since nothing downstream needs it and it would be a behavior
-/// change (`apply_gameconfig_changes` does its own `Local`-based diff
-/// independently either way).
-///
-/// Phase 7f-3/7f-4: this system is exclusive (`fn(&mut World)`) because
-/// reconciling mirror entities needs simultaneous spawn/despawn plus
-/// resource access, which an ordinary `SystemParam` bundle can't express
-/// (same justification `drain_cmds` uses in `src/systems/audio/systems.rs`).
-/// The `SnapshotMirrors` bundle from 7f-2 is gone -- exclusive systems can't
-/// take `SystemParam` bundles, only `&mut World` plus `ExclusiveSystemParam`s
-/// -- replaced by explicit `world.resource_mut::<Render*>()` calls, same 10
-/// fields, same order, same `mem::take`-vs-`.clone()` choice per field as
-/// before. All 8 `DrawableSnapshot` drawable categories are now
-/// mirror-reconciled (7f-3 landed map sprites/texts + screen sprites/texts;
-/// 7f-4 added GUI windows/buttons/labels/progress bars) -- there is no
-/// longer a render-world `DrawableSnapshot` resource to write into at the
-/// end; `new_snapshot` only lives long enough to source the 8 `reconcile_*`
-/// calls and the 10 global-field fan-out below, then drops.
-fn receive_snapshot(world: &mut World) {
-    let should_update = world.resource_mut::<SnapshotConsumer>().0.update();
-    if !should_update {
-        return;
-    }
-
-    let new_snapshot = world
-        .resource_mut::<SnapshotConsumer>()
-        .0
-        .output_buffer()
-        .clone();
-
-    reconcile_map_sprites(world, &new_snapshot.map_sprites);
-    reconcile_map_texts(world, &new_snapshot.map_texts);
-    reconcile_screen_sprites(world, &new_snapshot.screen_sprites);
-    reconcile_screen_texts(world, &new_snapshot.screen_texts);
-    reconcile_gui_windows(world, &new_snapshot.gui_windows);
-    reconcile_gui_buttons(world, &new_snapshot.gui_buttons);
-    reconcile_gui_labels(world, &new_snapshot.gui_labels);
-    reconcile_gui_progress_bars(world, &new_snapshot.gui_progress_bars);
-
-    world.resource_mut::<RenderCamera>().0 = new_snapshot.camera;
-    world.resource_mut::<RenderGameConfig>().0 = new_snapshot.game_config;
-    world.resource_mut::<RenderSignalSnapshot>().0 = new_snapshot.signals;
-    world.resource_mut::<RenderAppState>().0 = new_snapshot.app_state;
-    world.resource_mut::<RenderDebugSnapshot>().0 = new_snapshot.debug;
-    world.resource_mut::<RenderActiveScene>().0 = new_snapshot.active_scene;
-    world.resource_mut::<RenderWorldTime>().0 = new_snapshot.world_time;
-    world.resource_mut::<RenderPostProcess>().0 = new_snapshot.post_process;
-    world.resource_mut::<RenderGuiThemes>().0 = new_snapshot.gui_themes;
-    world.resource_mut::<RenderCameraFollow>().0 = new_snapshot.camera_follow;
-}
-
-/// Diffs the render-owned mirrors (`ScreenSize`, `DebugOverlayConfig`)
-/// against their previous-frame values and sends `LogicMsg`s on change;
-/// drains `SignalIntents` queued by this frame's `GuiCallback`; refreshes
-/// `PendingImguiCapture` for `sample_and_send_input`'s NEXT frame read (the
-/// one-frame imgui-capture lag, unchanged since Phase 6e). The `Local<Option<T>>`s
-/// replace the loop-local `last_screen_size`/`last_overlay_config` bindings
-/// -- both are read AND written by this same system across repeated
-/// `schedule.run()` calls, which is exactly what `Local<T>` is for; wrapped
-/// in `Option` so this compiles without requiring `ScreenSize`/
-/// `DebugOverlayConfig` to implement `Default` (neither does today) --
-/// `Option<T>: Default` holds unconditionally. Consequence: frame 1 always
-/// sees `None != Some(current)` and sends once even if nothing changed
-/// since startup -- harmless, the logic thread already expects an initial
-/// `ScreenSize`/`OverlayConfig` update.
-#[allow(clippy::too_many_arguments)]
-fn send_render_mirrors(
-    screen_size: Res<ScreenSize>,
-    mut last_screen_size: Local<Option<ScreenSize>>,
-    overlay_config: Res<DebugOverlayConfig>,
-    mut last_overlay_config: Local<Option<DebugOverlayConfig>>,
-    mut intents: ResMut<SignalIntents>,
-    bridge: Res<LogicBridge>,
-    imgui: NonSend<ImguiBridge>,
-    mut pending_capture: ResMut<PendingImguiCapture>,
-) {
-    if *last_screen_size != Some(*screen_size) {
-        *last_screen_size = Some(*screen_size);
-        let _ = bridge.tx_logic.send(LogicMsg::ScreenSize {
-            w: screen_size.w,
-            h: screen_size.h,
-        });
-    }
-    if last_overlay_config.as_ref() != Some(&*overlay_config) {
-        *last_overlay_config = Some(overlay_config.clone());
-        let _ = bridge
-            .tx_logic
-            .send(LogicMsg::OverlayConfig(overlay_config.clone()));
-    }
-    let intents_taken = std::mem::take(&mut intents.0);
-    if !intents_taken.is_empty() {
-        let _ = bridge.tx_logic.send(LogicMsg::SignalIntents(intents_taken));
-    }
-    pending_capture.0 = imgui.capture_state();
-}
-
 /// Everything the logic thread needs to build the gameplay `World` and its
-/// schedules inside its own closure (Phase 5e). Must be `Send`: hooks are
+/// schedules inside its own closure. Must be `Send`: hooks are
 /// `Box<dyn FnOnce + Send>`, scene descriptors are fn pointers, and the
 /// channel endpoints are crossbeam handles.
 struct LogicInit {
@@ -1701,9 +1506,9 @@ struct LogicInit {
     window_h: i32,
     tx_render: Sender<RenderMsg>,
     rx_logic: Receiver<LogicMsg>,
-    /// Receiver for the dedicated bounded input channel (Phase 7d).
+    /// Receiver for the dedicated bounded input channel.
     rx_input: Receiver<InputSample>,
-    /// The sim thread's write end of the snapshot triple buffer (Phase 7c).
+    /// The sim thread's write end of the snapshot triple buffer.
     /// `Option` so [`EngineBuilder::setup_logic_world`] can `.take()` it into
     /// the logic world's [`SnapshotPublisher`] resource -- `Input<T>` isn't
     /// `Clone`, unlike the `Sender`/`Receiver` fields above.
@@ -1722,7 +1527,7 @@ fn logic_thread(init: LogicInit) {
     }
 }
 
-/// Cap on a single sim tick's real dt (Phase 7b): protects against a huge dt
+/// Cap on a single sim tick's real dt: protects against a huge dt
 /// after a debugger pause or long stall producing an unrealistic physics
 /// step (tunneling through colliders, teleporting) on the next tick. The POC
 /// reference implementation leaves this unclamped; this engine clamps it (a
@@ -1742,31 +1547,28 @@ fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
     world.resource_mut::<InputState>().clear_edges();
 }
 
-/// The logic thread's `Pacer`-driven loop (Phase 7b): one `sim` tick per
+/// The logic thread's `Pacer`-driven loop: one `sim` tick per
 /// `Pacer` wakeup at `[simulation] hz`, `dt` the real elapsed time since the
 /// previous tick (clamped to [`DT_CLAMP_SECONDS`], scaled by `time_scale`
-/// inside [`update_world_time`]). Unlike the old
-/// `recv_timeout(FIXED_DT)` + accumulator/substep-cap model, there is no
+/// inside [`update_world_time`]). There is no
 /// catch-up: a stall simply produces one larger (clamped) dt on the next
-/// tick rather than several replayed substeps -- strict fixed-step
-/// determinism is consciously dropped on this branch (see
-/// `docs/plans/phase7b-pacing-configurable-frequencies.md`).
+/// tick rather than replayed substeps -- strict fixed-step
+/// determinism is consciously not provided.
 ///
 /// A backlog of pending raw input samples (whenever `sim_hz` trails the
 /// render frame rate, or a sim stall) is resolved sequentially, oldest to
-/// newest, against `PrevRawSnapshot` (`resolve_input_backlog`, Phase 7d --
-/// replaces the old merge-then-apply-once `merge_input_snapshots` model).
+/// newest, against `PrevRawSnapshot` (`resolve_input_backlog`).
 /// Non-input messages just update the logic-side mirrors/stores. The sim
 /// still ticks every `Pacer` wakeup even when no input arrived (holding the
 /// configured rate through a render stall).
 ///
-/// `present` (build + publish this tick's [`DrawableSnapshot`]) no longer
-/// runs once per received input sample (Phase 7c) — it's decimated to
+/// `present` (build + publish this tick's [`DrawableSnapshot`]) does not
+/// run once per received input sample — it's decimated to
 /// `[simulation] snapshot_hz`, checked independently of whether input
 /// arrived this tick (see [`snapshot_publish_due`]), so the render thread
 /// keeps receiving fresh snapshots during input droughts too. Forwarding
-/// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) moved off
-/// `present` onto the tail of `sim` for the same reason: asset loads must
+/// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) runs on the tail
+/// of `sim` rather than on `present`, for the same reason: asset loads must
 /// reach the render thread every tick, not just on a publish tick.
 fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     let use_scene_manager = !init.scenes.is_empty();

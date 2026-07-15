@@ -15,7 +15,7 @@ use aberredengine::resources::input_bindings::InputBindings;
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::systemsstore::SystemsStore;
-use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::GameCtx;

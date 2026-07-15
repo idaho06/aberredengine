@@ -1,12 +1,12 @@
 use raylib::prelude::*;
 
-use super::ScreenSpriteBufferItem;
+use super::render::ScreenSpriteBufferItem;
 
 /// Draw one already-resolved screen-space sprite item (UI layer).
 pub(super) fn draw_screen_sprite_item(
     d: &mut impl RaylibDraw,
     item: &ScreenSpriteBufferItem,
-    textures: &crate::resources::texturestore::TextureStore,
+    textures: &crate::resources::render::texturestore::TextureStore,
     debug: bool,
 ) {
     let sprite = &item.sprite;

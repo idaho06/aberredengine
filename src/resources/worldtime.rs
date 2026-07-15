@@ -13,10 +13,9 @@ pub struct WorldTime {
     /// Scaled delta time for the last update (seconds): the real elapsed
     /// time since the previous sim tick (as measured by the logic thread's
     /// `Pacer`, targeting `[simulation] hz` in `config.ini`), clamped
-    /// (`DT_CLAMP_SECONDS`) and multiplied by `time_scale`. There is no
-    /// longer a distinct "fixed substep" delta vs. "variable frame" delta
-    /// (Phase 7b removed the FIXED_DT accumulator/substep model) — one tick,
-    /// one delta.
+    /// (`DT_CLAMP_SECONDS`) and multiplied by `time_scale`. One tick, one
+    /// delta — there is no separate "fixed substep" vs. "variable frame"
+    /// delta.
     pub delta: f32,
     /// Multiplier applied by systems that honor time scaling.
     pub time_scale: f32,

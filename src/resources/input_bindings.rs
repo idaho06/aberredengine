@@ -87,8 +87,7 @@ impl InputBindings {
 }
 
 impl Default for InputBindings {
-    /// Mirrors the default key assignments that were previously hardcoded into
-    /// `BoolState::key_binding` fields on `InputState`.
+    /// The engine's default key assignments for every input action.
     fn default() -> Self {
         let k = |key: KeyboardKey| InputBinding::Keyboard(key);
         let m = |btn: MouseButton| InputBinding::MouseButton(btn);

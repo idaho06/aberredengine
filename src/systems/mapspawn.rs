@@ -12,8 +12,6 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use raylib::ffi;
-use raylib::ffi::TextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X;
 use raylib::prelude::*;
 
 use crate::components::animation::Animation;
@@ -46,7 +44,7 @@ use crate::resources::worldsignals::WorldSignals;
 /// Load all assets referenced by `map` into the engine stores, then spawn
 /// entities. Called by [`spawn_map_observer`]; can also be called directly.
 ///
-/// Since Phase 5c, GL asset loads are not performed here — instead the
+/// GL asset loads are not performed here — instead the
 /// texture/font entries are translated into [`RenderAssetCmd`]s appended to
 /// `render_asset_cmds`, applied later by
 /// `crate::systems::render_assets::process_render_asset_cmds`. This keeps
@@ -317,11 +315,10 @@ pub fn spawn_map_observer(
 /// [`SpawnMapRequested`] for each, letting [`spawn_map_observer`] handle the
 /// Raylib-dependent asset loading and entity spawning.
 ///
-/// Registered by [`crate::engine_app::EngineBuilder::with_lua`]. Since Phase
-/// 6c, runs on FIXED (240Hz, tail of the schedule) rather than VARIABLE, so a
-/// map load queued from `on_update_<scene>`/phase/timer/collision callbacks
-/// (all FIXED-scheduled or FIXED-effective since 6a/6b) is picked up the same
-/// substep instead of waiting for the next VARIABLE pass.
+/// Registered by [`crate::engine_app::EngineBuilder::with_lua`]. Runs on the
+/// sim schedule's `SimSet::Bookkeeping`, so a map load queued from
+/// `on_update_<scene>`/phase/timer/collision callbacks is picked up the same
+/// tick it's queued.
 #[cfg(feature = "lua")]
 pub fn process_lua_map_commands(
     mut commands: Commands,
@@ -337,25 +334,6 @@ pub fn process_lua_map_commands(
             },
         }
     }
-}
-
-/// Load a font with mipmaps and anisotropic filtering.
-///
-/// `pub(crate)` so that `lua_plugin` can reuse this rather than duplicating it.
-pub fn load_font_with_mipmaps(
-    rl: &mut RaylibHandle,
-    th: &RaylibThread,
-    path: &str,
-    size: i32,
-) -> Result<Font, String> {
-    let mut font = rl
-        .load_font_ex(th, path, size, None)
-        .map_err(|err| format!("Failed to load font '{path}': {err}"))?;
-    unsafe {
-        ffi::GenTextureMipmaps(&mut font.texture);
-        ffi::SetTextureFilter(font.texture, TEXTURE_FILTER_ANISOTROPIC_8X as i32);
-    }
-    Ok(font)
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 
-use super::ScreenTextBufferItem;
-use crate::resources::fontstore::FontStore;
+use super::render::ScreenTextBufferItem;
+use crate::resources::render::fontstore::FontStore;
 
 /// Draw one already-resolved screen-space text item (UI layer).
 pub(super) fn draw_screen_text_item(

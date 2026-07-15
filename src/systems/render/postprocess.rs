@@ -8,14 +8,14 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::rendertarget::RenderTarget;
+use crate::resources::render::rendertarget::RenderTarget;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::shaderstore::ShaderStore;
+use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::uniformvalue::UniformValue;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldtime::WorldTime;
 
-use super::SourceBuffer;
+use super::render::SourceBuffer;
 
 /// Apply post-processing shader passes and blit the final image to the window.
 ///

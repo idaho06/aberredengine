@@ -1,22 +1,20 @@
-//! Retained render-world "mirror" entities (Phase 7f-3): one bevy_ecs entity
-//! per drawable-list item, keyed by the sim entity's `Entity::to_bits()`,
+//! Retained render-world "mirror" entities: one bevy_ecs entity per
+//! drawable-list item, keyed by the sim entity's `Entity::to_bits()`,
 //! reconciled every time a new `DrawableSnapshot` arrives instead of rebuilt
 //! from a `Vec` every frame.
 //!
-//! Checkpoint 1 covered map sprites; checkpoint 2 added map texts, screen
-//! sprites, and screen texts; 7f-4 added the 4 GUI categories (windows,
-//! buttons, labels, progress bars). All 8 `DrawableSnapshot` drawable
-//! categories are now mirrored -- the render-world `DrawableSnapshot`
-//! *resource* itself no longer exists (the type survives only as the sim
-//! thread's wire format, see `src/protocol/snapshot.rs`).
+//! All 8 `DrawableSnapshot` drawable categories -- map sprites, map texts,
+//! screen sprites, screen texts, and the 4 GUI categories (windows, buttons,
+//! labels, progress bars) -- are mirrored this way. The render world holds
+//! no `DrawableSnapshot` *resource* itself; the type survives only as the
+//! sim thread's wire format, see `src/protocol/snapshot.rs`.
 //!
 //! Write-only from the snapshot: reconciliation must never read or mutate
 //! anything that would make the render world start carrying gameplay logic
-//! -- that's the architectural line the whole Phase 7f split defends.
+//! -- that's the architectural line this module defends.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use raylib::prelude::Vector2;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::components::dynamictext::DynamicText;
@@ -28,6 +26,10 @@ use crate::components::guilabel::GuiLabel;
 use crate::components::guiprogressbar::GuiProgressBar;
 use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
+use crate::components::render::mirror::{
+    MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapSprite,
+    MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
+};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
@@ -39,67 +41,7 @@ use crate::resources::drawable_snapshot::{
     GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
     MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
 };
-
-/// Foreign key back to the sim entity a mirror entity was reconciled from.
-/// Stores the `Entity` itself (not just its bits) so draw-prep code that
-/// needs the original sim `Entity` (e.g. entity-shader uniform seeding) can
-/// read it directly with no `Entity::from_bits` reconstruction.
-/// `Entity::to_bits()` is only computed where `SimIdMap`'s hashmap key is
-/// actually needed.
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SimMirror(pub Entity);
-
-/// Category tags. Zero-sized -- distinguish mirror entities that otherwise
-/// share `SimMirror` and (for map sprites/texts) the same positional
-/// component types, so a `Query<.., With<MirrorX>>` can't accidentally pick
-/// up another category's mirrors. `Default` lets [`reconcile`] spawn any
-/// category's marker generically via `Marker::default()`.
-#[derive(Component, Debug, Default)]
-pub struct MirrorMapSprite;
-#[derive(Component, Debug, Default)]
-pub struct MirrorMapText;
-#[derive(Component, Debug, Default)]
-pub struct MirrorScreenSprite;
-#[derive(Component, Debug, Default)]
-pub struct MirrorScreenText;
-#[derive(Component, Debug, Default)]
-pub struct MirrorGuiWindow;
-#[derive(Component, Debug, Default)]
-pub struct MirrorGuiButton;
-#[derive(Component, Debug, Default)]
-pub struct MirrorGuiLabel;
-#[derive(Component, Debug, Default)]
-pub struct MirrorGuiProgressBar;
-
-/// `RigidBody.velocity`, captured as a plain component on the mirror entity.
-/// Lives here rather than under `src/components/` because it's a
-/// reconciliation-layer synthetic type -- nothing in the sim world ever has
-/// this component; it wraps the `Vector2` already extracted from
-/// `RigidBody` at snapshot-build time (`MapSpriteEntry`/`MapTextEntry`'s
-/// `velocity` field). Screen-space categories have no velocity concept.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct MirrorVelocity(pub Vector2);
-
-/// Per-category sim-id -> render-mirror-entity maps. One `FxHashMap` field
-/// per category (not one shared map) so a category's despawn-on-vanish pass
-/// can only ever prune its own ids -- never let one category's reconcile
-/// function reach another's field. `scratch_seen` is [`reconcile`]'s reusable
-/// working set (cleared at the start of every call) -- kept here rather than
-/// allocated fresh per call since the 4 `reconcile_*` entry points all run
-/// sequentially from `receive_snapshot`, never concurrently, so one shared
-/// scratch buffer is always free to reuse.
-#[derive(Resource, Default)]
-pub struct SimIdMap {
-    pub map_sprites: FxHashMap<u64, Entity>,
-    pub map_texts: FxHashMap<u64, Entity>,
-    pub screen_sprites: FxHashMap<u64, Entity>,
-    pub screen_texts: FxHashMap<u64, Entity>,
-    pub gui_windows: FxHashMap<u64, Entity>,
-    pub gui_buttons: FxHashMap<u64, Entity>,
-    pub gui_labels: FxHashMap<u64, Entity>,
-    pub gui_progress_bars: FxHashMap<u64, Entity>,
-    scratch_seen: FxHashSet<u64>,
-}
+use crate::resources::render::sim_id_map::SimIdMap;
 
 /// Implemented by every `DrawableSnapshot` entry type [`reconcile`] accepts,
 /// so the shared loop can extract the originating sim `Entity` without a
@@ -486,6 +428,7 @@ pub struct MirrorQueries<'w, 's> {
 mod mirror_tests {
     use super::*;
     use crate::components::guiinteractable::GuiWidgetState;
+    use raylib::prelude::Vector2;
     use std::sync::Arc;
 
     fn new_test_world() -> World {
@@ -950,10 +893,9 @@ mod mirror_tests {
 
     /// Reconciling two DIFFERENT categories with the same-shaped ids must
     /// never let one category's despawn-on-vanish pass touch another's
-    /// mirrors -- the risk explicitly flagged in the source plan. Spawns a
-    /// map-sprite and a screen-text mirror in the same tick, then
-    /// reconciles map sprites alone with an empty list and asserts the
-    /// screen-text mirror survives untouched.
+    /// mirrors. Spawns a map-sprite and a screen-text mirror in the same
+    /// tick, then reconciles map sprites alone with an empty list and
+    /// asserts the screen-text mirror survives untouched.
     #[test]
     fn despawn_on_vanish_is_scoped_to_its_own_category() {
         let mut world = new_test_world();

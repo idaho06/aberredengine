@@ -1,9 +1,8 @@
-//! Render-world mirrors of `DrawableSnapshot`'s "global" fields (Phase 7f-2).
+//! Render-world mirrors of `DrawableSnapshot`'s "global" fields.
 //!
-//! `DrawableSnapshot` (`src/resources/drawable_snapshot.rs`) remains the
-//! shared wire-format struct built by `build_drawable_snapshot` on the sim
-//! side and published through the triple buffer -- it is NOT shrunk by this
-//! phase. What changes is the render side: `receive_snapshot`
+//! `DrawableSnapshot` (`src/resources/drawable_snapshot.rs`) is the shared
+//! wire-format struct built by `build_drawable_snapshot` on the sim side and
+//! published through the triple buffer. On the render side, `receive_snapshot`
 //! (`src/engine_app.rs`) fans out a copy of each of these 10 fields into its
 //! own dedicated resource here, and `render_system` reads those instead of
 //! `snapshot.<field>` directly. Each is a thin wrapper (not a bare re-insert

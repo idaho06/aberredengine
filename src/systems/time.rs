@@ -13,11 +13,10 @@ use crate::resources::worldtime::WorldTime;
 /// `time_scale` and writes both `elapsed` and `delta`. Also increments the
 /// frame counter.
 ///
-/// Called once per sim tick (Phase 7b: one `Pacer`-driven wakeup at
-/// `[simulation] hz`, no more fixed-substep accumulator) to advance the
-/// simulation clock before that tick's `sim` schedule runs. The `present`
-/// schedule (snapshot build/ship) sees the same `WorldTime.delta` this call
-/// set — there is no separate render-frame delta override anymore.
+/// Called once per sim tick (one `Pacer`-driven wakeup at `[simulation] hz`)
+/// to advance the simulation clock before that tick's `sim` schedule runs.
+/// The `present` schedule (snapshot build/ship) sees the same
+/// `WorldTime.delta` this call set — there is no separate render-frame delta.
 pub fn update_world_time(world: &mut World, dt: f32) {
     let mut wt = world.resource_mut::<WorldTime>();
     let scaled_dt = dt * wt.time_scale;

@@ -52,7 +52,7 @@ fn path_stem(path: &str) -> &str {
 }
 
 /// Load tilemap JSON and read atlas PNG dimensions, CPU-only (no GL context
-/// required — Phase 5c). `path` is a directory; the last path segment is
+/// required). `path` is a directory; the last path segment is
 /// used as the stem for `<stem>.png` (texture) and `<stem>.txt` (JSON
 /// data). Returns the parsed [`Tilemap`], the atlas's pixel dimensions, and
 /// the computed `png_path` (so callers building a

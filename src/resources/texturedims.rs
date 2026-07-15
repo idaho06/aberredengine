@@ -1,16 +1,16 @@
 //! CPU-side texture dimension mirror for the logic thread.
 //!
-//! Post Phase 5e the logic world has no [`TextureStore`]
-//! (GPU handles live only in the render world), but `animation` still needs
-//! the atlas width for multi-row frame wrap (`vertical_displacement > 0`).
-//! The render side sends a `LogicMsg::TextureLoaded { key, width, height }`
-//! after every texture load/upload (`Texture`, `TilemapTexture`,
-//! `RasterizeText` arms of `process_render_asset_cmds`), and the logic
-//! thread's message loop inserts it here — the same one-owner mirror pattern
-//! as `FontMetricsStore` (Phase 5b), just in the opposite direction of
-//! ownership: render extracts-and-sends, logic owns the store.
+//! The logic world has no [`TextureStore`] (GPU handles live only in the
+//! render world), but `animation` still needs the atlas width for multi-row
+//! frame wrap (`vertical_displacement > 0`). The render side sends a
+//! `LogicMsg::TextureLoaded { key, width, height }` after every texture
+//! load/upload (`Texture`, `TilemapTexture`, `RasterizeText` arms of
+//! `process_render_asset_cmds`), and the logic thread's message loop inserts
+//! it here — the same one-owner mirror pattern as `FontMetricsStore`, just in
+//! the opposite direction of ownership: render extracts-and-sends, logic owns
+//! the store.
 //!
-//! [`TextureStore`]: crate::resources::texturestore::TextureStore
+//! [`TextureStore`]: crate::resources::render::texturestore::TextureStore
 
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;

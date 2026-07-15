@@ -1,9 +1,8 @@
-//! Logic-side input resolution state (Phase 7d,
-//! `docs/plans/phase7d-raw-input-ownership.md`).
+//! Logic-side input resolution state.
 //!
 //! Binding resolution and `just_pressed`/`just_released` edge detection both
-//! moved from the render thread to the logic thread: the render thread now
-//! ships raw, unresolved [`RawDeviceSnapshot`](crate::protocol::raw_input::RawDeviceSnapshot)s
+//! happen on the logic thread: the render thread ships raw, unresolved
+//! [`RawDeviceSnapshot`](crate::protocol::raw_input::RawDeviceSnapshot)s
 //! over a dedicated bounded channel, and
 //! [`resolve_input_backlog`](crate::systems::input::resolve_input_backlog)
 //! diffs each one against [`PrevRawSnapshot`] to compute edges.
@@ -18,9 +17,9 @@ use crate::protocol::raw_input::RawDeviceSnapshot;
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct PrevRawSnapshot(pub RawDeviceSnapshot);
 
-/// Logic-side mirror of the render thread's [`crate::resources::imgui_bridge::ImguiCaptureState`]
-/// (Phase 6e). Updated from the newest queued `InputSample::capture` each
-/// tick, and read by `resolve_input_backlog` to mask gameplay input while the
-/// debug overlay has focus.
+/// Logic-side mirror of the render thread's [`crate::resources::render::imgui_bridge::ImguiCaptureState`].
+/// Updated from the newest queued `InputSample::capture` each tick, and read
+/// by `resolve_input_backlog` to mask gameplay input while the debug overlay
+/// has focus.
 #[derive(Resource, Debug, Clone, Copy, Default)]
-pub struct ImguiCaptureMirror(pub crate::resources::imgui_bridge::ImguiCaptureState);
+pub struct ImguiCaptureMirror(pub crate::resources::render::imgui_bridge::ImguiCaptureState);

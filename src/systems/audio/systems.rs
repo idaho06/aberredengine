@@ -1,4 +1,4 @@
-//! Systems run by the audio thread's own `Schedule` (Phase 7e): `drain_cmds`
+//! Systems run by the audio thread's own `Schedule`: `drain_cmds`
 //! -> `pump_music` -> `pump_fx`, chained, single-threaded. Each is an
 //! exclusive `fn(&mut World)` system: `drain_cmds` needs simultaneous
 //! spawn/despawn plus `NonSendMut<AudioStore>` access, which is awkward to
@@ -12,11 +12,12 @@ use bevy_ecs::prelude::{Component, Entity, World};
 use log::{debug, error, info};
 use raylib::ffi;
 
+use crate::components::audio::handles::{FfiHandle, MusicHandle};
+use crate::components::audio::music_track::MusicTrack;
+use crate::components::audio::playing_fx::PlayingFx;
 use crate::protocol::audio::{AudioCmd, AudioMessage};
-
-use super::store::{
-    AudioStore, CmdReceiver, FfiHandle, MsgSender, MusicHandle, MusicTrack, PlayingFx, ShouldExit,
-};
+use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
+use crate::resources::audio::store::AudioStore;
 
 /// Drain all pending [`AudioCmd`]s non-blockingly and apply them to the
 /// audio world. Behavior is a 1:1 port of the pre-7e inline match in
@@ -372,11 +373,9 @@ pub fn pump_music(world: &mut World) {
 }
 
 /// Clean up finished sound aliases -- despawn `PlayingFx` entities whose
-/// alias has stopped playing. No `AudioMessage` is sent here: the pre-7e
-/// code never emitted an FX-finished notification either, and the protocol
-/// (`AudioMessage`) intentionally still has no `FxFinished` variant --
-/// adding one is out of scope for this phase (see `docs/plans/phase7e-
-/// audio-ecs-world.md`'s "unchanged surface" constraint).
+/// alias has stopped playing. No `AudioMessage` is sent here: FX completion
+/// is silent by design, and the protocol (`AudioMessage`) intentionally has
+/// no `FxFinished` variant.
 pub fn pump_fx(world: &mut World) {
     for (entity, alias) in playing_fx_entities(world) {
         if !unsafe { ffi::IsSoundPlaying(alias) } {

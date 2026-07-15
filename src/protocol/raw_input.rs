@@ -1,19 +1,18 @@
-//! Raw, unresolved device input sampled by the render thread every frame
-//! (Phase 7d, `docs/plans/phase7d-raw-input-ownership.md`).
+//! Raw, unresolved device input sampled by the render thread every frame.
 //!
 //! [`RawDeviceSnapshot`] carries only *physically-down* state — no
 //! [`InputBindings`](crate::resources::input_bindings::InputBindings)
 //! resolution, no `just_pressed`/`just_released` edges. Both are computed
 //! sim-side by diffing consecutive snapshots
 //! (`crate::systems::input::resolve_input_sample`), which is what lets the
-//! render thread stop caring about bindings entirely.
+//! render thread stay unaware of bindings entirely.
 //!
 //! [`InputSample`] is the payload shipped over the dedicated bounded input
 //! channel (`LogicBridge::tx_input` / `LogicInit::rx_input`) — a raw snapshot
-//! plus the imgui capture state that rides alongside it (one render-frame
-//! stale, same latency class as before Phase 7d).
+//! plus the imgui capture state that rides alongside it, one render-frame
+//! stale.
 
-use crate::resources::imgui_bridge::ImguiCaptureState;
+use crate::resources::render::imgui_bridge::ImguiCaptureState;
 
 /// Number of `u64` words in the keyboard bitset. `8 * 64 = 512` bits,
 /// comfortably covering every raylib keycode (`KEY_KB_MENU = 348` is the
@@ -24,7 +23,7 @@ const KEY_WORDS: usize = 8;
 /// physically down, plus mouse position/wheel and window dimensions.
 ///
 /// Gamepad support is intentionally absent — a future addition would add
-/// `axes`/`buttons`/`connected` fields here, per the Phase 7d plan.
+/// `axes`/`buttons`/`connected` fields here.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct RawDeviceSnapshot {
     /// Bitset over raylib keyboard key codes. Bit `i` of word `i / 64` set

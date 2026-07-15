@@ -143,18 +143,16 @@ impl GuiTheme {
     }
 }
 
-/// Named, persistent store of GUI themes. Replaces the old single global
-/// `GuiTheme` resource so a scene can mix multiple themed `GuiWindow`s/
-/// `GuiButton`s/`GuiLabel`s (different `theme_key` per widget, see
-/// `components.md`). Always inserted at startup (see `engine_app.rs`) so
-/// consumers take a plain `Res<GuiThemeStore>` rather than
-/// `Option<Res<_>>` — only individual *keys* may be missing, not the store
-/// itself.
+/// Named, persistent store of GUI themes, allowing a scene to mix multiple
+/// themed `GuiWindow`s/`GuiButton`s/`GuiLabel`s (different `theme_key` per
+/// widget, see `components.md`). Always inserted at startup (see
+/// `engine_app.rs`) so consumers take a plain `Res<GuiThemeStore>` rather
+/// than `Option<Res<_>>` — only individual *keys* may be missing, not the
+/// store itself.
 ///
 /// Resources aren't touched by `clear_all_commands()`, so a theme registered
-/// under a name persists across scene switches exactly like the old single
-/// `GuiTheme` resource did — only the `RenderCmd` queue used to set it is
-/// scene-scoped.
+/// under a name persists across scene switches — only the `RenderCmd` queue
+/// used to set it is scene-scoped.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct GuiThemeStore {
     pub themes: FxHashMap<Arc<str>, GuiTheme>,

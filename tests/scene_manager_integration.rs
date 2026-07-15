@@ -6,7 +6,7 @@
 
 use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::resources::fontstore::FontStore;
+use aberredengine::resources::render::fontstore::FontStore;
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
@@ -15,7 +15,7 @@ use aberredengine::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::signal_intents::SignalIntents;
 use aberredengine::resources::systemsstore::SystemsStore;
-use aberredengine::resources::texturestore::TextureStore;
+use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::GameCtx;

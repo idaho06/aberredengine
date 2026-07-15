@@ -9,7 +9,7 @@
 //! Use newtypes when you need two values of the same underlying type:
 //! `struct BeforeSnapshot(ComponentSnapshot)` vs `struct AfterSnapshot(ComponentSnapshot)`.
 //!
-//! # `T: Clone` required (Phase 5d)
+//! # `T: Clone` required
 //!
 //! [`insert`](AppState::insert) requires `T: Clone` — `AppState` itself is `Clone` (see
 //! below), which lets `DrawableSnapshot` carry a cloned copy for render-side scene
@@ -68,11 +68,10 @@ fn clone_entry_value<T: Any + Send + Sync + Clone>(
 ///
 /// See the [module documentation](self) for usage guidelines.
 ///
-/// # Part of `DrawableSnapshot` (Phase 5d)
+/// # Part of `DrawableSnapshot`
 ///
-/// The Option B render/logic thread split
-/// (`docs/render-simulation-separation-brainstorm.md`) snapshots render-relevant state into
-/// `DrawableSnapshot`, which carries a cloned `AppState` (Phase 5d). Each stored [`Entry`]
+/// The render/logic thread split snapshots render-relevant state into
+/// `DrawableSnapshot`, which carries a cloned `AppState`. Each stored [`Entry`]
 /// carries its own clone function captured at insert time, which is what makes `AppState`
 /// itself `Clone` and imposes the breaking `T: Clone` bound on [`insert`](AppState::insert).
 /// A `generation` counter, bumped by [`insert`](AppState::insert), [`get_mut`](AppState::get_mut),

@@ -1,6 +1,6 @@
-//! Entry point of the dedicated audio thread (Phase 7e): the audio thread
-//! owns its own `bevy_ecs::World` + single-threaded `Schedule`, paced by the
-//! same [`Pacer`]/`audio_hz` loop shape used before this phase.
+//! Entry point of the dedicated audio thread: the audio thread
+//! owns its own `bevy_ecs::World` + single-threaded `Schedule`, paced by a
+//! [`Pacer`]/`audio_hz` loop.
 
 use bevy_ecs::prelude::World;
 use bevy_ecs::schedule::{IntoScheduleConfigs, Schedule, SingleThreadedExecutor};
@@ -13,7 +13,10 @@ use rustc_hash::FxHashMap;
 use crate::pacing::Pacer;
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 
-use super::store::{AudioStore, CmdReceiver, MsgSender, MusicTrack, ShouldExit};
+use crate::components::audio::music_track::MusicTrack;
+use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
+use crate::resources::audio::store::AudioStore;
+
 use super::systems::{despawn_all, drain_cmds, pump_fx, pump_music, unload_all_fx_aliases};
 
 /// Entry point of the dedicated audio thread.
@@ -29,11 +32,10 @@ use super::systems::{despawn_all, drain_cmds, pump_fx, pump_music, unload_all_fx
 ///
 /// Concurrency model:
 /// - Uses `crossbeam_channel` for lock-free message passing.
-/// - The loop is paced by a [`Pacer`] at `audio_hz` (Phase 7b): each tick
+/// - The loop is paced by a [`Pacer`] at `audio_hz`: each tick
 ///   drains all pending commands non-blockingly (`drain_cmds`), then pumps
 ///   music streams (`pump_music`) and cleans up finished sound aliases
-///   (`pump_fx`) -- constant wakeups replace the old blocking-while-idle /
-///   10ms-timeout-while-streaming split.
+///   (`pump_fx`) -- constant wakeups, no blocking while idle.
 ///
 /// This function runs until it receives [`AudioCmd::Shutdown`] (or the
 /// channel disconnects), at which point it unloads resources and exits

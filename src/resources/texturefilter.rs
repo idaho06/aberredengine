@@ -1,5 +1,5 @@
-//! Texture filtering mode shared by [`crate::resources::texturestore::TextureStore`]
-//! and [`crate::resources::rendertarget::RenderTarget`].
+//! Texture filtering mode shared by [`crate::resources::render::texturestore::TextureStore`]
+//! and [`crate::resources::render::rendertarget::RenderTarget`].
 
 use raylib::ffi::TextureFilter as FfiTextureFilter;
 

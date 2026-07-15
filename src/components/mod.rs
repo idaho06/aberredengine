@@ -6,6 +6,7 @@
 //!
 //! Submodules overview:
 //! - [`animation`] – playback state and a rule-based controller for sprite animations
+//! - [`audio`] – components used only by the audio thread's own `bevy_ecs::World`
 //! - [`boxcollider`] – axis-aligned rectangular collider for collision detection
 //! - [`cameratarget`] – marks an entity as a candidate for camera following
 //! - [`collision`] – collision callback rules and context for collision observers
@@ -44,6 +45,7 @@
 //! - [`zindex`] – rendering order hint for 2D drawing
 
 pub mod animation;
+pub mod audio;
 pub mod boxcollider;
 pub mod cameratarget;
 pub mod collision;
@@ -81,6 +83,7 @@ pub mod particleemitter;
 pub mod persistent;
 pub mod phase;
 pub mod position2d;
+pub mod render;
 pub mod rigidbody;
 pub mod rotation;
 pub mod scale;

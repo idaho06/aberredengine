@@ -1,0 +1,88 @@
+//! Samples raw device input each render frame and ships it to the logic thread.
+
+use bevy_ecs::prelude::*;
+
+use crate::protocol::endpoints::LogicBridge;
+use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
+use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
+use crate::resources::render::quit_requested::QuitRequested;
+use crate::resources::windowsize::WindowSize;
+
+/// Highest raylib keyboard key code in use today (`KEY_KB_MENU`).
+const MAX_KEY_CODE: u32 = 348;
+
+/// Number of raylib mouse button codes (`MOUSE_BUTTON_LEFT..=MOUSE_BUTTON_BACK`).
+const MOUSE_BUTTON_COUNT: u8 = 7;
+
+/// Poll raylib's whole keyboard + mouse held state into a
+/// [`RawDeviceSnapshot`]. NO `InputBindings` resolution and NO
+/// `just_pressed`/`just_released` edges -- both are computed sim-side by
+/// `resolve_input_backlog` (`crate::systems::input`).
+///
+/// Iterates every raw key code `0..=348` and mouse button code `0..=6`
+/// directly via raylib's FFI (`IsKeyDown`/`IsMouseButtonDown` take a bare
+/// `int`, not the `KeyboardKey`/`MouseButton` enum) rather than a
+/// hand-maintained key table -- ~355 cheap FFI calls/frame, negligible, and
+/// zero-maintenance if raylib ever adds keys.
+///
+/// Must run on the thread that owns the raylib window. Touches no ECS state.
+fn sample_raw_device_snapshot(
+    rl: &raylib::RaylibHandle,
+    window_w: i32,
+    window_h: i32,
+) -> RawDeviceSnapshot {
+    let mut raw = RawDeviceSnapshot {
+        window_w,
+        window_h,
+        ..Default::default()
+    };
+
+    for code in 0..=MAX_KEY_CODE {
+        // SAFETY: IsKeyDown reads raylib's in-memory key-state array; no
+        // preconditions beyond an initialized window, which the render
+        // thread guarantees.
+        if unsafe { raylib::ffi::IsKeyDown(code as i32) } {
+            raw.set_key(code);
+        }
+    }
+
+    for button in 0..MOUSE_BUTTON_COUNT {
+        // SAFETY: same as IsKeyDown above.
+        if unsafe { raylib::ffi::IsMouseButtonDown(button as i32) } {
+            raw.set_mouse_button(button);
+        }
+    }
+
+    raw.scroll_y = rl.get_mouse_wheel_move();
+    let mouse_pos = rl.get_mouse_position();
+    raw.mouse_x = mouse_pos.x;
+    raw.mouse_y = mouse_pos.y;
+
+    raw
+}
+
+/// Samples the raw device state once per render frame (the only system
+/// touching the raylib handle for input -- no bindings, no edges here, the
+/// sim thread resolves all of that) and ships it (+ the previous frame's
+/// imgui capture state, one-frame lag via `PendingImguiCapture`) to the
+/// logic thread over the dedicated bounded input channel. A momentarily
+/// full queue (sim stalled for 8+ render frames) drops the sample rather
+/// than growing an unbounded backlog; a disconnected channel (logic thread
+/// gone) sets `QuitRequested`.
+pub fn sample_and_send_input(
+    rl: NonSend<raylib::RaylibHandle>,
+    window_size: Res<WindowSize>,
+    capture: Res<PendingImguiCapture>,
+    bridge: Res<LogicBridge>,
+    mut quit: ResMut<QuitRequested>,
+) {
+    let raw = sample_raw_device_snapshot(&rl, window_size.w, window_size.h);
+    let result = bridge.tx_input.try_send(InputSample {
+        raw,
+        capture: capture.0,
+    });
+    if crate::pacing::send_channel_disconnected(&result) {
+        log::error!("Logic thread disconnected; shutting down");
+        quit.0 = true;
+    }
+}

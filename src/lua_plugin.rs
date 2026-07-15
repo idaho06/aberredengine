@@ -375,16 +375,13 @@ fn resolve_input_table(
 ///
 /// `dt` is the real elapsed time since the previous sim tick (clamped,
 /// scaled by `time_scale`), not a constant, and "continuous while held"
-/// logic fires once per sim tick -- every shipped scene script was checked
-/// for this (`docs/plans/phase6b-callback-merge.md`); all were safe as-is
-/// except `bunnymark/{screen,map}_loop.lua`, whose held-spawn loops spawn as
-/// fast as `sim_hz` allows while the mouse button is held -- left
-/// unmitigated, a deliberate/disclosed tradeoff for a stress-test scene, not
-/// an oversight (see `docs/render-logic-simplification-brainstorm.md`). A
-/// missing callback warns rather than skipping silently, since forgetting
-/// `on_update_<scene>` entirely is an authoring error worth flagging --
-/// deduped by name so a genuinely-missing callback logs once, not every
-/// tick.
+/// logic fires once per sim tick. `bunnymark/{screen,map}_loop.lua`'s
+/// held-spawn loops spawn as fast as `sim_hz` allows while the mouse button
+/// is held -- a deliberate/disclosed tradeoff for a stress-test scene, not
+/// an oversight. A missing callback warns rather than skipping silently,
+/// since forgetting `on_update_<scene>` entirely is an authoring error
+/// worth flagging -- deduped by name so a genuinely-missing callback logs
+/// once, not every tick.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn update(
     time: Res<WorldTime>,
@@ -550,17 +547,13 @@ pub fn switch_scene(
 
 /// Drains `asset_commands` queued from gameplay (`on_update_*`, `on_switch_scene`, phase/timer/
 /// collision callbacks) and translates them into `RenderAssetCmd`/`AudioCmd` messages — no GL
-/// calls here (Phase 5c). Actual GL loading happens in
-/// [`crate::systems::render_assets::process_render_asset_cmds`].
+/// calls happen here; actual GL loading happens in
+/// [`crate::systems::render::process_render_asset_cmds`] on the render thread.
 ///
-/// `setup()` drains this queue once for `on_setup`-time loads (applying GL loads directly, a
-/// documented seam exception — see that function's doc comment); this system is the reachable
-/// drain site for any `engine.load_*` call made after setup. Mirrors
-/// [`crate::systems::mapspawn::process_lua_map_commands`], including its Phase 6c move to FIXED
-/// for uniformity with the other 14 non-collision Lua queues — unlike the map-command case, this
-/// doesn't buy a same-tick latency win on its own: the `RenderAssetCmd`s produced here still only
-/// reach the render thread once per render frame, via `forward_render_asset_cmds`, which stays on
-/// `PRESENT` (see that system's registration in `engine_app.rs`).
+/// `setup()` drains this same queue once for `on_setup`-time loads, using its own local buffer;
+/// this system is the reachable drain site for any `engine.load_*` call made after setup.
+/// Mirrors [`crate::systems::mapspawn::process_lua_map_commands`]. The `RenderAssetCmd`s produced
+/// here reach the render thread via `forward_render_asset_cmds` on the sim schedule.
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,

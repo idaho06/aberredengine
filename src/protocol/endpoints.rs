@@ -1,5 +1,5 @@
 //! ECS resources holding the channel endpoints between the render (main)
-//! thread and the logic thread (Phase 5e of the Option B render/logic split).
+//! thread and the logic thread.
 //!
 //! Mirrors this module's own [`AudioBridge`] shape (audio bridge below): the render
 //! world owns the [`LogicBridge`] (sender + receiver + join handle), the
@@ -25,9 +25,8 @@ pub struct LogicBridge {
     /// Sender for [`LogicMsg`] (render -> logic).
     pub tx_logic: Sender<LogicMsg>,
     /// Sender for [`InputSample`] (render -> logic), on its own bounded
-    /// channel (Phase 7d) separate from `tx_logic`'s unbounded one — a stalled
-    /// sim drops the oldest-queued samples instead of growing an unbounded
-    /// backlog.
+    /// channel separate from `tx_logic`'s unbounded one — a stalled sim drops
+    /// the oldest-queued samples instead of growing an unbounded backlog.
     pub tx_input: Sender<InputSample>,
     /// Receiver for [`RenderMsg`] (logic -> render).
     pub rx_render: Receiver<RenderMsg>,
@@ -102,8 +101,8 @@ pub struct AudioBridge {
 /// This function:
 /// - Creates command/event channels.
 /// - Spawns the background thread running [`audio_thread`], paced at
-///   `audio_hz` (Phase 7b; read once here, at spawn time -- a runtime
-///   change to `GameConfig::audio_hz` after startup has no effect).
+///   `audio_hz`, read once here at spawn time -- a runtime change to
+///   `GameConfig::audio_hz` afterward has no effect.
 /// - Inserts [`AudioBridge`] and initializes `Messages<AudioMessage>` so that
 ///   systems can send commands and poll for events.
 pub fn setup_audio(world: &mut World, audio_hz: f64) {

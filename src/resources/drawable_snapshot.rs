@@ -1,16 +1,15 @@
 //! Render-relevant ECS state, captured once per render frame.
 //!
-//! Part of the Option B (render/simulation thread split) effort — see
-//! `docs/render-simulation-separation-brainstorm.md`. [`DrawableSnapshot`] is
-//! populated by [`build_drawable_snapshot`] on the `PRESENT` schedule
-//! (called `VARIABLE` through Phase 6c), immediately before `render_system`
-//! reads it (`src/systems/render/mod.rs`) instead of live ECS queries
-//! (Phase 3) -- no interpolation between frames (tried and reverted: it
-//! visibly lagged repositioned entities, e.g. parallax backgrounds). `PRESENT`
-//! runs once, after all of a frame's FIXED substeps have completed, which is
-//! the guarantee this capture needs regardless of which schedule GUI/Lua/scene
+//! [`DrawableSnapshot`] is populated by [`build_drawable_snapshot`] on the
+//! `PRESENT` schedule, immediately before `render_system` reads it
+//! (`src/systems/render/mod.rs`) -- captured state, not live ECS queries, and
+//! no interpolation between frames (tried and reverted: it visibly lagged
+//! repositioned entities, e.g. parallax backgrounds). `PRESENT` runs once,
+//! after all of a tick's sim-schedule systems have completed, which is the
+//! guarantee this capture needs regardless of which schedule GUI/Lua/scene
 //! systems happen to run on (see `build_drawable_snapshot`'s doc comment).
-//! Phase 5 sends the snapshot across a channel to a separate render thread.
+//! The snapshot is published into a triple buffer and read by a separate
+//! render thread.
 
 use std::sync::Arc;
 
@@ -50,8 +49,8 @@ use crate::resources::scenemanager::SceneManager;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use crate::resources::worldtime::WorldTime;
 
-/// One world-space sprite, owned. Mirrors the fields `render_system` used to
-/// query directly before Phase 3.
+/// One world-space sprite, owned. Mirrors the fields `render_system` needs
+/// for rendering.
 #[derive(Clone, Debug)]
 pub struct MapSpriteEntry {
     /// Entity id this entry was captured from. Carried through so downstream
@@ -67,8 +66,8 @@ pub struct MapSpriteEntry {
     pub shadow: Option<Shadow>,
     pub global_transform: Option<GlobalTransform2D>,
     /// `RigidBody.velocity`, when the entity has one -- feeds the
-    /// `uVelocity` entity-shader uniform (Phase 4 replaced `render_system`'s
-    /// live rigidbody query with this captured value).
+    /// `uVelocity` entity-shader uniform via this captured value rather than
+    /// a live rigidbody query.
     pub velocity: Option<Vector2>,
 }
 
@@ -178,16 +177,16 @@ pub struct DebugSnapshot {
     pub colliders: Vec<DebugColliderEntry>,
     pub positions: Vec<DebugPositionEntry>,
     pub rigidbody_count: usize,
-    /// Resolved `InputState` for the F11 imgui input panel (Phase 7d). The
-    /// render thread no longer resolves input itself (bindings/edges moved
-    /// sim-side), so this is its only way to show live per-action state —
+    /// Resolved `InputState` for the F11 imgui input panel. The
+    /// render thread does not resolve input itself (bindings/edges are
+    /// resolved sim-side), so this is its only way to show live per-action state —
     /// debug-mode-gated like the rest of `DebugSnapshot`, zero cost when
     /// debug mode is off.
     pub input_state: InputState,
 }
 
 /// Render-relevant ECS state captured once per render frame. See the module
-/// doc comment for how this fits into the Option B plan.
+/// doc comment for how this is populated and transported.
 ///
 /// Overwritten in place each render frame -- `render_system` always reads
 /// whatever the latest `PRESENT`-schedule pass produced, no history
@@ -203,18 +202,18 @@ pub struct DrawableSnapshot {
     pub gui_labels: Vec<GuiLabelEntry>,
     pub gui_progress_bars: Vec<GuiProgressBarEntry>,
     pub camera: Camera2D,
-    /// Full copy of this frame's [`GameConfig`] (Phase 4). Both
+    /// Full copy of this frame's [`GameConfig`]. Both
     /// `render_system` and `apply_gameconfig_changes` read config exclusively
-    /// from here -- in Phase 5 this is what carries config changes across the
-    /// logic->render channel. `Default` gives real config defaults (640x360
+    /// from here -- this is what carries config changes across the
+    /// logic->render boundary. `Default` gives real config defaults (640x360
     /// etc.), not zeros, so consumers running before the first
     /// `build_drawable_snapshot` pass can't act on a bogus 0x0 render size.
     pub game_config: GameConfig,
-    /// This frame's [`WorldSignals`] snapshot (Phase 4). Read-only consumers
-    /// on the render side (the debug world-signals panel, and now the two
-    /// scene callbacks' read-only `SignalSnapshot` param, Phase 5d) use this.
+    /// This frame's [`WorldSignals`] snapshot. Read-only consumers
+    /// on the render side (the debug world-signals panel, and the two
+    /// scene callbacks' read-only `SignalSnapshot` param) use this.
     pub signals: Arc<SignalSnapshot>,
-    /// Cloned [`AppState`] (Phase 5d). `render_system`'s two scene callbacks
+    /// Cloned [`AppState`]. `render_system`'s two scene callbacks
     /// (`GuiCallback`, `WorldDrawCallback`) read this instead of the live
     /// resource -- writes go through `SignalIntents` instead, applied
     /// logic-side by `apply_signal_intents`. `build_drawable_snapshot` skips
@@ -222,31 +221,31 @@ pub struct DrawableSnapshot {
     pub app_state: AppState,
     /// Debug-overlay payload; `Some` only while `DebugMode` is active.
     pub debug: Option<DebugSnapshot>,
-    /// Active scene name (Phase 5e). The render side resolves
+    /// Active scene name. The render side resolves
     /// `gui_callback`/`world_draw_callback` against its own cloned
     /// scene-descriptor table using this key; `None` when no SceneManager is
     /// in use or no scene is active yet.
     pub active_scene: Option<Arc<str>>,
-    /// This frame's [`WorldTime`] (Phase 5e). Render-side consumers (shader
+    /// This frame's [`WorldTime`]. Render-side consumers (shader
     /// time uniforms, the imgui performance panel) read this instead of the
     /// logic-world resource, preserving time_scale semantics for shader
     /// animation.
     pub world_time: WorldTime,
-    /// Post-process shader chain + uniforms (Phase 5e). Logic-owned
+    /// Post-process shader chain + uniforms. Logic-owned
     /// (`GameCtx.post_process`, Lua render commands); captured on change.
     pub post_process: PostProcessShader,
-    /// GUI themes (Phase 5e). Logic-owned (`set_gui_theme_*` Lua commands
+    /// GUI themes. Logic-owned (`set_gui_theme_*` Lua commands
     /// re-insert the resource); captured on change — themes mutate rarely.
     pub gui_themes: GuiThemeStore,
-    /// Camera-follow config copy (Phase 5e). Display-only, for the imgui
+    /// Camera-follow config copy. Display-only, for the imgui
     /// camera panel — same top-level mirror shape as `world_time`/
     /// `post_process` (copied unconditionally; the follow velocity mutates
-    /// every FIXED substep, so change-gating would never skip anyway).
+    /// every sim tick, so change-gating would never skip anyway).
     pub camera_follow: CameraFollowConfig,
 }
 
-/// Query data shapes below mirror the fields `render_system` used to query
-/// directly before Phase 3, with a leading `Entity` added on each (needed so
+/// Query data shapes below mirror the fields `render_system` needs, with a
+/// leading `Entity` added on each (needed so
 /// every `...Entry` struct below can carry the entity id downstream, e.g.
 /// for debug overlay/item lookup, without a live query).
 type MapSpriteQueryData = (
@@ -317,8 +316,7 @@ type DebugPositionQueryData = (
 
 /// Bundled read-only queries feeding [`build_drawable_snapshot`]. Covers
 /// everything `render_system` draws, plus the debug-overlay queries
-/// (colliders/positions/rigidbodies) that used to live in the now-deleted
-/// `RenderQueries` (`src/systems/render/mod.rs`) before Phase 4.
+/// (colliders/positions/rigidbodies).
 #[derive(SystemParam)]
 pub struct DrawableSnapshotQueries<'w, 's> {
     map_sprites: Query<'w, 's, MapSpriteQueryData>,
@@ -348,20 +346,15 @@ fn refill<D: bevy_ecs::query::ReadOnlyQueryData, T>(
 }
 
 /// Populates [`DrawableSnapshot`] from the current ECS state. Pure
-/// data-copying -- no rendering calls. Runs once per render frame, on the
+/// data-copying -- no rendering calls. Runs on the
 /// `PRESENT` schedule immediately before `render_system` (see
 /// `EngineBuilder::build_logic_schedules`), which by construction always runs
-/// after every FIXED substep this frame has completed -- since Phase 6d that
-/// includes GUI hit-test/layout, Lua `on_update`, and scene switches (all
-/// FIXED now), so this still captures fully-settled state via the
-/// schedule-ordering guarantee, not because those systems share a schedule
-/// with this one. The `.after(...)` edges below name what has to have
-/// settled but are vacuous cross-schedule markers now that those systems
-/// have moved -- see the module doc comment. An earlier iteration of this
-/// system captured at the end of FIXED instead, before any of the above
-/// existed there -- see
-/// `docs/render-simulation-separation-brainstorm.md`'s Phase 3 notes for why
-/// that capture point was wrong at the time.
+/// after every sim-schedule system for that tick has completed -- including
+/// GUI hit-test/layout, Lua `on_update`, and scene switches, so this
+/// captures fully-settled state via the schedule-ordering guarantee, not
+/// because those systems share a schedule with this one. The `.after(...)`
+/// edges below name what has to have settled but are vacuous cross-schedule
+/// markers -- see the module doc comment.
 #[allow(clippy::too_many_arguments)]
 pub fn build_drawable_snapshot(
     queries: DrawableSnapshotQueries,

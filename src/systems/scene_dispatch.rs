@@ -32,7 +32,7 @@ use rustc_hash::FxHashSet;
 
 use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::resources::appstate::AppState;
-use crate::resources::fontstore::FontStore;
+use crate::resources::render::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
@@ -40,7 +40,7 @@ use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore::SystemsStore;
-use crate::resources::texturestore::TextureStore;
+use crate::resources::render::texturestore::TextureStore;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
@@ -73,11 +73,8 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 /// - Called whether or not debug mode (F11) is active.
 /// - Interaction results must be communicated via [`SignalIntents`] (action flags,
 ///   pending edit values); queued intents are applied to `WorldSignals` at the top
-///   of the next FIXED substep by `apply_signal_intents` (Phase 5d,
-///   `docs/render-simulation-separation-brainstorm.md`; moved from the next
-///   frame's VARIABLE schedule to the next FIXED substep in Phase 6d) —
-///   one substep of latency, same as before this callback stopped holding a
-///   live `&mut WorldSignals`.
+///   of the next sim tick by `apply_signal_intents` (`SimSet::ApplyIntents`) —
+///   one tick of latency, since this callback holds no live `&mut WorldSignals`.
 ///   `AppState` is read-only from the GUI's perspective — it's a snapshot clone,
 ///   not the live resource.
 /// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.
@@ -147,8 +144,8 @@ pub type GuiCallback = fn(
 
 /// Called every frame inside `begin_mode2D` in camera-transformed world space.
 ///
-/// The [`SignalSnapshot`] param is read-only, mirroring [`GuiCallback`]'s switch away from a
-/// live `&WorldSignals` (Phase 5d).
+/// The [`SignalSnapshot`] param is read-only, mirroring [`GuiCallback`], which likewise takes
+/// no live `&WorldSignals`.
 pub type WorldDrawCallback =
     fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
 

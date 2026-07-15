@@ -1,8 +1,7 @@
 //! Input snapshot for Lua callbacks.
 //!
 //! This module provides [`InputSnapshot`], a frozen snapshot of the input state
-//! that is passed to Lua callbacks. This replaces the old approach of caching
-//! individual input values in RefCells.
+//! that is passed to Lua callbacks.
 //!
 //! # Design
 //!

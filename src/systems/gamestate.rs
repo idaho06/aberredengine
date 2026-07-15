@@ -39,7 +39,7 @@ pub fn state_is_playing(state: Res<GameState>) -> bool {
 
 /// Set the `quit_game` world signal flag and ask the render thread to exit.
 ///
-/// Phase 5e: this runs on the logic thread (no raylib handle exists there);
+/// Runs on the logic thread (no raylib handle exists there);
 /// `RenderMsg::Quit` makes the render loop break, which then sends
 /// `LogicMsg::Shutdown` back — same teardown path as a window close.
 pub fn quit_game(mut world_signals: ResMut<WorldSignals>, render_tx: Res<RenderTx>) {

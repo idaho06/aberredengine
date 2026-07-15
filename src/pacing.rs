@@ -1,10 +1,10 @@
-//! Fixed-rate loop pacing with a variable-dt fallback (Phase 7b).
+//! Fixed-rate loop pacing with a variable-dt fallback.
 //!
 //! A [`Pacer`] targets a constant tick period but tolerates OS scheduling
 //! jitter and overruns: it returns the *actual* elapsed time each tick so
 //! systems can integrate with a real delta rather than assuming a perfect dt.
 //! Used by both the logic thread (`[simulation] hz`) and the audio thread
-//! (`[audio] hz`) — see `docs/plans/phase7b-pacing-configurable-frequencies.md`.
+//! (`[audio] hz`).
 
 use std::time::{Duration, Instant};
 
@@ -22,7 +22,7 @@ pub fn channel_disconnected<T>(rx: &Receiver<T>) -> bool {
 /// Sender-side counterpart to [`channel_disconnected`]: true when a
 /// `try_send` result means the receiver is gone, as opposed to the channel
 /// merely being momentarily full (expected, non-fatal backpressure on a
-/// bounded channel -- see `LogicBridge::tx_input`, Phase 7d).
+/// bounded channel -- see `LogicBridge::tx_input`).
 pub fn send_channel_disconnected<T>(result: &Result<(), TrySendError<T>>) -> bool {
     matches!(result, Err(TrySendError::Disconnected(_)))
 }
