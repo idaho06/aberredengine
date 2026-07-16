@@ -19,11 +19,41 @@ use crate::resources::render::imgui_bridge::ImguiCaptureState;
 /// highest defined today).
 const KEY_WORDS: usize = 8;
 
-/// One render frame's raw device state: which keys/mouse buttons are
-/// physically down, plus mouse position/wheel and window dimensions.
+/// Maximum simultaneously-tracked gamepads (matches raylib's own internal
+/// `MAX_GAMEPADS`, not exposed via the Rust FFI bindings so hardcoded here,
+/// same convention as this module's key/mouse-button counts).
+pub const MAX_GAMEPADS: usize = 4;
+
+/// One render frame's raw state for a single gamepad slot.
 ///
-/// Gamepad support is intentionally absent — a future addition would add
-/// `axes`/`buttons`/`connected` fields here.
+/// `buttons`' bit index equals raylib's `GamepadButton` ordinal (0..=17
+/// fits comfortably in a `u32`, room to spare); `axes` is indexed by
+/// raylib's `GamepadAxis` ordinal (`LEFT_X`=0, `LEFT_Y`=1, `RIGHT_X`=2,
+/// `RIGHT_Y`=3, `LEFT_TRIGGER`=4, `RIGHT_TRIGGER`=5) — no remapping.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RawGamepad {
+    pub connected: bool,
+    pub buttons: u32,
+    pub axes: [f32; 6],
+}
+
+impl RawGamepad {
+    /// Mark gamepad `button` (a raylib `GamepadButton` ordinal) as down.
+    pub fn set_button(&mut self, button: u32) {
+        if button < 32 {
+            self.buttons |= 1u32 << button;
+        }
+    }
+
+    /// Whether gamepad `button` (a raylib `GamepadButton` ordinal) is down.
+    pub fn is_button_down(&self, button: u32) -> bool {
+        button < 32 && (self.buttons >> button) & 1 != 0
+    }
+}
+
+/// One render frame's raw device state: which keys/mouse buttons/gamepad
+/// buttons are physically down, plus mouse/gamepad-axis analog values and
+/// window dimensions.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct RawDeviceSnapshot {
     /// Bitset over raylib keyboard key codes. Bit `i` of word `i / 64` set
@@ -41,6 +71,11 @@ pub struct RawDeviceSnapshot {
     /// OS window dimensions at sample time.
     pub window_w: i32,
     pub window_h: i32,
+    /// Per-pad raw gamepad state. A disconnected pad is
+    /// `RawGamepad::default()` (all-zero) — the render thread rebuilds this
+    /// array fresh every frame rather than carrying forward the previous
+    /// frame's state, so a disconnect reads as all-zero, never stale.
+    pub gamepads: [RawGamepad; MAX_GAMEPADS],
 }
 
 impl RawDeviceSnapshot {
@@ -135,5 +170,31 @@ mod tests {
         assert!(!s.is_mouse_button_down(1));
         s.set_mouse_button(200);
         assert!(!s.is_mouse_button_down(200));
+    }
+
+    #[test]
+    fn gamepad_button_round_trips() {
+        let mut g = RawGamepad::default();
+        assert!(!g.is_button_down(0));
+        g.set_button(0);
+        g.set_button(17);
+        assert!(g.is_button_down(0));
+        assert!(g.is_button_down(17));
+        assert!(!g.is_button_down(1));
+    }
+
+    #[test]
+    fn gamepad_button_out_of_range_is_ignored_not_panicking() {
+        let mut g = RawGamepad::default();
+        g.set_button(32);
+        assert!(!g.is_button_down(32));
+    }
+
+    #[test]
+    fn disconnected_gamepad_slot_defaults_to_all_zero() {
+        let s = RawDeviceSnapshot::default();
+        assert!(!s.gamepads[0].connected);
+        assert_eq!(s.gamepads[0].buttons, 0);
+        assert_eq!(s.gamepads[0].axes, [0.0; 6]);
     }
 }

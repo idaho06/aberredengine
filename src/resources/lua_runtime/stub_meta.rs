@@ -382,6 +382,48 @@ impl LuaRuntime {
                             "Cursor Y in world-space (after camera transform, matches MapPosition)",
                         ),
                     ),
+                    (
+                        "gamepad_connected",
+                        "boolean",
+                        false,
+                        Some("Whether pad 0 is connected this tick"),
+                    ),
+                    (
+                        "pad_left_x",
+                        "number",
+                        false,
+                        Some("Pad 0 left stick X axis (-1.0..1.0)"),
+                    ),
+                    (
+                        "pad_left_y",
+                        "number",
+                        false,
+                        Some("Pad 0 left stick Y axis (-1.0..1.0)"),
+                    ),
+                    (
+                        "pad_right_x",
+                        "number",
+                        false,
+                        Some("Pad 0 right stick X axis (-1.0..1.0)"),
+                    ),
+                    (
+                        "pad_right_y",
+                        "number",
+                        false,
+                        Some("Pad 0 right stick Y axis (-1.0..1.0)"),
+                    ),
+                    (
+                        "pad_lt",
+                        "number",
+                        false,
+                        Some("Pad 0 left trigger pressure (-1.0..1.0)"),
+                    ),
+                    (
+                        "pad_rt",
+                        "number",
+                        false,
+                        Some("Pad 0 right trigger pressure (-1.0..1.0)"),
+                    ),
                 ],
             ),
             (

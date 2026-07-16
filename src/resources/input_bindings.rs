@@ -21,10 +21,24 @@
 use std::collections::HashMap;
 
 use bevy_ecs::prelude::*;
+use raylib::ffi::GamepadAxis;
+use raylib::ffi::GamepadButton;
 use raylib::ffi::KeyboardKey;
 use raylib::ffi::MouseButton;
 
 use crate::events::input::InputAction;
+use crate::protocol::raw_input::MAX_GAMEPADS;
+
+/// Which side of zero a [`GamepadAxis`] must cross to register as "down" for
+/// [`InputBinding::GamepadAxis`]. The crossing threshold itself is a single
+/// engine-wide constant (`crate::systems::input::GAMEPAD_AXIS_THRESHOLD`),
+/// not a per-binding field -- keeping this variant free of `f32` fields lets
+/// `InputBinding` keep deriving `Eq, Hash` unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AxisDirection {
+    Positive,
+    Negative,
+}
 
 /// A single hardware input source that can be bound to a logical action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,6 +47,17 @@ pub enum InputBinding {
     Keyboard(KeyboardKey),
     /// A mouse button (left, right, middle, etc.).
     MouseButton(MouseButton),
+    /// A gamepad button, on pad `pad` (`0..MAX_GAMEPADS`).
+    GamepadButton { pad: u8, button: GamepadButton },
+    /// A gamepad axis crossing past a fixed threshold in `direction`, on pad
+    /// `pad`. Lets an analog stick drive a digital action (e.g. the left
+    /// stick driving `MainDirection*`) with no changes to `InputState`'s
+    /// shape.
+    GamepadAxis {
+        pad: u8,
+        axis: GamepadAxis,
+        direction: AxisDirection,
+    },
 }
 
 /// Runtime-configurable map from logical [`InputAction`]s to hardware bindings.
@@ -78,11 +103,8 @@ impl InputBindings {
     /// Return the first binding for `action` as a string, or `None` if unbound.
     ///
     /// Useful for displaying "current key" in a settings screen.
-    pub fn first_binding_str(&self, action: InputAction) -> Option<&'static str> {
-        self.get_bindings(action).first().map(|b| match b {
-            InputBinding::Keyboard(k) => key_to_str(*k),
-            InputBinding::MouseButton(m) => mouse_button_to_str(*m),
-        })
+    pub fn first_binding_str(&self, action: InputAction) -> Option<String> {
+        self.get_bindings(action).first().map(|b| binding_to_str(*b))
     }
 }
 
@@ -133,8 +155,112 @@ impl Default for InputBindings {
         map.insert(InputAction::ToggleDebug, vec![k(KeyboardKey::KEY_F11)]);
         map.insert(InputAction::ToggleFullscreen, vec![k(KeyboardKey::KEY_F10)]);
 
-        Self { map, dirty: true }
+        let mut bindings = Self { map, dirty: true };
+        bindings.add_pad0_defaults();
+        bindings
     }
+}
+
+impl InputBindings {
+    /// Additively bind pad 0's d-pad + left stick to BOTH the
+    /// `MainDirection*` and `SecondaryDirection*` actions, face buttons to
+    /// `Action1/2/3`, and start to `Back` -- keyboard/mouse defaults are
+    /// untouched, this only appends. Called once from `Default::default`.
+    ///
+    /// Bound to both direction tiers (not just `MainDirection*`) because,
+    /// unlike keyboard (which has two independent devices -- WASD and
+    /// arrows -- feeding Main/Secondary separately), a gamepad has exactly
+    /// one directional input. Rust systems that read a specific tier
+    /// directly rather than the OR'd `digital.up/down/left/right` combined
+    /// value -- e.g. `menu_controller_observer`
+    /// (`src/systems/menu.rs`), which only listens for
+    /// `InputAction::SecondaryDirectionUp/Down` -- would otherwise never see
+    /// gamepad d-pad/stick input at all.
+    fn add_pad0_defaults(&mut self) {
+        let btn = |b: GamepadButton| InputBinding::GamepadButton { pad: 0, button: b };
+        let axis = |a: GamepadAxis, d: AxisDirection| InputBinding::GamepadAxis {
+            pad: 0,
+            axis: a,
+            direction: d,
+        };
+
+        let direction_defaults = [
+            (
+                GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP,
+                GamepadAxis::GAMEPAD_AXIS_LEFT_Y,
+                AxisDirection::Negative,
+                InputAction::MainDirectionUp,
+                InputAction::SecondaryDirectionUp,
+            ),
+            (
+                GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_DOWN,
+                GamepadAxis::GAMEPAD_AXIS_LEFT_Y,
+                AxisDirection::Positive,
+                InputAction::MainDirectionDown,
+                InputAction::SecondaryDirectionDown,
+            ),
+            (
+                GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_LEFT,
+                GamepadAxis::GAMEPAD_AXIS_LEFT_X,
+                AxisDirection::Negative,
+                InputAction::MainDirectionLeft,
+                InputAction::SecondaryDirectionLeft,
+            ),
+            (
+                GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_RIGHT,
+                GamepadAxis::GAMEPAD_AXIS_LEFT_X,
+                AxisDirection::Positive,
+                InputAction::MainDirectionRight,
+                InputAction::SecondaryDirectionRight,
+            ),
+        ];
+        for (button, gamepad_axis, direction, main, secondary) in direction_defaults {
+            self.add_binding(main, btn(button));
+            self.add_binding(main, axis(gamepad_axis, direction));
+            self.add_binding(secondary, btn(button));
+            self.add_binding(secondary, axis(gamepad_axis, direction));
+        }
+
+        let defaults = [
+            (
+                InputAction::Action1,
+                btn(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN),
+            ),
+            (
+                InputAction::Action2,
+                btn(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT),
+            ),
+            (
+                InputAction::Action3,
+                btn(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT),
+            ),
+            (
+                InputAction::Back,
+                btn(GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT),
+            ),
+        ];
+        for (action, binding) in defaults {
+            self.add_binding(action, binding);
+        }
+    }
+}
+
+/// Look up `name` in a canonical `(name, value)` table -- shared scan logic
+/// behind [`key_from_str`], [`gamepad_button_from_str`], and
+/// [`gamepad_axis_from_str`].
+fn table_lookup<T: Copy>(table: &[(&'static str, T)], name: &str) -> Option<T> {
+    table.iter().find(|(n, _)| *n == name).map(|(_, v)| *v)
+}
+
+/// Reverse-look-up `value` in a canonical `(name, value)` table, or
+/// `"unknown"` if absent -- shared scan logic behind [`key_to_str`],
+/// [`gamepad_button_to_str`], and [`gamepad_axis_to_str`].
+fn table_reverse<T: Copy + PartialEq>(table: &[(&'static str, T)], value: T) -> &'static str {
+    table
+        .iter()
+        .find(|(_, v)| *v == value)
+        .map(|(s, _)| *s)
+        .unwrap_or("unknown")
 }
 
 // ---------------------------------------------------------------------------
@@ -223,28 +349,20 @@ const KEY_NAME_TABLE: &[(&str, KeyboardKey)] = &[
 /// `"f11"`. Common aliases (`"return"` → `KEY_ENTER`, `"esc"` → `KEY_ESCAPE`) are
 /// accepted.
 pub fn key_from_str(s: &str) -> Option<KeyboardKey> {
-    KEY_NAME_TABLE
-        .iter()
-        .find(|(name, _)| *name == s)
-        .map(|(_, k)| *k)
-        .or(match s {
-            "return" => Some(KeyboardKey::KEY_ENTER),
-            "esc" => Some(KeyboardKey::KEY_ESCAPE),
-            "shift" => Some(KeyboardKey::KEY_LEFT_SHIFT),
-            "ctrl" => Some(KeyboardKey::KEY_LEFT_CONTROL),
-            _ => None,
-        })
+    table_lookup(KEY_NAME_TABLE, s).or(match s {
+        "return" => Some(KeyboardKey::KEY_ENTER),
+        "esc" => Some(KeyboardKey::KEY_ESCAPE),
+        "shift" => Some(KeyboardKey::KEY_LEFT_SHIFT),
+        "ctrl" => Some(KeyboardKey::KEY_LEFT_CONTROL),
+        _ => None,
+    })
 }
 
 /// Serialize a [`KeyboardKey`] to a canonical lowercase string.
 ///
 /// Returns `"unknown"` for keys not covered by the mapping.
 pub fn key_to_str(k: KeyboardKey) -> &'static str {
-    KEY_NAME_TABLE
-        .iter()
-        .find(|(_, key)| *key == k)
-        .map(|(s, _)| *s)
-        .unwrap_or("unknown")
+    table_reverse(KEY_NAME_TABLE, k)
 }
 
 // ---------------------------------------------------------------------------
@@ -273,22 +391,135 @@ pub fn mouse_button_to_str(m: MouseButton) -> &'static str {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Gamepad ↔ string conversion helpers
+// ---------------------------------------------------------------------------
+
+/// Canonical gamepad button name ↔ `GamepadButton` table. Named
+/// *positionally* (`face_up`/`face_down`/...) rather than by Xbox-style
+/// `a`/`b`/`x`/`y` labels, since those imply a specific controller layout
+/// that could mislead e.g. PlayStation-pad users and is awkward to change
+/// later without breaking saved rebind strings.
+const GAMEPAD_BUTTON_NAME_TABLE: &[(&str, GamepadButton)] = &[
+    ("dpad_up", GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP),
+    ("dpad_right", GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_RIGHT),
+    ("dpad_down", GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_DOWN),
+    ("dpad_left", GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_LEFT),
+    ("face_up", GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_UP),
+    ("face_right", GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT),
+    ("face_down", GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN),
+    ("face_left", GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT),
+    ("lb", GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_1),
+    ("lt", GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_2),
+    ("rb", GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_1),
+    ("rt", GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_2),
+    ("select", GamepadButton::GAMEPAD_BUTTON_MIDDLE_LEFT),
+    ("guide", GamepadButton::GAMEPAD_BUTTON_MIDDLE),
+    ("start", GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT),
+    ("left_thumb", GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB),
+    ("right_thumb", GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB),
+];
+
+/// Canonical gamepad axis name ↔ `GamepadAxis` table (used with a trailing
+/// `+`/`-` direction suffix, e.g. `"axis_lx+"`).
+const GAMEPAD_AXIS_NAME_TABLE: &[(&str, GamepadAxis)] = &[
+    ("axis_lx", GamepadAxis::GAMEPAD_AXIS_LEFT_X),
+    ("axis_ly", GamepadAxis::GAMEPAD_AXIS_LEFT_Y),
+    ("axis_rx", GamepadAxis::GAMEPAD_AXIS_RIGHT_X),
+    ("axis_ry", GamepadAxis::GAMEPAD_AXIS_RIGHT_Y),
+    ("axis_lt", GamepadAxis::GAMEPAD_AXIS_LEFT_TRIGGER),
+    ("axis_rt", GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER),
+];
+
+fn gamepad_button_from_str(s: &str) -> Option<GamepadButton> {
+    table_lookup(GAMEPAD_BUTTON_NAME_TABLE, s)
+}
+
+fn gamepad_button_to_str(b: GamepadButton) -> &'static str {
+    table_reverse(GAMEPAD_BUTTON_NAME_TABLE, b)
+}
+
+fn gamepad_axis_from_str(s: &str) -> Option<GamepadAxis> {
+    table_lookup(GAMEPAD_AXIS_NAME_TABLE, s)
+}
+
+fn gamepad_axis_to_str(a: GamepadAxis) -> &'static str {
+    table_reverse(GAMEPAD_AXIS_NAME_TABLE, a)
+}
+
+/// Parse a `"padN:..."` gamepad binding string (e.g. `"pad0:face_down"`,
+/// `"pad0:dpad_up"`, `"pad0:axis_lx+"`) into an [`InputBinding`]. `N` must be
+/// a valid pad index (`< MAX_GAMEPADS`). Returns `None` on any parse failure.
+fn gamepad_binding_from_str(s: &str) -> Option<InputBinding> {
+    let rest = s.strip_prefix("pad")?;
+    let (pad_str, name) = rest.split_once(':')?;
+    let pad: u8 = pad_str.parse().ok()?;
+    if pad as usize >= MAX_GAMEPADS {
+        return None;
+    }
+
+    if let Some((axis_name, dir_ch)) = name
+        .strip_suffix('+')
+        .map(|n| (n, '+'))
+        .or_else(|| name.strip_suffix('-').map(|n| (n, '-')))
+    {
+        let axis = gamepad_axis_from_str(axis_name)?;
+        let direction = if dir_ch == '+' {
+            AxisDirection::Positive
+        } else {
+            AxisDirection::Negative
+        };
+        return Some(InputBinding::GamepadAxis {
+            pad,
+            axis,
+            direction,
+        });
+    }
+
+    gamepad_button_from_str(name).map(|button| InputBinding::GamepadButton { pad, button })
+}
+
+fn gamepad_binding_to_str(pad: u8, rest: &str) -> String {
+    format!("pad{pad}:{rest}")
+}
+
 /// Parse any binding string into an [`InputBinding`].
 ///
-/// Tries mouse button names first (`"mouse_left"`, etc.), then keyboard key names.
-/// Returns `None` for unknown strings.
+/// Tries mouse button names first (`"mouse_left"`, etc.), then keyboard key
+/// names, then the `"padN:..."` gamepad grammar. Returns `None` for unknown
+/// strings.
 pub fn binding_from_str(s: &str) -> Option<InputBinding> {
     if let Some(m) = mouse_button_from_str(s) {
         return Some(InputBinding::MouseButton(m));
     }
-    key_from_str(s).map(InputBinding::Keyboard)
+    if let Some(k) = key_from_str(s) {
+        return Some(InputBinding::Keyboard(k));
+    }
+    gamepad_binding_from_str(s)
 }
 
-/// Serialize an [`InputBinding`] to a canonical string.
-pub fn binding_to_str(b: InputBinding) -> &'static str {
+/// Serialize an [`InputBinding`] to a canonical string. Returns an owned
+/// `String` rather than `&'static str` because gamepad bindings are
+/// parametric on `pad` (`"pad0:..."`, `"pad1:..."`) and can't be
+/// pre-enumerated as `'static` literals.
+pub fn binding_to_str(b: InputBinding) -> String {
     match b {
-        InputBinding::Keyboard(k) => key_to_str(k),
-        InputBinding::MouseButton(m) => mouse_button_to_str(m),
+        InputBinding::Keyboard(k) => key_to_str(k).to_string(),
+        InputBinding::MouseButton(m) => mouse_button_to_str(m).to_string(),
+        InputBinding::GamepadButton { pad, button } => {
+            gamepad_binding_to_str(pad, gamepad_button_to_str(button))
+        }
+        InputBinding::GamepadAxis {
+            pad,
+            axis,
+            direction,
+        } => {
+            let sign = match direction {
+                AxisDirection::Positive => "+",
+                AxisDirection::Negative => "-",
+            };
+            gamepad_binding_to_str(pad, &format!("{}{sign}", gamepad_axis_to_str(axis)))
+        }
     }
 }
 
@@ -298,60 +529,64 @@ mod tests {
 
     #[test]
     fn test_default_bindings_are_correct() {
+        // Keyboard/mouse defaults are always the FIRST bindings for each
+        // action -- pad-0 gamepad defaults (see test_pad0_defaults_are_appended
+        // below) are additive, appended after `Default::default`'s
+        // keyboard/mouse `map.insert` calls.
         let b = InputBindings::default();
         assert_eq!(
-            b.get_bindings(InputAction::MainDirectionUp),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_W)]
+            b.get_bindings(InputAction::MainDirectionUp)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_W)
         );
         assert_eq!(
-            b.get_bindings(InputAction::MainDirectionDown),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_S)]
+            b.get_bindings(InputAction::MainDirectionDown)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_S)
         );
         assert_eq!(
-            b.get_bindings(InputAction::MainDirectionLeft),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_A)]
+            b.get_bindings(InputAction::MainDirectionLeft)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_A)
         );
         assert_eq!(
-            b.get_bindings(InputAction::MainDirectionRight),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_D)]
+            b.get_bindings(InputAction::MainDirectionRight)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_D)
         );
         assert_eq!(
-            b.get_bindings(InputAction::SecondaryDirectionUp),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_UP)]
+            b.get_bindings(InputAction::SecondaryDirectionUp)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_UP)
         );
         assert_eq!(
-            b.get_bindings(InputAction::SecondaryDirectionDown),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_DOWN)]
+            b.get_bindings(InputAction::SecondaryDirectionDown)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_DOWN)
         );
         assert_eq!(
-            b.get_bindings(InputAction::SecondaryDirectionLeft),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_LEFT)]
+            b.get_bindings(InputAction::SecondaryDirectionLeft)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_LEFT)
         );
         assert_eq!(
-            b.get_bindings(InputAction::SecondaryDirectionRight),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_RIGHT)]
+            b.get_bindings(InputAction::SecondaryDirectionRight)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_RIGHT)
         );
         assert_eq!(
-            b.get_bindings(InputAction::Back),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_ESCAPE)]
+            b.get_bindings(InputAction::Back)[0],
+            InputBinding::Keyboard(KeyboardKey::KEY_ESCAPE)
         );
         assert_eq!(
-            b.get_bindings(InputAction::Action1),
+            &b.get_bindings(InputAction::Action1)[..2],
             &[
                 InputBinding::Keyboard(KeyboardKey::KEY_SPACE),
                 InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT),
             ]
         );
         assert_eq!(
-            b.get_bindings(InputAction::Action2),
+            &b.get_bindings(InputAction::Action2)[..2],
             &[
                 InputBinding::Keyboard(KeyboardKey::KEY_ENTER),
                 InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_RIGHT),
             ]
         );
         assert_eq!(
-            b.get_bindings(InputAction::Action3),
-            &[InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)]
+            b.get_bindings(InputAction::Action3)[0],
+            InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)
         );
         assert_eq!(
             b.get_bindings(InputAction::Special),
@@ -365,6 +600,56 @@ mod tests {
             b.get_bindings(InputAction::ToggleFullscreen),
             &[InputBinding::Keyboard(KeyboardKey::KEY_F10)]
         );
+    }
+
+    #[test]
+    fn test_pad0_defaults_are_appended() {
+        let b = InputBindings::default();
+        assert!(b.get_bindings(InputAction::MainDirectionUp).contains(
+            &InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP,
+            }
+        ));
+        assert!(b.get_bindings(InputAction::MainDirectionUp).contains(
+            &InputBinding::GamepadAxis {
+                pad: 0,
+                axis: GamepadAxis::GAMEPAD_AXIS_LEFT_Y,
+                direction: AxisDirection::Negative,
+            }
+        ));
+        assert!(b.get_bindings(InputAction::Action1).contains(
+            &InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN,
+            }
+        ));
+        assert!(b.get_bindings(InputAction::Back).contains(
+            &InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT,
+            }
+        ));
+        // SecondaryDirectionUp gets the SAME d-pad/stick additions as
+        // MainDirectionUp -- a gamepad has one directional input, unlike
+        // keyboard's two independent devices (WASD vs arrows), and Rust
+        // systems like menu_controller_observer read SecondaryDirection*
+        // directly rather than the OR'd combined value.
+        assert!(b.get_bindings(InputAction::SecondaryDirectionUp).contains(
+            &InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP,
+            }
+        ));
+        assert!(b.get_bindings(InputAction::SecondaryDirectionUp).contains(
+            &InputBinding::GamepadAxis {
+                pad: 0,
+                axis: GamepadAxis::GAMEPAD_AXIS_LEFT_Y,
+                direction: AxisDirection::Negative,
+            }
+        ));
+        // Untouched actions get no pad-0 additions.
+        assert_eq!(b.get_bindings(InputAction::Special).len(), 1);
     }
 
     #[test]
@@ -387,14 +672,13 @@ mod tests {
             InputBinding::Keyboard(KeyboardKey::KEY_Z),
         );
         let bl = b.get_bindings(InputAction::Action1);
-        // default: Space + MouseLeft, plus new Z
-        assert_eq!(bl.len(), 3);
+        // default: Space + MouseLeft + pad0 face_down, plus new Z appended last
         assert_eq!(bl[0], InputBinding::Keyboard(KeyboardKey::KEY_SPACE));
         assert_eq!(
             bl[1],
             InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)
         );
-        assert_eq!(bl[2], InputBinding::Keyboard(KeyboardKey::KEY_Z));
+        assert_eq!(*bl.last().unwrap(), InputBinding::Keyboard(KeyboardKey::KEY_Z));
     }
 
     #[test]
@@ -409,9 +693,18 @@ mod tests {
     #[test]
     fn test_first_binding_str_returns_canonical_name() {
         let b = InputBindings::default();
-        assert_eq!(b.first_binding_str(InputAction::Action1), Some("space"));
-        assert_eq!(b.first_binding_str(InputAction::MainDirectionUp), Some("w"));
-        assert_eq!(b.first_binding_str(InputAction::ToggleDebug), Some("f11"));
+        assert_eq!(
+            b.first_binding_str(InputAction::Action1).as_deref(),
+            Some("space")
+        );
+        assert_eq!(
+            b.first_binding_str(InputAction::MainDirectionUp).as_deref(),
+            Some("w")
+        );
+        assert_eq!(
+            b.first_binding_str(InputAction::ToggleDebug).as_deref(),
+            Some("f11")
+        );
     }
 
     #[test]
@@ -556,10 +849,64 @@ mod tests {
     #[test]
     fn test_first_binding_str_mouse_button() {
         let b = InputBindings::default();
-        // Action3 default is mouse_middle only
+        // Action3 default is mouse_middle first (pad0 face_left appended after)
         assert_eq!(
-            b.first_binding_str(InputAction::Action3),
+            b.first_binding_str(InputAction::Action3).as_deref(),
             Some("mouse_middle")
         );
+    }
+
+    #[test]
+    fn test_gamepad_binding_from_str_button_and_axis_roundtrip() {
+        assert_eq!(
+            binding_from_str("pad0:face_down"),
+            Some(InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN,
+            })
+        );
+        assert_eq!(
+            binding_to_str(InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN,
+            }),
+            "pad0:face_down"
+        );
+        assert_eq!(
+            binding_from_str("pad0:axis_lx+"),
+            Some(InputBinding::GamepadAxis {
+                pad: 0,
+                axis: GamepadAxis::GAMEPAD_AXIS_LEFT_X,
+                direction: AxisDirection::Positive,
+            })
+        );
+        assert_eq!(
+            binding_to_str(InputBinding::GamepadAxis {
+                pad: 0,
+                axis: GamepadAxis::GAMEPAD_AXIS_LEFT_X,
+                direction: AxisDirection::Positive,
+            }),
+            "pad0:axis_lx+"
+        );
+        assert_eq!(
+            binding_from_str("pad1:axis_ry-"),
+            Some(InputBinding::GamepadAxis {
+                pad: 1,
+                axis: GamepadAxis::GAMEPAD_AXIS_RIGHT_Y,
+                direction: AxisDirection::Negative,
+            })
+        );
+    }
+
+    #[test]
+    fn test_gamepad_binding_from_str_out_of_range_pad_returns_none() {
+        assert_eq!(binding_from_str("pad9:face_down"), None);
+    }
+
+    #[test]
+    fn test_gamepad_binding_from_str_unknown_name_returns_none() {
+        assert_eq!(binding_from_str("pad0:not_a_button"), None);
+        assert_eq!(binding_from_str("pad0:axis_zz+"), None);
+        assert_eq!(binding_from_str("padx:face_down"), None);
     }
 }

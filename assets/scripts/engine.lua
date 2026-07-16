@@ -179,6 +179,13 @@ engine = {}
 ---@field mouse_y number Cursor Y in game-space (0..render_height, letterbox-corrected)
 ---@field mouse_world_x number Cursor X in world-space (after camera transform, matches MapPosition)
 ---@field mouse_world_y number Cursor Y in world-space (after camera transform, matches MapPosition)
+---@field gamepad_connected boolean Whether pad 0 is connected this tick
+---@field pad_left_x number Pad 0 left stick X axis (-1.0..1.0)
+---@field pad_left_y number Pad 0 left stick Y axis (-1.0..1.0)
+---@field pad_right_x number Pad 0 right stick X axis (-1.0..1.0)
+---@field pad_right_y number Pad 0 right stick Y axis (-1.0..1.0)
+---@field pad_lt number Pad 0 left trigger pressure (-1.0..1.0)
+---@field pad_rt number Pad 0 right trigger pressure (-1.0..1.0)
 
 ---Visible world-space rectangle returned by engine.get_camera_view_rect(). Assumes zero rotation.
 ---@class CameraViewRect

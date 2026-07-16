@@ -27,11 +27,23 @@ use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::resources::camera2d::Camera2DRes;
+use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::{BoolState, InputState};
-use crate::resources::input_bindings::{InputBinding, InputBindings};
+use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings};
 use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
+
+/// Shared engine-wide axis-to-digital crossing threshold for
+/// [`InputBinding::GamepadAxis`] (see that variant's doc comment for why
+/// this isn't a per-binding field).
+const GAMEPAD_AXIS_THRESHOLD: f32 = 0.5;
+
+/// Zero out `v` if its magnitude is below `deadzone` — a simple
+/// clamp-to-zero deadzone (not a rescale of the remaining range).
+fn apply_deadzone(v: f32, deadzone: f32) -> f32 {
+    if v.abs() < deadzone { 0.0 } else { v }
+}
 
 /// Project a game-space (render-target) position into world space through a
 /// 2D camera — the handle-free equivalent of
@@ -50,10 +62,33 @@ pub fn screen_to_world2d(position: Vector2, camera: &Camera2D) -> Vector2 {
 // ---------------------------------------------------------------------------
 
 /// Whether `action` is active in `raw`, per its current [`InputBindings`].
-fn action_active(raw: &RawDeviceSnapshot, bindings: &InputBindings, action: InputAction) -> bool {
+fn action_active(
+    raw: &RawDeviceSnapshot,
+    bindings: &InputBindings,
+    action: InputAction,
+    deadzone: f32,
+) -> bool {
     bindings.get_bindings(action).iter().any(|b| match b {
         InputBinding::Keyboard(k) => raw.is_key_down(*k as u32),
         InputBinding::MouseButton(m) => raw.is_mouse_button_down(*m as u8),
+        InputBinding::GamepadButton { pad, button } => raw
+            .gamepads
+            .get(*pad as usize)
+            .is_some_and(|g| g.is_button_down(*button as u32)),
+        InputBinding::GamepadAxis {
+            pad,
+            axis,
+            direction,
+        } => {
+            let Some(gamepad) = raw.gamepads.get(*pad as usize) else {
+                return false;
+            };
+            let v = apply_deadzone(gamepad.axes[*axis as usize], deadzone);
+            match direction {
+                AxisDirection::Positive => v > GAMEPAD_AXIS_THRESHOLD,
+                AxisDirection::Negative => v < -GAMEPAD_AXIS_THRESHOLD,
+            }
+        }
     })
 }
 
@@ -67,9 +102,10 @@ fn resolve_action(
     sample: &RawDeviceSnapshot,
     bindings: &InputBindings,
     action: InputAction,
+    deadzone: f32,
 ) {
-    let was = action_active(prev, bindings, action);
-    let now = action_active(sample, bindings, action);
+    let was = action_active(prev, bindings, action, deadzone);
+    let now = action_active(sample, bindings, action, deadzone);
     state.apply_edge(was, now);
 }
 
@@ -90,10 +126,11 @@ fn resolve_sample_into(
     prev: &RawDeviceSnapshot,
     sample: &RawDeviceSnapshot,
     bindings: &InputBindings,
+    deadzone: f32,
 ) {
     macro_rules! resolve {
         ($field:ident, $action:expr) => {
-            resolve_action(&mut input.$field, prev, sample, bindings, $action)
+            resolve_action(&mut input.$field, prev, sample, bindings, $action, deadzone)
         };
     }
     resolve!(maindirection_up, InputAction::MainDirectionUp);
@@ -153,6 +190,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
     // second `WindowSize` from `samples.last()` here.
     let window_size = *world.resource::<WindowSize>();
     let screen_size = *world.resource::<ScreenSize>();
+    let deadzone = world.resource::<GameConfig>().gamepad_deadzone;
     let mut prev_raw = world.resource::<PrevRawSnapshot>().0;
 
     world.resource_scope(|world, mut input: Mut<InputState>| {
@@ -169,7 +207,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 
         input.scroll_y = 0.0;
         for sample in samples {
-            resolve_sample_into(&mut input, &prev_raw, sample, bindings);
+            resolve_sample_into(&mut input, &prev_raw, sample, bindings, deadzone);
             input.scroll_y += sample.scroll_y;
             prev_raw = *sample;
         }
@@ -177,6 +215,14 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         // Newest sample's mouse position, letterbox-corrected into
         // game-space (matches ScreenPosition entity coordinates).
         let newest = samples.last().expect("checked non-empty above");
+
+        // Pad 0's raw analog state -- last-sample-wins (same tier as
+        // mouse_x/mouse_y), NOT summed like scroll_y. Deadzone is
+        // deliberately NOT applied here: these are the raw values surfaced
+        // to gameplay/Lua, kept true for a future calibration UI; deadzone
+        // only affects action_active's digital-threshold resolution above.
+        input.gamepad_connected = newest.gamepads[0].connected;
+        input.gamepad_axes = newest.gamepads[0].axes;
         let game_mouse_pos = window_size.window_to_game_pos(
             Vector2 {
                 x: newest.mouse_x,
@@ -299,6 +345,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use raylib::ffi::{GamepadAxis, GamepadButton};
     use crate::resources::render::imgui_bridge::ImguiCaptureState;
     use raylib::ffi::KeyboardKey;
     use raylib::prelude::Camera2D;
@@ -359,6 +406,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
+        world.insert_resource(GameConfig::default());
         world.insert_resource(PrevRawSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
         world.insert_resource(Camera2DRes(camera));
@@ -642,5 +690,114 @@ mod tests {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         resolve_input_backlog(&mut world, &[]);
         assert_eq!(world.resource::<EventLog>().input_events.len(), 0);
+    }
+
+    /// A raw snapshot with pad 0 connected, `button` (if given) held down and
+    /// `axes` set (defaulting to all-zero).
+    fn raw_with_gamepad(button: Option<u32>, axes: [f32; 6]) -> RawDeviceSnapshot {
+        let mut r = raw();
+        r.gamepads[0].connected = true;
+        r.gamepads[0].axes = axes;
+        if let Some(b) = button {
+            r.gamepads[0].set_button(b);
+        }
+        r
+    }
+
+    #[test]
+    fn resolve_gamepad_button_press_and_release_fires_edges() {
+        // Default bindings map pad0's RIGHT_FACE_DOWN to Action1.
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        let down = raw_with_gamepad(
+            Some(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN as u32),
+            [0.0; 6],
+        );
+        resolve_input_backlog(&mut world, &[down]);
+        let input = world.resource::<InputState>();
+        assert!(input.action_1.just_pressed);
+        assert!(input.action_1.active);
+
+        world.resource_mut::<InputState>().clear_edges();
+        let up = raw_with_gamepad(None, [0.0; 6]);
+        resolve_input_backlog(&mut world, &[up]);
+        let input = world.resource::<InputState>();
+        assert!(input.action_1.just_released);
+        assert!(!input.action_1.active);
+    }
+
+    #[test]
+    fn resolve_gamepad_axis_threshold_crossing_fires_both_directions() {
+        // Default bindings map pad0's LEFT_X axis to MainDirectionRight
+        // (positive) / MainDirectionLeft (negative).
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        let neutral = raw_with_gamepad(None, [0.0; 6]);
+        resolve_input_backlog(&mut world, &[neutral]);
+        assert!(!world.resource::<InputState>().maindirection_right.active);
+
+        world.resource_mut::<InputState>().clear_edges();
+        let mut axes = [0.0; 6];
+        axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.8;
+        let pushed_right = raw_with_gamepad(None, axes);
+        resolve_input_backlog(&mut world, &[pushed_right]);
+        let input = world.resource::<InputState>();
+        assert!(input.maindirection_right.just_pressed);
+        assert!(input.maindirection_right.active);
+
+        world.resource_mut::<InputState>().clear_edges();
+        let back_to_neutral = raw_with_gamepad(None, [0.0; 6]);
+        resolve_input_backlog(&mut world, &[back_to_neutral]);
+        let input = world.resource::<InputState>();
+        assert!(input.maindirection_right.just_released);
+        assert!(!input.maindirection_right.active);
+    }
+
+    #[test]
+    fn resolve_gamepad_axis_within_deadzone_reads_as_inactive() {
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        // Default deadzone is 0.15; 0.1 is inside it.
+        let mut axes = [0.0; 6];
+        axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.1;
+        let sample = raw_with_gamepad(None, axes);
+        resolve_input_backlog(&mut world, &[sample]);
+        let input = world.resource::<InputState>();
+        assert!(!input.maindirection_right.active);
+        assert!(!input.maindirection_left.active);
+    }
+
+    #[test]
+    fn resolve_disconnected_pad_reads_as_all_zero_not_stale() {
+        // Connected + button held in sample 1, then a disconnected
+        // (all-zero, connected=false) sample in the SAME tick's backlog --
+        // must fire just_released, not freeze at active=true.
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        let connected_and_pressed = raw_with_gamepad(
+            Some(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN as u32),
+            [0.0; 6],
+        );
+        let disconnected = raw(); // gamepads[0] defaults to RawGamepad::default()
+
+        resolve_input_backlog(&mut world, &[connected_and_pressed, disconnected]);
+        let input = world.resource::<InputState>();
+        assert!(input.action_1.just_pressed);
+        assert!(input.action_1.just_released);
+        assert!(!input.action_1.active);
+        assert!(!input.gamepad_connected);
+        assert_eq!(input.gamepad_axes, [0.0; 6]);
+    }
+
+    #[test]
+    fn resolve_gamepad_axes_and_connected_are_last_sample_wins() {
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        let mut axes1 = [0.0; 6];
+        axes1[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.9;
+        let sample1 = raw_with_gamepad(None, axes1);
+        let mut axes2 = [0.0; 6];
+        axes2[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.3;
+        let sample2 = raw_with_gamepad(None, axes2);
+
+        resolve_input_backlog(&mut world, &[sample1, sample2]);
+        let input = world.resource::<InputState>();
+        assert!(input.gamepad_connected);
+        assert_eq!(input.gamepad_axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize], 0.3);
     }
 }

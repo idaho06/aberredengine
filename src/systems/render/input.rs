@@ -3,7 +3,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::protocol::endpoints::LogicBridge;
-use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
+use crate::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
 use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
 use crate::resources::render::quit_requested::QuitRequested;
 use crate::resources::windowsize::WindowSize;
@@ -13,6 +13,13 @@ const MAX_KEY_CODE: u32 = 348;
 
 /// Number of raylib mouse button codes (`MOUSE_BUTTON_LEFT..=MOUSE_BUTTON_BACK`).
 const MOUSE_BUTTON_COUNT: u8 = 7;
+
+/// Highest raylib `GamepadButton` ordinal (`GAMEPAD_BUTTON_RIGHT_THUMB`); 0
+/// is `GAMEPAD_BUTTON_UNKNOWN` and is skipped when polling.
+const MAX_GAMEPAD_BUTTON: i32 = 17;
+
+/// Number of raylib `GamepadAxis` values (`LEFT_X..=RIGHT_TRIGGER`).
+const GAMEPAD_AXIS_COUNT: i32 = 6;
 
 /// Poll raylib's whole keyboard + mouse held state into a
 /// [`RawDeviceSnapshot`]. NO `InputBindings` resolution and NO
@@ -58,6 +65,30 @@ fn sample_raw_device_snapshot(
     raw.mouse_x = mouse_pos.x;
     raw.mouse_y = mouse_pos.y;
 
+    for pad in 0..MAX_GAMEPADS as i32 {
+        // SAFETY: same as IsKeyDown above -- reads raylib's in-memory
+        // gamepad-state array, requires only an initialized window.
+        let connected = unsafe { raylib::ffi::IsGamepadAvailable(pad) };
+        let slot = &mut raw.gamepads[pad as usize];
+        slot.connected = connected;
+        if !connected {
+            // Leave the slot at its Default::default() (all-zero) value --
+            // a disconnected pad reads as all-zero, never stale, since this
+            // snapshot is rebuilt fresh every frame with no carry-forward.
+            continue;
+        }
+        for button in 1..=MAX_GAMEPAD_BUTTON {
+            // SAFETY: same as IsGamepadAvailable above.
+            if unsafe { raylib::ffi::IsGamepadButtonDown(pad, button) } {
+                slot.set_button(button as u32);
+            }
+        }
+        for axis in 0..GAMEPAD_AXIS_COUNT {
+            // SAFETY: same as IsGamepadAvailable above.
+            slot.axes[axis as usize] = unsafe { raylib::ffi::GetGamepadAxisMovement(pad, axis) };
+        }
+    }
+
     raw
 }
 
@@ -75,8 +106,24 @@ pub fn sample_and_send_input(
     capture: Res<PendingImguiCapture>,
     bridge: Res<LogicBridge>,
     mut quit: ResMut<QuitRequested>,
+    mut prev_gamepad_connected: Local<[bool; MAX_GAMEPADS]>,
 ) {
     let raw = sample_raw_device_snapshot(&rl, window_size.w, window_size.h);
+
+    for (pad, gamepad) in raw.gamepads.iter().enumerate() {
+        if gamepad.connected != prev_gamepad_connected[pad] {
+            log::info!(
+                "Gamepad {pad}: {}",
+                if gamepad.connected {
+                    "connected"
+                } else {
+                    "disconnected"
+                }
+            );
+            prev_gamepad_connected[pad] = gamepad.connected;
+        }
+    }
+
     let result = bridge.tx_input.try_send(InputSample {
         raw,
         capture: capture.0,

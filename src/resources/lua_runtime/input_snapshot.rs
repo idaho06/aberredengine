@@ -86,6 +86,20 @@ pub struct AnalogInputs {
     pub mouse_world_x: f32,
     /// Mouse Y in world-space (after camera transform). Matches MapPosition coordinates.
     pub mouse_world_y: f32,
+    /// Whether pad 0 is connected this tick.
+    pub gamepad_connected: bool,
+    /// Pad 0's left stick X axis (-1.0..1.0).
+    pub pad_left_x: f32,
+    /// Pad 0's left stick Y axis (-1.0..1.0).
+    pub pad_left_y: f32,
+    /// Pad 0's right stick X axis (-1.0..1.0).
+    pub pad_right_x: f32,
+    /// Pad 0's right stick Y axis (-1.0..1.0).
+    pub pad_right_y: f32,
+    /// Pad 0's left trigger pressure (-1.0..1.0, raylib convention).
+    pub pad_lt: f32,
+    /// Pad 0's right trigger pressure (-1.0..1.0, raylib convention).
+    pub pad_rt: f32,
 }
 
 /// Frozen snapshot of all input state for a single frame.
@@ -167,6 +181,15 @@ impl InputSnapshot {
                 mouse_y: input.mouse_y,
                 mouse_world_x: input.mouse_world_x,
                 mouse_world_y: input.mouse_world_y,
+                gamepad_connected: input.gamepad_connected,
+                // Indices match raylib's GamepadAxis ordinal order (LX, LY,
+                // RX, RY, LT, RT) -- see RawGamepad's doc comment.
+                pad_left_x: input.gamepad_axes[0],
+                pad_left_y: input.gamepad_axes[1],
+                pad_right_x: input.gamepad_axes[2],
+                pad_right_y: input.gamepad_axes[3],
+                pad_lt: input.gamepad_axes[4],
+                pad_rt: input.gamepad_axes[5],
             },
         }
     }
@@ -446,6 +469,29 @@ mod tests {
         assert!(snap.digital.mouse_left.pressed);
         assert!(snap.digital.mouse_left.just_pressed);
         assert!(!snap.digital.mouse_left.just_released);
+    }
+
+    #[test]
+    fn test_gamepad_fields_propagated() {
+        let mut input = default_input();
+        input.gamepad_connected = true;
+        input.gamepad_axes = [0.1, -0.2, 0.3, -0.4, 0.5, -0.6];
+        let snap = InputSnapshot::from_input_state(&input);
+        assert!(snap.analog.gamepad_connected);
+        assert_eq!(snap.analog.pad_left_x, 0.1);
+        assert_eq!(snap.analog.pad_left_y, -0.2);
+        assert_eq!(snap.analog.pad_right_x, 0.3);
+        assert_eq!(snap.analog.pad_right_y, -0.4);
+        assert_eq!(snap.analog.pad_lt, 0.5);
+        assert_eq!(snap.analog.pad_rt, -0.6);
+    }
+
+    #[test]
+    fn test_gamepad_fields_default_disconnected_and_zero() {
+        let snap = InputSnapshot::from_input_state(&default_input());
+        assert!(!snap.analog.gamepad_connected);
+        assert_eq!(snap.analog.pad_left_x, 0.0);
+        assert_eq!(snap.analog.pad_rt, 0.0);
     }
 
     #[test]

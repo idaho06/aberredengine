@@ -25,6 +25,9 @@
 //!
 //! [audio]
 //! hz = 100
+//!
+//! [input]
+//! gamepad_deadzone = 0.15
 //! ```
 
 use bevy_ecs::prelude::*;
@@ -55,6 +58,8 @@ const DEFAULT_AUDIO_HZ: f64 = 100.0;
 /// 1000Hz is almost certainly a config typo.
 const MIN_TICK_HZ: f64 = 15.0;
 const MAX_TICK_HZ: f64 = 1000.0;
+/// Default gamepad analog-stick deadzone radius (`[input] gamepad_deadzone`).
+const DEFAULT_GAMEPAD_DEADZONE: f32 = 0.15;
 
 /// Game configuration resource.
 ///
@@ -122,6 +127,16 @@ pub struct GameConfig {
     ///
     /// [`DrawableSnapshot`]: crate::resources::drawable_snapshot::DrawableSnapshot
     pub snapshot_hz: f64,
+    /// Radial deadzone applied to gamepad analog-stick axes before they
+    /// drive digital actions via [`InputBinding::GamepadAxis`]
+    /// (`[input] gamepad_deadzone`, default `0.15`, clamped to `[0.0, 1.0]`).
+    /// Applied sim-side, not render-side, so the raw protocol stays
+    /// deadzone-free for a future per-game calibration UI; the raw
+    /// `InputState.gamepad_axes`/Lua `input.analog.pad_*` values are
+    /// likewise never deadzoned, only the digital-action resolution is.
+    ///
+    /// [`InputBinding::GamepadAxis`]: crate::resources::input_bindings::InputBinding::GamepadAxis
+    pub gamepad_deadzone: f32,
 }
 
 /// A snapshot of [`GameConfig`] as loaded at startup, before any runtime
@@ -140,6 +155,17 @@ fn clamp_tick_hz(hz: f64, field: &str) -> f64 {
     let clamped = hz.clamp(MIN_TICK_HZ, MAX_TICK_HZ);
     if clamped != hz {
         warn!("{field} = {hz} out of range [{MIN_TICK_HZ}, {MAX_TICK_HZ}]; clamped to {clamped}");
+    }
+    clamped
+}
+
+/// Clamp a parsed `[input] gamepad_deadzone` value to `0.0..=1.0`, warning
+/// (and keeping the clamped value, same convention as [`clamp_tick_hz`])
+/// when out of range.
+fn clamp_gamepad_deadzone(deadzone: f32, field: &str) -> f32 {
+    let clamped = deadzone.clamp(0.0, 1.0);
+    if clamped != deadzone {
+        warn!("{field} = {deadzone} out of range [0.0, 1.0]; clamped to {clamped}");
     }
     clamped
 }
@@ -177,6 +203,7 @@ impl GameConfig {
             sim_hz: DEFAULT_SIM_HZ,
             audio_hz: DEFAULT_AUDIO_HZ,
             snapshot_hz: default_snapshot_hz(DEFAULT_TARGET_FPS),
+            gamepad_deadzone: DEFAULT_GAMEPAD_DEADZONE,
         }
     }
 
@@ -273,6 +300,9 @@ impl GameConfig {
             .flatten()
             .unwrap_or_else(|| default_snapshot_hz(self.target_fps));
         self.snapshot_hz = clamp_tick_hz(snapshot_hz, "simulation.snapshot_hz");
+        if let Some(dz) = config.getfloat("input", "gamepad_deadzone").ok().flatten() {
+            self.gamepad_deadzone = clamp_gamepad_deadzone(dz as f32, "input.gamepad_deadzone");
+        }
         info!(
             "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_hz={}",
             self.render_width,
@@ -676,6 +706,43 @@ mod tests {
         let mut config = GameConfig::new();
         config.load_from_str("[render]\nwidth = 320\n").unwrap();
         assert_eq!(config.render_target_filter, TextureFilter::Nearest);
+    }
+
+    #[test]
+    fn test_new_defaults_gamepad_deadzone() {
+        let config = GameConfig::new();
+        assert_eq!(config.gamepad_deadzone, DEFAULT_GAMEPAD_DEADZONE);
+    }
+
+    #[test]
+    fn test_load_gamepad_deadzone_from_str() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[input]\ngamepad_deadzone = 0.3\n")
+            .unwrap();
+        assert_eq!(config.gamepad_deadzone, 0.3);
+    }
+
+    #[test]
+    fn test_gamepad_deadzone_missing_keeps_default() {
+        let mut config = GameConfig::new();
+        config.load_from_str("[render]\nwidth = 800\n").unwrap();
+        assert_eq!(config.gamepad_deadzone, DEFAULT_GAMEPAD_DEADZONE);
+    }
+
+    #[test]
+    fn test_gamepad_deadzone_out_of_range_is_clamped() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[input]\ngamepad_deadzone = -0.5\n")
+            .unwrap();
+        assert_eq!(config.gamepad_deadzone, 0.0);
+
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[input]\ngamepad_deadzone = 1.5\n")
+            .unwrap();
+        assert_eq!(config.gamepad_deadzone, 1.0);
     }
 
     #[test]

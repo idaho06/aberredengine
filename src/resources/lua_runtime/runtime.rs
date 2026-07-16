@@ -600,6 +600,15 @@ impl LuaRuntime {
         tables.analog.set("mouse_y", analog.mouse_y)?;
         tables.analog.set("mouse_world_x", analog.mouse_world_x)?;
         tables.analog.set("mouse_world_y", analog.mouse_world_y)?;
+        tables
+            .analog
+            .set("gamepad_connected", analog.gamepad_connected)?;
+        tables.analog.set("pad_left_x", analog.pad_left_x)?;
+        tables.analog.set("pad_left_y", analog.pad_left_y)?;
+        tables.analog.set("pad_right_x", analog.pad_right_x)?;
+        tables.analog.set("pad_right_y", analog.pad_right_y)?;
+        tables.analog.set("pad_lt", analog.pad_lt)?;
+        tables.analog.set("pad_rt", analog.pad_rt)?;
         Ok(())
     }
 
@@ -622,6 +631,8 @@ impl LuaRuntime {
     ///         mouse_y       = number,  -- game-space cursor Y (0..render_height)
     ///         mouse_world_x = number,  -- world-space cursor X (after camera)
     ///         mouse_world_y = number,  -- world-space cursor Y (after camera)
+    ///         gamepad_connected = bool,  -- pad 0 connected this tick
+    ///         pad_left_x/left_y/right_x/right_y/lt/rt = number,  -- pad 0 raw axes
     ///     },
     /// }
     /// ```

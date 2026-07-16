@@ -58,6 +58,15 @@ pub struct InputState {
     /// testing always reacts to the literal left mouse button, same tier as
     /// mouse_x/mouse_y.
     pub mouse_left_button: BoolState,
+    /// Whether pad 0 is connected this tick. Pad-0-only for now; see
+    /// `gamepad_axes`.
+    pub gamepad_connected: bool,
+    /// Pad 0's raw analog axis values (`[LX, LY, RX, RY, LT, RT]`, matching
+    /// raylib's `GamepadAxis` ordinal order), last-sample-wins across a
+    /// tick's backlog. Deliberately NOT deadzoned -- this is the raw value
+    /// surfaced to gameplay/Lua; deadzone only affects
+    /// `InputBinding::GamepadAxis`'s digital-threshold resolution.
+    pub gamepad_axes: [f32; 6],
 }
 
 impl BoolState {
