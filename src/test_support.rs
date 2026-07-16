@@ -238,7 +238,7 @@ impl TestWorldBuilder {
     /// Build the [`TestWorld`], calling the same four production
     /// `EngineBuilder` functions `logic_thread_main` calls, in the same
     /// order.
-    pub fn build(mut self) -> Result<TestWorld, String> {
+    pub fn build(mut self) -> Result<TestWorld, crate::error::EngineError> {
         let use_scene_manager = !self.scenes.is_empty();
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();

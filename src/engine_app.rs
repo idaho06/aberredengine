@@ -73,6 +73,7 @@ use bevy_ecs::system::RunSystemOnce;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
 
+use crate::error::EngineError;
 use crate::pacing::Pacer;
 use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
@@ -610,7 +611,7 @@ impl EngineBuilder {
     /// ([`LogicMsg`]/[`RenderMsg`] — fully `Send` enums). Logic-thread
     /// startup errors are logged from that thread and surface as an
     /// immediate `RenderMsg::Quit`, not as an `Err` here.
-    pub fn try_run(mut self) -> Result<(), String> {
+    pub fn try_run(mut self) -> Result<(), EngineError> {
         crate::protocol::shutdown::install_panic_hook();
         log::info!("Hello, world! This is the Aberred Engine!");
 
@@ -676,7 +677,7 @@ impl EngineBuilder {
         let handle = std::thread::Builder::new()
             .name("aberred-logic".into())
             .spawn(move || logic_thread(init))
-            .map_err(|err| format!("Failed to spawn logic thread: {err}"))?;
+            .map_err(|source| EngineError::ThreadSpawn { source })?;
 
         let mut render_world = Self::setup_render_world(
             config,
@@ -698,48 +699,32 @@ impl EngineBuilder {
         Ok(())
     }
 
-    fn validate_builder(&self, use_scene_manager: bool) -> Result<(), String> {
+    fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
         if use_scene_manager {
             if self.switch_scene_hook.is_some() {
-                return Err(
-                    "EngineBuilder conflict: .add_scene() and .on_switch_scene() cannot be used \
-                     together. Use .add_scene() for SceneManager-based games, or \
-                     .on_switch_scene() for full manual control -- not both."
-                        .to_string(),
-                );
+                return Err(EngineError::AddSceneConflictsWithSwitchScene);
             }
             if self.enter_play_hook.is_some() {
-                return Err(
-                    "EngineBuilder conflict: .add_scene() and .on_enter_play() cannot be used \
-                     together. SceneManager owns the enter_play hook. Use .on_setup() for \
-                     asset loading instead."
-                        .to_string(),
-                );
+                return Err(EngineError::AddSceneConflictsWithEnterPlay);
             }
             if self.initial_scene.is_none() {
-                return Err(
-                    "EngineBuilder: .add_scene() requires .initial_scene(\"name\") to specify \
-                     which scene to enter first."
-                        .to_string(),
-                );
+                return Err(EngineError::AddSceneRequiresInitialScene);
             }
         }
 
         Ok(())
     }
 
-    fn load_config(&self) -> Result<GameConfig, String> {
+    fn load_config(&self) -> Result<GameConfig, EngineError> {
         let mut config = GameConfig::with_path(&self.config_path);
         if let Some(content) = &self.config_str {
             config
                 .load_from_str(content)
-                .map_err(|err| format!("Failed to parse embedded config: {err}"))?;
+                .map_err(|message| EngineError::ConfigEmbedded { message })?;
         } else {
-            config.load_from_file().map_err(|err| {
-                format!(
-                    "Failed to load config '{}': {err}",
-                    self.config_path.display()
-                )
+            config.load_from_file().map_err(|message| EngineError::ConfigFile {
+                path: self.config_path.clone(),
+                message,
             })?;
         }
         if let Some(title) = &self.title_override {
@@ -779,7 +764,7 @@ impl EngineBuilder {
 
     fn setup_window(
         config: &GameConfig,
-    ) -> Result<(raylib::RaylibHandle, raylib::RaylibThread, RenderTarget), String> {
+    ) -> Result<(raylib::RaylibHandle, raylib::RaylibThread, RenderTarget), EngineError> {
         let raylib_log_level = Self::raylib_log_level_from_env();
         let (mut rl, thread) = raylib::init()
             .size(config.window_width as i32, config.window_height as i32)
@@ -794,7 +779,7 @@ impl EngineBuilder {
 
         let render_target =
             RenderTarget::new(&mut rl, &thread, config.render_width, config.render_height)
-                .map_err(|err| format!("Failed to create render target: {err}"))?;
+                .map_err(|message| EngineError::RenderTarget { message })?;
 
         Ok((rl, thread, render_target))
     }
@@ -820,7 +805,7 @@ impl EngineBuilder {
         render_scene_table: Option<RenderSceneTable>,
         snapshot_consumer: SnapshotConsumer,
         bridge: LogicBridge,
-    ) -> Result<World, String> {
+    ) -> Result<World, EngineError> {
         let mut world = World::new();
         world.insert_resource(ScreenSize {
             w: config.render_width as i32,
@@ -869,9 +854,9 @@ impl EngineBuilder {
         // rather than being leaked by a dropped, never-populated World.
         let imgui_bridge = match ImguiBridge::new_dark() {
             Ok(imgui_bridge) => imgui_bridge,
-            Err(err) => {
+            Err(message) => {
                 shutdown_logic_bridge(bridge);
-                return Err(format!("Failed to initialize imgui bridge: {err}"));
+                return Err(EngineError::Imgui { message });
             }
         };
         world.insert_non_send(imgui_bridge);
@@ -895,7 +880,7 @@ impl EngineBuilder {
     /// (`FontMetricsStore`/`TextureDimsStore`). Runs INSIDE the thread
     /// closure so NonSend `LuaRuntime` is created on (and pinned to) the
     /// logic thread.
-    pub(crate) fn setup_logic_world(init: &mut LogicInit) -> Result<World, String> {
+    pub(crate) fn setup_logic_world(init: &mut LogicInit) -> Result<World, EngineError> {
         let config = init.config.clone();
         let render_width = config.render_width;
         let render_height = config.render_height;
@@ -968,8 +953,7 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = init.lua_script {
-            let lua_runtime =
-                LuaRuntime::new().map_err(|err| format!("Failed to create Lua runtime: {err}"))?;
+            let lua_runtime = LuaRuntime::new()?;
             if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
                 log::error!("Failed to load Lua script: {}", e);
             }
@@ -984,7 +968,7 @@ impl EngineBuilder {
     fn validate_required_systems(
         systems_store: &SystemsStore,
         requires_switch_scene: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), EngineError> {
         let mut missing = Vec::new();
 
         for name in ["setup", "enter_play", "quit_game"] {
@@ -1000,10 +984,7 @@ impl EngineBuilder {
         if missing.is_empty() {
             Ok(())
         } else {
-            Err(format!(
-                "EngineBuilder missing required system registrations: {}",
-                missing.join(", ")
-            ))
+            Err(EngineError::MissingSystems(missing.join(", ")))
         }
     }
 
@@ -1015,7 +996,7 @@ impl EngineBuilder {
         init: &mut LogicInit,
         world: &mut World,
         use_scene_manager: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), EngineError> {
         let mut systems_store = SystemsStore::new();
         #[cfg(feature = "lua")]
         let requires_switch_scene = use_scene_manager
@@ -1160,7 +1141,7 @@ impl EngineBuilder {
         world: &mut World,
         has_lua: bool,
         use_scene_manager: bool,
-    ) -> Result<(Schedule, Schedule), String> {
+    ) -> Result<(Schedule, Schedule), EngineError> {
         let mut fixed = Schedule::default();
         let mut present = Schedule::default();
 
@@ -1438,12 +1419,14 @@ impl EngineBuilder {
         // this schedule used to carry is gone.
         present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
 
-        fixed
-            .initialize(world)
-            .map_err(|err| format!("Failed to initialize fixed schedule: {err}"))?;
-        present
-            .initialize(world)
-            .map_err(|err| format!("Failed to initialize present schedule: {err}"))?;
+        fixed.initialize(world).map_err(|source| EngineError::ScheduleInit {
+            which: "fixed",
+            source,
+        })?;
+        present.initialize(world).map_err(|source| EngineError::ScheduleInit {
+            which: "present",
+            source,
+        })?;
 
         Ok((fixed, present))
     }
@@ -1453,7 +1436,7 @@ impl EngineBuilder {
     /// has no `run_if(state_is_playing)` gate — the render world has no
     /// `GameState`; the snapshot's config is seeded with the real loaded
     /// config at startup, so early application is a no-op, not a downgrade.
-    fn build_render_schedule(world: &mut World) -> Result<Schedule, String> {
+    fn build_render_schedule(world: &mut World) -> Result<Schedule, EngineError> {
         let mut schedule = Schedule::default();
         schedule.add_systems(
             (
@@ -1469,9 +1452,10 @@ impl EngineBuilder {
             )
                 .chain(),
         );
-        schedule
-            .initialize(world)
-            .map_err(|err| format!("Failed to initialize render schedule: {err}"))?;
+        schedule.initialize(world).map_err(|source| EngineError::ScheduleInit {
+            which: "render",
+            source,
+        })?;
         Ok(schedule)
     }
 
@@ -1605,7 +1589,7 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 /// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) runs on the tail
 /// of `sim` rather than on `present`, for the same reason: asset loads must
 /// reach the render thread every tick, not just on a publish tick.
-fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
+fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let use_scene_manager = !init.scenes.is_empty();
     #[cfg(feature = "lua")]
     let has_lua = init.lua_script.is_some();
@@ -2302,7 +2286,10 @@ mod tests {
             .try_run()
             .expect_err("conflicting scene/switch_scene hooks should fail preflight");
 
-        assert!(err.contains("EngineBuilder conflict: .add_scene() and .on_switch_scene()"));
+        assert!(
+            err.to_string()
+                .contains("EngineBuilder conflict: .add_scene() and .on_switch_scene()")
+        );
     }
 
     #[test]
@@ -2314,7 +2301,10 @@ mod tests {
             .try_run()
             .expect_err("conflicting scene/enter_play hooks should fail preflight");
 
-        assert!(err.contains("EngineBuilder conflict: .add_scene() and .on_enter_play()"));
+        assert!(
+            err.to_string()
+                .contains("EngineBuilder conflict: .add_scene() and .on_enter_play()")
+        );
     }
 
     #[test]
@@ -2324,7 +2314,7 @@ mod tests {
             .try_run()
             .expect_err("missing initial_scene should fail preflight");
 
-        assert!(err.contains(".add_scene() requires .initial_scene"));
+        assert!(err.to_string().contains(".add_scene() requires .initial_scene"));
     }
 
     #[test]
@@ -2332,10 +2322,11 @@ mod tests {
         let systems_store = SystemsStore::new();
         let err = EngineBuilder::validate_required_systems(&systems_store, true)
             .expect_err("missing required systems should fail validation");
+        let err_str = err.to_string();
 
-        assert!(err.contains("setup"));
-        assert!(err.contains("enter_play"));
-        assert!(err.contains("quit_game"));
-        assert!(err.contains("switch_scene"));
+        assert!(err_str.contains("setup"));
+        assert!(err_str.contains("enter_play"));
+        assert!(err_str.contains("quit_game"));
+        assert!(err_str.contains("switch_scene"));
     }
 }

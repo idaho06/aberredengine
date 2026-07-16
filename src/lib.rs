@@ -10,6 +10,8 @@ pub use raylib;
 
 pub mod components;
 pub mod engine_app;
+pub mod error;
+pub use error::EngineError;
 pub mod events;
 pub mod protocol;
 #[cfg(feature = "lua")]
