@@ -560,7 +560,7 @@ fn my_enter(ctx: &mut GameCtx) {
 }
 ```
 
-> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `AudioCmd`, etc.
+> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, `AudioCmd`, etc.
 
 #### Scene-scoped (transient) observers
 
@@ -689,6 +689,23 @@ Register this as an extra system (`.add_system(spawn_player_once_texture_ready)`
 
 `TextureFilter::ALL` lists all six filter variants (useful for building filter pickers); `TextureFilter::as_str()`/`FromStr` round-trip a filter to/from its config string (`"nearest"`, `"bilinear"`, etc.).
 
+To load a texture from an in-memory-encoded buffer (e.g. a PNG embedded in your binary via `include_bytes!`) instead of a file path, use `RenderAssetCmd::TextureFromMemory`:
+
+```rust
+asset_cmds.write(RenderAssetCmd::TextureFromMemory {
+    id: "intro_logo".to_string(),
+    ext: ".png".to_string(), // leading dot, matches raylib's file-type hint
+    bytes: include_bytes!("../assets/textures/intro_logo.png").to_vec(),
+    filter: TextureFilter::Nearest,
+});
+```
+
+Same `LogicMsg::TextureLoaded` reply and `TextureDimsStore` population as the path-based `Texture` command — the load-then-use gap and dimension-query pattern above apply identically.
+
+To remove a previously-loaded texture (dropping its GPU handle), use `RenderAssetCmd::RemoveTexture { key }`. The render thread also reports `LogicMsg::TextureRemoved { key }`, which prunes the logic-side `TextureDimsStore` entry automatically — no manual cleanup needed on your side.
+
+To rename an already-loaded texture's key or change its sampling filter without reloading from disk, use `RenderAssetCmd::RenameTexture { old_key, new_key }` / `RenderAssetCmd::SetTextureFilter { key, filter }` — both are in-place `TextureStore` mutations (a key move / a single `SetTextureFilter` GL call), not a fresh load. `RenameTexture` reports `LogicMsg::TextureRenamed { old_key, new_key }`, which moves the `TextureDimsStore` entry to the new key automatically; `SetTextureFilter` has no logic-side effect to mirror. Both no-op with a warning if the key isn't loaded.
+
 ### Fonts
 
 Queue a load with `RenderAssetCmd::Font`. Mipmap generation is handled internally by the render thread's loader (`process_render_asset_cmds`) for every font it loads — you don't need to do anything extra for smooth scaled/rotated text.
@@ -714,6 +731,10 @@ fn measure_label(fonts: Res<FontMetricsStore>) {
     }
 }
 ```
+
+To remove a previously-loaded font (dropping its GPU handle and `FontStore` metadata), use `RenderAssetCmd::RemoveFont { key }`. The render thread also reports `LogicMsg::FontRemoved { key }`, which prunes the logic-side `FontMetricsStore` entry automatically.
+
+To rename an already-loaded font's key in place (no reload, no glyph-atlas regeneration), use `RenderAssetCmd::RenameFont { old_key, new_key }`. It reports `LogicMsg::FontRenamed { old_key, new_key }`, which moves the `FontMetricsStore` entry to the new key automatically. No-ops with a warning if `old_key` isn't loaded.
 
 ### Audio (sounds and music)
 
@@ -748,6 +769,18 @@ asset_cmds.write(RenderAssetCmd::Shader {
 ```
 
 There's no synchronous "did it load, is it valid" result available to logic-side code — the render thread's loader logs an error and simply doesn't register the shader if the file is missing or fails validation. Reference the shader by its `id` key from an `EntityShader` component as usual; a failed load just means nothing renders through that shader key.
+
+To load a shader from in-memory source strings instead of file paths (e.g. shaders embedded via `include_str!`), use `RenderAssetCmd::ShaderFromMemory`:
+
+```rust
+asset_cmds.write(RenderAssetCmd::ShaderFromMemory {
+    id: "glitch".to_string(),
+    vs_src: None, // default vertex shader
+    fs_src: Some(include_str!("../assets/shaders/glitch.fs").to_string()),
+});
+```
+
+Same `None`-per-stage convention as `RenderAssetCmd::Shader`, and the same "no synchronous success/failure signal" caveat applies — a failed compile just logs an error and the shader key stays unregistered.
 
 ### Animations
 
@@ -1841,6 +1874,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `ScreenSize` | `Res` | Internal render resolution (`w`, `h`) — inserted independently on both the logic and render threads, always in sync |
 | `WindowSize` | `Res` | OS window dimensions (`w`, `h`), has `calculate_letterbox()` and `window_to_game_pos()` |
 | `GameConfig` | `ResMut` | Loaded from `config.ini` — all render/window/simulation/audio settings |
+| `GameConfigDefaults` | `Res` | Read-only snapshot (`.0: GameConfig`) of `GameConfig` as loaded at startup, before any runtime mutation — use to restore a field to its loaded default (e.g. window title after a map override) without needing your own capture-resource |
 | `InputState` | `Res` | Input state — digital fields are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32` |
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |

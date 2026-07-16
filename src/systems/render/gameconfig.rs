@@ -94,6 +94,14 @@ pub fn apply_gameconfig_changes(
         // fullscreen is not implemented. WindowSize is refreshed every frame
         // from the actual window size regardless (see engine_app.rs).
 
+        // Apply window title if changed. Compared against `last_applied`
+        // (not a live window query — raylib has no GetWindowTitle) so an
+        // unchanged title is never redundantly re-applied.
+        if last_applied.as_ref().map(|c| &c.window_title) != Some(&config.window_title) {
+            rl.set_window_title(th, &config.window_title);
+            debug!("Window title set to '{}'", config.window_title);
+        }
+
         // Apply vsync setting only if it differs from the current window state
         let vsync_flag = ffi::ConfigFlags::FLAG_VSYNC_HINT as u32;
         let vsync_active = unsafe { ffi::IsWindowState(vsync_flag) };

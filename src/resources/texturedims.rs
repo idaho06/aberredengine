@@ -45,4 +45,35 @@ impl TextureDimsStore {
     pub fn remove(&mut self, key: &str) {
         self.map.remove(key);
     }
+
+    /// Move the dimensions entry for `old_key` to `new_key` in place (e.g.
+    /// alongside queueing `RenderAssetCmd::RenameTexture`). No-op if
+    /// `old_key` isn't tracked.
+    pub fn rename(&mut self, old_key: &str, new_key: String) {
+        if let Some(dims) = self.map.remove(old_key) {
+            self.map.insert(new_key, dims);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_drops_a_previously_inserted_key() {
+        let mut store = TextureDimsStore::default();
+        store.insert("player", 32, 32);
+        assert_eq!(store.get("player"), Some((32, 32)));
+        store.remove("player");
+        assert_eq!(store.get("player"), None);
+        assert_eq!(store.width("player"), None);
+    }
+
+    #[test]
+    fn remove_of_missing_key_is_a_no_op() {
+        let mut store = TextureDimsStore::default();
+        store.remove("does_not_exist");
+        assert_eq!(store.get("does_not_exist"), None);
+    }
 }

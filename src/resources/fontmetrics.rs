@@ -157,6 +157,17 @@ impl FontMetrics {
 #[derive(Resource, Default)]
 pub struct FontMetricsStore(pub FxHashMap<String, FontMetrics>);
 
+impl FontMetricsStore {
+    /// Move the metrics entry for `old_key` to `new_key` in place (mirrors
+    /// [`TextureDimsStore::rename`](crate::resources::texturedims::TextureDimsStore::rename)).
+    /// No-op if `old_key` isn't tracked.
+    pub fn rename(&mut self, old_key: &str, new_key: String) {
+        if let Some(metrics) = self.0.remove(old_key) {
+            self.0.insert(new_key, metrics);
+        }
+    }
+}
+
 /// Tracks which font keys have already logged a "missing from
 /// `FontMetricsStore`" warning, so `dynamictext_size_system` warns once per
 /// key instead of every frame. Same warn-once-per-key shape as
@@ -312,6 +323,17 @@ mod tests {
     /// CI — run manually (`cargo test --features lua -- --ignored
     /// font_metrics_matches_raylib_measure_text_ex`) before landing any
     /// change to `measure_text`/`extract`.
+    #[test]
+    fn font_metrics_store_remove_drops_a_key() {
+        let mut store = FontMetricsStore::default();
+        store
+            .0
+            .insert("test_font".to_string(), test_support::lowercase_alphabet_metrics());
+        assert!(store.0.contains_key("test_font"));
+        store.0.remove("test_font");
+        assert!(!store.0.contains_key("test_font"));
+    }
+
     #[test]
     #[ignore]
     fn font_metrics_matches_raylib_measure_text_ex() {

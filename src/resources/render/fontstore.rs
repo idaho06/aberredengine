@@ -68,21 +68,22 @@ impl FontStore {
 
     /// Rename a font key, moving both the font and its metadata.
     ///
-    /// No call sites today (no `rename_font`/`unload_font` Lua API exists
-    /// yet), but if one is added: `FontMetricsStore` (`fontmetrics.rs`) must
-    /// be renamed/removed/cleared alongside this store, or a stale/aliased
-    /// key will silently return wrong CPU-side metrics — worse than
-    /// `dynamictext_size_system`'s current "missing key, warn once" failure
-    /// mode.
-    pub fn rename(&mut self, old_id: impl AsRef<str>, new_id: impl Into<String>) {
+    /// Returns `false` (no-op) if `old_id` is not loaded. Callers renaming a
+    /// font must also rename/remove the matching `FontMetricsStore`
+    /// (`fontmetrics.rs`) entry, or a stale/aliased key will silently
+    /// return wrong CPU-side metrics — worse than `dynamictext_size_system`'s
+    /// current "missing key, warn once" failure mode.
+    pub fn rename(&mut self, old_id: impl AsRef<str>, new_id: impl Into<String>) -> bool {
         let old_key = old_id.as_ref();
+        let Some(font) = self.fonts.remove(old_key) else {
+            return false;
+        };
         let new_key = new_id.into();
-        if let Some(font) = self.fonts.remove(old_key) {
-            self.fonts.insert(new_key.clone(), font);
-        }
+        self.fonts.insert(new_key.clone(), font);
         if let Some(meta) = self.meta.remove(old_key) {
             self.meta.insert(new_key, meta);
         }
+        true
     }
 
     /// Remove a font and its metadata by key.

@@ -39,6 +39,20 @@ pub enum LogicMsg {
         width: i32,
         height: i32,
     },
+    /// Sent after `RenderAssetCmd::RemoveTexture` drops the GPU handle;
+    /// the logic side prunes the now-stale entry from `TextureDimsStore`.
+    TextureRemoved { key: String },
+    /// Sent after `RenderAssetCmd::RemoveFont` drops the GPU handle; the
+    /// logic side prunes the now-stale entry from `FontMetricsStore`.
+    FontRemoved { key: String },
+    /// Sent after `RenderAssetCmd::RenameTexture` moves a texture to a new
+    /// key in place; the logic side moves the matching `TextureDimsStore`
+    /// entry so the CPU-side dims mirror follows the rename.
+    TextureRenamed { old_key: String, new_key: String },
+    /// Sent after `RenderAssetCmd::RenameFont` moves a font to a new key in
+    /// place; the logic side moves the matching `FontMetricsStore` entry so
+    /// the CPU-side metrics mirror follows the rename.
+    FontRenamed { old_key: String, new_key: String },
     /// Imgui debug-checkbox edits (render-owned `DebugOverlayConfig`); the
     /// logic-side mirror gates `build_drawable_snapshot`'s per-entity
     /// `Signals` clone. Sent on change only.

@@ -98,6 +98,26 @@ impl TextureStore {
         self.paths.remove(key.as_ref());
         self.map.remove(key.as_ref())
     }
+    /// Rename an already-loaded texture in place: no reload, just a key
+    /// move (mirrors [`FontStore::rename`](crate::resources::render::fontstore::FontStore::rename)),
+    /// preserving the GPU handle, filter, and path metadata.
+    ///
+    /// Returns `false` (no-op) if `old_key` is not loaded.
+    pub fn rename(&mut self, old_key: impl AsRef<str>, new_key: impl Into<String>) -> bool {
+        let old_key = old_key.as_ref();
+        let Some(texture) = self.map.remove(old_key) else {
+            return false;
+        };
+        let filter = self.filters.remove(old_key).unwrap_or_default();
+        let path = self.paths.remove(old_key);
+        let new_key = new_key.into();
+        self.filters.insert(new_key.clone(), filter);
+        if let Some(path) = path {
+            self.paths.insert(new_key.clone(), path);
+        }
+        self.map.insert(new_key, texture);
+        true
+    }
     /// Update the sampling filter of an already-loaded texture in place.
     ///
     /// Returns `false` (no-op) if `key` is not loaded.

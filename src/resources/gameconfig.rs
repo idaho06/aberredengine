@@ -124,6 +124,15 @@ pub struct GameConfig {
     pub snapshot_hz: f64,
 }
 
+/// A snapshot of [`GameConfig`] as loaded at startup, before any runtime
+/// mutation. Inserted once into the logic world (`setup_logic_world`) right
+/// after the config file is read, so game/editor code that mutates
+/// `GameConfig` at runtime (render size, window title, background color,
+/// ...) can still ask "what was this field's loaded-from-file default?"
+/// without inventing a bespoke capture-resource per field.
+#[derive(Resource, Debug, Clone)]
+pub struct GameConfigDefaults(pub GameConfig);
+
 /// Clamp a parsed `[simulation] hz` / `[audio] hz` value to
 /// `MIN_TICK_HZ..=MAX_TICK_HZ`, warning (and keeping the clamped value,
 /// rather than rejecting the whole config load) when out of range.

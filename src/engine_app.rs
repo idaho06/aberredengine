@@ -92,6 +92,7 @@ use crate::events::gamestate::observe_gamestate_change_event;
 use crate::events::render_assets::RenderAssetCmd;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::events::render::switchfullscreen::switch_fullscreen_observer;
+use crate::events::window::WindowResizedEvent;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
 use crate::protocol::endpoints::{setup_audio, shutdown_audio};
@@ -100,7 +101,7 @@ use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::render::fontstore::FontStore;
-use crate::resources::gameconfig::GameConfig;
+use crate::resources::gameconfig::{GameConfig, GameConfigDefaults};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
@@ -908,6 +909,7 @@ impl EngineBuilder {
             w: init.window_w,
             h: init.window_h,
         });
+        world.insert_resource(GameConfigDefaults(config.clone()));
         world.insert_resource(config);
         world.insert_resource(InputState::default());
         world.insert_resource(InputBindings::default());
@@ -1570,6 +1572,33 @@ fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 /// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) runs on the tail
 /// of `sim` rather than on `present`, for the same reason: asset loads must
 /// reach the render thread every tick, not just on a publish tick.
+/// Mirrors the newest window size into [`WindowSize`] and, if it actually
+/// changed (and both new dimensions are `> 0`), triggers
+/// [`WindowResizedEvent`] with the new values.
+///
+/// The write to `WindowSize` is unconditional (matches prior behavior);
+/// only the event trigger is gated on "changed and positive".
+///
+/// # Precondition
+/// Caller must have already inserted [`WindowSize`] into `world`. In
+/// production this always holds because `WindowSize` is inserted at
+/// startup (~engine_app.rs:907) before `logic_thread_main`'s tick loop
+/// runs; a missing resource here is a startup-ordering bug, so this
+/// function does not guard against it — `world.resource_mut::<WindowSize>()`
+/// panics by design.
+fn apply_window_resize(world: &mut World, new_w: i32, new_h: i32) {
+    let (old_w, old_h) = {
+        let mut window_size = world.resource_mut::<WindowSize>();
+        let old = (window_size.w, window_size.h);
+        window_size.w = new_w;
+        window_size.h = new_h;
+        old
+    };
+    if (new_w != old_w || new_h != old_h) && new_w > 0 && new_h > 0 {
+        world.trigger(WindowResizedEvent { w: new_w, h: new_h });
+    }
+}
+
 fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
     let use_scene_manager = !init.scenes.is_empty();
     #[cfg(feature = "lua")]
@@ -1649,6 +1678,22 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
                         .resource_mut::<TextureDimsStore>()
                         .insert(key, width, height);
                 }
+                LogicMsg::TextureRemoved { key } => {
+                    world.resource_mut::<TextureDimsStore>().remove(&key);
+                }
+                LogicMsg::FontRemoved { key } => {
+                    world.resource_mut::<FontMetricsStore>().0.remove(&key);
+                }
+                LogicMsg::TextureRenamed { old_key, new_key } => {
+                    world
+                        .resource_mut::<TextureDimsStore>()
+                        .rename(&old_key, new_key);
+                }
+                LogicMsg::FontRenamed { old_key, new_key } => {
+                    world
+                        .resource_mut::<FontMetricsStore>()
+                        .rename(&old_key, new_key);
+                }
                 LogicMsg::OverlayConfig(config) => {
                     *world.resource_mut::<DebugOverlayConfig>() = config;
                 }
@@ -1676,9 +1721,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), String> {
         }
 
         if let Some(newest) = input_backlog.last() {
-            let mut window_size = world.resource_mut::<WindowSize>();
-            window_size.w = newest.window_w;
-            window_size.h = newest.window_h;
+            apply_window_resize(&mut world, newest.window_w, newest.window_h);
         }
         if let Some(capture) = newest_capture {
             world.resource_mut::<ImguiCaptureMirror>().0 = capture;
@@ -1743,6 +1786,60 @@ fn register_persistent_system<M>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Resource, Default)]
+    struct ResizeCount(u32);
+
+    fn count_resizes(_event: bevy_ecs::observer::On<WindowResizedEvent>, mut count: ResMut<ResizeCount>) {
+        count.0 += 1;
+    }
+
+    fn window_resize_test_world(w: i32, h: i32) -> World {
+        let mut world = World::new();
+        world.insert_resource(WindowSize { w, h });
+        world.insert_resource(ResizeCount::default());
+        world.spawn(Observer::new(count_resizes));
+        world.flush();
+        world
+    }
+
+    #[test]
+    fn apply_window_resize_no_change_does_not_trigger() {
+        let mut world = window_resize_test_world(800, 600);
+        apply_window_resize(&mut world, 800, 600);
+        world.flush();
+        assert_eq!(world.resource::<ResizeCount>().0, 0);
+    }
+
+    #[test]
+    fn apply_window_resize_real_change_triggers_once() {
+        let mut world = window_resize_test_world(800, 600);
+        apply_window_resize(&mut world, 1024, 768);
+        world.flush();
+        assert_eq!(world.resource::<ResizeCount>().0, 1);
+        let ws = world.resource::<WindowSize>();
+        assert_eq!((ws.w, ws.h), (1024, 768));
+    }
+
+    #[test]
+    fn apply_window_resize_repeated_same_value_triggers_only_first_time() {
+        let mut world = window_resize_test_world(800, 600);
+        apply_window_resize(&mut world, 1024, 768);
+        world.flush();
+        apply_window_resize(&mut world, 1024, 768);
+        world.flush();
+        assert_eq!(world.resource::<ResizeCount>().0, 1);
+    }
+
+    #[test]
+    fn apply_window_resize_ignores_nonpositive_dimensions() {
+        let mut world = window_resize_test_world(800, 600);
+        apply_window_resize(&mut world, 0, 768);
+        world.flush();
+        apply_window_resize(&mut world, 1024, -1);
+        world.flush();
+        assert_eq!(world.resource::<ResizeCount>().0, 0);
+    }
 
     #[test]
     fn test_builder_default() {

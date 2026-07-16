@@ -19,6 +19,7 @@ use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::render::RaylibAccess;
+use raylib::prelude::Image;
 
 /// Drains queued [`RenderAssetCmd`]s and performs the corresponding GL
 /// load/upload. The only system that touches `RaylibAccess`/`FontStore`/
@@ -75,7 +76,7 @@ pub(crate) fn apply_render_asset_cmd(
             Ok(tex) => {
                 debug!("Loaded texture '{}' from '{}'", id, path);
                 let (width, height) = (tex.width, tex.height);
-                tex_store.insert(&id, tex, filter, None);
+                tex_store.insert(&id, tex, filter, Some(path));
                 notifications.push(LogicMsg::TextureLoaded {
                     key: id,
                     width,
@@ -83,6 +84,35 @@ pub(crate) fn apply_render_asset_cmd(
                 });
             }
             Err(e) => error!("Failed to load texture '{}': {}", path, e),
+        },
+        RenderAssetCmd::TextureFromMemory {
+            id,
+            ext,
+            bytes,
+            filter,
+        } => match Image::load_image_from_mem(&ext, &bytes) {
+            Ok(image) => match rl.load_texture_from_image(th, &image) {
+                Ok(tex) => {
+                    debug!(
+                        "Loaded texture '{}' from {} in-memory bytes (ext '{}')",
+                        id,
+                        bytes.len(),
+                        ext
+                    );
+                    let (width, height) = (tex.width, tex.height);
+                    tex_store.insert(&id, tex, filter, None);
+                    notifications.push(LogicMsg::TextureLoaded {
+                        key: id,
+                        width,
+                        height,
+                    });
+                }
+                Err(e) => error!("Failed to upload in-memory texture '{}': {}", id, e),
+            },
+            Err(e) => error!(
+                "Failed to decode in-memory texture '{}' (ext '{}'): {}",
+                id, ext, e
+            ),
         },
         RenderAssetCmd::Font {
             id,
@@ -132,6 +162,15 @@ pub(crate) fn apply_render_asset_cmd(
                 ),
             }
         }
+        RenderAssetCmd::ShaderFromMemory { id, vs_src, fs_src } => {
+            match rl.load_shader_from_memory(th, vs_src.as_deref(), fs_src.as_deref()) {
+                Ok(shader) => {
+                    debug!("Loaded shader '{}' from memory", id);
+                    shaders.add(&id, shader);
+                }
+                Err(e) => error!("Shader '{}' failed to load from memory: {e}", id),
+            }
+        }
         RenderAssetCmd::RasterizeText {
             key,
             font_key,
@@ -179,7 +218,7 @@ pub(crate) fn apply_render_asset_cmd(
                         &key,
                         tex,
                         crate::resources::texturefilter::TextureFilter::Nearest,
-                        None,
+                        Some(png_path),
                     );
                     notifications.push(LogicMsg::TextureLoaded {
                         key,
@@ -195,6 +234,41 @@ pub(crate) fn apply_render_asset_cmd(
         }
         RenderAssetCmd::RemoveTexture { key } => {
             tex_store.remove(&key);
+            notifications.push(LogicMsg::TextureRemoved { key });
+        }
+        RenderAssetCmd::RemoveFont { key } => {
+            fonts.remove(&key);
+            notifications.push(LogicMsg::FontRemoved { key });
+        }
+        RenderAssetCmd::RenameTexture { old_key, new_key } => {
+            if tex_store.rename(&old_key, new_key.clone()) {
+                debug!("Renamed texture '{}' -> '{}'", old_key, new_key);
+                notifications.push(LogicMsg::TextureRenamed { old_key, new_key });
+            } else {
+                warn!(
+                    "process_render_asset_cmds: RenameTexture '{}' -> '{}': '{}' not loaded",
+                    old_key, new_key, old_key
+                );
+            }
+        }
+        RenderAssetCmd::SetTextureFilter { key, filter } => {
+            if !tex_store.set_filter(&key, filter) {
+                warn!(
+                    "process_render_asset_cmds: SetTextureFilter '{}': not loaded",
+                    key
+                );
+            }
+        }
+        RenderAssetCmd::RenameFont { old_key, new_key } => {
+            if fonts.rename(&old_key, new_key.clone()) {
+                debug!("Renamed font '{}' -> '{}'", old_key, new_key);
+                notifications.push(LogicMsg::FontRenamed { old_key, new_key });
+            } else {
+                warn!(
+                    "process_render_asset_cmds: RenameFont '{}' -> '{}': '{}' not loaded",
+                    old_key, new_key, old_key
+                );
+            }
         }
     }
 }

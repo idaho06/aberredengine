@@ -67,9 +67,45 @@ pub enum RenderAssetCmd {
     /// data was already parsed CPU-side by the caller before this command
     /// was queued.
     TilemapTexture { key: String, png_path: String },
+    /// Load a texture from an in-memory-encoded image buffer (e.g. an
+    /// embedded PNG) and store it under `id`. `ext` is the file-type hint
+    /// raylib's decoder needs, e.g. ".png" (leading dot, matches
+    /// `LoadImageFromMemory`'s `fileType` convention).
+    TextureFromMemory {
+        id: String,
+        ext: String,
+        bytes: Vec<u8>,
+        filter: TextureFilter,
+    },
+    /// Load a shader from optional in-memory vertex/fragment source
+    /// strings, store under `id`. Mirrors `Shader`'s `Option`-per-stage
+    /// shape (a shader can supply just one stage's source and let raylib
+    /// use its default for the other).
+    ShaderFromMemory {
+        id: String,
+        vs_src: Option<String>,
+        fs_src: Option<String>,
+    },
     /// Remove the texture stored under `key` (drops the GPU handle).
     /// Logic-side cleanup (`menu_despawn`'s rasterized labels) cannot touch
     /// `TextureStore` directly — even its GL-free `remove()` — because the
     /// resource only exists in the render world.
     RemoveTexture { key: String },
+    /// Remove the font stored under `key` (drops the GPU handle + its
+    /// `FontStore` metadata). Same rationale as `RemoveTexture`: logic-side
+    /// code cannot touch `FontStore` directly.
+    RemoveFont { key: String },
+    /// Rename an already-loaded texture's key in place: no disk re-read or
+    /// GPU re-upload, just a `TextureStore` key move (preserves the same
+    /// GPU handle, filter, and path metadata). No-ops with a warning if
+    /// `old_key` isn't loaded.
+    RenameTexture { old_key: String, new_key: String },
+    /// Update the sampling filter of an already-loaded texture in place
+    /// (a single `SetTextureFilter` GL call) — no reload. No-ops with a
+    /// warning if `key` isn't loaded.
+    SetTextureFilter { key: String, filter: TextureFilter },
+    /// Rename an already-loaded font's key in place: no disk re-read or
+    /// glyph-atlas regeneration, just a `FontStore` key move. No-ops with a
+    /// warning if `old_key` isn't loaded.
+    RenameFont { old_key: String, new_key: String },
 }

@@ -9,7 +9,7 @@
 //! need more `WorldSignals` methods.
 
 use crate::resources::worldsignals::WorldSignals;
-use bevy_ecs::prelude::Resource;
+use bevy_ecs::prelude::{Entity, Resource};
 
 /// One deferred write against [`WorldSignals`], produced by a render-side scene callback and
 /// applied logic-side by `apply_signal_intents`.
@@ -20,6 +20,7 @@ pub enum SignalIntent {
     SetScalar(String, f32),
     SetInteger(String, i32),
     SetString(String, String),
+    SetEntity(String, u64),
 }
 
 /// Buffer of [`SignalIntent`]s queued during render (`GuiCallback`), drained into
@@ -59,6 +60,12 @@ impl SignalIntents {
             .push(SignalIntent::SetString(key.into(), value.into()));
     }
 
+    /// Queue an entity-set intent.
+    pub fn set_entity(&mut self, key: impl Into<String>, entity: Entity) {
+        self.0
+            .push(SignalIntent::SetEntity(key.into(), entity.to_bits()));
+    }
+
     /// Drain all queued intents into `signals`, applying each in the order queued.
     pub fn apply_to(&mut self, signals: &mut WorldSignals) {
         for intent in self.0.drain(..) {
@@ -68,6 +75,7 @@ impl SignalIntents {
                 SignalIntent::SetScalar(key, value) => signals.set_scalar(key, value),
                 SignalIntent::SetInteger(key, value) => signals.set_integer(key, value),
                 SignalIntent::SetString(key, value) => signals.set_string(key, value),
+                SignalIntent::SetEntity(key, bits) => signals.set_entity(key, Entity::from_bits(bits)),
             }
         }
     }
@@ -107,6 +115,18 @@ mod tests {
         intents.apply_to(&mut signals);
 
         assert!(!signals.has_flag("gui:action:save"));
+    }
+
+    #[test]
+    fn apply_to_routes_set_entity() {
+        let mut intents = SignalIntents::default();
+        let entity = Entity::from_bits(7);
+        intents.set_entity("selected", entity);
+
+        let mut signals = WorldSignals::default();
+        intents.apply_to(&mut signals);
+
+        assert_eq!(signals.get_entity("selected"), Some(&entity));
     }
 
     #[test]
