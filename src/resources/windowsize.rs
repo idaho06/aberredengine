@@ -17,7 +17,7 @@ use raylib::prelude::*;
 /// `RenderX`-style wrapper mirroring one authoritative copy. That's why it
 /// stays in flat `src/resources/` rather than `src/resources/render/`
 /// alongside the render-exclusive resources.
-#[derive(Resource, Clone, Copy)]
+#[derive(Resource, Clone, Copy, PartialEq)]
 pub struct WindowSize {
     /// Width in pixels.
     pub w: i32,

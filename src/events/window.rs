@@ -1,16 +1,8 @@
 //! Window resize event.
 //!
-//! [`WindowResizedEvent`] is triggered by the logic thread's per-tick
-//! window-size mirror (see `engine_app.rs`) whenever the window dimensions
-//! reported by the newest input sample differ from the previously recorded
-//! [`crate::resources::windowsize::WindowSize`], and both new dimensions are
-//! strictly positive.
-//!
-//! The very first tick does not trigger this event: the initial
-//! `WindowSize` resource is inserted at startup with the real window size,
-//! so there is nothing to diff against yet. Consumers that need the
-//! startup size should read [`crate::resources::windowsize::WindowSize`]
-//! directly instead of waiting for this event.
+//! [`WindowResizedEvent`] is triggered by the sim-schedule system
+//! `detect_window_resize` (`crate::systems::window`) — see that system's
+//! doc comment for the trigger conditions and mirroring/ordering mechanics.
 
 use bevy_ecs::prelude::*;
 
