@@ -95,6 +95,8 @@ use crate::events::render::switchfullscreen::switch_fullscreen_observer;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
 use crate::protocol::endpoints::{setup_audio, shutdown_audio};
+#[cfg(any(test, feature = "test-support"))]
+use crate::protocol::endpoints::setup_audio_stub;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -208,12 +210,12 @@ use crate::systems::mapspawn::process_lua_map_commands;
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
 /// `Send` because these are carried into the logic thread via `LogicInit`.
-type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + Send>;
+pub(crate) type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + Send>;
 
 /// Closure that adds a game-update system to the [`Schedule`].
 /// Deferred until `run()` when the schedule is being built.
 /// `Send`: see [`HookRegistrar`].
-type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
+pub(crate) type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 
 /// System sets partitioning the logic thread's `fixed` schedule pipeline.
 /// [`EngineBuilder`]'s
@@ -268,7 +270,7 @@ pub enum SimSet {
 /// Closure that spawns an observer entity into the [`World`].
 /// Deferred until `run()` when the world exists.
 /// `Send`: see [`HookRegistrar`].
-type ObserverRegistrar = Box<dyn FnOnce(&mut World) + Send>;
+pub(crate) type ObserverRegistrar = Box<dyn FnOnce(&mut World) + Send>;
 
 /// Builder for bootstrapping the engine.
 ///
@@ -666,6 +668,10 @@ impl EngineBuilder {
             rx_logic,
             rx_input,
             snapshot_publisher: Some(SnapshotPublisher(snap_in)),
+            #[cfg(any(test, feature = "test-support"))]
+            stub_audio: false,
+            #[cfg(any(test, feature = "test-support"))]
+            audio_stub_ends: None,
         };
         let handle = std::thread::Builder::new()
             .name("aberred-logic".into())
@@ -889,7 +895,7 @@ impl EngineBuilder {
     /// (`FontMetricsStore`/`TextureDimsStore`). Runs INSIDE the thread
     /// closure so NonSend `LuaRuntime` is created on (and pinned to) the
     /// logic thread.
-    fn setup_logic_world(init: &mut LogicInit) -> Result<World, String> {
+    pub(crate) fn setup_logic_world(init: &mut LogicInit) -> Result<World, String> {
         let config = init.config.clone();
         let render_width = config.render_width;
         let render_height = config.render_height;
@@ -916,7 +922,19 @@ impl EngineBuilder {
         world.insert_resource(PrevRawSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
 
-        setup_audio(&mut world, audio_hz);
+        #[cfg(any(test, feature = "test-support"))]
+        let use_audio_stub = init.stub_audio;
+        #[cfg(not(any(test, feature = "test-support")))]
+        let use_audio_stub = false;
+
+        if use_audio_stub {
+            #[cfg(any(test, feature = "test-support"))]
+            {
+                init.audio_stub_ends = Some(setup_audio_stub(&mut world));
+            }
+        } else {
+            setup_audio(&mut world, audio_hz);
+        }
 
         world.insert_resource(GameState::new());
         world.insert_resource(NextGameState::new());
@@ -993,7 +1011,7 @@ impl EngineBuilder {
     /// the logic thread; consumes the hooks out of `init`). The render-side
     /// scene table was already cloned off before `init` crossed the thread
     /// boundary.
-    fn register_logic_systems(
+    pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
         use_scene_manager: bool,
@@ -1061,7 +1079,11 @@ impl EngineBuilder {
         Ok(())
     }
 
-    fn spawn_observers(world: &mut World, has_lua: bool, extra_observers: Vec<ObserverRegistrar>) {
+    pub(crate) fn spawn_observers(
+        world: &mut World,
+        has_lua: bool,
+        extra_observers: Vec<ObserverRegistrar>,
+    ) {
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_collision_observer), Persistent));
@@ -1130,7 +1152,7 @@ impl EngineBuilder {
     /// doc-value markers, not real constraints -- `logic_thread_main`'s loop
     /// structure guarantees the tick's `fixed`/`sim` run completes before
     /// `present` runs, which is the ordering those edges express.
-    fn build_logic_schedules(
+    pub(crate) fn build_logic_schedules(
         update_hook: Option<UpdateRegistrar>,
         fixed_update_hook: Option<UpdateRegistrar>,
         extra_systems: Vec<UpdateRegistrar>,
@@ -1490,32 +1512,42 @@ impl EngineBuilder {
 /// schedules inside its own closure. Must be `Send`: hooks are
 /// `Box<dyn FnOnce + Send>`, scene descriptors are fn pointers, and the
 /// channel endpoints are crossbeam handles.
-struct LogicInit {
-    config: GameConfig,
-    setup_hook: Option<HookRegistrar>,
-    enter_play_hook: Option<HookRegistrar>,
-    switch_scene_hook: Option<HookRegistrar>,
-    update_hook: Option<UpdateRegistrar>,
-    fixed_update_hook: Option<UpdateRegistrar>,
-    extra_systems: Vec<UpdateRegistrar>,
-    extra_fixed_systems: Vec<UpdateRegistrar>,
-    extra_observers: Vec<ObserverRegistrar>,
-    scenes: Vec<(String, SceneDescriptor)>,
-    initial_scene: Option<String>,
+pub(crate) struct LogicInit {
+    pub(crate) config: GameConfig,
+    pub(crate) setup_hook: Option<HookRegistrar>,
+    pub(crate) enter_play_hook: Option<HookRegistrar>,
+    pub(crate) switch_scene_hook: Option<HookRegistrar>,
+    pub(crate) update_hook: Option<UpdateRegistrar>,
+    pub(crate) fixed_update_hook: Option<UpdateRegistrar>,
+    pub(crate) extra_systems: Vec<UpdateRegistrar>,
+    pub(crate) extra_fixed_systems: Vec<UpdateRegistrar>,
+    pub(crate) extra_observers: Vec<ObserverRegistrar>,
+    pub(crate) scenes: Vec<(String, SceneDescriptor)>,
+    pub(crate) initial_scene: Option<String>,
     #[cfg(feature = "lua")]
-    lua_script: Option<PathBuf>,
+    pub(crate) lua_script: Option<PathBuf>,
     /// Initial WindowSize mirror values (refreshed per-frame via `InputSample`).
-    window_w: i32,
-    window_h: i32,
-    tx_render: Sender<RenderMsg>,
-    rx_logic: Receiver<LogicMsg>,
+    pub(crate) window_w: i32,
+    pub(crate) window_h: i32,
+    pub(crate) tx_render: Sender<RenderMsg>,
+    pub(crate) rx_logic: Receiver<LogicMsg>,
     /// Receiver for the dedicated bounded input channel.
-    rx_input: Receiver<InputSample>,
+    pub(crate) rx_input: Receiver<InputSample>,
     /// The sim thread's write end of the snapshot triple buffer.
     /// `Option` so [`EngineBuilder::setup_logic_world`] can `.take()` it into
     /// the logic world's [`SnapshotPublisher`] resource -- `Input<T>` isn't
     /// `Clone`, unlike the `Sender`/`Receiver` fields above.
-    snapshot_publisher: Option<SnapshotPublisher>,
+    pub(crate) snapshot_publisher: Option<SnapshotPublisher>,
+    /// Test-harness-only: when `true`, [`EngineBuilder::setup_logic_world`]
+    /// inserts a stub [`AudioBridge`](crate::protocol::endpoints::AudioBridge)
+    /// (no real audio thread) via `setup_audio_stub` instead of `setup_audio`,
+    /// stashing the stub's far ends into `audio_stub_ends` for the caller to
+    /// retrieve. Always `false` in production (`try_run` never sets it).
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) stub_audio: bool,
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) audio_stub_ends:
+        Option<(Receiver<crate::protocol::audio::AudioCmd>, Sender<crate::protocol::audio::AudioMessage>)>,
 }
 
 /// Logic thread entry point. Startup errors can't propagate to
@@ -1544,7 +1576,7 @@ const DT_CLAMP_SECONDS: f32 = 0.25;
 /// state) is left untouched and freely re-readable every tick. Extracted
 /// from `logic_thread_main` so this property stays independently testable
 /// without a real `Pacer`/`Instant` drive.
-fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
+pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
     crate::tracy::tracy_span!("sim_schedule_run");
     sim.run(world);
     world.resource_mut::<InputState>().clear_edges();
@@ -1748,7 +1780,7 @@ impl Default for EngineBuilder {
 
 /// Helper: register a system into the world, mark it [`Persistent`], and insert
 /// its ID into [`SystemsStore`].
-fn register_persistent_system<M>(
+pub(crate) fn register_persistent_system<M>(
     world: &mut World,
     store: &mut SystemsStore,
     name: &str,

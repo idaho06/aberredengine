@@ -111,6 +111,20 @@ pub fn setup_audio(world: &mut World, audio_hz: f64) {
 
     let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_msg, audio_hz));
 
+    insert_audio_bridge_resources(world, tx_cmd, rx_msg, handle);
+}
+
+/// Shared by [`setup_audio`] and [`setup_audio_stub`]: insert the
+/// [`AudioBridge`] resource plus the `Messages<AudioCmd>`/
+/// `Messages<AudioMessage>` queues it drains. The two callers differ only in
+/// how `handle`/the channel far ends are produced (a real audio thread vs.
+/// a no-op stub thread).
+fn insert_audio_bridge_resources(
+    world: &mut World,
+    tx_cmd: Sender<AudioCmd>,
+    rx_msg: Receiver<AudioMessage>,
+    handle: std::thread::JoinHandle<()>,
+) {
     world.insert_resource(AudioBridge {
         tx_cmd,
         rx_msg,
@@ -118,6 +132,27 @@ pub fn setup_audio(world: &mut World, audio_hz: f64) {
     });
     world.insert_resource(Messages::<AudioMessage>::default());
     world.insert_resource(Messages::<AudioCmd>::default());
+}
+
+/// Test/harness-only stub: inserts the same [`AudioBridge`] +
+/// `Messages<AudioCmd>`/`Messages<AudioMessage>` resources as [`setup_audio`],
+/// but spawns NO real audio thread -- `handle` is a trivial
+/// `std::thread::spawn(|| {})` that returns (and therefore joins) instantly,
+/// so [`shutdown_audio`] works unchanged against it. Returns the far ends so
+/// the caller (a `TestWorld`) can inspect outgoing [`AudioCmd`]s and inject
+/// fake [`AudioMessage`] replies. The caller MUST hold both for the World's
+/// whole lifetime -- `forward_audio_cmds` swallows send errors, so a dropped
+/// receiver won't panic, it'll just silently break the inspection contract.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn setup_audio_stub(world: &mut World) -> (Receiver<AudioCmd>, Sender<AudioMessage>) {
+    let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
+    let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
+
+    let handle = std::thread::spawn(|| {});
+
+    insert_audio_bridge_resources(world, tx_cmd, rx_msg, handle);
+
+    (rx_cmd, tx_msg)
 }
 
 /// Gracefully request shutdown of the audio thread and join it.
@@ -128,5 +163,31 @@ pub fn shutdown_audio(world: &mut World) {
     if let Some(bridge) = world.remove_resource::<AudioBridge>() {
         let _ = bridge.tx_cmd.send(AudioCmd::Shutdown);
         let _ = bridge.handle.join();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_audio_stub_inserts_bridge_and_message_resources_with_no_real_thread() {
+        let mut world = World::new();
+
+        let (rx_cmd, tx_msg) = setup_audio_stub(&mut world);
+
+        assert!(world.get_resource::<AudioBridge>().is_some());
+        assert!(world.get_resource::<Messages<AudioCmd>>().is_some());
+        assert!(world.get_resource::<Messages<AudioMessage>>().is_some());
+
+        // The stub thread does no real work, so shutdown_audio's join
+        // returns immediately instead of blocking on a Pacer-paced loop.
+        shutdown_audio(&mut world);
+        assert!(world.get_resource::<AudioBridge>().is_none());
+
+        // Far ends are still usable after the bridge itself is torn down --
+        // the caller (a TestWorld) is expected to hold these independently.
+        drop(rx_cmd);
+        drop(tx_msg);
     }
 }

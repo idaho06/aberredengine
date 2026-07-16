@@ -56,3 +56,4 @@ debug    = 1
 default = ["lua"]
 lua   = ["dep:mlua"]
 tracy = ["dep:tracy-client"]  # profiling — never in default
+test-support = []             # headless TestWorld harness — never in default

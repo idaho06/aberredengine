@@ -92,6 +92,20 @@ impl FontMetrics {
         }
     }
 
+    /// Construct metrics directly from a glyph map, with no
+    /// `'?'`-then-first-glyph fallback beyond an explicit `'?'` entry (if
+    /// any) in `glyphs` -- there is no GL font to derive a "first glyph in
+    /// array order" fallback from outside [`extract`](Self::extract). For
+    /// synthetic/test data (e.g. a headless [`TestWorld`](crate::test_support::TestWorld)
+    /// fixture); real font loads always go through `extract`.
+    pub fn new(base_size: i32, glyphs: FxHashMap<i32, GlyphMetrics>) -> Self {
+        Self {
+            base_size,
+            glyphs,
+            first_glyph: None,
+        }
+    }
+
     /// Resolve a codepoint to its glyph metrics, replicating raylib's
     /// `GetGlyphIndex` fallback chain: exact match, then the `'?'` glyph,
     /// then the font's first glyph (index 0) if no `'?'` glyph exists.

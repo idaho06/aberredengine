@@ -21,4 +21,6 @@ pub mod resources;
 #[cfg(feature = "lua")]
 pub mod stub_generator;
 pub mod systems;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 pub(crate) mod tracy;
