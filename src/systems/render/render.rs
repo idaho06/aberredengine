@@ -52,11 +52,12 @@ use crate::resources::render::scene_table::RenderSceneTable;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::texturestore::TextureStore;
+use crate::resources::render::thread_stats::RenderStats;
 use crate::resources::windowsize::WindowSize;
 use crate::systems::scene_dispatch::GuiCallback;
 use log::warn;
 
-use super::debug_overlay::draw_imgui_debug;
+use super::debug_overlay::{draw_imgui_debug, PerfPanelStats};
 use super::geometry::{
     compute_sprite_cull_bounds, compute_sprite_geometry, compute_view_bounds,
     draw_rotated_rect_lines, resolve_world_transform,
@@ -286,6 +287,7 @@ pub(crate) struct DebugResources<'w> {
     pub active_scene: Res<'w, RenderActiveScene>,
     pub debug_snapshot: Res<'w, RenderDebugSnapshot>,
     pub camera_follow: Res<'w, RenderCameraFollow>,
+    pub render_stats: Res<'w, RenderStats>,
 }
 
 /// Tracks which render buffer is the current source during multi-pass
@@ -899,6 +901,7 @@ pub fn render_system(
             screen_sprite_count,
             screen_text_count,
             shader_count,
+            perf_stats,
         ) = if let Some(debug_snapshot) = &debug_res.debug_snapshot.0 {
             let fps = rl.get_fps();
             let window_mouse_pos = rl.get_mouse_position();
@@ -918,6 +921,11 @@ pub fn render_system(
             let screen_sprite_count = mirrors.screen_sprites.count();
             let screen_text_count = mirrors.screen_texts.count();
             let shader_count = shader_store.len();
+            let perf_stats = PerfPanelStats {
+                sim: debug_snapshot.sim_stats,
+                audio: debug_snapshot.audio_stats,
+                render: debug_res.render_stats.0,
+            };
             (
                 fps,
                 game_mouse_pos,
@@ -929,11 +937,28 @@ pub fn render_system(
                 screen_sprite_count,
                 screen_text_count,
                 shader_count,
+                perf_stats,
             )
         } else {
             // Dummy values — only reached when gui_callback is Some; debug_active is false
             // so the debug branch inside the closure will not execute them.
-            (0, Vector2::zero(), Vector2::zero(), 0, 0, 0, 0, 0, 0, 0)
+            (
+                0,
+                Vector2::zero(),
+                Vector2::zero(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                PerfPanelStats {
+                    sim: Default::default(),
+                    audio: Default::default(),
+                    render: Default::default(),
+                },
+            )
         };
 
         // Extract refs before closure (avoids borrow conflict with apply_postprocess_passes)
@@ -978,6 +1003,7 @@ pub fn render_system(
                         screen_text_count,
                         game_mouse_pos,
                         mouse_world,
+                        &perf_stats,
                     );
                 }
 

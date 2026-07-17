@@ -27,3 +27,4 @@ pub mod scene_table;
 pub mod shaderstore;
 pub mod sim_id_map;
 pub mod texturestore;
+pub mod thread_stats;

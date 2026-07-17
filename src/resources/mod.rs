@@ -59,6 +59,7 @@ pub mod signal_keys;
 pub mod systemsstore;
 pub mod texturedims;
 pub mod texturefilter;
+pub mod thread_stats;
 pub mod uniformvalue;
 pub mod warn_once;
 pub mod windowsize;

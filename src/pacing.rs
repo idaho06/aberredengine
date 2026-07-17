@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, TryRecvError, TrySendError};
 
+use crate::protocol::stats::ThreadStats;
+
 /// True once every sender for `rx` has been dropped.
 ///
 /// `Receiver::try_iter()` can't distinguish "nothing queued right now" from
@@ -68,6 +70,85 @@ impl Pacer {
         } else {
             false
         }
+    }
+}
+
+/// Rolls up per-tick work-time measurements into a [`ThreadStats`] snapshot
+/// once per ~1s window. Measures only the timed work handed to `record`
+/// (e.g. a schedule run) -- never the pacer's own sleep.
+pub struct StatsWindow {
+    configured_hz: f32,
+    period: Duration,
+    window: Duration,
+    window_start: Instant,
+    ticks: u32,
+    total_work: Duration,
+    max_work: Duration,
+    overruns: u32,
+}
+
+impl StatsWindow {
+    /// Create a window targeting `hz` and rolling over every ~1s.
+    pub fn new(hz: f64) -> Self {
+        Self::with_window(hz, Duration::from_secs(1))
+    }
+
+    /// Create a window targeting `hz` with an explicit rollover period.
+    /// Production code should use [`Self::new`]; a shorter `window` is only
+    /// useful in tests, so real rollovers don't require a real 1s sleep.
+    pub fn with_window(hz: f64, window: Duration) -> Self {
+        Self {
+            configured_hz: hz as f32,
+            period: Duration::from_secs_f64(1.0 / hz),
+            window,
+            window_start: Instant::now(),
+            ticks: 0,
+            total_work: Duration::ZERO,
+            max_work: Duration::ZERO,
+            overruns: 0,
+        }
+    }
+
+    /// Record one tick's work time (excluding any pacer sleep). Returns
+    /// `Some(ThreadStats)` once the window has rolled over, resetting the
+    /// accumulators for the next window; otherwise `None`.
+    pub fn record(&mut self, work_time: Duration) -> Option<ThreadStats> {
+        self.ticks += 1;
+        self.total_work += work_time;
+        self.max_work = self.max_work.max(work_time);
+        if work_time > self.period {
+            self.overruns += 1;
+        }
+
+        let elapsed = self.window_start.elapsed();
+        if elapsed < self.window {
+            return None;
+        }
+
+        let stats = ThreadStats {
+            configured_hz: self.configured_hz,
+            achieved_hz: if elapsed.as_secs_f32() > 0.0 {
+                self.ticks as f32 / elapsed.as_secs_f32()
+            } else {
+                0.0
+            },
+            tick_avg_ms: if self.ticks > 0 {
+                self.total_work.as_secs_f32() * 1000.0 / self.ticks as f32
+            } else {
+                0.0
+            },
+            tick_max_ms: self.max_work.as_secs_f32() * 1000.0,
+            overruns: self.overruns,
+            ticks: self.ticks,
+        };
+
+        self.window_start = Instant::now();
+        self.ticks = 0;
+        self.total_work = Duration::ZERO;
+        self.max_work = Duration::ZERO;
+        self.overruns = 0;
+
+        Some(stats)
     }
 }
 
@@ -132,5 +213,94 @@ mod tests {
             !pacer.due(),
             "immediately re-checking must not fire again until another period elapses"
         );
+    }
+
+    #[test]
+    fn stats_window_does_not_roll_over_before_window_elapses() {
+        let mut window = StatsWindow::with_window(1000.0, Duration::from_secs(10));
+        assert!(window.record(Duration::from_micros(100)).is_none());
+    }
+
+    #[test]
+    fn stats_window_rolls_over_after_window_elapses() {
+        let mut window = StatsWindow::with_window(1000.0, Duration::from_millis(5));
+        std::thread::sleep(Duration::from_millis(6));
+        let stats = window
+            .record(Duration::from_micros(100))
+            .expect("window should have rolled over");
+        assert_eq!(stats.configured_hz, 1000.0);
+        assert!(stats.achieved_hz > 0.0);
+        assert!(stats.tick_avg_ms > 0.0);
+        assert!(stats.tick_max_ms > 0.0);
+    }
+
+    #[test]
+    fn stats_window_counts_overruns() {
+        // period is 100ms at 10hz; a 200ms "tick" overruns it.
+        let mut window = StatsWindow::with_window(10.0, Duration::from_millis(5));
+        std::thread::sleep(Duration::from_millis(6));
+        let stats = window
+            .record(Duration::from_millis(200))
+            .expect("window should have rolled over");
+        assert_eq!(stats.overruns, 1);
+    }
+
+    #[test]
+    fn stats_window_no_overrun_when_work_within_period() {
+        let mut window = StatsWindow::with_window(10.0, Duration::from_millis(5));
+        std::thread::sleep(Duration::from_millis(6));
+        let stats = window
+            .record(Duration::from_millis(1))
+            .expect("window should have rolled over");
+        assert_eq!(stats.overruns, 0);
+    }
+
+    #[test]
+    fn stats_window_resets_accumulators_after_rollover() {
+        let mut window = StatsWindow::with_window(10.0, Duration::from_millis(5));
+        std::thread::sleep(Duration::from_millis(6));
+        let first = window
+            .record(Duration::from_millis(200))
+            .expect("first window should roll over");
+        assert_eq!(first.overruns, 1);
+
+        // Immediately after a rollover the new window shouldn't fire again
+        // until its own period elapses, and shouldn't carry over the prior
+        // window's overrun/max-work accumulation.
+        assert!(window.record(Duration::from_micros(1)).is_none());
+        std::thread::sleep(Duration::from_millis(6));
+        let second = window
+            .record(Duration::from_micros(1))
+            .expect("second window should roll over");
+        assert_eq!(
+            second.overruns, 0,
+            "overrun count must not carry over from the previous window"
+        );
+        assert!(
+            second.tick_max_ms < first.tick_max_ms,
+            "max work must reset, not carry the previous window's 200ms spike"
+        );
+    }
+
+    #[test]
+    fn stats_window_tick_avg_reflects_multiple_ticks() {
+        let mut window = StatsWindow::with_window(1000.0, Duration::from_millis(5));
+        window.record(Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(6));
+        let stats = window
+            .record(Duration::from_millis(3))
+            .expect("window should have rolled over");
+        // avg of two ticks (1ms, 3ms) is 2ms
+        assert!(
+            (stats.tick_avg_ms - 2.0).abs() < 0.5,
+            "avg unexpectedly far from 2ms: {}",
+            stats.tick_avg_ms
+        );
+        assert!(
+            (stats.tick_max_ms - 3.0).abs() < 0.5,
+            "max unexpectedly far from 3ms: {}",
+            stats.tick_max_ms
+        );
+        assert_eq!(stats.ticks, 2);
     }
 }

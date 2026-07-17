@@ -74,7 +74,7 @@ use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
 
 use crate::error::EngineError;
-use crate::pacing::Pacer;
+use crate::pacing::{Pacer, StatsWindow};
 use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::endpoints::{
@@ -103,7 +103,7 @@ use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::render::fontstore::FontStore;
-use crate::resources::gameconfig::{GameConfig, GameConfigDefaults};
+use crate::resources::gameconfig::{GameConfig, GameConfigDefaults, default_snapshot_hz};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
@@ -135,7 +135,8 @@ use crate::resources::signal_intents::SignalIntents;
 use crate::systems::animation::animation;
 use crate::systems::animation::animation_controller;
 use crate::systems::audio_bridge::{
-    forward_audio_cmds, poll_audio_messages, update_bevy_audio_cmds, update_bevy_audio_messages,
+    forward_audio_cmds, land_audio_stats, poll_audio_messages, update_bevy_audio_cmds,
+    update_bevy_audio_messages,
 };
 use crate::systems::camera_follow::camera_follow_system;
 use crate::systems::collision_detector::collision_detector;
@@ -168,6 +169,8 @@ use crate::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use crate::resources::render::sim_id_map::SimIdMap;
+use crate::resources::render::thread_stats::RenderStats;
+use crate::resources::thread_stats::{AudioStats, SimStats};
 use crate::systems::render::apply_gameconfig_changes;
 use crate::systems::render::input::sample_and_send_input;
 use crate::systems::render::messages::pump_render_msgs;
@@ -843,6 +846,7 @@ impl EngineBuilder {
         // inserted before the first snapshot arrives -- each reconcile_*'s
         // resource_scope panics if this resource is absent.
         world.insert_resource(SimIdMap::default());
+        world.insert_resource(RenderStats::default());
         if let Some(table) = render_scene_table {
             world.insert_resource(table);
         }
@@ -906,6 +910,8 @@ impl EngineBuilder {
         world.insert_resource(InputBindings::default());
         world.insert_resource(PrevRawSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
+        world.insert_resource(SimStats::default());
+        world.insert_resource(AudioStats::default());
 
         #[cfg(any(test, feature = "test-support"))]
         let use_audio_stub = init.stub_audio;
@@ -1187,6 +1193,7 @@ impl EngineBuilder {
                 forward_audio_cmds,
                 poll_audio_messages,
                 update_bevy_audio_messages,
+                land_audio_stats,
             )
                 .chain()
                 .in_set(SimSet::AudioPump),
@@ -1472,6 +1479,15 @@ impl EngineBuilder {
         #[cfg(feature = "tracy")]
         let _tracy = tracy_client::Client::start();
 
+        // Phase 7j: no dedicated Pacer here -- raylib's own target_fps/vsync
+        // wait paces this loop, from inside the same schedule.run() call
+        // this StatsWindow times. That means tick_avg_ms/achieved_hz read as
+        // whole-frame time (vsync wait included), unlike SimStats/AudioStats'
+        // "work excluding sleep" -- see RenderStats' doc comment. Reuses
+        // GameConfig's own target_fps-unset fallback so the two can't drift.
+        let target_fps = world.resource::<RenderGameConfig>().0.target_fps;
+        let mut stats_window = StatsWindow::new(default_snapshot_hz(target_fps));
+
         while !world
             .non_send::<raylib::RaylibHandle>()
             .window_should_close()
@@ -1480,7 +1496,12 @@ impl EngineBuilder {
         {
             {
                 crate::tracy::tracy_span!("render_schedule_run");
+                let tick_start = std::time::Instant::now();
                 schedule.run(world);
+                let tick_work = tick_start.elapsed();
+                if let Some(stats) = stats_window.record(tick_work) {
+                    *world.resource_mut::<RenderStats>() = RenderStats(stats);
+                }
             }
             world.clear_trackers();
             crate::tracy::tracy_frame_mark!();
@@ -1621,6 +1642,15 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // never sleeps, it just reports whether a `snapshot_hz` period has
     // elapsed since it last fired.
     let mut snapshot_pacer = Pacer::new(snapshot_hz);
+    // Phase 7j: rolls up sim-tick work time (run_sim_tick only, not the
+    // pacer's sleep) into SimStats once per ~1s window, for the F11 perf
+    // panel. Input-backlog sum/max share this same window -- averaged
+    // against ThreadStats::ticks on rollover rather than a separately
+    // maintained tick counter, since record() is called exactly once per
+    // sim tick below and would otherwise need to be kept in lockstep.
+    let mut stats_window = StatsWindow::new(sim_hz);
+    let mut backlog_sum: u64 = 0;
+    let mut backlog_max: u32 = 0;
     // Reused across ticks (`.clear()` below) instead of a fresh `Vec` per
     // tick -- this drains at up to `sim_hz` (default 240/s) whenever input
     // is flowing, so keeping its allocation avoids reallocating on the hot
@@ -1733,7 +1763,21 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // arrived this tick, holding the configured `sim_hz` through a
         // render stall (mirrors the old "Timeout => run FIXED only" arm).
         update_world_time(&mut world, dt);
+        let tick_start = std::time::Instant::now();
         run_sim_tick(&mut world, &mut sim);
+        let tick_work = tick_start.elapsed();
+
+        backlog_sum += input_backlog.len() as u64;
+        backlog_max = backlog_max.max(input_backlog.len() as u32);
+        if let Some(thread) = stats_window.record(tick_work) {
+            *world.resource_mut::<SimStats>() = SimStats {
+                thread,
+                input_backlog_avg: backlog_sum as f32 / thread.ticks as f32,
+                input_backlog_max: backlog_max,
+            };
+            backlog_sum = 0;
+            backlog_max = 0;
+        }
 
         // Phase 7c: `present` runs at the configured `snapshot_hz`, not once
         // per received input sample -- independent of whether input arrived

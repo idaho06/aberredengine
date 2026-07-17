@@ -1,5 +1,6 @@
 use raylib::prelude::{Camera2D, Vector2};
 
+use crate::protocol::stats::ThreadStats;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::render::fontstore::FontStore;
@@ -7,10 +8,22 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::render::texturestore::TextureStore;
+use crate::resources::thread_stats::SimStats;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::SignalSnapshot;
 use crate::resources::worldtime::WorldTime;
 use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
+
+/// Per-thread tick stats bundled for [`draw_performance_panel`] -- built
+/// once at the `render_system` call site from `DebugSnapshot`'s `sim_stats`/
+/// `audio_stats` and the render-local `RenderStats` resource, rather than
+/// growing `draw_performance_panel`/`draw_imgui_debug`'s already-long
+/// positional-arg lists with three more bare parameters.
+pub(super) struct PerfPanelStats {
+    pub sim: SimStats,
+    pub audio: ThreadStats,
+    pub render: ThreadStats,
+}
 
 /// Orchestrates all imgui debug panels drawn at window resolution over the game image.
 ///
@@ -42,8 +55,9 @@ pub(super) fn draw_imgui_debug(
     screen_text_count: usize,
     game_mouse_pos: Vector2,
     mouse_world: Vector2,
+    perf_stats: &PerfPanelStats,
 ) {
-    draw_performance_panel(ui, fps, world_time);
+    draw_performance_panel(ui, fps, world_time, perf_stats);
     draw_ecs_panel(
         ui,
         sprite_count,
@@ -71,7 +85,12 @@ pub(super) fn draw_imgui_debug(
     );
 }
 
-pub(super) fn draw_performance_panel(ui: &ImguiUi, fps: u32, world_time: &WorldTime) {
+pub(super) fn draw_performance_panel(
+    ui: &ImguiUi,
+    fps: u32,
+    world_time: &WorldTime,
+    perf_stats: &PerfPanelStats,
+) {
     ui.window("Performance")
         .collapsed(false, Condition::FirstUseEver)
         .build(|| {
@@ -81,8 +100,35 @@ pub(super) fn draw_performance_panel(ui: &ImguiUi, fps: u32, world_time: &WorldT
             ui.text(format!("Frame: {}", world_time.frame_count));
             ui.text(format!("Time scale: {:.2}x", world_time.time_scale));
             ui.separator();
+            ui.text("Thread stats (~1s window):");
+            draw_thread_stats_row(ui, "sim", &perf_stats.sim.thread);
+            ui.text(format!(
+                "  input backlog: {:.1} avg / {} max samples/tick",
+                perf_stats.sim.input_backlog_avg, perf_stats.sim.input_backlog_max
+            ));
+            draw_thread_stats_row(ui, "audio", &perf_stats.audio);
+            draw_thread_stats_row(ui, "render (frame time)", &perf_stats.render);
+            ui.separator();
             ui.text("Press F11 to toggle debug");
         });
+}
+
+/// One perf-panel row for a single thread's [`ThreadStats`]. Colored yellow
+/// when the thread is meaningfully behind its configured rate or has
+/// overrun its period this window, matching `draw_input_panel`'s existing
+/// `text_colored` palette convention (green/gray/yellow/orange).
+fn draw_thread_stats_row(ui: &ImguiUi, label: &str, stats: &ThreadStats) {
+    let healthy = stats.overruns == 0
+        && (stats.configured_hz <= 0.0 || stats.achieved_hz >= stats.configured_hz * 0.95);
+    let line = format!(
+        "  {label}: {:.1} Hz cfg | {:.1} achieved | {:.2}ms avg {:.2}ms max | {} overruns",
+        stats.configured_hz, stats.achieved_hz, stats.tick_avg_ms, stats.tick_max_ms, stats.overruns
+    );
+    if healthy {
+        ui.text(line);
+    } else {
+        ui.text_colored([1.0, 1.0, 0.0, 1.0], line);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

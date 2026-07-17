@@ -46,8 +46,18 @@ use crate::resources::guitheme::GuiThemeStore;
 use crate::resources::input::InputState;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::scenemanager::SceneManager;
+use crate::resources::thread_stats::{AudioStats, SimStats};
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use crate::resources::worldtime::WorldTime;
+use crate::protocol::stats::ThreadStats;
+
+/// Bundled to keep `build_drawable_snapshot`'s system-param count under
+/// bevy_ecs's 16-param function-system limit.
+#[derive(SystemParam)]
+pub struct ThreadStatsParams<'w> {
+    pub sim: Res<'w, SimStats>,
+    pub audio: Res<'w, AudioStats>,
+}
 
 /// One world-space sprite, owned. Mirrors the fields `render_system` needs
 /// for rendering.
@@ -183,6 +193,12 @@ pub struct DebugSnapshot {
     /// debug-mode-gated like the rest of `DebugSnapshot`, zero cost when
     /// debug mode is off.
     pub input_state: InputState,
+    /// Sim thread's own tick-timing rollup + input-backlog gauge, for the
+    /// F11 perf panel.
+    pub sim_stats: SimStats,
+    /// Audio thread's tick-timing rollup, mirrored logic-side from
+    /// `AudioMessage::Stats` by `land_audio_stats`.
+    pub audio_stats: ThreadStats,
 }
 
 /// Render-relevant ECS state captured once per render frame. See the module
@@ -371,6 +387,7 @@ pub fn build_drawable_snapshot(
     camera_follow: Res<CameraFollowConfig>,
     scene_manager: Option<Res<SceneManager>>,
     input_state: Res<InputState>,
+    thread_stats: ThreadStatsParams,
     mut snapshot: ResMut<DrawableSnapshot>,
 ) {
     refill(&mut snapshot.map_sprites, &queries.map_sprites, |(
@@ -556,6 +573,8 @@ pub fn build_drawable_snapshot(
         );
         debug.rigidbody_count = queries.debug_rigidbodies.iter().count();
         debug.input_state = input_state.clone();
+        debug.sim_stats = *thread_stats.sim;
+        debug.audio_stats = thread_stats.audio.0;
     } else {
         snapshot.debug = None;
     }
@@ -587,6 +606,8 @@ mod tests {
         world.insert_resource(GuiThemeStore::default());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(InputState::default());
+        world.insert_resource(SimStats::default());
+        world.insert_resource(AudioStats::default());
         world.insert_resource(DrawableSnapshot::default());
         world
     }

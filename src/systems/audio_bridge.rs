@@ -13,12 +13,15 @@
 //!   thread via the `AudioBridge` sender.
 //! - [`update_bevy_audio_cmds`] advances the ECS message queue for `AudioCmd`
 //!   so same-frame readers can observe writes.
+//! - [`land_audio_stats`] reads `AudioMessage::Stats` out of the queue into
+//!   the logic-world `AudioStats` resource, for the F11 perf panel.
 
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::AudioBridge;
+use crate::resources::thread_stats::AudioStats;
 use bevy_ecs::prelude::Messages;
 use bevy_ecs::{
-    prelude::{MessageWriter, Res},
+    prelude::{MessageReader, MessageWriter, Res},
     system::ResMut,
 };
 
@@ -60,4 +63,15 @@ pub fn forward_audio_cmds(
 /// Advance the ECS message queue for AudioCmd so same-frame readers can observe writes.
 pub fn update_bevy_audio_cmds(mut msgs: ResMut<Messages<AudioCmd>>) {
     msgs.update();
+}
+
+/// Mirror the audio thread's latest tick-stats rollup into the logic-world
+/// `AudioStats` resource. Run after [`update_bevy_audio_messages`] so this
+/// frame's freshly-written `AudioMessage::Stats` (if any) is visible here.
+pub fn land_audio_stats(mut reader: MessageReader<AudioMessage>, mut stats: ResMut<AudioStats>) {
+    for msg in reader.read() {
+        if let AudioMessage::Stats { stats: s } = msg {
+            stats.0 = *s;
+        }
+    }
 }

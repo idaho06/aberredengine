@@ -26,6 +26,11 @@
 //! - [`shutdown`] – global running flag + panic hook, the emergency-path
 //!   shutdown signal checked by every thread's loop alongside the primary
 //!   message-based shutdown path
+//! - [`stats`] – `ThreadStats`, the per-thread tick-timing payload collected
+//!   by `crate::pacing::StatsWindow` and carried cross-thread by
+//!   `AudioMessage::Stats` (sim/render stats never leave their owning
+//!   thread's `World` as messages — sim writes its own resource directly,
+//!   render's stays render-local)
 
 pub mod audio;
 pub mod endpoints;
@@ -33,3 +38,4 @@ pub mod raw_input;
 pub mod render_logic;
 pub mod shutdown;
 pub mod snapshot;
+pub mod stats;

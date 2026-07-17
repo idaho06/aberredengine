@@ -10,7 +10,7 @@ use raylib::core::audio::RaylibAudio;
 use raylib::ffi;
 use rustc_hash::FxHashMap;
 
-use crate::pacing::Pacer;
+use crate::pacing::{Pacer, StatsWindow};
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 
 use crate::components::audio::music_track::MusicTrack;
@@ -72,6 +72,10 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
     schedule.initialize(&mut world).expect("audio schedule initialize");
 
     let mut pacer = Pacer::new(audio_hz);
+    // Phase 7j: rolls up schedule-run work time into a ThreadStats once per
+    // ~1s window, shipped to the logic thread via AudioMessage::Stats for
+    // the F11 perf panel.
+    let mut stats_window = StatsWindow::new(audio_hz);
 
     'run: loop {
         if !crate::protocol::shutdown::running() {
@@ -79,7 +83,15 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
         }
         pacer.tick();
 
+        let tick_start = std::time::Instant::now();
         schedule.run(&mut world);
+        let tick_work = tick_start.elapsed();
+        if let Some(stats) = stats_window.record(tick_work) {
+            let _ = world
+                .resource::<MsgSender>()
+                .0
+                .send(AudioMessage::Stats { stats });
+        }
 
         if world.resource::<ShouldExit>().0 {
             break 'run;
