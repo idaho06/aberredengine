@@ -23,8 +23,9 @@
 //! **Pure Rust game:**
 //! ```rust,no_run,ignore
 //! use aberredengine::engine_app::EngineBuilder;
+//! use aberredengine::EngineError;
 //!
-//! fn main() {
+//! fn main() -> Result<(), EngineError> {
 //!     EngineBuilder::new()
 //!         .config("config.ini")
 //!         .title("My Game")
@@ -32,7 +33,7 @@
 //!         .on_enter_play(my_game::enter_play)
 //!         .on_update(my_game::update)
 //!         .on_switch_scene(my_game::switch_scene)
-//!         .run();
+//!         .try_run()
 //! }
 //! ```
 //!
@@ -40,18 +41,19 @@
 //! ```rust,no_run,ignore
 //! use aberredengine::engine_app::EngineBuilder;
 //! use aberredengine::systems::scene_dispatch::SceneDescriptor;
+//! use aberredengine::EngineError;
 //!
-//! fn main() {
+//! fn main() -> Result<(), EngineError> {
 //!     EngineBuilder::new()
 //!         .config("config.ini")
 //!         .on_setup(load_assets)
-//!         .add_system(tilemap_load_system)   // runs every frame while Playing
+//!         .add_system(tilemap_load_system)   // runs once per sim tick while Playing
 //!         .add_system(tilemap_save_system)   // multiple systems allowed
 //!         .add_observer(on_tilemap_loaded)   // persistent observer for a custom event
 //!         .add_scene("intro", SceneDescriptor { /* … */ })
 //!         .add_scene("editor", SceneDescriptor { /* … */ })
 //!         .initial_scene("intro")
-//!         .run();
+//!         .try_run()
 //! }
 //! ```
 //!
@@ -234,7 +236,7 @@ pub(crate) type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimSet {
     /// Drain `SignalIntents` queued by the render thread's `GuiCallback` into
-    /// `WorldSignals`, before anything this substep reads them.
+    /// `WorldSignals`, before anything this tick reads them.
     ApplyIntents,
     /// One-shot spawns reacting to `Added<T>` (menu/gridlayout/tilemap) and
     /// game-state bookkeeping (`check_pending_state`).
@@ -260,12 +262,12 @@ pub enum SimSet {
     /// GUI layout, hit-test, and per-state visual sync.
     Gui,
     /// Group counts, Lua phase callbacks, and animation controller
-    /// resolution -- all downstream of this substep's collision results.
+    /// resolution -- all downstream of this tick's collision results.
     PostCollision,
     /// Lua command-queue draining (map/asset commands, entity setup) and
     /// scene lifecycle polling.
     Drain,
-    /// Tail-of-substep housekeeping: signal bindings, text sizing, input
+    /// Tail-of-tick housekeeping: signal bindings, text sizing, input
     /// binding change notification, and (for Lua games) `lua_plugin::update`.
     Bookkeeping,
 }
@@ -1240,9 +1242,9 @@ impl EngineBuilder {
         // it is even built. See that block's own comment for the real
         // `.after()` edge between the pair.
 
-        // --- FIXED: input-driven forces/movement (InputState is sampled once
-        // per render frame in main_loop, before the accumulator loop, and held
-        // constant across every fixed substep that reads it here) ---
+        // --- FIXED: input-driven forces/movement (InputState is resolved
+        // sim-side once per tick by resolve_input_backlog, before this tick's
+        // sim.run(), and held constant for every system that reads it here) ---
         fixed.add_systems(input_simple_controller.in_set(SimSet::Controllers));
         fixed.add_systems(input_acceleration_controller.in_set(SimSet::Controllers));
         fixed.add_systems(mouse_controller.in_set(SimSet::Controllers));
@@ -1383,16 +1385,15 @@ impl EngineBuilder {
         }
 
         // Phase 6d: moved from VARIABLE to FIXED. Accepted consequence: a
-        // scene switch resolved mid-substep-batch (e.g. substep 3 of an
-        // 8-substep catch-up) runs the remaining substeps against the
-        // newly-spawned scene, so the snapshot sent at the end of that frame
-        // may show it partially constructed -- same accepted tradeoff as the
-        // Lua-direct switch path (see lua_plugin::update's doc comment and
-        // with_lua()'s update_hook installation above). `.add_scene()`
-        // (use_scene_manager) and Lua's `.with_lua()` are mutually exclusive
-        // (validate_builder rejects both switch_scene_hook and
-        // use_scene_manager), so this and the Lua-direct path never run
-        // together.
+        // scene switch resolved mid-tick runs the rest of that tick's
+        // pipeline against the newly-spawned scene, so the snapshot published
+        // at the end of that tick may show it partially constructed -- same
+        // accepted tradeoff as the Lua-direct switch path (see
+        // lua_plugin::update's doc comment and with_lua()'s update_hook
+        // installation above). `.add_scene()` (use_scene_manager) and Lua's
+        // `.with_lua()` are mutually exclusive (validate_builder rejects
+        // both switch_scene_hook and use_scene_manager), so this and the
+        // Lua-direct path never run together.
         if use_scene_manager {
             fixed.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
             fixed.add_systems(
@@ -1628,7 +1629,8 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 /// `present` (build + publish this tick's [`DrawableSnapshot`]) does not
 /// run once per received input sample — it's decimated to
 /// `[simulation] snapshot_hz`, checked independently of whether input
-/// arrived this tick (see [`snapshot_publish_due`]), so the render thread
+/// arrived this tick (checked via [`Pacer::due`] on a dedicated snapshot
+/// `Pacer`), so the render thread
 /// keeps receiving fresh snapshots during input droughts too. Forwarding
 /// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) runs on the tail
 /// of `sim` rather than on `present`, for the same reason: asset loads must
@@ -2275,7 +2277,7 @@ mod tests {
                 .unwrap()
                 > lua_phase_index,
             "lua_plugin::update should run after lua_phase_system (ordered last among \
-             Lua-touching FIXED systems each substep)"
+             Lua-touching FIXED systems each tick)"
         );
     }
 

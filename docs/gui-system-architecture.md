@@ -138,7 +138,7 @@ engine.set_gui_theme_font("compact", "ui_font", 13, 255, 220, 120, 255)
 ### Registering themes in Rust
 
 There is no Lua-style builder API for Rust theming. Mutate `GuiThemeStore` directly in a startup
-system registered via `EngineBuilder::add_system`:
+system registered via `EngineBuilder::on_setup`:
 
 ```rust
 use std::sync::Arc;
@@ -179,7 +179,7 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
 
 // Registration:
 // EngineBuilder::new()
-//     .add_system(setup_gui_theme)
+//     .on_setup(setup_gui_theme)
 //     ...
 ```
 
@@ -943,7 +943,7 @@ fn on_retreat_clicked(_entity: Entity, ctx: &mut GameCtx) {
 
 fn main() {
     EngineBuilder::new()
-        .add_system(setup_gui_theme)
+        .on_setup(setup_gui_theme)
         .add_scene("game", SceneDescriptor {
             on_enter: scene_enter,
             on_update: None,

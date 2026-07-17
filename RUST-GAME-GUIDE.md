@@ -125,7 +125,7 @@ use aberredengine::systems::scene_dispatch::SceneDescriptor;
 
 mod scenes;
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), aberredengine::EngineError> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")
@@ -342,7 +342,7 @@ For single-scene games or when you need full control over scene transitions, use
 ```rust
 use aberredengine::engine_app::EngineBuilder;
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), aberredengine::EngineError> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")
@@ -356,7 +356,7 @@ fn main() -> Result<(), String> {
 
 ### Startup error handling
 
-Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), String>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and missing required built-in system registrations.
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and missing required built-in system registrations.
 
 `EngineBuilder::run()` is still available as a convenience wrapper, but it only logs startup failures internally and does not return them to your `main` function.
 
@@ -403,8 +403,8 @@ Setup ──→ Playing ──→ Quitting
 | `.add_system(system)` | Add an extra per-sim-tick system. Same auto-constraints as `.on_update()` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
-| `.try_run()` | Start the engine and return `Result<(), String>` on startup failure. Recommended for Rust `main`. |
-| `.run()` | Convenience wrapper around `.try_run()` that logs startup failures and returns `()`. |
+| `.try_run()` | Start the engine and return `Result<(), aberredengine::EngineError>` on startup failure. Recommended for Rust `main`. |
+| `.run()` | Convenience wrapper around `.try_run()` that logs the error, prints it to stderr, and exits the process with status 1 on startup failure. |
 
 **Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()`, `.on_enter_play()`, or `.with_lua()` — the SceneManager owns those hooks, and a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` also requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with any explicit `.on_setup()`/`.on_enter_play()`/`.on_update()`/`.on_switch_scene()` call, in either order — it installs its own four hooks, and mixing in your own is ambiguous. Use `.on_setup()` for asset loading in the SceneManager approach. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
 
