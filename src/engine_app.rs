@@ -1139,6 +1139,20 @@ impl EngineBuilder {
         world.flush();
     }
 
+    /// Registers the non-Lua `PostCollision` pair
+    /// (`update_group_counts_system` + `animation_controller`, with no
+    /// intra-pair ordering edge, unlike the Lua branch's
+    /// `update_group_counts_system.before(lua_phase_system)`/
+    /// `animation_controller.after(lua_phase_system)`). Shared by both the
+    /// `#[cfg(feature = "lua")] if has_lua {} else {}` else-arm and the
+    /// standalone `#[cfg(not(feature = "lua"))]` block in
+    /// `build_logic_schedules` -- neither system is Lua-specific, so this
+    /// helper compiles unconditionally in both feature configs.
+    fn add_non_lua_post_collision(sim: &mut Schedule) {
+        sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
+        sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
+    }
+
     /// Build the two schedules the logic thread runs: `sim`
     /// (runs once per `Pacer`-paced sim tick at `[simulation] hz`, real dt --
     /// this is where essentially all gameplay logic lives: movement,
@@ -1337,8 +1351,7 @@ impl EngineBuilder {
                     .in_set(SimSet::Drain),
             );
         } else {
-            sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
-            sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
+            Self::add_non_lua_post_collision(&mut sim);
         }
 
         #[cfg(not(feature = "lua"))]
@@ -1346,8 +1359,7 @@ impl EngineBuilder {
             // `has_lua` only exists to keep the build_schedules signature uniform
             // across feature combinations.
             let _ = has_lua;
-            sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
-            sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
+            Self::add_non_lua_post_collision(&mut sim);
         }
 
         sim.add_systems(animation.in_set(SimSet::Drain));
