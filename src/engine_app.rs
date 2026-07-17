@@ -1188,13 +1188,32 @@ impl EngineBuilder {
         use_scene_manager: bool,
     ) -> Result<(Schedule, Schedule), EngineError> {
         let mut sim = Schedule::default();
-        let mut present = Schedule::default();
 
-        // Single source of truth for cross-group ordering within `sim`
-        // (Phase 7b Step 0) -- see `SimSet`'s doc comment for what each
-        // group holds. Systems join a group via `.in_set(SimSet::X)`; only
-        // load-bearing *intra*-group edges remain as explicit `.after()`
-        // calls below.
+        Self::configure_sim_sets(&mut sim);
+        Self::add_engine_sim_systems(&mut sim, has_lua);
+        Self::apply_user_registrars(&mut sim, update_hook, extra_systems);
+        Self::add_scene_manager_systems(&mut sim, use_scene_manager);
+
+        let mut present = Self::build_present_schedule();
+
+        sim.initialize(world).map_err(|source| EngineError::ScheduleInit {
+            which: "sim",
+            source,
+        })?;
+        present.initialize(world).map_err(|source| EngineError::ScheduleInit {
+            which: "present",
+            source,
+        })?;
+
+        Ok((sim, present))
+    }
+
+    /// Single source of truth for cross-group ordering within `sim`
+    /// (Phase 7b Step 0) -- see `SimSet`'s doc comment for what each
+    /// group holds. Systems join a group via `.in_set(SimSet::X)`; only
+    /// load-bearing *intra*-group edges remain as explicit `.after()`
+    /// calls in [`Self::add_engine_sim_systems`].
+    fn configure_sim_sets(sim: &mut Schedule) {
         sim.configure_sets(
             (
                 SimSet::ApplyIntents,
@@ -1212,7 +1231,13 @@ impl EngineBuilder {
             )
                 .chain(),
         );
+    }
 
+    /// Registers the engine's own `sim`-schedule systems (everything except
+    /// user-supplied hooks/systems, scene-manager systems, and the
+    /// `present` schedule -- see [`Self::apply_user_registrars`],
+    /// [`Self::add_scene_manager_systems`], [`Self::build_present_schedule`]).
+    fn add_engine_sim_systems(sim: &mut Schedule, has_lua: bool) {
         // --- SIM: signal intents + state bookkeeping, one-shot spawns ---
         // apply_signal_intents runs first, before everything else this
         // tick (in particular before on_update_<scene>, dispatched from
@@ -1351,7 +1376,7 @@ impl EngineBuilder {
                     .in_set(SimSet::Drain),
             );
         } else {
-            Self::add_non_lua_post_collision(&mut sim);
+            Self::add_non_lua_post_collision(sim);
         }
 
         #[cfg(not(feature = "lua"))]
@@ -1359,7 +1384,7 @@ impl EngineBuilder {
             // `has_lua` only exists to keep the build_schedules signature uniform
             // across feature combinations.
             let _ = has_lua;
-            Self::add_non_lua_post_collision(&mut sim);
+            Self::add_non_lua_post_collision(sim);
         }
 
         sim.add_systems(animation.in_set(SimSet::Drain));
@@ -1371,40 +1396,6 @@ impl EngineBuilder {
                 .after(update_world_signals_binding_system)
                 .in_set(SimSet::Bookkeeping),
         );
-
-        // update_hook/extra_systems (on_update/add_system/configure_schedule)
-        // all target `sim` -- see those methods' doc comments for the
-        // once-per-sim-tick cadence. Each closure supplies its own
-        // `.in_set(SimSet::X)` (see `on_update`/`add_system`/`with_lua`'s
-        // hook installation for the concrete sets used); `configure_schedule`
-        // closures are free to pick any `SimSet` (exported for exactly this).
-        if let Some(update_hook) = update_hook {
-            update_hook(&mut sim);
-        }
-
-        for extra in extra_systems {
-            extra(&mut sim);
-        }
-
-        // Phase 6d: moved from VARIABLE to FIXED. Accepted consequence: a
-        // scene switch resolved mid-tick runs the rest of that tick's
-        // pipeline against the newly-spawned scene, so the snapshot published
-        // at the end of that tick may show it partially constructed -- same
-        // accepted tradeoff as the Lua-direct switch path (see
-        // lua_plugin::update's doc comment and with_lua()'s update_hook
-        // installation above). `.add_scene()` (use_scene_manager) and Lua's
-        // `.with_lua()` are mutually exclusive (validate_builder rejects
-        // both switch_scene_hook and use_scene_manager), so this and the
-        // Lua-direct path never run together.
-        if use_scene_manager {
-            sim.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
-            sim.add_systems(
-                scene_switch_poll
-                    .run_if(state_is_playing)
-                    .after(scene_update_system)
-                    .in_set(SimSet::Drain),
-            );
-        }
 
         // Forwards RenderAssetCmd to the render thread (Phase 5e; the GL
         // drain itself, process_render_asset_cmds, now lives on the render
@@ -1428,6 +1419,59 @@ impl EngineBuilder {
                 .after(update_bevy_render_asset_cmds)
                 .in_set(SimSet::Bookkeeping),
         );
+    }
+
+    /// Applies user-supplied `sim`-schedule registrars: the single
+    /// `update_hook` installed by `.on_update()`, plus every
+    /// `extra_systems` closure installed by `.add_system()`/
+    /// `.configure_schedule()`. Each closure supplies its own
+    /// `.in_set(SimSet::X)` (see `on_update`/`add_system`/`with_lua`'s hook
+    /// installation for the concrete sets used); `configure_schedule`
+    /// closures are free to pick any `SimSet` (exported for exactly this).
+    fn apply_user_registrars(
+        sim: &mut Schedule,
+        update_hook: Option<UpdateRegistrar>,
+        extra_systems: Vec<UpdateRegistrar>,
+    ) {
+        if let Some(update_hook) = update_hook {
+            update_hook(sim);
+        }
+
+        for extra in extra_systems {
+            extra(sim);
+        }
+    }
+
+    /// Registers the SceneManager's own `sim`-schedule systems, when
+    /// `.add_scene()` was used. Phase 6d: moved from VARIABLE to FIXED.
+    /// Accepted consequence: a scene switch resolved mid-tick runs the rest
+    /// of that tick's pipeline against the newly-spawned scene, so the
+    /// snapshot published at the end of that tick may show it partially
+    /// constructed -- same accepted tradeoff as the Lua-direct switch path
+    /// (see `lua_plugin::update`'s doc comment and `with_lua()`'s
+    /// `update_hook` installation). `.add_scene()` (`use_scene_manager`)
+    /// and Lua's `.with_lua()` are mutually exclusive (`validate_builder`
+    /// rejects both `switch_scene_hook` and `use_scene_manager`), so this
+    /// and the Lua-direct path never run together.
+    fn add_scene_manager_systems(sim: &mut Schedule, use_scene_manager: bool) {
+        if use_scene_manager {
+            sim.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
+            sim.add_systems(
+                scene_switch_poll
+                    .run_if(state_is_playing)
+                    .after(scene_update_system)
+                    .in_set(SimSet::Drain),
+            );
+        }
+    }
+
+    /// Builds (but does not initialize) the logic thread's `present`
+    /// schedule: package the tick's fully-settled state into a
+    /// `DrawableSnapshot` and publish it. See
+    /// [`Self::build_logic_schedules`]'s doc comment for the `sim`/`present`
+    /// split rationale.
+    fn build_present_schedule() -> Schedule {
+        let mut present = Schedule::default();
 
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut drawable_snapshot_config = build_drawable_snapshot
@@ -1454,16 +1498,7 @@ impl EngineBuilder {
         // this schedule used to carry is gone.
         present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
 
-        sim.initialize(world).map_err(|source| EngineError::ScheduleInit {
-            which: "sim",
-            source,
-        })?;
-        present.initialize(world).map_err(|source| EngineError::ScheduleInit {
-            which: "present",
-            source,
-        })?;
-
-        Ok((sim, present))
+        present
     }
 
     /// Build the render thread's single per-frame schedule: every
