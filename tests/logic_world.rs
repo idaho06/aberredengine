@@ -16,11 +16,13 @@ use aberredengine::components::group::Group;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
+use aberredengine::engine_app::SimSet;
 use aberredengine::events::render_assets::RenderAssetCmd;
 use aberredengine::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::protocol::render_logic::RenderMsg;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::resources::fontmetrics::{FontMetrics, GlyphMetrics};
+use aberredengine::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberredengine::resources::input::InputState;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::systems::game_ctx::GameCtx;
@@ -194,4 +196,122 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     let size_after = tw.world.get::<DynamicText>(text).unwrap().size();
     assert_eq!(size_after.x, 20.0, "advance_x(10) * scale(20/10) for a single 'a'");
     assert_eq!(size_after.y, 20.0, "text_height == font_size for single-line text");
+}
+
+#[derive(Resource, Default)]
+struct Counter(u32);
+
+fn increment_counter(mut counter: ResMut<Counter>) {
+    counter.0 += 1;
+}
+
+/// A `setup` hook that does NOT auto-transition to `Playing` (unlike
+/// [`TestWorld`]'s default), so the test controls exactly when `Playing` is
+/// reached instead of guessing at the default hook's transition timing.
+fn setup_without_auto_play() {}
+
+/// (e) `TestWorldBuilder::add_system`: the registered system must be gated
+/// by `run_if(state_is_playing)` through the harness, exactly like
+/// production's `EngineBuilder::add_system` -- it must not run before
+/// `Playing`, and must run exactly once per tick once `Playing` is reached.
+#[test]
+fn add_system_runs_once_per_tick_only_while_playing() {
+    let mut tw = TestWorld::builder()
+        .on_setup(setup_without_auto_play)
+        .add_system(increment_counter)
+        .build()
+        .expect("build should succeed");
+    tw.world.insert_resource(Counter::default());
+
+    tw.tick(3, DT);
+    assert!(
+        !matches!(tw.world.resource::<GameState>().get(), GameStates::Playing),
+        "setup_without_auto_play must never request a transition to Playing"
+    );
+    assert_eq!(
+        tw.world.resource::<Counter>().0,
+        0,
+        "add_system's run_if(state_is_playing) must suppress the system before Playing"
+    );
+
+    tw.world
+        .resource_mut::<NextGameState>()
+        .set(GameStates::Playing);
+    tw.tick_to_play(DT, 8);
+    let count_at_play = tw.world.resource::<Counter>().0;
+
+    tw.tick(1, DT);
+    assert_eq!(
+        tw.world.resource::<Counter>().0,
+        count_at_play + 1,
+        "system must run exactly once per tick once Playing"
+    );
+}
+
+#[derive(Resource, Default)]
+struct OrderLog(Vec<&'static str>);
+
+fn log_movement(mut log: ResMut<OrderLog>) {
+    log.0.push("movement");
+}
+
+fn log_collision(mut log: ResMut<OrderLog>) {
+    log.0.push("collision");
+}
+
+/// (f) `TestWorldBuilder::configure_schedule`: a system placed in
+/// `SimSet::Movement` must run before one placed in `SimSet::Collision`,
+/// proving `SimSet` placement resolves through the harness's real `sim`
+/// schedule (not just that the registrar closures were invoked).
+#[test]
+fn configure_schedule_respects_simset_ordering() {
+    let mut tw = TestWorld::builder()
+        .configure_schedule(|schedule| {
+            schedule.add_systems(log_movement.in_set(SimSet::Movement));
+        })
+        .configure_schedule(|schedule| {
+            schedule.add_systems(log_collision.in_set(SimSet::Collision));
+        })
+        .build()
+        .expect("build should succeed");
+    tw.world.insert_resource(OrderLog::default());
+
+    tw.tick(1, DT);
+
+    assert_eq!(
+        tw.world.resource::<OrderLog>().0,
+        vec!["movement", "collision"],
+        "SimSet::Movement must run before SimSet::Collision"
+    );
+}
+
+#[derive(Event, Debug, Clone, Copy)]
+struct HarnessProbeEvent;
+
+fn on_harness_probe_event(_trigger: On<HarnessProbeEvent>, mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("observer_fired");
+}
+
+fn trigger_harness_probe_event(mut commands: Commands) {
+    commands.trigger(HarnessProbeEvent);
+}
+
+/// (g) `TestWorldBuilder::add_observer`: a persistent observer registered
+/// through the harness must fire on a triggered event, same as production's
+/// `EngineBuilder::add_observer`.
+#[test]
+fn add_observer_fires_on_triggered_event() {
+    let mut tw = TestWorld::builder()
+        .add_observer(on_harness_probe_event)
+        .add_system(trigger_harness_probe_event)
+        .build()
+        .expect("build should succeed");
+
+    tw.tick_to_play(DT, 8);
+    tw.tick(1, DT);
+
+    assert!(
+        tw.world.resource::<WorldSignals>().has_flag("observer_fired"),
+        "observer registered via TestWorldBuilder::add_observer must fire on the triggered event"
+    );
 }

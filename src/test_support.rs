@@ -35,10 +35,12 @@
 //!   (`snapshot_out`) to read back what `present` just published.
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::IntoObserverSystem;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 #[cfg(feature = "lua")]
 use std::path::PathBuf;
 
+use crate::components::persistent::Persistent;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, hook_registrar,
     run_sim_tick,
@@ -173,6 +175,41 @@ impl TestWorldBuilder {
                     .in_set(crate::engine_app::SimSet::ScriptUpdate),
             );
         }));
+        self
+    }
+
+    /// Add a system to the sim schedule, mirroring
+    /// `EngineBuilder::add_system`: `.run_if(state_is_playing)`,
+    /// `.in_set(SimSet::ScriptUpdate)`. Can be called multiple times.
+    pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
+        self.extra_systems
+            .push(Box::new(move |schedule: &mut Schedule| {
+                schedule.add_systems(
+                    system
+                        .run_if(crate::systems::gamestate::state_is_playing)
+                        .in_set(crate::engine_app::SimSet::ScriptUpdate),
+                );
+            }));
+        self
+    }
+
+    /// Add systems to the sim schedule with full control over ordering and
+    /// run conditions, mirroring `EngineBuilder::configure_schedule`.
+    pub fn configure_schedule(mut self, f: impl FnOnce(&mut Schedule) + Send + 'static) -> Self {
+        self.extra_systems.push(Box::new(f));
+        self
+    }
+
+    /// Add a persistent observer for a custom (or engine) event, mirroring
+    /// `EngineBuilder::add_observer`.
+    pub fn add_observer<E: Event, B: Bundle, M>(
+        mut self,
+        observer: impl IntoObserverSystem<E, B, M>,
+    ) -> Self {
+        self.extra_observers
+            .push(Box::new(move |world: &mut World| {
+                world.spawn((Observer::new(observer), Persistent));
+            }));
         self
     }
 
