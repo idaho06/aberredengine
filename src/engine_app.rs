@@ -298,6 +298,11 @@ pub struct EngineBuilder {
     initial_scene: Option<String>,
     extra_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
+    /// Names of the `on_*` hook methods explicitly called by the developer,
+    /// tracked so `validate_builder` can detect a conflict with `.with_lua()`
+    /// (which installs its own four hooks unconditionally) regardless of
+    /// call order.
+    user_hooks: Vec<&'static str>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
 }
@@ -319,6 +324,7 @@ impl EngineBuilder {
             initial_scene: None,
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
+            user_hooks: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
         }
@@ -352,6 +358,7 @@ impl EngineBuilder {
         self.setup_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "setup", system);
         }));
+        self.user_hooks.push("on_setup");
         self
     }
 
@@ -362,6 +369,7 @@ impl EngineBuilder {
         self.enter_play_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "enter_play", system);
         }));
+        self.user_hooks.push("on_enter_play");
         self
     }
 
@@ -377,6 +385,7 @@ impl EngineBuilder {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
         }));
+        self.user_hooks.push("on_update");
         self
     }
 
@@ -390,6 +399,7 @@ impl EngineBuilder {
         self.switch_scene_hook = Some(Box::new(|world, store| {
             register_persistent_system(world, store, "switch_scene", system);
         }));
+        self.user_hooks.push("on_switch_scene");
         self
     }
 
@@ -498,10 +508,15 @@ impl EngineBuilder {
     /// at `.run()` time. Use with [`.initial_scene()`](Self::initial_scene) to
     /// specify which scene starts first.
     ///
-    /// # Panics (at `.run()`)
+    /// # Errors (at `.run()`/`.try_run()`)
     ///
-    /// - If `.add_scene()` is combined with `.on_switch_scene()` or `.on_enter_play()`
-    /// - If `.add_scene()` is used without `.initial_scene()`
+    /// - If `.add_scene()` is combined with `.on_switch_scene()`, `.on_enter_play()`,
+    ///   or `.with_lua()`
+    /// - If `.add_scene()` is used without `.initial_scene()`, or `.initial_scene()`
+    ///   names a scene that was never registered
+    ///
+    /// `.try_run()` returns these as an [`EngineError`]; `.run()` prints the error
+    /// to stderr and exits with a nonzero status. Neither panics.
     pub fn add_scene(mut self, name: impl Into<String>, descriptor: SceneDescriptor) -> Self {
         self.scenes.push((name.into(), descriptor));
         self
@@ -554,11 +569,14 @@ impl EngineBuilder {
     /// Build the engine and run the main loop.
     ///
     /// This consumes the builder and does not return until the game exits.
-    /// Startup failures are logged and abort engine initialization without
-    /// entering the main loop.
+    /// Startup failures are logged, printed to stderr, and exit the process
+    /// with status 1 -- this never silently returns after a failed startup.
+    /// Use [`.try_run()`](Self::try_run) instead to handle the error yourself.
     pub fn run(self) {
         if let Err(err) = self.try_run() {
             log::error!("Failed to start engine: {err}");
+            eprintln!("Failed to start engine: {err}");
+            std::process::exit(1);
         }
     }
 
@@ -665,18 +683,68 @@ impl EngineBuilder {
     }
 
     fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
+        self.validate_lua_conflicts(use_scene_manager)?;
+        self.validate_scene_manager(use_scene_manager)?;
+        Ok(())
+    }
+
+    /// Checks `.with_lua()` against `.add_scene()` and against any explicitly
+    /// called `.on_*()` hook, regardless of call order (`.with_lua()`
+    /// installs its own four hooks unconditionally, so by validation time
+    /// the hook `Option` fields alone can't tell "user set this" apart from
+    /// "with_lua set this" -- that's what `user_hooks` tracks separately).
+    fn validate_lua_conflicts(&self, use_scene_manager: bool) -> Result<(), EngineError> {
+        #[cfg(feature = "lua")]
+        let has_lua_script = self.lua_script.is_some();
+        #[cfg(not(feature = "lua"))]
+        let has_lua_script = false;
+
+        if !has_lua_script {
+            return Ok(());
+        }
         if use_scene_manager {
-            if self.switch_scene_hook.is_some() {
-                return Err(EngineError::AddSceneConflictsWithSwitchScene);
+            return Err(EngineError::LuaConflictsWithSceneManager);
+        }
+        if !self.user_hooks.is_empty() {
+            return Err(EngineError::LuaConflictsWithHooks {
+                hooks: self.user_hooks.join(", "),
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks `.add_scene()`/`.initial_scene()` consistency: no conflicting
+    /// hooks, `initial_scene` is set and matches a registered scene name
+    /// (SceneManager path), or `initial_scene` is unset (non-SceneManager path).
+    fn validate_scene_manager(&self, use_scene_manager: bool) -> Result<(), EngineError> {
+        if !use_scene_manager {
+            if self.initial_scene.is_some() {
+                return Err(EngineError::InitialSceneWithoutScenes);
             }
-            if self.enter_play_hook.is_some() {
-                return Err(EngineError::AddSceneConflictsWithEnterPlay);
-            }
-            if self.initial_scene.is_none() {
-                return Err(EngineError::AddSceneRequiresInitialScene);
-            }
+            return Ok(());
         }
 
+        if self.switch_scene_hook.is_some() {
+            return Err(EngineError::AddSceneConflictsWithSwitchScene);
+        }
+        if self.enter_play_hook.is_some() {
+            return Err(EngineError::AddSceneConflictsWithEnterPlay);
+        }
+        let Some(initial_scene) = &self.initial_scene else {
+            return Err(EngineError::AddSceneRequiresInitialScene);
+        };
+        if !self.scenes.iter().any(|(name, _)| name == initial_scene) {
+            let registered = self
+                .scenes
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(EngineError::InitialSceneNotRegistered {
+                name: initial_scene.clone(),
+                registered,
+            });
+        }
         Ok(())
     }
 
@@ -922,8 +990,13 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = init.lua_script {
             let lua_runtime = LuaRuntime::new()?;
-            if let Err(e) = lua_runtime.run_script(script_path.to_str().unwrap_or("")) {
-                log::error!("Failed to load Lua script: {}", e);
+            let path_display = script_path.to_string_lossy();
+            if let Err(e) = lua_runtime.run_script(&path_display) {
+                log::error!("Failed to load Lua script '{path_display}': {e}");
+                eprintln!(
+                    "Failed to load Lua script '{path_display}': {e}\n\
+                     The engine will continue running with no scenes loaded; fix the script and restart."
+                );
             }
             world.insert_non_send(lua_runtime);
         }
@@ -2305,6 +2378,68 @@ mod tests {
             .expect_err("missing initial_scene should fail preflight");
 
         assert!(err.to_string().contains(".add_scene() requires .initial_scene"));
+    }
+
+    #[cfg(feature = "lua")]
+    #[test]
+    fn test_with_lua_conflicts_with_add_scene() {
+        let err = EngineBuilder::new()
+            .with_lua("assets/scripts/main.lua")
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu")
+            .try_run()
+            .expect_err("with_lua + add_scene should fail preflight");
+
+        assert!(
+            err.to_string()
+                .contains("EngineBuilder conflict: .with_lua() and .add_scene()")
+        );
+    }
+
+    #[cfg(feature = "lua")]
+    #[test]
+    fn test_with_lua_conflicts_with_user_hook_either_order() {
+        let lua_first = EngineBuilder::new()
+            .with_lua("assets/scripts/main.lua")
+            .on_setup(dummy_setup)
+            .try_run()
+            .expect_err("with_lua + on_setup should fail preflight regardless of order");
+        let hook_first = EngineBuilder::new()
+            .on_setup(dummy_setup)
+            .with_lua("assets/scripts/main.lua")
+            .try_run()
+            .expect_err("on_setup + with_lua should fail preflight regardless of order");
+
+        for err in [lua_first, hook_first] {
+            assert!(err.to_string().contains("EngineBuilder conflict: .with_lua()"));
+            assert!(err.to_string().contains("on_setup"));
+        }
+    }
+
+    #[test]
+    fn test_initial_scene_not_registered() {
+        let err = EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menuu")
+            .try_run()
+            .expect_err("typo'd initial_scene should fail preflight");
+
+        let err_str = err.to_string();
+        assert!(err_str.contains("\"menuu\""));
+        assert!(err_str.contains("menu"));
+    }
+
+    #[test]
+    fn test_initial_scene_without_scenes() {
+        let err = EngineBuilder::new()
+            .initial_scene("menu")
+            .try_run()
+            .expect_err("initial_scene without add_scene should fail preflight");
+
+        assert!(
+            err.to_string()
+                .contains(".initial_scene() was set but no scenes were registered")
+        );
     }
 
     #[test]

@@ -406,7 +406,7 @@ Setup ──→ Playing ──→ Quitting
 | `.try_run()` | Start the engine and return `Result<(), String>` on startup failure. Recommended for Rust `main`. |
 | `.run()` | Convenience wrapper around `.try_run()` that logs startup failures and returns `()`. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()` or `.on_enter_play()` — the SceneManager owns those hooks. `.add_scene()` also requires `.initial_scene(...)` — omitting it is a startup error. Use `.on_setup()` for asset loading in both approaches. With `.try_run()`, these conflicts are returned as startup errors instead of panicking.
+**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()`, `.on_enter_play()`, or `.with_lua()` — the SceneManager owns those hooks, and a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` also requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with any explicit `.on_setup()`/`.on_enter_play()`/`.on_update()`/`.on_switch_scene()` call, in either order — it installs its own four hooks, and mixing in your own is ambiguous. Use `.on_setup()` for asset loading in the SceneManager approach. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
 
 ### Custom systems and observers
 

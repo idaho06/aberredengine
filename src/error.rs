@@ -26,6 +26,32 @@ pub enum EngineError {
     )]
     AddSceneRequiresInitialScene,
 
+    #[error(
+        "EngineBuilder conflict: .with_lua() and .add_scene() are mutually exclusive. \
+         Lua games drive scenes from main.lua's scene registry; SceneManager games use \
+         .add_scene() -- not both."
+    )]
+    LuaConflictsWithSceneManager,
+
+    #[error(
+        "EngineBuilder conflict: .with_lua() replaces the setup/enter_play/update/\
+         switch_scene hooks; also calling .{hooks}() is ambiguous. Remove the explicit \
+         hook call(s)."
+    )]
+    LuaConflictsWithHooks { hooks: String },
+
+    #[error(
+        "EngineBuilder: .initial_scene(\"{name}\") does not match any registered scene. \
+         Registered scenes: {registered}."
+    )]
+    InitialSceneNotRegistered { name: String, registered: String },
+
+    #[error(
+        "EngineBuilder: .initial_scene() was set but no scenes were registered via \
+         .add_scene(). Either add a scene or remove .initial_scene()."
+    )]
+    InitialSceneWithoutScenes,
+
     #[error("EngineBuilder missing required system registrations: {0}")]
     MissingSystems(String),
 
