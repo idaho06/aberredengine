@@ -38,9 +38,21 @@ pub fn forward_render_asset_cmds(
 /// [`SnapshotPublisher`] triple buffer. The render loop reads the
 /// latest publish once per frame (`Output::update`), so a slow render frame
 /// simply redraws the last one and a fast render frame sees no new data.
+///
+/// Writes into the triple buffer's existing input-side buffer via
+/// `input_buffer_mut()`/`clone_into_buffer`/`publish()` instead of
+/// `Input::write(snapshot.clone())` -- `write` move-assigns a freshly
+/// cloned value over the input buffer, dropping whatever `Vec` capacity it
+/// held from three publishes ago and reallocating all 8 drawable lists
+/// every publish (~`snapshot_hz`, default ~60/s). `clone_into_buffer`
+/// reuses that capacity instead; see its doc comment
+/// (`resources/drawable_snapshot.rs`) for why a plain `clone_from` on the
+/// whole struct wouldn't.
 pub fn send_drawable_snapshot(
     snapshot: Res<DrawableSnapshot>,
     mut publisher: ResMut<SnapshotPublisher>,
 ) {
-    publisher.0.write(snapshot.clone());
+    let buf = publisher.0.input_buffer_mut();
+    snapshot.clone_into_buffer(buf);
+    publisher.0.publish();
 }

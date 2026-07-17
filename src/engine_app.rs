@@ -2174,6 +2174,70 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
+        use crate::components::sprite::Sprite;
+        use crate::components::zindex::ZIndex;
+        use crate::resources::drawable_snapshot::MapSpriteEntry;
+        use std::sync::Arc;
+
+        fn sprite_entry(id: u32) -> MapSpriteEntry {
+            MapSpriteEntry {
+                entity: Entity::from_raw_u32(id).unwrap(),
+                sprite: Sprite {
+                    tex_key: Arc::from(""),
+                    width: 0.0,
+                    height: 0.0,
+                    offset: Vector2::default(),
+                    origin: Vector2::default(),
+                    flip_h: false,
+                    flip_v: false,
+                },
+                position: MapPosition::new(0.0, 0.0),
+                z_index: ZIndex(0.0),
+                scale: None,
+                rotation: None,
+                shader: None,
+                tint: None,
+                shadow: None,
+                global_transform: None,
+                velocity: None,
+            }
+        }
+
+        let (snap_in, mut snap_out) =
+            triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
+        let mut publisher = SnapshotPublisher(snap_in);
+
+        // First publish: 3 entries, via clone_into_buffer + input_buffer_mut +
+        // publish -- the same path send_drawable_snapshot uses.
+        let first = DrawableSnapshot {
+            map_sprites: vec![sprite_entry(0), sprite_entry(1), sprite_entry(2)],
+            ..Default::default()
+        };
+        first.clone_into_buffer(publisher.0.input_buffer_mut());
+        publisher.0.publish();
+
+        // Second publish: 1 entry. Guards against Vec::clone_from leaving a
+        // stale trailing entry on shrink when reusing the buffer's existing
+        // (3-entry) capacity instead of allocating fresh.
+        let second = DrawableSnapshot {
+            map_sprites: vec![sprite_entry(9)],
+            ..Default::default()
+        };
+        second.clone_into_buffer(publisher.0.input_buffer_mut());
+        publisher.0.publish();
+
+        assert!(snap_out.update(), "a publish should be pending");
+        let published = snap_out.output_buffer();
+        assert_eq!(
+            published.map_sprites.len(),
+            1,
+            "second publish must shrink to exactly 1 entry, no stale trailing entries"
+        );
+        assert_eq!(published.map_sprites[0].entity, Entity::from_raw_u32(9).unwrap());
+    }
+
+    #[test]
     fn test_builder_hooks_set() {
         let builder = EngineBuilder::new()
             .on_setup(dummy_setup)

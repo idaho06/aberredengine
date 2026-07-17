@@ -201,6 +201,23 @@ pub struct DebugSnapshot {
     pub audio_stats: ThreadStats,
 }
 
+impl DebugSnapshot {
+    /// Clones `self`'s contents into `dst`, reusing `dst`'s existing `Vec`
+    /// backing storage for `colliders`/`positions` via `Vec::clone_from`'s
+    /// capacity-reusing specialization -- mirrors
+    /// `DrawableSnapshot::clone_into_buffer`, see its doc comment for why a
+    /// struct-level `clone_from` (the derived one) wouldn't give this for
+    /// free.
+    fn clone_into_buffer(&self, dst: &mut Self) {
+        dst.colliders.clone_from(&self.colliders);
+        dst.positions.clone_from(&self.positions);
+        dst.rigidbody_count = self.rigidbody_count;
+        dst.input_state = self.input_state.clone();
+        dst.sim_stats = self.sim_stats;
+        dst.audio_stats = self.audio_stats;
+    }
+}
+
 /// Render-relevant ECS state captured once per render frame. See the module
 /// doc comment for how this is populated and transported.
 ///
@@ -258,6 +275,53 @@ pub struct DrawableSnapshot {
     /// `post_process` (copied unconditionally; the follow velocity mutates
     /// every sim tick, so change-gating would never skip anyway).
     pub camera_follow: CameraFollowConfig,
+}
+
+impl DrawableSnapshot {
+    /// Clones `self`'s contents into `dst`, reusing `dst`'s existing `Vec`
+    /// backing storage for the 8 drawable lists via `Vec::clone_from`'s
+    /// capacity-reusing specialization.
+    ///
+    /// `#[derive(Clone)]` (on this struct) never generates a specialized
+    /// `clone_from` -- it only generates `fn clone(&self) -> Self`, so a
+    /// struct-level `dst.clone_from(self)` would fall back to the trait's
+    /// default `*self = source.clone()` and allocate fresh `Vec`s every
+    /// call, same cost as `dst = self.clone()`. Calling `.clone_from()`
+    /// field-by-field instead gets `Vec<T>`'s own hand-written
+    /// capacity-reusing `clone_from` on each of the 8 lists, which is the
+    /// whole point of this method -- see `send_drawable_snapshot`
+    /// (`systems/logic_bridge.rs`), the sole caller, publishing into the
+    /// triple buffer's existing (stale but valid) input-side buffer instead
+    /// of moving a freshly-cloned value over it.
+    ///
+    /// Every field must be listed by hand -- there's no compiler check tying
+    /// this to the struct definition. A field added to `DrawableSnapshot`
+    /// later and forgotten here doesn't fail to compile, it silently reverts
+    /// to whatever stale value `dst` already held for that field.
+    pub(crate) fn clone_into_buffer(&self, dst: &mut Self) {
+        dst.map_sprites.clone_from(&self.map_sprites);
+        dst.map_texts.clone_from(&self.map_texts);
+        dst.screen_sprites.clone_from(&self.screen_sprites);
+        dst.screen_texts.clone_from(&self.screen_texts);
+        dst.gui_windows.clone_from(&self.gui_windows);
+        dst.gui_buttons.clone_from(&self.gui_buttons);
+        dst.gui_labels.clone_from(&self.gui_labels);
+        dst.gui_progress_bars.clone_from(&self.gui_progress_bars);
+        dst.camera = self.camera;
+        dst.game_config.clone_from(&self.game_config);
+        dst.signals = Arc::clone(&self.signals);
+        dst.app_state.clone_from(&self.app_state);
+        match (&self.debug, &mut dst.debug) {
+            (Some(src), Some(existing)) => src.clone_into_buffer(existing),
+            (Some(src), None) => dst.debug = Some(src.clone()),
+            (None, _) => dst.debug = None,
+        }
+        dst.active_scene.clone_from(&self.active_scene);
+        dst.world_time = self.world_time;
+        dst.post_process.clone_from(&self.post_process);
+        dst.gui_themes.clone_from(&self.gui_themes);
+        dst.camera_follow.clone_from(&self.camera_follow);
+    }
 }
 
 /// Query data shapes below mirror the fields `render_system` needs, with a
