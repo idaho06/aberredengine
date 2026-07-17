@@ -14,7 +14,7 @@ use aberredengine::resources::input_bindings::{
     InputBinding, InputBindings, binding_from_str, key_from_str, key_to_str,
 };
 use bevy_ecs::prelude::*;
-use raylib::ffi::{KeyboardKey, MouseButton};
+use raylib::ffi::{GamepadButton, KeyboardKey, MouseButton};
 
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{InputCmd, action_from_str};
@@ -419,9 +419,18 @@ fn test_bool_state_derives_default_without_key_binding() {
 fn test_action3_default_is_mouse_middle() {
     let bindings = InputBindings::default();
     let bl = bindings.get_bindings(InputAction::Action3);
+    // Mouse middle is the keyboard/mouse-tier default; pad 0's right-face-left
+    // button is additively appended on top by add_pad0_defaults (Phase 7g) --
+    // gamepad defaults never replace the keyboard/mouse ones.
     assert_eq!(
         bl,
-        &[InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE)]
+        &[
+            InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_MIDDLE),
+            InputBinding::GamepadButton {
+                pad: 0,
+                button: GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT,
+            },
+        ]
     );
 }
 
