@@ -95,9 +95,7 @@ pub struct TestWorldBuilder {
     enter_play_hook: Option<HookRegistrar>,
     switch_scene_hook: Option<HookRegistrar>,
     update_hook: Option<UpdateRegistrar>,
-    fixed_update_hook: Option<UpdateRegistrar>,
     extra_systems: Vec<UpdateRegistrar>,
-    extra_fixed_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
     scenes: Vec<(String, SceneDescriptor)>,
     initial_scene: Option<String>,
@@ -130,9 +128,7 @@ impl TestWorldBuilder {
             })),
             switch_scene_hook: None,
             update_hook: None,
-            fixed_update_hook: None,
             extra_systems: Vec::new(),
-            extra_fixed_systems: Vec::new(),
             extra_observers: Vec::new(),
             scenes: Vec::new(),
             initial_scene: None,
@@ -185,15 +181,6 @@ impl TestWorldBuilder {
                     .run_if(crate::systems::gamestate::state_is_playing)
                     .in_set(crate::engine_app::SimSet::ScriptUpdate),
             );
-        }));
-        self
-    }
-
-    /// Register the `fixed_update` hook (runs once per sim tick, no implicit
-    /// `SimSet` membership).
-    pub fn on_fixed_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.fixed_update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(system.run_if(crate::systems::gamestate::state_is_playing));
         }));
         self
     }
@@ -253,9 +240,7 @@ impl TestWorldBuilder {
             enter_play_hook: self.enter_play_hook.take(),
             switch_scene_hook: self.switch_scene_hook.take(),
             update_hook: self.update_hook.take(),
-            fixed_update_hook: self.fixed_update_hook.take(),
             extra_systems: std::mem::take(&mut self.extra_systems),
-            extra_fixed_systems: std::mem::take(&mut self.extra_fixed_systems),
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
             initial_scene: self.initial_scene.take(),
@@ -291,9 +276,7 @@ impl TestWorldBuilder {
 
         let (sim, present) = EngineBuilder::build_logic_schedules(
             init.update_hook.take(),
-            init.fixed_update_hook.take(),
             std::mem::take(&mut init.extra_systems),
-            std::mem::take(&mut init.extra_fixed_systems),
             &mut world,
             has_lua,
             use_scene_manager,

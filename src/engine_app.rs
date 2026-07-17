@@ -228,8 +228,7 @@ pub(crate) type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 /// *within* a group that are still load-bearing remain explicit `.after()`
 /// calls (see that function's doc comment for the convention).
 ///
-/// Exported so [`configure_schedule`](EngineBuilder::configure_schedule) /
-/// [`configure_fixed_schedule`](EngineBuilder::configure_fixed_schedule)
+/// Exported so [`configure_schedule`](EngineBuilder::configure_schedule)
 /// closures can position custom systems relative to engine groups, e.g.
 /// `.in_set(SimSet::Movement)` or `.before(SimSet::Collision)`.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -244,7 +243,7 @@ pub enum SimSet {
     /// `forward_audio_cmds` -> `poll_audio_messages` ->
     /// `update_bevy_audio_messages`, kept as an explicit `.chain()`).
     AudioPump,
-    /// User `on_update`/`add_system`/`add_fixed_system` hooks. Lua's
+    /// User `on_update`/`add_system` hooks. Lua's
     /// `on_update_<scene>` is dispatched separately, from
     /// `lua_plugin::update` in `SimSet::Bookkeeping`, so it runs after
     /// camera-follow/collision rather than before.
@@ -294,12 +293,10 @@ pub struct EngineBuilder {
     setup_hook: Option<HookRegistrar>,
     enter_play_hook: Option<HookRegistrar>,
     update_hook: Option<UpdateRegistrar>,
-    fixed_update_hook: Option<UpdateRegistrar>,
     switch_scene_hook: Option<HookRegistrar>,
     scenes: Vec<(String, SceneDescriptor)>,
     initial_scene: Option<String>,
     extra_systems: Vec<UpdateRegistrar>,
-    extra_fixed_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
@@ -317,12 +314,10 @@ impl EngineBuilder {
             setup_hook: None,
             enter_play_hook: None,
             update_hook: None,
-            fixed_update_hook: None,
             switch_scene_hook: None,
             scenes: Vec::new(),
             initial_scene: None,
             extra_systems: Vec::new(),
-            extra_fixed_systems: Vec::new(),
             extra_observers: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
@@ -441,6 +436,13 @@ impl EngineBuilder {
     /// constraints are applied — the developer is responsible for
     /// `.run_if()`, `.after()`, `.before()`, `.in_set()` etc.
     ///
+    /// This and [`add_system`](Self::add_system) are the only two extension
+    /// points onto the sim schedule; use this one when you need ordering
+    /// relative to the engine's own pipeline via [`SimSet`], e.g. a
+    /// game-specific movement modifier that must run alongside
+    /// [`movement`](crate::systems::movement::movement) and before
+    /// [`collision_detector`](crate::systems::collision_detector::collision_detector).
+    ///
     /// ```rust,ignore
     /// .configure_schedule(|schedule| {
     ///     schedule.add_systems(
@@ -453,44 +455,6 @@ impl EngineBuilder {
     /// ```
     pub fn configure_schedule(mut self, f: impl FnOnce(&mut Schedule) + Send + 'static) -> Self {
         self.extra_systems.push(Box::new(f));
-        self
-    }
-
-
-    /// Add a system to the sim schedule.
-    ///
-    /// Use this for custom Rust-side physics/gameplay logic that needs a
-    /// deterministic, render-rate-independent tick -- e.g. a game-specific
-    /// movement modifier that must run alongside [`movement`](crate::systems::movement::movement)
-    /// and before [`collision_detector`](crate::systems::collision_detector::collision_detector).
-    ///
-    /// The system is added with `.run_if(state_is_playing)`, matching
-    /// [`.add_system()`](Self::add_system), but with no `SimSet` membership
-    /// of its own -- it runs unordered relative to the engine's pipeline
-    /// unless you also constrain it. For ordering relative to `SimSet`
-    /// groups, use [`configure_fixed_schedule`](Self::configure_fixed_schedule)
-    /// instead.
-    pub fn add_fixed_system<M>(
-        mut self,
-        system: impl IntoSystem<(), (), M> + Send + 'static,
-    ) -> Self {
-        self.extra_fixed_systems
-            .push(Box::new(move |schedule: &mut Schedule| {
-                schedule.add_systems(system.run_if(state_is_playing));
-            }));
-        self
-    }
-
-    /// Add systems to the sim schedule with full control over ordering and
-    /// run conditions.
-    ///
-    /// Mirrors [`configure_schedule`](Self::configure_schedule), including
-    /// `SimSet` availability; kept as a separate builder method for games
-    /// that want to distinguish "custom fixed-tick systems" from "custom
-    /// scripted-update systems" in their own code organization, even though
-    /// both target the same schedule.
-    pub fn configure_fixed_schedule(mut self, f: impl FnOnce(&mut Schedule) + Send + 'static) -> Self {
-        self.extra_fixed_systems.push(Box::new(f));
         self
     }
 
@@ -658,9 +622,7 @@ impl EngineBuilder {
             enter_play_hook: self.enter_play_hook.take(),
             switch_scene_hook: self.switch_scene_hook.take(),
             update_hook: self.update_hook.take(),
-            fixed_update_hook: self.fixed_update_hook.take(),
             extra_systems: std::mem::take(&mut self.extra_systems),
-            extra_fixed_systems: std::mem::take(&mut self.extra_fixed_systems),
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
             initial_scene: self.initial_scene.take(),
@@ -1141,9 +1103,7 @@ impl EngineBuilder {
     /// `present` runs, which is the ordering those edges express.
     pub(crate) fn build_logic_schedules(
         update_hook: Option<UpdateRegistrar>,
-        fixed_update_hook: Option<UpdateRegistrar>,
         extra_systems: Vec<UpdateRegistrar>,
-        extra_fixed_systems: Vec<UpdateRegistrar>,
         world: &mut World,
         has_lua: bool,
         use_scene_manager: bool,
@@ -1336,24 +1296,16 @@ impl EngineBuilder {
         );
 
         // update_hook/extra_systems (on_update/add_system/configure_schedule)
-        // and fixed_update_hook/extra_fixed_systems (add_fixed_system/
-        // configure_fixed_schedule) all target `fixed` -- see those methods'
-        // doc comments for the once-per-sim-tick cadence. Each closure
-        // supplies its own `.in_set(SimSet::X)` (see `on_update`/`add_system`/
-        // `with_lua`'s hook installation for the concrete sets used);
-        // `configure_schedule`/`configure_fixed_schedule` closures are free
-        // to pick any `SimSet` (exported for exactly this).
+        // all target `fixed` -- see those methods' doc comments for the
+        // once-per-sim-tick cadence. Each closure supplies its own
+        // `.in_set(SimSet::X)` (see `on_update`/`add_system`/`with_lua`'s
+        // hook installation for the concrete sets used); `configure_schedule`
+        // closures are free to pick any `SimSet` (exported for exactly this).
         if let Some(update_hook) = update_hook {
             update_hook(&mut fixed);
         }
-        if let Some(fixed_update_hook) = fixed_update_hook {
-            fixed_update_hook(&mut fixed);
-        }
 
         for extra in extra_systems {
-            extra(&mut fixed);
-        }
-        for extra in extra_fixed_systems {
             extra(&mut fixed);
         }
 
@@ -1523,9 +1475,7 @@ pub(crate) struct LogicInit {
     pub(crate) enter_play_hook: Option<HookRegistrar>,
     pub(crate) switch_scene_hook: Option<HookRegistrar>,
     pub(crate) update_hook: Option<UpdateRegistrar>,
-    pub(crate) fixed_update_hook: Option<UpdateRegistrar>,
     pub(crate) extra_systems: Vec<UpdateRegistrar>,
-    pub(crate) extra_fixed_systems: Vec<UpdateRegistrar>,
     pub(crate) extra_observers: Vec<ObserverRegistrar>,
     pub(crate) scenes: Vec<(String, SceneDescriptor)>,
     pub(crate) initial_scene: Option<String>,
@@ -1626,9 +1576,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     let (mut sim, mut present) = EngineBuilder::build_logic_schedules(
         init.update_hook.take(),
-        init.fixed_update_hook.take(),
         std::mem::take(&mut init.extra_systems),
-        std::mem::take(&mut init.extra_fixed_systems),
         &mut world,
         has_lua,
         use_scene_manager,
@@ -2151,7 +2099,7 @@ mod tests {
     fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
         let (fixed, _present) =
-            EngineBuilder::build_logic_schedules(None, None, Vec::new(), Vec::new(), &mut world, false, false)
+            EngineBuilder::build_logic_schedules(None, Vec::new(), &mut world, false, false)
                 .expect("build_logic_schedules should succeed without Lua runtime");
         let fixed_type_ids: Vec<_> = fixed
             .systems()
@@ -2193,8 +2141,6 @@ mod tests {
         let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
         let (fixed, present) = EngineBuilder::build_logic_schedules(
             builder.update_hook,
-            builder.fixed_update_hook,
-            Vec::new(),
             Vec::new(),
             &mut world,
             true,

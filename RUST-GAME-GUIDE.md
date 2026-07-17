@@ -111,7 +111,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, `on_enter_play`, `on_update`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.add_fixed_system()`, `.configure_schedule()`/`.configure_fixed_schedule()` closures, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is the real elapsed time since the previous tick (not a fixed constant), and sim ticks keep running even during a render stall.
+- **Every hook and callback you write — `on_setup`, `on_enter_play`, `on_update`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is the real elapsed time since the previous tick (not a fixed constant), and sim ticks keep running even during a render stall.
 - **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why their signatures look different from everything else (read-only signal snapshots instead of live, mutable `WorldSignals` — see below).
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. Requesting one from a logic-side system panics when the engine initializes its schedule. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -401,9 +401,7 @@ Setup ──→ Playing ──→ Quitting
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
 | `.add_system(system)` | Add an extra per-sim-tick system. Same auto-constraints as `.on_update()` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. |
-| `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. |
-| `.add_fixed_system(system)` | Like `.add_system()`, but only `.run_if(state_is_playing)` is applied — no automatic ordering relative to the engine's other per-tick systems. Same schedule, different default wiring; see below. |
-| `.configure_fixed_schedule(closure)` | Same as `.configure_schedule()` — full manual control, same schedule. Kept as a separate method name for code organization. |
+| `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
 | `.try_run()` | Start the engine and return `Result<(), String>` on startup failure. Recommended for Rust `main`. |
 | `.run()` | Convenience wrapper around `.try_run()` that logs startup failures and returns `()`. |
@@ -479,28 +477,6 @@ EngineBuilder::new()
 ```
 
 Engine system functions are `pub` and importable from `aberredengine::systems::*`. Use them directly as `.after()` / `.before()` arguments — but only systems that live on this same logic-thread schedule; render-thread systems like `render_system` are never reachable from here, ordering relative to them is not expressible. No automatic `run_if` or `after` constraints are applied — you control everything.
-
-#### `.add_fixed_system(system)` / `.configure_fixed_schedule(closure)` — same schedule, no default ordering
-
-Despite the name, there is only **one** logic-thread schedule — `.add_fixed_system()`/`.configure_fixed_schedule()` don't target a separate "fixed-timestep" schedule distinct from `.add_system()`/`.configure_schedule()`. The only difference is the default wiring applied to the system you pass in:
-
-- `.add_system(sys)` applies `run_if(state_is_playing)` **and** places `sys` alongside the engine's own script-update systems (so it naturally runs after movement/collision/camera-follow have settled for the tick, matching `on_update`'s ordering).
-- `.add_fixed_system(sys)` applies **only** `run_if(state_is_playing)` — no automatic placement relative to the engine's own systems. Use this when you want to attach explicit `.after()`/`.before()` constraints yourself (via `.configure_fixed_schedule()`) without fighting the default script-update placement `.add_system()` would otherwise apply.
-
-```rust
-EngineBuilder::new()
-    .add_fixed_system(physics_debug_system)  // only run_if(state_is_playing) — unordered otherwise
-    .configure_fixed_schedule(|schedule| {
-        schedule.add_systems(
-            custom_ordering_system
-                .run_if(state_is_playing)
-                .before(movement), // needs to run before movement specifically, not after script-update
-        );
-    })
-    // …
-    .try_run()
-    .expect("engine startup failed");
-```
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
