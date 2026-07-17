@@ -223,7 +223,7 @@ pub(crate) type HookRegistrar = Box<dyn FnOnce(&mut World, &mut SystemsStore) + 
 /// `Send`: see [`HookRegistrar`].
 pub(crate) type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 
-/// System sets partitioning the logic thread's `fixed` schedule pipeline.
+/// System sets partitioning the logic thread's `sim` schedule pipeline.
 /// [`EngineBuilder`]'s
 /// `build_logic_schedules` declares one `configure_sets((...).chain())` over
 /// this list as the single source of ordering truth between groups; edges
@@ -1147,13 +1147,11 @@ impl EngineBuilder {
         world.flush();
     }
 
-    /// Build the two schedules the logic thread runs: `fixed`
+    /// Build the two schedules the logic thread runs: `sim`
     /// (runs once per `Pacer`-paced sim tick at `[simulation] hz`, real dt --
     /// this is where essentially all gameplay logic lives: movement,
     /// collision, phases, animation, Lua scripting, GUI layout/hit-test,
-    /// scene lifecycle, and per-tick housekeeping; the binding still called
-    /// `fixed` returned from this function is bound to `sim` by its caller,
-    /// `logic_thread_main`, since ticks are not fixed-duration) and
+    /// scene lifecycle, and per-tick housekeeping) and
     /// `present` (decimated to `[simulation] snapshot_hz`, not run
     /// once per received input sample -- package the tick's
     /// fully-settled state into a `DrawableSnapshot` and publish it into the
@@ -1161,7 +1159,7 @@ impl EngineBuilder {
     /// `.claude/context/system-order.md` for the rationale behind the split
     /// and the full list of which system lives where.
     ///
-    /// `fixed`'s internal ordering is expressed via [`SimSet`]
+    /// `sim`'s internal ordering is expressed via [`SimSet`]
     /// rather than per-system `.after()`/`.before()` edges: one
     /// `configure_sets((...).chain())` call declares the pipeline, and each
     /// system joins its group with `.in_set(SimSet::X)`. Only *intra*-set
@@ -1171,10 +1169,10 @@ impl EngineBuilder {
     /// implied by set order.
     ///
     /// `bevy_ecs` cannot express `.after()`/`.before()` across two separate
-    /// `Schedule`s, so `present`'s `.after()` markers referencing `fixed`
+    /// `Schedule`s, so `present`'s `.after()` markers referencing `sim`
     /// systems (e.g. `build_drawable_snapshot`'s list below) remain vacuous
     /// doc-value markers, not real constraints -- `logic_thread_main`'s loop
-    /// structure guarantees the tick's `fixed`/`sim` run completes before
+    /// structure guarantees the tick's `sim` run completes before
     /// `present` runs, which is the ordering those edges express.
     pub(crate) fn build_logic_schedules(
         update_hook: Option<UpdateRegistrar>,
@@ -1183,15 +1181,15 @@ impl EngineBuilder {
         has_lua: bool,
         use_scene_manager: bool,
     ) -> Result<(Schedule, Schedule), EngineError> {
-        let mut fixed = Schedule::default();
+        let mut sim = Schedule::default();
         let mut present = Schedule::default();
 
-        // Single source of truth for cross-group ordering within `fixed`
+        // Single source of truth for cross-group ordering within `sim`
         // (Phase 7b Step 0) -- see `SimSet`'s doc comment for what each
         // group holds. Systems join a group via `.in_set(SimSet::X)`; only
         // load-bearing *intra*-group edges remain as explicit `.after()`
         // calls below.
-        fixed.configure_sets(
+        sim.configure_sets(
             (
                 SimSet::ApplyIntents,
                 SimSet::Spawn,
@@ -1209,7 +1207,7 @@ impl EngineBuilder {
                 .chain(),
         );
 
-        // --- FIXED: signal intents + state bookkeeping, one-shot spawns ---
+        // --- SIM: signal intents + state bookkeeping, one-shot spawns ---
         // apply_signal_intents runs first, before everything else this
         // tick (in particular before on_update_<scene>, dispatched from
         // lua_plugin::update in SimSet::Bookkeeping): intents queued by the
@@ -1217,12 +1215,12 @@ impl EngineBuilder {
         // be visible to this tick's scene logic (Phase 5d). The ordering is
         // now implied by SimSet::ApplyIntents preceding every later group in
         // the chain.
-        fixed.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
-        fixed.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
-        fixed.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
-        fixed.add_systems(tilemap_spawn_system.in_set(SimSet::Spawn));
-        fixed.add_systems(check_pending_state.in_set(SimSet::Spawn));
-        fixed.add_systems(
+        sim.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
+        sim.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
+        sim.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
+        sim.add_systems(tilemap_spawn_system.in_set(SimSet::Spawn));
+        sim.add_systems(check_pending_state.in_set(SimSet::Spawn));
+        sim.add_systems(
             (
                 update_bevy_audio_cmds,
                 forward_audio_cmds,
@@ -1234,7 +1232,7 @@ impl EngineBuilder {
                 .in_set(SimSet::AudioPump),
         );
         // update_bevy_render_asset_cmds + forward_render_asset_cmds moved off
-        // `present` onto the tail of `fixed` in Phase 7c (SimSet::Bookkeeping):
+        // `present` onto the tail of `sim` in Phase 7c (SimSet::Bookkeeping):
         // with `present` now decimated to `[simulation] snapshot_hz` (see
         // `logic_thread_main`), asset loads must still reach the render
         // thread every sim tick, not just on a publish tick, or a texture
@@ -1242,79 +1240,79 @@ impl EngineBuilder {
         // it is even built. See that block's own comment for the real
         // `.after()` edge between the pair.
 
-        // --- FIXED: input-driven forces/movement (InputState is resolved
+        // --- SIM: input-driven forces/movement (InputState is resolved
         // sim-side once per tick by resolve_input_backlog, before this tick's
         // sim.run(), and held constant for every system that reads it here) ---
-        fixed.add_systems(input_simple_controller.in_set(SimSet::Controllers));
-        fixed.add_systems(input_acceleration_controller.in_set(SimSet::Controllers));
-        fixed.add_systems(mouse_controller.in_set(SimSet::Controllers));
-        fixed.add_systems(
+        sim.add_systems(input_simple_controller.in_set(SimSet::Controllers));
+        sim.add_systems(input_acceleration_controller.in_set(SimSet::Controllers));
+        sim.add_systems(mouse_controller.in_set(SimSet::Controllers));
+        sim.add_systems(
             particle_emitter_system
                 .before(movement)
                 .in_set(SimSet::Movement),
         );
-        fixed.add_systems(movement.in_set(SimSet::Movement));
-        fixed.add_systems(ttl_system.after(movement).in_set(SimSet::Movement));
-        fixed.add_systems(tween_system::<MapPosition>.in_set(SimSet::Movement));
-        fixed.add_systems(tween_system::<Rotation>.in_set(SimSet::Movement));
-        fixed.add_systems(tween_system::<Scale>.in_set(SimSet::Movement));
+        sim.add_systems(movement.in_set(SimSet::Movement));
+        sim.add_systems(ttl_system.after(movement).in_set(SimSet::Movement));
+        sim.add_systems(tween_system::<MapPosition>.in_set(SimSet::Movement));
+        sim.add_systems(tween_system::<Rotation>.in_set(SimSet::Movement));
+        sim.add_systems(tween_system::<Scale>.in_set(SimSet::Movement));
         // propagate_transforms/collision_detector's old .after(movement)/
         // .after(tween_system::<T>) edges are now implied by
         // SimSet::Movement preceding SimSet::Transforms/Collision.
-        fixed.add_systems(propagate_transforms.in_set(SimSet::Transforms));
-        fixed.add_systems(
+        sim.add_systems(propagate_transforms.in_set(SimSet::Transforms));
+        sim.add_systems(
             cleanup_orphaned_global_transforms
                 .after(propagate_transforms)
                 .in_set(SimSet::Transforms),
         );
-        fixed.add_systems(camera_follow_system.after(propagate_transforms).in_set(SimSet::Transforms));
-        fixed.add_systems(collision_detector.in_set(SimSet::Collision));
-        fixed.add_systems(stuck_to_entity_system.after(collision_detector).in_set(SimSet::Collision));
-        fixed.add_systems(phase_system.after(collision_detector).in_set(SimSet::Collision));
+        sim.add_systems(camera_follow_system.after(propagate_transforms).in_set(SimSet::Transforms));
+        sim.add_systems(collision_detector.in_set(SimSet::Collision));
+        sim.add_systems(stuck_to_entity_system.after(collision_detector).in_set(SimSet::Collision));
+        sim.add_systems(phase_system.after(collision_detector).in_set(SimSet::Collision));
 
-        // --- FIXED: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
+        // --- SIM: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
         // collision, so it's grouped with the GUI chain rather than its
         // MapPosition/Rotation/Scale siblings above; since Phase 6d all four
-        // TweenValue type parameters share FIXED cadence, so
+        // TweenValue type parameters share sim cadence, so
         // LuaOnTweenFinished<ScreenPosition> no longer fires at a different
         // rate than the other three).
-        fixed.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));
-        fixed.add_systems(
+        sim.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));
+        sim.add_systems(
             (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
                 .before(gui_layout_system)
                 .in_set(SimSet::Gui),
         );
-        fixed.add_systems(
+        sim.add_systems(
             gui_layout_system
                 .after(tween_system::<ScreenPosition>)
                 .in_set(SimSet::Gui),
         );
-        fixed.add_systems(gui_hit_test_system.after(gui_layout_system).in_set(SimSet::Gui));
-        fixed.add_systems(
+        sim.add_systems(gui_hit_test_system.after(gui_layout_system).in_set(SimSet::Gui));
+        sim.add_systems(
             gui_image_state_sync_system
                 .after(gui_hit_test_system)
                 .in_set(SimSet::Gui),
         );
-        fixed.add_systems(gui_progressbar_signal_update_system.in_set(SimSet::Gui));
+        sim.add_systems(gui_progressbar_signal_update_system.in_set(SimSet::Gui));
 
         #[cfg(feature = "lua")]
         if has_lua {
-            fixed.add_systems(
+            sim.add_systems(
                 update_group_counts_system
                     .before(lua_phase_system)
                     .in_set(SimSet::PostCollision),
             );
-            fixed.add_systems(
+            sim.add_systems(
                 lua_phase_system
                     .run_if(state_is_playing)
                     .in_set(SimSet::PostCollision),
             );
-            fixed.add_systems(
+            sim.add_systems(
                 animation_controller
                     .after(lua_phase_system)
                     .in_set(SimSet::PostCollision),
             );
-            fixed.add_systems(update_lua_timers.in_set(SimSet::PostCollision));
+            sim.add_systems(update_lua_timers.in_set(SimSet::PostCollision));
             // Mirrors the pre-thread-split engine's explicit
             // `.after(lua_plugin::update)` constraint on both systems: a
             // queued map/asset load is drained after on_update_<scene> has
@@ -1323,13 +1321,13 @@ impl EngineBuilder {
             // load's RenderAssetCmd forwarded to the render thread this same
             // tick rather than lagging one tick (both now share
             // SimSet::Bookkeeping, so this ordering needs an explicit edge).
-            fixed.add_systems(
+            sim.add_systems(
                 process_lua_map_commands
                     .after(crate::lua_plugin::update)
                     .before(update_bevy_render_asset_cmds)
                     .in_set(SimSet::Bookkeeping),
             );
-            fixed.add_systems(
+            sim.add_systems(
                 crate::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
                     .after(crate::lua_plugin::update)
@@ -1341,14 +1339,14 @@ impl EngineBuilder {
             // the frame after spawn" -- a strictly tighter latency (up to
             // 1/240s instead of up to ~16ms at 60fps), not a regression; see
             // docs/plans/phase6d-variable-collapse.md.
-            fixed.add_systems(
+            sim.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
                     .in_set(SimSet::Drain),
             );
         } else {
-            fixed.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
-            fixed.add_systems(animation_controller.in_set(SimSet::PostCollision));
+            sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
+            sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
         }
 
         #[cfg(not(feature = "lua"))]
@@ -1356,32 +1354,32 @@ impl EngineBuilder {
             // `has_lua` only exists to keep the build_schedules signature uniform
             // across feature combinations.
             let _ = has_lua;
-            fixed.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
-            fixed.add_systems(animation_controller.in_set(SimSet::PostCollision));
+            sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
+            sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
         }
 
-        fixed.add_systems(animation.in_set(SimSet::Drain));
-        fixed.add_systems(update_timers.in_set(SimSet::Drain));
-        fixed.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
-        fixed.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
-        fixed.add_systems(
+        sim.add_systems(animation.in_set(SimSet::Drain));
+        sim.add_systems(update_timers.in_set(SimSet::Drain));
+        sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
+        sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
+        sim.add_systems(
             dynamictext_size_system
                 .after(update_world_signals_binding_system)
                 .in_set(SimSet::Bookkeeping),
         );
 
         // update_hook/extra_systems (on_update/add_system/configure_schedule)
-        // all target `fixed` -- see those methods' doc comments for the
+        // all target `sim` -- see those methods' doc comments for the
         // once-per-sim-tick cadence. Each closure supplies its own
         // `.in_set(SimSet::X)` (see `on_update`/`add_system`/`with_lua`'s
         // hook installation for the concrete sets used); `configure_schedule`
         // closures are free to pick any `SimSet` (exported for exactly this).
         if let Some(update_hook) = update_hook {
-            update_hook(&mut fixed);
+            update_hook(&mut sim);
         }
 
         for extra in extra_systems {
-            extra(&mut fixed);
+            extra(&mut sim);
         }
 
         // Phase 6d: moved from VARIABLE to FIXED. Accepted consequence: a
@@ -1395,8 +1393,8 @@ impl EngineBuilder {
         // both switch_scene_hook and use_scene_manager), so this and the
         // Lua-direct path never run together.
         if use_scene_manager {
-            fixed.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
-            fixed.add_systems(
+            sim.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
+            sim.add_systems(
                 scene_switch_poll
                     .run_if(state_is_playing)
                     .after(scene_update_system)
@@ -1407,7 +1405,7 @@ impl EngineBuilder {
         // Forwards RenderAssetCmd to the render thread (Phase 5e; the GL
         // drain itself, process_render_asset_cmds, now lives on the render
         // schedule). Phase 7c: this pair moved off `present` onto the tail
-        // of `fixed` (SimSet::Bookkeeping) so it runs every sim tick,
+        // of `sim` (SimSet::Bookkeeping) so it runs every sim tick,
         // independent of the now-decimated `present`/snapshot-publish rate
         // (see `logic_thread_main`'s doc comment) -- a tick's asset loads
         // must not sit queued for several ticks waiting for the next
@@ -1420,8 +1418,8 @@ impl EngineBuilder {
         // ordering) and need their own explicit
         // `.before(update_bevy_render_asset_cmds)` edge so a same-tick load
         // still forwards this tick instead of lagging one.
-        fixed.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
-        fixed.add_systems(
+        sim.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
+        sim.add_systems(
             forward_render_asset_cmds
                 .after(update_bevy_render_asset_cmds)
                 .in_set(SimSet::Bookkeeping),
@@ -1452,8 +1450,8 @@ impl EngineBuilder {
         // this schedule used to carry is gone.
         present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
 
-        fixed.initialize(world).map_err(|source| EngineError::ScheduleInit {
-            which: "fixed",
+        sim.initialize(world).map_err(|source| EngineError::ScheduleInit {
+            which: "sim",
             source,
         })?;
         present.initialize(world).map_err(|source| EngineError::ScheduleInit {
@@ -1461,7 +1459,7 @@ impl EngineBuilder {
             source,
         })?;
 
-        Ok((fixed, present))
+        Ok((sim, present))
     }
 
     /// Build the render thread's single per-frame schedule: every
@@ -2173,12 +2171,12 @@ mod tests {
     #[test]
     fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
         let mut world = World::new();
-        let (fixed, _present) =
+        let (sim, _present) =
             EngineBuilder::build_logic_schedules(None, Vec::new(), &mut world, false, false)
                 .expect("build_logic_schedules should succeed without Lua runtime");
-        let fixed_type_ids: Vec<_> = fixed
+        let sim_type_ids: Vec<_> = sim
             .systems()
-            .expect("build_logic_schedules initializes the fixed schedule")
+            .expect("build_logic_schedules initializes the sim schedule")
             .map(|(_, system)| system.system_type())
             .collect();
         let phase_system_type = IntoSystem::into_system(phase_system).system_type();
@@ -2186,25 +2184,25 @@ mod tests {
         let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).system_type();
         let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).system_type();
 
-        let phase_index = fixed_type_ids
+        let phase_index = sim_type_ids
             .iter()
             .position(|type_id| *type_id == phase_system_type)
-            .expect("phase_system should be present in the fixed schedule");
-        let animation_controller_index = fixed_type_ids
+            .expect("phase_system should be present in the sim schedule");
+        let animation_controller_index = sim_type_ids
             .iter()
             .position(|type_id| *type_id == animation_controller_type)
-            .expect("animation_controller should be present in the fixed schedule");
+            .expect("animation_controller should be present in the sim schedule");
 
         assert!(
             animation_controller_index > phase_index,
             "animation_controller should still run after phase_system"
         );
         assert!(
-            !fixed_type_ids.contains(&lua_phase_system_type),
+            !sim_type_ids.contains(&lua_phase_system_type),
             "lua_phase_system should be absent when has_lua is false"
         );
         assert!(
-            !fixed_type_ids.contains(&update_lua_timers_type),
+            !sim_type_ids.contains(&update_lua_timers_type),
             "update_lua_timers should be absent when has_lua is false"
         );
     }
@@ -2214,7 +2212,7 @@ mod tests {
     fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
         let mut world = World::new();
         let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
-        let (fixed, present) = EngineBuilder::build_logic_schedules(
+        let (sim, present) = EngineBuilder::build_logic_schedules(
             builder.update_hook,
             Vec::new(),
             &mut world,
@@ -2223,9 +2221,9 @@ mod tests {
         )
         .expect("build_logic_schedules should succeed with has_lua=true");
 
-        let fixed_type_ids: Vec<_> = fixed
+        let sim_type_ids: Vec<_> = sim
             .systems()
-            .expect("build_logic_schedules initializes the fixed schedule")
+            .expect("build_logic_schedules initializes the sim schedule")
             .map(|(_, system)| system.system_type())
             .collect();
         let present_type_ids: Vec<_> = present
@@ -2242,42 +2240,42 @@ mod tests {
         };
 
         let update_group_counts_index = index_of(
-            &fixed_type_ids,
+            &sim_type_ids,
             IntoSystem::into_system(update_group_counts_system).system_type(),
             "update_group_counts_system",
         );
         let lua_phase_index = index_of(
-            &fixed_type_ids,
+            &sim_type_ids,
             IntoSystem::into_system(lua_phase_system).system_type(),
             "lua_phase_system",
         );
 
         assert!(
             update_group_counts_index < lua_phase_index,
-            "update_group_counts_system should run before lua_phase_system (both fixed-schedule)"
+            "update_group_counts_system should run before lua_phase_system (both sim-schedule)"
         );
 
-        // Since Phase 6d, lua_plugin::update runs on the FIXED (240Hz) schedule
+        // Since Phase 6d, lua_plugin::update runs on the sim (240Hz) schedule
         // too, alongside update_group_counts_system/lua_phase_system -- and
         // since Phase 7c, `present` contains only build_drawable_snapshot/
-        // send_drawable_snapshot (forward_render_asset_cmds moved to FIXED).
+        // send_drawable_snapshot (forward_render_asset_cmds moved to sim).
         let lua_update_type = IntoSystem::into_system(crate::lua_plugin::update).system_type();
         assert!(
-            fixed_type_ids.contains(&lua_update_type),
-            "lua_plugin::update should be present in the fixed schedule"
+            sim_type_ids.contains(&lua_update_type),
+            "lua_plugin::update should be present in the sim schedule"
         );
         assert!(
             !present_type_ids.contains(&lua_update_type),
             "lua_plugin::update should not be present in the present schedule"
         );
         assert!(
-            fixed_type_ids
+            sim_type_ids
                 .iter()
                 .position(|t| *t == lua_update_type)
                 .unwrap()
                 > lua_phase_index,
             "lua_plugin::update should run after lua_phase_system (ordered last among \
-             Lua-touching FIXED systems each tick)"
+             Lua-touching sim systems each tick)"
         );
     }
 
