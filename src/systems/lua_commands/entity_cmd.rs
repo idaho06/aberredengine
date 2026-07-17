@@ -28,6 +28,7 @@ use crate::components::tween::{Tween, TweenValue};
 
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{EntityCmd, TweenConfig, UniformValue};
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 
@@ -771,7 +772,7 @@ fn process_lifecycle_cmd(
         }
         EntityCmd::MenuDespawn { entity_id } => {
             let Some(entity) = resolve_entity(entity_id) else { return; };
-            if let Some(system_id) = systems_store.get_entity_system("menu_despawn") {
+            if let Some(system_id) = systems_store.get_entity_system(hook_keys::MENU_DESPAWN) {
                 commands.run_system_with(*system_id, entity);
             }
         }

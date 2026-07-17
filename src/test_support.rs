@@ -40,13 +40,14 @@ use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use std::path::PathBuf;
 
 use crate::engine_app::{
-    EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar,
-    register_persistent_system, run_sim_tick,
+    EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, hook_registrar,
+    run_sim_tick,
 };
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::SnapshotPublisher;
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
@@ -120,12 +121,8 @@ impl TestWorldBuilder {
     pub fn new() -> Self {
         Self {
             config: GameConfig::new(),
-            setup_hook: Some(Box::new(|world, store| {
-                register_persistent_system(world, store, "setup", default_test_setup);
-            })),
-            enter_play_hook: Some(Box::new(|world, store| {
-                register_persistent_system(world, store, "enter_play", default_test_enter_play);
-            })),
+            setup_hook: Some(hook_registrar(hook_keys::SETUP, default_test_setup)),
+            enter_play_hook: Some(hook_registrar(hook_keys::ENTER_PLAY, default_test_enter_play)),
             switch_scene_hook: None,
             update_hook: None,
             extra_systems: Vec::new(),
@@ -150,26 +147,20 @@ impl TestWorldBuilder {
     /// `next_state.set(GameStates::Playing)` yourself (or drive the
     /// transition manually) if the test still needs to reach `Playing`.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.setup_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "setup", system);
-        }));
+        self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
         self
     }
 
     /// Replace the `enter_play` hook.
     pub fn on_enter_play<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.enter_play_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "enter_play", system);
-        }));
+        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, system));
         self
     }
 
     /// Register the `switch_scene` hook (required if any scene is added
     /// without using `add_scene`'s own `SceneManager` wiring).
     pub fn on_switch_scene<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.switch_scene_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "switch_scene", system);
-        }));
+        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, system));
         self
     }
 
@@ -203,12 +194,8 @@ impl TestWorldBuilder {
         use crate::lua_plugin;
 
         self.lua_script = Some(script_path.into());
-        self.setup_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "setup", lua_plugin::setup);
-        }));
-        self.enter_play_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "enter_play", lua_plugin::enter_play);
-        }));
+        self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));
+        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, lua_plugin::enter_play));
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
@@ -216,9 +203,7 @@ impl TestWorldBuilder {
                     .in_set(crate::engine_app::SimSet::Bookkeeping),
             );
         }));
-        self.switch_scene_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "switch_scene", lua_plugin::switch_scene);
-        }));
+        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, lua_plugin::switch_scene));
         self
     }
 

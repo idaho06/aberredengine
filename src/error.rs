@@ -35,10 +35,10 @@ pub enum EngineError {
 
     #[error(
         "EngineBuilder conflict: .with_lua() replaces the setup/enter_play/update/\
-         switch_scene hooks; also calling .{hooks}() is ambiguous. Remove the explicit \
-         hook call(s)."
+         switch_scene hooks; also calling .{hook}() is ambiguous. Remove the explicit \
+         hook call."
     )]
-    LuaConflictsWithHooks { hooks: String },
+    LuaConflictsWithHooks { hook: &'static str },
 
     #[error(
         "EngineBuilder: .initial_scene(\"{name}\") does not match any registered scene. \

@@ -126,6 +126,7 @@ use crate::resources::render::scene_table::RenderSceneTable;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::render::shaderstore::ShaderStore;
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::resources::render::texturestore::TextureStore;
@@ -300,11 +301,11 @@ pub struct EngineBuilder {
     initial_scene: Option<String>,
     extra_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
-    /// Names of the `on_*` hook methods explicitly called by the developer,
-    /// tracked so `validate_builder` can detect a conflict with `.with_lua()`
-    /// (which installs its own four hooks unconditionally) regardless of
-    /// call order.
-    user_hooks: Vec<&'static str>,
+    /// Name of the first `on_*` hook method explicitly called by the
+    /// developer, tracked so `validate_builder` can detect a conflict with
+    /// `.with_lua()` (which installs its own four hooks unconditionally)
+    /// regardless of call order.
+    first_user_hook: Option<&'static str>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
 }
@@ -326,7 +327,7 @@ impl EngineBuilder {
             initial_scene: None,
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
-            user_hooks: Vec::new(),
+            first_user_hook: None,
             #[cfg(feature = "lua")]
             lua_script: None,
         }
@@ -357,10 +358,8 @@ impl EngineBuilder {
     ///
     /// The system is registered into [`SystemsStore`] under the key `"setup"`.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.setup_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "setup", system);
-        }));
-        self.user_hooks.push("on_setup");
+        self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
+        self.first_user_hook.get_or_insert("on_setup");
         self
     }
 
@@ -368,10 +367,8 @@ impl EngineBuilder {
     ///
     /// The system is registered into [`SystemsStore`] under the key `"enter_play"`.
     pub fn on_enter_play<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.enter_play_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "enter_play", system);
-        }));
-        self.user_hooks.push("on_enter_play");
+        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, system));
+        self.first_user_hook.get_or_insert("on_enter_play");
         self
     }
 
@@ -387,7 +384,7 @@ impl EngineBuilder {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
         }));
-        self.user_hooks.push("on_update");
+        self.first_user_hook.get_or_insert("on_update");
         self
     }
 
@@ -398,10 +395,8 @@ impl EngineBuilder {
         mut self,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.switch_scene_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "switch_scene", system);
-        }));
-        self.user_hooks.push("on_switch_scene");
+        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, system));
+        self.first_user_hook.get_or_insert("on_switch_scene");
         self
     }
 
@@ -543,12 +538,8 @@ impl EngineBuilder {
 
         self.lua_script = Some(script_path.into());
 
-        self.setup_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "setup", lua_plugin::setup);
-        }));
-        self.enter_play_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "enter_play", lua_plugin::enter_play);
-        }));
+        self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));
+        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, lua_plugin::enter_play));
         // lua_plugin::update runs once per sim tick, in SimSet::Bookkeeping
         // (last among the engine's own groups) -- this is also where
         // on_update_<scene> itself is dispatched now, restoring the
@@ -562,9 +553,7 @@ impl EngineBuilder {
                     .in_set(SimSet::Bookkeeping),
             );
         }));
-        self.switch_scene_hook = Some(Box::new(|world, store| {
-            register_persistent_system(world, store, "switch_scene", lua_plugin::switch_scene);
-        }));
+        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, lua_plugin::switch_scene));
         self
     }
 
@@ -694,7 +683,7 @@ impl EngineBuilder {
     /// called `.on_*()` hook, regardless of call order (`.with_lua()`
     /// installs its own four hooks unconditionally, so by validation time
     /// the hook `Option` fields alone can't tell "user set this" apart from
-    /// "with_lua set this" -- that's what `user_hooks` tracks separately).
+    /// "with_lua set this" -- that's what `first_user_hook` tracks separately).
     fn validate_lua_conflicts(&self, use_scene_manager: bool) -> Result<(), EngineError> {
         #[cfg(feature = "lua")]
         let has_lua_script = self.lua_script.is_some();
@@ -707,10 +696,8 @@ impl EngineBuilder {
         if use_scene_manager {
             return Err(EngineError::LuaConflictsWithSceneManager);
         }
-        if !self.user_hooks.is_empty() {
-            return Err(EngineError::LuaConflictsWithHooks {
-                hooks: self.user_hooks.join(", "),
-            });
+        if let Some(hook) = self.first_user_hook {
+            return Err(EngineError::LuaConflictsWithHooks { hook });
         }
         Ok(())
     }
@@ -1014,14 +1001,14 @@ impl EngineBuilder {
     ) -> Result<(), EngineError> {
         let mut missing = Vec::new();
 
-        for name in ["setup", "enter_play", "quit_game"] {
+        for name in [hook_keys::SETUP, hook_keys::ENTER_PLAY, hook_keys::QUIT_GAME] {
             if systems_store.get(name).is_none() {
                 missing.push(name);
             }
         }
 
-        if requires_switch_scene && systems_store.get("switch_scene").is_none() {
-            missing.push("switch_scene");
+        if requires_switch_scene && systems_store.get(hook_keys::SWITCH_SCENE).is_none() {
+            missing.push(hook_keys::SWITCH_SCENE);
         }
 
         if missing.is_empty() {
@@ -1069,17 +1056,22 @@ impl EngineBuilder {
             register_persistent_system(
                 world,
                 &mut systems_store,
-                "switch_scene",
+                hook_keys::SWITCH_SCENE,
                 scene_switch_system,
             );
-            register_persistent_system(world, &mut systems_store, "enter_play", scene_enter_play);
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::ENTER_PLAY,
+                scene_enter_play,
+            );
         }
 
-        register_persistent_system(world, &mut systems_store, "quit_game", quit_game);
+        register_persistent_system(world, &mut systems_store, hook_keys::QUIT_GAME, quit_game);
         register_persistent_system(
             world,
             &mut systems_store,
-            "clean_all_entities",
+            hook_keys::CLEAN_ALL_ENTITIES,
             clean_all_entities,
         );
 
@@ -1087,7 +1079,7 @@ impl EngineBuilder {
         world
             .entity_mut(menu_despawn_system_id.entity())
             .insert(Persistent);
-        systems_store.insert_entity_system("menu_despawn", menu_despawn_system_id);
+        systems_store.insert_entity_system(hook_keys::MENU_DESPAWN, menu_despawn_system_id);
 
         Self::validate_required_systems(&systems_store, requires_switch_scene)?;
 
@@ -1838,6 +1830,18 @@ pub(crate) fn register_persistent_system<M>(
     let system_id = world.register_system(system);
     world.entity_mut(system_id.entity()).insert(Persistent);
     store.insert(name, system_id);
+}
+
+/// Build a [`HookRegistrar`] that registers `system` as a persistent system
+/// under `name` when run. Collapses the
+/// `Box::new(|world, store| register_persistent_system(world, store, name, system))`
+/// closure repeated across `on_setup`/`on_enter_play`/`on_switch_scene` and
+/// `with_lua`'s hook installations into one call site.
+pub(crate) fn hook_registrar<M>(
+    name: &'static str,
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+) -> HookRegistrar {
+    Box::new(move |world, store| register_persistent_system(world, store, name, system))
 }
 
 #[cfg(test)]

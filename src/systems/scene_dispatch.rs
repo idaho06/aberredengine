@@ -39,6 +39,7 @@ use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::signal_keys as sk;
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::render::texturestore::TextureStore;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
@@ -291,7 +292,7 @@ pub fn scene_switch_poll(
     systems_store: Res<SystemsStore>,
 ) {
     if world_signals.take_flag(sk::SWITCH_SCENE) {
-        commands.run_system(*systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
+        commands.run_system(*systems_store.get(hook_keys::SWITCH_SCENE).expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
 }
 
@@ -317,7 +318,7 @@ pub fn scene_enter_play(
 
     world_signals.set_string(sk::SCENE, initial);
 
-    commands.run_system(*systems_store.get("switch_scene").expect(
+    commands.run_system(*systems_store.get(hook_keys::SWITCH_SCENE).expect(
         "'switch_scene' system not registered; validate_required_systems should have caught this",
     ));
 }

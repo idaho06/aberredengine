@@ -52,3 +52,30 @@ impl SystemsStore {
         self.entity_map.get(name.as_ref())
     }
 }
+
+// Well-known SystemsStore keys the engine itself registers/looks up.
+//
+// Use these constants everywhere a SystemsStore key is written or read to
+// get compile-time-checked references and a single rename point (mirrors
+// src/resources/signal_keys.rs's convention for WorldSignals keys -- this is
+// a distinct namespace even where a string value happens to coincide, e.g.
+// "switch_scene"/"quit_game" are also WorldSignals flag names; do not
+// conflate the two).
+
+/// One-shot asset-loading hook, called during the `Setup` game state.
+pub const SETUP: &str = "setup";
+
+/// Hook called once when transitioning to `Playing`.
+pub const ENTER_PLAY: &str = "enter_play";
+
+/// Hook called when a scene transition is requested.
+pub const SWITCH_SCENE: &str = "switch_scene";
+
+/// Engine-internal teardown hook run on a clean shutdown request.
+pub const QUIT_GAME: &str = "quit_game";
+
+/// Engine-internal hook that despawns all non-persistent entities.
+pub const CLEAN_ALL_ENTITIES: &str = "clean_all_entities";
+
+/// Entity-input system (`SystemId<In<Entity>>`) that despawns a menu.
+pub const MENU_DESPAWN: &str = "menu_despawn";

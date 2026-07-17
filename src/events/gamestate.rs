@@ -10,6 +10,7 @@
 //! setup/teardown systems and avoids borrowing conflicts.
 use crate::resources::gamestate::NextGameStates::{Pending, Unchanged};
 use crate::resources::gamestate::{GameState, GameStates, NextGameState};
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
@@ -87,16 +88,16 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
     match state {
         GameStates::None => debug!("Entered None state"),
         GameStates::Setup => {
-            commands.run_system(*systems_store.get("setup").expect(
+            commands.run_system(*systems_store.get(hook_keys::SETUP).expect(
                 "'setup' system not registered; validate_required_systems should have caught this",
             ));
         }
         GameStates::Playing => {
-            commands.run_system(*systems_store.get("enter_play").expect("'enter_play' system not registered; validate_required_systems should have caught this"));
+            commands.run_system(*systems_store.get(hook_keys::ENTER_PLAY).expect("'enter_play' system not registered; validate_required_systems should have caught this"));
         }
         // GameStates::Paused => eprintln!("Entered Paused state"),
         GameStates::Quitting => {
-            commands.run_system(*systems_store.get("quit_game").expect("'quit_game' system not registered; validate_required_systems should have caught this"));
+            commands.run_system(*systems_store.get(hook_keys::QUIT_GAME).expect("'quit_game' system not registered; validate_required_systems should have caught this"));
         }
     }
 }

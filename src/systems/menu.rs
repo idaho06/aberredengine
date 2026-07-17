@@ -28,6 +28,7 @@ use crate::resources::gamestate::NextGameState;
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::signal_keys as sk;
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::systems::GameCtx;
@@ -684,7 +685,7 @@ fn dispatch_menu_action(
             ctx.world_signals.set_string(sk::SCENE, scene_name.clone());
             ctx.commands.run_system(
                 *systems_store
-                    .get("switch_scene")
+                    .get(hook_keys::SWITCH_SCENE)
                     .expect("switch_scene system not found"),
             );
         }

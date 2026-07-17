@@ -32,6 +32,7 @@ use crate::resources::lua_runtime::{
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::screensize::ScreenSize;
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 
 use crate::resources::signal_keys as sk;
@@ -205,7 +206,7 @@ pub fn enter_play(
     // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
 
     // Finally, run the switch_scene system to spawn initial scene entities
-    commands.run_system(*systems_store.get("switch_scene").expect(
+    commands.run_system(*systems_store.get(hook_keys::SWITCH_SCENE).expect(
         "'switch_scene' system not registered; validate_required_systems should have caught this",
     ));
 }
@@ -464,7 +465,7 @@ pub fn update(
     // Check for scene switch flag (set by Lua)
     if scene_state.world_signals.take_flag(sk::SWITCH_SCENE) {
         debug!("Scene switch requested in world signals.");
-        commands.run_system(*scene_state.systems_store.get("switch_scene").expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
+        commands.run_system(*scene_state.systems_store.get(hook_keys::SWITCH_SCENE).expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
     }
 }
 
@@ -927,7 +928,7 @@ mod tests {
         let switch_scene_id = world.register_system(switch_scene);
         world
             .resource_mut::<SystemsStore>()
-            .insert("switch_scene", switch_scene_id);
+            .insert(hook_keys::SWITCH_SCENE, switch_scene_id);
 
         define_level1_switches_to_level2_lua_callbacks(&world);
 
