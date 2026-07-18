@@ -471,8 +471,7 @@ pub(super) fn set_entity_uniforms(
     }
 
     // uVelocity (vec2) - only if the entity had a RigidBody at capture time
-    // (velocity comes from the DrawableSnapshot entry, not a live query --
-    // Phase 4)
+    // (velocity comes from the DrawableSnapshot entry, not a live query)
     if let Some(velocity) = velocity {
         set_vec2(shader, locations, "uVelocity", &[velocity.x, velocity.y]);
     }

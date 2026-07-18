@@ -153,12 +153,12 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let rx_logic = init.rx_logic;
     let rx_input = init.rx_input;
     let mut pacer = Pacer::new(sim_hz);
-    // Phase 7c: a second, non-blocking `Pacer` decimates `present`/snapshot
+    // A second, non-blocking `Pacer` decimates `present`/snapshot
     // publishing independently of the sim's own pacing above -- `due()`
     // never sleeps, it just reports whether a `snapshot_hz` period has
     // elapsed since it last fired.
     let mut snapshot_pacer = Pacer::new(snapshot_hz);
-    // Phase 7j: rolls up sim-tick work time (run_sim_tick only, not the
+    // Rolls up sim-tick work time (run_sim_tick only, not the
     // pacer's sleep) into SimStats once per ~1s window, for the F11 perf
     // panel. Input-backlog sum/max share this same window -- averaged
     // against ThreadStats::ticks on rollover rather than a separately
@@ -184,7 +184,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // them sequentially against PrevRawSnapshot (see its doc comment for
         // why merge-then-diff-once can't replace this). `capture` rides with
         // each sample; only the newest matters (one render-frame stale
-        // either way, same as before Phase 7d).
+        // either way).
         input_backlog.clear();
         let mut newest_capture: Option<ImguiCaptureState> = None;
         for sample in rx_input.try_iter() {
@@ -241,9 +241,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         }
 
         if shutdown_requested {
-            // Mirrors the pre-7b behavior of exiting immediately on
-            // Shutdown (no sim/present work runs after it) — the messages
-            // loop above already applied everything in this batch to its
+            // Exits immediately on Shutdown (no sim/present work runs
+            // after it) — the messages loop above already applied
+            // everything in this batch to its
             // resource, including any SignalIntents, so flush those into
             // WorldSignals directly instead of running a full
             // (now-pointless) simulation tick just to reach
@@ -265,7 +265,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             world.resource_mut::<ImguiCaptureMirror>().0 = capture;
         }
         // Resolve bindings + edges (InputState + events) BEFORE the sim tick
-        // that reads it, same order as before Phase 7b. A F10 edge (post
+        // that reads it. A F10 edge (post
         // imgui-capture-mask) means the caller, not the resolver, ships
         // RenderMsg::ToggleFullscreen -- see resolve_input_backlog's doc
         // comment for why it stays free of channel sends.
@@ -295,7 +295,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             backlog_max = 0;
         }
 
-        // Phase 7c: `present` runs at the configured `snapshot_hz`, not once
+        // `present` runs at the configured `snapshot_hz`, not once
         // per received input sample -- independent of whether input arrived
         // this tick, so the render thread keeps receiving fresh snapshots
         // during input droughts too. `present` sees the same real dt this

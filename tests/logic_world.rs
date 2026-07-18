@@ -1,10 +1,9 @@
-//! Phase 7h consumer tests for `aberredengine::test_support::TestWorld`.
+//! Consumer tests for `aberredengine::test_support::TestWorld`.
 //!
 //! These exercise the REAL logic-thread `World`/`sim`/`present` schedules
 //! headlessly -- see `src/test_support.rs`'s module doc for what's real vs.
-//! stubbed. Each test targets one seam called out by the phase 7h plan:
-//! input edge resolution, spawn/collision, snapshot build, and the async
-//! font-metrics contract.
+//! stubbed. Each test targets one seam: input edge resolution,
+//! spawn/collision, snapshot build, and the async font-metrics contract.
 
 #![cfg(feature = "test-support")]
 

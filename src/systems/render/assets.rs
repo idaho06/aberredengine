@@ -46,7 +46,7 @@ pub fn process_render_asset_cmds(
             &mut notifications,
         );
     }
-    // FontMetricsStore/TextureDimsStore are logic-world-owned (Phase 5e):
+    // FontMetricsStore/TextureDimsStore are logic-world-owned:
     // ship each load's metrics/dims across the channel instead of writing a
     // local resource. Send errors only occur during shutdown — ignored.
     for msg in notifications.drain(..) {

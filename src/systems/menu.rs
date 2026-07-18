@@ -132,9 +132,9 @@ pub fn menu_spawn_system(
                     menu_item.id
                 );
             } else {
-                // Static text sprite: measure via FontMetricsStore (CPU-side,
-                // Phase 5b), queue rasterization for process_render_asset_cmds
-                // (render-destined, Phase 5c).
+                // Static text sprite: measure via FontMetricsStore (CPU-side),
+                // queue rasterization for process_render_asset_cmds
+                // (render-destined).
                 let Some(metrics) = font_metrics.0.get(&font_string) else {
                     if warn_cache.warn_once(&font_string) {
                         warn!(
@@ -303,9 +303,9 @@ pub fn menu_despawn(
     // Despawn menu item entities and clean up textures
     for item in menu.items.iter() {
         // Remove the rasterized label texture if it exists (only non-dynamic
-        // items have one). Queued as a RenderAssetCmd (Phase 5e): TextureStore
+        // items have one). Queued as a RenderAssetCmd: TextureStore
         // is render-world-only, so even the GL-free `remove()` bookkeeping
-        // can't be called from logic-side cleanup anymore. The dims mirror is
+        // can't be called from logic-side cleanup. The dims mirror is
         // logic-owned and dropped directly.
         let texture_key = format!("menu_{}", item.id);
         texture_dims.remove(&texture_key);

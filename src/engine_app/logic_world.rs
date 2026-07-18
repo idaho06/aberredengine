@@ -292,7 +292,7 @@ impl EngineBuilder {
         world.spawn((Observer::new(rust_collision_observer), Persistent));
         world.spawn((Observer::new(switch_debug_observer), Persistent));
         // switch_fullscreen_observer is NOT here: it lives in the RENDER
-        // world (Phase 5e) — F10 toggles the window, which only exists there.
+        // world — F10 toggles the window, which only exists there.
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
         world.spawn((Observer::new(gui_interactable_click_observer), Persistent));

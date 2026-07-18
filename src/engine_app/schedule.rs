@@ -178,8 +178,8 @@ impl EngineBuilder {
         Ok((sim, present))
     }
 
-    /// Single source of truth for cross-group ordering within `sim`
-    /// (Phase 7b Step 0) -- see `SimSet`'s doc comment for what each
+    /// Single source of truth for cross-group ordering within `sim` --
+    /// see `SimSet`'s doc comment for what each
     /// group holds. Systems join a group via `.in_set(SimSet::X)`; only
     /// load-bearing *intra*-group edges remain as explicit `.after()`
     /// calls in [`Self::add_engine_sim_systems`].
@@ -213,8 +213,8 @@ impl EngineBuilder {
         // tick (in particular before on_update_<scene>, dispatched from
         // lua_plugin::update in SimSet::Bookkeeping): intents queued by the
         // render thread's GuiCallback (inside render_system) each frame must
-        // be visible to this tick's scene logic (Phase 5d). The ordering is
-        // now implied by SimSet::ApplyIntents preceding every later group in
+        // be visible to this tick's scene logic. The ordering is
+        // implied by SimSet::ApplyIntents preceding every later group in
         // the chain.
         sim.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
         sim.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
@@ -232,14 +232,13 @@ impl EngineBuilder {
                 .chain()
                 .in_set(SimSet::AudioPump),
         );
-        // update_bevy_render_asset_cmds + forward_render_asset_cmds moved off
-        // `present` onto the tail of `sim` in Phase 7c (SimSet::Bookkeeping):
-        // with `present` now decimated to `[simulation] snapshot_hz` (see
-        // `logic_thread_main`), asset loads must still reach the render
-        // thread every sim tick, not just on a publish tick, or a texture
-        // could sit queued for several ticks before a snapshot referencing
-        // it is even built. See that block's own comment for the real
-        // `.after()` edge between the pair.
+        // update_bevy_render_asset_cmds + forward_render_asset_cmds live on
+        // the tail of `sim` (SimSet::Bookkeeping): with `present` decimated
+        // to `[simulation] snapshot_hz` (see `logic_thread_main`), asset
+        // loads must still reach the render thread every sim tick, not just
+        // on a publish tick, or a texture could sit queued for several ticks
+        // before a snapshot referencing it is even built. See that block's
+        // own comment for the real `.after()` edge between the pair.
 
         // --- SIM: input-driven forces/movement (InputState is resolved
         // sim-side once per tick by resolve_input_backlog, before this tick's
@@ -273,10 +272,9 @@ impl EngineBuilder {
 
         // --- SIM: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
         // collision, so it's grouped with the GUI chain rather than its
-        // MapPosition/Rotation/Scale siblings above; since Phase 6d all four
-        // TweenValue type parameters share sim cadence, so
-        // LuaOnTweenFinished<ScreenPosition> no longer fires at a different
-        // rate than the other three).
+        // MapPosition/Rotation/Scale siblings above; all four TweenValue
+        // type parameters share sim cadence, so LuaOnTweenFinished<T> fires
+        // at the same rate regardless of which T is tweened).
         sim.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));
         sim.add_systems(
             (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
@@ -314,13 +312,12 @@ impl EngineBuilder {
                     .in_set(SimSet::PostCollision),
             );
             sim.add_systems(update_lua_timers.in_set(SimSet::PostCollision));
-            // Mirrors the pre-thread-split engine's explicit
-            // `.after(lua_plugin::update)` constraint on both systems: a
-            // queued map/asset load is drained after on_update_<scene> has
-            // had a chance to queue it this same tick, not before.
+            // `.after(lua_plugin::update)` on both systems: a queued
+            // map/asset load is drained after on_update_<scene> has had a
+            // chance to queue it this same tick, not before.
             // `.before(update_bevy_render_asset_cmds)` keeps a same-tick map
             // load's RenderAssetCmd forwarded to the render thread this same
-            // tick rather than lagging one tick (both now share
+            // tick rather than lagging one tick (both share
             // SimSet::Bookkeeping, so this ordering needs an explicit edge).
             sim.add_systems(
                 process_lua_map_commands
@@ -335,11 +332,7 @@ impl EngineBuilder {
                     .before(update_bevy_render_asset_cmds)
                     .in_set(SimSet::Bookkeeping),
             );
-            // Phase 6d: moved from VARIABLE to FIXED alongside everything
-            // else. "Fires the substep after spawn" replaces the old "fires
-            // the frame after spawn" -- a strictly tighter latency (up to
-            // 1/240s instead of up to ~16ms at 60fps), not a regression; see
-            // docs/plans/phase6d-variable-collapse.md.
+            // Fires the sim tick after spawn (up to 1/sim_hz latency).
             sim.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
@@ -367,20 +360,18 @@ impl EngineBuilder {
                 .in_set(SimSet::Bookkeeping),
         );
 
-        // Forwards RenderAssetCmd to the render thread (Phase 5e; the GL
-        // drain itself, process_render_asset_cmds, now lives on the render
-        // schedule). Phase 7c: this pair moved off `present` onto the tail
-        // of `sim` (SimSet::Bookkeeping) so it runs every sim tick,
-        // independent of the now-decimated `present`/snapshot-publish rate
-        // (see `logic_thread_main`'s doc comment) -- a tick's asset loads
-        // must not sit queued for several ticks waiting for the next
-        // publish. `.after(update_bevy_render_asset_cmds)` is a REAL
+        // Forwards RenderAssetCmd to the render thread (the GL drain itself,
+        // process_render_asset_cmds, lives on the render schedule). This
+        // pair lives on the tail of `sim` (SimSet::Bookkeeping) so it runs
+        // every sim tick, independent of the decimated `present`/snapshot-
+        // publish rate (see `logic_thread_main`'s doc comment) -- a tick's
+        // asset loads must not sit queued for several ticks waiting for the
+        // next publish. `.after(update_bevy_render_asset_cmds)` is a REAL
         // same-schedule edge (both land in `SimSet::Bookkeeping`); ordering
         // relative to menu/tilemap spawning (earlier `SimSet`s, via the
         // `configure_sets((...).chain())` pipeline) is implicit, but the Lua
-        // asset/map command drains now share this same `SimSet` too (moved
-        // here to run `.after(lua_plugin::update)`, restoring old-engine
-        // ordering) and need their own explicit
+        // asset/map command drains share this same `SimSet` too (running
+        // `.after(lua_plugin::update)`) and need their own explicit
         // `.before(update_bevy_render_asset_cmds)` edge so a same-tick load
         // still forwards this tick instead of lagging one.
         sim.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
@@ -413,7 +404,7 @@ impl EngineBuilder {
     }
 
     /// Registers the SceneManager's own `sim`-schedule systems, when
-    /// `.add_scene()` was used. Phase 6d: moved from VARIABLE to FIXED.
+    /// `.add_scene()` was used.
     /// Accepted consequence: a scene switch resolved mid-tick runs the rest
     /// of that tick's pipeline against the newly-spawned scene, so the
     /// snapshot published at the end of that tick may show it partially
@@ -459,13 +450,12 @@ impl EngineBuilder {
         }
         present.add_systems(drawable_snapshot_config);
 
-        // Tail of the logic `present` schedule (Phase 5e; renamed from
-        // `variable` in Phase 6d): ship this frame's fully-settled snapshot to
-        // the render thread. apply_gameconfig_changes + render_system live on
-        // the render thread's own schedule (build_render_schedule).
-        // Phase 7d: InputBindings became logic-thread-only (no render-side
-        // mirror to refresh), so the send_input_bindings_on_change system
-        // this schedule used to carry is gone.
+        // Tail of the logic `present` schedule: ship this frame's
+        // fully-settled snapshot to the render thread. apply_gameconfig_changes
+        // + render_system live on the render thread's own schedule
+        // (build_render_schedule). InputBindings is logic-thread-only (no
+        // render-side mirror to refresh), so there is no bindings-sync system
+        // here.
         present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
 
         present

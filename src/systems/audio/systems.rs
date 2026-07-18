@@ -20,8 +20,7 @@ use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::audio::store::AudioStore;
 
 /// Drain all pending [`AudioCmd`]s non-blockingly and apply them to the
-/// audio world. Behavior is a 1:1 port of the pre-7e inline match in
-/// `audio_thread` -- see that history for the arm-by-arm rationale.
+/// audio world.
 pub fn drain_cmds(world: &mut World) {
     let cmds: Vec<AudioCmd> = world.resource::<CmdReceiver>().0.try_iter().collect();
     for cmd in cmds {
@@ -111,7 +110,7 @@ fn spawn_fx_alias(world: &mut World, sound: ffi::Sound, pitch: Option<f32>) {
 /// `PlayingFx` entity. Shared by `StopAllFx`/`UnloadAllFx`/`Shutdown`, which
 /// differ only in whether the alias is stopped first (`StopAllFx` cuts off
 /// audio still playing; `UnloadAllFx`/`Shutdown` unload without an explicit
-/// stop, matching pre-7e behavior).
+/// stop).
 pub(crate) fn unload_all_fx_aliases(world: &mut World, stop_first: bool) {
     for (entity, alias) in playing_fx_entities(world) {
         if stop_first {

@@ -138,13 +138,10 @@ fn dummy_enter_play() {}
 fn dummy_update() {}
 fn dummy_switch_scene() {}
 
-// --- Phase 7b: input edge-latch (run_sim_tick) ---
+// --- Input edge-latch (run_sim_tick) ---
 //
-// The old accumulator/substep-cap tests (`take_fixed_substeps_*`,
-// `run_fixed_substeps_*` across 0/1/8 substeps) are gone with the
-// machinery they exercised -- Phase 7b's paced loop runs exactly one
-// `sim` tick per `Pacer` wakeup, so "fires exactly once regardless of
-// batch size" collapses to "fires exactly once", covered below.
+// The paced loop runs exactly one `sim` tick per `Pacer` wakeup, so an
+// edge (just_pressed/just_released) fires exactly once, covered below.
 
 /// Counts how many times `InputState.action_1`/`mouse_left_button` were
 /// observed with an edge set, for asserting "fires exactly once".
@@ -225,7 +222,7 @@ fn run_sim_tick_delivers_press_and_release_in_same_sample() {
     assert_eq!(counts.action_1_released, 1, "release edge must fire exactly once");
 }
 
-// --- Phase 5e: channel enum round-trip smoke test ---
+// --- Channel enum round-trip smoke test ---
 
 #[test]
 fn logic_and_render_msgs_round_trip_across_a_thread() {
@@ -251,7 +248,7 @@ fn logic_and_render_msgs_round_trip_across_a_thread() {
     assert!(matches!(rx_render.recv().unwrap(), RenderMsg::Quit));
 }
 
-// --- Phase 7d: dedicated bounded input channel round-trip smoke test ---
+// --- Dedicated bounded input channel round-trip smoke test ---
 
 #[test]
 fn input_sample_round_trips_across_a_thread() {
@@ -280,7 +277,7 @@ fn input_sample_round_trips_across_a_thread() {
     echo.join().expect("echo thread should exit cleanly");
 }
 
-// --- Phase 7c: triple_buffer snapshot transport ---
+// --- triple_buffer snapshot transport ---
 
 #[test]
 fn snapshot_triple_buffer_round_trips_across_a_thread() {
@@ -504,10 +501,10 @@ fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
         "update_group_counts_system should run before lua_phase_system (both sim-schedule)"
     );
 
-    // Since Phase 6d, lua_plugin::update runs on the sim (240Hz) schedule
-    // too, alongside update_group_counts_system/lua_phase_system -- and
-    // since Phase 7c, `present` contains only build_drawable_snapshot/
-    // send_drawable_snapshot (forward_render_asset_cmds moved to sim).
+    // lua_plugin::update runs on the sim (240Hz) schedule, alongside
+    // update_group_counts_system/lua_phase_system; `present` contains only
+    // build_drawable_snapshot/send_drawable_snapshot
+    // (forward_render_asset_cmds lives on sim).
     let lua_update_type = IntoSystem::into_system(crate::lua_plugin::update).system_type();
     assert!(
         sim_type_ids.contains(&lua_update_type),

@@ -96,11 +96,10 @@ pub(crate) struct CommonCmdBufs {
 
 // This function is meant to load all resources
 //
-// Since Phase 5e, `setup()` is an ordinary `RenderAssetCmd` producer: it
+// `setup()` is an ordinary `RenderAssetCmd` producer: it
 // queues asset loads into `Messages<RenderAssetCmd>` (forwarded to the
 // render thread, which performs the GL work and replies with
-// `FontLoaded`/`TextureLoaded` notifications). The pre-5e "apply GL loads
-// directly" bootstrap exception is gone — the logic world has no GL
+// `FontLoaded`/`TextureLoaded` notifications). The logic world has no GL
 // resources at all, so bootstrap fonts' metrics arrive asynchronously
 // (dynamictext/menu measurement retries each frame until they land).
 pub fn setup(
@@ -962,15 +961,13 @@ mod tests {
 
     #[test]
     fn process_lua_asset_commands_translates_load_texture_same_call() {
-        // Phase 6c moved process_lua_asset_commands from VARIABLE to FIXED.
-        // The system itself is unchanged (schedule-agnostic: NonSend<LuaRuntime>
+        // process_lua_asset_commands is schedule-agnostic (NonSend<LuaRuntime>
         // + MessageWriters + Local<Vec<_>>) -- this confirms an
         // engine.load_texture() call queued immediately before the system
         // runs is still translated into a RenderAssetCmd::Texture correctly.
-        // It does NOT exercise the schedule-membership/ordering change itself
+        // It does NOT exercise the schedule-membership/ordering itself
         // (that's covered by the full schedule build in
-        // tests/engine_tick_integration.rs); it would pass unchanged if this
-        // system were still registered on VARIABLE.
+        // tests/engine_tick_integration.rs).
         let mut world = new_drain_test_world();
         world.insert_resource(Messages::<crate::protocol::render_assets::RenderAssetCmd>::default());
 

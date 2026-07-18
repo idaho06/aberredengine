@@ -234,8 +234,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         input.mouse_x = game_mouse_pos.x;
         input.mouse_y = game_mouse_pos.y;
 
-        // --- Imgui debug-overlay input capture (Phase 6e; see
-        // apply_input_snapshot's original doc comment, ported verbatim) ---
+        // --- Imgui debug-overlay input capture ---
         // Masks input meant for the F11 debug imgui overlay before events
         // are emitted, so gameplay doesn't also react to clicks/keys meant
         // for the debug panel:
@@ -653,7 +652,7 @@ mod tests {
         );
         assert!(
             input.fullscreen_toggle.just_pressed,
-            "F10 must never be masked -- it never interacted with imgui capture pre-7d either"
+            "F10 must never be masked -- fullscreen toggling is unrelated to imgui capture"
         );
         let log = world.resource::<EventLog>();
         assert_eq!(log.debug_switches, 1);

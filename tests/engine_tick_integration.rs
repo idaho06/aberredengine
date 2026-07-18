@@ -3094,8 +3094,8 @@ fn animation_wraps_rows_with_vertical_displacement() {
     );
     world.insert_resource(anim_store);
 
-    // Record the atlas dims so the system can look up the width (Phase 5e:
-    // animation reads TextureDimsStore, not the GPU TextureStore).
+    // Record the atlas dims so the system can look up the width
+    // (animation reads TextureDimsStore, not the GPU TextureStore).
     world
         .resource_mut::<TextureDimsStore>()
         .insert("sheet", 256, 256);

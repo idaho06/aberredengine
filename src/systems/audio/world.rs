@@ -72,7 +72,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
     schedule.initialize(&mut world).expect("audio schedule initialize");
 
     let mut pacer = Pacer::new(audio_hz);
-    // Phase 7j: rolls up schedule-run work time into a ThreadStats once per
+    // Rolls up schedule-run work time into a ThreadStats once per
     // ~1s window, shipped to the logic thread via AudioMessage::Stats for
     // the F11 perf panel.
     let mut stats_window = StatsWindow::new(audio_hz);

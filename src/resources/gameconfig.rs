@@ -174,7 +174,7 @@ fn clamp_gamepad_deadzone(deadzone: f32, field: &str) -> f32 {
 /// publishing snapshots faster than the render thread can display), falling
 /// back to a flat 60 if `target_fps` is unset/zero. Shared by `new()` and
 /// `apply_ini`'s no-explicit-override path so the two can't drift. Also used
-/// by `render_main_loop` (Phase 7j) to seed its `StatsWindow` at the same
+/// by `render_main_loop` to seed its `StatsWindow` at the same
 /// implicit rate the render thread already falls back to.
 pub(crate) fn default_snapshot_hz(target_fps: u32) -> f64 {
     if target_fps > 0 { target_fps as f64 } else { 60.0 }

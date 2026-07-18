@@ -419,7 +419,7 @@ fn test_action3_default_is_mouse_middle() {
     let bindings = InputBindings::default();
     let bl = bindings.get_bindings(InputAction::Action3);
     // Mouse middle is the keyboard/mouse-tier default; pad 0's right-face-left
-    // button is additively appended on top by add_pad0_defaults (Phase 7g) --
+    // button is additively appended on top by add_pad0_defaults --
     // gamepad defaults never replace the keyboard/mouse ones.
     assert_eq!(
         bl,

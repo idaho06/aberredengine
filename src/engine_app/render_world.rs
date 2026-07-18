@@ -93,7 +93,7 @@ impl EngineBuilder {
         world.insert_resource(RenderPostProcess::default());
         world.insert_resource(RenderGuiThemes::default());
         world.insert_resource(RenderCameraFollow::default());
-        // Phase 7f-3/7f-4: backs all 8 categories' mirror-entity
+        // Backs all 8 categories' mirror-entity
         // reconciliation done by receive_snapshot/reconcile_*. Must be
         // inserted before the first snapshot arrives -- each reconcile_*'s
         // resource_scope panics if this resource is absent.

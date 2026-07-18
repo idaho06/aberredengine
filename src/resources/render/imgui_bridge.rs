@@ -265,7 +265,7 @@ impl ImguiBridge {
         callback(ui);
         // Snapshot capture flags now, while this frame's widget interactions
         // are reflected in `io()` -- see `capture_state`/`clear_capture`'s
-        // doc comments (Phase 6e). Scoped to `debug_active` -- see this
+        // doc comments. Scoped to `debug_active` -- see this
         // method's own doc comment above for why.
         self.capture = if debug_active {
             let io = self.context.io();

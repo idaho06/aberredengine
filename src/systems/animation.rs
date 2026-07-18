@@ -93,7 +93,7 @@ pub fn animation(
             }
 
             // Compute sprite offset for the current frame. The atlas width
-            // comes from the CPU-side dims mirror (Phase 5e) — the GPU
+            // comes from the CPU-side dims mirror — the GPU
             // TextureStore lives in the render world only.
             let tex_width = if animation.vertical_displacement > 0.0 {
                 texture_dims

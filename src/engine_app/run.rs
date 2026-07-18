@@ -59,7 +59,7 @@ impl EngineBuilder {
 
         let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
-        // Phase 7d: input gets its own dedicated bounded channel, separate
+        // Input gets its own dedicated bounded channel, separate
         // from the unbounded LogicMsg channel above — see LogicBridge::tx_input.
         // Capacity 64: sized for the worst supported ratio of render fps to
         // sim_hz, not a round number. sim_hz clamps to >= 15 (period ~66ms);
@@ -72,7 +72,7 @@ impl EngineBuilder {
         // stale sample off a momentarily-full channel (see
         // `LogicBridge::rx_input`'s doc comment).
         let rx_input_render = rx_input.clone();
-        // Phase 7c: the DrawableSnapshot itself travels via a triple buffer,
+        // The DrawableSnapshot itself travels via a triple buffer,
         // not the RenderMsg channel above -- sim writes `snap_in`, render
         // reads `snap_out`, latest-wins, no queue growth. Seeded with
         // `DrawableSnapshot::default()`; never read before the sim's first
@@ -84,8 +84,7 @@ impl EngineBuilder {
             triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
 
         // Render-side clone of the scene-descriptor table (fn pointers, cheap)
-        // for gui/world-draw callback resolution against RenderActiveScene
-        // (Phase 7f-2; was snapshot.active_scene before the split).
+        // for gui/world-draw callback resolution against RenderActiveScene.
         let render_scene_table = use_scene_manager.then(|| {
             RenderSceneTable(
                 self.scenes
@@ -157,7 +156,7 @@ impl EngineBuilder {
         #[cfg(feature = "tracy")]
         let _tracy = tracy_client::Client::start();
 
-        // Phase 7j: no dedicated Pacer here -- raylib's own target_fps/vsync
+        // No dedicated Pacer here -- raylib's own target_fps/vsync
         // wait paces this loop, from inside the same schedule.run() call
         // this StatsWindow times. That means tick_avg_ms/achieved_hz read as
         // whole-frame time (vsync wait included), unlike SimStats/AudioStats'

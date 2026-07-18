@@ -236,11 +236,10 @@ impl ScreenDrawItem {
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
     text_buffer: Vec<TextBufferItem>,
-    // Phase 7f-3/7f-4: scratch buffers for the mirror-query-sourced
-    // screen-space items, drained into screen_draw_buffer by
-    // draw_screen_space (rather than passing the query directly, this keeps
-    // the existing Local-buffer-capacity-reuse convention the other 2
-    // buffers above already use).
+    // Scratch buffers for the mirror-query-sourced screen-space items,
+    // drained into screen_draw_buffer by draw_screen_space (rather than
+    // passing the query directly, this keeps the same
+    // Local-buffer-capacity-reuse convention the other 2 buffers above use).
     screen_sprite_buffer: Vec<ScreenSpriteBufferItem>,
     screen_text_buffer: Vec<ScreenTextBufferItem>,
     screen_draw_buffer: Vec<ScreenDrawItem>,
@@ -254,7 +253,7 @@ pub struct RenderResources<'w> {
     pub textures: Res<'w, TextureStore>,
     pub fonts: NonSend<'w, FontStore>,
     pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
-    // Phase 7f-2: mirrors of DrawableSnapshot's global fields, fanned out by
+    // Mirrors of DrawableSnapshot's global fields, fanned out by
     // receive_snapshot (src/engine_app.rs) -- see src/resources/render_mirrors.rs.
     // These are render-world-only snapshot copies, not the live sim resources
     // of the same underlying type.
@@ -280,7 +279,7 @@ pub(crate) struct DebugResources<'w> {
     /// `RenderActiveScene` instead of the logic-world-only `SceneManager`.
     pub scene_table: Option<Res<'w, RenderSceneTable>>,
     pub overlay_config: ResMut<'w, DebugOverlayConfig>,
-    // Phase 7f-2: active_scene kept alongside scene_table since both are
+    // active_scene kept alongside scene_table since both are
     // always read together (world_draw_callback/gui_callback dispatch);
     // debug_snapshot/camera_follow are read only inside the imgui debug
     // overlay (draw_imgui_debug, gated on debug_active).
@@ -330,9 +329,9 @@ pub fn render_system(
     mut res: RenderResources,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
-    // Phase 7f-3/7f-4: draw prep for all 8 drawable categories sources from
-    // retained mirror entities instead of a DrawableSnapshot Vec -- there is
-    // no render-world DrawableSnapshot resource any more.
+    // Draw prep for all 8 drawable categories sources from retained mirror
+    // entities instead of a DrawableSnapshot Vec -- there is no
+    // render-world DrawableSnapshot resource.
     mirrors: MirrorQueries,
 ) {
     crate::tracy::tracy_span!("render_system");
@@ -352,8 +351,8 @@ pub fn render_system(
     let textures = &res.textures;
     // Single source of truth for "is debug active": the debug snapshot
     // mirror's presence, captured from DebugMode by build_drawable_snapshot
-    // earlier this frame. render_system takes no live Res<DebugMode> (Phase 5
-    // prep: the render thread won't have one).
+    // earlier this frame. render_system takes no live Res<DebugMode> --
+    // the render world doesn't have one.
     let debug_active = debug_res.debug_snapshot.0.is_some();
 
     // ========== PHASE 1: Render game content to the render target ==========
@@ -819,7 +818,7 @@ pub fn render_system(
         let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
         {
             crate::tracy::tracy_span!("render/screen_space");
-            // Phase 7f-3/7f-4: all 8 screen-space categories source from
+            // All 8 screen-space categories source from
             // retained mirror entities. Built into their own scratch
             // buffers (not directly into screen_draw_buffer) so
             // draw_screen_space can stay agnostic to where its items came
@@ -1027,7 +1026,7 @@ pub fn render_system(
         // needs_imgui was false this frame, so `render()` (and therefore the
         // capture snapshot it takes) doesn't run -- clear explicitly so
         // capture flags don't freeze at their last computed value once the
-        // debug overlay closes (Phase 6e).
+        // debug overlay closes.
         imgui_bridge.clear_capture();
         apply_postprocess_passes(
             rl,
@@ -1105,17 +1104,17 @@ fn warn_missing_theme(
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space<'m>(
     d: &mut impl RaylibDraw,
-    // Phase 7f-3 checkpoint 2: already-resolved mirror-query-sourced items,
-    // drained (not iterated) into `buffer` -- draining reuses each item's
-    // capacity for the caller's next-frame scratch buffer with zero clone,
-    // matching the Local-buffer-reuse convention `sprite_buffer`/
-    // `text_buffer` already use above.
+    // Already-resolved mirror-query-sourced items, drained (not iterated)
+    // into `buffer` -- draining reuses each item's capacity for the
+    // caller's next-frame scratch buffer with zero clone, matching the
+    // Local-buffer-reuse convention `sprite_buffer`/`text_buffer` already
+    // use above.
     screen_sprites: &mut Vec<ScreenSpriteBufferItem>,
     screen_texts: &mut Vec<ScreenTextBufferItem>,
-    // Phase 7f-4: read straight off the mirror query iterators (borrowed,
-    // no per-frame Vec<Entry> materialization) -- several GuiX component
-    // fields (caption, callback_name, ...) are heap-allocated Strings that
-    // an owned scratch-buffer rebuild would needlessly clone every frame.
+    // Read straight off the mirror query iterators (borrowed, no per-frame
+    // Vec<Entry> materialization) -- several GuiX component fields
+    // (caption, callback_name, ...) are heap-allocated Strings that an
+    // owned scratch-buffer rebuild would needlessly clone every frame.
     gui_windows: impl Iterator<Item = (&'m SimMirror, &'m GuiWindow, &'m ScreenPosition, &'m ZIndex)>,
     gui_buttons: impl Iterator<
         Item = (&'m SimMirror, &'m GuiButton, &'m GuiInteractable, &'m ScreenPosition, &'m ZIndex),
@@ -1421,10 +1420,9 @@ mod screen_draw_buffer_tests {
 
     #[test]
     fn equal_zindex_and_variant_ties_break_ascending_by_entity() {
-        // Phase 7f-3 checkpoint 2: two sprites at the same z_index (so
-        // variant_rank ties too) must order deterministically by
-        // Entity's own Ord impl, since mirror query iteration order
-        // carries no guarantee, unlike the old snapshot Vec's build order.
+        // Two sprites at the same z_index (so variant_rank ties too) must
+        // order deterministically by Entity's own Ord impl, since mirror
+        // query iteration order carries no ordering guarantee.
         // Compares against `entities.sort()` rather than a hand-guessed
         // order: Entity's internal bit layout (NonMaxU32-niched index) does
         // NOT correlate monotonically with `from_raw_u32`'s input, so the
