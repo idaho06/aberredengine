@@ -25,7 +25,7 @@ use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 /// `Added<GuiButton>` to insert the co-located `GuiInteractable` and spawn
 /// the caption `DynamicText` child, the same way `Menu` carries its own item
 /// data and `menu_spawn_system` reacts on `Added<Menu>`.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiButton {
     pub size: Vector2,
     /// Empty string = captionless button, no caption child spawned.

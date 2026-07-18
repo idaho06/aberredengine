@@ -11,7 +11,7 @@ use raylib::prelude::Vector2;
 ///
 /// The render system multiplies sprite dimensions by these values. Can be
 /// animated via `Tween<Scale>`.
-#[derive(Component, Clone, Debug, Copy)]
+#[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Scale {
     pub scale: Vector2,
 }

@@ -97,9 +97,11 @@ fn sample_raw_device_snapshot(
 /// sim thread resolves all of that) and ships it (+ the previous frame's
 /// imgui capture state, one-frame lag via `PendingImguiCapture`) to the
 /// logic thread over the dedicated bounded input channel. A momentarily
-/// full queue (sim stalled for 8+ render frames) drops the sample rather
-/// than growing an unbounded backlog; a disconnected channel (logic thread
-/// gone) sets `QuitRequested`.
+/// full queue (sim stalled) drops the OLDEST queued sample to make room
+/// (`pacing::send_or_drop_oldest`) rather than growing an unbounded backlog
+/// or discarding the newest sample -- the sim resumes seeing the freshest
+/// input, not stale taps from before the stall; a disconnected channel
+/// (logic thread gone) sets `QuitRequested`.
 pub fn sample_and_send_input(
     rl: NonSend<raylib::RaylibHandle>,
     window_size: Res<WindowSize>,
@@ -124,10 +126,14 @@ pub fn sample_and_send_input(
         }
     }
 
-    let result = bridge.tx_input.try_send(InputSample {
-        raw,
-        capture: capture.0,
-    });
+    let result = crate::pacing::send_or_drop_oldest(
+        &bridge.tx_input,
+        &bridge.rx_input,
+        InputSample {
+            raw,
+            capture: capture.0,
+        },
+    );
     if crate::pacing::send_channel_disconnected(&result) {
         log::error!("Logic thread disconnected; shutting down");
         quit.0 = true;

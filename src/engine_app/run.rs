@@ -61,7 +61,17 @@ impl EngineBuilder {
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
         // Phase 7d: input gets its own dedicated bounded channel, separate
         // from the unbounded LogicMsg channel above — see LogicBridge::tx_input.
-        let (tx_input, rx_input) = bounded::<InputSample>(8);
+        // Capacity 64: sized for the worst supported ratio of render fps to
+        // sim_hz, not a round number. sim_hz clamps to >= 15 (period ~66ms);
+        // at 240fps that's up to ~16 backlogged samples per sim tick, so 64
+        // gives headroom for uncapped-vsync/500fps+ cases too. InputSample is
+        // ~300B, so 64 slots costs ~19KB — trivial.
+        let (tx_input, rx_input) = bounded::<InputSample>(64);
+        // Cloned before `rx_input` moves into `init` below -- the render
+        // side keeps its own handle so `sample_and_send_input` can pop a
+        // stale sample off a momentarily-full channel (see
+        // `LogicBridge::rx_input`'s doc comment).
+        let rx_input_render = rx_input.clone();
         // Phase 7c: the DrawableSnapshot itself travels via a triple buffer,
         // not the RenderMsg channel above -- sim writes `snap_in`, render
         // reads `snap_out`, latest-wins, no queue growth. Seeded with
@@ -123,6 +133,7 @@ impl EngineBuilder {
             LogicBridge {
                 tx_logic,
                 tx_input,
+                rx_input: rx_input_render,
                 rx_render,
                 handle,
             },

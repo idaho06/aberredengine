@@ -15,7 +15,7 @@ use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 /// Themed panel rendered as a nine-patch background at the entity's `ScreenPosition`.
 /// `theme_key` selects which named theme in `GuiThemeStore` to render with
 /// (default `"default"`); see `docs/gui-system-architecture.md` Roadmap #2.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiWindow {
     pub size: Vector2,
     pub theme_key: Arc<str>,

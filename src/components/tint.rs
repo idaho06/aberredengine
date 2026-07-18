@@ -19,6 +19,16 @@ pub struct Tint {
     pub color: Color,
 }
 
+/// Manual, not derived: `Color` is a foreign type with no `PartialEq` impl
+/// (and the orphan rule blocks adding one here), so `#[derive(PartialEq)]`
+/// can't be used on this struct.
+impl PartialEq for Tint {
+    fn eq(&self, other: &Self) -> bool {
+        let c = |c: Color| (c.r, c.g, c.b, c.a);
+        c(self.color) == c(other.color)
+    }
+}
+
 impl Tint {
     /// Create a new Tint with the specified RGBA values.
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {

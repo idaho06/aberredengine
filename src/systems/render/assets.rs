@@ -11,7 +11,7 @@
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
 
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::endpoints::LogicTx;
 use crate::protocol::render_logic::LogicMsg;
 use crate::resources::fontmetrics::FontMetrics;

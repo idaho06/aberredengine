@@ -14,7 +14,7 @@ use raylib::math::Vector2;
 /// This component is automatically managed by the transform propagation system.
 /// For root entities (no parent), it mirrors the local MapPosition/Rotation/Scale.
 /// For child entities, it contains the composed result of the full ancestor chain.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct GlobalTransform2D {
     /// World-space position.
     pub position: Vector2,

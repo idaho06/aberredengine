@@ -19,6 +19,11 @@
 //! - [`raw_input`] – `RawDeviceSnapshot`/`InputSample`, the dedicated
 //!   bounded-channel payload carrying unresolved device input from the
 //!   render thread to the sim thread
+//! - [`render_assets`] – `RenderAssetCmd`, GL asset-load commands. Also a
+//!   bevy `Message` living in both worlds' own `Messages<RenderAssetCmd>`
+//!   queue (predates the thread split) — carried cross-thread wrapped in
+//!   `RenderMsg::Asset`, which is this module's actual reason for living
+//!   here rather than `src/events/`
 //! - [`snapshot`] – `SnapshotPublisher`/`SnapshotConsumer`, the `triple_buffer`
 //!   transport for `DrawableSnapshot` — the one exception to "everything
 //!   here is a crossbeam channel payload": `Input`/`Output` are still plain
@@ -35,6 +40,7 @@
 pub mod audio;
 pub mod endpoints;
 pub mod raw_input;
+pub mod render_assets;
 pub mod render_logic;
 pub mod shutdown;
 pub mod snapshot;

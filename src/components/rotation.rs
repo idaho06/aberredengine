@@ -10,7 +10,7 @@ use bevy_ecs::prelude::Component;
 ///
 /// Positive values rotate clockwise. Used by the render system when drawing
 /// sprites and can be animated via `Tween<Rotation>`.
-#[derive(Component, Clone, Debug, Copy, Default)]
+#[derive(Component, Clone, Debug, Copy, Default, PartialEq)]
 pub struct Rotation {
     pub degrees: f32,
 }

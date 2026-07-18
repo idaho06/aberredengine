@@ -21,7 +21,7 @@ use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 /// entirely if unset, same gating as `GuiTheme.button`). Carries its own
 /// caption text; `gui_label_spawn_system` reacts on `Added<GuiLabel>` to
 /// spawn the caption `DynamicText` child.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiLabel {
     pub size: Vector2,
     /// Empty string = captionless label, no caption child spawned.

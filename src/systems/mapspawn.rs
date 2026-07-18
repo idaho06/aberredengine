@@ -28,7 +28,7 @@ use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::events::spawnmap::SpawnMapRequested;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 #[cfg(feature = "lua")]

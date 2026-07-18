@@ -65,6 +65,22 @@ pub struct DynamicText {
     size: Vector2,
 }
 
+/// Manual, not derived: `color`/`initial_color` are `raylib::Color`, a
+/// foreign type with no `PartialEq` impl (and the orphan rule blocks adding
+/// one here), so `#[derive(PartialEq)]` can't be used on this struct.
+impl PartialEq for DynamicText {
+    fn eq(&self, other: &Self) -> bool {
+        let color = |c: raylib::prelude::Color| (c.r, c.g, c.b, c.a);
+        self.text == other.text
+            && self.font == other.font
+            && self.font_size == other.font_size
+            && color(self.color) == color(other.color)
+            && self.initial_text == other.initial_text
+            && color(self.initial_color) == color(other.initial_color)
+            && self.size == other.size
+    }
+}
+
 impl DynamicText {
     /// Creates a new DynamicText component.
     ///

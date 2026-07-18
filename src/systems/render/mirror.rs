@@ -93,17 +93,40 @@ impl SimEntry for GuiProgressBarEntry {
     }
 }
 
-/// Insert `component` if `Some`, remove it if `None`. The one piece of
-/// per-optional-field logic reconciliation needs beyond "insert the whole
-/// bundle": a sim-side optional component that goes from present to absent
-/// between snapshots (e.g. a `Tint` removed mid-game) must be *removed* from
-/// the mirror, not left stale -- a bundle `.insert()` alone never removes
-/// anything.
-fn set_optional<C: Component>(entity: &mut EntityWorldMut, value: Option<C>) {
+/// Insert a clone of `value` only if the entity's current component value
+/// differs from it (or the component is absent). Every publish
+/// (~`snapshot_hz`, default ~60/s) used to re-`insert()` and reclone every
+/// component unconditionally, even for entities whose data hadn't changed
+/// since the last pass -- pure waste for mostly-static scenes (GUI panels,
+/// HUDs). Takes `value` by reference and only clones it on the write path,
+/// not the comparison path, so an unchanged component (the common case)
+/// costs one comparison and zero allocations -- cloning first and comparing
+/// after would pay the clone (heap `String`/`Vec` allocations for types like
+/// `GuiButton`/`Sprite`) on every publish regardless of whether the result
+/// is ever used. Bevy change detection is not otherwise relied on
+/// downstream (`render_system` has no `Changed<T>` filters), so this is
+/// purely an allocation/write-avoidance optimization, not a correctness
+/// dependency -- do not build new logic on top of the change ticks this now
+/// avoids bumping.
+fn insert_if_changed<C: Component + PartialEq + Clone>(entity: &mut EntityWorldMut, value: &C) {
+    if entity.get::<C>() != Some(value) {
+        entity.insert(value.clone());
+    }
+}
+
+/// Insert a clone of `component` if `Some` (skipping the write -- and the
+/// clone -- when unchanged, see [`insert_if_changed`]), remove it if `None`.
+/// The one piece of per-optional-field logic reconciliation needs beyond
+/// "insert the whole bundle": a sim-side optional component that goes from
+/// present to absent between snapshots (e.g. a `Tint` removed mid-game) must
+/// be *removed* from the mirror, not left stale -- a bundle `.insert()`
+/// alone never removes anything. The removal path always runs
+/// unconditionally (never diff-guarded) -- `EntityWorldMut::remove` is
+/// already a no-op when the component is absent, so there's no
+/// unnecessary-write cost to skip.
+fn set_optional<C: Component + PartialEq + Clone>(entity: &mut EntityWorldMut, value: Option<&C>) {
     match value {
-        Some(c) => {
-            entity.insert(c);
-        }
+        Some(c) => insert_if_changed(entity, c),
         None => {
             entity.remove::<C>();
         }
@@ -113,13 +136,15 @@ fn set_optional<C: Component>(entity: &mut EntityWorldMut, value: Option<C>) {
 /// Shared upsert (spawn-or-update) + despawn-on-vanish reconciliation loop,
 /// used identically by every category's `reconcile_*` function below: spawn
 /// a mirror (tagged with `Marker::default()`) for every sim id not yet seen,
-/// overwrite (whole-bundle re-insert, not diffed field-by-field) every
-/// component on ids already mirrored, and despawn any previously-mirrored id
-/// absent from `entries` this pass. The only per-category difference left as
-/// a closure is `apply`, since which components to write genuinely varies
-/// (e.g. map sprites also carry `Scale`/`Rotation`, screen categories don't)
-/// -- id lookup, spawn-on-new-id, and despawn-on-vanish are byte-for-byte
-/// identical across categories and live entirely in this function.
+/// update (diffed field-by-field via `insert_if_changed`/`set_optional` --
+/// each write skipped when the incoming value equals what's already on the
+/// mirror) every component on ids already mirrored, and despawn any
+/// previously-mirrored id absent from `entries` this pass. The only
+/// per-category difference left as a closure is `apply`, since which
+/// components to write genuinely varies (e.g. map sprites also carry
+/// `Scale`/`Rotation`, screen categories don't) -- id lookup, spawn-on-new-id,
+/// and despawn-on-vanish are byte-for-byte identical across categories and
+/// live entirely in this function.
 fn reconcile<Marker: Component + Default, E: SimEntry>(
     world: &mut World,
     id_map: &mut FxHashMap<u64, Entity>,
@@ -172,14 +197,17 @@ pub fn reconcile_map_sprites(world: &mut World, entries: &[MapSpriteEntry]) {
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.sprite.clone(), entry.position, entry.z_index));
-                set_optional::<Scale>(entity_mut, entry.scale);
-                set_optional::<Rotation>(entity_mut, entry.rotation);
-                set_optional::<EntityShader>(entity_mut, entry.shader.clone());
-                set_optional::<Tint>(entity_mut, entry.tint);
-                set_optional::<Shadow>(entity_mut, entry.shadow);
-                set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform);
-                set_optional::<MirrorVelocity>(entity_mut, entry.velocity.map(MirrorVelocity));
+                insert_if_changed(entity_mut, &entry.sprite);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
+                set_optional::<Scale>(entity_mut, entry.scale.as_ref());
+                set_optional::<Rotation>(entity_mut, entry.rotation.as_ref());
+                set_optional::<EntityShader>(entity_mut, entry.shader.as_ref());
+                set_optional::<Tint>(entity_mut, entry.tint.as_ref());
+                set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
+                set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform.as_ref());
+                let velocity = entry.velocity.map(MirrorVelocity);
+                set_optional::<MirrorVelocity>(entity_mut, velocity.as_ref());
             },
         );
     });
@@ -198,12 +226,15 @@ pub fn reconcile_map_texts(world: &mut World, entries: &[MapTextEntry]) {
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.text.clone(), entry.position, entry.z_index));
-                set_optional::<EntityShader>(entity_mut, entry.shader.clone());
-                set_optional::<Tint>(entity_mut, entry.tint);
-                set_optional::<Shadow>(entity_mut, entry.shadow);
-                set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform);
-                set_optional::<MirrorVelocity>(entity_mut, entry.velocity.map(MirrorVelocity));
+                insert_if_changed(entity_mut, &entry.text);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
+                set_optional::<EntityShader>(entity_mut, entry.shader.as_ref());
+                set_optional::<Tint>(entity_mut, entry.tint.as_ref());
+                set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
+                set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform.as_ref());
+                let velocity = entry.velocity.map(MirrorVelocity);
+                set_optional::<MirrorVelocity>(entity_mut, velocity.as_ref());
             },
         );
     });
@@ -223,9 +254,11 @@ pub fn reconcile_screen_sprites(world: &mut World, entries: &[ScreenSpriteEntry]
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.sprite.clone(), entry.position, entry.z_index));
-                set_optional::<Tint>(entity_mut, entry.tint);
-                set_optional::<Shadow>(entity_mut, entry.shadow);
+                insert_if_changed(entity_mut, &entry.sprite);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
+                set_optional::<Tint>(entity_mut, entry.tint.as_ref());
+                set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
             },
         );
     });
@@ -243,9 +276,11 @@ pub fn reconcile_screen_texts(world: &mut World, entries: &[ScreenTextEntry]) {
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.text.clone(), entry.position, entry.z_index));
-                set_optional::<Tint>(entity_mut, entry.tint);
-                set_optional::<Shadow>(entity_mut, entry.shadow);
+                insert_if_changed(entity_mut, &entry.text);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
+                set_optional::<Tint>(entity_mut, entry.tint.as_ref());
+                set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
             },
         );
     });
@@ -264,7 +299,9 @@ pub fn reconcile_gui_windows(world: &mut World, entries: &[GuiWindowEntry]) {
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.window.clone(), entry.position, entry.z_index));
+                insert_if_changed(entity_mut, &entry.window);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
             },
         );
     });
@@ -284,12 +321,10 @@ pub fn reconcile_gui_buttons(world: &mut World, entries: &[GuiButtonEntry]) {
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((
-                    entry.button.clone(),
-                    entry.interactable.clone(),
-                    entry.position,
-                    entry.z_index,
-                ));
+                insert_if_changed(entity_mut, &entry.button);
+                insert_if_changed(entity_mut, &entry.interactable);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
             },
         );
     });
@@ -307,7 +342,9 @@ pub fn reconcile_gui_labels(world: &mut World, entries: &[GuiLabelEntry]) {
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.label.clone(), entry.position, entry.z_index));
+                insert_if_changed(entity_mut, &entry.label);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
             },
         );
     });
@@ -326,7 +363,9 @@ pub fn reconcile_gui_progress_bars(world: &mut World, entries: &[GuiProgressBarE
             scratch_seen,
             entries,
             |entry, entity_mut| {
-                entity_mut.insert((entry.progress_bar.clone(), entry.position, entry.z_index));
+                insert_if_changed(entity_mut, &entry.progress_bar);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
             },
         );
     });
@@ -524,6 +563,69 @@ mod mirror_tests {
         assert_eq!(
             world.get::<Sprite>(mirror_entity_second).unwrap().tex_key.as_ref(),
             "changed"
+        );
+    }
+
+    #[test]
+    fn unchanged_republish_does_not_bump_component_change_tick() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_map_sprites(&mut world, &[make_map_sprite_entry(sim_entity, 1.0)]);
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .map_sprites
+            .get(&sim_entity.to_bits())
+            .unwrap();
+        // Advance the change-tick baseline (mirrors clear_trackers() being
+        // called once per render frame in the real schedule) so the next
+        // reconcile's is_changed() check reflects only writes made after
+        // this point, not the initial spawn-time insert above.
+        world.clear_trackers();
+
+        reconcile_map_sprites(&mut world, &[make_map_sprite_entry(sim_entity, 1.0)]);
+
+        assert!(
+            !world
+                .entity(mirror_entity)
+                .get_ref::<Sprite>()
+                .unwrap()
+                .is_changed(),
+            "reconciling with an identical entry must not rewrite (and so must not bump the \
+             change tick of) an already-up-to-date component"
+        );
+        assert!(
+            !world
+                .entity(mirror_entity)
+                .get_ref::<ZIndex>()
+                .unwrap()
+                .is_changed(),
+            "same, for a second field on the same mirror entity"
+        );
+    }
+
+    #[test]
+    fn changed_republish_does_bump_component_change_tick() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+
+        reconcile_map_sprites(&mut world, &[make_map_sprite_entry(sim_entity, 1.0)]);
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .map_sprites
+            .get(&sim_entity.to_bits())
+            .unwrap();
+        world.clear_trackers();
+
+        reconcile_map_sprites(&mut world, &[make_map_sprite_entry(sim_entity, 2.0)]);
+
+        assert!(
+            world
+                .entity(mirror_entity)
+                .get_ref::<ZIndex>()
+                .unwrap()
+                .is_changed(),
+            "a genuinely changed field must still be rewritten"
         );
     }
 

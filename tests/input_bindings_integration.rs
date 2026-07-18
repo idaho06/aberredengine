@@ -64,14 +64,13 @@ fn test_default_bindings_cover_all_actions() {
     }
 }
 
-/// The default binding count should be exactly 15 (one per action).
+/// Every action should have at least one default binding.
 #[test]
 fn test_default_bindings_count() {
     let bindings = InputBindings::default();
-    assert_eq!(
-        bindings.map.len(),
-        15,
-        "Expected 15 default action bindings"
+    assert!(
+        bindings.map.iter().all(|bl| !bl.is_empty()),
+        "Expected every action to have at least one default binding"
     );
 }
 
@@ -124,7 +123,7 @@ fn test_first_binding_str_returns_some_for_bound_action() {
 fn test_get_bindings_returns_empty_for_unbound_action() {
     let mut bindings = InputBindings::default();
     // Remove all bindings for Back explicitly
-    bindings.map.remove(&InputAction::Back);
+    bindings.map[InputAction::Back.index()].clear();
     assert!(bindings.get_bindings(InputAction::Back).is_empty());
 }
 
@@ -321,7 +320,7 @@ fn test_process_input_cmd_unknown_action_does_not_panic() {
         &mut bindings,
     );
 
-    assert_eq!(bindings.map.len(), snapshot.len());
+    assert_eq!(bindings.map, snapshot, "bindings must be unchanged");
 }
 
 #[cfg(feature = "lua")]

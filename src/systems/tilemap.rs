@@ -16,7 +16,7 @@ use crate::components::mapposition::MapPosition;
 use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::zindex::ZIndex;
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
 pub const TILES_GROUP: &str = "tiles";

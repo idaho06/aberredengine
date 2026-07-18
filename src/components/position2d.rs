@@ -56,6 +56,16 @@ impl<S: PositionSpace> Clone for Position2D<S> {
 
 impl<S: PositionSpace> Copy for Position2D<S> {}
 
+/// Manual, not derived, for the same reason as `Clone`/`Copy` above: a
+/// derived impl would carry a spurious `S: PartialEq` bound. Compares `pos`
+/// only -- `_marker` is a zero-sized `PhantomData<S>` with no state to
+/// diverge on.
+impl<S: PositionSpace> PartialEq for Position2D<S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.pos == other.pos
+    }
+}
+
 impl<S: PositionSpace> Default for Position2D<S> {
     fn default() -> Self {
         Self {

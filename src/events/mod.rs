@@ -12,7 +12,6 @@
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
 //! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
-//! - [`render_assets`] – GL asset-load commands consumed by `process_render_asset_cmds`
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
 //! - [`render`] – events/observers used only by the render (main) thread (F10 fullscreen toggle)
 //!
@@ -27,7 +26,6 @@ pub mod input;
 pub mod luatimer;
 pub mod menu;
 pub mod render;
-pub mod render_assets;
 pub mod spawnmap;
 pub mod switchdebug;
 pub mod timer;

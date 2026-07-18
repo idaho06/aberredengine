@@ -17,7 +17,7 @@ use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
 use aberredengine::engine_app::SimSet;
-use aberredengine::events::render_assets::RenderAssetCmd;
+use aberredengine::protocol::render_assets::RenderAssetCmd;
 use aberredengine::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::protocol::render_logic::RenderMsg;
 use aberredengine::raylib::ffi::KeyboardKey;

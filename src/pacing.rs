@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{Receiver, TryRecvError, TrySendError};
+use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError};
 
 use crate::protocol::stats::ThreadStats;
 
@@ -27,6 +27,23 @@ pub fn channel_disconnected<T>(rx: &Receiver<T>) -> bool {
 /// bounded channel -- see `LogicBridge::tx_input`).
 pub fn send_channel_disconnected<T>(result: &Result<(), TrySendError<T>>) -> bool {
     matches!(result, Err(TrySendError::Disconnected(_)))
+}
+
+/// Sends `value` on `tx`; if the bounded channel is momentarily full, pops
+/// exactly one stale entry off `rx` (the oldest still queued) and retries
+/// the send once, so the freshest value wins instead of being silently
+/// discarded. Correct only with a single producer on `tx` -- see
+/// `LogicBridge::rx_input`'s doc comment for the invariant this relies on;
+/// with multiple producers another sender could refill the freed slot
+/// between the pop and the retry, race-losing the retry back to `Full`.
+pub fn send_or_drop_oldest<T>(tx: &Sender<T>, rx: &Receiver<T>, value: T) -> Result<(), TrySendError<T>> {
+    match tx.try_send(value) {
+        Err(TrySendError::Full(value)) => {
+            let _ = rx.try_recv();
+            tx.try_send(value)
+        }
+        result => result,
+    }
 }
 
 /// Paces a loop to a target frequency, returning the real elapsed dt.
@@ -58,14 +75,22 @@ impl Pacer {
     }
 
     /// Non-blocking check: has at least one period elapsed since the last
-    /// `due()` call (or construction)? Unlike `tick()`, never sleeps -- resets
-    /// the internal clock and returns `true` only when a period has actually
-    /// elapsed. For decimating a less-frequent task inside a loop paced by a
+    /// `due()` call (or construction)? Unlike `tick()`, never sleeps. On a
+    /// fire, the deadline advances by exactly one `period` (carrying any
+    /// overshoot forward) rather than resetting to `Instant::now()` -- a
+    /// reset would systematically undershoot the configured rate, since the
+    /// overshoot past each period is discarded every time. If still behind
+    /// by a full period after advancing (e.g. after a long stall), the
+    /// deadline snaps to now instead of firing in a burst on subsequent
+    /// polls. For decimating a less-frequent task inside a loop paced by a
     /// different `Pacer` (e.g. "publish a snapshot at `snapshot_hz` from
     /// inside a loop ticking at `sim_hz`"), not for pacing the loop itself.
     pub fn due(&mut self) -> bool {
         if self.last.elapsed() >= self.period {
-            self.last = Instant::now();
+            self.last += self.period;
+            if self.last.elapsed() >= self.period {
+                self.last = Instant::now();
+            }
             true
         } else {
             false
@@ -213,6 +238,61 @@ mod tests {
             !pacer.due(),
             "immediately re-checking must not fire again until another period elapses"
         );
+    }
+
+    #[test]
+    fn due_carries_overshoot_forward() {
+        let mut pacer = Pacer::new(1000.0); // period 1ms
+        let old_last = Instant::now() - pacer.period.mul_f64(1.5);
+        pacer.last = old_last;
+        assert!(pacer.due());
+        assert_eq!(
+            pacer.last,
+            old_last + pacer.period,
+            "deadline should advance by exactly one period, not reset to now"
+        );
+    }
+
+    #[test]
+    fn due_stall_snaps_once() {
+        let mut pacer = Pacer::new(1000.0); // period 1ms
+        pacer.last = Instant::now() - pacer.period.mul_f64(3.0);
+        assert!(pacer.due(), "first poll after a stall should fire");
+        assert!(
+            pacer.last.elapsed() < pacer.period,
+            "stall guard should snap the deadline close to now, not leave it periods behind"
+        );
+        assert!(
+            !pacer.due(),
+            "immediately re-checking after the stall snap must not fire again"
+        );
+    }
+
+    #[test]
+    fn send_or_drop_oldest_sends_directly_when_not_full() {
+        let (tx, rx) = crossbeam_channel::bounded::<i32>(2);
+        assert!(send_or_drop_oldest(&tx, &rx, 1).is_ok());
+        assert_eq!(rx.try_recv(), Ok(1));
+    }
+
+    #[test]
+    fn send_or_drop_oldest_drops_oldest_when_full() {
+        let (tx, rx) = crossbeam_channel::bounded::<i32>(2);
+        tx.try_send(1).unwrap();
+        tx.try_send(2).unwrap();
+        assert!(send_or_drop_oldest(&tx, &rx, 3).is_ok());
+        // Oldest (1) was dropped to make room; 2 and 3 remain, in order.
+        assert_eq!(rx.try_recv(), Ok(2));
+        assert_eq!(rx.try_recv(), Ok(3));
+    }
+
+    #[test]
+    fn send_or_drop_oldest_reports_disconnected() {
+        let (tx, rx) = crossbeam_channel::bounded::<i32>(1);
+        drop(rx);
+        let rx2 = crossbeam_channel::bounded::<i32>(1).1; // unrelated, unused receiver
+        let result = send_or_drop_oldest(&tx, &rx2, 1);
+        assert!(send_channel_disconnected(&result));
     }
 
     #[test]

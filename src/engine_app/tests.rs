@@ -255,7 +255,7 @@ fn logic_and_render_msgs_round_trip_across_a_thread() {
 
 #[test]
 fn input_sample_round_trips_across_a_thread() {
-    let (tx_input, rx_input) = bounded::<InputSample>(8);
+    let (tx_input, rx_input) = bounded::<InputSample>(64);
 
     let echo = std::thread::spawn(move || {
         let sample = rx_input.recv().expect("sender alive");

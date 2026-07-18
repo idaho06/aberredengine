@@ -46,8 +46,27 @@ pub struct GuiInteractable {
     pub state: GuiWidgetState,
     /// Lua callback name, checked first.
     pub on_click_callback: Option<String>,
-    /// Rust fn-pointer callback, checked second.
+    /// Rust fn-pointer callback, checked second. Set once at spawn time and
+    /// never mutated afterward -- excluded from `PartialEq` below (see that
+    /// impl's comment) rather than compared by address, which the compiler
+    /// warns is not a reliable identity check.
     pub on_rust_callback: Option<GuiRustCallback>,
+}
+
+/// Manual, not derived: comparing `on_rust_callback` by function-pointer
+/// address is unreliable (the compiler may merge identical function bodies,
+/// or addresses may vary across codegen units -- see
+/// `unpredictable_function_pointer_comparisons`), so it's excluded here.
+/// Safe for this struct's one consumer, the mirror reconcile diff-guard
+/// (`src/systems/render/mirror.rs`): `on_rust_callback` is set once at spawn
+/// and never mutated afterward, so treating it as always-equal never masks
+/// a real change on an otherwise-identical, still-live entity.
+impl PartialEq for GuiInteractable {
+    fn eq(&self, other: &Self) -> bool {
+        self.size == other.size
+            && self.state == other.state
+            && self.on_click_callback == other.on_click_callback
+    }
 }
 
 impl GuiInteractable {

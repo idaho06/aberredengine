@@ -9,7 +9,7 @@
 //! See `src/protocol/endpoints.rs` for the bridge resources holding the
 //! endpoints.
 
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::FontMetrics;
 use crate::resources::signal_intents::SignalIntent;

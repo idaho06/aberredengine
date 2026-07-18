@@ -10,7 +10,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 /// Describes how to render a textured quad for an entity.
 pub struct Sprite {
     /// Texture identifier used to look up the GPU resource.

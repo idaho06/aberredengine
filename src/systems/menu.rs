@@ -21,7 +21,7 @@ use crate::components::zindex::ZIndex;
 use crate::protocol::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::gamestate::GameStates::Quitting;
 use crate::resources::gamestate::NextGameState;

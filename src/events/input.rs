@@ -46,6 +46,58 @@ pub enum InputAction {
     ToggleFullscreen,
 }
 
+impl InputAction {
+    /// Total number of variants -- the size of the flat array
+    /// [`InputBindings`](crate::resources::input_bindings::InputBindings) indexes
+    /// with [`index`](Self::index) instead of hashing a `HashMap` key on
+    /// every lookup (this enum's bindings are read up to 15 times per
+    /// backlogged input sample, every sim tick -- default 240Hz).
+    pub const COUNT: usize = 15;
+
+    /// Every variant, in the same order as [`Self::index`] assigns slots.
+    pub const ALL: [InputAction; Self::COUNT] = [
+        InputAction::MainDirectionUp,
+        InputAction::MainDirectionDown,
+        InputAction::MainDirectionLeft,
+        InputAction::MainDirectionRight,
+        InputAction::SecondaryDirectionUp,
+        InputAction::SecondaryDirectionDown,
+        InputAction::SecondaryDirectionLeft,
+        InputAction::SecondaryDirectionRight,
+        InputAction::Back,
+        InputAction::Action1,
+        InputAction::Action2,
+        InputAction::Action3,
+        InputAction::Special,
+        InputAction::ToggleDebug,
+        InputAction::ToggleFullscreen,
+    ];
+
+    /// Slot index into `InputBindings`'s flat `[Vec<InputBinding>; COUNT]`
+    /// array. A manual match (not `as usize` on the enum's discriminant) so
+    /// adding/reordering a variant can't silently change another variant's
+    /// index without a compiler-visible diff.
+    pub const fn index(self) -> usize {
+        match self {
+            InputAction::MainDirectionUp => 0,
+            InputAction::MainDirectionDown => 1,
+            InputAction::MainDirectionLeft => 2,
+            InputAction::MainDirectionRight => 3,
+            InputAction::SecondaryDirectionUp => 4,
+            InputAction::SecondaryDirectionDown => 5,
+            InputAction::SecondaryDirectionLeft => 6,
+            InputAction::SecondaryDirectionRight => 7,
+            InputAction::Back => 8,
+            InputAction::Action1 => 9,
+            InputAction::Action2 => 10,
+            InputAction::Action3 => 11,
+            InputAction::Special => 12,
+            InputAction::ToggleDebug => 13,
+            InputAction::ToggleFullscreen => 14,
+        }
+    }
+}
+
 /// Event emitted when an input action is pressed or released.
 ///
 /// The `action` field identifies which logical action occurred, and `pressed`

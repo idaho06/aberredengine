@@ -252,7 +252,7 @@ impl TestWorldBuilder {
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
-        let (_tx_input, rx_input) = bounded(8);
+        let (_tx_input, rx_input) = bounded(64);
         let (snap_in, snap_out) =
             triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
 

@@ -44,5 +44,5 @@ pub struct MirrorGuiProgressBar;
 /// ever has this component; it wraps the `Vector2` already extracted from
 /// `RigidBody` at snapshot-build time (`MapSpriteEntry`/`MapTextEntry`'s
 /// `velocity` field). Screen-space categories have no velocity concept.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct MirrorVelocity(pub Vector2);

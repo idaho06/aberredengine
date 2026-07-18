@@ -61,7 +61,7 @@ pub struct ThreadStatsParams<'w> {
 
 /// One world-space sprite, owned. Mirrors the fields `render_system` needs
 /// for rendering.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MapSpriteEntry {
     /// Entity id this entry was captured from. Carried through so downstream
     /// consumers (debug overlay, item lookup) don't need a live query.
@@ -82,7 +82,7 @@ pub struct MapSpriteEntry {
 }
 
 /// One world-space text entity, owned. Mirrors `MapTextQueryData`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MapTextEntry {
     pub entity: Entity,
     pub text: DynamicText,
@@ -97,7 +97,7 @@ pub struct MapTextEntry {
 }
 
 /// One screen-space sprite, owned. Mirrors `ScreenSpriteQueryData`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ScreenSpriteEntry {
     pub entity: Entity,
     pub sprite: Sprite,
@@ -108,7 +108,7 @@ pub struct ScreenSpriteEntry {
 }
 
 /// One screen-space text entity, owned. Mirrors `ScreenTextQueryData`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ScreenTextEntry {
     pub entity: Entity,
     pub text: DynamicText,
@@ -119,7 +119,7 @@ pub struct ScreenTextEntry {
 }
 
 /// One GUI window/panel, owned.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuiWindowEntry {
     pub entity: Entity,
     pub window: GuiWindow,
@@ -128,7 +128,7 @@ pub struct GuiWindowEntry {
 }
 
 /// One GUI button, owned.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuiButtonEntry {
     pub entity: Entity,
     pub button: GuiButton,
@@ -138,7 +138,7 @@ pub struct GuiButtonEntry {
 }
 
 /// One GUI label, owned.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuiLabelEntry {
     pub entity: Entity,
     pub label: GuiLabel,
@@ -147,7 +147,7 @@ pub struct GuiLabelEntry {
 }
 
 /// One GUI progress bar, owned.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuiProgressBarEntry {
     pub entity: Entity,
     pub progress_bar: GuiProgressBar,

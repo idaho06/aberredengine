@@ -4,7 +4,7 @@
 //! Used by entity shaders, post-process shaders, and the render system.
 
 /// Value types for shader uniforms.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UniformValue {
     Float(f32),
     Int(i32),

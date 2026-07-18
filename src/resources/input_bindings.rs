@@ -18,8 +18,6 @@
 //! let keys = bindings.get_bindings(InputAction::Action1);
 //! ```
 
-use std::collections::HashMap;
-
 use bevy_ecs::prelude::*;
 use raylib::ffi::GamepadAxis;
 use raylib::ffi::GamepadButton;
@@ -67,9 +65,15 @@ pub enum InputBinding {
 ///
 /// Supports multiple bindings per action so that, for example, both W and
 /// the Up arrow key can map to the same movement action.
+///
+/// A fixed-size array indexed by [`InputAction::index`], not a `HashMap` --
+/// bindings are read up to `InputAction::COUNT` times per backlogged input
+/// sample, every sim tick (default 240Hz via `[simulation] hz`), so hashing
+/// a key on every lookup was steady avoidable CPU against a map that only
+/// ever changes on an explicit Lua/Rust rebind.
 #[derive(Resource, Debug, Clone)]
 pub struct InputBindings {
-    pub map: HashMap<InputAction, Vec<InputBinding>>,
+    pub map: [Vec<InputBinding>; InputAction::COUNT],
     dirty: bool,
 }
 
@@ -79,14 +83,14 @@ impl InputBindings {
     /// This is the typical "rebind" path: the user picks one new key and the
     /// old binding is discarded.
     pub fn rebind(&mut self, action: InputAction, binding: InputBinding) {
-        self.map.insert(action, vec![binding]);
+        self.map[action.index()] = vec![binding];
         self.dirty = true;
     }
 
     /// Append `binding` to the list of bindings for `action` without removing
     /// existing ones (multi-bind / combo support).
     pub fn add_binding(&mut self, action: InputAction, binding: InputBinding) {
-        self.map.entry(action).or_default().push(binding);
+        self.map[action.index()].push(binding);
         self.dirty = true;
     }
 
@@ -97,7 +101,7 @@ impl InputBindings {
 
     /// Return all bindings registered for `action`, or an empty slice if none.
     pub fn get_bindings(&self, action: InputAction) -> &[InputBinding] {
-        self.map.get(&action).map(Vec::as_slice).unwrap_or(&[])
+        self.map[action.index()].as_slice()
     }
 
     /// Return the first binding for `action` as a string, or `None` if unbound.
@@ -106,6 +110,15 @@ impl InputBindings {
     pub fn first_binding_str(&self, action: InputAction) -> Option<String> {
         self.get_bindings(action).first().map(|b| binding_to_str(*b))
     }
+
+    /// Iterate every action alongside its bindings. Keeps the flat-array
+    /// backing storage (see the struct doc) encapsulated -- callers that
+    /// need to walk every action (e.g. `update_bindings_cache`, which builds
+    /// the Lua-facing snapshot) get an iterator instead of reaching into
+    /// `map` and `InputAction::ALL` themselves.
+    pub fn iter(&self) -> impl Iterator<Item = (InputAction, &[InputBinding])> {
+        InputAction::ALL.into_iter().map(|action| (action, self.get_bindings(action)))
+    }
 }
 
 impl Default for InputBindings {
@@ -113,47 +126,27 @@ impl Default for InputBindings {
     fn default() -> Self {
         let k = |key: KeyboardKey| InputBinding::Keyboard(key);
         let m = |btn: MouseButton| InputBinding::MouseButton(btn);
-        let mut map = HashMap::new();
+        let mut map: [Vec<InputBinding>; InputAction::COUNT] = std::array::from_fn(|_| Vec::new());
 
-        map.insert(InputAction::MainDirectionUp, vec![k(KeyboardKey::KEY_W)]);
-        map.insert(InputAction::MainDirectionDown, vec![k(KeyboardKey::KEY_S)]);
-        map.insert(InputAction::MainDirectionLeft, vec![k(KeyboardKey::KEY_A)]);
-        map.insert(InputAction::MainDirectionRight, vec![k(KeyboardKey::KEY_D)]);
-        map.insert(
-            InputAction::SecondaryDirectionUp,
-            vec![k(KeyboardKey::KEY_UP)],
-        );
-        map.insert(
-            InputAction::SecondaryDirectionDown,
-            vec![k(KeyboardKey::KEY_DOWN)],
-        );
-        map.insert(
-            InputAction::SecondaryDirectionLeft,
-            vec![k(KeyboardKey::KEY_LEFT)],
-        );
-        map.insert(
-            InputAction::SecondaryDirectionRight,
-            vec![k(KeyboardKey::KEY_RIGHT)],
-        );
-        map.insert(InputAction::Back, vec![k(KeyboardKey::KEY_ESCAPE)]);
-        map.insert(
-            InputAction::Action1,
-            vec![k(KeyboardKey::KEY_SPACE), m(MouseButton::MOUSE_BUTTON_LEFT)],
-        );
-        map.insert(
-            InputAction::Action2,
-            vec![
-                k(KeyboardKey::KEY_ENTER),
-                m(MouseButton::MOUSE_BUTTON_RIGHT),
-            ],
-        );
-        map.insert(
-            InputAction::Action3,
-            vec![m(MouseButton::MOUSE_BUTTON_MIDDLE)],
-        );
-        map.insert(InputAction::Special, vec![k(KeyboardKey::KEY_F12)]);
-        map.insert(InputAction::ToggleDebug, vec![k(KeyboardKey::KEY_F11)]);
-        map.insert(InputAction::ToggleFullscreen, vec![k(KeyboardKey::KEY_F10)]);
+        map[InputAction::MainDirectionUp.index()] = vec![k(KeyboardKey::KEY_W)];
+        map[InputAction::MainDirectionDown.index()] = vec![k(KeyboardKey::KEY_S)];
+        map[InputAction::MainDirectionLeft.index()] = vec![k(KeyboardKey::KEY_A)];
+        map[InputAction::MainDirectionRight.index()] = vec![k(KeyboardKey::KEY_D)];
+        map[InputAction::SecondaryDirectionUp.index()] = vec![k(KeyboardKey::KEY_UP)];
+        map[InputAction::SecondaryDirectionDown.index()] = vec![k(KeyboardKey::KEY_DOWN)];
+        map[InputAction::SecondaryDirectionLeft.index()] = vec![k(KeyboardKey::KEY_LEFT)];
+        map[InputAction::SecondaryDirectionRight.index()] = vec![k(KeyboardKey::KEY_RIGHT)];
+        map[InputAction::Back.index()] = vec![k(KeyboardKey::KEY_ESCAPE)];
+        map[InputAction::Action1.index()] =
+            vec![k(KeyboardKey::KEY_SPACE), m(MouseButton::MOUSE_BUTTON_LEFT)];
+        map[InputAction::Action2.index()] = vec![
+            k(KeyboardKey::KEY_ENTER),
+            m(MouseButton::MOUSE_BUTTON_RIGHT),
+        ];
+        map[InputAction::Action3.index()] = vec![m(MouseButton::MOUSE_BUTTON_MIDDLE)];
+        map[InputAction::Special.index()] = vec![k(KeyboardKey::KEY_F12)];
+        map[InputAction::ToggleDebug.index()] = vec![k(KeyboardKey::KEY_F11)];
+        map[InputAction::ToggleFullscreen.index()] = vec![k(KeyboardKey::KEY_F10)];
 
         let mut bindings = Self { map, dirty: true };
         bindings.add_pad0_defaults();
@@ -528,6 +521,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_input_action_index_is_a_bijection_onto_0_count() {
+        // Every ALL entry must map to a distinct index < COUNT -- catches
+        // copy-paste errors in InputAction::index's manual match (e.g. two
+        // variants accidentally sharing a slot, silently corrupting both
+        // actions' bindings).
+        let mut seen = [false; InputAction::COUNT];
+        for action in InputAction::ALL {
+            let i = action.index();
+            assert!(i < InputAction::COUNT, "{action:?} index {i} out of range");
+            assert!(!seen[i], "{action:?} index {i} collides with another variant");
+            seen[i] = true;
+        }
+        assert!(seen.iter().all(|&s| s), "every slot 0..COUNT must be reachable");
+    }
+
+    #[test]
     fn test_default_bindings_are_correct() {
         // Keyboard/mouse defaults are always the FIRST bindings for each
         // action -- pad-0 gamepad defaults (see test_pad0_defaults_are_appended
@@ -684,7 +693,7 @@ mod tests {
     #[test]
     fn test_get_bindings_unregistered_returns_empty() {
         let b = InputBindings {
-            map: HashMap::new(),
+            map: std::array::from_fn(|_| Vec::new()),
             dirty: false,
         };
         assert!(b.get_bindings(InputAction::Action1).is_empty());
@@ -710,7 +719,7 @@ mod tests {
     #[test]
     fn test_first_binding_str_unbound_returns_none() {
         let b = InputBindings {
-            map: HashMap::new(),
+            map: std::array::from_fn(|_| Vec::new()),
             dirty: false,
         };
         assert_eq!(b.first_binding_str(InputAction::Action1), None);

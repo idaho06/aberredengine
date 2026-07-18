@@ -26,8 +26,19 @@ pub struct LogicBridge {
     pub tx_logic: Sender<LogicMsg>,
     /// Sender for [`InputSample`] (render -> logic), on its own bounded
     /// channel separate from `tx_logic`'s unbounded one — a stalled sim drops
-    /// the oldest-queued samples instead of growing an unbounded backlog.
+    /// the OLDEST-queued sample instead of growing an unbounded backlog (see
+    /// `rx_input` below for how the render side implements the drop).
     pub tx_input: Sender<InputSample>,
+    /// A clone of the logic thread's `InputSample` receiver, held solely so
+    /// `sample_and_send_input` can pop one stale entry off the front of a
+    /// momentarily-full `tx_input` channel before retrying the send —
+    /// crossbeam has no sender-side "drop oldest" primitive, so freeing a
+    /// slot requires a receiver handle. Safe with a single producer
+    /// (`sample_and_send_input` is the only `tx_input.try_send` call site):
+    /// the popped sample is always the oldest one still queued, and the
+    /// logic thread's own `rx_input.try_iter()` drain is unaffected — it
+    /// only ever sees whatever is left in the channel.
+    pub rx_input: Receiver<InputSample>,
     /// Receiver for [`RenderMsg`] (logic -> render).
     pub rx_render: Receiver<RenderMsg>,
     /// Join handle for the logic thread; joined during shutdown, after

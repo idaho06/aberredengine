@@ -16,7 +16,7 @@ use crate::components::screenposition::ScreenPosition;
 use crate::error::EngineError;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::events::switchdebug::switch_debug_observer;
 use crate::protocol::endpoints::{setup_audio, RenderTx};
 #[cfg(any(test, feature = "test-support"))]

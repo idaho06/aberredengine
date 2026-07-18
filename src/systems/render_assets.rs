@@ -8,7 +8,7 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 
 /// Advances the `RenderAssetCmd` message queue once per frame, so writes
 /// from earlier this frame become readable. Mirrors `update_bevy_audio_cmds`.

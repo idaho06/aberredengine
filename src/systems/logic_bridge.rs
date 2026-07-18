@@ -17,7 +17,7 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::protocol::snapshot::SnapshotPublisher;

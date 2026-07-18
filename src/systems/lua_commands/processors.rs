@@ -12,7 +12,7 @@ use raylib::prelude::{Camera2D, Color, Rectangle, Vector2};
 use crate::components::phase::Phase;
 use crate::components::shadow::Shadow;
 use crate::protocol::audio::AudioCmd;
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
@@ -602,7 +602,7 @@ mod tests {
         process_signal_command, translate_asset_command,
     };
     use crate::protocol::audio::AudioCmd;
-    use crate::events::render_assets::RenderAssetCmd;
+    use crate::protocol::render_assets::RenderAssetCmd;
     use crate::resources::animationstore::AnimationStore;
     use crate::resources::guitheme::GuiThemeStore;
     use crate::resources::lua_runtime::{AnimationCmd, AssetCmd, AudioLuaCmd, RenderCmd, SignalCmd};

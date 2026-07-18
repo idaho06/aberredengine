@@ -63,10 +63,10 @@ impl LuaRuntime {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             let mut snap = data.bindings_snapshot.borrow_mut();
             snap.clear();
-            for (action, bl) in &bindings.map {
+            for (action, bl) in bindings.iter() {
                 if let Some(first) = bl.first() {
                     let key_str = binding_to_str(*first);
-                    let action_str = action_to_str(*action).to_string();
+                    let action_str = action_to_str(action).to_string();
                     snap.insert(action_str, key_str.to_string());
                 }
             }

@@ -36,7 +36,7 @@ pub enum ProgressBarDirection {
 /// `signal_binding`, when set, causes `gui_progressbar_signal_update_system`
 /// to read `value` from `WorldSignals` every frame (integer preferred, scalar
 /// as fallback), so the bar stays in sync without Lua polling.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiProgressBar {
     pub size: Vector2,
     /// Current fill level. Clamped to `[0, max]` at construction and by

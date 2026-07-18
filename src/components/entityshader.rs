@@ -24,7 +24,7 @@ use crate::resources::uniformvalue::UniformValue;
 /// let mut shader = EntityShader::new("glow");
 /// shader.uniforms_mut().insert(Arc::from("uIntensity"), UniformValue::Float(0.8));
 /// ```
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct EntityShader {
     /// Key referencing a shader in the ShaderStore.
     pub shader_key: Arc<str>,

@@ -18,7 +18,7 @@ use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
-use crate::events::render_assets::RenderAssetCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
@@ -558,7 +558,7 @@ pub fn switch_scene(
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    mut render_asset_cmd_writer: MessageWriter<crate::events::render_assets::RenderAssetCmd>,
+    mut render_asset_cmd_writer: MessageWriter<crate::protocol::render_assets::RenderAssetCmd>,
     mut buf: Local<Vec<AssetCmd>>,
 ) {
     lua_runtime.drain_asset_commands_into(&mut buf);
@@ -972,7 +972,7 @@ mod tests {
         // tests/engine_tick_integration.rs); it would pass unchanged if this
         // system were still registered on VARIABLE.
         let mut world = new_drain_test_world();
-        world.insert_resource(Messages::<crate::events::render_assets::RenderAssetCmd>::default());
+        world.insert_resource(Messages::<crate::protocol::render_assets::RenderAssetCmd>::default());
 
         {
             let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
@@ -986,12 +986,12 @@ mod tests {
         world.run_system_once(process_lua_asset_commands).unwrap();
 
         let cmds: Vec<_> = world
-            .resource_mut::<Messages<crate::events::render_assets::RenderAssetCmd>>()
+            .resource_mut::<Messages<crate::protocol::render_assets::RenderAssetCmd>>()
             .drain()
             .collect();
         assert_eq!(cmds.len(), 1, "expected exactly one RenderAssetCmd");
         match &cmds[0] {
-            crate::events::render_assets::RenderAssetCmd::Texture { id, path, .. } => {
+            crate::protocol::render_assets::RenderAssetCmd::Texture { id, path, .. } => {
                 assert_eq!(id, "boss");
                 assert_eq!(path, "assets/boss.png");
             }
