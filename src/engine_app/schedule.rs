@@ -128,7 +128,7 @@ impl EngineBuilder {
     /// this is where essentially all gameplay logic lives: movement,
     /// collision, phases, animation, Lua scripting, GUI layout/hit-test,
     /// scene lifecycle, and per-tick housekeeping) and
-    /// `present` (decimated to `[simulation] snapshot_hz`, not run
+    /// `present` (decimated to `[simulation] snapshot_skip` sim ticks, not run
     /// once per received input sample -- package the tick's
     /// fully-settled state into a `DrawableSnapshot` and publish it into the
     /// `SnapshotPublisher` triple buffer; nothing else). See
@@ -234,7 +234,7 @@ impl EngineBuilder {
         );
         // update_bevy_render_asset_cmds + forward_render_asset_cmds live on
         // the tail of `sim` (SimSet::Bookkeeping): with `present` decimated
-        // to `[simulation] snapshot_hz` (see `logic_thread_main`), asset
+        // to `[simulation] snapshot_skip` sim ticks (see `logic_thread_main`), asset
         // loads must still reach the render thread every sim tick, not just
         // on a publish tick, or a texture could sit queued for several ticks
         // before a snapshot referencing it is even built. See that block's

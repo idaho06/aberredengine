@@ -8,7 +8,7 @@ use crossbeam_channel::{Receiver, Sender};
 use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
 use crate::error::EngineError;
-use crate::pacing::{Pacer, StatsWindow};
+use crate::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::shutdown_audio;
@@ -121,9 +121,8 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 ///
 /// `present` (build + publish this tick's [`DrawableSnapshot`]) does not
 /// run once per received input sample — it's decimated to
-/// `[simulation] snapshot_hz`, checked independently of whether input
-/// arrived this tick (checked via [`Pacer::due`] on a dedicated snapshot
-/// `Pacer`), so the render thread
+/// `[simulation] snapshot_skip`, a sim-tick countdown checked
+/// independently of whether input arrived this tick, so the render thread
 /// keeps receiving fresh snapshots during input droughts too. Forwarding
 /// queued `RenderAssetCmd`s (`forward_render_asset_cmds`) runs on the tail
 /// of `sim` rather than on `present`, for the same reason: asset loads must
@@ -136,7 +135,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let has_lua = false;
 
     let sim_hz = init.config.sim_hz;
-    let snapshot_hz = init.config.snapshot_hz;
+    let snapshot_skip = init.config.snapshot_skip;
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
@@ -153,11 +152,12 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let rx_logic = init.rx_logic;
     let rx_input = init.rx_input;
     let mut pacer = Pacer::new(sim_hz);
-    // A second, non-blocking `Pacer` decimates `present`/snapshot
-    // publishing independently of the sim's own pacing above -- `due()`
-    // never sleeps, it just reports whether a `snapshot_hz` period has
-    // elapsed since it last fired.
-    let mut snapshot_pacer = Pacer::new(snapshot_hz);
+    // Decimates `present`/snapshot publishing independently of the sim's
+    // own pacing above: a countdown of sim ticks rather than a second
+    // wall-clock Pacer, so publish cadence scales with actual sim ticking
+    // instead of holding an independent wall-clock rate. Fires on the first
+    // tick, then every `snapshot_skip + 1` ticks thereafter.
+    let mut present_countdown = TickCountdown::new(snapshot_skip);
     // Rolls up sim-tick work time (run_sim_tick only, not the
     // pacer's sleep) into SimStats once per ~1s window, for the F11 perf
     // panel. Input-backlog sum/max share this same window -- averaged
@@ -295,14 +295,14 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             backlog_max = 0;
         }
 
-        // `present` runs at the configured `snapshot_hz`, not once
+        // `present` runs every `snapshot_skip + 1` sim ticks, not once
         // per received input sample -- independent of whether input arrived
         // this tick, so the render thread keeps receiving fresh snapshots
         // during input droughts too. `present` sees the same real dt this
         // tick measured (no separate render-frame-delta override) -- that
         // dt is captured into the snapshot for render-side use (shader time
         // uniforms, perf panel), even on ticks that don't publish.
-        if snapshot_pacer.due() {
+        if present_countdown.due() {
             crate::tracy::tracy_span!("present_schedule_run");
             present.run(&mut world);
         }

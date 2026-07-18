@@ -95,7 +95,7 @@ fullscreen = false             ; Start in fullscreen mode
 
 [simulation]
 hz = 240                       ; Logic thread's sim tick rate (see Threading Model, Section 3)
-; snapshot_hz = 60              ; Optional; defaults to [window] target_fps
+; snapshot_skip = 1             ; Optional; PRESENT runs every N+1th sim tick; defaults to round(hz/target_fps)-1
 
 [audio]
 hz = 100                       ; Audio thread's tick rate
@@ -2082,7 +2082,7 @@ Section 2 showed the basics. This is the complete reference.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hz` | `f64` | `240` | Logic thread's sim tick rate — see [Threading Model](#threading-model-what-your-code-can-access). Read once at startup; a runtime `GameConfig` change has no effect. Clamped to `[15, 1000]`, out-of-range values warn and clamp rather than error. |
-| `snapshot_hz` | `f64` | `[window] target_fps` if set, else `60` | Rate at which the logic thread publishes render state to the render thread. Re-resolved from `target_fps` whenever this key isn't set explicitly. Same clamp range as `hz`. |
+| `snapshot_skip` | `u32` | `round(hz / effective_fps) - 1`, `effective_fps` = `[window] target_fps` if set else `60` | Number of sim ticks the PRESENT schedule skips between publishes of render state to the render thread — `0` publishes every tick, `N` publishes every `N+1`th tick (effective rate `hz / (N+1)`). Re-resolved from `hz`/`target_fps` whenever this key isn't set explicitly. Clamped to `[0, 1000]`. |
 
 **`[audio]` section:**
 

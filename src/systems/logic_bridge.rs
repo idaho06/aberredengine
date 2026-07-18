@@ -9,8 +9,8 @@
 //!   the snapshot itself publishes.
 //! - [`send_drawable_snapshot`] — publishes this frame's [`DrawableSnapshot`]
 //!   into the sim thread's [`SnapshotPublisher`] (the `triple_buffer` write
-//!   end). Still `PRESENT`-scheduled, decimated to `[simulation] snapshot_hz`
-//!   rather than running once per received input sample.
+//!   end). Still `PRESENT`-scheduled, decimated to `[simulation] snapshot_skip`
+//!   sim ticks rather than running once per received input sample.
 //!
 //! `InputBindings` is logic-thread-only (no render-side mirror to refresh),
 //! since binding resolution itself happens on the sim thread.
@@ -44,8 +44,8 @@ pub fn forward_render_asset_cmds(
 /// `Input::write(snapshot.clone())` -- `write` move-assigns a freshly
 /// cloned value over the input buffer, dropping whatever `Vec` capacity it
 /// held from three publishes ago and reallocating all 8 drawable lists
-/// every publish (~`snapshot_hz`, default ~60/s). `clone_into_buffer`
-/// reuses that capacity instead; see its doc comment
+/// every publish (see `GameConfig::snapshot_skip` for the publish cadence).
+/// `clone_into_buffer` reuses that capacity instead; see its doc comment
 /// (`resources/drawable_snapshot.rs`) for why a plain `clone_from` on the
 /// whole struct wouldn't.
 pub fn send_drawable_snapshot(

@@ -10,7 +10,7 @@ use crate::protocol::raw_input::InputSample;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use crate::resources::drawable_snapshot::DrawableSnapshot;
-use crate::resources::gameconfig::default_snapshot_hz;
+use crate::resources::gameconfig::default_render_fps;
 use crate::resources::render::mirrors::RenderGameConfig;
 use crate::resources::render::quit_requested::QuitRequested;
 use crate::resources::render::scene_table::RenderSceneTable;
@@ -160,10 +160,12 @@ impl EngineBuilder {
         // wait paces this loop, from inside the same schedule.run() call
         // this StatsWindow times. That means tick_avg_ms/achieved_hz read as
         // whole-frame time (vsync wait included), unlike SimStats/AudioStats'
-        // "work excluding sleep" -- see RenderStats' doc comment. Reuses
-        // GameConfig's own target_fps-unset fallback so the two can't drift.
+        // "work excluding sleep" -- see RenderStats' doc comment. This is the
+        // render thread's own implicit fps fallback, no longer shared with a
+        // snapshot rate now that PRESENT decimates by sim-tick count instead
+        // of wall-clock rate (see GameConfig::snapshot_skip).
         let target_fps = world.resource::<RenderGameConfig>().0.target_fps;
-        let mut stats_window = StatsWindow::new(default_snapshot_hz(target_fps));
+        let mut stats_window = StatsWindow::new(default_render_fps(target_fps));
 
         while !world
             .non_send::<raylib::RaylibHandle>()

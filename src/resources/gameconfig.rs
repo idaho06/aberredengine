@@ -21,7 +21,7 @@
 //!
 //! [simulation]
 //! hz = 240
-//! ; snapshot_hz = 60   ; optional; defaults to [window] target_fps
+//! ; snapshot_skip = 3   ; optional; PRESENT runs every N+1th sim tick; defaults to round(sim_hz/target_fps)-1
 //!
 //! [audio]
 //! hz = 100
@@ -113,20 +113,22 @@ pub struct GameConfig {
     /// Read once at startup by the audio thread's `Pacer` — same
     /// startup-only caveat as [`sim_hz`](Self::sim_hz).
     pub audio_hz: f64,
-    /// Rate at which the sim thread publishes a [`DrawableSnapshot`] into the
-    /// render triple buffer (`[simulation] snapshot_hz`).
+    /// Number of sim ticks the PRESENT schedule skips between
+    /// [`DrawableSnapshot`] publishes into the render triple buffer
+    /// (`[simulation] snapshot_skip`) — `0` publishes every tick, `N`
+    /// publishes every `N + 1`th tick, giving an effective publish rate of
+    /// `sim_hz / (N + 1)`.
     ///
-    /// Decimated relative to `sim_hz`: the sim ticks gameplay at `sim_hz` but
-    /// only packages+publishes a snapshot at this (usually much lower) rate.
-    /// Defaults to `target_fps` (no point publishing faster than the render
-    /// thread can display) when `target_fps > 0`, else `60.0`; this default
-    /// is re-resolved from the current `target_fps` on every config load that
-    /// doesn't set `snapshot_hz` explicitly. Clamped the same as `sim_hz`/
-    /// `audio_hz`. Read once at startup by the logic thread's decimation
-    /// timer — same startup-only caveat as [`sim_hz`](Self::sim_hz).
+    /// Defaults to `max(0, round(sim_hz / effective_fps) - 1)`, where
+    /// `effective_fps` is `target_fps` when `target_fps > 0` else `60.0` (no
+    /// point publishing faster than the render thread can display); this
+    /// default is re-resolved from the current `sim_hz`/`target_fps` on
+    /// every config load that doesn't set `snapshot_skip` explicitly.
+    /// Clamped to `[0, 1000]`. Read once at startup by the logic thread's
+    /// tick counter — same startup-only caveat as [`sim_hz`](Self::sim_hz).
     ///
     /// [`DrawableSnapshot`]: crate::resources::drawable_snapshot::DrawableSnapshot
-    pub snapshot_hz: f64,
+    pub snapshot_skip: u32,
     /// Radial deadzone applied to gamepad analog-stick axes before they
     /// drive digital actions via [`InputBinding::GamepadAxis`]
     /// (`[input] gamepad_deadzone`, default `0.15`, clamped to `[0.0, 1.0]`).
@@ -148,36 +150,62 @@ pub struct GameConfig {
 #[derive(Resource, Debug, Clone)]
 pub struct GameConfigDefaults(pub GameConfig);
 
+/// Clamp a parsed config value to `min..=max`, warning (and keeping the
+/// clamped value, rather than rejecting the whole config load) when out of
+/// range. Shared by every `[simulation]`/`[audio]`/`[input]` clamp below so
+/// the warn-and-clamp behavior can't drift between fields.
+fn clamp_and_warn<T: PartialOrd + Copy + std::fmt::Display>(
+    value: T,
+    min: T,
+    max: T,
+    field: &str,
+) -> T {
+    let clamped = if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
+    };
+    if clamped != value {
+        warn!("{field} = {value} out of range [{min}, {max}]; clamped to {clamped}");
+    }
+    clamped
+}
+
 /// Clamp a parsed `[simulation] hz` / `[audio] hz` value to
-/// `MIN_TICK_HZ..=MAX_TICK_HZ`, warning (and keeping the clamped value,
-/// rather than rejecting the whole config load) when out of range.
+/// `MIN_TICK_HZ..=MAX_TICK_HZ`.
 fn clamp_tick_hz(hz: f64, field: &str) -> f64 {
-    let clamped = hz.clamp(MIN_TICK_HZ, MAX_TICK_HZ);
-    if clamped != hz {
-        warn!("{field} = {hz} out of range [{MIN_TICK_HZ}, {MAX_TICK_HZ}]; clamped to {clamped}");
-    }
-    clamped
+    clamp_and_warn(hz, MIN_TICK_HZ, MAX_TICK_HZ, field)
 }
 
-/// Clamp a parsed `[input] gamepad_deadzone` value to `0.0..=1.0`, warning
-/// (and keeping the clamped value, same convention as [`clamp_tick_hz`])
-/// when out of range.
+/// Clamp a parsed `[simulation] snapshot_skip` value to `[0, 1000]`.
+/// Negative values clamp to `0`.
+fn clamp_snapshot_skip(skip: i64, field: &str) -> u32 {
+    clamp_and_warn(skip, 0, 1000, field) as u32
+}
+
+/// Clamp a parsed `[input] gamepad_deadzone` value to `0.0..=1.0`.
 fn clamp_gamepad_deadzone(deadzone: f32, field: &str) -> f32 {
-    let clamped = deadzone.clamp(0.0, 1.0);
-    if clamped != deadzone {
-        warn!("{field} = {deadzone} out of range [0.0, 1.0]; clamped to {clamped}");
-    }
-    clamped
+    clamp_and_warn(deadzone, 0.0, 1.0, field)
 }
 
-/// `snapshot_hz`'s implicit default: track `target_fps` (no point
-/// publishing snapshots faster than the render thread can display), falling
-/// back to a flat 60 if `target_fps` is unset/zero. Shared by `new()` and
-/// `apply_ini`'s no-explicit-override path so the two can't drift. Also used
-/// by `render_main_loop` to seed its `StatsWindow` at the same
-/// implicit rate the render thread already falls back to.
-pub(crate) fn default_snapshot_hz(target_fps: u32) -> f64 {
+/// The render thread's implicit fps fallback: track `target_fps`, falling
+/// back to a flat 60 if `target_fps` is unset/zero. Used by
+/// `render_main_loop` to seed its `StatsWindow` at the same implicit rate
+/// the render thread already falls back to.
+pub(crate) fn default_render_fps(target_fps: u32) -> f64 {
     if target_fps > 0 { target_fps as f64 } else { 60.0 }
+}
+
+/// `snapshot_skip`'s implicit default: skip enough sim ticks between
+/// publishes to land close to `default_render_fps(target_fps)` (no point
+/// publishing snapshots faster than the render thread can display).
+/// Shared by `new()` and `apply_ini`'s no-explicit-override path so the two
+/// can't drift.
+pub(crate) fn default_snapshot_skip(sim_hz: f64, target_fps: u32) -> u32 {
+    let effective_fps = default_render_fps(target_fps);
+    ((sim_hz / effective_fps).round() - 1.0).max(0.0) as u32
 }
 
 impl Default for GameConfig {
@@ -204,7 +232,7 @@ impl GameConfig {
             config_path: PathBuf::from(DEFAULT_CONFIG_PATH),
             sim_hz: DEFAULT_SIM_HZ,
             audio_hz: DEFAULT_AUDIO_HZ,
-            snapshot_hz: default_snapshot_hz(DEFAULT_TARGET_FPS),
+            snapshot_skip: default_snapshot_skip(DEFAULT_SIM_HZ, DEFAULT_TARGET_FPS),
             gamepad_deadzone: DEFAULT_GAMEPAD_DEADZONE,
         }
     }
@@ -292,21 +320,24 @@ impl GameConfig {
         if let Some(hz) = config.getfloat("audio", "hz").ok().flatten() {
             self.audio_hz = clamp_tick_hz(hz, "audio.hz");
         }
-        // snapshot_hz: an explicit key wins; otherwise re-resolve the
-        // target_fps-tracking default every load (this field's default isn't
-        // flat, unlike sim_hz/audio_hz, so "missing key" and "recompute from
-        // the value target_fps just took" are the same branch).
-        let snapshot_hz = config
-            .getfloat("simulation", "snapshot_hz")
+        // snapshot_skip: an explicit key wins; otherwise re-resolve the
+        // sim_hz/target_fps-tracking default every load (this field's
+        // default isn't flat, unlike sim_hz/audio_hz, so "missing key" and
+        // "recompute from the values sim_hz/target_fps just took" are the
+        // same branch). Must run after both `[simulation] hz` and
+        // `[window] target_fps` are parsed above, since the derivation
+        // depends on both.
+        let snapshot_skip = config
+            .getint("simulation", "snapshot_skip")
             .ok()
             .flatten()
-            .unwrap_or_else(|| default_snapshot_hz(self.target_fps));
-        self.snapshot_hz = clamp_tick_hz(snapshot_hz, "simulation.snapshot_hz");
+            .unwrap_or_else(|| default_snapshot_skip(self.sim_hz, self.target_fps) as i64);
+        self.snapshot_skip = clamp_snapshot_skip(snapshot_skip, "simulation.snapshot_skip");
         if let Some(dz) = config.getfloat("input", "gamepad_deadzone").ok().flatten() {
             self.gamepad_deadzone = clamp_gamepad_deadzone(dz as f32, "input.gamepad_deadzone");
         }
         info!(
-            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_hz={}",
+            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_skip={}",
             self.render_width,
             self.render_height,
             self.window_width,
@@ -317,7 +348,7 @@ impl GameConfig {
             self.window_title,
             self.sim_hz,
             self.audio_hz,
-            self.snapshot_hz
+            self.snapshot_skip
         );
     }
 
@@ -547,42 +578,60 @@ mod tests {
     }
 
     #[test]
-    fn test_new_defaults_snapshot_hz_to_target_fps() {
+    fn test_new_defaults_snapshot_skip_derived() {
         let config = GameConfig::new();
-        assert_eq!(config.snapshot_hz, DEFAULT_TARGET_FPS as f64);
+        // round(DEFAULT_SIM_HZ / DEFAULT_TARGET_FPS) - 1 = round(240/120) - 1 = 1
+        assert_eq!(config.snapshot_skip, 1);
     }
 
     #[test]
-    fn test_snapshot_hz_explicit_override() {
+    fn test_snapshot_skip_explicit_override() {
         let mut config = GameConfig::new();
         config
-            .load_from_str("[simulation]\nsnapshot_hz = 30\n")
+            .load_from_str("[simulation]\nsnapshot_skip = 0\n")
             .unwrap();
-        assert_eq!(config.snapshot_hz, 30.0);
+        assert_eq!(config.snapshot_skip, 0);
+
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[simulation]\nsnapshot_skip = 7\n")
+            .unwrap();
+        assert_eq!(config.snapshot_skip, 7);
     }
 
     #[test]
-    fn test_snapshot_hz_tracks_target_fps_when_unset() {
+    fn test_snapshot_skip_tracks_sim_hz_and_target_fps_when_unset() {
         let mut config = GameConfig::new();
         config
-            .load_from_str("[window]\ntarget_fps = 90\n")
+            .load_from_str("[simulation]\nhz = 120\n[window]\ntarget_fps = 60\n")
             .unwrap();
-        assert_eq!(config.snapshot_hz, 90.0);
+        // round(120/60) - 1 = 1
+        assert_eq!(config.snapshot_skip, 1);
     }
 
     #[test]
-    fn test_snapshot_hz_out_of_range_is_clamped() {
+    fn test_snapshot_skip_derives_from_60fps_fallback_when_target_fps_unset() {
         let mut config = GameConfig::new();
         config
-            .load_from_str("[simulation]\nsnapshot_hz = 1\n")
+            .load_from_str("[window]\ntarget_fps = 0\n")
             .unwrap();
-        assert_eq!(config.snapshot_hz, MIN_TICK_HZ);
+        // round(240/60) - 1 = 3, same as the DEFAULT_TARGET_FPS case
+        assert_eq!(config.snapshot_skip, 3);
+    }
+
+    #[test]
+    fn test_snapshot_skip_out_of_range_is_clamped() {
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[simulation]\nsnapshot_skip = -1\n")
+            .unwrap();
+        assert_eq!(config.snapshot_skip, 0);
 
         let mut config = GameConfig::new();
         config
-            .load_from_str("[simulation]\nsnapshot_hz = 5000\n")
+            .load_from_str("[simulation]\nsnapshot_skip = 5000\n")
             .unwrap();
-        assert_eq!(config.snapshot_hz, MAX_TICK_HZ);
+        assert_eq!(config.snapshot_skip, 1000);
     }
 
     #[test]

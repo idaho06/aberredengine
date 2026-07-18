@@ -73,26 +73,33 @@ impl Pacer {
         self.last = now;
         dt
     }
+}
 
-    /// Non-blocking check: has at least one period elapsed since the last
-    /// `due()` call (or construction)? Unlike `tick()`, never sleeps. On a
-    /// fire, the deadline advances by exactly one `period` (carrying any
-    /// overshoot forward) rather than resetting to `Instant::now()` -- a
-    /// reset would systematically undershoot the configured rate, since the
-    /// overshoot past each period is discarded every time. If still behind
-    /// by a full period after advancing (e.g. after a long stall), the
-    /// deadline snaps to now instead of firing in a burst on subsequent
-    /// polls. For decimating a less-frequent task inside a loop paced by a
-    /// different `Pacer` (e.g. "publish a snapshot at `snapshot_hz` from
-    /// inside a loop ticking at `sim_hz`"), not for pacing the loop itself.
+/// Non-blocking, tick-count-based decimator: fires once every `skip + 1`
+/// calls to [`due`](Self::due). Unlike [`Pacer`], never sleeps and isn't
+/// wall-clock paced -- for decimating a less-frequent task (e.g. publishing
+/// a snapshot) against the tick count of a loop already paced by a `Pacer`,
+/// rather than against real elapsed time.
+pub struct TickCountdown {
+    skip: u32,
+    remaining: u32,
+}
+
+impl TickCountdown {
+    /// Create a countdown that fires immediately on the first `due()` call,
+    /// then every `skip + 1` calls thereafter.
+    pub fn new(skip: u32) -> Self {
+        Self { skip, remaining: 0 }
+    }
+
+    /// Non-blocking check: is this call due to fire? Decrements the
+    /// countdown otherwise.
     pub fn due(&mut self) -> bool {
-        if self.last.elapsed() >= self.period {
-            self.last += self.period;
-            if self.last.elapsed() >= self.period {
-                self.last = Instant::now();
-            }
+        if self.remaining == 0 {
+            self.remaining = self.skip;
             true
         } else {
+            self.remaining -= 1;
             false
         }
     }
@@ -214,58 +221,6 @@ mod tests {
         // time from `last` -- an externally-added 5ms sleep before the
         // second tick should be reflected (not truncated away).
         assert!(dt >= 0.004, "dt too small: {dt}");
-    }
-
-    #[test]
-    fn due_false_before_period_elapses() {
-        let mut pacer = Pacer::new(60.0); // period ~16.67ms
-        assert!(!pacer.due());
-    }
-
-    #[test]
-    fn due_true_once_period_elapses() {
-        let mut pacer = Pacer::new(1000.0); // period 1ms
-        std::thread::sleep(Duration::from_millis(2));
-        assert!(pacer.due());
-    }
-
-    #[test]
-    fn due_resets_after_firing() {
-        let mut pacer = Pacer::new(1000.0);
-        std::thread::sleep(Duration::from_millis(2));
-        assert!(pacer.due(), "first check after the sleep should fire");
-        assert!(
-            !pacer.due(),
-            "immediately re-checking must not fire again until another period elapses"
-        );
-    }
-
-    #[test]
-    fn due_carries_overshoot_forward() {
-        let mut pacer = Pacer::new(1000.0); // period 1ms
-        let old_last = Instant::now() - pacer.period.mul_f64(1.5);
-        pacer.last = old_last;
-        assert!(pacer.due());
-        assert_eq!(
-            pacer.last,
-            old_last + pacer.period,
-            "deadline should advance by exactly one period, not reset to now"
-        );
-    }
-
-    #[test]
-    fn due_stall_snaps_once() {
-        let mut pacer = Pacer::new(1000.0); // period 1ms
-        pacer.last = Instant::now() - pacer.period.mul_f64(3.0);
-        assert!(pacer.due(), "first poll after a stall should fire");
-        assert!(
-            pacer.last.elapsed() < pacer.period,
-            "stall guard should snap the deadline close to now, not leave it periods behind"
-        );
-        assert!(
-            !pacer.due(),
-            "immediately re-checking after the stall snap must not fire again"
-        );
     }
 
     #[test]

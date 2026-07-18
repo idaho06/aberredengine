@@ -94,10 +94,10 @@ impl SimEntry for GuiProgressBarEntry {
 }
 
 /// Insert a clone of `value` only if the entity's current component value
-/// differs from it (or the component is absent). Every publish
-/// (~`snapshot_hz`, default ~60/s) used to re-`insert()` and reclone every
-/// component unconditionally, even for entities whose data hadn't changed
-/// since the last pass -- pure waste for mostly-static scenes (GUI panels,
+/// differs from it (or the component is absent). Every publish (see
+/// `GameConfig::snapshot_skip` for the cadence) used to re-`insert()` and
+/// reclone every component unconditionally, even for entities whose data
+/// hadn't changed since the last pass -- pure waste for mostly-static scenes (GUI panels,
 /// HUDs). Takes `value` by reference and only clones it on the write path,
 /// not the comparison path, so an unchanged component (the common case)
 /// costs one comparison and zero allocations -- cloning first and comparing
