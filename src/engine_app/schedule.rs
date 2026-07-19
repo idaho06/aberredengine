@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::*;
+use bevy_ecs::schedule::SingleThreadedExecutor;
 
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
@@ -123,6 +124,26 @@ impl EngineBuilder {
         sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
     }
 
+    /// Registers `animation` (`SimSet::Drain`) exactly once, regardless of
+    /// feature config -- a single call site so the Lua-only ordering edge
+    /// below doesn't require duplicating the base registration per branch.
+    /// `.after(lua_setup_entity_system)`, when Lua is active: both touch
+    /// Signals/Animation/Sprite (`lua_setup_entity_system`'s ctx-building
+    /// reads them for the entity's one-shot setup callback; `animation`
+    /// writes them advancing frame_index/tex_key) with no prior edge --
+    /// ambiguity_detection flags it. Pinned so setup is considered
+    /// "settled" before the entity's first animation-advance tick.
+    fn add_animation_system(sim: &mut Schedule, has_lua: bool) {
+        #[cfg(feature = "lua")]
+        if has_lua {
+            sim.add_systems(animation.after(lua_setup_entity_system).in_set(SimSet::Drain));
+            return;
+        }
+        #[cfg(not(feature = "lua"))]
+        let _ = has_lua;
+        sim.add_systems(animation.in_set(SimSet::Drain));
+    }
+
     /// Build the two schedules the logic thread runs: `sim`
     /// (runs once per `Pacer`-paced sim tick at `[simulation] hz`, real dt --
     /// this is where essentially all gameplay logic lives: movement,
@@ -158,6 +179,14 @@ impl EngineBuilder {
         use_scene_manager: bool,
     ) -> Result<(Schedule, Schedule), EngineError> {
         let mut sim = Schedule::default();
+        // Pinned unconditionally (not gated behind a deterministic-mode
+        // flag): removes cross-run interleaving nondeterminism in Commands
+        // application / entity allocation order (determinism-02). Mirrors
+        // the audio thread's own schedule (src/systems/audio/world.rs).
+        // Only affects which systems can interleave -- auto_insert_apply_
+        // deferred (Commands-flush ordering) is executor-independent, so
+        // command-visibility timing is unchanged.
+        sim.set_executor(SingleThreadedExecutor::new());
 
         Self::configure_sim_sets(&mut sim);
         Self::add_engine_sim_systems(&mut sim, has_lua);
@@ -165,6 +194,7 @@ impl EngineBuilder {
         Self::add_scene_manager_systems(&mut sim, use_scene_manager);
 
         let mut present = Self::build_present_schedule();
+        present.set_executor(SingleThreadedExecutor::new());
 
         sim.initialize(world)
             .map_err(|source| EngineError::ScheduleInit {
@@ -222,7 +252,18 @@ impl EngineBuilder {
         sim.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
         sim.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
         sim.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
-        sim.add_systems(tilemap_spawn_system.in_set(SimSet::Spawn));
+        // .after(menu_spawn_system): both queue into the logic world's
+        // Messages<RenderAssetCmd> (RasterizeText / TilemapTexture) with no
+        // prior edge between them -- ambiguity_detection flags the shared
+        // writer access. Pinned to registration order; the two queued
+        // commands are independent (process_render_asset_cmds treats the
+        // queue as an unordered batch of loads), so this only silences a
+        // latent-fragility warning, not a real behavior fix.
+        sim.add_systems(
+            tilemap_spawn_system
+                .after(menu_spawn_system)
+                .in_set(SimSet::Spawn),
+        );
         sim.add_systems(check_pending_state.in_set(SimSet::Spawn));
         sim.add_systems(
             (
@@ -247,7 +288,18 @@ impl EngineBuilder {
         // sim-side once per tick by resolve_input_backlog, before this tick's
         // sim.run(), and held constant for every system that reads it here) ---
         sim.add_systems(input_simple_controller.in_set(SimSet::Controllers));
-        sim.add_systems(input_acceleration_controller.in_set(SimSet::Controllers));
+        // .ambiguous_with(input_simple_controller): both hold
+        // Query<&mut RigidBody> (InputControlled vs AccelerationControlled
+        // entities are disjoint in practice, but ambiguity_detection can't
+        // see past the marker component to prove that) -- a genuine false
+        // positive, not a real ordering requirement, so marked
+        // ambiguous_with rather than given an arbitrary .after() that would
+        // misread as "order matters here."
+        sim.add_systems(
+            input_acceleration_controller
+                .ambiguous_with(input_simple_controller)
+                .in_set(SimSet::Controllers),
+        );
         sim.add_systems(mouse_controller.in_set(SimSet::Controllers));
         sim.add_systems(
             particle_emitter_system
@@ -256,7 +308,18 @@ impl EngineBuilder {
         );
         sim.add_systems(movement.in_set(SimSet::Movement));
         sim.add_systems(ttl_system.after(movement).in_set(SimSet::Movement));
-        sim.add_systems(tween_system::<MapPosition>.in_set(SimSet::Movement));
+        // .before(particle_emitter_system): both write MapPosition with no
+        // prior edge (ambiguity_detection flags it; also transitively
+        // resolves tween_system::<MapPosition> vs movement, since
+        // particle_emitter_system is already .before(movement)). A tweened
+        // entity that's also a particle emitter (e.g. a projectile flying a
+        // tween path with a trail) should spawn particles from this tick's
+        // already-tweened position, not last tick's.
+        sim.add_systems(
+            tween_system::<MapPosition>
+                .before(particle_emitter_system)
+                .in_set(SimSet::Movement),
+        );
         sim.add_systems(tween_system::<Rotation>.in_set(SimSet::Movement));
         sim.add_systems(tween_system::<Scale>.in_set(SimSet::Movement));
         // propagate_transforms/collision_detector's old .after(movement)/
@@ -279,9 +342,15 @@ impl EngineBuilder {
                 .after(collision_detector)
                 .in_set(SimSet::Collision),
         );
+        // .after(stuck_to_entity_system): both write MapPosition with no
+        // prior edge (ambiguity_detection flags it). Phase logic (state
+        // machines, e.g. ground/patrol checks) should react to an entity's
+        // final, stuck-to-resolved position this tick, not a pre-stuck-to
+        // one.
         sim.add_systems(
             phase_system
                 .after(collision_detector)
+                .after(stuck_to_entity_system)
                 .in_set(SimSet::Collision),
         );
 
@@ -291,10 +360,13 @@ impl EngineBuilder {
         // type parameters share sim cadence, so LuaOnTweenFinished<T> fires
         // at the same rate regardless of which T is tweened).
         sim.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));
+        // ambiguous_with: both mutate GuiThemeWarnCache (warn-once set
+        // insert, commutative) -- a genuine false positive, not a real
+        // ordering requirement.
         sim.add_systems(
             (
                 gui_button_spawn_system,
-                gui_label_spawn_system,
+                gui_label_spawn_system.ambiguous_with(gui_button_spawn_system),
                 gui_image_spawn_system,
             )
                 .before(gui_layout_system)
@@ -334,7 +406,17 @@ impl EngineBuilder {
                     .after(lua_phase_system)
                     .in_set(SimSet::PostCollision),
             );
-            sim.add_systems(update_lua_timers.in_set(SimSet::PostCollision));
+            // .after(lua_phase_system): both touch Timer<LuaTimerCallback>
+            // (lua_phase_system's ctx-building reads it for ctx.timer;
+            // update_lua_timers advances it) with no prior edge --
+            // ambiguity_detection flags it. Pinned so a phase callback's
+            // ctx.timer reflects this tick's pre-advance state, consistent
+            // with ctx.time_in_phase's own semantics.
+            sim.add_systems(
+                update_lua_timers
+                    .after(lua_phase_system)
+                    .in_set(SimSet::PostCollision),
+            );
             // `.after(lua_plugin::update)` on both systems: a queued
             // map/asset load is drained after on_update_<scene> has had a
             // chance to queue it this same tick, not before.
@@ -373,7 +455,7 @@ impl EngineBuilder {
             Self::add_non_lua_post_collision(sim);
         }
 
-        sim.add_systems(animation.in_set(SimSet::Drain));
+        Self::add_animation_system(sim, has_lua);
         sim.add_systems(update_timers.in_set(SimSet::Drain));
         sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
         sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
@@ -486,5 +568,68 @@ impl EngineBuilder {
         present.add_systems(send_drawable_snapshot.after(build_drawable_snapshot));
 
         present
+    }
+}
+
+#[cfg(test)]
+mod ambiguity_audit {
+    //! Regression gate (determinism-02-deterministic-schedule.md §2):
+    //! builds the real `sim` schedule (via the engine's own
+    //! `configure_sim_sets`/`add_engine_sim_systems`, not a hand-listed
+    //! system set) with `ambiguity_detection: LogLevel::Warn` and asserts
+    //! zero ambiguities remain. Every ambiguity bevy 0.19 reported as of
+    //! this audit (2026-07-19) was triaged and closed with an explicit
+    //! `.after()`/`.before()` edge at its registration site in
+    //! `add_engine_sim_systems` (see the comments there) -- most pin a real
+    //! preferred order, one (`gui_label_spawn_system`/`gui_button_spawn_system`)
+    //! is a documented false positive (commutative set-insert) pinned only
+    //! to silence the warning. A future system addition that reintroduces
+    //! an ambiguity should fail this test; run with
+    //! `RUST_LOG=warn cargo test ambiguity_audit -- --nocapture` to have
+    //! bevy's own `warn!` logging (emitted from inside
+    //! `Schedule::initialize` while the graph still has system names
+    //! resolved -- `ScheduleBuildWarning::to_string` panics if called after
+    //! the fact, once `initialize` has moved systems into the executable)
+    //! print the new finding's human-readable description, then either add
+    //! an edge or an `.ambiguous_with()` with a comment explaining why it's
+    //! safe.
+    use bevy_ecs::schedule::{LogLevel, ScheduleBuildSettings};
+
+    use super::*;
+
+    fn assert_no_ambiguities(has_lua: bool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let mut world = World::new();
+        let mut sim = Schedule::default();
+        sim.set_build_settings(ScheduleBuildSettings {
+            ambiguity_detection: LogLevel::Warn,
+            ..Default::default()
+        });
+        EngineBuilder::configure_sim_sets(&mut sim);
+        EngineBuilder::add_engine_sim_systems(&mut sim, has_lua);
+
+        let metadata = sim
+            .initialize(&mut world)
+            .expect("sim schedule must still build successfully under ambiguity_detection=Warn");
+
+        let warning_count = metadata.map(|m| m.warnings.len()).unwrap_or(0);
+        assert_eq!(
+            warning_count, 0,
+            "new system ambiguity detected (has_lua={has_lua}) -- rerun with \
+             RUST_LOG=warn cargo test ambiguity_audit -- --nocapture to see \
+             which systems conflict, then add an .after()/.before() edge or \
+             a documented .ambiguous_with()"
+        );
+    }
+
+    #[test]
+    fn sim_schedule_has_no_ambiguities_lua() {
+        assert_no_ambiguities(true);
+    }
+
+    #[test]
+    fn sim_schedule_has_no_ambiguities_no_lua() {
+        assert_no_ambiguities(false);
     }
 }

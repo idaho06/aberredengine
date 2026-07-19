@@ -34,6 +34,13 @@ raylib = { package = "sola-raylib", version = "6.2", features = ["noscreenshot"]
 [target.'cfg(target_os = "windows")'.build-dependencies]
 embed-resource = "3"
 
+[dev-dependencies]
+# "debug" resolves system names in bevy_ecs's schedule-build warnings (e.g.
+# ambiguity_detection); scoped to dev-dependencies so it applies to `cargo
+# test` builds only, not `cargo build`/`cargo run` (edition-2024 resolver
+# unifies dev-dependency features per-target, not into the main binary).
+bevy_ecs = { version = "0.19", features = ["debug"] }
+
 [profile.release]
 opt-level = 3
 lto = "fat"

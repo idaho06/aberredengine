@@ -29,7 +29,8 @@ use aberredengine::test_support::TestWorld;
 use raylib::prelude::Color;
 use rustc_hash::FxHashMap;
 
-const DT: f32 = 1.0 / 60.0;
+mod common;
+use common::DT;
 
 /// (a) Input pipeline: a synthetic key-down sample resolves into exactly one
 /// `just_pressed` edge, consumed by the tick that observes it.
