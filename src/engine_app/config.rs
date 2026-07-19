@@ -13,10 +13,12 @@ impl EngineBuilder {
                 .load_from_str(content)
                 .map_err(|message| EngineError::ConfigEmbedded { message })?;
         } else {
-            config.load_from_file().map_err(|message| EngineError::ConfigFile {
-                path: self.config_path.clone(),
-                message,
-            })?;
+            config
+                .load_from_file()
+                .map_err(|message| EngineError::ConfigFile {
+                    path: self.config_path.clone(),
+                    message,
+                })?;
         }
         if let Some(title) = &self.title_override {
             config.window_title = title.clone();

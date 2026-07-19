@@ -475,10 +475,9 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
         Res<SystemsStore>,
         Res<AnimationStore>,
     )>::new(world);
-    let (mut commands, mut queries, mut world_signals, systems_store, anim_store) =
-        state
-            .get_mut(world)
-            .expect("Hierarchy test params should fetch");
+    let (mut commands, mut queries, mut world_signals, systems_store, anim_store) = state
+        .get_mut(world)
+        .expect("Hierarchy test params should fetch");
 
     process_entity_commands(
         &mut commands,
@@ -1735,9 +1734,7 @@ fn stale_gt_removed_after_child_despawn() {
     // 8. resolve_world_pos must now return MapPosition (300, 0)
     let mut state =
         SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
-    let (positions, global_transforms) = state
-        .get(&world)
-        .expect("Hierarchy queries should fetch");
+    let (positions, global_transforms) = state.get(&world).expect("Hierarchy queries should fetch");
     let resolved = resolve_world_pos(&positions, &global_transforms, player).unwrap();
 
     assert!(

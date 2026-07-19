@@ -13,12 +13,12 @@ pub mod engine_app;
 pub mod error;
 pub use error::EngineError;
 pub mod events;
-pub mod protocol;
 #[cfg(feature = "lua")]
 pub mod lua_plugin;
 #[cfg(feature = "lua")]
 pub mod luarc_generator;
 pub(crate) mod pacing;
+pub mod protocol;
 pub mod resources;
 #[cfg(feature = "lua")]
 pub mod stub_generator;

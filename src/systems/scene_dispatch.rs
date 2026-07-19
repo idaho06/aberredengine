@@ -32,16 +32,16 @@ use rustc_hash::FxHashSet;
 
 use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::resources::appstate::AppState;
-use crate::resources::render::fontstore::FontStore;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
+use crate::resources::render::fontstore::FontStore;
+use crate::resources::render::texturestore::TextureStore;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
-use crate::resources::render::texturestore::TextureStore;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use crate::resources::worldtime::WorldTime;
 use crate::systems::GameCtx;
@@ -134,14 +134,8 @@ impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
     }
 }
 
-pub type GuiCallback = fn(
-    &ImguiUi,
-    &SignalSnapshot,
-    &mut SignalIntents,
-    &TextureStore,
-    &FontStore,
-    &AppState,
-);
+pub type GuiCallback =
+    fn(&ImguiUi, &SignalSnapshot, &mut SignalIntents, &TextureStore, &FontStore, &AppState);
 
 /// Called every frame inside `begin_mode2D` in camera-transformed world space.
 ///

@@ -69,7 +69,9 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
     let mut schedule = Schedule::default();
     schedule.set_executor(SingleThreadedExecutor::new());
     schedule.add_systems((drain_cmds, pump_music, pump_fx).chain());
-    schedule.initialize(&mut world).expect("audio schedule initialize");
+    schedule
+        .initialize(&mut world)
+        .expect("audio schedule initialize");
 
     let mut pacer = Pacer::new(audio_hz);
     // Rolls up schedule-run work time into a ThreadStats once per

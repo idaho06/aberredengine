@@ -52,11 +52,11 @@ impl std::str::FromStr for EasingCurve {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "linear"      => Ok(EasingCurve::Linear),
-            "ease_out"    => Ok(EasingCurve::EaseOut),
-            "ease_in"     => Ok(EasingCurve::EaseIn),
+            "linear" => Ok(EasingCurve::Linear),
+            "ease_out" => Ok(EasingCurve::EaseOut),
+            "ease_in" => Ok(EasingCurve::EaseIn),
             "ease_in_out" => Ok(EasingCurve::EaseInOut),
-            _             => Err(()),
+            _ => Err(()),
         }
     }
 }

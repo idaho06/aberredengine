@@ -132,7 +132,9 @@ impl GuiTheme {
     /// bar). Returns `false` when the skin is dropped so callers can log a
     /// warning.
     pub fn drop_invalid_progress_bar_skin(&mut self) -> bool {
-        let Some(skin) = &self.progress_bar else { return true; };
+        let Some(skin) = &self.progress_bar else {
+            return true;
+        };
         let fill_invalid = skin.fill.is_unset();
         let track_invalid = skin.track.as_ref().is_some_and(|t| t.is_unset());
         if fill_invalid || track_invalid {
@@ -265,7 +267,6 @@ mod tests {
         assert_eq!(theme.font_size, 16.0);
         assert_eq!(theme.text_color, Color::WHITE);
     }
-
 
     #[test]
     fn drop_invalid_button_skin_clears_button_when_normal_unset() {

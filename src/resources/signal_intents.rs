@@ -75,7 +75,9 @@ impl SignalIntents {
                 SignalIntent::SetScalar(key, value) => signals.set_scalar(key, value),
                 SignalIntent::SetInteger(key, value) => signals.set_integer(key, value),
                 SignalIntent::SetString(key, value) => signals.set_string(key, value),
-                SignalIntent::SetEntity(key, bits) => signals.set_entity(key, Entity::from_bits(bits)),
+                SignalIntent::SetEntity(key, bits) => {
+                    signals.set_entity(key, Entity::from_bits(bits))
+                }
             }
         }
     }

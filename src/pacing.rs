@@ -36,7 +36,11 @@ pub fn send_channel_disconnected<T>(result: &Result<(), TrySendError<T>>) -> boo
 /// `LogicBridge::rx_input`'s doc comment for the invariant this relies on;
 /// with multiple producers another sender could refill the freed slot
 /// between the pop and the retry, race-losing the retry back to `Full`.
-pub fn send_or_drop_oldest<T>(tx: &Sender<T>, rx: &Receiver<T>, value: T) -> Result<(), TrySendError<T>> {
+pub fn send_or_drop_oldest<T>(
+    tx: &Sender<T>,
+    rx: &Receiver<T>,
+    value: T,
+) -> Result<(), TrySendError<T>> {
     match tx.try_send(value) {
         Err(TrySendError::Full(value)) => {
             let _ = rx.try_recv();

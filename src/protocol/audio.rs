@@ -119,5 +119,7 @@ pub enum AudioMessage {
     FxLoadFailed { id: String, error: String },
     /// Audio thread's own tick-timing rollup, sent once per `StatsWindow`
     /// window (~1s) for the F11 perf panel.
-    Stats { stats: crate::protocol::stats::ThreadStats },
+    Stats {
+        stats: crate::protocol::stats::ThreadStats,
+    },
 }

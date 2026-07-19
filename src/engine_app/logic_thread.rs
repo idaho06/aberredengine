@@ -11,8 +11,8 @@ use crate::error::EngineError;
 use crate::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
 use crate::protocol::audio::{AudioCmd, AudioMessage};
-use crate::protocol::endpoints::shutdown_audio;
 use crate::protocol::endpoints::RenderTx;
+use crate::protocol::endpoints::shutdown_audio;
 use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::SnapshotPublisher;
@@ -20,8 +20,8 @@ use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::FontMetricsStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
-use crate::resources::render::imgui_bridge::ImguiCaptureState;
 use crate::resources::rawinput::ImguiCaptureMirror;
+use crate::resources::render::imgui_bridge::ImguiCaptureState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::texturedims::TextureDimsStore;
@@ -68,8 +68,7 @@ pub(crate) struct LogicInit {
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) stub_audio: bool,
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) audio_stub_ends:
-        Option<(Receiver<AudioCmd>, Sender<AudioMessage>)>,
+    pub(crate) audio_stub_ends: Option<(Receiver<AudioCmd>, Sender<AudioMessage>)>,
 }
 
 /// Logic thread entry point. Startup errors can't propagate to
@@ -139,7 +138,11 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
-    EngineBuilder::spawn_observers(&mut world, has_lua, std::mem::take(&mut init.extra_observers));
+    EngineBuilder::spawn_observers(
+        &mut world,
+        has_lua,
+        std::mem::take(&mut init.extra_observers),
+    );
 
     let (mut sim, mut present) = EngineBuilder::build_logic_schedules(
         init.update_hook.take(),
@@ -270,7 +273,11 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // RenderMsg::ToggleFullscreen -- see resolve_input_backlog's doc
         // comment for why it stays free of channel sends.
         resolve_input_backlog(&mut world, &input_backlog);
-        if world.resource::<InputState>().fullscreen_toggle.just_pressed {
+        if world
+            .resource::<InputState>()
+            .fullscreen_toggle
+            .just_pressed
+        {
             let tx_render = world.resource::<RenderTx>().0.clone();
             let _ = tx_render.send(RenderMsg::ToggleFullscreen);
         }

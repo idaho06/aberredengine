@@ -36,22 +36,22 @@
 
 mod command_queues;
 mod commands;
-mod queue_registry;
 mod context;
 mod engine_api;
 mod entity_builder;
 mod input_snapshot;
+mod queue_registry;
 mod runtime;
 mod spawn_data;
 mod stub_meta;
 
 // Re-export all public types for backwards compatibility
 pub use commands::*;
-pub(crate) use context::{clear_array_table, populate_entity_signals, set_opt};
 pub use context::{
     AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
     SpriteSnapshot, build_entity_context_pooled,
 };
+pub(crate) use context::{clear_array_table, populate_entity_signals, set_opt};
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
 pub use runtime::{LuaRuntime, SignalsCtxTables, action_from_str};

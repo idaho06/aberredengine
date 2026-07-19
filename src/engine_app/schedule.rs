@@ -29,6 +29,7 @@ use crate::systems::gui_spawn::{
 };
 use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
 use crate::systems::inputsimplecontroller::input_simple_controller;
+use crate::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
 use crate::systems::menu::menu_spawn_system;
 use crate::systems::mousecontroller::mouse_controller;
 use crate::systems::movement::movement;
@@ -47,7 +48,6 @@ use crate::systems::tilemap::tilemap_spawn_system;
 use crate::systems::timer::update_timers;
 use crate::systems::ttl::ttl_system;
 use crate::systems::tween::tween_system;
-use crate::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
 use crate::systems::window::detect_window_resize;
 
 #[cfg(feature = "lua")]
@@ -166,14 +166,17 @@ impl EngineBuilder {
 
         let mut present = Self::build_present_schedule();
 
-        sim.initialize(world).map_err(|source| EngineError::ScheduleInit {
-            which: "sim",
-            source,
-        })?;
-        present.initialize(world).map_err(|source| EngineError::ScheduleInit {
-            which: "present",
-            source,
-        })?;
+        sim.initialize(world)
+            .map_err(|source| EngineError::ScheduleInit {
+                which: "sim",
+                source,
+            })?;
+        present
+            .initialize(world)
+            .map_err(|source| EngineError::ScheduleInit {
+                which: "present",
+                source,
+            })?;
 
         Ok((sim, present))
     }
@@ -265,10 +268,22 @@ impl EngineBuilder {
                 .after(propagate_transforms)
                 .in_set(SimSet::Transforms),
         );
-        sim.add_systems(camera_follow_system.after(propagate_transforms).in_set(SimSet::Transforms));
+        sim.add_systems(
+            camera_follow_system
+                .after(propagate_transforms)
+                .in_set(SimSet::Transforms),
+        );
         sim.add_systems(collision_detector.in_set(SimSet::Collision));
-        sim.add_systems(stuck_to_entity_system.after(collision_detector).in_set(SimSet::Collision));
-        sim.add_systems(phase_system.after(collision_detector).in_set(SimSet::Collision));
+        sim.add_systems(
+            stuck_to_entity_system
+                .after(collision_detector)
+                .in_set(SimSet::Collision),
+        );
+        sim.add_systems(
+            phase_system
+                .after(collision_detector)
+                .in_set(SimSet::Collision),
+        );
 
         // --- SIM: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
         // collision, so it's grouped with the GUI chain rather than its
@@ -277,7 +292,11 @@ impl EngineBuilder {
         // at the same rate regardless of which T is tweened).
         sim.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));
         sim.add_systems(
-            (gui_button_spawn_system, gui_label_spawn_system, gui_image_spawn_system)
+            (
+                gui_button_spawn_system,
+                gui_label_spawn_system,
+                gui_image_spawn_system,
+            )
                 .before(gui_layout_system)
                 .in_set(SimSet::Gui),
         );
@@ -286,7 +305,11 @@ impl EngineBuilder {
                 .after(tween_system::<ScreenPosition>)
                 .in_set(SimSet::Gui),
         );
-        sim.add_systems(gui_hit_test_system.after(gui_layout_system).in_set(SimSet::Gui));
+        sim.add_systems(
+            gui_hit_test_system
+                .after(gui_layout_system)
+                .in_set(SimSet::Gui),
+        );
         sim.add_systems(
             gui_image_state_sync_system
                 .after(gui_hit_test_system)
@@ -416,7 +439,11 @@ impl EngineBuilder {
     /// and the Lua-direct path never run together.
     fn add_scene_manager_systems(sim: &mut Schedule, use_scene_manager: bool) {
         if use_scene_manager {
-            sim.add_systems(scene_update_system.run_if(state_is_playing).in_set(SimSet::Drain));
+            sim.add_systems(
+                scene_update_system
+                    .run_if(state_is_playing)
+                    .in_set(SimSet::Drain),
+            );
             sim.add_systems(
                 scene_switch_poll
                     .run_if(state_is_playing)

@@ -108,7 +108,9 @@ impl InputBindings {
     ///
     /// Useful for displaying "current key" in a settings screen.
     pub fn first_binding_str(&self, action: InputAction) -> Option<String> {
-        self.get_bindings(action).first().map(|b| binding_to_str(*b))
+        self.get_bindings(action)
+            .first()
+            .map(|b| binding_to_str(*b))
     }
 
     /// Iterate every action alongside its bindings. Keeps the flat-array
@@ -117,7 +119,9 @@ impl InputBindings {
     /// the Lua-facing snapshot) get an iterator instead of reaching into
     /// `map` and `InputAction::ALL` themselves.
     pub fn iter(&self) -> impl Iterator<Item = (InputAction, &[InputBinding])> {
-        InputAction::ALL.into_iter().map(|action| (action, self.get_bindings(action)))
+        InputAction::ALL
+            .into_iter()
+            .map(|action| (action, self.get_bindings(action)))
     }
 }
 
@@ -530,10 +534,16 @@ mod tests {
         for action in InputAction::ALL {
             let i = action.index();
             assert!(i < InputAction::COUNT, "{action:?} index {i} out of range");
-            assert!(!seen[i], "{action:?} index {i} collides with another variant");
+            assert!(
+                !seen[i],
+                "{action:?} index {i} collides with another variant"
+            );
             seen[i] = true;
         }
-        assert!(seen.iter().all(|&s| s), "every slot 0..COUNT must be reachable");
+        assert!(
+            seen.iter().all(|&s| s),
+            "every slot 0..COUNT must be reachable"
+        );
     }
 
     #[test]
@@ -627,18 +637,20 @@ mod tests {
                 direction: AxisDirection::Negative,
             }
         ));
-        assert!(b.get_bindings(InputAction::Action1).contains(
-            &InputBinding::GamepadButton {
-                pad: 0,
-                button: GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN,
-            }
-        ));
-        assert!(b.get_bindings(InputAction::Back).contains(
-            &InputBinding::GamepadButton {
-                pad: 0,
-                button: GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT,
-            }
-        ));
+        assert!(
+            b.get_bindings(InputAction::Action1)
+                .contains(&InputBinding::GamepadButton {
+                    pad: 0,
+                    button: GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN,
+                })
+        );
+        assert!(
+            b.get_bindings(InputAction::Back)
+                .contains(&InputBinding::GamepadButton {
+                    pad: 0,
+                    button: GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT,
+                })
+        );
         // SecondaryDirectionUp gets the SAME d-pad/stick additions as
         // MainDirectionUp -- a gamepad has one directional input, unlike
         // keyboard's two independent devices (WASD vs arrows), and Rust
@@ -687,7 +699,10 @@ mod tests {
             bl[1],
             InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)
         );
-        assert_eq!(*bl.last().unwrap(), InputBinding::Keyboard(KeyboardKey::KEY_Z));
+        assert_eq!(
+            *bl.last().unwrap(),
+            InputBinding::Keyboard(KeyboardKey::KEY_Z)
+        );
     }
 
     #[test]

@@ -18,9 +18,9 @@ use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
-use crate::protocol::audio::AudioCmd;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
+use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::gamestate::GameStates::Quitting;
@@ -234,7 +234,11 @@ pub fn menu_spawn_system(
                     x: origin.x,
                     y: origin.y + (vc as f32) * item_spacing,
                 };
-                set_menu_position(&mut commands.entity(bottom_indicator), use_screen_space, pos);
+                set_menu_position(
+                    &mut commands.entity(bottom_indicator),
+                    use_screen_space,
+                    pos,
+                );
             }
             menu.bottom_indicator_entity = Some(bottom_indicator);
         }
@@ -521,7 +525,11 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 x: menu.origin.x,
                 y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
             };
-            set_menu_position(&mut commands.entity(bottom_entity), menu.use_screen_space, pos);
+            set_menu_position(
+                &mut commands.entity(bottom_entity),
+                menu.use_screen_space,
+                pos,
+            );
         } else {
             clear_menu_position(&mut commands.entity(bottom_entity), menu.use_screen_space);
         }
@@ -729,8 +737,15 @@ mod tests {
     fn static_label_queues_rasterize_text_and_sizes_sprite() {
         let mut world = new_test_world();
         world.spawn(
-            Menu::new(&[("ok", "ok")], Vector2::zero(), "test_font", 20.0, 4.0, false)
-                .with_dynamic_text(false),
+            Menu::new(
+                &[("ok", "ok")],
+                Vector2::zero(),
+                "test_font",
+                20.0,
+                4.0,
+                false,
+            )
+            .with_dynamic_text(false),
         );
 
         world
@@ -778,8 +793,15 @@ mod tests {
     fn missing_font_metrics_skips_item_and_queues_nothing() {
         let mut world = new_test_world();
         world.spawn(
-            Menu::new(&[("ok", "ok")], Vector2::zero(), "missing_font", 20.0, 4.0, false)
-                .with_dynamic_text(false),
+            Menu::new(
+                &[("ok", "ok")],
+                Vector2::zero(),
+                "missing_font",
+                20.0,
+                4.0,
+                false,
+            )
+            .with_dynamic_text(false),
         );
 
         world

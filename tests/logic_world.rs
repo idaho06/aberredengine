@@ -16,8 +16,8 @@ use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
 use aberredengine::engine_app::SimSet;
-use aberredengine::protocol::render_assets::RenderAssetCmd;
 use aberredengine::protocol::raw_input::RawDeviceSnapshot;
+use aberredengine::protocol::render_assets::RenderAssetCmd;
 use aberredengine::protocol::render_logic::RenderMsg;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::resources::fontmetrics::{FontMetrics, GlyphMetrics};
@@ -47,7 +47,10 @@ fn input_edge_fires_exactly_once_and_clears() {
 
     {
         let input = tw.world.resource::<InputState>();
-        assert!(input.action_1.just_pressed, "edge must be visible before the tick consumes it");
+        assert!(
+            input.action_1.just_pressed,
+            "edge must be visible before the tick consumes it"
+        );
     }
 
     tw.tick(1, DT);
@@ -79,7 +82,8 @@ fn spawn_and_collide_fires_rust_collision_rule() {
     let mut tw = TestWorld::new();
     tw.tick_to_play(DT, 8);
 
-    tw.world.spawn(CollisionRule::rust("a", "b", collision_bump_flag));
+    tw.world
+        .spawn(CollisionRule::rust("a", "b", collision_bump_flag));
     tw.world.spawn((
         Group::new("a"),
         MapPosition::new(0.0, 0.0),
@@ -156,10 +160,9 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
 
     tw.tick(1, DT);
 
-    let forwarded = tw
-        .sent_to_render
-        .try_recv()
-        .expect("queued RenderAssetCmd::Font must be forwarded as RenderMsg::Asset within one tick");
+    let forwarded = tw.sent_to_render.try_recv().expect(
+        "queued RenderAssetCmd::Font must be forwarded as RenderMsg::Asset within one tick",
+    );
     match forwarded {
         RenderMsg::Asset(RenderAssetCmd::Font { id, .. }) => assert_eq!(id, "test_font"),
         other => panic!("expected RenderMsg::Asset(Font), got {other:?}"),
@@ -185,16 +188,19 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     // metrics arriving alone doesn't retroactively resize an entity that
     // hasn't been touched since. A legitimate re-touch (here, `set_text`)
     // is what triggers the retry once metrics are available.
-    tw.world
-        .get_mut::<DynamicText>(text)
-        .unwrap()
-        .set_text("a");
+    tw.world.get_mut::<DynamicText>(text).unwrap().set_text("a");
 
     tw.tick(1, DT);
 
     let size_after = tw.world.get::<DynamicText>(text).unwrap().size();
-    assert_eq!(size_after.x, 20.0, "advance_x(10) * scale(20/10) for a single 'a'");
-    assert_eq!(size_after.y, 20.0, "text_height == font_size for single-line text");
+    assert_eq!(
+        size_after.x, 20.0,
+        "advance_x(10) * scale(20/10) for a single 'a'"
+    );
+    assert_eq!(
+        size_after.y, 20.0,
+        "text_height == font_size for single-line text"
+    );
 }
 
 #[derive(Resource, Default)]
@@ -310,7 +316,9 @@ fn add_observer_fires_on_triggered_event() {
     tw.tick(1, DT);
 
     assert!(
-        tw.world.resource::<WorldSignals>().has_flag("observer_fired"),
+        tw.world
+            .resource::<WorldSignals>()
+            .has_flag("observer_fired"),
         "observer registered via TestWorldBuilder::add_observer must fire on the triggered event"
     );
 }

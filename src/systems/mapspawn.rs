@@ -28,8 +28,8 @@ use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
-use crate::protocol::render_assets::RenderAssetCmd;
 use crate::events::spawnmap::SpawnMapRequested;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
@@ -432,7 +432,10 @@ mod tests {
                 assert_eq!(id, "font1");
                 assert_eq!(path, "assets/font1.ttf");
                 assert_eq!(*size, 24);
-                assert!(skip_if_loaded, "spawn_map fonts should skip if already loaded");
+                assert!(
+                    skip_if_loaded,
+                    "spawn_map fonts should skip if already loaded"
+                );
             }
             other => panic!("expected RenderAssetCmd::Font, got {other:?}"),
         }

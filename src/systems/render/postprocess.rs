@@ -9,8 +9,8 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::render::rendertarget::RenderTarget;
-use crate::resources::screensize::ScreenSize;
 use crate::resources::render::shaderstore::ShaderStore;
+use crate::resources::screensize::ScreenSize;
 use crate::resources::uniformvalue::UniformValue;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldtime::WorldTime;
@@ -334,7 +334,12 @@ fn set_int(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &s
 }
 
 /// Set a `vec2` uniform by name, if present in the shader.
-fn set_vec2(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &str, value: &[f32; 2]) {
+fn set_vec2(
+    shader: &mut Shader,
+    locations: &mut FxHashMap<String, i32>,
+    name: &str,
+    value: &[f32; 2],
+) {
     let loc = get_uniform_loc(shader, locations, name);
     if loc >= 0 {
         set_shader_value_raw(
@@ -347,7 +352,12 @@ fn set_vec2(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &
 }
 
 /// Set a `vec4` uniform by name, if present in the shader.
-fn set_vec4(shader: &mut Shader, locations: &mut FxHashMap<String, i32>, name: &str, value: &[f32; 4]) {
+fn set_vec4(
+    shader: &mut Shader,
+    locations: &mut FxHashMap<String, i32>,
+    name: &str,
+    value: &[f32; 4],
+) {
     let loc = get_uniform_loc(shader, locations, name);
     if loc >= 0 {
         set_shader_value_raw(
@@ -391,7 +401,12 @@ pub(super) fn set_standard_uniforms(
     );
 
     // uFrame (int)
-    set_int(shader, locations, "uFrame", &(world_time.frame_count as i32));
+    set_int(
+        shader,
+        locations,
+        "uFrame",
+        &(world_time.frame_count as i32),
+    );
 
     // uWindowResolution (vec2)
     set_vec2(

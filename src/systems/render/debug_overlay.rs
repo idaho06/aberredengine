@@ -3,11 +3,11 @@ use raylib::prelude::{Camera2D, Vector2};
 use crate::protocol::stats::ThreadStats;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::render::fontstore::FontStore;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
-use crate::resources::screensize::ScreenSize;
+use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::texturestore::TextureStore;
+use crate::resources::screensize::ScreenSize;
 use crate::resources::thread_stats::SimStats;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldsignals::SignalSnapshot;
@@ -122,7 +122,11 @@ fn draw_thread_stats_row(ui: &ImguiUi, label: &str, stats: &ThreadStats) {
         && (stats.configured_hz <= 0.0 || stats.achieved_hz >= stats.configured_hz * 0.95);
     let line = format!(
         "  {label}: {:.1} Hz cfg | {:.1} achieved | {:.2}ms avg {:.2}ms max | {} overruns",
-        stats.configured_hz, stats.achieved_hz, stats.tick_avg_ms, stats.tick_max_ms, stats.overruns
+        stats.configured_hz,
+        stats.achieved_hz,
+        stats.tick_avg_ms,
+        stats.tick_max_ms,
+        stats.overruns
     );
     if healthy {
         ui.text(line);

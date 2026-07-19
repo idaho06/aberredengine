@@ -26,11 +26,11 @@ use aberredengine::components::stuckto::StuckTo;
 use aberredengine::components::timer::{Timer, TimerCallback};
 use aberredengine::components::ttl::Ttl;
 use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use aberredengine::protocol::audio::AudioCmd;
 use aberredengine::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
 use aberredengine::events::luatimer::LuaTimerEvent;
 use aberredengine::events::timer::TimerEvent;
+use aberredengine::protocol::audio::AudioCmd;
 use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
 use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
@@ -41,10 +41,10 @@ use aberredengine::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::resources::postprocessshader::PostProcessShader;
+use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::systemsstore::SystemsStore;
 use aberredengine::resources::texturedims::TextureDimsStore;
-use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::animation::{animation, animation_controller};
@@ -1171,12 +1171,7 @@ fn lua_timer_fires_across_multiple_ticks() {
     let fired_clone = fired_count.clone();
 
     let mut world = make_world(0.3);
-    world.spawn((LuaTimer::new(
-        0.8,
-        LuaTimerCallback {
-            name: "cb".into(),
-        },
-    ),));
+    world.spawn((LuaTimer::new(0.8, LuaTimerCallback { name: "cb".into() }),));
 
     world.add_observer(move |_trigger: On<LuaTimerEvent>| {
         *fired_clone.lock().unwrap() += 1;

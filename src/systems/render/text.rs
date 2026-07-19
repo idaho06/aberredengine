@@ -21,7 +21,14 @@ pub(super) fn draw_screen_text_item(
                 x: pos.pos.x + shadow.offset.x,
                 y: pos.pos.y + shadow.offset.y,
             };
-            d.draw_text_ex(font, &item.text, shadow_pos, item.font_size, 1.0, shadow.color);
+            d.draw_text_ex(
+                font,
+                &item.text,
+                shadow_pos,
+                item.font_size,
+                1.0,
+                shadow.color,
+            );
         }
         d.draw_text_ex(font, &item.text, pos.pos, item.font_size, 1.0, final_color);
         if debug {

@@ -1,5 +1,5 @@
-use super::*;
 use super::super::entity_builder::LuaEntityBuilder;
+use super::*;
 
 impl LuaRuntime {
     pub(in crate::resources::lua_runtime) fn register_spawn_api(&self) -> LuaResult<()> {

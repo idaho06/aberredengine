@@ -19,5 +19,5 @@ mod spawn;
 
 use super::commands::*;
 use super::runtime::{LuaAppData, LuaRuntime};
-use mlua::prelude::*;
 use macros::push_fn_meta;
+use mlua::prelude::*;

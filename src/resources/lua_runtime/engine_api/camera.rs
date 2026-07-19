@@ -5,7 +5,15 @@ impl LuaRuntime {
         let engine: LuaTable = self.lua.globals().get("engine")?;
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
-        define_camera_cmd_twins!(engine, self.lua, meta_fns, "", camera_commands, "camera", "");
+        define_camera_cmd_twins!(
+            engine,
+            self.lua,
+            meta_fns,
+            "",
+            camera_commands,
+            "camera",
+            ""
+        );
 
         engine.set(
             "get_camera",

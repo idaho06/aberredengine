@@ -76,7 +76,6 @@ impl BoolState {
         self.just_released = false;
     }
 
-
     /// Force this action to read as not-held/not-just-pressed, without
     /// touching `just_released`. Used to mask input meant for the F11 debug
     /// imgui overlay -- `just_released` must never be suppressed, or
@@ -122,7 +121,6 @@ impl InputState {
             &mut self.mouse_left_button,
         ]
     }
-
 
     /// All keyboard-sourced digital fields (everything [`bool_fields_mut`](Self::bool_fields_mut)
     /// returns except `mouse_left_button`), as mutable references. Reused by

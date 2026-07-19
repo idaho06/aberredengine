@@ -238,9 +238,9 @@ mod tests {
         let button_entity = world
             .spawn((
                 GuiButton {
-                callback_name: "on_start_clicked".into(),
-                ..GuiButton::new(80.0, 24.0, "Start")
-            },
+                    callback_name: "on_start_clicked".into(),
+                    ..GuiButton::new(80.0, 24.0, "Start")
+                },
                 ScreenPosition::new(10.0, 20.0),
                 ZIndex(5.0),
             ))
@@ -278,9 +278,9 @@ mod tests {
         insert_empty_theme_store(&mut world);
         world.spawn((
             GuiButton {
-            callback_name: "on_start_clicked".into(),
-            ..GuiButton::new(80.0, 24.0, "")
-        },
+                callback_name: "on_start_clicked".into(),
+                ..GuiButton::new(80.0, 24.0, "")
+            },
             ScreenPosition::new(10.0, 20.0),
             ZIndex(5.0),
         ));
@@ -410,11 +410,9 @@ mod tests {
 
         tick(&mut world, gui_label_spawn_system);
 
-        let binding = world
-            .query::<&SignalBinding>()
-            .iter(&world)
-            .next()
-            .expect("caption child should have a SignalBinding when GuiLabel.signal_binding is set");
+        let binding = world.query::<&SignalBinding>().iter(&world).next().expect(
+            "caption child should have a SignalBinding when GuiLabel.signal_binding is set",
+        );
         assert_eq!(binding.signal_key, "score");
         assert_eq!(binding.format, None);
     }
@@ -512,7 +510,9 @@ mod tests {
             "caption keeps the placeholder while the signal key is unset"
         );
 
-        world.resource_mut::<WorldSignals>().set_integer("score", 42);
+        world
+            .resource_mut::<WorldSignals>()
+            .set_integer("score", 42);
         tick(&mut world, update_world_signals_binding_system);
 
         let caption_text = world
@@ -646,7 +646,9 @@ mod tests {
             .expect("caption should still spawn with default values");
         assert_eq!(&*caption_text.font, "");
         assert!(
-            !world.resource_mut::<GuiThemeWarnCache>().warn_once("missing"),
+            !world
+                .resource_mut::<GuiThemeWarnCache>()
+                .warn_once("missing"),
             "the missing key should already be recorded by spawn_themed_caption's fallback"
         );
     }

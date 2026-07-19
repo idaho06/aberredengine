@@ -644,7 +644,11 @@ impl LuaRuntime {
     /// different callback sites) short-circuit entirely, and lets calls on a
     /// new frame diff against the previous frame's snapshot, writing only the
     /// digital buttons and analog values that actually changed.
-    pub fn update_input_table(&self, snapshot: &InputSnapshot, frame_count: u64) -> LuaResult<LuaTable> {
+    pub fn update_input_table(
+        &self,
+        snapshot: &InputSnapshot,
+        frame_count: u64,
+    ) -> LuaResult<LuaTable> {
         let tables = self.get_input_ctx_pool();
 
         let data = self
@@ -833,15 +837,17 @@ mod tests {
     fn gui_theme_commands_preserve_policy_survives_clear_render_commands_does_not() {
         let runtime = LuaRuntime::new().unwrap();
         if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
-            data.gui_theme_commands.borrow_mut().push(RenderCmd::SetGuiThemeFont {
-                theme_key: "default".to_string(),
-                font_key: "arcade".to_string(),
-                font_size: 16.0,
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            });
+            data.gui_theme_commands
+                .borrow_mut()
+                .push(RenderCmd::SetGuiThemeFont {
+                    theme_key: "default".to_string(),
+                    font_key: "arcade".to_string(),
+                    font_size: 16.0,
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 255,
+                });
             data.render_commands
                 .borrow_mut()
                 .push(RenderCmd::ClearPostProcessUniforms);

@@ -140,7 +140,10 @@ fn resolve_sample_into(
     resolve!(secondarydirection_up, InputAction::SecondaryDirectionUp);
     resolve!(secondarydirection_down, InputAction::SecondaryDirectionDown);
     resolve!(secondarydirection_left, InputAction::SecondaryDirectionLeft);
-    resolve!(secondarydirection_right, InputAction::SecondaryDirectionRight);
+    resolve!(
+        secondarydirection_right,
+        InputAction::SecondaryDirectionRight
+    );
     resolve!(action_back, InputAction::Back);
     resolve!(action_1, InputAction::Action1);
     resolve!(action_2, InputAction::Action2);
@@ -201,9 +204,14 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         // Saved BEFORE this tick's mouse fields are overwritten below, so
         // mouse masking can freeze at the pre-capture position rather than
         // leaking a bogus new one (see the imgui-capture doc comment below).
-        let frozen_mouse = capture
-            .mouse
-            .then(|| (input.mouse_x, input.mouse_y, input.mouse_world_x, input.mouse_world_y));
+        let frozen_mouse = capture.mouse.then(|| {
+            (
+                input.mouse_x,
+                input.mouse_y,
+                input.mouse_world_x,
+                input.mouse_world_y,
+            )
+        });
 
         input.scroll_y = 0.0;
         for sample in samples {
@@ -344,9 +352,9 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use raylib::ffi::{GamepadAxis, GamepadButton};
     use crate::resources::render::imgui_bridge::ImguiCaptureState;
     use raylib::ffi::KeyboardKey;
+    use raylib::ffi::{GamepadAxis, GamepadButton};
     use raylib::prelude::Camera2D;
 
     fn test_camera(target: (f32, f32), offset: (f32, f32), zoom: f32, rotation: f32) -> Camera2D {
@@ -504,8 +512,14 @@ mod tests {
         resolve_input_backlog(&mut world, &[down, up]);
 
         let input = world.resource::<InputState>();
-        assert!(input.action_1.just_pressed, "press edge must survive the intermediate transition");
-        assert!(input.action_1.just_released, "release edge must survive the intermediate transition");
+        assert!(
+            input.action_1.just_pressed,
+            "press edge must survive the intermediate transition"
+        );
+        assert!(
+            input.action_1.just_released,
+            "release edge must survive the intermediate transition"
+        );
         assert!(!input.action_1.active);
     }
 
@@ -517,8 +531,14 @@ mod tests {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         {
             let mut bindings = world.resource_mut::<InputBindings>();
-            bindings.rebind(InputAction::Action1, InputBinding::Keyboard(KeyboardKey::KEY_Z));
-            bindings.add_binding(InputAction::Action1, InputBinding::Keyboard(KeyboardKey::KEY_X));
+            bindings.rebind(
+                InputAction::Action1,
+                InputBinding::Keyboard(KeyboardKey::KEY_Z),
+            );
+            bindings.add_binding(
+                InputAction::Action1,
+                InputBinding::Keyboard(KeyboardKey::KEY_X),
+            );
         }
 
         let mut z_down = raw();
@@ -543,7 +563,10 @@ mod tests {
             !input.action_1.just_pressed,
             "rolling handoff between two bound keys must not double-fire just_pressed"
         );
-        assert!(input.action_1.active, "action must still read active through the handoff");
+        assert!(
+            input.action_1.active,
+            "action must still read active through the handoff"
+        );
     }
 
     #[test]
@@ -605,7 +628,10 @@ mod tests {
         };
         resolve_input_backlog(&mut world, &[established_sample]);
         let established = world.resource::<InputState>().clone();
-        assert_ne!(established.mouse_x, 0.0, "sanity: a real cursor position was established");
+        assert_ne!(
+            established.mouse_x, 0.0,
+            "sanity: a real cursor position was established"
+        );
 
         world.resource_mut::<InputState>().clear_edges();
         world.resource_mut::<ImguiCaptureMirror>().0 = ImguiCaptureState {
@@ -797,6 +823,9 @@ mod tests {
         resolve_input_backlog(&mut world, &[sample1, sample2]);
         let input = world.resource::<InputState>();
         assert!(input.gamepad_connected);
-        assert_eq!(input.gamepad_axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize], 0.3);
+        assert_eq!(
+            input.gamepad_axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize],
+            0.3
+        );
     }
 }

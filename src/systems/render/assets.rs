@@ -11,8 +11,8 @@
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
 
-use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::endpoints::LogicTx;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::render_logic::LogicMsg;
 use crate::resources::fontmetrics::FontMetrics;
 use crate::resources::render::fontstore::FontStore;
@@ -195,11 +195,7 @@ pub(crate) fn apply_render_asset_cmd(
                         crate::resources::texturefilter::TextureFilter::Nearest,
                         None,
                     );
-                    notifications.push(LogicMsg::TextureLoaded {
-                        key,
-                        width,
-                        height,
-                    });
+                    notifications.push(LogicMsg::TextureLoaded { key, width, height });
                 }
                 None => warn!(
                     "process_render_asset_cmds: failed to rasterize text for '{}'",
@@ -220,11 +216,7 @@ pub(crate) fn apply_render_asset_cmd(
                         crate::resources::texturefilter::TextureFilter::Nearest,
                         Some(png_path),
                     );
-                    notifications.push(LogicMsg::TextureLoaded {
-                        key,
-                        width,
-                        height,
-                    });
+                    notifications.push(LogicMsg::TextureLoaded { key, width, height });
                 }
                 Err(e) => warn!(
                     "process_render_asset_cmds: failed to load tilemap texture '{}': {e}",

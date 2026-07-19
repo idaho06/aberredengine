@@ -161,16 +161,17 @@ impl LuaRuntime {
 
         engine.set(
             "set_render_size",
-            self.lua.create_function(|lua, (width, height): (u32, u32)| {
-                let width = width.clamp(120, 7680);
-                let height = height.clamp(120, 4320);
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .gameconfig_commands
-                    .borrow_mut()
-                    .push(GameConfigCmd::RenderSize { width, height });
-                Ok(())
-            })?,
+            self.lua
+                .create_function(|lua, (width, height): (u32, u32)| {
+                    let width = width.clamp(120, 7680);
+                    let height = height.clamp(120, 4320);
+                    lua.app_data_ref::<LuaAppData>()
+                        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
+                        .gameconfig_commands
+                        .borrow_mut()
+                        .push(GameConfigCmd::RenderSize { width, height });
+                    Ok(())
+                })?,
         )?;
         push_fn_meta(
             &self.lua,

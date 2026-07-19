@@ -32,7 +32,7 @@ impl LuaRuntime {
     // Drain methods — all 22 generated from queue_registry.rs via lua_queues!
     // -------------------------------------------------------------------------
 
-    crate::lua_queues!{drain_methods}
+    crate::lua_queues! {drain_methods}
 
     // -------------------------------------------------------------------------
     // Queue management
@@ -46,7 +46,7 @@ impl LuaRuntime {
     /// `queue_registry.rs` for the per-queue policy and rationale).
     pub fn clear_all_commands(&self) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
-            crate::lua_queues!{clear_body data}
+            crate::lua_queues! {clear_body data}
         }
     }
 

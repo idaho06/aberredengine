@@ -132,7 +132,12 @@ impl LuaRuntime {
                     ("target_y", "number", false, Some("Camera target world Y")),
                     ("offset_x", "number", false, Some("Camera screen offset X")),
                     ("offset_y", "number", false, Some("Camera screen offset Y")),
-                    ("rotation", "number", false, Some("Camera rotation in degrees")),
+                    (
+                        "rotation",
+                        "number",
+                        false,
+                        Some("Camera rotation in degrees"),
+                    ),
                     ("zoom", "number", false, Some("Camera zoom factor")),
                 ],
             ),

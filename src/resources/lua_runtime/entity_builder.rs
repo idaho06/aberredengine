@@ -6,19 +6,19 @@
 //! The builder supports both spawning new entities and cloning existing ones,
 //! in both regular and collision contexts.
 
+use super::commands::{CloneCmd, UniformValue};
+use super::runtime::LuaAppData;
+use super::spawn_data::*;
+use super::stub_meta::BuilderMethodDef;
+use crate::components::Themed;
 use crate::components::guibutton::GuiButton;
 use crate::components::guiimage::GuiImage;
 use crate::components::guilabel::GuiLabel;
 use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use crate::components::guiwindow::GuiWindow;
-use crate::components::Themed;
-use raylib::prelude::Vector2;
-use super::commands::{CloneCmd, UniformValue};
-use super::runtime::LuaAppData;
-use super::spawn_data::*;
-use super::stub_meta::BuilderMethodDef;
-use mlua::prelude::*;
 use mlua::MaybeSend;
+use mlua::prelude::*;
+use raylib::prelude::Vector2;
 
 /// Parse a Lua value into a UniformValue.
 ///
@@ -233,7 +233,11 @@ pub fn collect_builder_meta() -> Vec<BuilderMethodDef> {
     // register_as and build are not with_* methods so the macro doesn't capture them;
     // append their entries manually so the stub generator includes them.
     const REGISTER_AS_PARAMS: &[(&str, &str)] = &[("key", "string")];
-    v.push(("register_as", "Register entity in WorldSignals for later retrieval", REGISTER_AS_PARAMS));
+    v.push((
+        "register_as",
+        "Register entity in WorldSignals for later retrieval",
+        REGISTER_AS_PARAMS,
+    ));
     v.push(("build", "Queue entity for spawning or cloning", &[]));
     v
 }
@@ -243,8 +247,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     meta: &mut Option<Vec<BuilderMethodDef>>,
 ) {
     builder_method!(
-        methods, meta,
-        "with_group", "Set entity group",
+        methods,
+        meta,
+        "with_group",
+        "Set entity group",
         [("name", "string")],
         |_, this: &mut LuaEntityBuilder, name: String| {
             this.cmd.group = Some(name);
@@ -253,8 +259,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_position", "Set world position",
+        methods,
+        meta,
+        "with_position",
+        "Set world position",
         [("x", "number"), ("y", "number")],
         |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
             this.cmd.position = Some((x, y));
@@ -263,8 +271,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_sprite", "Set sprite",
+        methods,
+        meta,
+        "with_sprite",
+        "Set sprite",
         [
             ("tex_key", "string"),
             ("width", "number"),
@@ -272,7 +282,9 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("origin_x", "number"),
             ("origin_y", "number"),
         ],
-        |_, this: &mut LuaEntityBuilder, (tex_key, width, height, origin_x, origin_y): (String, f32, f32, f32, f32)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (tex_key, width, height, origin_x, origin_y): (String, f32, f32, f32, f32)| {
             this.cmd.sprite = Some(SpriteData {
                 tex_key,
                 width,
@@ -289,8 +301,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_sprite_offset", "Set sprite offset",
+        methods,
+        meta,
+        "with_sprite_offset",
+        "Set sprite offset",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(ref mut sprite) = this.cmd.sprite else {
@@ -305,8 +319,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_sprite_flip", "Set sprite flipping",
+        methods,
+        meta,
+        "with_sprite_flip",
+        "Set sprite flipping",
         [("flip_h", "boolean"), ("flip_v", "boolean")],
         |_, this: &mut LuaEntityBuilder, (flip_h, flip_v): (bool, bool)| {
             let Some(ref mut sprite) = this.cmd.sprite else {
@@ -321,8 +337,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_zindex", "Set render order",
+        methods,
+        meta,
+        "with_zindex",
+        "Set render order",
         [("z", "number")],
         |_, this: &mut LuaEntityBuilder, z: f32| {
             this.cmd.zindex = Some(z);
@@ -331,8 +349,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_velocity", "Set velocity (creates RigidBody if needed)",
+        methods,
+        meta,
+        "with_velocity",
+        "Set velocity (creates RigidBody if needed)",
         [("vx", "number"), ("vy", "number")],
         |_, this: &mut LuaEntityBuilder, (vx, vy): (f32, f32)| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
@@ -350,8 +370,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_friction", "Set friction (creates RigidBody if needed)",
+        methods,
+        meta,
+        "with_friction",
+        "Set friction (creates RigidBody if needed)",
         [("friction", "number")],
         |_, this: &mut LuaEntityBuilder, friction: f32| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
@@ -367,8 +389,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_max_speed", "Set max speed clamp (creates RigidBody if needed)",
+        methods,
+        meta,
+        "with_max_speed",
+        "Set max speed clamp (creates RigidBody if needed)",
         [("speed", "number")],
         |_, this: &mut LuaEntityBuilder, speed: f32| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
@@ -384,8 +408,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_accel", "Add a named acceleration force",
+        methods,
+        meta,
+        "with_accel",
+        "Add a named acceleration force",
         [
             ("name", "string"),
             ("x", "number"),
@@ -394,10 +420,20 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
         ],
         |_, this: &mut LuaEntityBuilder, (name, x, y, enabled): (String, f32, f32, bool)| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
-                rb.forces.push(ForceData { name, x, y, enabled });
+                rb.forces.push(ForceData {
+                    name,
+                    x,
+                    y,
+                    enabled,
+                });
             } else {
                 this.cmd.rigidbody = Some(RigidBodyData {
-                    forces: vec![ForceData { name, x, y, enabled }],
+                    forces: vec![ForceData {
+                        name,
+                        x,
+                        y,
+                        enabled,
+                    }],
                     ..RigidBodyData::default()
                 });
             }
@@ -406,8 +442,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_frozen", "Mark entity as frozen (physics skipped)",
+        methods,
+        meta,
+        "with_frozen",
+        "Mark entity as frozen (physics skipped)",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             if let Some(ref mut rb) = this.cmd.rigidbody {
@@ -423,15 +461,19 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_collider", "Set box collider",
+        methods,
+        meta,
+        "with_collider",
+        "Set box collider",
         [
             ("width", "number"),
             ("height", "number"),
             ("origin_x", "number"),
             ("origin_y", "number"),
         ],
-        |_, this: &mut LuaEntityBuilder, (width, height, origin_x, origin_y): (f32, f32, f32, f32)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (width, height, origin_x, origin_y): (f32, f32, f32, f32)| {
             this.cmd.collider = Some(ColliderData {
                 width,
                 height,
@@ -445,8 +487,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_collider_offset", "Set collider offset",
+        methods,
+        meta,
+        "with_collider_offset",
+        "Set collider offset",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(ref mut collider) = this.cmd.collider else {
@@ -461,8 +505,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_mouse_controlled", "Enable mouse position tracking",
+        methods,
+        meta,
+        "with_mouse_controlled",
+        "Enable mouse position tracking",
         [("follow_x", "boolean"), ("follow_y", "boolean")],
         |_, this: &mut LuaEntityBuilder, (follow_x, follow_y): (bool, bool)| {
             this.cmd.mouse_controlled = Some((follow_x, follow_y));
@@ -471,8 +517,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_rotation", "Set rotation in degrees",
+        methods,
+        meta,
+        "with_rotation",
+        "Set rotation in degrees",
         [("degrees", "number")],
         |_, this: &mut LuaEntityBuilder, degrees: f32| {
             this.cmd.rotation = Some(degrees);
@@ -481,8 +529,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_scale", "Set scale",
+        methods,
+        meta,
+        "with_scale",
+        "Set scale",
         [("sx", "number"), ("sy", "number")],
         |_, this: &mut LuaEntityBuilder, (sx, sy): (f32, f32)| {
             this.cmd.scale = Some((sx, sy));
@@ -491,8 +541,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_persistent", "Survive scene transitions",
+        methods,
+        meta,
+        "with_persistent",
+        "Survive scene transitions",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             this.cmd.persistent = true;
@@ -501,8 +553,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signal_scalar", "Add a scalar signal",
+        methods,
+        meta,
+        "with_signal_scalar",
+        "Add a scalar signal",
         [("key", "string"), ("value", "number")],
         |_, this: &mut LuaEntityBuilder, (key, value): (String, f32)| {
             this.cmd.signal_scalars.push((key, value));
@@ -511,8 +565,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signal_integer", "Add an integer signal",
+        methods,
+        meta,
+        "with_signal_integer",
+        "Add an integer signal",
         [("key", "string"), ("value", "integer")],
         |_, this: &mut LuaEntityBuilder, (key, value): (String, i32)| {
             this.cmd.signal_integers.push((key, value));
@@ -521,8 +577,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signal_flag", "Add a flag signal",
+        methods,
+        meta,
+        "with_signal_flag",
+        "Add a flag signal",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             this.cmd.signal_flags.push(key);
@@ -531,8 +589,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signal_string", "Add a string signal",
+        methods,
+        meta,
+        "with_signal_string",
+        "Add a string signal",
         [("key", "string"), ("value", "string")],
         |_, this: &mut LuaEntityBuilder, (key, value): (String, String)| {
             this.cmd.signal_strings.push((key, value));
@@ -541,8 +601,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_screen_position", "Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.",
+        methods,
+        meta,
+        "with_screen_position",
+        "Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.",
         [("x", "number"), ("y", "number")],
         |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
             this.cmd.screen_position = Some((x, y));
@@ -551,8 +613,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_window", "Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.",
+        methods,
+        meta,
+        "with_gui_window",
+        "Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.",
         [("width", "number"), ("height", "number")],
         |_, this: &mut LuaEntityBuilder, (width, height): (f32, f32)| {
             this.cmd.gui_window = Some(GuiWindow::new(width, height));
@@ -561,8 +625,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_offset", "Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.",
+        methods,
+        meta,
+        "with_gui_offset",
+        "Set GuiOffset (position relative to the parent, resolved each frame by gui_layout_system). Requires :with_parent() first.",
         [("x", "number"), ("y", "number")],
         |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
             if this.cmd.parent.is_none() {
@@ -576,18 +642,34 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_button", "Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
-        [("width", "number"), ("height", "number"), ("label", "string"), ("callback_name", "string")],
-        |_, this: &mut LuaEntityBuilder, (width, height, label, callback_name): (f32, f32, String, String)| {
-            this.cmd.gui_button = Some(GuiButton::with_lua_callback(width, height, label, callback_name));
+        methods,
+        meta,
+        "with_gui_button",
+        "Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [
+            ("width", "number"),
+            ("height", "number"),
+            ("label", "string"),
+            ("callback_name", "string")
+        ],
+        |_,
+         this: &mut LuaEntityBuilder,
+         (width, height, label, callback_name): (f32, f32, String, String)| {
+            this.cmd.gui_button = Some(GuiButton::with_lua_callback(
+                width,
+                height,
+                label,
+                callback_name,
+            ));
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_button_disabled", "Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.",
+        methods,
+        meta,
+        "with_gui_button_disabled",
+        "Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             let Some(btn) = this.cmd.gui_button.as_mut() else {
@@ -601,9 +683,15 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_label", "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
-        [("width", "number"), ("height", "number"), ("text", "string")],
+        methods,
+        meta,
+        "with_gui_label",
+        "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [
+            ("width", "number"),
+            ("height", "number"),
+            ("text", "string")
+        ],
         |_, this: &mut LuaEntityBuilder, (width, height, text): (f32, f32, String)| {
             this.cmd.gui_label = Some(GuiLabel::new(width, height, text));
             Ok(())
@@ -611,8 +699,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_label_signal_binding", "Bind a GuiLabel's caption to a WorldSignal value -- gui_label_spawn_system attaches a SignalBinding to the caption DynamicText child, kept in sync by update_world_signals_binding_system. The label's caption text (set via :with_gui_label) remains the placeholder shown until the signal key first resolves. Requires :with_gui_label() first.",
+        methods,
+        meta,
+        "with_gui_label_signal_binding",
+        "Bind a GuiLabel's caption to a WorldSignal value -- gui_label_spawn_system attaches a SignalBinding to the caption DynamicText child, kept in sync by update_world_signals_binding_system. The label's caption text (set via :with_gui_label) remains the placeholder shown until the signal key first resolves. Requires :with_gui_label() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let Some(label) = this.cmd.gui_label.as_mut() else {
@@ -626,8 +716,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_label_signal_binding_format", "Set format string for a GuiLabel's signal binding (use {} as placeholder). Requires :with_gui_label_signal_binding() first.",
+        methods,
+        meta,
+        "with_gui_label_signal_binding_format",
+        "Set format string for a GuiLabel's signal binding (use {} as placeholder). Requires :with_gui_label_signal_binding() first.",
         [("format", "string")],
         |_, this: &mut LuaEntityBuilder, format: String| {
             let Some((_, fmt)) = this
@@ -646,13 +738,20 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_theme_key", "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.",
+        methods,
+        meta,
+        "with_gui_theme_key",
+        "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let key: std::sync::Arc<str> = std::sync::Arc::from(key.as_str());
             fn apply<T: Themed>(opt: &mut Option<T>, key: &std::sync::Arc<str>) -> bool {
-                if let Some(t) = opt.as_mut() { *t.theme_key_mut() = key.clone(); true } else { false }
+                if let Some(t) = opt.as_mut() {
+                    *t.theme_key_mut() = key.clone();
+                    true
+                } else {
+                    false
+                }
             }
             if !apply(&mut this.cmd.gui_window, &key)
                 && !apply(&mut this.cmd.gui_button, &key)
@@ -668,18 +767,45 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_image", "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
-        [("width", "number"), ("height", "number"), ("tex_key", "string"), ("offset_x", "number"), ("offset_y", "number"), ("callback_name", "string")],
-        |_, this: &mut LuaEntityBuilder, (width, height, tex_key, offset_x, offset_y, callback_name): (f32, f32, String, f32, f32, String)| {
-            this.cmd.gui_image = Some(GuiImage::with_lua_callback(width, height, tex_key, offset_x, offset_y, callback_name));
+        methods,
+        meta,
+        "with_gui_image",
+        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        [
+            ("width", "number"),
+            ("height", "number"),
+            ("tex_key", "string"),
+            ("offset_x", "number"),
+            ("offset_y", "number"),
+            ("callback_name", "string")
+        ],
+        |_,
+         this: &mut LuaEntityBuilder,
+         (width, height, tex_key, offset_x, offset_y, callback_name): (
+            f32,
+            f32,
+            String,
+            f32,
+            f32,
+            String
+        )| {
+            this.cmd.gui_image = Some(GuiImage::with_lua_callback(
+                width,
+                height,
+                tex_key,
+                offset_x,
+                offset_y,
+                callback_name,
+            ));
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_image_hover_offset", "Set the atlas offset GuiImage uses while GuiInteractable.state == Hovered. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is hovered. Requires :with_gui_image() first.",
+        methods,
+        meta,
+        "with_gui_image_hover_offset",
+        "Set the atlas offset GuiImage uses while GuiInteractable.state == Hovered. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is hovered. Requires :with_gui_image() first.",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(img) = this.cmd.gui_image.as_mut() else {
@@ -693,8 +819,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_image_pressed_offset", "Set the atlas offset GuiImage uses while GuiInteractable.state == Pressed. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is pressed. Requires :with_gui_image() first.",
+        methods,
+        meta,
+        "with_gui_image_pressed_offset",
+        "Set the atlas offset GuiImage uses while GuiInteractable.state == Pressed. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is pressed. Requires :with_gui_image() first.",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(img) = this.cmd.gui_image.as_mut() else {
@@ -708,8 +836,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_image_disabled_offset", "Set the atlas offset GuiImage uses while GuiInteractable.state == Disabled. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is disabled. Requires :with_gui_image() first.",
+        methods,
+        meta,
+        "with_gui_image_disabled_offset",
+        "Set the atlas offset GuiImage uses while GuiInteractable.state == Disabled. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is disabled. Requires :with_gui_image() first.",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(img) = this.cmd.gui_image.as_mut() else {
@@ -723,9 +853,16 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_progress_bar", "Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the \"default\" key.",
-        [("width", "number"), ("height", "number"), ("value", "number"), ("max", "number")],
+        methods,
+        meta,
+        "with_gui_progress_bar",
+        "Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the \"default\" key.",
+        [
+            ("width", "number"),
+            ("height", "number"),
+            ("value", "number"),
+            ("max", "number")
+        ],
         |_, this: &mut LuaEntityBuilder, (width, height, value, max): (f32, f32, f32, f32)| {
             this.cmd.gui_progress_bar = Some(GuiProgressBar::new(width, height, value, max));
             Ok(())
@@ -733,8 +870,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_progress_bar_vertical", "Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.",
+        methods,
+        meta,
+        "with_gui_progress_bar_vertical",
+        "Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.",
         [],
         |_, this: &mut LuaEntityBuilder, ()| {
             let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
@@ -748,8 +887,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_progress_bar_reversed", "Reverse the fill anchor of a GuiProgressBar: Horizontal becomes HorizontalReversed (right-to-left), Vertical becomes VerticalReversed (top-to-bottom). Requires :with_gui_progress_bar() first.",
+        methods,
+        meta,
+        "with_gui_progress_bar_reversed",
+        "Reverse the fill anchor of a GuiProgressBar: Horizontal becomes HorizontalReversed (right-to-left), Vertical becomes VerticalReversed (top-to-bottom). Requires :with_gui_progress_bar() first.",
         [],
         |_, this: &mut LuaEntityBuilder, ()| {
             let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
@@ -768,8 +909,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_gui_progress_bar_signal_binding", "Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.",
+        methods,
+        meta,
+        "with_gui_progress_bar_signal_binding",
+        "Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
@@ -783,8 +926,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_text", "Set DynamicText component",
+        methods,
+        meta,
+        "with_text",
+        "Set DynamicText component",
         [
             ("content", "string"),
             ("font", "string"),
@@ -794,15 +939,27 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("b", "integer"),
             ("a", "integer"),
         ],
-        |_, this: &mut LuaEntityBuilder, (content, font, font_size, r, g, b, a): (String, String, f32, u8, u8, u8, u8)| {
-            this.cmd.text = Some(TextData { content, font, font_size, r, g, b, a });
+        |_,
+         this: &mut LuaEntityBuilder,
+         (content, font, font_size, r, g, b, a): (String, String, f32, u8, u8, u8, u8)| {
+            this.cmd.text = Some(TextData {
+                content,
+                font,
+                font_size,
+                r,
+                g,
+                b,
+                a,
+            });
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu", "Add interactive menu",
+        methods,
+        meta,
+        "with_menu",
+        "Add interactive menu",
         [
             ("items", "table"),
             ("origin_x", "number"),
@@ -812,7 +969,17 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("item_spacing", "number"),
             ("use_screen_space", "boolean"),
         ],
-        |_, this: &mut LuaEntityBuilder, (items_table, origin_x, origin_y, font, font_size, item_spacing, use_screen_space): (LuaTable, f32, f32, String, f32, f32, bool)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (items_table, origin_x, origin_y, font, font_size, item_spacing, use_screen_space): (
+            LuaTable,
+            f32,
+            f32,
+            String,
+            f32,
+            f32,
+            bool
+        )| {
             let mut items: Vec<(String, String)> = Vec::new();
             for value in items_table.sequence_values::<LuaTable>() {
                 let item_table = value?;
@@ -835,8 +1002,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_colors", "Set menu normal/selected colors (RGBA)",
+        methods,
+        meta,
+        "with_menu_colors",
+        "Set menu normal/selected colors (RGBA)",
         [
             ("nr", "integer"),
             ("ng", "integer"),
@@ -847,21 +1016,35 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("sb", "integer"),
             ("sa", "integer"),
         ],
-        |_, this: &mut LuaEntityBuilder, (nr, ng, nb, na, sr, sg, sb, sa): (u8, u8, u8, u8, u8, u8, u8, u8)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (nr, ng, nb, na, sr, sg, sb, sa): (u8, u8, u8, u8, u8, u8, u8, u8)| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
                     "with_menu_colors() requires with_menu() first",
                 ));
             };
-            menu.normal_color = Some(ColorData { r: nr, g: ng, b: nb, a: na });
-            menu.selected_color = Some(ColorData { r: sr, g: sg, b: sb, a: sa });
+            menu.normal_color = Some(ColorData {
+                r: nr,
+                g: ng,
+                b: nb,
+                a: na,
+            });
+            menu.selected_color = Some(ColorData {
+                r: sr,
+                g: sg,
+                b: sb,
+                a: sa,
+            });
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_dynamic_text", "Enable dynamic text updates for menu items",
+        methods,
+        meta,
+        "with_menu_dynamic_text",
+        "Enable dynamic text updates for menu items",
         [("dynamic", "boolean")],
         |_, this: &mut LuaEntityBuilder, dynamic: bool| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -875,8 +1058,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_cursor", "Set cursor entity for menu",
+        methods,
+        meta,
+        "with_menu_cursor",
+        "Set cursor entity for menu",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -890,8 +1075,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_selection_sound", "Set sound for menu selection changes",
+        methods,
+        meta,
+        "with_menu_selection_sound",
+        "Set sound for menu selection changes",
         [("sound_key", "string")],
         |_, this: &mut LuaEntityBuilder, sound_key: String| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -905,8 +1092,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_action_set_scene", "Set scene-switch action for menu item",
+        methods,
+        meta,
+        "with_menu_action_set_scene",
+        "Set scene-switch action for menu item",
         [("item_id", "string"), ("scene", "string")],
         |_, this: &mut LuaEntityBuilder, (item_id, scene): (String, String)| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -914,14 +1103,17 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_menu_action_set_scene() requires with_menu() first",
                 ));
             };
-            menu.actions.push((item_id, MenuActionData::SetScene { scene }));
+            menu.actions
+                .push((item_id, MenuActionData::SetScene { scene }));
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_action_show_submenu", "Set submenu action for menu item",
+        methods,
+        meta,
+        "with_menu_action_show_submenu",
+        "Set submenu action for menu item",
         [("item_id", "string"), ("submenu", "string")],
         |_, this: &mut LuaEntityBuilder, (item_id, submenu): (String, String)| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -929,14 +1121,17 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_menu_action_show_submenu() requires with_menu() first",
                 ));
             };
-            menu.actions.push((item_id, MenuActionData::ShowSubMenu { menu: submenu }));
+            menu.actions
+                .push((item_id, MenuActionData::ShowSubMenu { menu: submenu }));
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_action_quit", "Set quit action for menu item",
+        methods,
+        meta,
+        "with_menu_action_quit",
+        "Set quit action for menu item",
         [("item_id", "string")],
         |_, this: &mut LuaEntityBuilder, item_id: String| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -950,8 +1145,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_callback", "Set Lua callback for menu selection",
+        methods,
+        meta,
+        "with_menu_callback",
+        "Set Lua callback for menu selection",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -965,8 +1162,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_menu_visible_count", "Set max visible menu items (enables scrolling)",
+        methods,
+        meta,
+        "with_menu_visible_count",
+        "Set max visible menu items (enables scrolling)",
         [("count", "integer")],
         |_, this: &mut LuaEntityBuilder, count: usize| {
             let Some(ref mut menu) = this.cmd.menu else {
@@ -980,8 +1179,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signals", "Add empty Signals component",
+        methods,
+        meta,
+        "with_signals",
+        "Add empty Signals component",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             this.cmd.has_signals = true;
@@ -990,7 +1191,8 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
+        methods,
+        meta,
         "with_phase",
         "Add phase state machine\n\nExample:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
         [("table", "table")],
@@ -1014,14 +1216,18 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_stuckto", "Attach entity to a target entity",
+        methods,
+        meta,
+        "with_stuckto",
+        "Attach entity to a target entity",
         [
             ("target_entity_id", "integer"),
             ("follow_x", "boolean"),
             ("follow_y", "boolean"),
         ],
-        |_, this: &mut LuaEntityBuilder, (target_entity_id, follow_x, follow_y): (u64, bool, bool)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (target_entity_id, follow_x, follow_y): (u64, bool, bool)| {
             this.cmd.stuckto = Some(StuckToData {
                 target_entity_id,
                 offset_x: 0.0,
@@ -1035,8 +1241,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_stuckto_offset", "Set offset for StuckTo",
+        methods,
+        meta,
+        "with_stuckto_offset",
+        "Set offset for StuckTo",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(ref mut stuckto) = this.cmd.stuckto else {
@@ -1051,8 +1259,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_stuckto_stored_velocity", "Set velocity to restore when unstuck",
+        methods,
+        meta,
+        "with_stuckto_stored_velocity",
+        "Set velocity to restore when unstuck",
         [("vx", "number"), ("vy", "number")],
         |_, this: &mut LuaEntityBuilder, (vx, vy): (f32, f32)| {
             let Some(ref mut stuckto) = this.cmd.stuckto else {
@@ -1066,8 +1276,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_lua_timer", "Add a Lua timer callback",
+        methods,
+        meta,
+        "with_lua_timer",
+        "Add a Lua timer callback",
         [("duration", "number"), ("callback", "string")],
         |_, this: &mut LuaEntityBuilder, (duration, callback): (f32, String)| {
             this.cmd.lua_timer = Some((duration, callback));
@@ -1076,8 +1288,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_ttl", "Set time-to-live (auto-despawn)",
+        methods,
+        meta,
+        "with_ttl",
+        "Set time-to-live (auto-despawn)",
         [("seconds", "number")],
         |_, this: &mut LuaEntityBuilder, seconds: f32| {
             this.cmd.ttl = Some(seconds);
@@ -1086,8 +1300,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signal_binding", "Bind text to a WorldSignal value",
+        methods,
+        meta,
+        "with_signal_binding",
+        "Bind text to a WorldSignal value",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             this.cmd.signal_binding = Some((key, None));
@@ -1096,8 +1312,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_signal_binding_format", "Set format string for signal binding (use {} as placeholder)",
+        methods,
+        meta,
+        "with_signal_binding_format",
+        "Set format string for signal binding (use {} as placeholder)",
         [("format", "string")],
         |_, this: &mut LuaEntityBuilder, format: String| {
             let Some((_, ref mut fmt)) = this.cmd.signal_binding else {
@@ -1111,9 +1329,15 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_grid_layout", "Spawn entities from a JSON grid layout",
-        [("path", "string"), ("group", "string"), ("zindex", "number")],
+        methods,
+        meta,
+        "with_grid_layout",
+        "Spawn entities from a JSON grid layout",
+        [
+            ("path", "string"),
+            ("group", "string"),
+            ("zindex", "number")
+        ],
         |_, this: &mut LuaEntityBuilder, (path, group, zindex): (String, String, f32)| {
             this.cmd.grid_layout = Some((path, group, zindex));
             Ok(())
@@ -1121,8 +1345,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_position", "Add position tween animation",
+        methods,
+        meta,
+        "with_tween_position",
+        "Add position tween animation",
         [
             ("from_x", "number"),
             ("from_y", "number"),
@@ -1130,7 +1356,9 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("to_y", "number"),
             ("duration", "number"),
         ],
-        |_, this: &mut LuaEntityBuilder, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
             this.cmd.tween_position = Some(TweenPositionData {
                 from_x,
                 from_y,
@@ -1143,8 +1371,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_position_easing", "Set easing for position tween",
+        methods,
+        meta,
+        "with_tween_position_easing",
+        "Set easing for position tween",
         [("easing", "string")],
         |_, this: &mut LuaEntityBuilder, easing: String| {
             let Some(ref mut tween) = this.cmd.tween_position else {
@@ -1158,8 +1388,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_position_loop", "Set loop mode for position tween",
+        methods,
+        meta,
+        "with_tween_position_loop",
+        "Set loop mode for position tween",
         [("loop_mode", "string")],
         |_, this: &mut LuaEntityBuilder, loop_mode: String| {
             let Some(ref mut tween) = this.cmd.tween_position else {
@@ -1173,8 +1405,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_position_backwards", "Start position tween in reverse",
+        methods,
+        meta,
+        "with_tween_position_backwards",
+        "Start position tween in reverse",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             let Some(ref mut tween) = this.cmd.tween_position else {
@@ -1188,8 +1422,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_position_on_finished", "Set a Lua callback to call when the position tween finishes",
+        methods,
+        meta,
+        "with_tween_position_on_finished",
+        "Set a Lua callback to call when the position tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_position else {
@@ -1203,8 +1439,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_screen_position", "Add screen position tween animation",
+        methods,
+        meta,
+        "with_tween_screen_position",
+        "Add screen position tween animation",
         [
             ("from_x", "number"),
             ("from_y", "number"),
@@ -1212,7 +1450,9 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("to_y", "number"),
             ("duration", "number"),
         ],
-        |_, this: &mut LuaEntityBuilder, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
             this.cmd.tween_screen_position = Some(TweenScreenPositionData {
                 from_x,
                 from_y,
@@ -1225,8 +1465,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_screen_position_easing", "Set easing for screen position tween",
+        methods,
+        meta,
+        "with_tween_screen_position_easing",
+        "Set easing for screen position tween",
         [("easing", "string")],
         |_, this: &mut LuaEntityBuilder, easing: String| {
             let Some(ref mut tween) = this.cmd.tween_screen_position else {
@@ -1240,8 +1482,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_screen_position_loop", "Set loop mode for screen position tween",
+        methods,
+        meta,
+        "with_tween_screen_position_loop",
+        "Set loop mode for screen position tween",
         [("loop_mode", "string")],
         |_, this: &mut LuaEntityBuilder, loop_mode: String| {
             let Some(ref mut tween) = this.cmd.tween_screen_position else {
@@ -1255,8 +1499,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_screen_position_backwards", "Start screen position tween in reverse",
+        methods,
+        meta,
+        "with_tween_screen_position_backwards",
+        "Start screen position tween in reverse",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             let Some(ref mut tween) = this.cmd.tween_screen_position else {
@@ -1270,8 +1516,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_screen_position_on_finished", "Set a Lua callback to call when the screen position tween finishes",
+        methods,
+        meta,
+        "with_tween_screen_position_on_finished",
+        "Set a Lua callback to call when the screen position tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_screen_position else {
@@ -1285,8 +1533,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_rotation", "Add rotation tween animation",
+        methods,
+        meta,
+        "with_tween_rotation",
+        "Add rotation tween animation",
         [("from", "number"), ("to", "number"), ("duration", "number")],
         |_, this: &mut LuaEntityBuilder, (from, to, duration): (f32, f32, f32)| {
             this.cmd.tween_rotation = Some(TweenRotationData {
@@ -1299,8 +1549,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_rotation_easing", "Set easing for rotation tween",
+        methods,
+        meta,
+        "with_tween_rotation_easing",
+        "Set easing for rotation tween",
         [("easing", "string")],
         |_, this: &mut LuaEntityBuilder, easing: String| {
             let Some(ref mut tween) = this.cmd.tween_rotation else {
@@ -1314,8 +1566,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_rotation_loop", "Set loop mode for rotation tween",
+        methods,
+        meta,
+        "with_tween_rotation_loop",
+        "Set loop mode for rotation tween",
         [("loop_mode", "string")],
         |_, this: &mut LuaEntityBuilder, loop_mode: String| {
             let Some(ref mut tween) = this.cmd.tween_rotation else {
@@ -1329,8 +1583,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_rotation_backwards", "Start rotation tween in reverse",
+        methods,
+        meta,
+        "with_tween_rotation_backwards",
+        "Start rotation tween in reverse",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             let Some(ref mut tween) = this.cmd.tween_rotation else {
@@ -1344,8 +1600,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_rotation_on_finished", "Set a Lua callback to call when the rotation tween finishes",
+        methods,
+        meta,
+        "with_tween_rotation_on_finished",
+        "Set a Lua callback to call when the rotation tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_rotation else {
@@ -1359,8 +1617,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_scale", "Add scale tween animation",
+        methods,
+        meta,
+        "with_tween_scale",
+        "Add scale tween animation",
         [
             ("from_x", "number"),
             ("from_y", "number"),
@@ -1368,7 +1628,9 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             ("to_y", "number"),
             ("duration", "number"),
         ],
-        |_, this: &mut LuaEntityBuilder, (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
+        |_,
+         this: &mut LuaEntityBuilder,
+         (from_x, from_y, to_x, to_y, duration): (f32, f32, f32, f32, f32)| {
             this.cmd.tween_scale = Some(TweenScaleData {
                 from_x,
                 from_y,
@@ -1381,8 +1643,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_scale_easing", "Set easing for scale tween",
+        methods,
+        meta,
+        "with_tween_scale_easing",
+        "Set easing for scale tween",
         [("easing", "string")],
         |_, this: &mut LuaEntityBuilder, easing: String| {
             let Some(ref mut tween) = this.cmd.tween_scale else {
@@ -1396,8 +1660,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_scale_loop", "Set loop mode for scale tween",
+        methods,
+        meta,
+        "with_tween_scale_loop",
+        "Set loop mode for scale tween",
         [("loop_mode", "string")],
         |_, this: &mut LuaEntityBuilder, loop_mode: String| {
             let Some(ref mut tween) = this.cmd.tween_scale else {
@@ -1411,8 +1677,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_scale_backwards", "Start scale tween in reverse",
+        methods,
+        meta,
+        "with_tween_scale_backwards",
+        "Start scale tween in reverse",
         [],
         |_, this: &mut LuaEntityBuilder, (): ()| {
             let Some(ref mut tween) = this.cmd.tween_scale else {
@@ -1426,8 +1694,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tween_scale_on_finished", "Set a Lua callback to call when the scale tween finishes",
+        methods,
+        meta,
+        "with_tween_scale_on_finished",
+        "Set a Lua callback to call when the scale tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_scale else {
@@ -1441,9 +1711,15 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_lua_collision_rule", "Add collision callback between two groups",
-        [("group_a", "string"), ("group_b", "string"), ("callback", "string")],
+        methods,
+        meta,
+        "with_lua_collision_rule",
+        "Add collision callback between two groups",
+        [
+            ("group_a", "string"),
+            ("group_b", "string"),
+            ("callback", "string")
+        ],
         |_, this: &mut LuaEntityBuilder, (group_a, group_b, callback): (String, String, String)| {
             this.cmd.lua_collision_rule = Some(LuaCollisionRuleData {
                 group_a,
@@ -1455,8 +1731,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_animation", "Set animation by key",
+        methods,
+        meta,
+        "with_animation",
+        "Set animation by key",
         [("animation_key", "string")],
         |_, this: &mut LuaEntityBuilder, animation_key: String| {
             this.cmd.animation = Some(AnimationData { animation_key });
@@ -1465,8 +1743,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_animation_controller", "Add animation controller with fallback",
+        methods,
+        meta,
+        "with_animation_controller",
+        "Add animation controller with fallback",
         [("fallback_key", "string")],
         |_, this: &mut LuaEntityBuilder, fallback_key: String| {
             this.cmd.animation_controller = Some(AnimationControllerData {
@@ -1478,8 +1758,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_animation_rule", "Add animation rule to controller",
+        methods,
+        meta,
+        "with_animation_rule",
+        "Add animation rule to controller",
         [("condition_table", "table"), ("set_key", "string")],
         |_, this: &mut LuaEntityBuilder, (condition_table, set_key): (LuaTable, String)| {
             fn parse_condition(table: &LuaTable) -> LuaResult<AnimationConditionData> {
@@ -1504,7 +1786,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                         let min: f32 = table.get("min")?;
                         let max: f32 = table.get("max")?;
                         let inclusive: bool = table.get("inclusive").unwrap_or(true);
-                        Ok(AnimationConditionData::ScalarRange { key, min, max, inclusive })
+                        Ok(AnimationConditionData::ScalarRange {
+                            key,
+                            min,
+                            max,
+                            inclusive,
+                        })
                     }
                     "integer_cmp" => {
                         let key: String = table.get("key")?;
@@ -1517,7 +1804,12 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                         let min: i32 = table.get("min")?;
                         let max: i32 = table.get("max")?;
                         let inclusive: bool = table.get("inclusive").unwrap_or(true);
-                        Ok(AnimationConditionData::IntegerRange { key, min, max, inclusive })
+                        Ok(AnimationConditionData::IntegerRange {
+                            key,
+                            min,
+                            max,
+                            inclusive,
+                        })
                     }
                     "all" => {
                         let conditions_table: LuaTable = table.get("conditions")?;
@@ -1554,17 +1846,23 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
             };
 
             let condition = parse_condition(&condition_table)?;
-            controller.rules.push(AnimationRuleData { condition, set_key });
+            controller
+                .rules
+                .push(AnimationRuleData { condition, set_key });
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_particle_emitter", "Add particle emitter",
+        methods,
+        meta,
+        "with_particle_emitter",
+        "Add particle emitter",
         [("table", "table")],
         |_, this: &mut LuaEntityBuilder, table: LuaTable| {
-            use super::spawn_data::{ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData};
+            use super::spawn_data::{
+                ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData,
+            };
 
             let mut data = ParticleEmitterData::default();
 
@@ -1665,9 +1963,16 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_tint", "Set color tint (RGBA 0-255)",
-        [("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")],
+        methods,
+        meta,
+        "with_tint",
+        "Set color tint (RGBA 0-255)",
+        [
+            ("r", "integer"),
+            ("g", "integer"),
+            ("b", "integer"),
+            ("a", "integer")
+        ],
         |_, this: &mut LuaEntityBuilder, (r, g, b, a): (u8, u8, u8, u8)| {
             this.cmd.tint = Some((r, g, b, a));
             Ok(())
@@ -1675,9 +1980,18 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_shadow", "Set drop shadow (offset dx/dy and RGBA color 0-255)",
-        [("dx", "number"), ("dy", "number"), ("r", "integer"), ("g", "integer"), ("b", "integer"), ("a", "integer")],
+        methods,
+        meta,
+        "with_shadow",
+        "Set drop shadow (offset dx/dy and RGBA color 0-255)",
+        [
+            ("dx", "number"),
+            ("dy", "number"),
+            ("r", "integer"),
+            ("g", "integer"),
+            ("b", "integer"),
+            ("a", "integer")
+        ],
         |_, this: &mut LuaEntityBuilder, (dx, dy, r, g, b, a): (f32, f32, u8, u8, u8, u8)| {
             this.cmd.shadow = Some((dx, dy, r, g, b, a));
             Ok(())
@@ -1685,8 +1999,10 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
-        "with_shader", "Set per-entity shader with optional uniforms",
+        methods,
+        meta,
+        "with_shader",
+        "Set per-entity shader with optional uniforms",
         [("shader_key", "string"), ("uniforms", "table?")],
         |_, this: &mut LuaEntityBuilder, args: mlua::MultiValue| {
             let mut iter = args.into_iter();
@@ -1711,14 +2027,19 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 }
             }
 
-            this.cmd.shader = Some(EntityShaderData { key: shader_key, uniforms });
+            this.cmd.shader = Some(EntityShaderData {
+                key: shader_key,
+                uniforms,
+            });
             Ok(())
         }
     );
 
     builder_method!(
-        methods, meta,
-        "with_parent", "Set parent entity for transform hierarchy",
+        methods,
+        meta,
+        "with_parent",
+        "Set parent entity for transform hierarchy",
         [("parent_id", "integer")],
         |_, this: &mut LuaEntityBuilder, parent_id: u64| {
             this.cmd.parent = Some(parent_id);
@@ -1727,7 +2048,8 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
+        methods,
+        meta,
         "with_tilemap",
         "Spawn a tilemap root. All tile entities become ChildOf children so the root's position/scale/rotation transforms the whole tilemap.",
         [("path", "string")],
@@ -1738,7 +2060,8 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
+        methods,
+        meta,
         "with_lua_setup",
         "Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.",
         [("callback", "string")],
@@ -1749,7 +2072,8 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
+        methods,
+        meta,
         "with_on_animation_end",
         "Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.",
         [("fn_name", "string")],
@@ -1760,7 +2084,8 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 
     builder_method!(
-        methods, meta,
+        methods,
+        meta,
         "with_camera_target",
         "Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).",
         [("priority", "integer?"), ("zoom", "number?")],

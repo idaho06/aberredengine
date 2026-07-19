@@ -34,7 +34,11 @@ impl LuaRuntime {
             "load_shader",
             "Load a shader (at least one of vs_path/fs_path required)",
             "render",
-            &[("id", "string"), ("vs_path", "string?"), ("fs_path", "string?")],
+            &[
+                ("id", "string"),
+                ("vs_path", "string?"),
+                ("fs_path", "string?"),
+            ],
             None,
         )?;
 
@@ -176,9 +180,18 @@ impl LuaRuntime {
             meta_fns,
             "set_gui_theme_panel",
             gui_theme_commands,
-            |(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
-                String, String, f32, f32, f32, f32, i32, i32, i32, i32
-            ),
+            |(
+                theme_key,
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom,
+            )| (String, String, f32, f32, f32, f32, i32, i32, i32, i32),
             RenderCmd::SetGuiThemePanel {
                 theme_key,
                 tex_key,
@@ -212,7 +225,19 @@ impl LuaRuntime {
             meta_fns,
             "set_gui_theme_button",
             gui_theme_commands,
-            |(theme_key, state, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
+            |(
+                theme_key,
+                state,
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom,
+            )| (
                 String, String, String, f32, f32, f32, f32, i32, i32, i32, i32
             ),
             RenderCmd::SetGuiThemeButton {
@@ -251,9 +276,18 @@ impl LuaRuntime {
             meta_fns,
             "set_gui_theme_label",
             gui_theme_commands,
-            |(theme_key, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)| (
-                String, String, f32, f32, f32, f32, i32, i32, i32, i32
-            ),
+            |(
+                theme_key,
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom,
+            )| (String, String, f32, f32, f32, f32, i32, i32, i32, i32),
             RenderCmd::SetGuiThemeLabel {
                 theme_key,
                 tex_key,
@@ -317,8 +351,21 @@ impl LuaRuntime {
             meta_fns,
             "set_gui_theme_progress_bar",
             gui_theme_commands,
-            |(theme_key, part, tex_key, source_x, source_y, source_w, source_h, left, top, right, bottom)|
-            (String, String, String, f32, f32, f32, f32, i32, i32, i32, i32),
+            |(
+                theme_key,
+                part,
+                tex_key,
+                source_x,
+                source_y,
+                source_w,
+                source_h,
+                left,
+                top,
+                right,
+                bottom,
+            )| (
+                String, String, String, f32, f32, f32, f32, i32, i32, i32, i32
+            ),
             RenderCmd::SetGuiThemeProgressBar {
                 theme_key,
                 part,
@@ -358,7 +405,16 @@ impl LuaRuntime {
             "set_gui_theme_button_shadow",
             gui_theme_commands,
             |(theme_key, state, dx, dy, r, g, b, a)| (String, String, f32, f32, u8, u8, u8, u8),
-            RenderCmd::SetGuiThemeButtonShadow { theme_key, state, dx, dy, r, g, b, a },
+            RenderCmd::SetGuiThemeButtonShadow {
+                theme_key,
+                state,
+                dx,
+                dy,
+                r,
+                g,
+                b,
+                a
+            },
             desc = "Set the drop shadow for one state of the named theme's GuiButton skin. \
                     state is \"normal\"/\"hover\"/\"pressed\"/\"disabled\"; unset states fall back to \
                     the \"normal\" shadow, which itself falls back to the theme's panel_shadow. \
@@ -383,7 +439,15 @@ impl LuaRuntime {
             "set_gui_theme_panel_shadow",
             gui_theme_commands,
             |(theme_key, dx, dy, r, g, b, a)| (String, f32, f32, u8, u8, u8, u8),
-            RenderCmd::SetGuiThemePanelShadow { theme_key, dx, dy, r, g, b, a },
+            RenderCmd::SetGuiThemePanelShadow {
+                theme_key,
+                dx,
+                dy,
+                r,
+                g,
+                b,
+                a
+            },
             desc = "Set the named theme's panel drop shadow. All nine-patch backgrounds (GuiWindow, GuiButton, GuiLabel, GuiProgressBar) \
                     using this theme will draw a shifted, tinted pre-pass before the main patch. \
                     Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.",
@@ -406,7 +470,15 @@ impl LuaRuntime {
             "set_gui_theme_text_shadow",
             gui_theme_commands,
             |(theme_key, dx, dy, r, g, b, a)| (String, f32, f32, u8, u8, u8, u8),
-            RenderCmd::SetGuiThemeTextShadow { theme_key, dx, dy, r, g, b, a },
+            RenderCmd::SetGuiThemeTextShadow {
+                theme_key,
+                dx,
+                dy,
+                r,
+                g,
+                b,
+                a
+            },
             desc = "Set the named theme's caption text drop shadow. The Shadow component is inserted on DynamicText caption \
                     children spawned by gui_button_spawn_system/gui_label_spawn_system when this theme is resolved. \
                     Call from on_setup() — gui_theme_commands has preserve policy and survives scene switches.",

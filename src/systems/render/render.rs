@@ -27,20 +27,20 @@ use crate::components::guilabel::GuiLabel;
 use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use crate::components::guiwindow::GuiWindow;
 use crate::components::mapposition::MapPosition;
+use crate::components::render::mirror::SimMirror;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
-use crate::components::sprite::Sprite;
 use crate::components::shadow::Shadow;
+use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
-use crate::resources::signal_intents::SignalIntents;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::render::fontstore::FontStore;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
+use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::imgui_bridge::ImguiBridge;
-use crate::components::render::mirror::SimMirror;
+use crate::resources::signal_intents::SignalIntents;
 
 use super::mirror::MirrorQueries;
 use crate::resources::render::mirrors::{
@@ -49,23 +49,23 @@ use crate::resources::render::mirrors::{
 };
 use crate::resources::render::rendertarget::RenderTarget;
 use crate::resources::render::scene_table::RenderSceneTable;
-use crate::resources::screensize::ScreenSize;
 use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::texturestore::TextureStore;
 use crate::resources::render::thread_stats::RenderStats;
+use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
 use crate::systems::scene_dispatch::GuiCallback;
 use log::warn;
 
-use super::debug_overlay::{draw_imgui_debug, PerfPanelStats};
+use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
 use super::geometry::{
     compute_sprite_cull_bounds, compute_sprite_geometry, compute_view_bounds,
     draw_rotated_rect_lines, resolve_world_transform,
 };
+use super::gui_panel::{self, draw_screen_panel_item};
 use super::postprocess::{
     apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
-use super::gui_panel::{self, draw_screen_panel_item};
 use super::sprite::draw_screen_sprite_item;
 use super::text::draw_screen_text_item;
 
@@ -382,7 +382,19 @@ pub fn render_system(
                 crate::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
                 sprite_buffer.extend(mirrors.map_sprites.iter().filter_map(
-                    |(mirror, sprite, position, z_index, scale, rotation, shader, tint, shadow, global_transform, velocity)| {
+                    |(
+                        mirror,
+                        sprite,
+                        position,
+                        z_index,
+                        scale,
+                        rotation,
+                        shader,
+                        tint,
+                        shadow,
+                        global_transform,
+                        velocity,
+                    )| {
                         let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
                             *position,
                             scale.copied(),
@@ -466,7 +478,14 @@ pub fn render_system(
                                 y: dest.y + shadow.offset.y,
                                 ..dest
                             };
-                            d2.draw_texture_pro(tex, src, shadow_dest, origin_scaled, rotation, shadow.color);
+                            d2.draw_texture_pro(
+                                tex,
+                                src,
+                                shadow_dest,
+                                origin_scaled,
+                                rotation,
+                                shadow.color,
+                            );
                         }
 
                         // Apply entity shader if present
@@ -573,7 +592,17 @@ pub fn render_system(
                 crate::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
                 text_buffer.extend(mirrors.map_texts.iter().filter_map(
-                    |(mirror, text, position, z_index, shader, tint, shadow, global_transform, velocity)| {
+                    |(
+                        mirror,
+                        text,
+                        position,
+                        z_index,
+                        shader,
+                        tint,
+                        shadow,
+                        global_transform,
+                        velocity,
+                    )| {
                         let resolved_pos = MapPosition::from_vec(
                             global_transform.map_or(position.pos, |gt| gt.position),
                         );
@@ -625,7 +654,14 @@ pub fn render_system(
                                 x: item.resolved_pos.pos.x + shadow.offset.x,
                                 y: item.resolved_pos.pos.y + shadow.offset.y,
                             };
-                            d2.draw_text_ex(font, &item.text.text, shadow_pos, item.text.font_size, 1.0, shadow.color);
+                            d2.draw_text_ex(
+                                font,
+                                &item.text.text,
+                                shadow_pos,
+                                item.text.font_size,
+                                1.0,
+                                shadow.color,
+                            );
                         }
 
                         if let Some(entity_shader) = &item.maybe_shader {
@@ -1007,7 +1043,14 @@ pub fn render_system(
                 }
 
                 if let Some(cb) = gui_callback {
-                    cb(ui, signal_snapshot, signal_intents, textures, fonts, app_state);
+                    cb(
+                        ui,
+                        signal_snapshot,
+                        signal_intents,
+                        textures,
+                        fonts,
+                        app_state,
+                    );
                 }
             });
         };
@@ -1085,7 +1128,13 @@ fn screen_panel_item(
     z_index: ZIndex,
     maybe_shadow: Option<Shadow>,
 ) -> ScreenDrawItem {
-    ScreenDrawItem::Panel(ScreenPanelBufferItem { entity, panel, dest, z_index, maybe_shadow })
+    ScreenDrawItem::Panel(ScreenPanelBufferItem {
+        entity,
+        panel,
+        dest,
+        z_index,
+        maybe_shadow,
+    })
 }
 
 fn warn_missing_theme(
@@ -1095,9 +1144,7 @@ fn warn_missing_theme(
     detail: &str,
 ) {
     if gui_theme_warn_cache.warn_once(theme_key) {
-        warn!(
-            "{widget_kind} references unregistered theme_key '{theme_key}'{detail}"
-        );
+        warn!("{widget_kind} references unregistered theme_key '{theme_key}'{detail}");
     }
 }
 
@@ -1117,11 +1164,22 @@ fn draw_screen_space<'m>(
     // owned scratch-buffer rebuild would needlessly clone every frame.
     gui_windows: impl Iterator<Item = (&'m SimMirror, &'m GuiWindow, &'m ScreenPosition, &'m ZIndex)>,
     gui_buttons: impl Iterator<
-        Item = (&'m SimMirror, &'m GuiButton, &'m GuiInteractable, &'m ScreenPosition, &'m ZIndex),
+        Item = (
+            &'m SimMirror,
+            &'m GuiButton,
+            &'m GuiInteractable,
+            &'m ScreenPosition,
+            &'m ZIndex,
+        ),
     >,
     gui_labels: impl Iterator<Item = (&'m SimMirror, &'m GuiLabel, &'m ScreenPosition, &'m ZIndex)>,
     gui_progress_bars: impl Iterator<
-        Item = (&'m SimMirror, &'m GuiProgressBar, &'m ScreenPosition, &'m ZIndex),
+        Item = (
+            &'m SimMirror,
+            &'m GuiProgressBar,
+            &'m ScreenPosition,
+            &'m ZIndex,
+        ),
     >,
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
@@ -1137,7 +1195,12 @@ fn draw_screen_space<'m>(
             Some(theme) => buffer.push(screen_panel_item(
                 mirror.0,
                 theme.panel.clone(),
-                Rectangle { x: p.pos.x, y: p.pos.y, width: window.size.x, height: window.size.y },
+                Rectangle {
+                    x: p.pos.x,
+                    y: p.pos.y,
+                    width: window.size.x,
+                    height: window.size.y,
+                },
                 *z,
                 theme.panel_shadow,
             )),
@@ -1163,7 +1226,12 @@ fn draw_screen_space<'m>(
             buffer.push(screen_panel_item(
                 mirror.0,
                 resolve_button_patch(skin, interactable.state).clone(),
-                Rectangle { x: p.pos.x, y: p.pos.y, width: interactable.size.x, height: interactable.size.y },
+                Rectangle {
+                    x: p.pos.x,
+                    y: p.pos.y,
+                    width: interactable.size.x,
+                    height: interactable.size.y,
+                },
                 *z,
                 resolve_button_shadow(skin, interactable.state, theme.panel_shadow),
             ));
@@ -1190,7 +1258,12 @@ fn draw_screen_space<'m>(
             buffer.push(screen_panel_item(
                 mirror.0,
                 patch.clone(),
-                Rectangle { x: p.pos.x, y: p.pos.y, width: label.size.x, height: label.size.y },
+                Rectangle {
+                    x: p.pos.x,
+                    y: p.pos.y,
+                    width: label.size.x,
+                    height: label.size.y,
+                },
                 *z,
                 theme.panel_shadow,
             ));
@@ -1226,23 +1299,48 @@ fn draw_screen_space<'m>(
         let y = p.pos.y;
         let w = bar.size.x;
         let h = bar.size.y;
-        let ratio = if bar.max > 0.0 { (bar.value / bar.max).clamp(0.0, 1.0) } else { 0.0 };
-        let track_dest = Rectangle { x, y, width: w, height: h };
+        let ratio = if bar.max > 0.0 {
+            (bar.value / bar.max).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let track_dest = Rectangle {
+            x,
+            y,
+            width: w,
+            height: h,
+        };
         let fill_dest = match bar.direction {
-            ProgressBarDirection::Horizontal => {
-                Rectangle { x, y, width: w * ratio, height: h }
-            }
+            ProgressBarDirection::Horizontal => Rectangle {
+                x,
+                y,
+                width: w * ratio,
+                height: h,
+            },
             ProgressBarDirection::HorizontalReversed => {
                 let fill_w = w * ratio;
-                Rectangle { x: x + w - fill_w, y, width: fill_w, height: h }
+                Rectangle {
+                    x: x + w - fill_w,
+                    y,
+                    width: fill_w,
+                    height: h,
+                }
             }
             ProgressBarDirection::Vertical => {
                 let fill_h = h * ratio;
-                Rectangle { x, y: y + h - fill_h, width: w, height: fill_h }
+                Rectangle {
+                    x,
+                    y: y + h - fill_h,
+                    width: w,
+                    height: fill_h,
+                }
             }
-            ProgressBarDirection::VerticalReversed => {
-                Rectangle { x, y, width: w, height: h * ratio }
-            }
+            ProgressBarDirection::VerticalReversed => Rectangle {
+                x,
+                y,
+                width: w,
+                height: h * ratio,
+            },
         };
         buffer.push(ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
             entity: mirror.0,
@@ -1262,7 +1360,9 @@ fn draw_screen_space<'m>(
     for item in buffer.iter() {
         match item {
             ScreenDrawItem::Panel(p) => draw_screen_panel_item(d, p, textures),
-            ScreenDrawItem::ProgressBar(pb) => gui_panel::draw_screen_progress_bar_item(d, pb, textures),
+            ScreenDrawItem::ProgressBar(pb) => {
+                gui_panel::draw_screen_progress_bar_item(d, pb, textures)
+            }
             ScreenDrawItem::Sprite(s) => draw_screen_sprite_item(d, s, textures, debug_sprites),
             ScreenDrawItem::Text(t) => draw_screen_text_item(d, t, fonts, debug_texts),
         }
@@ -1376,8 +1476,10 @@ mod screen_draw_buffer_tests {
     /// specifically exercises their tie-break against each other.
     #[test]
     fn all_four_variants_tie_break_ascending_by_entity_at_equal_rank() {
-        let mut entities: Vec<Entity> =
-            [50, 1, 20].into_iter().map(|i| Entity::from_raw_u32(i).unwrap()).collect();
+        let mut entities: Vec<Entity> = [50, 1, 20]
+            .into_iter()
+            .map(|i| Entity::from_raw_u32(i).unwrap())
+            .collect();
         // Panel and ProgressBar share variant_rank 0 -- build one of each
         // sharing this entity set so their relative order is exercised.
         let buffer: Vec<ScreenDrawItem> = vec![
@@ -1389,7 +1491,10 @@ mod screen_draw_buffer_tests {
         let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
 
         entities.sort();
-        assert_eq!(ids, entities, "Panel/ProgressBar ties must now resolve by ascending Entity");
+        assert_eq!(
+            ids, entities,
+            "Panel/ProgressBar ties must now resolve by ascending Entity"
+        );
     }
 
     #[test]
@@ -1445,8 +1550,10 @@ mod screen_draw_buffer_tests {
 
     #[test]
     fn equal_zindex_and_variant_ties_break_ascending_by_entity_for_text() {
-        let mut entities: Vec<Entity> =
-            [9, 3].into_iter().map(|i| Entity::from_raw_u32(i).unwrap()).collect();
+        let mut entities: Vec<Entity> = [9, 3]
+            .into_iter()
+            .map(|i| Entity::from_raw_u32(i).unwrap())
+            .collect();
         let buffer: Vec<ScreenDrawItem> = entities
             .iter()
             .map(|&e| text_item_with_entity(1.0, e))

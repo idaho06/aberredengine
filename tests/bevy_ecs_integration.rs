@@ -414,7 +414,9 @@ fn query_with_filter() {
     world.spawn((Position { x: 3.0, y: 3.0 }, Player));
 
     let mut state = SystemState::<Query<&Position, With<Player>>>::new(&mut world);
-    let query = state.get(&world).expect("Player position query should fetch");
+    let query = state
+        .get(&world)
+        .expect("Player position query should fetch");
 
     let count = query.iter().count();
     assert_eq!(count, 2);
@@ -705,9 +707,7 @@ fn commands_trigger_event() {
 
     // Use Commands to trigger
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
     commands.trigger(SimpleEvent(1));
     state.apply(&mut world);
 
@@ -950,9 +950,7 @@ fn system_commands_run_system() {
     let system_id = world.register_system(increment_counter);
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
     commands.run_system(system_id);
     state.apply(&mut world);
 
@@ -1345,9 +1343,7 @@ fn commands_spawn_entity() {
     let mut world = World::new();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
 
     commands.spawn((Position { x: 10.0, y: 20.0 },));
 
@@ -1370,9 +1366,7 @@ fn commands_entity_insert() {
     let entity = world.spawn((Position { x: 0.0, y: 0.0 },)).id();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
 
     commands.entity(entity).insert(Velocity { x: 1.0, y: 2.0 });
 
@@ -1389,9 +1383,7 @@ fn commands_entity_despawn() {
     let entity = world.spawn((Position { x: 0.0, y: 0.0 },)).id();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
 
     commands.entity(entity).despawn();
 
@@ -1405,9 +1397,7 @@ fn commands_insert_resource() {
     let mut world = World::new();
 
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
 
     commands.insert_resource(Counter(42));
 
@@ -1432,12 +1422,8 @@ fn commands_in_system() {
     let mut player_state = SystemState::<Query<&Position, With<Player>>>::new(&mut world);
     let mut enemy_state = SystemState::<Query<&Position, With<Enemy>>>::new(&mut world);
 
-    let player_query = player_state
-        .get(&world)
-        .expect("Player query should fetch");
-    let enemy_query = enemy_state
-        .get(&world)
-        .expect("Enemy query should fetch");
+    let player_query = player_state.get(&world).expect("Player query should fetch");
+    let enemy_query = enemy_state.get(&world).expect("Enemy query should fetch");
 
     assert_eq!(player_query.iter().count(), 1);
     assert_eq!(enemy_query.iter().count(), 1);
@@ -1699,13 +1685,7 @@ fn observer_without_persistent_is_despawned_by_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -1754,13 +1734,7 @@ fn observer_with_persistent_survives_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -1818,13 +1792,7 @@ fn multiple_observers_mixed_persistence() {
 
     // Simulate scene cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -1866,13 +1834,7 @@ fn commands_trigger_works_with_persistent_observer() {
 
     // Simulate scene cleanup BEFORE using Commands::trigger
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -1882,9 +1844,7 @@ fn commands_trigger_works_with_persistent_observer() {
 
     // Use Commands to trigger (like the input system does)
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
     commands.trigger(PersistenceTestEvent(42));
     state.apply(&mut world);
 
@@ -1955,13 +1915,7 @@ fn registered_system_without_persistent_is_despawned_by_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -2006,13 +1960,7 @@ fn registered_system_with_persistent_survives_cleanup() {
 
     // Simulate scene cleanup: despawn all entities without Persistent
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -2057,13 +2005,7 @@ fn registered_system_with_input_survives_cleanup_when_persistent() {
 
     // Simulate scene cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -2106,13 +2048,7 @@ fn multiple_registered_systems_mixed_persistence() {
 
     // Simulate scene cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -2150,13 +2086,7 @@ fn commands_run_system_works_with_persistent_system() {
 
     // Simulate scene cleanup BEFORE using Commands::run_system
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 
@@ -2166,9 +2096,7 @@ fn commands_run_system_works_with_persistent_system() {
 
     // Use Commands to run system (like the menu selection observer does)
     let mut state = SystemState::<Commands>::new(&mut world);
-    let mut commands = state
-        .get_mut(&mut world)
-        .expect("Commands should fetch");
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
     commands.run_system(system_id);
     state.apply(&mut world);
 
@@ -2203,13 +2131,7 @@ fn system_entity_can_have_additional_components() {
 
     // Simulate cleanup
     let entities_to_despawn: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
 

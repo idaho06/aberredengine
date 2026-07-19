@@ -20,8 +20,8 @@ use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
-use crate::components::stuckto::StuckTo;
 use crate::components::shadow::Shadow;
+use crate::components::stuckto::StuckTo;
 use crate::components::tint::Tint;
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Tween, TweenValue};
@@ -50,7 +50,10 @@ fn get_entity_cmd<'a>(entity: Entity, commands: &'a mut Commands) -> Option<Enti
     match commands.get_entity(entity) {
         Ok(entity_cmds) => Some(entity_cmds),
         Err(_) => {
-            warn!("Cannot apply command to entity {:?}: entity was despawned", entity);
+            warn!(
+                "Cannot apply command to entity {:?}: entity was despawned",
+                entity
+            );
             None
         }
     }
@@ -66,7 +69,9 @@ fn get_entity_cmd<'a>(entity: Entity, commands: &'a mut Commands) -> Option<Enti
 /// silently at apply time instead of panicking via Bevy's default (panic)
 /// error handler.
 fn with_entity_cmd(commands: &mut Commands, entity_id: u64, f: impl FnOnce(&mut EntityCommands)) {
-    let Some(entity) = resolve_entity(entity_id) else { return; };
+    let Some(entity) = resolve_entity(entity_id) else {
+        return;
+    };
     with_entity_cmds(commands, entity, f);
 }
 
@@ -159,19 +164,24 @@ pub fn process_entity_commands(
                 process_lifecycle_cmd(cmd, commands, world_signals, systems_store)
             }
 
-            EntityCmd::SetGuiDisabled { entity_id, disabled } => {
-                process_gui_interactable_cmd(entity_id, disabled, queries)
-            }
+            EntityCmd::SetGuiDisabled {
+                entity_id,
+                disabled,
+            } => process_gui_interactable_cmd(entity_id, disabled, queries),
 
             EntityCmd::SetGuiProgress { entity_id, value } => {
-                let Some(entity) = resolve_entity(entity_id) else { continue; };
+                let Some(entity) = resolve_entity(entity_id) else {
+                    continue;
+                };
                 if let Ok(mut bar) = queries.gui_progress_bars.get_mut(entity) {
                     bar.value = value.clamp(0.0, bar.max);
                 }
             }
 
             EntityCmd::SetGuiProgressMax { entity_id, max } => {
-                let Some(entity) = resolve_entity(entity_id) else { continue; };
+                let Some(entity) = resolve_entity(entity_id) else {
+                    continue;
+                };
                 if let Ok(mut bar) = queries.gui_progress_bars.get_mut(entity) {
                     bar.max = max.max(0.0);
                     bar.value = bar.value.min(bar.max);
@@ -184,13 +194,17 @@ pub fn process_entity_commands(
 fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SetVelocity { entity_id, vx, vy } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.velocity = Vector2 { x: vx, y: vy };
             }
         }
         EntityCmd::SetSpeed { entity_id, speed } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.set_speed(speed);
             }
@@ -199,7 +213,9 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             entity_id,
             friction,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.friction = friction;
             }
@@ -208,19 +224,25 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             entity_id,
             max_speed,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.max_speed = max_speed;
             }
         }
         EntityCmd::FreezeEntity { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.freeze();
             }
         }
         EntityCmd::UnfreezeEntity { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.unfreeze();
             }
@@ -232,13 +254,17 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             y,
             enabled,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.add_force_with_state(&name, Vector2 { x, y }, enabled);
             }
         }
         EntityCmd::RemoveForce { entity_id, name } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.remove_force(&name);
             }
@@ -248,7 +274,9 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             name,
             enabled,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.set_force_enabled(&name, enabled);
             }
@@ -259,7 +287,9 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             x,
             y,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
                 rb.set_force_value(&name, Vector2 { x, y });
             }
@@ -272,7 +302,9 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
 /// `GuiInteractable.state` only — never `try_insert`s a fresh component,
 /// since that would wipe `on_click_callback`/`on_rust_callback`/`size`.
 fn process_gui_interactable_cmd(entity_id: u64, disabled: bool, queries: &mut EntityCmdQueries) {
-    let Some(entity) = resolve_entity(entity_id) else { return; };
+    let Some(entity) = resolve_entity(entity_id) else {
+        return;
+    };
     if let Ok(mut interactable) = queries.gui_interactables.get_mut(entity) {
         interactable.state = if disabled {
             GuiWidgetState::Disabled
@@ -285,19 +317,25 @@ fn process_gui_interactable_cmd(entity_id: u64, disabled: bool, queries: &mut En
 fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SignalSetFlag { entity_id, flag } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_flag(&flag);
             }
         }
         EntityCmd::SignalClearFlag { entity_id, flag } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.clear_flag(&flag);
             }
         }
         EntityCmd::SignalToggleFlag { entity_id, flag } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.toggle_flag(&flag);
             }
@@ -307,13 +345,17 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             key,
             value,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_scalar(&key, value);
             }
         }
         EntityCmd::SignalClearScalar { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.clear_scalar(&key);
             }
@@ -323,13 +365,17 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             key,
             value,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_string(&key, &value);
             }
         }
         EntityCmd::SignalClearString { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.remove_string(&key);
             }
@@ -339,13 +385,17 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             key,
             value,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.set_integer(&key, value);
             }
         }
         EntityCmd::SignalClearInteger { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
                 signals.clear_integer(&key);
             }
@@ -361,7 +411,9 @@ fn process_animation_cmd(
 ) {
     match cmd {
         EntityCmd::RestartAnimation { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut animation) = queries.animation.get_mut(entity) {
                 animation.frame_index = 0;
                 animation.elapsed_time = 0.0;
@@ -372,7 +424,9 @@ fn process_animation_cmd(
             entity_id,
             animation_key,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut animation) = queries.animation.get_mut(entity) {
                 animation.animation_key = animation_key.clone();
                 animation.frame_index = 0;
@@ -391,7 +445,9 @@ fn process_animation_cmd(
             flip_h,
             flip_v,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut sprite) = queries.sprites.get_mut(entity) {
                 sprite.flip_h = flip_h;
                 sprite.flip_v = flip_v;
@@ -517,13 +573,17 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
         | EntityCmd::ShaderSetVec2 { .. }
         | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, queries),
         EntityCmd::ShaderClearUniform { entity_id, name } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
                 shader.uniforms_mut().remove(name.as_str());
             }
         }
         EntityCmd::ShaderClearUniforms { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut shader) = queries.shaders.get_mut(entity) {
                 shader.uniforms_mut().clear();
             }
@@ -544,7 +604,15 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
                 ec.try_remove::<Tint>();
             });
         }
-        EntityCmd::SetShadow { entity_id, dx, dy, r, g, b, a } => {
+        EntityCmd::SetShadow {
+            entity_id,
+            dx,
+            dy,
+            r,
+            g,
+            b,
+            a,
+        } => {
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_insert(Shadow::new(dx, dy, r, g, b, a));
             });
@@ -586,7 +654,9 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
         } => (entity_id, name, UniformValue::Vec4 { x, y, z, w }),
         _ => unreachable!(),
     };
-    let Some(entity) = resolve_entity(entity_id) else { return; };
+    let Some(entity) = resolve_entity(entity_id) else {
+        return;
+    };
     if let Ok(mut shader) = queries.shaders.get_mut(entity) {
         shader.uniforms_mut().insert(Arc::from(name), value);
     }
@@ -595,14 +665,18 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
 fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
     match cmd {
         EntityCmd::SetPosition { entity_id, x, y } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut pos) = queries.positions.get_mut(entity) {
                 pos.pos.x = x;
                 pos.pos.y = y;
             }
         }
         EntityCmd::SetScreenPosition { entity_id, x, y } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Ok(mut pos) = queries.screen_positions.get_mut(entity) {
                 pos.pos.x = x;
                 pos.pos.y = y;
@@ -628,7 +702,9 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             priority,
             zoom,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             let existing = queries
                 .camera_targets
                 .get(entity)
@@ -656,7 +732,9 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             entity_id,
             parent_id,
         } => {
-            let Some(parent) = resolve_entity(parent_id) else { return; };
+            let Some(parent) = resolve_entity(parent_id) else {
+                return;
+            };
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_insert((ChildOf(parent), GlobalTransform2D::default()));
             });
@@ -668,7 +746,9 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             }
         }
         EntityCmd::RemoveParent { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             // Snap to world transform before detaching
             let world_transform = queries
                 .global_transforms
@@ -703,7 +783,9 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             stored_vx,
             stored_vy,
         } => {
-            let Some(target) = resolve_entity(target_id) else { return; };
+            let Some(target) = resolve_entity(target_id) else {
+                return;
+            };
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_insert(StuckTo {
                     target,
@@ -722,7 +804,9 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             });
         }
         EntityCmd::ReleaseStuckTo { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             let stored_velocity = queries
                 .stuckto
                 .get(entity)
@@ -754,7 +838,12 @@ fn process_lifecycle_cmd(
             callback,
         } => {
             with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(LuaTimer::new(duration, LuaTimerCallback { name: callback.into() }));
+                ec.try_insert(LuaTimer::new(
+                    duration,
+                    LuaTimerCallback {
+                        name: callback.into(),
+                    },
+                ));
             });
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {
@@ -771,7 +860,9 @@ fn process_lifecycle_cmd(
             }
         }
         EntityCmd::MenuDespawn { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else { return; };
+            let Some(entity) = resolve_entity(entity_id) else {
+                return;
+            };
             if let Some(system_id) = systems_store.get_entity_system(hook_keys::MENU_DESPAWN) {
                 commands.run_system_with(*system_id, entity);
             }
@@ -875,7 +966,10 @@ mod tests {
     fn set_camera_target_preserves_existing_zoom_when_priority_only() {
         let mut world = World::new();
         let entity = world
-            .spawn(CameraTarget { priority: 5, zoom: 2.0 })
+            .spawn(CameraTarget {
+                priority: 5,
+                zoom: 2.0,
+            })
             .id();
 
         run_camera_target_cmd(
@@ -896,7 +990,10 @@ mod tests {
     fn set_camera_target_preserves_existing_priority_when_zoom_only() {
         let mut world = World::new();
         let entity = world
-            .spawn(CameraTarget { priority: 5, zoom: 2.0 })
+            .spawn(CameraTarget {
+                priority: 5,
+                zoom: 2.0,
+            })
             .id();
 
         run_camera_target_cmd(
@@ -934,13 +1031,18 @@ mod tests {
 
         let interactable = world.get::<GuiInteractable>(entity).unwrap();
         assert_eq!(interactable.state, GuiWidgetState::Disabled);
-        assert_eq!(interactable.on_click_callback.as_deref(), Some("on_start_clicked"));
+        assert_eq!(
+            interactable.on_click_callback.as_deref(),
+            Some("on_start_clicked")
+        );
     }
 
     #[test]
     fn set_gui_disabled_false_resets_to_normal() {
         let mut world = World::new();
-        let entity = world.spawn(GuiInteractable::new(80.0, 24.0).with_disabled()).id();
+        let entity = world
+            .spawn(GuiInteractable::new(80.0, 24.0).with_disabled())
+            .id();
 
         run_gui_disabled_cmd(
             &mut world,

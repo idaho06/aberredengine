@@ -88,7 +88,11 @@ impl LuaRuntime {
             "get_group_count",
             self.lua.create_function(|lua, group: String| {
                 let count = lua.app_data_ref::<LuaAppData>().and_then(|data| {
-                    data.signal_snapshot.borrow().group_counts.get(&group).copied()
+                    data.signal_snapshot
+                        .borrow()
+                        .group_counts
+                        .get(&group)
+                        .copied()
                 });
                 Ok(count)
             })?,
@@ -214,7 +218,15 @@ impl LuaRuntime {
             Some("table"),
         )?;
 
-        define_signal_cmd_twins!(engine, self.lua, meta_fns, "", signal_commands, "signal", "");
+        define_signal_cmd_twins!(
+            engine,
+            self.lua,
+            meta_fns,
+            "",
+            signal_commands,
+            "signal",
+            ""
+        );
 
         engine.set(
             "change_scene",

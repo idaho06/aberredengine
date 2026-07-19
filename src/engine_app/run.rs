@@ -2,10 +2,10 @@ use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 
 use super::builder::EngineBuilder;
-use super::logic_thread::{logic_thread, LogicInit};
+use super::logic_thread::{LogicInit, logic_thread};
 use crate::error::EngineError;
 use crate::pacing::StatsWindow;
-use crate::protocol::endpoints::{shutdown_logic, LogicBridge};
+use crate::protocol::endpoints::{LogicBridge, shutdown_logic};
 use crate::protocol::raw_input::InputSample;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};

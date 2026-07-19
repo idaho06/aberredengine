@@ -27,8 +27,7 @@ use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
-    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context,
-    drain_phase_and_effects,
+    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context, drain_phase_and_effects,
 };
 use log::error;
 

@@ -190,7 +190,11 @@ fn reconcile<Marker: Component + Default, E: SimEntry>(
 /// entirely.
 pub fn reconcile_map_sprites(world: &mut World, entries: &[MapSpriteEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { map_sprites, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            map_sprites,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorMapSprite, _>(
             world,
             map_sprites,
@@ -219,7 +223,11 @@ pub fn reconcile_map_sprites(world: &mut World, entries: &[MapSpriteEntry]) {
 /// concept).
 pub fn reconcile_map_texts(world: &mut World, entries: &[MapTextEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { map_texts, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            map_texts,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorMapText, _>(
             world,
             map_texts,
@@ -247,7 +255,11 @@ pub fn reconcile_map_texts(world: &mut World, entries: &[MapTextEntry]) {
 /// reduced field set).
 pub fn reconcile_screen_sprites(world: &mut World, entries: &[ScreenSpriteEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { screen_sprites, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            screen_sprites,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorScreenSprite, _>(
             world,
             screen_sprites,
@@ -269,7 +281,11 @@ pub fn reconcile_screen_sprites(world: &mut World, entries: &[ScreenSpriteEntry]
 /// [`reconcile_screen_sprites`] exactly, swapping `Sprite` for `DynamicText`.
 pub fn reconcile_screen_texts(world: &mut World, entries: &[ScreenTextEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { screen_texts, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            screen_texts,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorScreenText, _>(
             world,
             screen_texts,
@@ -292,7 +308,11 @@ pub fn reconcile_screen_texts(world: &mut World, entries: &[ScreenTextEntry]) {
 /// single `.insert()`, no `set_optional` calls needed.
 pub fn reconcile_gui_windows(world: &mut World, entries: &[GuiWindowEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { gui_windows, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            gui_windows,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorGuiWindow, _>(
             world,
             gui_windows,
@@ -314,7 +334,11 @@ pub fn reconcile_gui_windows(world: &mut World, entries: &[GuiWindowEntry]) {
 /// `.insert()`, same shape as any other multi-component apply closure here.
 pub fn reconcile_gui_buttons(world: &mut World, entries: &[GuiButtonEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { gui_buttons, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            gui_buttons,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorGuiButton, _>(
             world,
             gui_buttons,
@@ -335,7 +359,11 @@ pub fn reconcile_gui_buttons(world: &mut World, entries: &[GuiButtonEntry]) {
 /// exactly, swapping `GuiWindow` for `GuiLabel`.
 pub fn reconcile_gui_labels(world: &mut World, entries: &[GuiLabelEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { gui_labels, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            gui_labels,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorGuiLabel, _>(
             world,
             gui_labels,
@@ -356,7 +384,11 @@ pub fn reconcile_gui_labels(world: &mut World, entries: &[GuiLabelEntry]) {
 /// `GuiProgressBar`.
 pub fn reconcile_gui_progress_bars(world: &mut World, entries: &[GuiProgressBarEntry]) {
     world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
-        let SimIdMap { gui_progress_bars, scratch_seen, .. } = &mut *id_map;
+        let SimIdMap {
+            gui_progress_bars,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
         reconcile::<MirrorGuiProgressBar, _>(
             world,
             gui_progress_bars,
@@ -486,7 +518,11 @@ mod mirror_tests {
         let e1 = scratch.spawn_empty().id();
         scratch.despawn(e1);
         let e2 = scratch.spawn_empty().id();
-        assert_ne!(e1.to_bits(), e2.to_bits(), "premise: generation must differ");
+        assert_ne!(
+            e1.to_bits(),
+            e2.to_bits(),
+            "premise: generation must differ"
+        );
         (e1, e2)
     }
 
@@ -526,13 +562,13 @@ mod mirror_tests {
         assert_eq!(id_map.map_sprites.len(), 1);
         let mirror_entity = *id_map.map_sprites.get(&sim_entity.to_bits()).unwrap();
 
-        assert_eq!(
-            world.get::<SimMirror>(mirror_entity).unwrap().0,
-            sim_entity
-        );
+        assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
         assert!(world.get::<MirrorMapSprite>(mirror_entity).is_some());
         assert_eq!(world.get::<ZIndex>(mirror_entity).unwrap().0, 1.0);
-        assert_eq!(world.get::<Sprite>(mirror_entity).unwrap().tex_key.as_ref(), "test");
+        assert_eq!(
+            world.get::<Sprite>(mirror_entity).unwrap().tex_key.as_ref(),
+            "test"
+        );
     }
 
     #[test]
@@ -561,7 +597,11 @@ mod mirror_tests {
         );
         assert_eq!(world.get::<ZIndex>(mirror_entity_second).unwrap().0, 2.0);
         assert_eq!(
-            world.get::<Sprite>(mirror_entity_second).unwrap().tex_key.as_ref(),
+            world
+                .get::<Sprite>(mirror_entity_second)
+                .unwrap()
+                .tex_key
+                .as_ref(),
             "changed"
         );
     }
@@ -706,7 +746,10 @@ mod mirror_tests {
         let id_map = world.resource::<SimIdMap>();
         assert!(!id_map.map_sprites.contains_key(&e1.to_bits()));
         let mirror_2 = *id_map.map_sprites.get(&e2.to_bits()).unwrap();
-        assert_ne!(mirror_1, mirror_2, "a genuinely new mirror must be spawned for e2");
+        assert_ne!(
+            mirror_1, mirror_2,
+            "a genuinely new mirror must be spawned for e2"
+        );
         assert_eq!(id_map.map_sprites.len(), 1);
     }
 
@@ -747,7 +790,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_map_texts(&mut world, &[make_map_text_entry(sim_entity, 1.0)]);
-        let mirror_first = *world.resource::<SimIdMap>().map_texts.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .map_texts
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_map_texts(&mut world, &[make_map_text_entry(sim_entity, 2.0)]);
         let id_map = world.resource::<SimIdMap>();
@@ -766,7 +813,11 @@ mod mirror_tests {
         let mut with_tint = make_map_text_entry(sim_entity, 1.0);
         with_tint.tint = Some(Tint::default());
         reconcile_map_texts(&mut world, &[with_tint]);
-        let mirror_entity = *world.resource::<SimIdMap>().map_texts.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .map_texts
+            .get(&sim_entity.to_bits())
+            .unwrap();
         assert!(world.get::<Tint>(mirror_entity).is_some());
 
         reconcile_map_texts(&mut world, &[make_map_text_entry(sim_entity, 1.0)]);
@@ -779,7 +830,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_map_texts(&mut world, &[make_map_text_entry(sim_entity, 1.0)]);
-        let mirror_entity = *world.resource::<SimIdMap>().map_texts.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .map_texts
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_map_texts(&mut world, &[]);
 
@@ -793,7 +848,11 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_map_texts(&mut world, &[make_map_text_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().map_texts.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .map_texts
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_map_texts(&mut world, &[make_map_text_entry(e2, 1.0)]);
 
@@ -845,7 +904,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_screen_sprites(&mut world, &[make_screen_sprite_entry(sim_entity, 1.0)]);
-        let mirror_first = *world.resource::<SimIdMap>().screen_sprites.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .screen_sprites
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_screen_sprites(&mut world, &[make_screen_sprite_entry(sim_entity, 2.0)]);
         let id_map = world.resource::<SimIdMap>();
@@ -867,7 +930,11 @@ mod mirror_tests {
             color: raylib::prelude::Color::BLACK,
         });
         reconcile_screen_sprites(&mut world, &[with_shadow]);
-        let mirror_entity = *world.resource::<SimIdMap>().screen_sprites.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .screen_sprites
+            .get(&sim_entity.to_bits())
+            .unwrap();
         assert!(world.get::<Shadow>(mirror_entity).is_some());
 
         reconcile_screen_sprites(&mut world, &[make_screen_sprite_entry(sim_entity, 1.0)]);
@@ -880,7 +947,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_screen_sprites(&mut world, &[make_screen_sprite_entry(sim_entity, 1.0)]);
-        let mirror_entity = *world.resource::<SimIdMap>().screen_sprites.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .screen_sprites
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_screen_sprites(&mut world, &[]);
 
@@ -894,7 +965,11 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_screen_sprites(&mut world, &[make_screen_sprite_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().screen_sprites.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .screen_sprites
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_screen_sprites(&mut world, &[make_screen_sprite_entry(e2, 1.0)]);
 
@@ -937,7 +1012,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(sim_entity, 1.0)]);
-        let mirror_first = *world.resource::<SimIdMap>().screen_texts.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .screen_texts
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(sim_entity, 2.0)]);
         let id_map = world.resource::<SimIdMap>();
@@ -956,7 +1035,11 @@ mod mirror_tests {
         let mut with_tint = make_screen_text_entry(sim_entity, 1.0);
         with_tint.tint = Some(Tint::default());
         reconcile_screen_texts(&mut world, &[with_tint]);
-        let mirror_entity = *world.resource::<SimIdMap>().screen_texts.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .screen_texts
+            .get(&sim_entity.to_bits())
+            .unwrap();
         assert!(world.get::<Tint>(mirror_entity).is_some());
 
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(sim_entity, 1.0)]);
@@ -969,7 +1052,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(sim_entity, 1.0)]);
-        let mirror_entity = *world.resource::<SimIdMap>().screen_texts.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .screen_texts
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_screen_texts(&mut world, &[]);
 
@@ -983,7 +1070,11 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().screen_texts.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .screen_texts
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(e2, 1.0)]);
 
@@ -1006,7 +1097,11 @@ mod mirror_tests {
 
         reconcile_map_sprites(&mut world, &[make_map_sprite_entry(sprite_entity, 1.0)]);
         reconcile_screen_texts(&mut world, &[make_screen_text_entry(text_entity, 1.0)]);
-        let text_mirror = *world.resource::<SimIdMap>().screen_texts.get(&text_entity.to_bits()).unwrap();
+        let text_mirror = *world
+            .resource::<SimIdMap>()
+            .screen_texts
+            .get(&text_entity.to_bits())
+            .unwrap();
 
         // Reconcile map sprites with an empty list -- must despawn the
         // map-sprite mirror, but must NOT touch the screen-text mirror.
@@ -1049,7 +1144,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 1.0)]);
-        let mirror_first = *world.resource::<SimIdMap>().gui_windows.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .gui_windows
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 2.0)]);
         let id_map = world.resource::<SimIdMap>();
@@ -1066,7 +1165,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_windows(&mut world, &[make_gui_window_entry(sim_entity, 1.0)]);
-        let mirror_entity = *world.resource::<SimIdMap>().gui_windows.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .gui_windows
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_gui_windows(&mut world, &[]);
 
@@ -1080,7 +1183,11 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_gui_windows(&mut world, &[make_gui_window_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().gui_windows.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .gui_windows
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_gui_windows(&mut world, &[make_gui_window_entry(e2, 1.0)]);
 
@@ -1119,7 +1226,10 @@ mod mirror_tests {
         let mirror_entity = *id_map.gui_buttons.get(&sim_entity.to_bits()).unwrap();
         assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
         assert!(world.get::<MirrorGuiButton>(mirror_entity).is_some());
-        assert_eq!(world.get::<GuiButton>(mirror_entity).unwrap().caption, "Play");
+        assert_eq!(
+            world.get::<GuiButton>(mirror_entity).unwrap().caption,
+            "Play"
+        );
         assert_eq!(
             world.get::<GuiInteractable>(mirror_entity).unwrap().state,
             GuiWidgetState::Normal
@@ -1137,7 +1247,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_buttons(&mut world, &[make_gui_button_entry(sim_entity, 1.0)]);
-        let mirror_first = *world.resource::<SimIdMap>().gui_buttons.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .gui_buttons
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         let mut second = make_gui_button_entry(sim_entity, 2.0);
         second.button.theme_key = Arc::from("changed");
@@ -1147,9 +1261,15 @@ mod mirror_tests {
         let id_map = world.resource::<SimIdMap>();
         assert_eq!(id_map.gui_buttons.len(), 1);
         let mirror_second = *id_map.gui_buttons.get(&sim_entity.to_bits()).unwrap();
-        assert_eq!(mirror_first, mirror_second, "must update the same mirror, not spawn a new one");
+        assert_eq!(
+            mirror_first, mirror_second,
+            "must update the same mirror, not spawn a new one"
+        );
 
-        assert_eq!(&*world.get::<GuiButton>(mirror_second).unwrap().theme_key, "changed");
+        assert_eq!(
+            &*world.get::<GuiButton>(mirror_second).unwrap().theme_key,
+            "changed"
+        );
         assert_eq!(
             world.get::<GuiInteractable>(mirror_second).unwrap().state,
             GuiWidgetState::Hovered
@@ -1163,7 +1283,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_buttons(&mut world, &[make_gui_button_entry(sim_entity, 1.0)]);
-        let mirror_entity = *world.resource::<SimIdMap>().gui_buttons.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .gui_buttons
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_gui_buttons(&mut world, &[]);
 
@@ -1177,7 +1301,11 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_gui_buttons(&mut world, &[make_gui_button_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().gui_buttons.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .gui_buttons
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_gui_buttons(&mut world, &[make_gui_button_entry(e2, 1.0)]);
 
@@ -1210,7 +1338,10 @@ mod mirror_tests {
         let mirror_entity = *id_map.gui_labels.get(&sim_entity.to_bits()).unwrap();
         assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
         assert!(world.get::<MirrorGuiLabel>(mirror_entity).is_some());
-        assert_eq!(world.get::<GuiLabel>(mirror_entity).unwrap().caption, "Score");
+        assert_eq!(
+            world.get::<GuiLabel>(mirror_entity).unwrap().caption,
+            "Score"
+        );
     }
 
     #[test]
@@ -1219,7 +1350,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_labels(&mut world, &[make_gui_label_entry(sim_entity, 1.0)]);
-        let mirror_first = *world.resource::<SimIdMap>().gui_labels.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .gui_labels
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         let mut second = make_gui_label_entry(sim_entity, 2.0);
         second.label.caption = "Changed".to_string();
@@ -1229,7 +1364,10 @@ mod mirror_tests {
         assert_eq!(id_map.gui_labels.len(), 1);
         let mirror_second = *id_map.gui_labels.get(&sim_entity.to_bits()).unwrap();
         assert_eq!(mirror_first, mirror_second);
-        assert_eq!(world.get::<GuiLabel>(mirror_second).unwrap().caption, "Changed");
+        assert_eq!(
+            world.get::<GuiLabel>(mirror_second).unwrap().caption,
+            "Changed"
+        );
         assert_eq!(world.get::<ZIndex>(mirror_second).unwrap().0, 2.0);
     }
 
@@ -1239,7 +1377,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_labels(&mut world, &[make_gui_label_entry(sim_entity, 1.0)]);
-        let mirror_entity = *world.resource::<SimIdMap>().gui_labels.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .gui_labels
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_gui_labels(&mut world, &[]);
 
@@ -1253,7 +1395,11 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_gui_labels(&mut world, &[make_gui_label_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().gui_labels.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .gui_labels
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_gui_labels(&mut world, &[make_gui_label_entry(e2, 1.0)]);
 
@@ -1286,7 +1432,10 @@ mod mirror_tests {
         let mirror_entity = *id_map.gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
         assert_eq!(world.get::<SimMirror>(mirror_entity).unwrap().0, sim_entity);
         assert!(world.get::<MirrorGuiProgressBar>(mirror_entity).is_some());
-        assert_eq!(world.get::<GuiProgressBar>(mirror_entity).unwrap().value, 3.0);
+        assert_eq!(
+            world.get::<GuiProgressBar>(mirror_entity).unwrap().value,
+            3.0
+        );
     }
 
     #[test]
@@ -1295,8 +1444,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(sim_entity, 1.0)]);
-        let mirror_first =
-            *world.resource::<SimIdMap>().gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
+        let mirror_first = *world
+            .resource::<SimIdMap>()
+            .gui_progress_bars
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         let mut second = make_gui_progress_bar_entry(sim_entity, 2.0);
         second.progress_bar.value = 7.0;
@@ -1306,7 +1458,10 @@ mod mirror_tests {
         assert_eq!(id_map.gui_progress_bars.len(), 1);
         let mirror_second = *id_map.gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
         assert_eq!(mirror_first, mirror_second);
-        assert_eq!(world.get::<GuiProgressBar>(mirror_second).unwrap().value, 7.0);
+        assert_eq!(
+            world.get::<GuiProgressBar>(mirror_second).unwrap().value,
+            7.0
+        );
         assert_eq!(world.get::<ZIndex>(mirror_second).unwrap().0, 2.0);
     }
 
@@ -1316,8 +1471,11 @@ mod mirror_tests {
         let sim_entity = world.spawn_empty().id();
 
         reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(sim_entity, 1.0)]);
-        let mirror_entity =
-            *world.resource::<SimIdMap>().gui_progress_bars.get(&sim_entity.to_bits()).unwrap();
+        let mirror_entity = *world
+            .resource::<SimIdMap>()
+            .gui_progress_bars
+            .get(&sim_entity.to_bits())
+            .unwrap();
 
         reconcile_gui_progress_bars(&mut world, &[]);
 
@@ -1331,14 +1489,21 @@ mod mirror_tests {
         let (e1, e2) = generation_reuse_pair();
 
         reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(e1, 1.0)]);
-        let mirror_1 = *world.resource::<SimIdMap>().gui_progress_bars.get(&e1.to_bits()).unwrap();
+        let mirror_1 = *world
+            .resource::<SimIdMap>()
+            .gui_progress_bars
+            .get(&e1.to_bits())
+            .unwrap();
 
         reconcile_gui_progress_bars(&mut world, &[make_gui_progress_bar_entry(e2, 1.0)]);
 
         assert!(world.get_entity(mirror_1).is_err());
         let id_map = world.resource::<SimIdMap>();
         assert!(!id_map.gui_progress_bars.contains_key(&e1.to_bits()));
-        assert_ne!(mirror_1, *id_map.gui_progress_bars.get(&e2.to_bits()).unwrap());
+        assert_ne!(
+            mirror_1,
+            *id_map.gui_progress_bars.get(&e2.to_bits()).unwrap()
+        );
     }
 
     /// Sibling to `despawn_on_vanish_is_scoped_to_its_own_category` covering
@@ -1352,8 +1517,11 @@ mod mirror_tests {
 
         reconcile_gui_windows(&mut world, &[make_gui_window_entry(window_entity, 1.0)]);
         reconcile_gui_buttons(&mut world, &[make_gui_button_entry(button_entity, 1.0)]);
-        let button_mirror =
-            *world.resource::<SimIdMap>().gui_buttons.get(&button_entity.to_bits()).unwrap();
+        let button_mirror = *world
+            .resource::<SimIdMap>()
+            .gui_buttons
+            .get(&button_entity.to_bits())
+            .unwrap();
 
         reconcile_gui_windows(&mut world, &[]);
 

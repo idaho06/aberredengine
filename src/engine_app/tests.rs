@@ -10,10 +10,10 @@ use super::logic_thread::run_sim_tick;
 use super::logic_world::register_persistent_system;
 use crate::components::mapposition::MapPosition;
 use crate::components::persistent::Persistent;
+use crate::protocol::raw_input::InputSample;
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::SnapshotPublisher;
-use crate::protocol::raw_input::InputSample;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
@@ -23,11 +23,11 @@ use crate::systems::animation::animation_controller;
 use crate::systems::phase::phase_system;
 
 #[cfg(feature = "lua")]
+use crate::systems::group::update_group_counts_system;
+#[cfg(feature = "lua")]
 use crate::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use crate::systems::luatimer::update_lua_timers;
-#[cfg(feature = "lua")]
-use crate::systems::group::update_group_counts_system;
 
 #[test]
 fn test_builder_default() {
@@ -196,8 +196,14 @@ fn run_sim_tick_fires_edge_exactly_once_and_clears_it() {
     assert_eq!(counts.mouse_pressed, 1, "mouse edge must fire exactly once");
 
     let input = world.resource::<InputState>();
-    assert!(input.action_1.active, "active/held state must never be cleared");
-    assert!(input.mouse_left_button.active, "mouse active must be untouched");
+    assert!(
+        input.action_1.active,
+        "active/held state must never be cleared"
+    );
+    assert!(
+        input.mouse_left_button.active,
+        "mouse active must be untouched"
+    );
     assert!(
         !input.action_1.just_pressed,
         "edge must be consumed (cleared) after the tick sees it"
@@ -218,8 +224,14 @@ fn run_sim_tick_delivers_press_and_release_in_same_sample() {
     run_sim_tick(&mut world, &mut schedule);
 
     let counts = world.resource::<EdgeFireCounts>();
-    assert_eq!(counts.action_1_pressed, 1, "press edge must fire exactly once");
-    assert_eq!(counts.action_1_released, 1, "release edge must fire exactly once");
+    assert_eq!(
+        counts.action_1_pressed, 1,
+        "press edge must fire exactly once"
+    );
+    assert_eq!(
+        counts.action_1_released, 1,
+        "release edge must fire exactly once"
+    );
 }
 
 // --- Channel enum round-trip smoke test ---
@@ -241,7 +253,9 @@ fn logic_and_render_msgs_round_trip_across_a_thread() {
         let _ = tx_render.send(RenderMsg::Quit);
     });
 
-    tx_logic.send(LogicMsg::ScreenSize { w: 320, h: 200 }).unwrap();
+    tx_logic
+        .send(LogicMsg::ScreenSize { w: 320, h: 200 })
+        .unwrap();
     tx_logic.send(LogicMsg::Shutdown).unwrap();
 
     echo.join().expect("echo thread should exit cleanly");
@@ -258,7 +272,11 @@ fn input_sample_round_trips_across_a_thread() {
         let sample = rx_input.recv().expect("sender alive");
         assert_eq!(sample.raw.window_w, 800);
         assert_eq!(sample.raw.window_h, 600);
-        assert!(sample.raw.is_key_down(raylib::ffi::KeyboardKey::KEY_SPACE as u32));
+        assert!(
+            sample
+                .raw
+                .is_key_down(raylib::ffi::KeyboardKey::KEY_SPACE as u32)
+        );
     });
 
     let mut raw = RawDeviceSnapshot {
@@ -365,7 +383,10 @@ fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
         1,
         "second publish must shrink to exactly 1 entry, no stale trailing entries"
     );
-    assert_eq!(published.map_sprites[0].entity, Entity::from_raw_u32(9).unwrap());
+    assert_eq!(
+        published.map_sprites[0].entity,
+        Entity::from_raw_u32(9).unwrap()
+    );
 }
 
 #[test]
@@ -623,7 +644,10 @@ fn test_add_scene_requires_initial_scene() {
         .try_run()
         .expect_err("missing initial_scene should fail preflight");
 
-    assert!(err.to_string().contains(".add_scene() requires .initial_scene"));
+    assert!(
+        err.to_string()
+            .contains(".add_scene() requires .initial_scene")
+    );
 }
 
 #[cfg(feature = "lua")]
@@ -657,7 +681,10 @@ fn test_with_lua_conflicts_with_user_hook_either_order() {
         .expect_err("on_setup + with_lua should fail preflight regardless of order");
 
     for err in [lua_first, hook_first] {
-        assert!(err.to_string().contains("EngineBuilder conflict: .with_lua()"));
+        assert!(
+            err.to_string()
+                .contains("EngineBuilder conflict: .with_lua()")
+        );
         assert!(err.to_string().contains("on_setup"));
     }
 }

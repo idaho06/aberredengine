@@ -214,9 +214,7 @@ mod tests {
     #[test]
     fn resolve_world_pos_local_only() {
         let mut world = World::new();
-        let e = world
-            .spawn(MapPosition::new(5.0, 10.0))
-            .id();
+        let e = world.spawn(MapPosition::new(5.0, 10.0)).id();
 
         let mut state =
             SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
@@ -271,9 +269,8 @@ mod tests {
             Query<&GlobalTransform2D>,
             Query<&BoxCollider>,
         )>::new(&mut world);
-        let (positions, global_transforms, box_colliders) = state
-            .get(&world)
-            .expect("Collider queries should fetch");
+        let (positions, global_transforms, box_colliders) =
+            state.get(&world).expect("Collider queries should fetch");
 
         assert!(resolve_collider_rect(&positions, &global_transforms, &box_colliders, e).is_none());
     }
@@ -282,10 +279,7 @@ mod tests {
     fn resolve_collider_rect_with_components() {
         let mut world = World::new();
         let e = world
-            .spawn((
-                MapPosition::new(10.0, 20.0),
-                BoxCollider::new(30.0, 40.0),
-            ))
+            .spawn((MapPosition::new(10.0, 20.0), BoxCollider::new(30.0, 40.0)))
             .id();
 
         let mut state = SystemState::<(
@@ -293,9 +287,8 @@ mod tests {
             Query<&GlobalTransform2D>,
             Query<&BoxCollider>,
         )>::new(&mut world);
-        let (positions, global_transforms, box_colliders) = state
-            .get(&world)
-            .expect("Collider queries should fetch");
+        let (positions, global_transforms, box_colliders) =
+            state.get(&world).expect("Collider queries should fetch");
 
         let rect = resolve_collider_rect(&positions, &global_transforms, &box_colliders, e);
         assert!(rect.is_some());

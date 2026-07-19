@@ -46,9 +46,9 @@ pub fn gui_image_state_sync_system(mut query: Query<(&GuiImage, &GuiInteractable
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_ecs::system::RunSystemOnce;
     use crate::components::screenposition::ScreenPosition;
     use crate::components::zindex::ZIndex;
+    use bevy_ecs::system::RunSystemOnce;
 
     fn tick<M>(world: &mut World, system: impl IntoSystem<(), (), M>) {
         world
@@ -71,10 +71,22 @@ mod tests {
     #[test]
     fn resolve_image_offset_falls_back_to_base_offset_when_unset() {
         let image = GuiImage::new(32.0, 32.0, "item_sword", 10.0, 20.0);
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Normal), Vector2::new(10.0, 20.0));
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Hovered), Vector2::new(10.0, 20.0));
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Pressed), Vector2::new(10.0, 20.0));
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Disabled), Vector2::new(10.0, 20.0));
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Normal),
+            Vector2::new(10.0, 20.0)
+        );
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Hovered),
+            Vector2::new(10.0, 20.0)
+        );
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Pressed),
+            Vector2::new(10.0, 20.0)
+        );
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Disabled),
+            Vector2::new(10.0, 20.0)
+        );
     }
 
     #[test]
@@ -83,10 +95,22 @@ mod tests {
             .with_offset_hover(40.0, 0.0)
             .with_offset_pressed(80.0, 0.0)
             .with_offset_disabled(120.0, 0.0);
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Normal), Vector2::new(10.0, 20.0));
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Hovered), Vector2::new(40.0, 0.0));
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Pressed), Vector2::new(80.0, 0.0));
-        assert_eq!(resolve_image_offset(&image, GuiWidgetState::Disabled), Vector2::new(120.0, 0.0));
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Normal),
+            Vector2::new(10.0, 20.0)
+        );
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Hovered),
+            Vector2::new(40.0, 0.0)
+        );
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Pressed),
+            Vector2::new(80.0, 0.0)
+        );
+        assert_eq!(
+            resolve_image_offset(&image, GuiWidgetState::Disabled),
+            Vector2::new(120.0, 0.0)
+        );
     }
 
     #[test]

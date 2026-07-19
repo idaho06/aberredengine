@@ -16,9 +16,9 @@
 use crate::components::luaphase::LuaPhase;
 use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::protocol::audio::AudioCmd;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::camera2d::Camera2DRes;
-use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::gamestate::{GameStates, NextGameState};
@@ -314,7 +314,6 @@ fn drain_common_commands(
         lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
     }
 }
-
 
 /// Refreshes `cached` to `"on_update_{scene}"`, but only rebuilds it when it
 /// doesn't already match -- avoids reallocating/rewriting the cached callback
@@ -807,7 +806,6 @@ mod tests {
         );
     }
 
-
     /// Builds a [`World`] with all resources [`update`] depends on
     /// (superset of [`new_drain_test_world`]'s: also needs `WorldTime`/`InputState`/
     /// `Camera2DRes`/`ScreenSize`).
@@ -969,7 +967,8 @@ mod tests {
         // (that's covered by the full schedule build in
         // tests/engine_tick_integration.rs).
         let mut world = new_drain_test_world();
-        world.insert_resource(Messages::<crate::protocol::render_assets::RenderAssetCmd>::default());
+        world
+            .insert_resource(Messages::<crate::protocol::render_assets::RenderAssetCmd>::default());
 
         {
             let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();

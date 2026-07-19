@@ -18,8 +18,7 @@ use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::lua_commands::{
-    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context,
-    drain_phase_and_effects,
+    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context, drain_phase_and_effects,
 };
 
 /// Call the named Lua setup function for every newly added [`LuaSetup`] entity.

@@ -12,7 +12,13 @@ pub(super) fn draw_screen_panel_item(
     textures: &TextureStore,
 ) {
     if let Some(shadow) = item.maybe_shadow {
-        draw_nine_patch_tinted(d, &item.panel, shadow_offset_rect(item.dest, shadow), shadow.color, textures);
+        draw_nine_patch_tinted(
+            d,
+            &item.panel,
+            shadow_offset_rect(item.dest, shadow),
+            shadow.color,
+            textures,
+        );
     }
     draw_nine_patch(d, &item.panel, item.dest, textures);
 }
@@ -49,7 +55,11 @@ fn draw_nine_patch(
 }
 
 fn shadow_offset_rect(rect: Rectangle, shadow: Shadow) -> Rectangle {
-    Rectangle { x: rect.x + shadow.offset.x, y: rect.y + shadow.offset.y, ..rect }
+    Rectangle {
+        x: rect.x + shadow.offset.x,
+        y: rect.y + shadow.offset.y,
+        ..rect
+    }
 }
 
 fn draw_nine_patch_tinted(

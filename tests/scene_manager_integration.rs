@@ -6,16 +6,16 @@
 
 use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::resources::render::fontstore::FontStore;
 use aberredengine::resources::gameconfig::GameConfig;
 use aberredengine::resources::group::TrackedGroups;
 use aberredengine::resources::input::InputState;
 use aberredengine::resources::input_bindings::InputBindings;
 use aberredengine::resources::postprocessshader::PostProcessShader;
+use aberredengine::resources::render::fontstore::FontStore;
+use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::scenemanager::SceneManager;
 use aberredengine::resources::signal_intents::SignalIntents;
 use aberredengine::resources::systemsstore::SystemsStore;
-use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::GameCtx;
@@ -431,13 +431,7 @@ fn non_persistent_entities_despawned() {
 
     // Only persistent entities should remain
     let non_persistent: Vec<Entity> = world
-        .query_filtered::<
-            Entity,
-            (
-                Without<Persistent>,
-                Without<bevy_ecs::resource::IsResource>,
-            ),
-        >()
+        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
         .iter(&world)
         .collect();
     assert!(

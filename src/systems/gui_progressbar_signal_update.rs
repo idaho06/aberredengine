@@ -15,12 +15,16 @@ pub fn gui_progressbar_signal_update_system(
     world_signals: Res<WorldSignals>,
 ) {
     for mut bar in &mut query {
-        let Some(key) = &bar.signal_binding else { continue; };
+        let Some(key) = &bar.signal_binding else {
+            continue;
+        };
         let value = world_signals
             .get_integer(key)
             .map(|i| i as f32)
             .or_else(|| world_signals.get_scalar(key));
-        let Some(v) = value else { continue; };
+        let Some(v) = value else {
+            continue;
+        };
         let clamped = v.clamp(0.0, bar.max);
         if (bar.value - clamped).abs() > f32::EPSILON {
             bar.value = clamped;
@@ -44,9 +48,7 @@ mod tests {
     fn updates_value_from_integer_signal() {
         let mut world = World::new();
         world.insert_resource(WorldSignals::default());
-        world
-            .resource_mut::<WorldSignals>()
-            .set_integer("hp", 40);
+        world.resource_mut::<WorldSignals>().set_integer("hp", 40);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 100.0, 100.0).with_signal_binding("hp"));
 
         tick(&mut world, gui_progressbar_signal_update_system);
@@ -74,9 +76,7 @@ mod tests {
     fn clamps_value_to_max() {
         let mut world = World::new();
         world.insert_resource(WorldSignals::default());
-        world
-            .resource_mut::<WorldSignals>()
-            .set_integer("hp", 9999);
+        world.resource_mut::<WorldSignals>().set_integer("hp", 9999);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 0.0, 100.0).with_signal_binding("hp"));
 
         tick(&mut world, gui_progressbar_signal_update_system);
@@ -101,9 +101,7 @@ mod tests {
     fn no_update_when_signal_binding_absent() {
         let mut world = World::new();
         world.insert_resource(WorldSignals::default());
-        world
-            .resource_mut::<WorldSignals>()
-            .set_integer("hp", 10);
+        world.resource_mut::<WorldSignals>().set_integer("hp", 10);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 50.0, 100.0)); // no signal binding
 
         tick(&mut world, gui_progressbar_signal_update_system);

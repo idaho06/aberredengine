@@ -11,11 +11,11 @@
 
 use crate::components::persistent::CleanableEntity;
 use crate::events::gamestate::GameStateChangedEvent;
+use crate::protocol::endpoints::RenderTx;
+use crate::protocol::render_logic::RenderMsg;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
-use crate::protocol::render_logic::RenderMsg;
-use crate::protocol::endpoints::RenderTx;
 use bevy_ecs::prelude::*;
 use log::info;
 
@@ -49,10 +49,7 @@ pub fn quit_game(mut world_signals: ResMut<WorldSignals>, render_tx: Res<RenderT
 }
 
 /// Despawn all entities that are not marked [`Persistent`].
-pub fn clean_all_entities(
-    mut commands: Commands,
-    query: Query<Entity, CleanableEntity>,
-) {
+pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, CleanableEntity>) {
     for entity in query.iter() {
         commands.entity(entity).try_despawn();
     }

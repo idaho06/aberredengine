@@ -340,9 +340,10 @@ mod tests {
     #[test]
     fn font_metrics_store_remove_drops_a_key() {
         let mut store = FontMetricsStore::default();
-        store
-            .0
-            .insert("test_font".to_string(), test_support::lowercase_alphabet_metrics());
+        store.0.insert(
+            "test_font".to_string(),
+            test_support::lowercase_alphabet_metrics(),
+        );
         assert!(store.0.contains_key("test_font"));
         store.0.remove("test_font");
         assert!(!store.0.contains_key("test_font"));

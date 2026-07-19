@@ -17,18 +17,15 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::endpoints::RenderTx;
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::render_logic::RenderMsg;
 use crate::protocol::snapshot::SnapshotPublisher;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 
 /// Forward queued [`RenderAssetCmd`]s to the render thread. Send errors are
 /// ignored (they only occur during shutdown, when the render side is gone).
-pub fn forward_render_asset_cmds(
-    tx: Res<RenderTx>,
-    mut reader: MessageReader<RenderAssetCmd>,
-) {
+pub fn forward_render_asset_cmds(tx: Res<RenderTx>, mut reader: MessageReader<RenderAssetCmd>) {
     for cmd in reader.read() {
         let _ = tx.0.send(RenderMsg::Asset(cmd.clone()));
     }

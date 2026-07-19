@@ -276,7 +276,10 @@ impl EngineBuilder {
         self.lua_script = Some(script_path.into());
 
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));
-        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, lua_plugin::enter_play));
+        self.enter_play_hook = Some(hook_registrar(
+            hook_keys::ENTER_PLAY,
+            lua_plugin::enter_play,
+        ));
         // lua_plugin::update runs once per sim tick, in SimSet::Bookkeeping
         // (last among the engine's own groups) -- this is also where
         // on_update_<scene> itself is dispatched now, restoring the
@@ -290,7 +293,10 @@ impl EngineBuilder {
                     .in_set(SimSet::Bookkeeping),
             );
         }));
-        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, lua_plugin::switch_scene));
+        self.switch_scene_hook = Some(hook_registrar(
+            hook_keys::SWITCH_SCENE,
+            lua_plugin::switch_scene,
+        ));
         self
     }
 }

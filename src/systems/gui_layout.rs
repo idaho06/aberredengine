@@ -27,19 +27,11 @@ use raylib::math::Vector2;
 use crate::components::guioffset::GuiOffset;
 use crate::components::screenposition::ScreenPosition;
 
-type RootsQuery<'w, 's> = Query<
-    'w,
-    's,
-    (Option<&'static ScreenPosition>, &'static Children),
-    Without<GuiOffset>,
->;
+type RootsQuery<'w, 's> =
+    Query<'w, 's, (Option<&'static ScreenPosition>, &'static Children), Without<GuiOffset>>;
 
-type GuiChildrenQuery<'w, 's> = Query<
-    'w,
-    's,
-    (&'static GuiOffset, Option<&'static Children>),
-    With<ChildOf>,
->;
+type GuiChildrenQuery<'w, 's> =
+    Query<'w, 's, (&'static GuiOffset, Option<&'static Children>), With<ChildOf>>;
 
 /// Resolve every GUI child's `ScreenPosition` from its parent's
 /// `ScreenPosition` + `GuiOffset`, top-down. Should run after any system
@@ -99,7 +91,13 @@ fn layout_children(
         }
 
         if let Some(grandchildren) = maybe_grandchildren {
-            layout_children(new_pos, grandchildren, gui_children, screen_positions, commands);
+            layout_children(
+                new_pos,
+                grandchildren,
+                gui_children,
+                screen_positions,
+                commands,
+            );
         }
     }
 }

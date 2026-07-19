@@ -5,8 +5,8 @@ use super::builder::EngineBuilder;
 use crate::components::persistent::Persistent;
 use crate::error::EngineError;
 use crate::events::render::switchfullscreen::switch_fullscreen_observer;
-use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bridge};
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::snapshot::SnapshotConsumer;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::gameconfig::GameConfig;
@@ -150,10 +150,12 @@ impl EngineBuilder {
             )
                 .chain(),
         );
-        schedule.initialize(world).map_err(|source| EngineError::ScheduleInit {
-            which: "render",
-            source,
-        })?;
+        schedule
+            .initialize(world)
+            .map_err(|source| EngineError::ScheduleInit {
+                which: "render",
+                source,
+            })?;
         Ok(schedule)
     }
 }

@@ -53,7 +53,13 @@ pub struct GuiImage {
 }
 
 impl GuiImage {
-    pub fn new(width: f32, height: f32, tex_key: impl Into<String>, offset_x: f32, offset_y: f32) -> Self {
+    pub fn new(
+        width: f32,
+        height: f32,
+        tex_key: impl Into<String>,
+        offset_x: f32,
+        offset_y: f32,
+    ) -> Self {
         Self {
             size: Vector2::new(width, height),
             tex_key: tex_key.into(),
@@ -119,7 +125,8 @@ mod tests {
     #[cfg(feature = "lua")]
     #[test]
     fn test_guiimage_with_lua_callback() {
-        let img = GuiImage::with_lua_callback(32.0, 32.0, "item_sword", 64.0, 32.0, "on_sword_clicked");
+        let img =
+            GuiImage::with_lua_callback(32.0, 32.0, "item_sword", 64.0, 32.0, "on_sword_clicked");
         assert_eq!(img.tex_key, "item_sword");
         assert!((img.offset.x - 64.0).abs() < f32::EPSILON);
         assert!((img.offset.y - 32.0).abs() < f32::EPSILON);

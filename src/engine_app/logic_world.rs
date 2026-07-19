@@ -16,11 +16,11 @@ use crate::components::screenposition::ScreenPosition;
 use crate::error::EngineError;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::events::gamestate::observe_gamestate_change_event;
-use crate::protocol::render_assets::RenderAssetCmd;
 use crate::events::switchdebug::switch_debug_observer;
-use crate::protocol::endpoints::{setup_audio, RenderTx};
 #[cfg(any(test, feature = "test-support"))]
 use crate::protocol::endpoints::setup_audio_stub;
+use crate::protocol::endpoints::{RenderTx, setup_audio};
+use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
@@ -29,7 +29,7 @@ use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::gameconfig::GameConfigDefaults;
-use crate::resources::gamestate::{GameState, NextGameState, GameStates};
+use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::guiinputstate::GuiInputState;
 use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
@@ -186,7 +186,11 @@ impl EngineBuilder {
     ) -> Result<(), EngineError> {
         let mut missing = Vec::new();
 
-        for name in [hook_keys::SETUP, hook_keys::ENTER_PLAY, hook_keys::QUIT_GAME] {
+        for name in [
+            hook_keys::SETUP,
+            hook_keys::ENTER_PLAY,
+            hook_keys::QUIT_GAME,
+        ] {
             if systems_store.get(name).is_none() {
                 missing.push(name);
             }
@@ -214,9 +218,8 @@ impl EngineBuilder {
     ) -> Result<(), EngineError> {
         let mut systems_store = SystemsStore::new();
         #[cfg(feature = "lua")]
-        let requires_switch_scene = use_scene_manager
-            || init.switch_scene_hook.is_some()
-            || init.lua_script.is_some();
+        let requires_switch_scene =
+            use_scene_manager || init.switch_scene_hook.is_some() || init.lua_script.is_some();
         #[cfg(not(feature = "lua"))]
         let requires_switch_scene = use_scene_manager || init.switch_scene_hook.is_some();
 

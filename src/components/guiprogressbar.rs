@@ -136,8 +136,17 @@ mod tests {
 
     #[test]
     fn direction_variants_all_distinct() {
-        assert_ne!(ProgressBarDirection::Horizontal, ProgressBarDirection::HorizontalReversed);
-        assert_ne!(ProgressBarDirection::Vertical, ProgressBarDirection::VerticalReversed);
-        assert_ne!(ProgressBarDirection::Horizontal, ProgressBarDirection::Vertical);
+        assert_ne!(
+            ProgressBarDirection::Horizontal,
+            ProgressBarDirection::HorizontalReversed
+        );
+        assert_ne!(
+            ProgressBarDirection::Vertical,
+            ProgressBarDirection::VerticalReversed
+        );
+        assert_ne!(
+            ProgressBarDirection::Horizontal,
+            ProgressBarDirection::Vertical
+        );
     }
 }

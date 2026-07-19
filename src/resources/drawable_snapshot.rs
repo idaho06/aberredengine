@@ -36,6 +36,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
+use crate::protocol::stats::ThreadStats;
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
@@ -49,7 +50,6 @@ use crate::resources::scenemanager::SceneManager;
 use crate::resources::thread_stats::{AudioStats, SimStats};
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use crate::resources::worldtime::WorldTime;
-use crate::protocol::stats::ThreadStats;
 
 /// Bundled to keep `build_drawable_snapshot`'s system-param count under
 /// bevy_ecs's 16-param function-system limit.
@@ -403,11 +403,37 @@ pub struct DrawableSnapshotQueries<'w, 's> {
     map_texts: Query<'w, 's, MapTextQueryData>,
     screen_sprites: Query<'w, 's, ScreenSpriteQueryData>,
     screen_texts: Query<'w, 's, ScreenTextQueryData>,
-    gui_windows: Query<'w, 's, (Entity, &'static GuiWindow, &'static ScreenPosition, &'static ZIndex)>,
+    gui_windows: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static GuiWindow,
+            &'static ScreenPosition,
+            &'static ZIndex,
+        ),
+    >,
     gui_buttons: Query<'w, 's, GuiButtonQueryData>,
-    gui_labels: Query<'w, 's, (Entity, &'static GuiLabel, &'static ScreenPosition, &'static ZIndex)>,
-    gui_progress_bars:
-        Query<'w, 's, (Entity, &'static GuiProgressBar, &'static ScreenPosition, &'static ZIndex)>,
+    gui_labels: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static GuiLabel,
+            &'static ScreenPosition,
+            &'static ZIndex,
+        ),
+    >,
+    gui_progress_bars: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static GuiProgressBar,
+            &'static ScreenPosition,
+            &'static ZIndex,
+        ),
+    >,
     debug_colliders: Query<'w, 's, DebugColliderQueryData>,
     debug_positions: Query<'w, 's, DebugPositionQueryData>,
     debug_rigidbodies: Query<'w, 's, (), With<RigidBody>>,
@@ -454,53 +480,53 @@ pub fn build_drawable_snapshot(
     thread_stats: ThreadStatsParams,
     mut snapshot: ResMut<DrawableSnapshot>,
 ) {
-    refill(&mut snapshot.map_sprites, &queries.map_sprites, |(
-        entity,
-        sprite,
-        position,
-        z_index,
-        scale,
-        rotation,
-        shader,
-        tint,
-        shadow,
-        global_transform,
-        rigidbody,
-    )| MapSpriteEntry {
-        entity,
-        sprite: sprite.clone(),
-        position: *position,
-        z_index: *z_index,
-        scale: scale.copied(),
-        rotation: rotation.copied(),
-        shader: shader.cloned(),
-        tint: tint.copied(),
-        shadow: shadow.copied(),
-        global_transform: global_transform.copied(),
-        velocity: rigidbody.map(|rb| rb.velocity),
-    });
+    refill(
+        &mut snapshot.map_sprites,
+        &queries.map_sprites,
+        |(
+            entity,
+            sprite,
+            position,
+            z_index,
+            scale,
+            rotation,
+            shader,
+            tint,
+            shadow,
+            global_transform,
+            rigidbody,
+        )| MapSpriteEntry {
+            entity,
+            sprite: sprite.clone(),
+            position: *position,
+            z_index: *z_index,
+            scale: scale.copied(),
+            rotation: rotation.copied(),
+            shader: shader.cloned(),
+            tint: tint.copied(),
+            shadow: shadow.copied(),
+            global_transform: global_transform.copied(),
+            velocity: rigidbody.map(|rb| rb.velocity),
+        },
+    );
 
-    refill(&mut snapshot.map_texts, &queries.map_texts, |(
-        entity,
-        text,
-        position,
-        z_index,
-        shader,
-        tint,
-        shadow,
-        global_transform,
-        rigidbody,
-    )| MapTextEntry {
-        entity,
-        text: text.clone(),
-        position: *position,
-        z_index: *z_index,
-        shader: shader.cloned(),
-        tint: tint.copied(),
-        shadow: shadow.copied(),
-        global_transform: global_transform.copied(),
-        velocity: rigidbody.map(|rb| rb.velocity),
-    });
+    refill(
+        &mut snapshot.map_texts,
+        &queries.map_texts,
+        |(entity, text, position, z_index, shader, tint, shadow, global_transform, rigidbody)| {
+            MapTextEntry {
+                entity,
+                text: text.clone(),
+                position: *position,
+                z_index: *z_index,
+                shader: shader.cloned(),
+                tint: tint.copied(),
+                shadow: shadow.copied(),
+                global_transform: global_transform.copied(),
+                velocity: rigidbody.map(|rb| rb.velocity),
+            }
+        },
+    );
 
     refill(
         &mut snapshot.screen_sprites,
@@ -632,7 +658,11 @@ pub fn build_drawable_snapshot(
             |(entity, position, signals, maybe_gt)| DebugPositionEntry {
                 entity,
                 world_pos: maybe_gt.map_or(position.pos, |gt| gt.position),
-                signals: if capture_signals { signals.cloned() } else { None },
+                signals: if capture_signals {
+                    signals.cloned()
+                } else {
+                    None
+                },
             },
         );
         debug.rigidbody_count = queries.debug_rigidbodies.iter().count();
@@ -692,8 +722,12 @@ mod tests {
                 },
                 MapPosition::new(3.0, 4.0),
                 ZIndex(2.0),
-                Scale { scale: Vector2::new(1.0, 1.0) },
-                Tint { color: Color::WHITE },
+                Scale {
+                    scale: Vector2::new(1.0, 1.0),
+                },
+                Tint {
+                    color: Color::WHITE,
+                },
             ))
             .id();
 
@@ -707,7 +741,10 @@ mod tests {
         assert_eq!(entry.position.pos, Vector2::new(3.0, 4.0));
         assert!(entry.scale.is_some());
         assert!(entry.tint.is_some());
-        assert!(entry.rotation.is_none(), "unset optional components stay None");
+        assert!(
+            entry.rotation.is_none(),
+            "unset optional components stay None"
+        );
         assert!(entry.shadow.is_none());
     }
 
@@ -794,7 +831,9 @@ mod tests {
     fn captures_world_signals_snapshot() {
         let mut world = new_test_world();
         world.resource_mut::<WorldSignals>().set_flag("paused");
-        world.resource_mut::<WorldSignals>().set_integer("score", 42);
+        world
+            .resource_mut::<WorldSignals>()
+            .set_integer("score", 42);
 
         world.run_system_once(build_drawable_snapshot).unwrap();
 
@@ -889,7 +928,10 @@ mod tests {
         world.run_system_once(build_drawable_snapshot).unwrap();
 
         let snapshot = world.resource::<DrawableSnapshot>();
-        let debug = snapshot.debug.as_ref().expect("payload present in debug mode");
+        let debug = snapshot
+            .debug
+            .as_ref()
+            .expect("payload present in debug mode");
 
         assert_eq!(debug.colliders.len(), 1);
         assert_eq!(debug.colliders[0].entity, plain);

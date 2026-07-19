@@ -195,7 +195,11 @@ fn clamp_gamepad_deadzone(deadzone: f32, field: &str) -> f32 {
 /// `render_main_loop` to seed its `StatsWindow` at the same implicit rate
 /// the render thread already falls back to.
 pub(crate) fn default_render_fps(target_fps: u32) -> f64 {
-    if target_fps > 0 { target_fps as f64 } else { 60.0 }
+    if target_fps > 0 {
+        target_fps as f64
+    } else {
+        60.0
+    }
 }
 
 /// `snapshot_skip`'s implicit default: skip enough sim ticks between
@@ -612,9 +616,7 @@ mod tests {
     #[test]
     fn test_snapshot_skip_derives_from_60fps_fallback_when_target_fps_unset() {
         let mut config = GameConfig::new();
-        config
-            .load_from_str("[window]\ntarget_fps = 0\n")
-            .unwrap();
+        config.load_from_str("[window]\ntarget_fps = 0\n").unwrap();
         // round(240/60) - 1 = 3, same as the DEFAULT_TARGET_FPS case
         assert_eq!(config.snapshot_skip, 3);
     }

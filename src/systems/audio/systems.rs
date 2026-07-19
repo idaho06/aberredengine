@@ -4,7 +4,7 @@
 //! spawn/despawn plus `NonSendMut<AudioStore>` access, which is awkward to
 //! express through ordinary system params.
 
-// Test to use 
+// Test to use
 
 use std::ffi::CString;
 
@@ -67,7 +67,8 @@ fn set_music_track_paused(world: &mut World, id: &str, paused: bool) {
 /// Snapshot of every current `MusicTrack` entity's data, needed whenever an
 /// operation must act on all playing/paused tracks in one pass (avoids a
 /// separate query per phase of the operation).
-fn music_tracks(world: &mut World) -> Vec<(Entity, String, MusicHandle, bool, bool)> { // Optimization opportunity: return an iterator instead of a Vec, to avoid heap allocation.
+fn music_tracks(world: &mut World) -> Vec<(Entity, String, MusicHandle, bool, bool)> {
+    // Optimization opportunity: return an iterator instead of a Vec, to avoid heap allocation.
     let mut q = world.query::<(Entity, &MusicTrack)>();
     q.iter(world)
         .map(|(e, t)| (e, t.id.clone(), t.music, t.looped, t.paused))
@@ -76,7 +77,8 @@ fn music_tracks(world: &mut World) -> Vec<(Entity, String, MusicHandle, bool, bo
 
 /// Snapshot of every current `PlayingFx` entity's alias, for the same
 /// one-pass reason as [`music_tracks`].
-fn playing_fx_entities(world: &mut World) -> Vec<(Entity, ffi::Sound)> { // Optimization opportunity: return an iterator instead of a Vec, to avoid heap allocation. 
+fn playing_fx_entities(world: &mut World) -> Vec<(Entity, ffi::Sound)> {
+    // Optimization opportunity: return an iterator instead of a Vec, to avoid heap allocation.
     let mut q = world.query::<(Entity, &PlayingFx)>();
     q.iter(world).map(|(e, f)| (e, f.alias.0)).collect()
 }

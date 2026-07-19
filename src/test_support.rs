@@ -49,11 +49,11 @@ use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::SnapshotPublisher;
-use crate::resources::systemsstore as hook_keys;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
-use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::gamestate::{GameState, GameStates, NextGameState};
+use crate::resources::systemsstore as hook_keys;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::systems::input::resolve_input_backlog;
 use crate::systems::scene_dispatch::SceneDescriptor;
@@ -124,7 +124,10 @@ impl TestWorldBuilder {
         Self {
             config: GameConfig::new(),
             setup_hook: Some(hook_registrar(hook_keys::SETUP, default_test_setup)),
-            enter_play_hook: Some(hook_registrar(hook_keys::ENTER_PLAY, default_test_enter_play)),
+            enter_play_hook: Some(hook_registrar(
+                hook_keys::ENTER_PLAY,
+                default_test_enter_play,
+            )),
             switch_scene_hook: None,
             update_hook: None,
             extra_systems: Vec::new(),
@@ -161,7 +164,10 @@ impl TestWorldBuilder {
 
     /// Register the `switch_scene` hook (required if any scene is added
     /// without using `add_scene`'s own `SceneManager` wiring).
-    pub fn on_switch_scene<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
+    pub fn on_switch_scene<M>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
         self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, system));
         self
     }
@@ -232,7 +238,10 @@ impl TestWorldBuilder {
 
         self.lua_script = Some(script_path.into());
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));
-        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, lua_plugin::enter_play));
+        self.enter_play_hook = Some(hook_registrar(
+            hook_keys::ENTER_PLAY,
+            lua_plugin::enter_play,
+        ));
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
@@ -240,7 +249,10 @@ impl TestWorldBuilder {
                     .in_set(crate::engine_app::SimSet::Bookkeeping),
             );
         }));
-        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, lua_plugin::switch_scene));
+        self.switch_scene_hook = Some(hook_registrar(
+            hook_keys::SWITCH_SCENE,
+            lua_plugin::switch_scene,
+        ));
         self
     }
 
@@ -348,13 +360,19 @@ impl TestWorld {
     /// normally enough with the default setup hook).
     pub fn tick_to_play(&mut self, dt: f32, max_ticks: u32) {
         for _ in 0..max_ticks {
-            if matches!(self.world.resource::<GameState>().get(), GameStates::Playing) {
+            if matches!(
+                self.world.resource::<GameState>().get(),
+                GameStates::Playing
+            ) {
                 return;
             }
             self.tick(1, dt);
         }
         assert!(
-            matches!(self.world.resource::<GameState>().get(), GameStates::Playing),
+            matches!(
+                self.world.resource::<GameState>().get(),
+                GameStates::Playing
+            ),
             "TestWorld did not reach GameStates::Playing within {max_ticks} ticks"
         );
     }

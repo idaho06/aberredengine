@@ -31,7 +31,10 @@ pub(super) fn draw_screen_sprite_item(
             width: sprite.width,
             height: sprite.height,
         };
-        let origin = Vector2 { x: sprite.origin.x, y: sprite.origin.y };
+        let origin = Vector2 {
+            x: sprite.origin.x,
+            y: sprite.origin.y,
+        };
 
         if let Some(shadow) = item.maybe_shadow {
             let shadow_dest = Rectangle {
