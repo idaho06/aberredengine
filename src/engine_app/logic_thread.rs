@@ -83,12 +83,17 @@ pub(super) fn logic_thread(init: LogicInit) {
     }
 }
 
-/// Cap on a single sim tick's real dt: protects against a huge dt
-/// after a debugger pause or long stall producing an unrealistic physics
-/// step (tunneling through colliders, teleporting) on the next tick. The POC
+/// Cap on a single sim tick's real dt, applied only on the variable-dt path
+/// (`GameConfig.fixed_dt == false`): protects against a huge dt after a
+/// debugger pause or long stall producing an unrealistic physics step
+/// (tunneling through colliders, teleporting) on the next tick. The POC
 /// reference implementation leaves this unclamped; this engine clamps it (a
-/// 2026-07-13 decision) since a stall is far more likely in practice than in
-/// the POC's demo loop.
+/// 2026-07-13 decision). That decision is superseded for the default
+/// `fixed_dt = true` path (2026-07-18, `determinism-01-fixed-timestep.md`):
+/// in fixed mode every tick integrates the same constant `1.0 / sim_hz`, so
+/// a stall dilates game time (runs slower than wall clock) instead of
+/// producing a dt spike -- there is nothing for this clamp to guard against.
+/// The clamp remains only as the variable-dt path's stall guard.
 const DT_CLAMP_SECONDS: f32 = 0.25;
 
 /// Run one `sim` schedule tick and clear `InputState`'s one-shot edge flags
@@ -103,13 +108,15 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
     world.resource_mut::<InputState>().clear_edges();
 }
 
-/// The logic thread's `Pacer`-driven loop: one `sim` tick per
-/// `Pacer` wakeup at `[simulation] hz`, `dt` the real elapsed time since the
-/// previous tick (clamped to [`DT_CLAMP_SECONDS`], scaled by `time_scale`
-/// inside [`update_world_time`]). There is no
-/// catch-up: a stall simply produces one larger (clamped) dt on the next
-/// tick rather than replayed substeps -- strict fixed-step
-/// determinism is consciously not provided.
+/// The logic thread's `Pacer`-driven loop: one `sim` tick per `Pacer` wakeup
+/// at `[simulation] hz`. `dt` depends on `GameConfig.fixed_dt` (default
+/// `true`): in fixed mode every tick integrates the constant `1.0 / sim_hz`
+/// (`Pacer::tick_fixed`, scaled by `time_scale` inside
+/// [`update_world_time`]) and a stall dilates game time instead of spiking
+/// dt -- no catch-up, no replayed substeps. In variable mode (`fixed_dt =
+/// false`, a transitional escape hatch, see `determinism-01-fixed-timestep.md`)
+/// `dt` is the real elapsed time since the previous tick, clamped to
+/// [`DT_CLAMP_SECONDS`].
 ///
 /// A backlog of pending raw input samples (whenever `sim_hz` trails the
 /// render frame rate, or a sim stall) is resolved sequentially, oldest to
@@ -154,7 +161,14 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     let rx_logic = init.rx_logic;
     let rx_input = init.rx_input;
+    let fixed_dt = init.config.fixed_dt;
     let mut pacer = Pacer::new(sim_hz);
+    // Computed once and reused every tick on the fixed-dt path -- derived
+    // from the Pacer's own period rather than re-deriving `1.0 / sim_hz`
+    // independently, so there's a single source of truth for the period
+    // (must be bit-identical everywhere it's used,
+    // determinism-01-fixed-timestep.md).
+    let sim_period_f32 = pacer.period_secs_f32();
     // Decimates `present`/snapshot publishing independently of the sim's
     // own pacing above: a countdown of sim ticks rather than a second
     // wall-clock Pacer, so publish cadence scales with actual sim ticking
@@ -180,7 +194,15 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         if !crate::protocol::shutdown::running() {
             break 'main;
         }
-        let dt = pacer.tick().min(DT_CLAMP_SECONDS);
+        // Always calls a sleeping Pacer method -- only the *value* handed to
+        // update_world_time differs by mode; the fixed path must not skip
+        // pacing (that would free-run the loop at max CPU).
+        let dt = if fixed_dt {
+            pacer.tick_fixed();
+            sim_period_f32
+        } else {
+            pacer.tick().min(DT_CLAMP_SECONDS)
+        };
 
         // Drain the dedicated bounded input channel: this tick's backlog of
         // raw samples, oldest to newest -- resolve_input_backlog processes

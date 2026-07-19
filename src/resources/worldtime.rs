@@ -10,12 +10,15 @@ use bevy_ecs::prelude::Resource;
 pub struct WorldTime {
     /// Total elapsed time since start (seconds).
     pub elapsed: f32,
-    /// Scaled delta time for the last update (seconds): the real elapsed
-    /// time since the previous sim tick (as measured by the logic thread's
-    /// `Pacer`, targeting `[simulation] hz` in `config.ini`), clamped
-    /// (`DT_CLAMP_SECONDS`) and multiplied by `time_scale`. One tick, one
-    /// delta — there is no separate "fixed substep" vs. "variable frame"
-    /// delta.
+    /// Scaled delta time for the last update (seconds), multiplied by
+    /// `time_scale`. One tick, one delta — there is no separate "fixed
+    /// substep" vs. "variable frame" delta. The unscaled input depends on
+    /// `GameConfig.fixed_dt` (default `true`): in fixed mode it's the
+    /// constant `1.0 / sim_hz`, so `delta` is identical every tick modulo
+    /// `time_scale` changes; in variable mode (transitional escape hatch,
+    /// see `determinism-01-fixed-timestep.md`) it's the real elapsed time
+    /// since the previous sim tick as measured by the logic thread's
+    /// `Pacer`, clamped to `DT_CLAMP_SECONDS`.
     pub delta: f32,
     /// Multiplier applied by systems that honor time scaling.
     pub time_scale: f32,

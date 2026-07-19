@@ -65,17 +65,59 @@ impl Pacer {
         }
     }
 
-    /// Sleep until the target period has elapsed, then return the real dt
-    /// (in seconds) since the previous call.
-    pub fn tick(&mut self) -> f32 {
+    /// The configured tick period, in seconds. Callers integrating a
+    /// constant fixed `dt` (see [`tick_fixed`](Self::tick_fixed)) should
+    /// derive it from here rather than re-deriving `1.0 / hz` independently,
+    /// so there is exactly one source of truth for the period.
+    pub fn period_secs_f32(&self) -> f32 {
+        self.period.as_secs_f32()
+    }
+
+    /// Sleep until the target period has elapsed since `self.last`. Shared
+    /// by [`tick`](Self::tick) and [`tick_fixed`](Self::tick_fixed), which
+    /// diverge only in how they advance `self.last` afterward.
+    fn sleep_to_deadline(&self) {
         let elapsed = self.last.elapsed();
         if elapsed < self.period {
             spin_sleep::sleep(self.period - elapsed);
         }
+    }
+
+    /// Sleep until the target period has elapsed, then return the real dt
+    /// (in seconds) since the previous call.
+    pub fn tick(&mut self) -> f32 {
+        self.sleep_to_deadline();
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32();
         self.last = now;
         dt
+    }
+
+    /// Sleep until the target period has elapsed (same discipline as
+    /// [`tick`](Self::tick)), but advance the deadline by exactly one
+    /// `period` (carrying any overshoot forward) instead of resetting it to
+    /// `Instant::now()` -- a reset would systematically undershoot the
+    /// configured rate, since the overshoot past each period would be
+    /// discarded every call. If still behind by a full period after
+    /// advancing (e.g. after a long stall or debugger pause), the deadline
+    /// snaps to now instead of the caller getting a burst of unpaced calls
+    /// to catch up.
+    ///
+    /// Returns nothing: callers in fixed-timestep mode must integrate a
+    /// constant, config-derived period (`1.0 / hz`), never a measured value
+    /// -- see `determinism-01-fixed-timestep.md`. This is the sleeping
+    /// counterpart to the pre-`f02581c` `Pacer::due()` (deleted when PRESENT
+    /// decimation moved to the wall-clock-agnostic
+    /// [`TickCountdown`](TickCountdown)); `due()`'s deadline-carry + snap
+    /// arithmetic is reused here, but `due()` itself never slept (it was a
+    /// non-blocking decimator check inside an already-paced loop) --
+    /// `tick_fixed` paces the loop itself, so it must sleep too.
+    pub fn tick_fixed(&mut self) {
+        self.sleep_to_deadline();
+        self.last += self.period;
+        if self.last.elapsed() >= self.period {
+            self.last = Instant::now();
+        }
     }
 }
 
@@ -225,6 +267,37 @@ mod tests {
         // time from `last` -- an externally-added 5ms sleep before the
         // second tick should be reflected (not truncated away).
         assert!(dt >= 0.004, "dt too small: {dt}");
+    }
+
+    #[test]
+    fn tick_fixed_carries_overshoot_forward() {
+        // At a fast rate, the actual sleep+measure loop will overshoot the
+        // period somewhat every call; the deadline should still advance by
+        // exactly one period per call rather than resetting to `now()`,
+        // which would systematically undershoot the configured rate.
+        let mut pacer = Pacer::new(1000.0);
+        let first_deadline = pacer.last + pacer.period;
+        pacer.tick_fixed();
+        assert_eq!(
+            pacer.last, first_deadline,
+            "deadline should advance by exactly one period, not reset to now"
+        );
+    }
+
+    #[test]
+    fn tick_fixed_stall_snaps_once() {
+        let mut pacer = Pacer::new(1000.0);
+        // Simulate a long stall by backdating `last` well behind now.
+        pacer.last -= Duration::from_millis(50);
+        let before = Instant::now();
+        pacer.tick_fixed();
+        assert!(
+            pacer.last >= before,
+            "stall guard should snap the deadline close to now, not leave it periods behind"
+        );
+        // Immediately re-checking after the stall snap must not still be
+        // behind by a full period (i.e. must not fire a catch-up burst).
+        assert!(pacer.last.elapsed() < pacer.period);
     }
 
     #[test]

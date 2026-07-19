@@ -31,7 +31,7 @@
 //! # Performance
 //!
 //! Context tables are pooled and reused across callbacks to reduce Lua GC pressure.
-//! See [`EntityCtxPool`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
+//! See [`EntityCtxTables`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Local;

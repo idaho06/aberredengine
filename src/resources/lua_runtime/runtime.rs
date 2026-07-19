@@ -279,7 +279,7 @@ pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
     }
 }
 
-/// Invokes `$cb!(field)` for each of the 19 digital button fields shared by
+/// Invokes `$cb!(field)` for each of the 20 digital button fields shared by
 /// `DigitalInputs` and `InputCtxTables` (field and table names match for all
 /// of them). Used by [`LuaRuntime::diff_digital_tables`] and
 /// [`LuaRuntime::write_all_digital_tables`] so the button list is declared
@@ -560,7 +560,7 @@ impl LuaRuntime {
     }
 
     /// Diffs `new` against `old`, calling `update_button_table` for each of
-    /// the 18 digital buttons whose state changed.
+    /// the 20 digital buttons whose state changed.
     fn diff_digital_tables(
         tables: &InputCtxTables,
         old: &super::input_snapshot::DigitalInputs,

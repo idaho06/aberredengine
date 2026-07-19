@@ -29,7 +29,7 @@ impl LuaRuntime {
     }
 
     // -------------------------------------------------------------------------
-    // Drain methods — all 22 generated from queue_registry.rs via lua_queues!
+    // Drain methods — all 23 generated from queue_registry.rs via lua_queues!
     // -------------------------------------------------------------------------
 
     crate::lua_queues! {drain_methods}

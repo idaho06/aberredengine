@@ -26,7 +26,7 @@
 //! ```
 //!
 //! **Performance**: Context tables are pooled and reused between collisions to
-//! reduce GC pressure. See [`CollisionCtxPool`](crate::resources::lua_runtime::CollisionCtxTables)
+//! reduce GC pressure. See [`CollisionCtxTables`](crate::resources::lua_runtime::CollisionCtxTables)
 //! in runtime.rs for implementation details.
 //!
 //! # Related
