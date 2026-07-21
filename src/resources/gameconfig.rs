@@ -22,7 +22,6 @@
 //! [simulation]
 //! hz = 240
 //! ; snapshot_skip = 3   ; optional; PRESENT runs every N+1th sim tick; defaults to round(sim_hz/target_fps)-1
-//! ; fixed_dt = false    ; optional; defaults true (fixed-step sim clock); set false for legacy variable-dt
 //!
 //! [audio]
 //! hz = 100
@@ -61,8 +60,6 @@ const MIN_TICK_HZ: f64 = 15.0;
 const MAX_TICK_HZ: f64 = 1000.0;
 /// Default gamepad analog-stick deadzone radius (`[input] gamepad_deadzone`).
 const DEFAULT_GAMEPAD_DEADZONE: f32 = 0.15;
-/// Default sim clock mode: fixed-step (`[simulation] fixed_dt`).
-const DEFAULT_FIXED_DT: bool = true;
 
 /// Game configuration resource.
 ///
@@ -132,19 +129,6 @@ pub struct GameConfig {
     ///
     /// [`DrawableSnapshot`]: crate::resources::drawable_snapshot::DrawableSnapshot
     pub snapshot_skip: u32,
-    /// Whether the logic thread's sim clock integrates a fixed `dt`
-    /// (`1.0 / sim_hz`, tick-index-derived game time) instead of
-    /// `Pacer::tick()`'s real elapsed time (`[simulation] fixed_dt`,
-    /// default `true`). Read once at startup by the logic thread — same
-    /// startup-only caveat as [`sim_hz`](Self::sim_hz).
-    ///
-    /// Transitional: this field exists only as an escape hatch
-    /// (`fixed_dt = false`) while the determinism roadmap
-    /// (`docs/plans/determinism-0*.md`) lands — the engine's target
-    /// behavior is fixed-step unconditionally, and both this field and the
-    /// variable-dt path are expected to be deleted once the roadmap
-    /// completes, not kept as a permanent toggle.
-    pub fixed_dt: bool,
     /// Radial deadzone applied to gamepad analog-stick axes before they
     /// drive digital actions via [`InputBinding::GamepadAxis`]
     /// (`[input] gamepad_deadzone`, default `0.15`, clamped to `[0.0, 1.0]`).
@@ -253,7 +237,6 @@ impl GameConfig {
             sim_hz: DEFAULT_SIM_HZ,
             audio_hz: DEFAULT_AUDIO_HZ,
             snapshot_skip: default_snapshot_skip(DEFAULT_SIM_HZ, DEFAULT_TARGET_FPS),
-            fixed_dt: DEFAULT_FIXED_DT,
             gamepad_deadzone: DEFAULT_GAMEPAD_DEADZONE,
         }
     }
@@ -354,14 +337,11 @@ impl GameConfig {
             .flatten()
             .unwrap_or_else(|| default_snapshot_skip(self.sim_hz, self.target_fps) as i64);
         self.snapshot_skip = clamp_snapshot_skip(snapshot_skip, "simulation.snapshot_skip");
-        if let Some(fixed_dt) = config.getbool("simulation", "fixed_dt").ok().flatten() {
-            self.fixed_dt = fixed_dt;
-        }
         if let Some(dz) = config.getfloat("input", "gamepad_deadzone").ok().flatten() {
             self.gamepad_deadzone = clamp_gamepad_deadzone(dz as f32, "input.gamepad_deadzone");
         }
         info!(
-            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_skip={}, fixed_dt={}",
+            "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_skip={}",
             self.render_width,
             self.render_height,
             self.window_width,
@@ -372,8 +352,7 @@ impl GameConfig {
             self.window_title,
             self.sim_hz,
             self.audio_hz,
-            self.snapshot_skip,
-            self.fixed_dt
+            self.snapshot_skip
         );
     }
 
@@ -817,28 +796,6 @@ mod tests {
             .load_from_str("[input]\ngamepad_deadzone = 1.5\n")
             .unwrap();
         assert_eq!(config.gamepad_deadzone, 1.0);
-    }
-
-    #[test]
-    fn test_new_defaults_fixed_dt() {
-        let config = GameConfig::new();
-        assert!(config.fixed_dt);
-    }
-
-    #[test]
-    fn test_load_fixed_dt_false_from_str() {
-        let mut config = GameConfig::new();
-        config
-            .load_from_str("[simulation]\nfixed_dt = false\n")
-            .unwrap();
-        assert!(!config.fixed_dt);
-    }
-
-    #[test]
-    fn test_fixed_dt_missing_keeps_default() {
-        let mut config = GameConfig::new();
-        config.load_from_str("[render]\nwidth = 800\n").unwrap();
-        assert!(config.fixed_dt);
     }
 
     #[test]
