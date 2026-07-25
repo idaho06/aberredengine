@@ -48,6 +48,7 @@ use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
+use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
@@ -123,4 +124,9 @@ pub struct GameCtx<'w, 's> {
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
     /// Mutable access to input bindings (key/mouse → action mapping). Use to rebind actions per scene.
     pub input_bindings: ResMut<'w, InputBindings>,
+    /// Mutable access to the shared, deterministic simulation RNG. Drawing
+    /// from any other RNG (`rand`, `fastrand::Rng::new()`, a
+    /// `Local<fastrand::Rng>`) inside a Rust game callback is a game bug in
+    /// deterministic mode -- see [`SimRng`]'s doc comment.
+    pub sim_rng: ResMut<'w, SimRng>,
 }

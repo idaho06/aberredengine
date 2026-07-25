@@ -32,6 +32,8 @@ use aberredengine::components::persistent::Persistent;
 use aberredengine::protocol::audio::AudioCmd;
 use aberredengine::resources::gamestate::{GameState, NextGameState};
 
+mod common;
+
 /// Set up a minimal world with all resources needed by `GameCtx`,
 /// `scene_switch_system`, and `scene_update_system`.
 fn setup_world() -> World {
@@ -50,6 +52,7 @@ fn setup_world() -> World {
     world.init_resource::<PostProcessShader>();
     world.insert_resource(CameraFollowConfig::default());
     world.insert_resource(InputBindings::default());
+    common::insert_sim_rng(&mut world);
     world
 }
 

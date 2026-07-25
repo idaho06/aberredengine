@@ -41,6 +41,9 @@ pub struct EngineBuilder {
     pub(super) first_user_hook: Option<&'static str>,
     #[cfg(feature = "lua")]
     pub(super) lua_script: Option<PathBuf>,
+    /// `Some(seed)` when `.deterministic(seed)` was called -- see that
+    /// method's doc comment. Mutually exclusive with `.with_lua()`.
+    pub(super) deterministic_seed: Option<u64>,
 }
 
 impl EngineBuilder {
@@ -63,6 +66,7 @@ impl EngineBuilder {
             first_user_hook: None,
             #[cfg(feature = "lua")]
             lua_script: None,
+            deterministic_seed: None,
         }
     }
 
@@ -297,6 +301,22 @@ impl EngineBuilder {
             hook_keys::SWITCH_SCENE,
             lua_plugin::switch_scene,
         ));
+        self
+    }
+
+    /// Opt into deterministic mode: `SimRng` (`src/resources/sim_rng.rs`) is
+    /// seeded from `seed` instead of entropy. Fixed-dt ticking and the
+    /// single-threaded schedule executor are already unconditional for every
+    /// game (determinism phases 01/02), so this is the last engine-side
+    /// switch a deterministic game needs to flip.
+    ///
+    /// Mutually exclusive with [`.with_lua()`](Self::with_lua) -- Lua is
+    /// outside the deterministic envelope
+    /// (`docs/plans/determinism-00-overview.md`); combining both is rejected
+    /// at `.run()`/`.try_run()` time as
+    /// [`EngineError::LuaConflictsWithDeterministic`](crate::error::EngineError::LuaConflictsWithDeterministic).
+    pub fn deterministic(mut self, seed: u64) -> Self {
+        self.deterministic_seed = Some(seed);
         self
     }
 }

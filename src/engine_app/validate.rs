@@ -5,7 +5,21 @@ impl EngineBuilder {
     pub(super) fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
         self.validate_lua_conflicts(use_scene_manager)?;
         self.validate_scene_manager(use_scene_manager)?;
+        self.validate_deterministic()?;
         Ok(())
+    }
+
+    /// Whether `.with_lua()` was called -- always `false` when the `lua`
+    /// feature is disabled (`lua_script` doesn't exist on the builder then).
+    fn has_lua_script(&self) -> bool {
+        #[cfg(feature = "lua")]
+        {
+            self.lua_script.is_some()
+        }
+        #[cfg(not(feature = "lua"))]
+        {
+            false
+        }
     }
 
     /// Checks `.with_lua()` against `.add_scene()` and against any explicitly
@@ -14,12 +28,7 @@ impl EngineBuilder {
     /// the hook `Option` fields alone can't tell "user set this" apart from
     /// "with_lua set this" -- that's what `first_user_hook` tracks separately).
     fn validate_lua_conflicts(&self, use_scene_manager: bool) -> Result<(), EngineError> {
-        #[cfg(feature = "lua")]
-        let has_lua_script = self.lua_script.is_some();
-        #[cfg(not(feature = "lua"))]
-        let has_lua_script = false;
-
-        if !has_lua_script {
+        if !self.has_lua_script() {
             return Ok(());
         }
         if use_scene_manager {
@@ -62,6 +71,16 @@ impl EngineBuilder {
                 name: initial_scene.clone(),
                 registered,
             });
+        }
+        Ok(())
+    }
+
+    /// `.deterministic(seed)` and `.with_lua()` are mutually exclusive --
+    /// Lua is outside the deterministic envelope
+    /// (`docs/plans/determinism-00-overview.md`).
+    fn validate_deterministic(&self) -> Result<(), EngineError> {
+        if self.deterministic_seed.is_some() && self.has_lua_script() {
+            return Err(EngineError::LuaConflictsWithDeterministic);
         }
         Ok(())
     }

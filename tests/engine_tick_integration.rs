@@ -64,6 +64,8 @@ use aberredengine::systems::timer::{timer_observer, update_timers};
 use aberredengine::systems::ttl::ttl_system;
 use aberredengine::systems::tween::tween_system;
 
+mod common;
+
 const EPSILON: f32 = 1e-6;
 
 fn approx_eq(a: f32, b: f32) -> bool {
@@ -90,6 +92,7 @@ fn make_world(delta: f32) -> World {
     world.init_resource::<PostProcessShader>();
     world.insert_resource(CameraFollowConfig::default());
     world.insert_resource(InputBindings::default());
+    common::insert_sim_rng(&mut world);
     world
 }
 

@@ -104,6 +104,7 @@ pub struct TestWorldBuilder {
     initial_scene: Option<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
+    deterministic_seed: Option<u64>,
     window_w: i32,
     window_h: i32,
 }
@@ -136,6 +137,7 @@ impl TestWorldBuilder {
             initial_scene: None,
             #[cfg(feature = "lua")]
             lua_script: None,
+            deterministic_seed: None,
             window_w: 800,
             window_h: 600,
         }
@@ -231,6 +233,13 @@ impl TestWorldBuilder {
         self
     }
 
+    /// Opt into deterministic mode, mirroring `EngineBuilder::deterministic`:
+    /// `SimRng` is seeded from `seed` instead of entropy.
+    pub fn deterministic(mut self, seed: u64) -> Self {
+        self.deterministic_seed = Some(seed);
+        self
+    }
+
     #[cfg(feature = "lua")]
     /// Configure the harness for a Lua game, mirroring `EngineBuilder::with_lua`.
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
@@ -280,6 +289,7 @@ impl TestWorldBuilder {
             initial_scene: self.initial_scene.take(),
             #[cfg(feature = "lua")]
             lua_script: self.lua_script.take(),
+            deterministic_seed: self.deterministic_seed,
             window_w: self.window_w,
             window_h: self.window_h,
             tx_render,

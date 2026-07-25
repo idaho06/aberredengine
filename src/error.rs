@@ -41,6 +41,13 @@ pub enum EngineError {
     LuaConflictsWithHooks { hook: &'static str },
 
     #[error(
+        "EngineBuilder conflict: .deterministic(seed) and .with_lua() cannot be used \
+         together. Lua is outside the deterministic envelope (see \
+         docs/plans/determinism-00-overview.md) -- deterministic games are Rust-only."
+    )]
+    LuaConflictsWithDeterministic,
+
+    #[error(
         "EngineBuilder: .initial_scene(\"{name}\") does not match any registered scene. \
          Registered scenes: {registered}."
     )]

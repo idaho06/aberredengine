@@ -23,6 +23,7 @@
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
+//! - [`sim_rng`] – shared, deterministic RNG for sim-schedule systems and Rust game callbacks
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name
 //! - [`texturefilter`] – texture sampling filter mode shared by render target and texture store
 //! - [`texturedims`] – CPU-side texture dimensions mirror for the logic thread
@@ -56,6 +57,7 @@ pub mod scenemanager;
 pub mod screensize;
 pub mod signal_intents;
 pub mod signal_keys;
+pub mod sim_rng;
 pub mod systemsstore;
 pub mod texturedims;
 pub mod texturefilter;

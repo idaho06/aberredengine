@@ -23,6 +23,8 @@ use aberredengine::systems::menu::menu_selection_observer;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 
+mod common;
+
 /// Set up a minimal world with all resources needed by `GameCtx` and
 /// `menu_selection_observer`.
 fn setup_world() -> World {
@@ -39,6 +41,7 @@ fn setup_world() -> World {
     world.init_resource::<PostProcessShader>();
     world.insert_resource(CameraFollowConfig::default());
     world.insert_resource(InputBindings::default());
+    common::insert_sim_rng(&mut world);
     #[cfg(feature = "lua")]
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world

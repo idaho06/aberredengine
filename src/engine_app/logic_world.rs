@@ -40,6 +40,7 @@ use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
+use crate::resources::sim_rng::SimRng;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturedims::TextureDimsStore;
@@ -108,6 +109,23 @@ impl EngineBuilder {
             w: init.window_w,
             h: init.window_h,
         });
+        // SimRng::from_seed is the one construction path for both modes --
+        // see that resource's doc comment. Deterministic mode seeds from
+        // `deterministic_seed`; otherwise a throwaway entropy-seeded Rng is
+        // read back via `get_seed()` so there's still a concrete, loggable
+        // seed.
+        let sim_seed = match init.deterministic_seed {
+            Some(seed) => {
+                log::info!("Deterministic mode: SimRng seeded with {seed}");
+                seed
+            }
+            None => {
+                let seed = fastrand::Rng::new().get_seed();
+                log::info!("Non-deterministic mode: SimRng entropy-seeded with {seed}");
+                seed
+            }
+        };
+        world.insert_resource(SimRng::from_seed(sim_seed));
         world.insert_resource(GameConfigDefaults(config.clone()));
         world.insert_resource(config);
         world.insert_resource(InputState::default());

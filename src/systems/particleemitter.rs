@@ -30,12 +30,20 @@ use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec}
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::ttl::Ttl;
+use crate::resources::sim_rng::SimRng;
 use crate::resources::worldtime::WorldTime;
 
 /// System that processes particle emitters and spawns particles.
 ///
 /// Queries all entities with `ParticleEmitter` and `MapPosition`, accumulates
 /// time, and spawns particles by cloning templates when thresholds are met.
+///
+/// Draws from the shared [`SimRng`] rather than a private per-system stream
+/// -- its draw order relative to other `SimRng`-drawing systems (`GameCtx`'s
+/// timer/collision/phase callbacks) matters for determinism, and is fixed by
+/// the `SimSet` chain (`src/engine_app/schedule.rs`): this system runs in
+/// `SimSet::Movement`, strictly before `SimSet::Collision`/`SimSet::Drain`
+/// where the other `SimRng` consumers live.
 ///
 /// # Ordering
 ///
@@ -50,7 +58,7 @@ pub fn particle_emitter_system(
     rigidbody_query: Query<&RigidBody>,
     time: Res<WorldTime>,
     mut commands: Commands,
-    mut rng: Local<Rng>,
+    mut sim_rng: ResMut<SimRng>,
 ) {
     let dt = time.delta; // delta is already scaled
     if dt <= 0.0 {
@@ -80,7 +88,7 @@ pub fn particle_emitter_system(
                 &emit_pos,
                 &emitter,
                 &rigidbody_query,
-                &mut rng,
+                &mut sim_rng.0,
             );
             emitter.time_since_emit -= period;
             emitter.emissions_remaining -= 1;

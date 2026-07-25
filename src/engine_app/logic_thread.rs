@@ -48,6 +48,11 @@ pub(crate) struct LogicInit {
     pub(crate) initial_scene: Option<String>,
     #[cfg(feature = "lua")]
     pub(crate) lua_script: Option<PathBuf>,
+    /// `Some(seed)` in deterministic mode (`EngineBuilder::deterministic`),
+    /// `None` otherwise -- `setup_logic_world` seeds `SimRng` accordingly
+    /// (see that resource's doc comment for the single construction path
+    /// both branches funnel through).
+    pub(crate) deterministic_seed: Option<u64>,
     /// Initial WindowSize mirror values (refreshed per-frame via `InputSample`).
     pub(crate) window_w: i32,
     pub(crate) window_h: i32,

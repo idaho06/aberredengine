@@ -106,6 +106,7 @@ impl EngineBuilder {
             initial_scene: self.initial_scene.take(),
             #[cfg(feature = "lua")]
             lua_script: self.lua_script.take(),
+            deterministic_seed: self.deterministic_seed,
             window_w: rl.get_screen_width(),
             window_h: rl.get_screen_height(),
             tx_render,

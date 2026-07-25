@@ -85,6 +85,7 @@ mod tests {
     use crate::resources::input_bindings::InputBindings;
     use crate::resources::postprocessshader::PostProcessShader;
     use crate::resources::render::texturestore::TextureStore;
+    use crate::resources::sim_rng::SimRng;
     use crate::resources::worldsignals::WorldSignals;
     use crate::resources::worldtime::WorldTime;
     use bevy_ecs::message::Messages;
@@ -99,6 +100,7 @@ mod tests {
         world.insert_resource(PostProcessShader::default());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(InputBindings::default());
+        world.insert_resource(SimRng::from_seed(0));
         world.insert_resource(Messages::<crate::protocol::audio::AudioCmd>::default());
         #[cfg(feature = "lua")]
         world.insert_non_send(
