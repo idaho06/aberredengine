@@ -36,6 +36,10 @@
 //!   `AudioMessage::Stats` (sim/render stats never leave their owning
 //!   thread's `World` as messages — sim writes its own resource directly,
 //!   render's stays render-local)
+//! - [`tick_input`] – `TickInput`, the canonical per-tick sim input record
+//!   (determinism roadmap phase 04) — everything a sim tick consumes,
+//!   recorded as an explicit value rather than left to thread-scheduling
+//!   timing; the future replay/lockstep wire format
 
 pub mod audio;
 pub mod endpoints;
@@ -45,3 +49,4 @@ pub mod render_logic;
 pub mod shutdown;
 pub mod snapshot;
 pub mod stats;
+pub mod tick_input;

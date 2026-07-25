@@ -21,9 +21,15 @@ use aberredengine::components::boxcollider::BoxCollider;
 use aberredengine::components::collision::{BoxSides, CollisionRule};
 use aberredengine::components::group::Group;
 use aberredengine::components::mapposition::MapPosition;
+use aberredengine::protocol::raw_input::RawDeviceSnapshot;
+use aberredengine::protocol::tick_input::TickInput;
+use aberredengine::raylib::ffi::KeyboardKey;
+use aberredengine::resources::input::InputState;
+use aberredengine::resources::screensize::ScreenSize;
+use aberredengine::resources::signal_intents::SignalIntent;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::systems::game_ctx::GameCtx;
-use aberredengine::test_support::TestWorld;
+use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 
 mod common;
 use common::DT;
@@ -176,5 +182,161 @@ fn identical_scenario_allocates_identical_entity_ids_across_runs() {
         "the full live-entity set, in query iteration order, must be \
          bit-identical across two runs (archetype/table order is \
          deterministic given identical spawn/despawn history)"
+    );
+}
+
+// --- determinism-04-tick-input.md: TickInput round-trip / empty-tick tests ---
+
+/// Observable state after driving a `TestWorld` through the scripted
+/// `TickInput` sequence below -- the "ground truth" `round_trip_tick_input_*`
+/// compares across two independent runs.
+#[derive(Debug, PartialEq)]
+struct TickInputScenarioResult {
+    up_active: bool,
+    flagged: bool,
+    screen_size: (i32, i32),
+}
+
+/// Drives a fresh, independently-seeded `TestWorld` through an identical
+/// scripted `TickInput` sequence -- this sequence itself stands in for a
+/// "recorded log" (05 adds an actual Recorder/serialization; the `TickInput`
+/// values are already the loss-free record per determinism-04-tick-input.md
+/// §3). Exercises all four `TickInput` fields relevant to `apply_tick_input`:
+/// raw samples (held key), an empty tick, queued `SignalIntent`s, and a
+/// `ScreenSize` change.
+fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
+    let mut tw = TestWorldBuilder::new()
+        .deterministic(seed)
+        .build()
+        .expect("build should succeed");
+
+    let mut key_down = RawDeviceSnapshot::default();
+    key_down.set_key(KeyboardKey::KEY_W as u32);
+
+    // Tick 0: a held key (W is bound to MainDirectionUp by default).
+    tw.apply_tick_input(
+        &TickInput {
+            tick: 0,
+            samples: vec![key_down],
+            ..Default::default()
+        },
+        DT,
+    );
+
+    // Tick 1: a genuinely empty tick -- nothing sim-visible landed.
+    tw.apply_tick_input(
+        &TickInput {
+            tick: 1,
+            ..Default::default()
+        },
+        DT,
+    );
+
+    // Tick 2: a queued SignalIntent.
+    tw.apply_tick_input(
+        &TickInput {
+            tick: 2,
+            intents: vec![SignalIntent::SetFlag("tick_input_round_trip".into())],
+            ..Default::default()
+        },
+        DT,
+    );
+
+    // Tick 3: a ScreenSize change.
+    tw.apply_tick_input(
+        &TickInput {
+            tick: 3,
+            screen_size: Some((800, 600)),
+            ..Default::default()
+        },
+        DT,
+    );
+
+    let up_active = tw.world.resource::<InputState>().maindirection_up.active;
+    let flagged = tw
+        .world
+        .resource::<WorldSignals>()
+        .has_flag("tick_input_round_trip");
+    let screen = tw.world.resource::<ScreenSize>();
+    let screen_size = (screen.w, screen.h);
+
+    TickInputScenarioResult {
+        up_active,
+        flagged,
+        screen_size,
+    }
+}
+
+#[test]
+fn round_trip_tick_input_sequence_produces_identical_state_across_two_runs() {
+    let run1 = run_tick_input_scenario(42);
+    let run2 = run_tick_input_scenario(42);
+
+    assert!(
+        run1.up_active,
+        "the held key from tick 0 must still read active after the \
+         intervening empty/intent/screen-size ticks -- resolve_input_backlog \
+         holds previous state across an empty tick rather than resetting it"
+    );
+    assert!(
+        run1.flagged,
+        "the queued SignalIntent must have been applied"
+    );
+    assert_eq!(run1.screen_size, (800, 600));
+    assert_eq!(
+        run1, run2,
+        "driving two independent TestWorlds through the identical scripted \
+         TickInput sequence must produce bit-identical observable state -- \
+         this is the round-trip guarantee determinism-04-tick-input.md exists \
+         to provide (a real Recorder/replay format is 05's job; the TickInput \
+         values themselves are already the loss-free record)"
+    );
+}
+
+#[test]
+fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
+    let mut tw = TestWorld::new();
+
+    let mut key_down = RawDeviceSnapshot::default();
+    key_down.set_key(KeyboardKey::KEY_W as u32);
+    tw.apply_tick_input(
+        &TickInput {
+            tick: 0,
+            samples: vec![key_down],
+            ..Default::default()
+        },
+        DT,
+    );
+    // `TestWorld::apply_tick_input` runs `run_sim_tick` (which clears
+    // just_pressed/just_released) before returning, same as
+    // `logic_thread_main` -- so `just_pressed` is a within-tick-only signal,
+    // not observable from outside a completed call; only `active` (the held
+    // state) survives to be checked here.
+    assert!(
+        tw.world.resource::<InputState>().maindirection_up.active,
+        "the pressed key must read active after the tick it lands"
+    );
+
+    // A genuinely empty TickInput: no samples, no capture, no intents, no
+    // screen_size change -- must hold InputState.active as-is (the key is
+    // still physically down).
+    tw.apply_tick_input(
+        &TickInput {
+            tick: 1,
+            ..Default::default()
+        },
+        DT,
+    );
+
+    let up = tw.world.resource::<InputState>().maindirection_up;
+    assert!(
+        up.active,
+        "an empty tick must hold the previous tick's active state, not reset it"
+    );
+    assert!(
+        !up.just_pressed,
+        "an empty tick must not fire a new just_pressed edge -- \
+         resolve_input_backlog early-returns on an empty sample slice, and \
+         the previous tick's edge was already cleared by clear_edges"
     );
 }

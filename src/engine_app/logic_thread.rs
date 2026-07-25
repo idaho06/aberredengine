@@ -13,20 +13,23 @@ use crate::pacing::{Pacer, StatsWindow, TickCountdown};
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::endpoints::shutdown_audio;
-use crate::protocol::raw_input::{InputSample, RawDeviceSnapshot};
+use crate::protocol::raw_input::InputSample;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::SnapshotPublisher;
+use crate::protocol::tick_input::TickInput;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
+use crate::resources::determinism_taint::DeterminismTaint;
 use crate::resources::fontmetrics::FontMetricsStore;
 use crate::resources::gameconfig::GameConfig;
+use crate::resources::gamestate::{GameState, GameStates};
 use crate::resources::input::InputState;
 use crate::resources::rawinput::ImguiCaptureMirror;
-use crate::resources::render::imgui_bridge::ImguiCaptureState;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::resources::thread_stats::SimStats;
 use crate::resources::windowsize::WindowSize;
+use crate::resources::worldtime::WorldTime;
 use crate::systems::input::resolve_input_backlog;
 use crate::systems::scene_dispatch::SceneDescriptor;
 use crate::systems::signal_intents::apply_signal_intents;
@@ -100,6 +103,155 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
     world.resource_mut::<InputState>().clear_edges();
 }
 
+/// v1 async-asset preload guard (determinism-04-tick-input.md §4): in
+/// deterministic mode, a `TextureDimsStore` key arriving for the *first*
+/// time while `GameState::Playing` is a practical proxy for "asset metadata
+/// arrived mid-gameplay" -- real deterministic games are Rust-only and load
+/// via `SpawnMapRequested`/builder paths at scene start, before `Playing`.
+/// Logs an `error!` and marks [`DeterminismTaint`] -- detect-and-flag, not
+/// prevent; does not block the insert. No-op outside deterministic mode.
+fn guard_texture_preload(world: &mut World, key: &str, deterministic: bool) {
+    if !deterministic {
+        return;
+    }
+    if !matches!(world.resource::<GameState>().get(), GameStates::Playing) {
+        return;
+    }
+    if world.resource::<TextureDimsStore>().get(key).is_some() {
+        return;
+    }
+    log::error!(
+        "Deterministic mode: TextureDimsStore gained new key {key:?} while \
+         GameState::Playing -- likely a texture loaded outside the preload \
+         window (determinism-04-tick-input.md §4 v1 rule); session tainted"
+    );
+    world.resource_mut::<DeterminismTaint>().taint();
+}
+
+/// Collect stage (live source): drains `rx_input`/`rx_logic` for one tick.
+/// Non-sim-visible messages (`FontLoaded`/`FontRemoved`/`FontRenamed`,
+/// `TextureRemoved`/`TextureRenamed`, `OverlayConfig`) are applied directly
+/// to `world` here, same as before this split — they never fed
+/// `apply_tick_input`. Sim-visible facts (raw samples, capture,
+/// `ScreenSize`, `SignalIntent`s, `TextureLoaded` dims) are written into
+/// `out` instead of straight into `World` resources — that's what makes the
+/// line right after this call's return the recorder tap point a future
+/// phase needs (determinism-04-tick-input.md §3): `out` already holds every
+/// sim-visible fact this tick, loss-free, before `apply_tick_input`
+/// consumes it.
+///
+/// `TextureLoaded` dims land in `TextureDimsStore` directly rather than via
+/// `out` — texture dims aren't part of `TickInput`'s envelope (see
+/// determinism-04-tick-input.md §4's "async-asset rule"; a later phase may
+/// need to tick-stamp them, but v1 is a preload rule, not a recorded field).
+///
+/// Returns `true` if `LogicMsg::Shutdown` was seen this batch.
+fn collect_tick_input_live(
+    out: &mut TickInput,
+    rx_input: &Receiver<InputSample>,
+    rx_logic: &Receiver<LogicMsg>,
+    world: &mut World,
+    deterministic: bool,
+) -> bool {
+    // Read before update_world_time increments frame_count later this tick,
+    // so `out.tick` describes "the tick about to run," 0-indexed.
+    out.reset(world.resource::<WorldTime>().frame_count);
+
+    // Drain the dedicated bounded input channel: this tick's backlog of raw
+    // samples, oldest to newest -- resolve_input_backlog (inside
+    // apply_tick_input) processes them sequentially against
+    // PrevRawSnapshot (see its doc comment for why merge-then-diff-once
+    // can't replace this). `capture` rides with each sample; only the
+    // newest matters (one render-frame stale either way).
+    for sample in rx_input.try_iter() {
+        out.capture = Some(sample.capture);
+        out.samples.push(sample.raw);
+    }
+
+    // Drain everything else currently queued (non-blocking -- the Pacer
+    // already did the waiting).
+    let mut shutdown_requested = false;
+    for msg in rx_logic.try_iter() {
+        match msg {
+            LogicMsg::ScreenSize { w, h } => out.screen_size = Some((w, h)),
+            LogicMsg::FontLoaded { key, metrics } => {
+                world
+                    .resource_mut::<FontMetricsStore>()
+                    .0
+                    .insert(key, metrics);
+            }
+            LogicMsg::TextureLoaded { key, width, height } => {
+                guard_texture_preload(world, &key, deterministic);
+                world
+                    .resource_mut::<TextureDimsStore>()
+                    .insert(key, width, height);
+            }
+            LogicMsg::TextureRemoved { key } => {
+                world.resource_mut::<TextureDimsStore>().remove(&key);
+            }
+            LogicMsg::FontRemoved { key } => {
+                world.resource_mut::<FontMetricsStore>().0.remove(&key);
+            }
+            LogicMsg::TextureRenamed { old_key, new_key } => {
+                // Not guarded by guard_texture_preload: this renames an
+                // already-loaded texture's key, not "asset metadata
+                // arriving mid-gameplay" -- determinism-04-tick-input.md
+                // §4's v1 rule scopes the preload guard to TextureLoaded
+                // (dims-arrival) only.
+                world
+                    .resource_mut::<TextureDimsStore>()
+                    .rename(&old_key, new_key);
+            }
+            LogicMsg::FontRenamed { old_key, new_key } => {
+                world
+                    .resource_mut::<FontMetricsStore>()
+                    .rename(&old_key, new_key);
+            }
+            LogicMsg::OverlayConfig(config) => {
+                *world.resource_mut::<DebugOverlayConfig>() = config;
+            }
+            LogicMsg::SignalIntents(intents) => out.intents.extend(intents),
+            LogicMsg::Shutdown => shutdown_requested = true,
+        }
+    }
+    shutdown_requested
+}
+
+/// Apply one [`TickInput`]'s sim-visible facts to `world`, ahead of that
+/// tick's `sim` schedule run. This is the one function every `TickInput`
+/// source must go through identically — live today (`logic_thread_main`),
+/// replay/lockstep in later determinism-roadmap phases — since "same
+/// `TickInput` sequence in -> same state out" is the whole determinism
+/// guarantee (determinism-04-tick-input.md).
+///
+/// Order matters and mirrors what `logic_thread_main` did inline before
+/// this was extracted: `ScreenSize`/`WindowSize`/`ImguiCaptureMirror` land
+/// first, then [`resolve_input_backlog`] (which reads `WindowSize`/
+/// `ScreenSize`/the capture mirror while resolving `tick_input.samples`),
+/// then queued `SignalIntent`s are appended to the `SignalIntents` buffer
+/// for `apply_signal_intents` (`SimSet::ApplyIntents`) to drain once `sim`
+/// runs.
+pub(crate) fn apply_tick_input(world: &mut World, tick_input: &TickInput) {
+    if let Some((w, h)) = tick_input.screen_size {
+        let mut screen_size = world.resource_mut::<ScreenSize>();
+        screen_size.w = w;
+        screen_size.h = h;
+    }
+    if let Some(newest) = tick_input.samples.last() {
+        let mut window_size = world.resource_mut::<WindowSize>();
+        window_size.w = newest.window_w;
+        window_size.h = newest.window_h;
+    }
+    if let Some(capture) = tick_input.capture {
+        world.resource_mut::<ImguiCaptureMirror>().0 = capture;
+    }
+    resolve_input_backlog(world, &tick_input.samples);
+    world
+        .resource_mut::<SignalIntents>()
+        .0
+        .extend(tick_input.intents.iter().cloned());
+}
+
 /// The logic thread's `Pacer`-driven loop: one `sim` tick per `Pacer` wakeup
 /// at `[simulation] hz`. Every tick integrates the constant `1.0 / sim_hz`
 /// (`Pacer::tick_fixed`, scaled by `time_scale` inside [`update_world_time`])
@@ -130,6 +282,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     let sim_hz = init.config.sim_hz;
     let snapshot_skip = init.config.snapshot_skip;
+    let deterministic = init.deterministic_seed.is_some();
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
@@ -170,11 +323,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let mut stats_window = StatsWindow::new(sim_hz);
     let mut backlog_sum: u64 = 0;
     let mut backlog_max: u32 = 0;
-    // Reused across ticks (`.clear()` below) instead of a fresh `Vec` per
-    // tick -- this drains at up to `sim_hz` (default 240/s) whenever input
-    // is flowing, so keeping its allocation avoids reallocating on the hot
-    // path.
-    let mut input_backlog: Vec<RawDeviceSnapshot> = Vec::new();
+    // Reused across ticks instead of a fresh TickInput per tick -- see
+    // TickInput::reset's doc comment for the allocation-reuse rationale.
+    let mut tick_input = TickInput::default();
 
     'main: loop {
         if !crate::protocol::shutdown::running() {
@@ -183,75 +334,30 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         pacer.tick_fixed();
         let dt = sim_period_f32;
 
-        // Drain the dedicated bounded input channel: this tick's backlog of
-        // raw samples, oldest to newest -- resolve_input_backlog processes
-        // them sequentially against PrevRawSnapshot (see its doc comment for
-        // why merge-then-diff-once can't replace this). `capture` rides with
-        // each sample; only the newest matters (one render-frame stale
-        // either way).
-        input_backlog.clear();
-        let mut newest_capture: Option<ImguiCaptureState> = None;
-        for sample in rx_input.try_iter() {
-            newest_capture = Some(sample.capture);
-            input_backlog.push(sample.raw);
-        }
-
-        // Drain everything else currently queued (non-blocking -- the Pacer
-        // already did the waiting). Message kinds apply to their mirrors
-        // immediately.
-        let mut shutdown_requested = false;
-        for msg in rx_logic.try_iter() {
-            match msg {
-                LogicMsg::ScreenSize { w, h } => {
-                    let mut screen_size = world.resource_mut::<ScreenSize>();
-                    screen_size.w = w;
-                    screen_size.h = h;
-                }
-                LogicMsg::FontLoaded { key, metrics } => {
-                    world
-                        .resource_mut::<FontMetricsStore>()
-                        .0
-                        .insert(key, metrics);
-                }
-                LogicMsg::TextureLoaded { key, width, height } => {
-                    world
-                        .resource_mut::<TextureDimsStore>()
-                        .insert(key, width, height);
-                }
-                LogicMsg::TextureRemoved { key } => {
-                    world.resource_mut::<TextureDimsStore>().remove(&key);
-                }
-                LogicMsg::FontRemoved { key } => {
-                    world.resource_mut::<FontMetricsStore>().0.remove(&key);
-                }
-                LogicMsg::TextureRenamed { old_key, new_key } => {
-                    world
-                        .resource_mut::<TextureDimsStore>()
-                        .rename(&old_key, new_key);
-                }
-                LogicMsg::FontRenamed { old_key, new_key } => {
-                    world
-                        .resource_mut::<FontMetricsStore>()
-                        .rename(&old_key, new_key);
-                }
-                LogicMsg::OverlayConfig(config) => {
-                    *world.resource_mut::<DebugOverlayConfig>() = config;
-                }
-                LogicMsg::SignalIntents(intents) => {
-                    world.resource_mut::<SignalIntents>().0.extend(intents);
-                }
-                LogicMsg::Shutdown => shutdown_requested = true,
-            }
-        }
+        // Collect stage: &tick_input already holds every sim-visible fact
+        // this tick, loss-free, right after this call returns -- the
+        // recorder tap point a later determinism-roadmap phase needs
+        // (determinism-04-tick-input.md §3). No hook exists yet.
+        let shutdown_requested = collect_tick_input_live(
+            &mut tick_input,
+            &rx_input,
+            &rx_logic,
+            &mut world,
+            deterministic,
+        );
 
         if shutdown_requested {
-            // Exits immediately on Shutdown (no sim/present work runs
-            // after it) — the messages loop above already applied
-            // everything in this batch to its
-            // resource, including any SignalIntents, so flush those into
-            // WorldSignals directly instead of running a full
-            // (now-pointless) simulation tick just to reach
-            // apply_signal_intents inside `sim`.
+            // Exits immediately (no sim/present work runs after it).
+            // collect_tick_input_live stashed this batch's SignalIntents
+            // into tick_input rather than the SignalIntents resource
+            // directly (apply_tick_input's job, which we're skipping) --
+            // flush them explicitly before running apply_signal_intents
+            // once, instead of running a full simulation tick just to
+            // reach it inside `sim`.
+            world
+                .resource_mut::<SignalIntents>()
+                .0
+                .append(&mut tick_input.intents);
             let _ = world.run_system_once(apply_signal_intents);
             break 'main;
         }
@@ -260,20 +366,11 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             break 'main;
         }
 
-        if let Some(newest) = input_backlog.last() {
-            let mut window_size = world.resource_mut::<WindowSize>();
-            window_size.w = newest.window_w;
-            window_size.h = newest.window_h;
-        }
-        if let Some(capture) = newest_capture {
-            world.resource_mut::<ImguiCaptureMirror>().0 = capture;
-        }
-        // Resolve bindings + edges (InputState + events) BEFORE the sim tick
-        // that reads it. A F10 edge (post
-        // imgui-capture-mask) means the caller, not the resolver, ships
-        // RenderMsg::ToggleFullscreen -- see resolve_input_backlog's doc
-        // comment for why it stays free of channel sends.
-        resolve_input_backlog(&mut world, &input_backlog);
+        // Apply stage. F10 edge (post imgui-capture-mask) means the
+        // caller, not resolve_input_backlog, ships
+        // RenderMsg::ToggleFullscreen -- see that fn's doc comment for why
+        // it stays free of channel sends.
+        apply_tick_input(&mut world, &tick_input);
         if world
             .resource::<InputState>()
             .fullscreen_toggle
@@ -291,8 +388,8 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         run_sim_tick(&mut world, &mut sim);
         let tick_work = tick_start.elapsed();
 
-        backlog_sum += input_backlog.len() as u64;
-        backlog_max = backlog_max.max(input_backlog.len() as u32);
+        backlog_sum += tick_input.samples.len() as u64;
+        backlog_max = backlog_max.max(tick_input.samples.len() as u32);
         if let Some(thread) = stats_window.record(tick_work) {
             *world.resource_mut::<SimStats>() = SimStats {
                 thread,
@@ -322,4 +419,92 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // (and the LuaRuntime pinned to this thread) drops.
     shutdown_audio(&mut world);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::signal_intents::SignalIntent;
+
+    /// Regression test for the bug this refactor could have introduced:
+    /// once collect_tick_input_live stashes SignalIntents into `TickInput`
+    /// instead of writing them straight to the `SignalIntents` resource,
+    /// the shutdown branch in `logic_thread_main` must explicitly flush
+    /// `tick_input.intents` before running `apply_signal_intents` -- a
+    /// `SignalIntent` queued in the same batch as `Shutdown` must not be
+    /// silently dropped. This test exercises the collect half directly
+    /// (the smallest unit that can regress): a batch containing both a
+    /// `SignalIntents` message and `Shutdown` must report `shutdown_requested
+    /// == true` AND leave the intent recoverable in `tick_input.intents`
+    /// (i.e. NOT already lost by the time the caller decides to shut down).
+    #[test]
+    fn shutdown_batch_preserves_signal_intents_in_tick_input() {
+        let (tx_input, rx_input) = crossbeam_channel::unbounded::<InputSample>();
+        let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
+        drop(tx_input);
+
+        tx_logic
+            .send(LogicMsg::SignalIntents(vec![SignalIntent::SetFlag(
+                "shutdown_batch_intent".into(),
+            )]))
+            .unwrap();
+        tx_logic.send(LogicMsg::Shutdown).unwrap();
+
+        let mut world = World::new();
+        world.insert_resource(WorldTime::default());
+        let mut tick_input = TickInput::default();
+        let shutdown_requested =
+            collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world, false);
+
+        assert!(shutdown_requested);
+        assert_eq!(
+            tick_input.intents,
+            vec![SignalIntent::SetFlag("shutdown_batch_intent".into())],
+            "a SignalIntent queued in the same batch as Shutdown must survive \
+             into tick_input, so the shutdown branch can flush it into \
+             SignalIntents before tearing down -- losing it here is exactly \
+             the regression this test guards against"
+        );
+    }
+
+    fn world_with_state(state: GameStates) -> World {
+        let mut world = World::new();
+        let mut game_state = GameState::new();
+        game_state.set(state);
+        world.insert_resource(game_state);
+        world.insert_resource(TextureDimsStore::default());
+        world.insert_resource(DeterminismTaint::default());
+        world
+    }
+
+    #[test]
+    fn preload_guard_taints_on_new_key_while_playing_in_deterministic_mode() {
+        let mut world = world_with_state(GameStates::Playing);
+        guard_texture_preload(&mut world, "late_texture", true);
+        assert!(world.resource::<DeterminismTaint>().is_tainted());
+    }
+
+    #[test]
+    fn preload_guard_ignores_non_deterministic_mode() {
+        let mut world = world_with_state(GameStates::Playing);
+        guard_texture_preload(&mut world, "late_texture", false);
+        assert!(!world.resource::<DeterminismTaint>().is_tainted());
+    }
+
+    #[test]
+    fn preload_guard_ignores_non_playing_state() {
+        let mut world = world_with_state(GameStates::Setup);
+        guard_texture_preload(&mut world, "late_texture", true);
+        assert!(!world.resource::<DeterminismTaint>().is_tainted());
+    }
+
+    #[test]
+    fn preload_guard_ignores_already_known_key() {
+        let mut world = world_with_state(GameStates::Playing);
+        world
+            .resource_mut::<TextureDimsStore>()
+            .insert("known_texture", 32, 32);
+        guard_texture_preload(&mut world, "known_texture", true);
+        assert!(!world.resource::<DeterminismTaint>().is_tainted());
+    }
 }

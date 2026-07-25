@@ -42,13 +42,14 @@ use std::path::PathBuf;
 
 use crate::components::persistent::Persistent;
 use crate::engine_app::{
-    EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, hook_registrar,
-    run_sim_tick,
+    EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
+    hook_registrar, run_sim_tick,
 };
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
 use crate::protocol::snapshot::SnapshotPublisher;
+use crate::protocol::tick_input::TickInput;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
 use crate::resources::gameconfig::GameConfig;
@@ -392,6 +393,18 @@ impl TestWorld {
     /// the real `InputSample` channel.
     pub fn send_input(&mut self, sample: RawDeviceSnapshot) {
         resolve_input_backlog(&mut self.world, std::slice::from_ref(&sample));
+    }
+
+    /// Apply one [`TickInput`], then advance one tick via [`Self::tick`] --
+    /// together the same sequence `logic_thread_main`'s per-tick loop runs
+    /// post-collect. Does not drain any channel -- build the `TickInput`
+    /// yourself (it's a plain public struct) and pass it in, mirroring how
+    /// `tick` doesn't drain a channel either. Determinism-roadmap round-trip/
+    /// replay tests use this to drive a `TestWorld` from a recorded
+    /// `TickInput` sequence the same way the real logic thread would.
+    pub fn apply_tick_input(&mut self, tick_input: &TickInput, dt: f32) {
+        apply_tick_input(&mut self.world, tick_input);
+        self.tick(1, dt);
     }
 
     /// Run the `present` schedule once and return the freshly published

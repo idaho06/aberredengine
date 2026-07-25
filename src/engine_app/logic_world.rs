@@ -26,6 +26,7 @@ use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
+use crate::resources::determinism_taint::DeterminismTaint;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::gameconfig::GameConfigDefaults;
@@ -126,6 +127,7 @@ impl EngineBuilder {
             }
         };
         world.insert_resource(SimRng::from_seed(sim_seed));
+        world.insert_resource(DeterminismTaint::default());
         world.insert_resource(GameConfigDefaults(config.clone()));
         world.insert_resource(config);
         world.insert_resource(InputState::default());

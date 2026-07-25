@@ -124,6 +124,6 @@ pub use schedule::SimSet;
 // warn these as unused (the original flat file had no equivalent warning,
 // since these were inline item definitions rather than `use` re-exports).
 #[cfg(any(test, feature = "test-support"))]
-pub(crate) use logic_thread::{LogicInit, run_sim_tick};
+pub(crate) use logic_thread::{LogicInit, apply_tick_input, run_sim_tick};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};
