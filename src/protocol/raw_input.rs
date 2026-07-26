@@ -30,7 +30,7 @@ pub const MAX_GAMEPADS: usize = 4;
 /// fits comfortably in a `u32`, room to spare); `axes` is indexed by
 /// raylib's `GamepadAxis` ordinal (`LEFT_X`=0, `LEFT_Y`=1, `RIGHT_X`=2,
 /// `RIGHT_Y`=3, `LEFT_TRIGGER`=4, `RIGHT_TRIGGER`=5) — no remapping.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RawGamepad {
     pub connected: bool,
     pub buttons: u32,
@@ -54,7 +54,7 @@ impl RawGamepad {
 /// One render frame's raw device state: which keys/mouse buttons/gamepad
 /// buttons are physically down, plus mouse/gamepad-axis analog values and
 /// window dimensions.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RawDeviceSnapshot {
     /// Bitset over raylib keyboard key codes. Bit `i` of word `i / 64` set
     /// means key code `i` is physically down.

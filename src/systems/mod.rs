@@ -88,6 +88,7 @@ pub mod rust_collision;
 pub mod scene_dispatch;
 pub mod signal_intents;
 pub mod signalbinding;
+pub(crate) mod state_hash;
 pub mod stuckto;
 pub mod tilemap;
 pub mod time;

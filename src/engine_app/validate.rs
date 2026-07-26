@@ -6,6 +6,7 @@ impl EngineBuilder {
         self.validate_lua_conflicts(use_scene_manager)?;
         self.validate_scene_manager(use_scene_manager)?;
         self.validate_deterministic()?;
+        self.validate_replay()?;
         Ok(())
     }
 
@@ -81,6 +82,31 @@ impl EngineBuilder {
     fn validate_deterministic(&self) -> Result<(), EngineError> {
         if self.deterministic_seed.is_some() && self.has_lua_script() {
             return Err(EngineError::LuaConflictsWithDeterministic);
+        }
+        Ok(())
+    }
+
+    /// `.record_replay()`/`.play_replay()` preconditions (determinism
+    /// roadmap phase 05, `docs/plans/determinism-05-replays.md`): mutually
+    /// exclusive with each other, both outside Lua's envelope, recording
+    /// needs an explicit seed up front, and playback supplies its own seed
+    /// from the file (an explicit `.deterministic()` alongside it would be
+    /// ambiguous about which seed wins, so it's rejected rather than
+    /// silently preferring one).
+    fn validate_replay(&self) -> Result<(), EngineError> {
+        if self.record_replay_path.is_some() && self.play_replay_path.is_some() {
+            return Err(EngineError::RecordAndPlayReplayConflict);
+        }
+        if (self.record_replay_path.is_some() || self.play_replay_path.is_some())
+            && self.has_lua_script()
+        {
+            return Err(EngineError::LuaConflictsWithReplay);
+        }
+        if self.record_replay_path.is_some() && self.deterministic_seed.is_none() {
+            return Err(EngineError::RecordReplayRequiresDeterministic);
+        }
+        if self.play_replay_path.is_some() && self.deterministic_seed.is_some() {
+            return Err(EngineError::PlayReplayConflictsWithDeterministic);
         }
         Ok(())
     }

@@ -107,6 +107,7 @@ mod logic_thread;
 mod logic_world;
 mod registrar;
 mod render_world;
+mod replay;
 mod run;
 mod schedule;
 #[cfg(test)]
@@ -127,3 +128,5 @@ pub use schedule::SimSet;
 pub(crate) use logic_thread::{LogicInit, apply_tick_input, run_sim_tick};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};

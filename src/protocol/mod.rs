@@ -46,6 +46,7 @@ pub mod endpoints;
 pub mod raw_input;
 pub mod render_assets;
 pub mod render_logic;
+pub mod replay;
 pub mod shutdown;
 pub mod snapshot;
 pub mod stats;

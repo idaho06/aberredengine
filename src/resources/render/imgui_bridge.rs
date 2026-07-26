@@ -182,7 +182,7 @@ impl ClipboardBackend for RaylibClipboardBackend {
 /// mask gameplay input while the debug panel has focus. Scoped to the F11
 /// debug overlay only -- the in-house `GuiButton`/`GuiWindow` system does its
 /// own hit-testing and isn't imgui.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImguiCaptureState {
     pub mouse: bool,
     pub keyboard: bool,

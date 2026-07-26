@@ -1,4 +1,8 @@
-//! Determinism regression guard (determinism-02-deterministic-schedule.md).
+//! Determinism regression guard (determinism-02-deterministic-schedule.md),
+//! plus the phase 05 (replays) verification harness
+//! (determinism-05-replays.md): state hash double-run/divergence tests, the
+//! replay recorder/player round trip, codec bit-exactness, empty-tick RLE,
+//! header validation, and a golden hash regression test.
 //!
 //! Runs an identical scripted scenario -- entity spawns AND despawns
 //! interleaved across multiple ticks, plus a collision -- against two fresh
@@ -338,5 +342,306 @@ fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
         "an empty tick must not fire a new just_pressed edge -- \
          resolve_input_backlog early-returns on an empty sample slice, and \
          the previous tick's edge was already cleared by clear_edges"
+    );
+}
+
+// --- determinism-05-replays.md: state hash + replay recorder/player -------
+
+use aberredengine::EngineError;
+use aberredengine::protocol::replay::{
+    REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest,
+};
+use aberredengine::resources::gameconfig::GameConfig;
+use aberredengine::test_support::{
+    hash_world_state, read_tick_inputs_from_replay, validate_replay_header,
+    write_tick_inputs_to_replay,
+};
+
+/// A short scripted `TickInput` sequence exercising a `SignalIntent` on
+/// tick 1 (identical every call) and, depending on `flag_on_tick_2`, either
+/// a second intent or nothing on tick 2 -- the fork point
+/// `divergent_input_diverges_hash_trail` checks against.
+fn scripted_ticks(flag_on_tick_2: bool) -> Vec<TickInput> {
+    vec![
+        TickInput {
+            tick: 0,
+            ..Default::default()
+        },
+        TickInput {
+            tick: 1,
+            intents: vec![SignalIntent::SetFlag("a".into())],
+            ..Default::default()
+        },
+        TickInput {
+            tick: 2,
+            intents: if flag_on_tick_2 {
+                vec![SignalIntent::SetFlag("b".into())]
+            } else {
+                Vec::new()
+            },
+            ..Default::default()
+        },
+        TickInput {
+            tick: 3,
+            ..Default::default()
+        },
+    ]
+}
+
+/// Drive a fresh, seeded `TestWorld` through `ticks`, collecting
+/// `hash_world_state` after each applied tick.
+fn run_hash_trail(seed: u64, ticks: &[TickInput]) -> Vec<u64> {
+    let mut tw = TestWorldBuilder::new()
+        .deterministic(seed)
+        .build()
+        .expect("build should succeed");
+    let mut trail = Vec::with_capacity(ticks.len());
+    for ti in ticks {
+        tw.apply_tick_input(ti, DT);
+        trail.push(hash_world_state(&tw.world));
+    }
+    trail
+}
+
+#[test]
+fn double_run_same_seed_same_hash_trail() {
+    let ticks = scripted_ticks(true);
+    let trail1 = run_hash_trail(7, &ticks);
+    let trail2 = run_hash_trail(7, &ticks);
+    assert_eq!(
+        trail1, trail2,
+        "same seed + same TickInput sequence must produce an identical hash \
+         trail -- a hash that silently omits a mutated field would still \
+         pass this test only by accident, but a hash that isn't a pure \
+         function of world state would fail it"
+    );
+}
+
+#[test]
+fn divergent_input_diverges_hash_trail() {
+    // Negative control: without this test, a hash function that returns a
+    // constant would pass the double-run test above and prove nothing.
+    let trail1 = run_hash_trail(7, &scripted_ticks(true));
+    let trail2 = run_hash_trail(7, &scripted_ticks(false));
+
+    assert_eq!(
+        trail1[0], trail2[0],
+        "ticks before the fork must still match"
+    );
+    assert_eq!(
+        trail1[1], trail2[1],
+        "ticks before the fork must still match"
+    );
+    assert_ne!(
+        trail1[2], trail2[2],
+        "the tick where input differs (a SignalIntent present in one run, \
+         absent in the other) must diverge -- proves the hash actually \
+         covers WorldSignals"
+    );
+    assert_ne!(
+        trail1[3], trail2[3],
+        "divergence must persist on later ticks (the flag stays set)"
+    );
+}
+
+fn temp_replay_path(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "aberredengine_test_{name}_{}.replay",
+        std::process::id()
+    ))
+}
+
+fn placeholder_header(seed: u64) -> ReplayHeader {
+    ReplayHeader {
+        magic: REPLAY_MAGIC,
+        format_version: REPLAY_FORMAT_VERSION,
+        engine_build_id: "test".into(),
+        seed,
+        sim_hz: 240.0,
+        config_digest: 0,
+        scene_id: String::new(),
+        game_version: "test".into(),
+    }
+}
+
+#[test]
+fn record_replay_roundtrip_matches_live_hash_trail() {
+    let ticks = scripted_ticks(true);
+    let live_trail = run_hash_trail(9, &ticks);
+
+    let path = temp_replay_path("roundtrip");
+    write_tick_inputs_to_replay(&path, placeholder_header(9), &ticks)
+        .expect("write_tick_inputs_to_replay should succeed");
+    let (_header, read_ticks) = read_tick_inputs_from_replay(&path, ticks.len());
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        read_ticks, ticks,
+        "TickInput sequence must round-trip through the replay file \
+         field-for-field"
+    );
+
+    let replay_trail = run_hash_trail(9, &read_ticks);
+    assert_eq!(
+        live_trail, replay_trail,
+        "replaying the round-tripped TickInput sequence must reproduce the \
+         exact same hash trail as the original live run"
+    );
+}
+
+#[test]
+fn codec_roundtrip_preserves_f32_bits() {
+    let sample = RawDeviceSnapshot {
+        mouse_x: f32::NAN,
+        mouse_y: -0.0f32,
+        scroll_y: f32::MIN_POSITIVE / 2.0, // subnormal
+        ..Default::default()
+    };
+    let ti = TickInput {
+        tick: 5,
+        samples: vec![sample],
+        ..Default::default()
+    };
+
+    let bytes = postcard::to_allocvec(&ti).expect("postcard encode should succeed");
+    let decoded: TickInput = postcard::from_bytes(&bytes).expect("postcard decode should succeed");
+
+    let orig = &ti.samples[0];
+    let round = &decoded.samples[0];
+    assert_eq!(
+        orig.mouse_x.to_bits(),
+        round.mouse_x.to_bits(),
+        "NaN payload/sign must round-trip bit-exact, not just compare equal \
+         under IEEE 754 rules (NaN != NaN)"
+    );
+    assert_eq!(
+        orig.mouse_y.to_bits(),
+        round.mouse_y.to_bits(),
+        "-0.0 must round-trip distinct from +0.0"
+    );
+    assert_eq!(
+        orig.scroll_y.to_bits(),
+        round.scroll_y.to_bits(),
+        "a subnormal value must round-trip bit-exact"
+    );
+}
+
+#[test]
+fn empty_tick_run_length_roundtrip() {
+    let ticks: Vec<TickInput> = (0..10_000u64)
+        .map(|tick| TickInput {
+            tick,
+            ..Default::default()
+        })
+        .collect();
+
+    let path = temp_replay_path("empty_run");
+    write_tick_inputs_to_replay(&path, placeholder_header(1), &ticks)
+        .expect("write_tick_inputs_to_replay should succeed");
+    let (_header, read_ticks) = read_tick_inputs_from_replay(&path, ticks.len());
+    let size = std::fs::metadata(&path)
+        .expect("replay file should exist")
+        .len();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(read_ticks.len(), 10_000);
+    assert!(read_ticks.iter().all(TickInput::is_empty));
+    assert!(
+        size < 200,
+        "10,000 empty ticks must compress to a handful of small entries via \
+         run-length encoding, not one entry per tick -- file was {size} bytes"
+    );
+}
+
+fn valid_header_for(config: &GameConfig) -> ReplayHeader {
+    ReplayHeader {
+        magic: REPLAY_MAGIC,
+        format_version: REPLAY_FORMAT_VERSION,
+        engine_build_id: "test".into(),
+        seed: 1,
+        sim_hz: config.sim_hz,
+        config_digest: config_digest(config),
+        scene_id: String::new(),
+        game_version: "test".into(),
+    }
+}
+
+#[test]
+fn replay_refuses_sim_hz_mismatch() {
+    let config = GameConfig::new();
+    let mut header = valid_header_for(&config);
+    header.sim_hz += 1.0;
+    assert!(matches!(
+        validate_replay_header(&header, &config),
+        Err(EngineError::ReplaySimHzMismatch { .. })
+    ));
+}
+
+#[test]
+fn replay_refuses_format_version_mismatch() {
+    let config = GameConfig::new();
+    let mut header = valid_header_for(&config);
+    header.format_version += 1;
+    assert!(matches!(
+        validate_replay_header(&header, &config),
+        Err(EngineError::ReplayVersionMismatch { .. })
+    ));
+}
+
+#[test]
+fn replay_refuses_config_digest_mismatch() {
+    let config = GameConfig::new();
+    let mut header = valid_header_for(&config);
+    header.config_digest ^= 1;
+    assert!(matches!(
+        validate_replay_header(&header, &config),
+        Err(EngineError::ReplayConfigMismatch { .. })
+    ));
+}
+
+#[test]
+fn replay_accepts_matching_header() {
+    let config = GameConfig::new();
+    let header = valid_header_for(&config);
+    assert!(validate_replay_header(&header, &config).is_ok());
+}
+
+/// Final `hash_world_state` after driving a small, fixed Rust-only scenario
+/// (one spawned entity plus [`scripted_ticks`]) through a `TestWorld` seeded
+/// with a fixed seed.
+fn golden_scenario_final_hash(seed: u64) -> u64 {
+    let mut tw = TestWorldBuilder::new()
+        .deterministic(seed)
+        .build()
+        .expect("build should succeed");
+    tw.world.spawn((
+        Group::new("golden"),
+        MapPosition::new(1.0, 2.0),
+        BoxCollider::new(4.0, 4.0),
+    ));
+
+    let mut last = 0u64;
+    for ti in &scripted_ticks(true) {
+        tw.apply_tick_input(ti, DT);
+        last = hash_world_state(&tw.world);
+    }
+    last
+}
+
+#[test]
+fn golden_replay_rust_scene_matches_checked_in_trail() {
+    // Golden value pinned against current sim/hash behavior -- this is the
+    // CI regression net determinism-05-replays.md asks for: any change to
+    // the hashed component/resource list, or any sim-behavior change that
+    // affects a hashed field, changes this value. That's the point -- it
+    // forces a conscious decision (update GOLDEN_HASH, and consider
+    // bumping REPLAY_FORMAT_VERSION if old replay files would now diverge)
+    // instead of a silent regression.
+    const GOLDEN_HASH: u64 = 0xcec7_81a2_f7c4_1bfa;
+    let actual = golden_scenario_final_hash(42);
+    assert_eq!(
+        actual, GOLDEN_HASH,
+        "golden hash changed -- if this is an intentional sim/hash change, \
+         update GOLDEN_HASH to {actual:#x}"
     );
 }

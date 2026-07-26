@@ -44,6 +44,13 @@ pub struct EngineBuilder {
     /// `Some(seed)` when `.deterministic(seed)` was called -- see that
     /// method's doc comment. Mutually exclusive with `.with_lua()`.
     pub(super) deterministic_seed: Option<u64>,
+    /// `Some(path)` when `.record_replay(path, ..)` was called.
+    pub(super) record_replay_path: Option<PathBuf>,
+    /// User-supplied diagnostics string recorded into the replay header,
+    /// from `.record_replay(path, game_version)`'s second argument.
+    pub(super) replay_game_version: String,
+    /// `Some(path)` when `.play_replay(path)` was called.
+    pub(super) play_replay_path: Option<PathBuf>,
 }
 
 impl EngineBuilder {
@@ -67,6 +74,9 @@ impl EngineBuilder {
             #[cfg(feature = "lua")]
             lua_script: None,
             deterministic_seed: None,
+            record_replay_path: None,
+            replay_game_version: String::new(),
+            play_replay_path: None,
         }
     }
 
@@ -317,6 +327,35 @@ impl EngineBuilder {
     /// [`EngineError::LuaConflictsWithDeterministic`](crate::error::EngineError::LuaConflictsWithDeterministic).
     pub fn deterministic(mut self, seed: u64) -> Self {
         self.deterministic_seed = Some(seed);
+        self
+    }
+
+    /// Record this session's `TickInput` stream to a replay file
+    /// (determinism roadmap phase 05, `docs/plans/determinism-05-replays.md`).
+    ///
+    /// Requires `.deterministic(seed)` to already be set (the replay header
+    /// needs a concrete seed) and is mutually exclusive with
+    /// [`.play_replay()`](Self::play_replay) -- both checked at
+    /// `.run()`/`.try_run()` time. `game_version` is a free-form
+    /// diagnostics string written into the header, not validated on replay.
+    pub fn record_replay(
+        mut self,
+        path: impl Into<PathBuf>,
+        game_version: impl Into<String>,
+    ) -> Self {
+        self.record_replay_path = Some(path.into());
+        self.replay_game_version = game_version.into();
+        self
+    }
+
+    /// Play back a previously recorded replay file instead of live input.
+    ///
+    /// The seed comes from the replay file's header -- do not also call
+    /// [`.deterministic()`](Self::deterministic) (rejected at
+    /// `.run()`/`.try_run()` time as ambiguous). Mutually exclusive with
+    /// [`.record_replay()`](Self::record_replay).
+    pub fn play_replay(mut self, path: impl Into<PathBuf>) -> Self {
+        self.play_replay_path = Some(path.into());
         self
     }
 }

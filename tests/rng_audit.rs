@@ -72,10 +72,9 @@ fn no_local_rng_anywhere_in_src() {
 
 #[test]
 fn entropy_seeding_confined_to_setup_logic_world() {
-    let offenders = scan_src(
-        Some(Path::new("src/engine_app/logic_world.rs")),
-        |line| line.contains("fastrand::Rng::new()") || line.contains("Rng::new()"),
-    );
+    let offenders = scan_src(Some(Path::new("src/engine_app/logic_world.rs")), |line| {
+        line.contains("fastrand::Rng::new()") || line.contains("Rng::new()")
+    });
 
     assert!(
         offenders.is_empty(),

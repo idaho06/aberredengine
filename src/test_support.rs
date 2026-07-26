@@ -297,6 +297,8 @@ impl TestWorldBuilder {
             rx_logic,
             rx_input,
             snapshot_publisher: Some(SnapshotPublisher(snap_in)),
+            replay_player: None,
+            replay_recorder: None,
             stub_audio: true,
             audio_stub_ends: None,
         };
@@ -439,6 +441,61 @@ impl Default for TestWorld {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// --- Determinism-roadmap phase 05 (replays) test wrappers -----------------
+//
+// `hash_world_state`/`ReplayRecorder`/`ReplayPlayer`/`validate_replay_header`
+// are crate-internal (`pub(crate)`, not real public API a downstream game
+// should see) -- these thin wrappers give `tests/determinism.rs` (an
+// external integration-test crate, unlike this module) a way to exercise
+// them without promoting the internals themselves.
+
+/// Full-world deterministic state hash -- see `crate::systems::state_hash`.
+pub fn hash_world_state(world: &World) -> u64 {
+    crate::systems::state_hash::hash_world_state(world)
+}
+
+/// Write `ticks` (one entry per tick, in order, no checkpoints) to a replay
+/// file at `path`.
+pub fn write_tick_inputs_to_replay(
+    path: &std::path::Path,
+    header: crate::protocol::replay::ReplayHeader,
+    ticks: &[TickInput],
+) -> std::io::Result<()> {
+    let mut rec = crate::engine_app::ReplayRecorder::create(path, &header)?;
+    for ti in ticks {
+        rec.record_tick(ti);
+    }
+    rec.finish(0)
+}
+
+/// Read `n` tick entries back from a replay file written by
+/// [`write_tick_inputs_to_replay`], returning the header plus the
+/// reconstructed `TickInput` sequence. `n` must match how many ticks were
+/// written.
+pub fn read_tick_inputs_from_replay(
+    path: &std::path::Path,
+    n: usize,
+) -> (crate::protocol::replay::ReplayHeader, Vec<TickInput>) {
+    let (header, mut player) = crate::engine_app::ReplayPlayer::open_header(path)
+        .expect("read_tick_inputs_from_replay: failed to open replay file");
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut ti = TickInput::default();
+        player.collect(&mut ti, i as u64);
+        out.push(ti);
+    }
+    (header, out)
+}
+
+/// Validate a replay header against a `GameConfig`, mirroring
+/// `EngineBuilder::try_run`'s own check.
+pub fn validate_replay_header(
+    header: &crate::protocol::replay::ReplayHeader,
+    config: &GameConfig,
+) -> Result<(), crate::error::EngineError> {
+    crate::engine_app::validate_replay_header(header, config)
 }
 
 #[cfg(test)]

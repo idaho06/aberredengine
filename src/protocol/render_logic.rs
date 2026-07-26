@@ -64,6 +64,28 @@ pub enum LogicMsg {
     /// The window is closing; the logic thread breaks its loop, shuts down
     /// audio, and joins.
     Shutdown,
+    /// Render-side replay-playback control (determinism roadmap phase 05,
+    /// `docs/plans/determinism-05-replays.md`), only meaningful when
+    /// `.play_replay(path)` was used. Applied directly by
+    /// `logic_thread_main`'s message drain -- a meta/control message, never
+    /// folded into `TickInput` (it doesn't affect recorded sim state).
+    ReplayControl(ReplayControl),
+}
+
+/// One control message for a running replay playback session. See
+/// [`LogicMsg::ReplayControl`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplayControl {
+    /// Resume ticking (also the default state -- a fresh `.play_replay()`
+    /// session starts playing immediately).
+    Play,
+    /// Freeze on the current tick: `collect`/`apply`/`run_sim_tick` are
+    /// skipped every loop iteration until `Play` is sent again.
+    Pause,
+    /// Toggle running ticks back-to-back without the `Pacer` sleep between
+    /// them (`Pacer::skip_to_now`) -- `dt` stays the fixed constant either
+    /// way, only wall-clock pacing changes.
+    FastForward(bool),
 }
 
 /// Logic thread -> render thread messages.
@@ -89,6 +111,19 @@ pub enum RenderMsg {
     /// Game-initiated quit (`quit_game`); the render loop breaks, same path
     /// as a window close.
     Quit,
+    /// A replay playback session's state hash diverged from the recorded
+    /// checkpoint at `tick` -- a determinism bug (or the replay file/build
+    /// no longer matches the current sim behavior). Reported, not fatal:
+    /// playback continues.
+    ReplayDiverged {
+        tick: u64,
+        expected: u64,
+        actual: u64,
+    },
+    /// A replay playback session reached the end of its recorded log; the
+    /// sim freezes on the last tick from here on (`ReplayPlayer::collect`
+    /// keeps returning empty `TickInput`s).
+    ReplayEnded,
 }
 
 /// Both message enums must stay fully `Send` — this is the structural

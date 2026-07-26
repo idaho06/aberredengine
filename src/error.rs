@@ -90,4 +90,46 @@ pub enum EngineError {
         #[source]
         source: std::io::Error,
     },
+
+    #[error("EngineBuilder conflict: .record_replay() and .play_replay() cannot both be used.")]
+    RecordAndPlayReplayConflict,
+
+    #[error(
+        "EngineBuilder: .record_replay() requires .deterministic(seed) to be called first \
+         -- the replay header needs a concrete seed."
+    )]
+    RecordReplayRequiresDeterministic,
+
+    #[error(
+        "EngineBuilder conflict: .play_replay() supplies its own seed from the replay file \
+         header; remove the explicit .deterministic(seed) call."
+    )]
+    PlayReplayConflictsWithDeterministic,
+
+    #[error(
+        "EngineBuilder conflict: .play_replay()/.record_replay() and .with_lua() cannot be \
+         used together. Lua is outside the deterministic envelope -- deterministic games are \
+         Rust-only."
+    )]
+    LuaConflictsWithReplay,
+
+    #[error("Failed to open replay file '{path}': {message}")]
+    ReplayOpen { path: PathBuf, message: String },
+
+    #[error("Replay format version mismatch: file is v{found}, engine expects v{expected}")]
+    ReplayVersionMismatch { found: u32, expected: u32 },
+
+    #[error(
+        "Replay sim_hz mismatch: file was recorded at {found}Hz, current config.ini is {expected}Hz"
+    )]
+    ReplaySimHzMismatch { found: f64, expected: f64 },
+
+    #[error(
+        "Replay config digest mismatch (found {found:#x}, expected {expected:#x}) -- a \
+         sim-visible GameConfig field changed since this replay was recorded"
+    )]
+    ReplayConfigMismatch { found: u64, expected: u64 },
+
+    #[error("Replay codec error: {0}")]
+    ReplayCodec(#[from] postcard::Error),
 }

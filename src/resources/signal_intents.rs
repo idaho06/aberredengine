@@ -13,7 +13,7 @@ use bevy_ecs::prelude::{Entity, Resource};
 
 /// One deferred write against [`WorldSignals`], produced by a render-side scene callback and
 /// applied logic-side by `apply_signal_intents`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SignalIntent {
     SetFlag(String),
     ClearFlag(String),

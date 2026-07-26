@@ -18,7 +18,7 @@ use crate::resources::signal_intents::SignalIntent;
 /// "did a change land this tick" — a tick with no new capture/size sample
 /// must leave the corresponding world resource untouched (see
 /// `apply_tick_input`'s doc comment), not overwrite it with a default.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TickInput {
     /// `WorldTime.frame_count` this applies to, read before that tick's
     /// `update_world_time` call increments it — i.e. 0-indexed, "the tick

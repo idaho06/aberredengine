@@ -3,11 +3,13 @@ use crossbeam_channel::{bounded, unbounded};
 
 use super::builder::EngineBuilder;
 use super::logic_thread::{LogicInit, logic_thread};
+use super::replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};
 use crate::error::EngineError;
 use crate::pacing::StatsWindow;
 use crate::protocol::endpoints::{LogicBridge, shutdown_logic};
 use crate::protocol::raw_input::InputSample;
 use crate::protocol::render_logic::{LogicMsg, RenderMsg};
+use crate::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest};
 use crate::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::gameconfig::default_render_fps;
@@ -55,6 +57,51 @@ impl EngineBuilder {
 
         self.validate_builder(use_scene_manager)?;
         let config = self.load_config()?;
+
+        // Replay header open-and-validate (determinism roadmap phase 05,
+        // docs/plans/determinism-05-replays.md): done here, before the
+        // logic thread is spawned, because that detached thread can't
+        // propagate a startup error back to this caller. `play_replay`
+        // borrows its seed from the file header -- `validate_builder`
+        // above already rejected an explicit `.deterministic()` alongside
+        // it, so overwriting `self.deterministic_seed` here is unambiguous.
+        let replay_player = match &self.play_replay_path {
+            Some(path) => {
+                let (header, player) = ReplayPlayer::open_header(path)?;
+                validate_replay_header(&header, &config)?;
+                self.deterministic_seed = Some(header.seed);
+                Some(player)
+            }
+            None => None,
+        };
+        let replay_recorder = match &self.record_replay_path {
+            Some(path) => {
+                // validate_builder already guarantees deterministic_seed is
+                // Some when record_replay_path is Some.
+                let seed = self
+                    .deterministic_seed
+                    .expect("validate_replay: record_replay requires .deterministic(seed)");
+                let header = ReplayHeader {
+                    magic: REPLAY_MAGIC,
+                    format_version: REPLAY_FORMAT_VERSION,
+                    engine_build_id: env!("CARGO_PKG_VERSION").to_string(),
+                    seed,
+                    sim_hz: config.sim_hz,
+                    config_digest: config_digest(&config),
+                    scene_id: self.initial_scene.clone().unwrap_or_default(),
+                    game_version: self.replay_game_version.clone(),
+                };
+                let recorder = ReplayRecorder::create(path, &header).map_err(|source| {
+                    EngineError::ReplayOpen {
+                        path: path.clone(),
+                        message: source.to_string(),
+                    }
+                })?;
+                Some(recorder)
+            }
+            None => None,
+        };
+
         let (rl, thread, render_target) = Self::setup_window(&config)?;
 
         let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
@@ -113,6 +160,8 @@ impl EngineBuilder {
             rx_logic,
             rx_input,
             snapshot_publisher: Some(SnapshotPublisher(snap_in)),
+            replay_player,
+            replay_recorder,
             #[cfg(any(test, feature = "test-support"))]
             stub_audio: false,
             #[cfg(any(test, feature = "test-support"))]

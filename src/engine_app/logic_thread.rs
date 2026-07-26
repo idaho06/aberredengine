@@ -7,6 +7,7 @@ use crossbeam_channel::{Receiver, Sender};
 
 use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
+use super::replay::{ReplayPlayer, ReplayRecorder};
 use crate::error::EngineError;
 use crate::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
@@ -14,7 +15,7 @@ use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::endpoints::shutdown_audio;
 use crate::protocol::raw_input::InputSample;
-use crate::protocol::render_logic::{LogicMsg, RenderMsg};
+use crate::protocol::render_logic::{LogicMsg, RenderMsg, ReplayControl};
 use crate::protocol::snapshot::SnapshotPublisher;
 use crate::protocol::tick_input::TickInput;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -33,7 +34,30 @@ use crate::resources::worldtime::WorldTime;
 use crate::systems::input::resolve_input_backlog;
 use crate::systems::scene_dispatch::SceneDescriptor;
 use crate::systems::signal_intents::apply_signal_intents;
+use crate::systems::state_hash::hash_world_state;
 use crate::systems::time::update_world_time;
+
+/// Runtime state a running replay-playback session's
+/// `LogicMsg::ReplayControl` messages mutate. A `World` resource (inserted
+/// unconditionally in `logic_thread_main`, harmless no-op when there's no
+/// `TickInputSource::Replay` -- a stray `ReplayControl` message just has
+/// nothing to affect) rather than a value threaded through
+/// `collect_tick_input_live`/`drain_logic_messages` as an extra parameter --
+/// matches how every other `LogicMsg`-driven cross-cutting concern
+/// (`DebugOverlayConfig`, `ScreenSize`, `ImguiCaptureMirror`, ...) is
+/// written: through `world`, which those functions already take.
+#[derive(Resource, Default)]
+struct ReplayRuntimeState {
+    paused: bool,
+    fast_forward: bool,
+}
+
+/// Where a tick's [`TickInput`] comes from: live device/channel collection,
+/// or a recorded file being replayed. See `docs/plans/determinism-05-replays.md`.
+enum TickInputSource {
+    Live,
+    Replay(ReplayPlayer),
+}
 
 /// Everything the logic thread needs to build the gameplay `World` and its
 /// schedules inside its own closure. Must be `Send`: hooks are
@@ -68,6 +92,14 @@ pub(crate) struct LogicInit {
     /// the logic world's [`SnapshotPublisher`] resource -- `Input<T>` isn't
     /// `Clone`, unlike the `Sender`/`Receiver` fields above.
     pub(crate) snapshot_publisher: Option<SnapshotPublisher>,
+    /// `Some` when `.play_replay(path)` was used -- `logic_thread_main`
+    /// drives its `sim` ticks from this instead of live `rx_input`/
+    /// `rx_logic` collection. Mutually exclusive with `replay_recorder` in
+    /// v1 (`EngineBuilder` only exposes one at a time), though nothing
+    /// structurally requires that.
+    pub(crate) replay_player: Option<ReplayPlayer>,
+    /// `Some` when `.record_replay(path, ..)` was used.
+    pub(crate) replay_recorder: Option<ReplayRecorder>,
     /// Test-harness-only: when `true`, [`EngineBuilder::setup_logic_world`]
     /// inserts a stub [`AudioBridge`](crate::protocol::endpoints::AudioBridge)
     /// (no real audio thread) via `setup_audio_stub` instead of `setup_audio`,
@@ -168,8 +200,24 @@ fn collect_tick_input_live(
         out.samples.push(sample.raw);
     }
 
-    // Drain everything else currently queued (non-blocking -- the Pacer
-    // already did the waiting).
+    drain_logic_messages(out, rx_logic, world, deterministic)
+}
+
+/// Applies every non-sim-visible `LogicMsg` (font/texture load/remove/
+/// rename, overlay config, replay playback control) directly to `world`,
+/// and folds sim-visible `ScreenSize`/`SignalIntent`s into `out`. Shared by
+/// the live collector above and the replay path in `logic_thread_main` --
+/// asset loads/overlay edits/playback control keep happening for real
+/// during replay, regardless of where `out`'s other fields came from.
+/// Returns `true` if `LogicMsg::Shutdown` was seen.
+fn drain_logic_messages(
+    out: &mut TickInput,
+    rx_logic: &Receiver<LogicMsg>,
+    world: &mut World,
+    deterministic: bool,
+) -> bool {
+    // Drain everything currently queued (non-blocking -- the Pacer already
+    // did the waiting).
     let mut shutdown_requested = false;
     for msg in rx_logic.try_iter() {
         match msg {
@@ -212,6 +260,15 @@ fn collect_tick_input_live(
             }
             LogicMsg::SignalIntents(intents) => out.intents.extend(intents),
             LogicMsg::Shutdown => shutdown_requested = true,
+            LogicMsg::ReplayControl(ReplayControl::Play) => {
+                world.resource_mut::<ReplayRuntimeState>().paused = false;
+            }
+            LogicMsg::ReplayControl(ReplayControl::Pause) => {
+                world.resource_mut::<ReplayRuntimeState>().paused = true;
+            }
+            LogicMsg::ReplayControl(ReplayControl::FastForward(on)) => {
+                world.resource_mut::<ReplayRuntimeState>().fast_forward = on;
+            }
         }
     }
     shutdown_requested
@@ -285,6 +342,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let deterministic = init.deterministic_seed.is_some();
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
+    world.insert_resource(ReplayRuntimeState::default());
     EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
     EngineBuilder::spawn_observers(
         &mut world,
@@ -327,24 +385,86 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // TickInput::reset's doc comment for the allocation-reuse rationale.
     let mut tick_input = TickInput::default();
 
+    // Replay wiring (determinism-05-replays.md). `source`/`recorder` are
+    // independent -- v1's `EngineBuilder` only exposes one at a time, but
+    // nothing here requires that.
+    let mut source = match init.replay_player.take() {
+        Some(player) => TickInputSource::Replay(player),
+        None => TickInputSource::Live,
+    };
+    let mut recorder = init.replay_recorder.take();
+    let mut replay_ended_sent = false;
+    // Fires once per ~1s of sim ticks, same cadence as StatsWindow -- a
+    // full-world hash every tick would be needlessly expensive; checkpoints
+    // only need to catch divergence within about a second of it happening.
+    // Only actually computed when recording or replaying (see `want_checkpoints`
+    // below) -- the countdown itself is cheap to keep ticking either way.
+    let mut checkpoint_countdown = TickCountdown::new((sim_hz.round() as u32).saturating_sub(1));
+    let want_checkpoints = recorder.is_some() || matches!(source, TickInputSource::Replay(_));
+    let mut last_hash: u64 = 0;
+
     'main: loop {
         if !crate::protocol::shutdown::running() {
             break 'main;
         }
-        pacer.tick_fixed();
+        let replay_state = world.resource::<ReplayRuntimeState>();
+        if replay_state.fast_forward {
+            pacer.skip_to_now();
+        } else {
+            pacer.tick_fixed();
+        }
         let dt = sim_period_f32;
+
+        if replay_state.paused {
+            // Still service the channels (shutdown, replay control, asset
+            // replies) so a paused session stays responsive; no sim/present
+            // work runs.
+            let shutdown_requested =
+                drain_logic_messages(&mut tick_input, &rx_logic, &mut world, deterministic);
+            if shutdown_requested {
+                world
+                    .resource_mut::<SignalIntents>()
+                    .0
+                    .append(&mut tick_input.intents);
+                let _ = world.run_system_once(apply_signal_intents);
+                break 'main;
+            }
+            if crate::pacing::channel_disconnected(&rx_logic) {
+                break 'main;
+            }
+            world.clear_trackers();
+            continue 'main;
+        }
 
         // Collect stage: &tick_input already holds every sim-visible fact
         // this tick, loss-free, right after this call returns -- the
-        // recorder tap point a later determinism-roadmap phase needs
-        // (determinism-04-tick-input.md §3). No hook exists yet.
-        let shutdown_requested = collect_tick_input_live(
-            &mut tick_input,
-            &rx_input,
-            &rx_logic,
-            &mut world,
-            deterministic,
-        );
+        // recorder tap point (below) taps it here, before apply_tick_input
+        // consumes it.
+        let shutdown_requested = match &mut source {
+            TickInputSource::Live => collect_tick_input_live(
+                &mut tick_input,
+                &rx_input,
+                &rx_logic,
+                &mut world,
+                deterministic,
+            ),
+            TickInputSource::Replay(player) => {
+                // Live input is discarded outright during playback -- the
+                // brainstorm doc's "drained and discarded by the sim" rule.
+                for _ in rx_input.try_iter() {}
+                player.collect(&mut tick_input, world.resource::<WorldTime>().frame_count);
+                if player.is_finished() && !replay_ended_sent {
+                    replay_ended_sent = true;
+                    let tx_render = world.resource::<RenderTx>().0.clone();
+                    let _ = tx_render.send(RenderMsg::ReplayEnded);
+                }
+                drain_logic_messages(&mut tick_input, &rx_logic, &mut world, deterministic)
+            }
+        };
+
+        if let Some(rec) = recorder.as_mut() {
+            rec.record_tick(&tick_input);
+        }
 
         if shutdown_requested {
             // Exits immediately (no sim/present work runs after it).
@@ -388,6 +508,28 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         run_sim_tick(&mut world, &mut sim);
         let tick_work = tick_start.elapsed();
 
+        if want_checkpoints && checkpoint_countdown.due() {
+            let hash = hash_world_state(&world);
+            last_hash = hash;
+            if let Some(rec) = recorder.as_mut() {
+                rec.record_checkpoint(tick_input.tick, hash);
+            }
+            if let TickInputSource::Replay(player) = &mut source
+                && let Some((expected, actual)) = player.verify_checkpoint(tick_input.tick, hash)
+            {
+                log::error!(
+                    "Replay diverged at tick {}: expected hash {expected:#x}, got {actual:#x}",
+                    tick_input.tick
+                );
+                let tx_render = world.resource::<RenderTx>().0.clone();
+                let _ = tx_render.send(RenderMsg::ReplayDiverged {
+                    tick: tick_input.tick,
+                    expected,
+                    actual,
+                });
+            }
+        }
+
         backlog_sum += tick_input.samples.len() as u64;
         backlog_max = backlog_max.max(tick_input.samples.len() as u32);
         if let Some(thread) = stats_window.record(tick_work) {
@@ -417,8 +559,21 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     // Logic owns the audio bridge: stop the audio thread before this world
     // (and the LuaRuntime pinned to this thread) drops.
+    finalize_recorder(recorder, last_hash);
     shutdown_audio(&mut world);
     Ok(())
+}
+
+/// Finalize a `ReplayRecorder` (if one is active) on every
+/// `logic_thread_main` exit path -- a file left without a trailer is a
+/// truncated replay. `recorder` is consumed (its `finish` takes `self`),
+/// hence a free fn rather than a method taking `&mut Option<..>`.
+fn finalize_recorder(recorder: Option<ReplayRecorder>, final_hash: u64) {
+    if let Some(rec) = recorder
+        && let Err(e) = rec.finish(final_hash)
+    {
+        log::error!("replay recorder: failed to finalize replay file: {e}");
+    }
 }
 
 #[cfg(test)]

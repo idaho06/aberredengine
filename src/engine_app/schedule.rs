@@ -136,7 +136,11 @@ impl EngineBuilder {
     fn add_animation_system(sim: &mut Schedule, has_lua: bool) {
         #[cfg(feature = "lua")]
         if has_lua {
-            sim.add_systems(animation.after(lua_setup_entity_system).in_set(SimSet::Drain));
+            sim.add_systems(
+                animation
+                    .after(lua_setup_entity_system)
+                    .in_set(SimSet::Drain),
+            );
             return;
         }
         #[cfg(not(feature = "lua"))]

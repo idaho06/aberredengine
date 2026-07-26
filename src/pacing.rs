@@ -119,6 +119,15 @@ impl Pacer {
             self.last = Instant::now();
         }
     }
+
+    /// Advance the deadline to now without sleeping. Used by replay
+    /// fast-forward (determinism-05-replays.md): the sim still integrates
+    /// the same fixed `dt` every tick (`period_secs_f32`), just without
+    /// waiting for wall-clock time to pass between ticks. Never called from
+    /// the live/non-replay path.
+    pub fn skip_to_now(&mut self) {
+        self.last = Instant::now();
+    }
 }
 
 /// Non-blocking, tick-count-based decimator: fires once every `skip + 1`
