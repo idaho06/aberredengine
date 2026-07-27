@@ -408,7 +408,6 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // value is unused there either way.
     let mut checkpoint_countdown = TickCountdown::new((sim_hz.round() as u32).saturating_sub(1));
     let want_checkpoints = recorder.is_some() || matches!(source, TickInputSource::Replay(_));
-    let mut last_hash: u64 = 0;
 
     'main: loop {
         if !crate::protocol::shutdown::running() {
@@ -530,7 +529,6 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
         if want_checkpoints && checkpoint_countdown.due() {
             let hash = hash_world_state(&world);
-            last_hash = hash;
             if let Some(rec) = recorder.as_mut() {
                 rec.record_checkpoint(tick_input.tick, hash);
             }
@@ -580,21 +578,24 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // Logic owns the audio bridge: stop the audio thread before this world
     // (and the LuaRuntime pinned to this thread) drops.
     let tainted = world.resource::<DeterminismTaint>().is_tainted();
-    finalize_recorder(recorder, last_hash, tainted);
+    finalize_recorder(&world, recorder, tainted);
     shutdown_audio(&mut world);
     Ok(())
 }
 
 /// Finalize a `ReplayRecorder` (if one is active) on every
 /// `logic_thread_main` exit path -- a file left without its closing
-/// `ReplayEntry::End` is a truncated replay. `recorder` is consumed (its
-/// `finish` takes `self`), hence a free fn rather than a method taking
-/// `&mut Option<..>`. `tainted` carries this session's [`DeterminismTaint`]
-/// into the file, so a later playback can say up front that the *recording*
-/// was already known non-reproducible.
-fn finalize_recorder(recorder: Option<ReplayRecorder>, final_hash: u64, tainted: bool) {
+/// `ReplayEntry::End` is a truncated replay. The closing `final_hash` is
+/// recomputed from the live world here rather than reused from the periodic
+/// checkpoint cache -- shutdown can happen between checkpoints, and
+/// `ReplayEntry::End` promises the true terminal world hash. `recorder` is
+/// consumed (its `finish` takes `self`), hence a free fn rather than a
+/// method taking `&mut Option<..>`. `tainted` carries this session's
+/// [`DeterminismTaint`] into the file, so a later playback can say up front
+/// that the *recording* was already known non-reproducible.
+fn finalize_recorder(world: &World, recorder: Option<ReplayRecorder>, tainted: bool) {
     if let Some(rec) = recorder
-        && let Err(e) = rec.finish(final_hash, tainted)
+        && let Err(e) = rec.finish(hash_world_state(world), tainted)
     {
         log::error!("replay recorder: failed to finalize replay file: {e}");
     }
@@ -603,7 +604,60 @@ fn finalize_recorder(recorder: Option<ReplayRecorder>, final_hash: u64, tainted:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::{self, BufReader, Read};
+    use std::path::Path;
+
+    use tempfile::NamedTempFile;
+
+    use crate::components::mapposition::MapPosition;
+    use crate::protocol::replay::{
+        REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader,
+    };
+    use crate::resources::sim_rng::SimRng;
     use crate::resources::signal_intents::SignalIntent;
+    use crate::resources::worldsignals::WorldSignals;
+
+    fn test_replay_header() -> ReplayHeader {
+        ReplayHeader {
+            magic: REPLAY_MAGIC,
+            format_version: REPLAY_FORMAT_VERSION,
+            engine_build_id: "test".into(),
+            seed: 1,
+            sim_hz: 240.0,
+            config_digest: 0,
+            scene_id: "".into(),
+            game_version: "test".into(),
+        }
+    }
+
+    fn read_len_prefixed<R: Read>(reader: &mut R) -> io::Result<Option<Vec<u8>>> {
+        let mut len_buf = [0u8; 4];
+        match reader.read_exact(&mut len_buf) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(e),
+        }
+        let len = u32::from_le_bytes(len_buf) as usize;
+        let mut buf = vec![0u8; len];
+        reader.read_exact(&mut buf)?;
+        Ok(Some(buf))
+    }
+
+    fn read_replay_end(path: &Path) -> ReplayEntry {
+        let mut reader = BufReader::new(File::open(path).unwrap());
+        let header = read_len_prefixed(&mut reader)
+            .unwrap()
+            .expect("replay file must contain a header");
+        let _: ReplayHeader = postcard::from_bytes(&header).unwrap();
+
+        let mut last = None;
+        while let Some(bytes) = read_len_prefixed(&mut reader).unwrap() {
+            last = Some(postcard::from_bytes::<ReplayEntry>(&bytes).unwrap());
+        }
+
+        last.expect("replay file must end with a ReplayEntry::End")
+    }
 
     /// Regression test for the bug this refactor could have introduced:
     /// once collect_tick_input_live stashes SignalIntents into `TickInput`
@@ -677,6 +731,43 @@ mod tests {
             tick_input, recorded,
             "a live SignalIntent/ScreenSize must not reach the sim during \
              playback -- every sim-visible fact comes from the replay file"
+        );
+    }
+
+    #[test]
+    fn finalize_recorder_hashes_live_world_in_end_entry() {
+        let file = NamedTempFile::new().unwrap();
+        let recorder = ReplayRecorder::create(file.path(), &test_replay_header()).unwrap();
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+        world.insert_resource(WorldTime::default());
+        world.insert_resource(SimRng::from_seed(1));
+        let entity = world.spawn(MapPosition::new(1.0, 2.0)).id();
+
+        let stale_checkpoint_hash = hash_world_state(&world);
+        world
+            .entity_mut(entity)
+            .get_mut::<MapPosition>()
+            .unwrap()
+            .set_x(99.0);
+        let expected_final_hash = hash_world_state(&world);
+        assert_ne!(
+            stale_checkpoint_hash, expected_final_hash,
+            "the regression needs a world change after the stale checkpoint hash"
+        );
+
+        finalize_recorder(&world, Some(recorder), false);
+
+        let ReplayEntry::End { final_hash, .. } = read_replay_end(file.path()) else {
+            panic!("replay file must end with ReplayEntry::End");
+        };
+        assert_eq!(
+            final_hash, expected_final_hash,
+            "the replay trailer must hash the live shutdown world, not a stale checkpoint value"
+        );
+        assert_ne!(
+            final_hash, stale_checkpoint_hash,
+            "the replay trailer must not reuse the last periodic checkpoint hash when the world changed afterward"
         );
     }
 
