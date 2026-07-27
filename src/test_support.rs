@@ -467,7 +467,7 @@ pub fn write_tick_inputs_to_replay(
     for ti in ticks {
         rec.record_tick(ti);
     }
-    rec.finish(0)
+    rec.finish(0, false)
 }
 
 /// Read `n` tick entries back from a replay file written by

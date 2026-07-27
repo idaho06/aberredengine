@@ -200,18 +200,28 @@ fn collect_tick_input_live(
         out.samples.push(sample.raw);
     }
 
-    drain_logic_messages(out, rx_logic, world, deterministic)
+    drain_logic_messages(Some(out), rx_logic, world, deterministic)
 }
 
 /// Applies every non-sim-visible `LogicMsg` (font/texture load/remove/
 /// rename, overlay config, replay playback control) directly to `world`,
 /// and folds sim-visible `ScreenSize`/`SignalIntent`s into `out`. Shared by
-/// the live collector above and the replay path in `logic_thread_main` --
-/// asset loads/overlay edits/playback control keep happening for real
-/// during replay, regardless of where `out`'s other fields came from.
+/// the live collector above, the replay path and the paused path in
+/// `logic_thread_main` -- asset loads/overlay edits/playback control keep
+/// happening for real in all three, regardless of where `out`'s other
+/// fields came from.
+///
+/// `out` is `None` when the caller must NOT let live sim-visible facts reach
+/// the sim: during replay playback (every sim-visible fact comes from the
+/// file -- a live `LogicMsg::ScreenSize`, which `send_render_mirrors` emits
+/// unconditionally on its first frame, would otherwise overwrite the
+/// recorded one and guarantee divergence) and while playback is paused (no
+/// tick runs, so there is nothing for them to apply to). The non-sim-visible
+/// arms still run in both cases.
+///
 /// Returns `true` if `LogicMsg::Shutdown` was seen.
 fn drain_logic_messages(
-    out: &mut TickInput,
+    mut out: Option<&mut TickInput>,
     rx_logic: &Receiver<LogicMsg>,
     world: &mut World,
     deterministic: bool,
@@ -221,7 +231,11 @@ fn drain_logic_messages(
     let mut shutdown_requested = false;
     for msg in rx_logic.try_iter() {
         match msg {
-            LogicMsg::ScreenSize { w, h } => out.screen_size = Some((w, h)),
+            LogicMsg::ScreenSize { w, h } => {
+                if let Some(out) = out.as_deref_mut() {
+                    out.screen_size = Some((w, h));
+                }
+            }
             LogicMsg::FontLoaded { key, metrics } => {
                 world
                     .resource_mut::<FontMetricsStore>()
@@ -258,7 +272,11 @@ fn drain_logic_messages(
             LogicMsg::OverlayConfig(config) => {
                 *world.resource_mut::<DebugOverlayConfig>() = config;
             }
-            LogicMsg::SignalIntents(intents) => out.intents.extend(intents),
+            LogicMsg::SignalIntents(intents) => {
+                if let Some(out) = out.as_deref_mut() {
+                    out.intents.extend(intents);
+                }
+            }
             LogicMsg::Shutdown => shutdown_requested = true,
             LogicMsg::ReplayControl(ReplayControl::Play) => {
                 world.resource_mut::<ReplayRuntimeState>().paused = false;
@@ -397,8 +415,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // Fires once per ~1s of sim ticks, same cadence as StatsWindow -- a
     // full-world hash every tick would be needlessly expensive; checkpoints
     // only need to catch divergence within about a second of it happening.
-    // Only actually computed when recording or replaying (see `want_checkpoints`
-    // below) -- the countdown itself is cheap to keep ticking either way.
+    // `want_checkpoints` short-circuits ahead of `due()` below, so outside a
+    // recording/playback session this countdown never advances at all -- its
+    // value is unused there either way.
     let mut checkpoint_countdown = TickCountdown::new((sim_hz.round() as u32).saturating_sub(1));
     let want_checkpoints = recorder.is_some() || matches!(source, TickInputSource::Replay(_));
     let mut last_hash: u64 = 0;
@@ -418,15 +437,13 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         if replay_state.paused {
             // Still service the channels (shutdown, replay control, asset
             // replies) so a paused session stays responsive; no sim/present
-            // work runs.
+            // work runs. `None`: no tick will run, so there is nothing for a
+            // live ScreenSize/SignalIntent to apply to -- collecting them
+            // here would only pile them into `tick_input` for the next
+            // `reset` to discard.
             let shutdown_requested =
-                drain_logic_messages(&mut tick_input, &rx_logic, &mut world, deterministic);
+                drain_logic_messages(None, &rx_logic, &mut world, deterministic);
             if shutdown_requested {
-                world
-                    .resource_mut::<SignalIntents>()
-                    .0
-                    .append(&mut tick_input.intents);
-                let _ = world.run_system_once(apply_signal_intents);
                 break 'main;
             }
             if crate::pacing::channel_disconnected(&rx_logic) {
@@ -436,10 +453,10 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             continue 'main;
         }
 
-        // Collect stage: &tick_input already holds every sim-visible fact
-        // this tick, loss-free, right after this call returns -- the
-        // recorder tap point (below) taps it here, before apply_tick_input
-        // consumes it.
+        // Collect stage: &tick_input holds every sim-visible fact this tick,
+        // loss-free, once this call returns -- that's what makes it the one
+        // thing the recorder has to capture (it does, just below the break
+        // checks) and the one thing apply_tick_input has to consume.
         let shutdown_requested = match &mut source {
             TickInputSource::Live => collect_tick_input_live(
                 &mut tick_input,
@@ -451,6 +468,17 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             TickInputSource::Replay(player) => {
                 // Live input is discarded outright during playback -- the
                 // brainstorm doc's "drained and discarded by the sim" rule.
+                // That covers rx_input here and rx_logic's sim-visible arms
+                // via the `None` below; every sim-visible fact this tick
+                // comes from the file, nothing merges on top of it.
+                //
+                // Deliberately AHEAD of the shutdown/disconnect breaks below
+                // (unlike record_tick, which sits after them): on the final
+                // tick of a session that breaks out, the player consumes one
+                // entry that never gets simulated. Harmless while
+                // record+play are mutually exclusive -- moving collect below
+                // the breaks would instead desync the checkpoint stream from
+                // the tick counter, which is worse.
                 for _ in rx_input.try_iter() {}
                 player.collect(&mut tick_input, world.resource::<WorldTime>().frame_count);
                 if player.is_finished() && !replay_ended_sent {
@@ -458,13 +486,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
                     let tx_render = world.resource::<RenderTx>().0.clone();
                     let _ = tx_render.send(RenderMsg::ReplayEnded);
                 }
-                drain_logic_messages(&mut tick_input, &rx_logic, &mut world, deterministic)
+                drain_logic_messages(None, &rx_logic, &mut world, deterministic)
             }
         };
-
-        if let Some(rec) = recorder.as_mut() {
-            rec.record_tick(&tick_input);
-        }
 
         if shutdown_requested {
             // Exits immediately (no sim/present work runs after it).
@@ -484,6 +508,14 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
         if crate::pacing::channel_disconnected(&rx_logic) {
             break 'main;
+        }
+
+        // Recorder tap point: strictly after the break checks above, so the
+        // file only ever contains ticks that actually ran (a batch carrying
+        // both a SignalIntent and Shutdown would otherwise be recorded and
+        // then replayed into a tick the original session never simulated).
+        if let Some(rec) = recorder.as_mut() {
+            rec.record_tick(&tick_input);
         }
 
         // Apply stage. F10 edge (post imgui-capture-mask) means the
@@ -559,18 +591,22 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     // Logic owns the audio bridge: stop the audio thread before this world
     // (and the LuaRuntime pinned to this thread) drops.
-    finalize_recorder(recorder, last_hash);
+    let tainted = world.resource::<DeterminismTaint>().is_tainted();
+    finalize_recorder(recorder, last_hash, tainted);
     shutdown_audio(&mut world);
     Ok(())
 }
 
 /// Finalize a `ReplayRecorder` (if one is active) on every
-/// `logic_thread_main` exit path -- a file left without a trailer is a
-/// truncated replay. `recorder` is consumed (its `finish` takes `self`),
-/// hence a free fn rather than a method taking `&mut Option<..>`.
-fn finalize_recorder(recorder: Option<ReplayRecorder>, final_hash: u64) {
+/// `logic_thread_main` exit path -- a file left without its closing
+/// `ReplayEntry::End` is a truncated replay. `recorder` is consumed (its
+/// `finish` takes `self`), hence a free fn rather than a method taking
+/// `&mut Option<..>`. `tainted` carries this session's [`DeterminismTaint`]
+/// into the file, so a later playback can say up front that the *recording*
+/// was already known non-reproducible.
+fn finalize_recorder(recorder: Option<ReplayRecorder>, final_hash: u64, tainted: bool) {
     if let Some(rec) = recorder
-        && let Err(e) = rec.finish(final_hash)
+        && let Err(e) = rec.finish(final_hash, tainted)
     {
         log::error!("replay recorder: failed to finalize replay file: {e}");
     }
@@ -619,6 +655,40 @@ mod tests {
              into tick_input, so the shutdown branch can flush it into \
              SignalIntents before tearing down -- losing it here is exactly \
              the regression this test guards against"
+        );
+    }
+
+    /// The `None` counterpart of the test above: during replay playback (and
+    /// while paused) the same batch must leave `tick_input` completely alone.
+    /// Live sim-visible facts merging on top of the recorded ones is what
+    /// made every playback session diverge -- `send_render_mirrors` emits a
+    /// `ScreenSize` on its first frame unconditionally, so this fired without
+    /// anyone touching the window.
+    #[test]
+    fn draining_without_a_tick_input_discards_sim_visible_facts() {
+        let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
+        tx_logic
+            .send(LogicMsg::SignalIntents(vec![SignalIntent::SetFlag(
+                "live_click_during_playback".into(),
+            )]))
+            .unwrap();
+        tx_logic
+            .send(LogicMsg::ScreenSize { w: 1280, h: 720 })
+            .unwrap();
+        drop(tx_logic);
+
+        let mut world = World::new();
+        let mut tick_input = TickInput::default();
+        tick_input.samples.push(Default::default());
+        let recorded = tick_input.clone();
+
+        let shutdown_requested = drain_logic_messages(None, &rx_logic, &mut world, false);
+
+        assert!(!shutdown_requested);
+        assert_eq!(
+            tick_input, recorded,
+            "a live SignalIntent/ScreenSize must not reach the sim during \
+             playback -- every sim-visible fact comes from the replay file"
         );
     }
 

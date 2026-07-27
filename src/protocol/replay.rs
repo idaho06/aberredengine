@@ -2,9 +2,10 @@
 //! `docs/plans/determinism-05-replays.md`).
 //!
 //! A replay file is a [`ReplayHeader`], then a stream of length-prefixed
-//! postcard-encoded [`ReplayEntry`] values, then a [`ReplayTrailer`]. Writing
-//! and reading both stream entry-by-entry (`src/engine_app/replay.rs`) —
-//! nothing here buffers a whole session in memory.
+//! postcard-encoded [`ReplayEntry`] values, the last of which is always
+//! [`ReplayEntry::End`]. Writing and reading both stream entry-by-entry
+//! (`src/engine_app/replay.rs`) — nothing here buffers a whole session in
+//! memory.
 
 use serde::{Deserialize, Serialize};
 
@@ -12,10 +13,10 @@ use crate::protocol::tick_input::TickInput;
 
 /// File magic, checked first on open.
 pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
-/// Bumped whenever [`ReplayHeader`]/[`ReplayEntry`]/[`ReplayTrailer`]'s shape
-/// or semantics change in a way that breaks reading an older file. A replay
-/// recorded under a different version is refused, not best-effort parsed.
-pub const REPLAY_FORMAT_VERSION: u32 = 1;
+/// Bumped whenever [`ReplayHeader`]/[`ReplayEntry`]'s shape or semantics
+/// change in a way that breaks reading an older file. A replay recorded
+/// under a different version is refused, not best-effort parsed.
+pub const REPLAY_FORMAT_VERSION: u32 = 2;
 
 /// A stable, version-controlled FNV-1a-style hash mixer.
 ///
@@ -111,13 +112,21 @@ pub enum ReplayEntry {
     /// A periodic state-hash checkpoint (see `checkpoint_interval_ticks`,
     /// `src/engine_app/replay.rs`).
     Checkpoint { tick: u64, hash: u64 },
-}
-
-/// Written once at the end of a replay file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplayTrailer {
-    pub total_ticks: u64,
-    pub final_hash: u64,
+    /// Always the last entry: the session summary, written by
+    /// `ReplayRecorder::finish`. Reading it is how playback recognizes a
+    /// clean end of file — a separate trailer *type* would need its own
+    /// framing discriminator to be told apart from an entry, so it lives in
+    /// this enum instead.
+    End {
+        total_ticks: u64,
+        final_hash: u64,
+        /// Whether the recording session tripped
+        /// [`DeterminismTaint`](crate::resources::determinism_taint::DeterminismTaint)
+        /// — i.e. this file is not guaranteed bit-exact reproducible, and a
+        /// divergence report from replaying it may be explained by that
+        /// rather than by a real regression.
+        tainted: bool,
+    },
 }
 
 /// Sim-visible `GameConfig` fields, hashed in this fixed order via
