@@ -611,11 +611,9 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use crate::components::mapposition::MapPosition;
-    use crate::protocol::replay::{
-        REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader,
-    };
-    use crate::resources::sim_rng::SimRng;
+    use crate::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader};
     use crate::resources::signal_intents::SignalIntent;
+    use crate::resources::sim_rng::SimRng;
     use crate::resources::worldsignals::WorldSignals;
 
     fn test_replay_header() -> ReplayHeader {

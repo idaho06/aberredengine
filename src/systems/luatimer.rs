@@ -31,22 +31,11 @@
 //! See [`EntityCtxTables`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
 
 use bevy_ecs::prelude::*;
-use mlua::prelude::*;
 
-use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::events::luatimer::LuaTimerEvent;
-use crate::protocol::audio::AudioCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
-use crate::systems::lua_commands::{
-    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context, drain_phase_and_effects,
-};
-use log::error;
+use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 
 use super::timer_core::{TimerRunner, run_timer_update};
 
@@ -81,108 +70,7 @@ pub fn update_lua_timers(
     run_timer_update(delta, &mut query, &mut runner);
 }
 
-fn build_timer_context(
-    lua_runtime: &LuaRuntime,
-    entity: Entity,
-    ctx_queries: &ContextQueries,
-    cmd_queries: &EntityCmdQueries,
-    luaphase_query: &Query<(Entity, &mut LuaPhase)>,
-) -> LuaResult<LuaTable> {
-    let lua_phase_snapshot = luaphase_query
-        .get(entity)
-        .ok()
-        .map(|(_, p)| LuaPhaseSnapshot::from(p));
-    build_entity_context(
-        lua_runtime,
-        entity,
-        ctx_queries,
-        cmd_queries,
-        lua_phase_snapshot,
-        None,
-    )
-}
-
-/// Observer that handles Lua timer events by calling Lua functions.
-///
-/// When a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) is triggered:
-///
-/// 1. Builds entity context with all component data
-/// 2. Checks if the Lua function exists
-/// 3. Calls it with `(ctx, input)` as parameters
-/// 4. Processes all commands queued by the Lua function:
-///    - Audio commands (play music/sounds)
-///    - Signal commands (modify WorldSignals)
-///    - Phase commands (trigger phase transitions)
-///    - Spawn commands (create new entities)
-///    - Entity commands (modify components)
-///
-/// If the Lua function doesn't exist, logs a warning but doesn't crash.
-#[allow(clippy::too_many_arguments)]
-pub fn lua_timer_observer(
-    trigger: On<LuaTimerEvent>,
-    mut commands: Commands,
-    input: Res<InputState>,
-    time: Res<WorldTime>,
-    // Bundled read-only queries for context building
-    ctx_queries: ContextQueries,
-    // Bundled mutable queries for command processing
-    mut cmd_queries: EntityCmdQueries,
-    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
-    // Resources
-    mut world_signals: ResMut<WorldSignals>,
-    lua_runtime: NonSend<LuaRuntime>,
-    mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    systems_store: Res<SystemsStore>,
-    animation_store: Res<AnimationStore>,
-    mut phase_buf: Local<Vec<PhaseCmd>>,
-    mut effect_bufs: Local<EffectCmdBufs>,
-) {
+pub fn lua_timer_observer(trigger: On<LuaTimerEvent>, mut p: LuaDispatch) {
     let event = trigger.event();
-    let entity = event.entity;
-
-    // Update signal cache so Lua can read current values
-    lua_runtime.update_signal_cache(world_signals.snapshot());
-
-    // Create input snapshot and table
-    let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
-        Ok(table) => table,
-        Err(e) => {
-            error!("Error creating input table for timer callback: {}", e);
-            return;
-        }
-    };
-
-    // Build entity context
-    let ctx_table = match build_timer_context(
-        &lua_runtime,
-        entity,
-        &ctx_queries,
-        &cmd_queries,
-        &luaphase_query,
-    ) {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            error!("Error building context for timer callback: {}", e);
-            return;
-        }
-    };
-
-    // Call the Lua callback with (ctx, input)
-    lua_runtime.call_named(&event.callback, "Timer", |func| {
-        func.call::<()>((ctx_table, input_table))
-    });
-
-    drain_phase_and_effects(
-        &lua_runtime,
-        &mut phase_buf,
-        &mut luaphase_query,
-        &mut effect_bufs,
-        &mut commands,
-        &mut world_signals,
-        &mut cmd_queries,
-        &mut audio_cmd_writer,
-        &systems_store,
-        &animation_store,
-    );
+    dispatch_and_drain(&mut p, event.entity, &event.callback, "Timer");
 }

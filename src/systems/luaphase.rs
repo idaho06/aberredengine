@@ -296,9 +296,9 @@ pub fn lua_phase_system(
     );
 
     // Phase and effect drains are kept separate here (not via
-    // drain_phase_and_effects) because apply_callback_transitions must run
-    // between them — see the doc comment on drain_and_process_effect_commands
-    // in lua_commands/mod.rs.
+    // dispatch::drain_dispatch_commands) because apply_callback_transitions
+    // must run between them — see the doc comment on
+    // drain_and_process_effect_commands in lua_commands/mod.rs.
     drain_and_process_phase_commands(&lua_runtime, &mut phase_buf, &mut query);
 
     // Apply return value transitions after phase drain — return values take

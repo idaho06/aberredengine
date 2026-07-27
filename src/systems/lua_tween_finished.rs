@@ -20,99 +20,21 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
-use crate::components::luaphase::LuaPhase;
 use crate::components::tween::TweenValue;
 use crate::events::tween::TweenFinishedEvent;
-use crate::protocol::audio::AudioCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
-use crate::systems::lua_commands::{
-    ContextQueries, EffectCmdBufs, EntityCmdQueries, build_entity_context, drain_phase_and_effects,
-};
-use log::error;
+use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 
-/// Observer that calls a Lua function when a `Tween<T>` finishes.
-#[allow(clippy::too_many_arguments)]
 pub fn lua_tween_finished_observer<T: TweenValue>(
     trigger: On<TweenFinishedEvent<T>>,
-    mut commands: Commands,
-    input: Res<InputState>,
-    time: Res<WorldTime>,
     on_finished_query: Query<&LuaOnTweenFinished<T>>,
-    ctx_queries: ContextQueries,
-    mut cmd_queries: EntityCmdQueries,
-    mut luaphase_query: Query<(Entity, &mut LuaPhase)>,
-    mut world_signals: ResMut<WorldSignals>,
-    lua_runtime: NonSend<LuaRuntime>,
-    mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    systems_store: Res<SystemsStore>,
-    animation_store: Res<AnimationStore>,
-    mut phase_buf: Local<Vec<PhaseCmd>>,
-    mut effect_bufs: Local<EffectCmdBufs>,
+    mut p: LuaDispatch,
 ) {
     let entity = trigger.event().entity;
 
-    // Only proceed if the entity opted in with LuaOnTweenFinished<T>.
-    let callback_name = match on_finished_query.get(entity) {
-        Ok(c) => c.callback.clone(),
-        Err(_) => return,
+    let Ok(callback) = on_finished_query.get(entity) else {
+        return;
     };
+    let callback_name = callback.callback.clone();
 
-    lua_runtime.update_signal_cache(world_signals.snapshot());
-
-    let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
-        Ok(t) => t,
-        Err(e) => {
-            error!(
-                "Error creating input table for on_tween_finished callback: {}",
-                e
-            );
-            return;
-        }
-    };
-
-    let lua_phase_snapshot = luaphase_query
-        .get(entity)
-        .ok()
-        .map(|(_, p)| LuaPhaseSnapshot::from(p));
-
-    let ctx_table = match build_entity_context(
-        &lua_runtime,
-        entity,
-        &ctx_queries,
-        &cmd_queries,
-        lua_phase_snapshot,
-        None,
-    ) {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            error!(
-                "Error building context for on_tween_finished callback: {}",
-                e
-            );
-            return;
-        }
-    };
-
-    lua_runtime.call_named(&callback_name, "on_tween_finished", |func| {
-        func.call::<()>((ctx_table, input_table))
-    });
-
-    drain_phase_and_effects(
-        &lua_runtime,
-        &mut phase_buf,
-        &mut luaphase_query,
-        &mut effect_bufs,
-        &mut commands,
-        &mut world_signals,
-        &mut cmd_queries,
-        &mut audio_cmd_writer,
-        &systems_store,
-        &animation_store,
-    );
+    dispatch_and_drain(&mut p, entity, &callback_name, "on_tween_finished");
 }
