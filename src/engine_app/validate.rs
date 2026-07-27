@@ -77,8 +77,7 @@ impl EngineBuilder {
     }
 
     /// `.deterministic(seed)` and `.with_lua()` are mutually exclusive --
-    /// Lua is outside the deterministic envelope
-    /// (`docs/plans/determinism-00-overview.md`).
+    /// Lua is outside the deterministic envelope.
     fn validate_deterministic(&self) -> Result<(), EngineError> {
         if self.deterministic_seed.is_some() && self.has_lua_script() {
             return Err(EngineError::LuaConflictsWithDeterministic);
@@ -86,13 +85,11 @@ impl EngineBuilder {
         Ok(())
     }
 
-    /// `.record_replay()`/`.play_replay()` preconditions (determinism
-    /// roadmap phase 05, `docs/plans/determinism-05-replays.md`): mutually
-    /// exclusive with each other, both outside Lua's envelope, recording
-    /// needs an explicit seed up front, and playback supplies its own seed
-    /// from the file (an explicit `.deterministic()` alongside it would be
-    /// ambiguous about which seed wins, so it's rejected rather than
-    /// silently preferring one).
+    /// `.record_replay()`/`.play_replay()` are mutually exclusive, both stay
+    /// outside Lua's envelope, recording needs an explicit seed up front, and
+    /// playback supplies its own seed from the file. An explicit
+    /// `.deterministic()` alongside playback is ambiguous about which seed
+    /// wins, so validation rejects it rather than silently preferring one.
     fn validate_replay(&self) -> Result<(), EngineError> {
         if self.record_replay_path.is_some() && self.play_replay_path.is_some() {
             return Err(EngineError::RecordAndPlayReplayConflict);

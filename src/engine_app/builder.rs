@@ -316,22 +316,19 @@ impl EngineBuilder {
 
     /// Opt into deterministic mode: `SimRng` (`src/resources/sim_rng.rs`) is
     /// seeded from `seed` instead of entropy. Fixed-dt ticking and the
-    /// single-threaded schedule executor are already unconditional for every
-    /// game (determinism phases 01/02), so this is the last engine-side
-    /// switch a deterministic game needs to flip.
+    /// single-threaded schedule executor already apply to every game, so this
+    /// is the engine switch that pins simulation randomness to a known seed.
     ///
     /// Mutually exclusive with [`.with_lua()`](Self::with_lua) -- Lua is
-    /// outside the deterministic envelope
-    /// (`docs/plans/determinism-00-overview.md`); combining both is rejected
-    /// at `.run()`/`.try_run()` time as
+    /// outside the deterministic envelope, so combining both is rejected at
+    /// `.run()`/`.try_run()` time as
     /// [`EngineError::LuaConflictsWithDeterministic`](crate::error::EngineError::LuaConflictsWithDeterministic).
     pub fn deterministic(mut self, seed: u64) -> Self {
         self.deterministic_seed = Some(seed);
         self
     }
 
-    /// Record this session's `TickInput` stream to a replay file
-    /// (determinism roadmap phase 05, `docs/plans/determinism-05-replays.md`).
+    /// Record this session's `TickInput` stream to a replay file.
     ///
     /// Requires `.deterministic(seed)` to already be set (the replay header
     /// needs a concrete seed) and is mutually exclusive with
@@ -348,7 +345,7 @@ impl EngineBuilder {
         self
     }
 
-    /// Play back a previously recorded replay file instead of live input.
+    /// Play back a recorded replay file instead of live input.
     ///
     /// The seed comes from the replay file's header -- do not also call
     /// [`.deterministic()`](Self::deterministic) (rejected at

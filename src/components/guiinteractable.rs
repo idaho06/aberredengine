@@ -8,8 +8,7 @@
 //! data (size, caption/tex_key, callback_name, theme_key); the
 //! `gui_button_spawn_system`/`gui_image_spawn_system` reactive spawn systems
 //! (`systems/gui_spawn.rs`) react on `Added<GuiButton>`/`Added<GuiImage>` to
-//! insert the co-located `GuiInteractable` one frame later. See
-//! `docs/gui-system-architecture.md`.
+//! insert the co-located `GuiInteractable` one frame later.
 
 use bevy_ecs::prelude::{Component, Entity};
 use raylib::prelude::Vector2;
@@ -24,9 +23,8 @@ pub enum GuiWidgetState {
     Normal,
     Hovered,
     Pressed,
-    /// Persistent state, never overwritten by hit-test resolution. No
-    /// public disable/enable API ships in this slice — set/cleared only by
-    /// mutating the component directly (see Open Item #1 in the design doc).
+    /// Persistent state, never overwritten by hit-test resolution. Set or
+    /// clear it by mutating the component directly.
     Disabled,
 }
 
@@ -39,7 +37,7 @@ pub enum GuiWidgetState {
 pub type GuiRustCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
 
 /// Hit-test/click state shared by every clickable GUI widget (`GuiButton`,
-/// `GuiImage`, future widgets).
+/// `GuiImage`, and any other widget that carries `GuiInteractable`).
 #[derive(Component, Clone, Debug)]
 pub struct GuiInteractable {
     pub size: Vector2,

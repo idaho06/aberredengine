@@ -45,8 +45,8 @@ use raylib::prelude::Vector2;
 const MENU_Z_INDEX: f32 = 23.0;
 
 /// Inserts the [`ZIndex`] every menu element needs to render, in either space.
-/// Single source of truth for this requirement so a future menu element type
-/// can't forget it the way the 4 call sites here once could drift independently.
+/// Single source of truth for this requirement, so every menu element type
+/// uses the same render layer.
 fn insert_menu_zindex(ecmd: &mut EntityCommands) {
     ecmd.insert(ZIndex(MENU_Z_INDEX));
 }

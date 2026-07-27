@@ -443,7 +443,7 @@ impl Default for TestWorld {
     }
 }
 
-// --- Determinism-roadmap phase 05 (replays) test wrappers -----------------
+// --- Replay test wrappers -------------------------------------------------
 //
 // `hash_world_state`/`ReplayRecorder`/`ReplayPlayer`/`validate_replay_header`
 // are crate-internal (`pub(crate)`, not real public API a downstream game

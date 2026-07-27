@@ -226,9 +226,9 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 
         // Pad 0's raw analog state -- last-sample-wins (same tier as
         // mouse_x/mouse_y), NOT summed like scroll_y. Deadzone is
-        // deliberately NOT applied here: these are the raw values surfaced
-        // to gameplay/Lua, kept true for a future calibration UI; deadzone
-        // only affects action_active's digital-threshold resolution above.
+        // deliberately NOT applied here: gameplay/Lua receive the raw values,
+        // while deadzone only affects action_active's
+        // digital-threshold resolution above.
         input.gamepad_connected = newest.gamepads[0].connected;
         input.gamepad_axes = newest.gamepads[0].axes;
         let game_mouse_pos = window_size.window_to_game_pos(

@@ -133,9 +133,9 @@ pub struct GameConfig {
     /// drive digital actions via [`InputBinding::GamepadAxis`]
     /// (`[input] gamepad_deadzone`, default `0.15`, clamped to `[0.0, 1.0]`).
     /// Applied sim-side, not render-side, so the raw protocol stays
-    /// deadzone-free for a future per-game calibration UI; the raw
-    /// `InputState.gamepad_axes`/Lua `input.analog.pad_*` values are
-    /// likewise never deadzoned, only the digital-action resolution is.
+    /// deadzone-free for calibration UIs and direct analog reads; the raw
+    /// `InputState.gamepad_axes`/Lua `input.analog.pad_*` values are likewise
+    /// never deadzoned, only the digital-action resolution is.
     ///
     /// [`InputBinding::GamepadAxis`]: crate::resources::input_bindings::InputBinding::GamepadAxis
     pub gamepad_deadzone: f32,

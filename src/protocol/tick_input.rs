@@ -1,8 +1,7 @@
 //! Canonical per-tick sim input record.
 //!
 //! [`TickInput`] is the recorded fact of what a single sim tick consumed —
-//! it IS the replay wire format and the lockstep wire format (both are later
-//! phases of the determinism roadmap; see `docs/plans/determinism-04-tick-input.md`).
+//! it IS the replay wire format.
 //! This module does not change *what* the sim reads today; it makes the
 //! assignment of {raw input samples, signal intents, screen-size changes} to
 //! a tick an explicit, recorded value instead of a thread-scheduling
@@ -49,8 +48,7 @@ impl TickInput {
         self.screen_size = None;
     }
 
-    /// True when nothing sim-visible landed this tick — the case a future
-    /// replay format's delta encoding compresses to ~0 bytes.
+    /// True when nothing sim-visible landed this tick.
     pub fn is_empty(&self) -> bool {
         self.samples.is_empty()
             && self.capture.is_none()

@@ -1,5 +1,4 @@
-//! Per-tick deterministic world-state hash (determinism roadmap phase 05,
-//! `docs/plans/determinism-05-replays.md`).
+//! Per-tick deterministic world-state hash.
 //!
 //! [`hash_world_state`] is called directly from `logic_thread_main`'s loop
 //! (and equally from `TestWorld`-driven tests) right after `run_sim_tick` —
@@ -10,8 +9,7 @@
 //! `src/engine_app/logic_thread.rs`); this function itself always does a
 //! full-world pass.
 //!
-//! **Blind spot:** `AppState` (`Box<dyn Any>`) is not hashed — v1 scope cut,
-//! see `docs/plans/determinism-05-replays.md`'s Open Questions. A game whose
+//! **Blind spot:** `AppState` (`Box<dyn Any>`) is not hashed. A game whose
 //! deterministic behavior depends solely on `AppState` contents (never
 //! reflected into a hashed component/resource) will not have that dependency
 //! caught by replay divergence tests.

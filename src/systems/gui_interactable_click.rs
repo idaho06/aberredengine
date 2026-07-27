@@ -5,10 +5,9 @@
 //! the clicked entity's `GuiInteractable`: Lua name first, Rust fn-pointer
 //! second — mirroring
 //! [`menu_selection_observer`](crate::systems::menu::menu_selection_observer)'s
-//! existing priority chain. Generalized from the former
-//! `gui_button_click_observer` when `GuiInteractable` was extracted out of
-//! `GuiButton` — this same observer now dispatches clicks for `GuiButton`,
-//! `GuiImage`, and any future widget carrying `GuiInteractable`.
+//! existing priority chain. This same observer dispatches clicks for
+//! `GuiButton`, `GuiImage`, and any other widget carrying
+//! `GuiInteractable`.
 
 use bevy_ecs::prelude::*;
 use log::warn;

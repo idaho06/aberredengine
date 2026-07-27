@@ -53,7 +53,7 @@ use bevy_ecs::message::Message;
 pub enum AudioCmd {
     /// Load a music stream from `path` and store it under `id`.
     LoadMusic { id: String, path: String },
-    /// Unload a previously loaded music stream identified by `id`.
+    /// Unload the loaded music stream identified by `id`.
     UnloadMusic { id: String },
     /// Unload all music streams.
     UnloadAllMusic,
@@ -66,19 +66,19 @@ pub enum AudioCmd {
     StopAllMusic,
     /// Pause playback for `id` (can be resumed).
     PauseMusic { id: String },
-    /// Resume playback for a previously paused `id`.
+    /// Resume playback for a paused `id`.
     ResumeMusic { id: String },
     /// Set volume of a music stream `id` to `vol` in the `[0.0, 1.0]` range.
     VolumeMusic { id: String, vol: f32 },
     /// Load a sound effect from `path` and store it under `id`.
     LoadFx { id: String, path: String },
-    /// Play a previously loaded sound effect `id` (one-shot).
+    /// Play the loaded sound effect `id` (one-shot).
     PlayFx { id: String },
-    /// Play a previously loaded sound effect `id` with pitch override (1.0 is base level).
+    /// Play the loaded sound effect `id` with pitch override (1.0 is base level).
     PlayFxPitched { id: String, pitch: f32 },
     /// Stop all currently playing sound effects without unloading them.
     StopAllFx,
-    /// Unload a previously loaded sound effect `id`.
+    /// Unload the loaded sound effect `id`.
     UnloadFx { id: String },
     /// Unload all sound effects.
     UnloadAllFx,

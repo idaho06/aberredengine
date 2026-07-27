@@ -10,8 +10,8 @@
 //!
 //! [`FontMetrics::measure_text`] is a line-for-line port of raylib's
 //! `MeasureTextEx`/`GetGlyphIndex` (`rtext.c`, vendored in
-//! `sola-raylib-sys` 6.2.0). Any behavior change to those C functions in a
-//! future raylib upgrade must be re-ported here.
+//! `sola-raylib-sys` 6.2.0). Keep this implementation aligned with those C
+//! functions when the vendored raylib code changes.
 
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;

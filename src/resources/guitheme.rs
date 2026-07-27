@@ -4,12 +4,10 @@
 //! optional `button` skin (used by `GuiButton`, one nine-patch per
 //! [`GuiWidgetState`](crate::components::guibutton::GuiWidgetState)), and an
 //! optional `label` nine-patch (used by
-//! [`GuiLabel`](crate::components::guilabel::GuiLabel)). See
-//! `docs/gui-system-architecture.md` for the full design.
+//! [`GuiLabel`](crate::components::guilabel::GuiLabel)).
 //!
-//! `button`/`label` are `Option` because a v1 game that only themes panels
-//! (never calls `engine.set_gui_theme_button`/`set_gui_theme_label`)
-//! shouldn't need to set them.
+//! `button`/`label` are `Option` so a theme can define panels only and leave
+//! button/label styling unset.
 
 use std::sync::Arc;
 
@@ -79,7 +77,7 @@ pub struct GuiProgressBarSkin {
 /// the same "unconfigured = skip" idiom `button`/`label` already use.
 ///
 /// Not a `Resource` itself — stored by name inside [`GuiThemeStore`], which
-/// is the actual resource. See `docs/gui-system-architecture.md` Roadmap #2.
+/// is the actual resource.
 #[derive(Clone, Debug)]
 pub struct GuiTheme {
     pub panel: GuiNinePatch,
@@ -153,8 +151,8 @@ impl GuiTheme {
 /// store itself.
 ///
 /// Resources aren't touched by `clear_all_commands()`, so a theme registered
-/// under a name persists across scene switches — only the `RenderCmd` queue
-/// used to set it is scene-scoped.
+/// under a name persists across scene switches. Only the `RenderCmd` queue
+/// that carries updates is scene-scoped.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct GuiThemeStore {
     pub themes: FxHashMap<Arc<str>, GuiTheme>,

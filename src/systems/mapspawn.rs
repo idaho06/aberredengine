@@ -67,10 +67,9 @@ pub fn spawn_map(
     }
 
     for entry in &map.fonts {
-        // "Already loaded" dedup (previously checked against
-        // `font_store.meta` here) now happens in `apply_render_asset_cmd`,
-        // gated by `skip_if_loaded: true` — spawn_map no longer has
-        // `FontStore` access to check directly.
+        // "Already loaded" dedup happens in `apply_render_asset_cmd`, gated by
+        // `skip_if_loaded: true` -- `spawn_map` does not read `FontStore`
+        // directly.
         render_asset_cmds.push(RenderAssetCmd::Font {
             id: entry.key.clone(),
             path: entry.path.clone(),

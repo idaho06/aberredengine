@@ -581,14 +581,14 @@ mod ambiguity_audit {
     //! builds the real `sim` schedule (via the engine's own
     //! `configure_sim_sets`/`add_engine_sim_systems`, not a hand-listed
     //! system set) with `ambiguity_detection: LogLevel::Warn` and asserts
-    //! zero ambiguities remain. Every ambiguity bevy 0.19 reported as of
-    //! this audit (2026-07-19) was triaged and closed with an explicit
-    //! `.after()`/`.before()` edge at its registration site in
-    //! `add_engine_sim_systems` (see the comments there) -- most pin a real
-    //! preferred order, one (`gui_label_spawn_system`/`gui_button_spawn_system`)
-    //! is a documented false positive (commutative set-insert) pinned only
-    //! to silence the warning. A future system addition that reintroduces
-    //! an ambiguity should fail this test; run with
+    //! zero ambiguities remain. Every ambiguity bevy 0.19 reports here is
+    //! closed with an explicit `.after()`/`.before()` edge at its
+    //! registration site in `add_engine_sim_systems` (see the comments
+    //! there) -- most pin a real preferred order, and one
+    //! (`gui_label_spawn_system`/`gui_button_spawn_system`) is a documented
+    //! false positive (commutative set-insert) pinned only to silence the
+    //! warning. A system addition that reintroduces an ambiguity should fail
+    //! this test; run with
     //! `RUST_LOG=warn cargo test ambiguity_audit -- --nocapture` to have
     //! bevy's own `warn!` logging (emitted from inside
     //! `Schedule::initialize` while the graph still has system names

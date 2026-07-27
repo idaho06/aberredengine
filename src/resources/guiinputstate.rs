@@ -2,8 +2,7 @@
 //!
 //! [`GuiInputState`] is reset at the start of `gui_hit_test_system` (first in
 //! the per-frame GUI ordering chain) and read by gameplay systems that want
-//! to avoid double-handling a click GUI already consumed this frame. See
-//! `docs/gui-system-architecture.md`'s "Click Consumption" section.
+//! to avoid double-handling a click GUI already consumed this frame.
 
 use bevy_ecs::prelude::Resource;
 

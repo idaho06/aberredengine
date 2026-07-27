@@ -15,10 +15,8 @@
 //! execution so a multi-level subtree resolves in one pass rather than one
 //! extra frame per nesting level.
 //!
-//! v1 GUI is translate-only (no rigid rotate/scale of children — see
-//! `docs/gui-system-architecture.md`'s "Why a custom system" section), so
-//! this is plain `Vector2` addition rather than `transform_compose`'s
-//! scale/rotate/translate composition.
+//! GUI child layout is translate-only, so this is plain `Vector2` addition
+//! rather than `transform_compose`'s scale/rotate/translate composition.
 
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;

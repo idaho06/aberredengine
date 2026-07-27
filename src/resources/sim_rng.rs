@@ -4,8 +4,7 @@
 //! draw from -- never a `Local<fastrand::Rng>`, never a `rand`/`fastrand`
 //! global. Render/audio/present-schedule code, and any conditionally
 //! compiled debug path, must not draw from it either: its internal state
-//! IS sim state, and must advance identically on every peer/replay
-//! (`docs/plans/determinism-03-seeded-rng.md`).
+//! IS sim state, and must advance identically on every replay of a session.
 
 use bevy_ecs::prelude::Resource;
 
@@ -23,7 +22,7 @@ use bevy_ecs::prelude::Resource;
 /// entry point to grep for. `setup_logic_world` picks the seed:
 /// - deterministic mode (`EngineBuilder::deterministic(seed)`): the given
 ///   `seed`.
-/// - non-deterministic mode (today's default): a throwaway
+/// - non-deterministic mode: a throwaway
 ///   `fastrand::Rng::new()` read back via `.get_seed()` to get a concrete
 ///   seed to log (`info!`) and pass to `from_seed`, so a surprising session
 ///   can be attributed after the fact.

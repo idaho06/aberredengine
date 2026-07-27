@@ -2,12 +2,12 @@
 //!
 //! [`DeterminismTaint`] is set when the logic thread detects a sim-visible
 //! event in deterministic mode that its recorded `TickInput` envelope
-//! cannot account for -- today, only the async-asset preload guard (v1 of
-//! `docs/plans/determinism-04-tick-input.md` §4: a `TextureDimsStore` key
-//! arriving for the first time while `GameState::Playing`, a proxy for
-//! "asset metadata loaded outside the preload window"). A tainted session's
-//! replay/lockstep recording (later determinism-roadmap phases) should not
-//! be trusted as bit-exact reproducible.
+//! cannot account for. Today the guard tracks a `TextureDimsStore` key that
+//! arrives for the first time while `GameState::Playing`, which marks asset
+//! metadata loading outside the preload window. A tainted session's replay
+//! recording is not bit-exact reproducible; the flag rides out in
+//! `ReplayEntry::End`'s `tainted` field so a divergence report can
+//! distinguish a tainted recording from a code regression.
 
 use bevy_ecs::prelude::Resource;
 

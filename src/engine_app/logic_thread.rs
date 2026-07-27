@@ -53,7 +53,7 @@ struct ReplayRuntimeState {
 }
 
 /// Where a tick's [`TickInput`] comes from: live device/channel collection,
-/// or a recorded file being replayed. See `docs/plans/determinism-05-replays.md`.
+/// or replay-file playback.
 enum TickInputSource {
     Live,
     Replay(ReplayPlayer),
@@ -94,9 +94,8 @@ pub(crate) struct LogicInit {
     pub(crate) snapshot_publisher: Option<SnapshotPublisher>,
     /// `Some` when `.play_replay(path)` was used -- `logic_thread_main`
     /// drives its `sim` ticks from this instead of live `rx_input`/
-    /// `rx_logic` collection. Mutually exclusive with `replay_recorder` in
-    /// v1 (`EngineBuilder` only exposes one at a time), though nothing
-    /// structurally requires that.
+    /// `rx_logic` collection. `EngineBuilder` configures replay playback and
+    /// replay recording as separate modes.
     pub(crate) replay_player: Option<ReplayPlayer>,
     /// `Some` when `.record_replay(path, ..)` was used.
     pub(crate) replay_recorder: Option<ReplayRecorder>,
@@ -135,13 +134,11 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
     world.resource_mut::<InputState>().clear_edges();
 }
 
-/// v1 async-asset preload guard (determinism-04-tick-input.md §4): in
-/// deterministic mode, a `TextureDimsStore` key arriving for the *first*
-/// time while `GameState::Playing` is a practical proxy for "asset metadata
-/// arrived mid-gameplay" -- real deterministic games are Rust-only and load
-/// via `SpawnMapRequested`/builder paths at scene start, before `Playing`.
-/// Logs an `error!` and marks [`DeterminismTaint`] -- detect-and-flag, not
-/// prevent; does not block the insert. No-op outside deterministic mode.
+/// In deterministic mode, treat a `TextureDimsStore` key arriving for the
+/// *first* time while `GameState::Playing` as a determinism hazard: it means
+/// texture metadata arrives during gameplay instead of before the playing
+/// state begins. Logs an `error!` and marks [`DeterminismTaint`] without
+/// blocking the insert. No-op outside deterministic mode.
 fn guard_texture_preload(world: &mut World, key: &str, deterministic: bool) {
     if !deterministic {
         return;
@@ -155,7 +152,7 @@ fn guard_texture_preload(world: &mut World, key: &str, deterministic: bool) {
     log::error!(
         "Deterministic mode: TextureDimsStore gained new key {key:?} while \
          GameState::Playing -- likely a texture loaded outside the preload \
-         window (determinism-04-tick-input.md §4 v1 rule); session tainted"
+         window; session tainted"
     );
     world.resource_mut::<DeterminismTaint>().taint();
 }
@@ -163,19 +160,14 @@ fn guard_texture_preload(world: &mut World, key: &str, deterministic: bool) {
 /// Collect stage (live source): drains `rx_input`/`rx_logic` for one tick.
 /// Non-sim-visible messages (`FontLoaded`/`FontRemoved`/`FontRenamed`,
 /// `TextureRemoved`/`TextureRenamed`, `OverlayConfig`) are applied directly
-/// to `world` here, same as before this split — they never fed
-/// `apply_tick_input`. Sim-visible facts (raw samples, capture,
-/// `ScreenSize`, `SignalIntent`s, `TextureLoaded` dims) are written into
-/// `out` instead of straight into `World` resources — that's what makes the
-/// line right after this call's return the recorder tap point a future
-/// phase needs (determinism-04-tick-input.md §3): `out` already holds every
-/// sim-visible fact this tick, loss-free, before `apply_tick_input`
-/// consumes it.
+/// to `world` here rather than through `apply_tick_input`. Sim-visible facts
+/// (raw samples, capture, `ScreenSize`, `SignalIntent`s, `TextureLoaded`
+/// dims) are written into `out` instead of straight into `World`
+/// resources, so `out` already holds every sim-visible fact for this tick
+/// before `apply_tick_input` consumes it.
 ///
 /// `TextureLoaded` dims land in `TextureDimsStore` directly rather than via
-/// `out` — texture dims aren't part of `TickInput`'s envelope (see
-/// determinism-04-tick-input.md §4's "async-asset rule"; a later phase may
-/// need to tick-stamp them, but v1 is a preload rule, not a recorded field).
+/// `out` — texture dims are not part of `TickInput`'s recorded envelope.
 ///
 /// Returns `true` if `LogicMsg::Shutdown` was seen this batch.
 fn collect_tick_input_live(
@@ -256,10 +248,9 @@ fn drain_logic_messages(
             }
             LogicMsg::TextureRenamed { old_key, new_key } => {
                 // Not guarded by guard_texture_preload: this renames an
-                // already-loaded texture's key, not "asset metadata
-                // arriving mid-gameplay" -- determinism-04-tick-input.md
-                // §4's v1 rule scopes the preload guard to TextureLoaded
-                // (dims-arrival) only.
+                // already-loaded texture's key, not new texture metadata
+                // arriving during gameplay. The preload guard applies only
+                // to `TextureLoaded`.
                 world
                     .resource_mut::<TextureDimsStore>()
                     .rename(&old_key, new_key);
@@ -294,14 +285,12 @@ fn drain_logic_messages(
 
 /// Apply one [`TickInput`]'s sim-visible facts to `world`, ahead of that
 /// tick's `sim` schedule run. This is the one function every `TickInput`
-/// source must go through identically — live today (`logic_thread_main`),
-/// replay/lockstep in later determinism-roadmap phases — since "same
-/// `TickInput` sequence in -> same state out" is the whole determinism
-/// guarantee (determinism-04-tick-input.md).
+/// source must go through identically — live (`logic_thread_main`) and
+/// replay playback (`ReplayPlayer`) — the determinism contract is "same
+/// `TickInput` sequence in -> same state out".
 ///
-/// Order matters and mirrors what `logic_thread_main` did inline before
-/// this was extracted: `ScreenSize`/`WindowSize`/`ImguiCaptureMirror` land
-/// first, then [`resolve_input_backlog`] (which reads `WindowSize`/
+/// Order matters: `ScreenSize`/`WindowSize`/`ImguiCaptureMirror` land first,
+/// then [`resolve_input_backlog`] (which reads `WindowSize`/
 /// `ScreenSize`/the capture mirror while resolving `tick_input.samples`),
 /// then queued `SignalIntent`s are appended to the `SignalIntents` buffer
 /// for `apply_signal_intents` (`SimSet::ApplyIntents`) to drain once `sim`
@@ -403,9 +392,8 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // TickInput::reset's doc comment for the allocation-reuse rationale.
     let mut tick_input = TickInput::default();
 
-    // Replay wiring (determinism-05-replays.md). `source`/`recorder` are
-    // independent -- v1's `EngineBuilder` only exposes one at a time, but
-    // nothing here requires that.
+    // Replay wiring. `source`/`recorder` are independent -- `EngineBuilder`
+    // exposes one mode at a time, but nothing here requires that.
     let mut source = match init.replay_player.take() {
         Some(player) => TickInputSource::Replay(player),
         None => TickInputSource::Live,

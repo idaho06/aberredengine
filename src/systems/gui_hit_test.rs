@@ -5,8 +5,8 @@
 //! left mouse button, picks the highest-`ZIndex` interactable under the
 //! cursor as the sole interaction target (others stay `Normal`), and
 //! triggers [`GuiInteractableClickEvent`] on a press-then-release-inside
-//! transition. Any clickable GUI widget (`GuiButton`, `GuiImage`, future
-//! widgets) goes through this same system by carrying `GuiInteractable`.
+//! transition. Any clickable GUI widget that carries `GuiInteractable`
+//! (including `GuiButton` and `GuiImage`) goes through this same system.
 //!
 //! State is a pure function of the current frame's cursor position
 //! (drag-off-cancels): outside bounds is always `Normal` regardless of
@@ -14,8 +14,7 @@
 //! click fires only when the widget was `Pressed` last frame and the mouse
 //! is released this frame while still inside bounds. `Disabled` widgets are
 //! never overwritten by this resolution, but still consume the click if
-//! they're the topmost hit (see `docs/gui-system-architecture.md`'s "Click
-//! Consumption" section).
+//! they're the topmost hit.
 
 use bevy_ecs::prelude::*;
 use raylib::math::{Rectangle, Vector2};

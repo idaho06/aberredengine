@@ -1,5 +1,4 @@
-//! Replay recording/playback runtime (determinism roadmap phase 05,
-//! `docs/plans/determinism-05-replays.md`).
+//! Replay recording/playback runtime.
 //!
 //! [`ReplayRecorder`] streams `TickInput`s to a file as `logic_thread_main`
 //! collects them; [`ReplayPlayer`] streams them back out, standing in for

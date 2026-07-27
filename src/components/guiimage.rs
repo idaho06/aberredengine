@@ -12,12 +12,9 @@
 //! `Sprite` lives on the *same* entity as `GuiImage`/`GuiInteractable`, not
 //! a `ChildOf` child.
 //!
-//! Explicitly out of scope for this slice: no automatic hover/press/disabled
-//! visual feedback (tint/skin swap) — left to the game's Lua callback (e.g.
-//! set `Tint` manually from `on_click_callback`). No drag-and-drop; this is
-//! click-only.
-//!
-//! See `docs/gui-system-architecture.md`.
+//! The widget handles click interaction only. Gameplay code applies any
+//! hover/press/disabled visual feedback itself (for example by setting
+//! `Tint` from a callback), and drag behavior lives outside this component.
 
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;

@@ -15,7 +15,7 @@ use bevy_ecs::prelude::*;
 ///
 /// Reads `InputState.mouse_world_x/y` — the window→game→world transformation
 /// (letterbox correction + camera projection) already happened when the
-/// per-frame input snapshot was applied, so this system no longer touches
+/// per-frame input snapshot was applied, so this system does not touch
 /// raylib. Runs on the FIXED schedule: the value is written once per render
 /// frame and held constant across substeps, matching raylib's own
 /// once-per-real-frame mouse refresh.

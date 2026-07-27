@@ -32,9 +32,10 @@ pub fn pump_render_msgs(world: &mut World) {
             RenderMsg::Asset(cmd) => asset_cmds.push(cmd),
             RenderMsg::ToggleFullscreen => toggle_fullscreen = true,
             RenderMsg::Quit => world.resource_mut::<QuitRequested>().0 = true,
-            // v1: logged only -- no render-side replay UI yet
-            // (determinism-05-replays.md). A game wanting to surface these
-            // can add its own render-world resource + observer later.
+            // Logged only; the render world does not surface replay
+            // divergence through a built-in UI. A game can mirror these
+            // messages into its own render-world resource if it wants to
+            // display them.
             RenderMsg::ReplayDiverged {
                 tick,
                 expected,

@@ -42,8 +42,8 @@ pub enum EngineError {
 
     #[error(
         "EngineBuilder conflict: .deterministic(seed) and .with_lua() cannot be used \
-         together. Lua is outside the deterministic envelope (see \
-         docs/plans/determinism-00-overview.md) -- deterministic games are Rust-only."
+         together. Lua is outside the deterministic envelope, so deterministic games are \
+         Rust-only."
     )]
     LuaConflictsWithDeterministic,
 

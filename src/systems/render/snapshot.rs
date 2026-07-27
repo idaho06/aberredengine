@@ -29,9 +29,8 @@ use super::mirror::{
 /// The snapshot's 8 `Vec<...Entry>` drawable-list fields feed the 8
 /// `reconcile_*` calls below (`src/systems/render/mirror.rs`), which write
 /// their results into retained mirror entities rather than a resource --
-/// read by reference, never cloned (the list clones this used to pay for
-/// every publish were 100% throwaway; only the 10 "global" fields below are
-/// actually kept). Those 10 remaining fields are each copied/cloned into a
+/// read by reference, never cloned. Only the 10 "global" fields below are
+/// actually kept, and each of those is copied/cloned into a
 /// dedicated `Render*` resource (mirroring `RenderResources`/
 /// `DebugResources`'s existing param-bundling pattern) -- `render_system`
 /// reads those instead of a `DrawableSnapshot` resource for anything

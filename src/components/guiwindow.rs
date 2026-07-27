@@ -2,7 +2,8 @@
 //!
 //! The [`GuiWindow`] component marks a screen-space entity as a themed
 //! panel, rendered as a nine-patch background using [`GuiTheme`](crate::resources::guitheme::GuiTheme).
-//! v1 is a standalone, static panel — no children, layout, or interaction yet.
+//! It carries panel rendering data only; child layout and interaction come
+//! from other GUI components.
 
 use std::sync::Arc;
 
@@ -14,7 +15,7 @@ use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 
 /// Themed panel rendered as a nine-patch background at the entity's `ScreenPosition`.
 /// `theme_key` selects which named theme in `GuiThemeStore` to render with
-/// (default `"default"`); see `docs/gui-system-architecture.md` Roadmap #2.
+/// (default `"default"`).
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiWindow {
     pub size: Vector2,

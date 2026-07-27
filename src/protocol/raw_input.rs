@@ -80,7 +80,7 @@ pub struct RawDeviceSnapshot {
 
 impl RawDeviceSnapshot {
     /// Mark keyboard `code` as down. Silently ignores codes outside the
-    /// bitset's range (there are none today; this is slack for future keys).
+    /// bitset's range (the extra space keeps room for additional keys).
     pub fn set_key(&mut self, code: u32) {
         let word = (code / 64) as usize;
         let bit = code % 64;

@@ -164,11 +164,11 @@ pub(super) struct ScreenProgressBarBufferItem {
 }
 
 /// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
-/// one dispatch order. A future GUI refactor can add variants here (e.g.
-/// NPatch panel/button) — doing so touches this enum plus one match arm each
-/// in [`ScreenDrawItem::z_index`], [`ScreenDrawItem::variant_rank`], the
-/// collect step, and the dispatch loop in [`draw_screen_space`]; it does not
-/// require restructuring the sort/dispatch skeleton itself.
+/// one dispatch order. Add new variants here by updating this enum plus one
+/// match arm each in [`ScreenDrawItem::z_index`],
+/// [`ScreenDrawItem::variant_rank`], the collect step, and the dispatch loop
+/// in [`draw_screen_space`]; the sort/dispatch skeleton itself stays the
+/// same.
 pub(super) enum ScreenDrawItem {
     Panel(ScreenPanelBufferItem),
     ProgressBar(ScreenProgressBarBufferItem),

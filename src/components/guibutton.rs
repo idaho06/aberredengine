@@ -9,8 +9,6 @@
 //! `Added<Menu>`. Querying `GuiButton` alone without `GuiInteractable` is
 //! only valid for the one frame between insertion and the spawn system
 //! running.
-//!
-//! See `docs/gui-system-architecture.md`.
 
 use std::sync::Arc;
 
@@ -37,7 +35,7 @@ pub struct GuiButton {
     /// Authored disabled state, applied to the spawned `GuiInteractable.state`
     /// once at spawn time. Mutating this field after spawn has no further
     /// effect — toggle `GuiInteractable.state` directly for runtime
-    /// enable/disable (see Open Item #1 in the design doc).
+    /// enable/disable.
     pub disabled: bool,
     /// Selects which named theme in `GuiThemeStore` to render this button
     /// (and its caption) with. Default `"default"`.

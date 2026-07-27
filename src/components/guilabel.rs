@@ -5,8 +5,7 @@
 //! (`ChildOf` + `GuiOffset`), spawned by `gui_label_spawn_system`
 //! (`systems/gui_spawn.rs`) reacting on `Added<GuiLabel>` — the same
 //! composition pattern [`GuiButton`](super::guibutton::GuiButton)'s caption
-//! uses, minus any interaction state: a label is never hit-tested. See
-//! `docs/gui-system-architecture.md`.
+//! uses, minus any interaction state: a label is never hit-tested.
 
 use std::sync::Arc;
 

@@ -4,8 +4,6 @@
 //! nine-patch fill scaled proportionally to `value / max`. Direction controls
 //! which edge the fill grows from. Signal binding keeps `value` in sync with a
 //! `WorldSignals` key without Lua polling.
-//!
-//! See `docs/gui-system-architecture.md`.
 
 use std::sync::Arc;
 

@@ -16,8 +16,6 @@
 //! either component in the same bundle as `GuiButton`/`GuiImage` (e.g. to
 //! get a Rust fn-pointer click callback via `GuiInteractable::rust(...)`)
 //! keeps it — these systems only fill in what's missing.
-//!
-//! See `docs/gui-system-architecture.md`.
 
 use std::sync::Arc;
 
@@ -42,10 +40,10 @@ use crate::resources::guitheme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 /// the parent — the `Panel`/`Text` `variant_rank` tie-break (see
 /// `src/systems/render/mod.rs`) draws text above the parent's background at
 /// equal z, so no separate "caption z" is needed. Padding is a fixed
-/// constant for v1, not theme-driven: `DynamicText`'s size is only known
-/// after a frame (`dynamictext_size_system`), so perfect centering is a
-/// future refinement, not a v1 requirement. `font`/`font_size`/`text_color`
-/// are resolved from the named theme (`theme_key`) in `GuiThemeStore` (or
+/// constant rather than theme-driven: `DynamicText`'s size is only known
+/// after a frame (`dynamictext_size_system`), so this helper anchors the
+/// caption with fixed padding instead of centering from measured text size.
+/// `font`/`font_size`/`text_color` are resolved from the named theme (`theme_key`) in `GuiThemeStore` (or
 /// built-in defaults if the key isn't registered, with a one-time warn via
 /// `gui_theme_warn_cache`), logging the existing "forgot to call
 /// engine.set_gui_theme_font" error when `font` is unset. `z_index`

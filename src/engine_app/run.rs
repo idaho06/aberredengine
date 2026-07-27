@@ -58,11 +58,10 @@ impl EngineBuilder {
         self.validate_builder(use_scene_manager)?;
         let config = self.load_config()?;
 
-        // Replay header open-and-validate (determinism roadmap phase 05,
-        // docs/plans/determinism-05-replays.md): done here, before the
-        // logic thread is spawned, because that detached thread can't
-        // propagate a startup error back to this caller. `play_replay`
-        // borrows its seed from the file header -- `validate_builder`
+        // Open and validate the replay header here, before spawning the
+        // logic thread, because that detached thread cannot propagate a
+        // startup error back to this caller. `play_replay` borrows its seed
+        // from the file header -- `validate_builder`
         // above already rejected an explicit `.deterministic()` alongside
         // it, so overwriting `self.deterministic_seed` here is unambiguous.
         let replay_player = match &self.play_replay_path {
@@ -210,10 +209,10 @@ impl EngineBuilder {
         // wait paces this loop, from inside the same schedule.run() call
         // this StatsWindow times. That means tick_avg_ms/achieved_hz read as
         // whole-frame time (vsync wait included), unlike SimStats/AudioStats'
-        // "work excluding sleep" -- see RenderStats' doc comment. This is the
-        // render thread's own implicit fps fallback, no longer shared with a
-        // snapshot rate now that PRESENT decimates by sim-tick count instead
-        // of wall-clock rate (see GameConfig::snapshot_skip).
+        // "work excluding sleep" -- see RenderStats' doc comment. This render
+        // loop therefore uses raylib's own fps pacing, while PRESENT decimates
+        // snapshot publication by sim-tick count (see
+        // GameConfig::snapshot_skip).
         let target_fps = world.resource::<RenderGameConfig>().0.target_fps;
         let mut stats_window = StatsWindow::new(default_render_fps(target_fps));
 

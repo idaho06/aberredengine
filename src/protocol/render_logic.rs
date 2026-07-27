@@ -64,8 +64,7 @@ pub enum LogicMsg {
     /// The window is closing; the logic thread breaks its loop, shuts down
     /// audio, and joins.
     Shutdown,
-    /// Render-side replay-playback control (determinism roadmap phase 05,
-    /// `docs/plans/determinism-05-replays.md`), only meaningful when
+    /// Render-side replay-playback control, only meaningful when
     /// `.play_replay(path)` was used. Applied directly by
     /// `logic_thread_main`'s message drain -- a meta/control message, never
     /// folded into `TickInput` (it doesn't affect recorded sim state).

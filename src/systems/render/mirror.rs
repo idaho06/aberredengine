@@ -95,10 +95,10 @@ impl SimEntry for GuiProgressBarEntry {
 
 /// Insert a clone of `value` only if the entity's current component value
 /// differs from it (or the component is absent). Every publish (see
-/// `GameConfig::snapshot_skip` for the cadence) used to re-`insert()` and
-/// reclone every component unconditionally, even for entities whose data
-/// hadn't changed since the last pass -- pure waste for mostly-static scenes (GUI panels,
-/// HUDs). Takes `value` by reference and only clones it on the write path,
+/// `GameConfig::snapshot_skip` for the cadence) compares the incoming value
+/// first so mostly-static scenes (GUI panels, HUDs) do not re-`insert()` and
+/// reclone every component unconditionally. Takes `value` by reference and
+/// only clones it on the write path,
 /// not the comparison path, so an unchanged component (the common case)
 /// costs one comparison and zero allocations -- cloning first and comparing
 /// after would pay the clone (heap `String`/`Vec` allocations for types like
@@ -139,7 +139,7 @@ fn set_optional<C: Component + PartialEq + Clone>(entity: &mut EntityWorldMut, v
 /// update (diffed field-by-field via `insert_if_changed`/`set_optional` --
 /// each write skipped when the incoming value equals what's already on the
 /// mirror) every component on ids already mirrored, and despawn any
-/// previously-mirrored id absent from `entries` this pass. The only
+/// mirrored id absent from `entries` this pass. The only
 /// per-category difference left as a closure is `apply`, since which
 /// components to write genuinely varies (e.g. map sprites also carry
 /// `Scale`/`Rotation`, screen categories don't) -- id lookup, spawn-on-new-id,

@@ -5,8 +5,7 @@
 //! `gui_layout_system` resolves it into the child's actual
 //! [`ScreenPosition`](super::screenposition::ScreenPosition) every frame —
 //! `ChildOf` itself is used for lifecycle only (cascade despawn), not
-//! positioning. See `docs/gui-system-architecture.md`'s Child Layout Model
-//! section.
+//! positioning.
 
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;

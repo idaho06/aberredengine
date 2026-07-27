@@ -1,5 +1,4 @@
-//! Replay file wire format (determinism roadmap phase 05,
-//! `docs/plans/determinism-05-replays.md`).
+//! Replay file wire format.
 //!
 //! A replay file is a [`ReplayHeader`], then a stream of length-prefixed
 //! postcard-encoded [`ReplayEntry`] values, the last of which is always
@@ -16,7 +15,12 @@ pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
 /// Bumped whenever [`ReplayHeader`]/[`ReplayEntry`]'s shape or semantics
 /// change in a way that breaks reading an older file. A replay recorded
 /// under a different version is refused, not best-effort parsed.
-pub const REPLAY_FORMAT_VERSION: u32 = 2;
+///
+/// `3`: [`config_digest`] dropped `snapshot_skip` (render-only). The entry
+/// shapes are unchanged from `2`, but a v2 file's digest was computed over
+/// a different field set, so replaying it would fail as a *config* mismatch
+/// — a misleading error for what is a format change.
+pub const REPLAY_FORMAT_VERSION: u32 = 3;
 
 /// A stable, version-controlled FNV-1a-style hash mixer.
 ///
@@ -88,9 +92,9 @@ impl ReplayHasher {
 pub struct ReplayHeader {
     pub magic: [u8; 4],
     pub format_version: u32,
-    /// `env!("CARGO_PKG_VERSION")` at record time. v1 simplification — no
-    /// git-hash plumbing; cross-build replay compatibility is out of scope
-    /// (`docs/plans/determinism-00-overview.md`'s "same build, same arch").
+    /// `env!("CARGO_PKG_VERSION")` at record time. The header stores the
+    /// package version string only; replay compatibility is checked within the
+    /// same build/architecture envelope.
     pub engine_build_id: String,
     pub seed: u64,
     pub sim_hz: f64,
@@ -132,11 +136,14 @@ pub enum ReplayEntry {
 /// Sim-visible `GameConfig` fields, hashed in this fixed order via
 /// [`ReplayHasher`]. Only fields that actually affect sim behavior belong
 /// here — e.g. `window_title`/`vsync`/`fullscreen` are render-only and
-/// excluded.
+/// excluded. `snapshot_skip` is excluded for the same reason (format
+/// version 2 → 3): it decimates PRESENT publishes, a render-facing output
+/// rate, and is already a sim-tick countdown rather than a wall-clock one,
+/// so it cannot change sim state. Including it only made playback refuse
+/// replays whose recording differed in a field the sim never observes.
 pub fn config_digest(config: &crate::resources::gameconfig::GameConfig) -> u64 {
     let mut h = ReplayHasher::new();
     h.write_u64(config.sim_hz.to_bits());
-    h.write_u32(config.snapshot_skip);
     h.write_f32(config.gamepad_deadzone);
     h.write_u32(config.render_width);
     h.write_u32(config.render_height);

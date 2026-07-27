@@ -1,11 +1,11 @@
 //! GUI interactable click events.
 //!
 //! [`GuiInteractableClickEvent`] is triggered when any clickable GUI widget
-//! (`GuiButton`, `GuiImage`, future widgets) carrying `GuiInteractable` is
+//! (`GuiButton`, `GuiImage`, or any other widget carrying `GuiInteractable`) is
 //! released while still inside its bounds, having been `Pressed` the
 //! preceding frame. Mirrors [`MenuSelectionEvent`](super::menu::MenuSelectionEvent).
-//! Generalized from the former `GuiButtonClickEvent` when `GuiInteractable`
-//! was extracted out of `GuiButton`.
+//! `gui_interactable_click_observer` dispatches the matching Lua/Rust
+//! callback chain for the clicked entity.
 
 use bevy_ecs::prelude::*;
 
@@ -16,7 +16,7 @@ use bevy_ecs::prelude::*;
 /// Lua/Rust callback chain.
 #[derive(Event, Debug, Clone)]
 pub struct GuiInteractableClickEvent {
-    /// The entity that was clicked (a `GuiButton`, `GuiImage`, or any future
+    /// The entity that was clicked (a `GuiButton`, `GuiImage`, or any other
     /// `GuiInteractable`-carrying widget).
     pub entity: Entity,
 }
