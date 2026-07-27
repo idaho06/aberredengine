@@ -5,6 +5,7 @@
 
 use super::commands::*;
 use super::input_snapshot::InputSnapshot;
+use super::input_snapshot::for_each_digital_button;
 use super::spawn_data::*;
 use crate::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
@@ -76,37 +77,7 @@ impl Default for GameConfigSnapshot {
     }
 }
 
-/// Shared state accessible from Lua function closures.
-/// This is stored in Lua's app_data and allows Lua functions to queue commands.
-///
-/// Queue fields must stay in sync with the list in `queue_registry.rs`.
-/// Drain methods and the body of `clear_all_commands` are generated from that list.
-#[derive(Default)]
-pub(super) struct LuaAppData {
-    // Command queues — keep in sync with queue_registry.rs lua_queues! list
-    pub(super) asset_commands: RefCell<Vec<AssetCmd>>,
-    pub(super) spawn_commands: RefCell<Vec<SpawnCmd>>,
-    pub(super) audio_commands: RefCell<Vec<AudioLuaCmd>>,
-    pub(super) signal_commands: RefCell<Vec<SignalCmd>>,
-    pub(super) phase_commands: RefCell<Vec<PhaseCmd>>,
-    pub(super) entity_commands: RefCell<Vec<EntityCmd>>,
-    pub(super) group_commands: RefCell<Vec<GroupCmd>>,
-    pub(super) camera_commands: RefCell<Vec<CameraCmd>>,
-    pub(super) animation_commands: RefCell<Vec<AnimationCmd>>,
-    pub(super) render_commands: RefCell<Vec<RenderCmd>>,
-    pub(super) gui_theme_commands: RefCell<Vec<RenderCmd>>,
-    pub(super) clone_commands: RefCell<Vec<CloneCmd>>,
-    pub(super) gameconfig_commands: RefCell<Vec<GameConfigCmd>>,
-    pub(super) camera_follow_commands: RefCell<Vec<CameraFollowCmd>>,
-    pub(super) input_commands: RefCell<Vec<InputCmd>>,
-    pub(super) map_commands: RefCell<Vec<MapLuaCmd>>,
-    pub(super) collision_entity_commands: RefCell<Vec<EntityCmd>>,
-    pub(super) collision_signal_commands: RefCell<Vec<SignalCmd>>,
-    pub(super) collision_audio_commands: RefCell<Vec<AudioLuaCmd>>,
-    pub(super) collision_spawn_commands: RefCell<Vec<SpawnCmd>>,
-    pub(super) collision_clone_commands: RefCell<Vec<CloneCmd>>,
-    pub(super) collision_phase_commands: RefCell<Vec<PhaseCmd>>,
-    pub(super) collision_camera_commands: RefCell<Vec<CameraCmd>>,
+crate::lua_queues! {app_data_struct {
     // Read-only caches — updated before each Lua callback
     pub(super) signal_snapshot: RefCell<Arc<SignalSnapshot>>,
     pub(super) tracked_groups: RefCell<FxHashSet<String>>,
@@ -120,7 +91,7 @@ pub(super) struct LuaAppData {
     /// by `update_input_table` to skip redundant writes within a frame and
     /// diff against the previous frame's values.
     pub(super) last_input: RefCell<Option<(u64, InputSnapshot)>>,
-}
+}}
 
 /// Pooled inner tables for one entity's `signals` ctx field
 /// (`flags`/`integers`/`scalars`/`strings`), reused in place via
@@ -169,34 +140,20 @@ pub struct CollisionCtxTables {
     pub sides_b: LuaTable,
 }
 
-/// Pooled input callback tables, owned directly by `LuaRuntime` and reused across
-/// scene, phase, and timer callbacks via cheap `Clone`.
-#[derive(Clone)]
-pub struct InputCtxTables {
-    pub input: LuaTable,
-    pub digital: LuaTable,
-    pub analog: LuaTable,
-    pub up: LuaTable,
-    pub down: LuaTable,
-    pub left: LuaTable,
-    pub right: LuaTable,
-    pub action_1: LuaTable,
-    pub action_2: LuaTable,
-    pub action_3: LuaTable,
-    pub back: LuaTable,
-    pub special: LuaTable,
-    pub main_up: LuaTable,
-    pub main_down: LuaTable,
-    pub main_left: LuaTable,
-    pub main_right: LuaTable,
-    pub secondary_up: LuaTable,
-    pub secondary_down: LuaTable,
-    pub secondary_left: LuaTable,
-    pub secondary_right: LuaTable,
-    pub debug: LuaTable,
-    pub fullscreen: LuaTable,
-    pub mouse_left: LuaTable,
+macro_rules! input_ctx_tables_fields {
+    ($(($field:ident, $($m:tt)*)),* $(,)?) => {
+        /// Pooled input callback tables, owned directly by `LuaRuntime` and reused across
+        /// scene, phase, and timer callbacks via cheap `Clone`.
+        #[derive(Clone)]
+        pub struct InputCtxTables {
+            pub input: LuaTable,
+            pub digital: LuaTable,
+            pub analog: LuaTable,
+            $( pub $field: LuaTable, )*
+        }
+    };
 }
+for_each_digital_button! {input_ctx_tables_fields}
 
 /// Pooled entity context tables, owned directly by `LuaRuntime` and reused for
 /// phase/timer callbacks via cheap `Clone`.
@@ -277,36 +234,6 @@ pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
         "toggle_fullscreen" => Some(InputAction::ToggleFullscreen),
         _ => None,
     }
-}
-
-/// Invokes `$cb!(field)` for each of the 20 digital button fields shared by
-/// `DigitalInputs` and `InputCtxTables` (field and table names match for all
-/// of them). Used by [`LuaRuntime::diff_digital_tables`] and
-/// [`LuaRuntime::write_all_digital_tables`] so the button list is declared
-/// exactly once.
-macro_rules! for_each_digital_button {
-    ($cb:ident) => {
-        $cb!(up);
-        $cb!(down);
-        $cb!(left);
-        $cb!(right);
-        $cb!(action_1);
-        $cb!(action_2);
-        $cb!(action_3);
-        $cb!(back);
-        $cb!(special);
-        $cb!(main_up);
-        $cb!(main_down);
-        $cb!(main_left);
-        $cb!(main_right);
-        $cb!(secondary_up);
-        $cb!(secondary_down);
-        $cb!(secondary_left);
-        $cb!(secondary_right);
-        $cb!(debug);
-        $cb!(fullscreen);
-        $cb!(mouse_left);
-    };
 }
 
 impl LuaRuntime {
@@ -472,76 +399,29 @@ impl LuaRuntime {
         let digital = lua.create_table()?;
         let analog = lua.create_table()?;
 
-        let up = lua.create_table()?;
-        let down = lua.create_table()?;
-        let left = lua.create_table()?;
-        let right = lua.create_table()?;
-        let action_1 = lua.create_table()?;
-        let action_2 = lua.create_table()?;
-        let action_3 = lua.create_table()?;
-        let back = lua.create_table()?;
-        let special = lua.create_table()?;
-        let main_up = lua.create_table()?;
-        let main_down = lua.create_table()?;
-        let main_left = lua.create_table()?;
-        let main_right = lua.create_table()?;
-        let secondary_up = lua.create_table()?;
-        let secondary_down = lua.create_table()?;
-        let secondary_left = lua.create_table()?;
-        let secondary_right = lua.create_table()?;
-        let debug = lua.create_table()?;
-        let fullscreen = lua.create_table()?;
-        let mouse_left = lua.create_table()?;
-
-        digital.set("up", up.clone())?;
-        digital.set("down", down.clone())?;
-        digital.set("left", left.clone())?;
-        digital.set("right", right.clone())?;
-        digital.set("action_1", action_1.clone())?;
-        digital.set("action_2", action_2.clone())?;
-        digital.set("action_3", action_3.clone())?;
-        digital.set("back", back.clone())?;
-        digital.set("special", special.clone())?;
-        digital.set("main_up", main_up.clone())?;
-        digital.set("main_down", main_down.clone())?;
-        digital.set("main_left", main_left.clone())?;
-        digital.set("main_right", main_right.clone())?;
-        digital.set("secondary_up", secondary_up.clone())?;
-        digital.set("secondary_down", secondary_down.clone())?;
-        digital.set("secondary_left", secondary_left.clone())?;
-        digital.set("secondary_right", secondary_right.clone())?;
-        digital.set("debug", debug.clone())?;
-        digital.set("fullscreen", fullscreen.clone())?;
-        digital.set("mouse_left", mouse_left.clone())?;
-
-        input.set("digital", digital.clone())?;
-        input.set("analog", analog.clone())?;
-
-        Ok(InputCtxTables {
-            input,
-            digital,
-            analog,
-            up,
-            down,
-            left,
-            right,
-            action_1,
-            action_2,
-            action_3,
-            back,
-            special,
-            main_up,
-            main_down,
-            main_left,
-            main_right,
-            secondary_up,
-            secondary_down,
-            secondary_left,
-            secondary_right,
-            debug,
-            fullscreen,
-            mouse_left,
-        })
+        // Emitted as ONE macro invocation (not split across separate
+        // let/wire/struct-init invocations): macro hygiene assigns each
+        // invocation of a macro its own identifier context, so a `let $field`
+        // bound in one invocation would not be visible to `$field` used in a
+        // different invocation even with an identical field name. Repeating
+        // `$field` across multiple `$(...)* ` groups within a single arm's
+        // expansion is fine — that's the same binding reused, not
+        // re-introduced.
+        macro_rules! ctx_build {
+            ($(($field:ident, $($m:tt)*)),* $(,)?) => {{
+                $( let $field = lua.create_table()?; )*
+                $( digital.set(stringify!($field), $field.clone())?; )*
+                input.set("digital", digital.clone())?;
+                input.set("analog", analog.clone())?;
+                InputCtxTables {
+                    input,
+                    digital,
+                    analog,
+                    $( $field, )*
+                }
+            }};
+        }
+        Ok(for_each_digital_button! {ctx_build})
     }
 
     /// Returns the pooled input callback tables for reuse.
@@ -566,14 +446,16 @@ impl LuaRuntime {
         old: &super::input_snapshot::DigitalInputs,
         new: &super::input_snapshot::DigitalInputs,
     ) -> LuaResult<()> {
-        macro_rules! diff_one {
-            ($field:ident) => {
-                if old.$field != new.$field {
-                    Self::update_button_table(&tables.$field, &new.$field)?;
-                }
+        macro_rules! diff_all {
+            ($(($field:ident, $($m:tt)*)),* $(,)?) => {
+                $(
+                    if old.$field != new.$field {
+                        Self::update_button_table(&tables.$field, &new.$field)?;
+                    }
+                )*
             };
         }
-        for_each_digital_button!(diff_one);
+        for_each_digital_button!(diff_all);
         Ok(())
     }
 
@@ -582,12 +464,12 @@ impl LuaRuntime {
         tables: &InputCtxTables,
         snapshot: &super::input_snapshot::DigitalInputs,
     ) -> LuaResult<()> {
-        macro_rules! write_one {
-            ($field:ident) => {
-                Self::update_button_table(&tables.$field, &snapshot.$field)?;
+        macro_rules! write_all {
+            ($(($field:ident, $($m:tt)*)),* $(,)?) => {
+                $( Self::update_button_table(&tables.$field, &snapshot.$field)?; )*
             };
         }
-        for_each_digital_button!(write_one);
+        for_each_digital_button!(write_all);
         Ok(())
     }
 
@@ -893,6 +775,20 @@ mod tests {
         assert!(action_1.get::<bool>("just_pressed").unwrap());
         assert_eq!(analog.get::<f32>("mouse_x").unwrap(), 12.5);
         assert_eq!(analog.get::<f32>("mouse_world_y").unwrap(), -4.0);
+    }
+
+    #[test]
+    fn digital_table_has_exactly_20_button_keys() {
+        let runtime = LuaRuntime::new().unwrap();
+        let input = runtime
+            .update_input_table(&InputSnapshot::default(), 1)
+            .unwrap();
+        let digital: LuaTable = input.get("digital").unwrap();
+        let count = digital.pairs::<String, LuaTable>().count();
+        assert_eq!(
+            count, 20,
+            "input.digital must have exactly 20 button tables"
+        );
     }
 
     #[test]

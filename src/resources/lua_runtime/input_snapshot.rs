@@ -41,36 +41,60 @@ impl DigitalButtonState {
     }
 }
 
-/// All digital input states.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct DigitalInputs {
-    // Combined directional (WASD OR arrows)
-    pub up: DigitalButtonState,
-    pub down: DigitalButtonState,
-    pub left: DigitalButtonState,
-    pub right: DigitalButtonState,
-    // Action buttons
-    pub action_1: DigitalButtonState,
-    pub action_2: DigitalButtonState,
-    pub action_3: DigitalButtonState,
-    pub back: DigitalButtonState,
-    pub special: DigitalButtonState,
-    // Raw WASD (main directional)
-    pub main_up: DigitalButtonState,
-    pub main_down: DigitalButtonState,
-    pub main_left: DigitalButtonState,
-    pub main_right: DigitalButtonState,
-    // Raw arrow keys (secondary directional)
-    pub secondary_up: DigitalButtonState,
-    pub secondary_down: DigitalButtonState,
-    pub secondary_left: DigitalButtonState,
-    pub secondary_right: DigitalButtonState,
-    // Special function keys
-    pub debug: DigitalButtonState,
-    pub fullscreen: DigitalButtonState,
-    // Raw left mouse button (not routed through InputBindings)
-    pub mouse_left: DigitalButtonState,
+/// Master list of the digital buttons exposed to Lua's `input.digital` table
+/// and mirrored in [`DigitalInputs`] / `InputCtxTables` (runtime.rs). Each row:
+///   (field_name, mapping)
+/// where mapping is one of:
+///   combined(main_field, secondary_field) — OR of two `InputState` BoolStates
+///   direct(input_state_field)             — 1:1 from an `InputState` BoolState
+///
+/// `for_each_digital_button!(my_cb)` expands to a single
+/// `my_cb!{ (field, mapping), (field, mapping), ... }` call carrying every
+/// row as one comma-separated argument list — one macro invocation, so a
+/// consumer can produce a complete item or expression from it directly
+/// (a struct definition, a struct-literal expression, or a `$(...)* `
+/// repetition of statements), since Rust does not support splicing
+/// multiple separate macro invocations into a struct's field list.
+macro_rules! for_each_digital_button {
+    ($cb:ident) => {
+        $cb! {
+            (up,              combined(maindirection_up,    secondarydirection_up)),
+            (down,            combined(maindirection_down,  secondarydirection_down)),
+            (left,            combined(maindirection_left,  secondarydirection_left)),
+            (right,           combined(maindirection_right, secondarydirection_right)),
+            (action_1,        direct(action_1)),
+            (action_2,        direct(action_2)),
+            (action_3,        direct(action_3)),
+            (back,            direct(action_back)),
+            (special,         direct(action_special)),
+            (main_up,         direct(maindirection_up)),
+            (main_down,       direct(maindirection_down)),
+            (main_left,       direct(maindirection_left)),
+            (main_right,      direct(maindirection_right)),
+            (secondary_up,    direct(secondarydirection_up)),
+            (secondary_down,  direct(secondarydirection_down)),
+            (secondary_left,  direct(secondarydirection_left)),
+            (secondary_right, direct(secondarydirection_right)),
+            (debug,           direct(mode_debug)),
+            (fullscreen,      direct(fullscreen_toggle)),
+            (mouse_left,      direct(mouse_left_button)),
+        }
+    };
 }
+pub(crate) use for_each_digital_button;
+
+macro_rules! digital_inputs_fields {
+    ($(($field:ident, $($m:tt)*)),* $(,)?) => {
+        /// All digital input states — one field per `for_each_digital_button!`
+        /// row (grouping: combined directional / raw WASD / raw arrows /
+        /// action buttons / function keys / mouse).
+        #[derive(Debug, Clone, Default, PartialEq)]
+        pub struct DigitalInputs {
+            $( pub $field: DigitalButtonState, )*
+        }
+    };
+}
+for_each_digital_button! {digital_inputs_fields}
 
 /// Analog input values.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -118,63 +142,27 @@ impl InputSnapshot {
     /// This combines main direction (WASD) and secondary direction (arrows)
     /// inputs into unified directional inputs (up/down/left/right).
     pub fn from_input_state(input: &InputState) -> Self {
+        macro_rules! digital_value {
+            (combined($main:ident, $secondary:ident)) => {
+                DigitalButtonState {
+                    pressed: input.$main.active || input.$secondary.active,
+                    just_pressed: input.$main.just_pressed || input.$secondary.just_pressed,
+                    just_released: input.$main.just_released || input.$secondary.just_released,
+                }
+            };
+            (direct($src:ident)) => {
+                DigitalButtonState::from_bool_state(&input.$src)
+            };
+        }
+        macro_rules! digital_from_input {
+            ($(($field:ident, $($m:tt)*)),* $(,)?) => {
+                DigitalInputs {
+                    $( $field: digital_value!($($m)*), )*
+                }
+            };
+        }
         Self {
-            digital: DigitalInputs {
-                // Combine WASD and arrow keys for directional input
-                up: DigitalButtonState {
-                    pressed: input.maindirection_up.active || input.secondarydirection_up.active,
-                    just_pressed: input.maindirection_up.just_pressed
-                        || input.secondarydirection_up.just_pressed,
-                    just_released: input.maindirection_up.just_released
-                        || input.secondarydirection_up.just_released,
-                },
-                down: DigitalButtonState {
-                    pressed: input.maindirection_down.active
-                        || input.secondarydirection_down.active,
-                    just_pressed: input.maindirection_down.just_pressed
-                        || input.secondarydirection_down.just_pressed,
-                    just_released: input.maindirection_down.just_released
-                        || input.secondarydirection_down.just_released,
-                },
-                left: DigitalButtonState {
-                    pressed: input.maindirection_left.active
-                        || input.secondarydirection_left.active,
-                    just_pressed: input.maindirection_left.just_pressed
-                        || input.secondarydirection_left.just_pressed,
-                    just_released: input.maindirection_left.just_released
-                        || input.secondarydirection_left.just_released,
-                },
-                right: DigitalButtonState {
-                    pressed: input.maindirection_right.active
-                        || input.secondarydirection_right.active,
-                    just_pressed: input.maindirection_right.just_pressed
-                        || input.secondarydirection_right.just_pressed,
-                    just_released: input.maindirection_right.just_released
-                        || input.secondarydirection_right.just_released,
-                },
-                action_1: DigitalButtonState::from_bool_state(&input.action_1),
-                action_2: DigitalButtonState::from_bool_state(&input.action_2),
-                action_3: DigitalButtonState::from_bool_state(&input.action_3),
-                back: DigitalButtonState::from_bool_state(&input.action_back),
-                special: DigitalButtonState::from_bool_state(&input.action_special),
-                // Raw WASD
-                main_up: DigitalButtonState::from_bool_state(&input.maindirection_up),
-                main_down: DigitalButtonState::from_bool_state(&input.maindirection_down),
-                main_left: DigitalButtonState::from_bool_state(&input.maindirection_left),
-                main_right: DigitalButtonState::from_bool_state(&input.maindirection_right),
-                // Raw arrow keys
-                secondary_up: DigitalButtonState::from_bool_state(&input.secondarydirection_up),
-                secondary_down: DigitalButtonState::from_bool_state(&input.secondarydirection_down),
-                secondary_left: DigitalButtonState::from_bool_state(&input.secondarydirection_left),
-                secondary_right: DigitalButtonState::from_bool_state(
-                    &input.secondarydirection_right,
-                ),
-                // Function keys
-                debug: DigitalButtonState::from_bool_state(&input.mode_debug),
-                fullscreen: DigitalButtonState::from_bool_state(&input.fullscreen_toggle),
-                // Raw left mouse button
-                mouse_left: DigitalButtonState::from_bool_state(&input.mouse_left_button),
-            },
+            digital: for_each_digital_button! {digital_from_input},
             analog: AnalogInputs {
                 scroll_y: input.scroll_y,
                 mouse_x: input.mouse_x,

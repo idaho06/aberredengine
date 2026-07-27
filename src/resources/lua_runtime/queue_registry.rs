@@ -1,16 +1,15 @@
 /// Central registry of all Lua command queues.
 ///
-/// To add a new queue:
-///   1. Add one row `(field_name, CmdType, clear_policy)` to the `@master` arm below.
-///      `clear_policy` is `clear` (wiped by `clear_all_commands` on scene switch — the
-///      default for queues whose commands may reference about-to-be-despawned entities)
-///      or `preserve` (left untouched — for scene-agnostic queues whose only drain site
-///      runs after `switch_scene`, e.g. `map_commands`/`asset_commands`).
-///   2. Add the corresponding `RefCell<Vec<CmdType>>` field to `LuaAppData` in
-///      runtime.rs (struct + Default), with the same field name.
+/// To add a new queue, add one row `(field_name, CmdType, clear_policy)` to
+/// the `@master` arm below. `clear_policy` is `clear` (wiped by
+/// `clear_all_commands` on scene switch — the default for queues whose
+/// commands may reference about-to-be-despawned entities) or `preserve`
+/// (left untouched — for scene-agnostic queues whose only drain site runs
+/// after `switch_scene`, e.g. `map_commands`/`asset_commands`).
 ///
-/// Drain methods (`drain_<field>_into`) and `clear_all_commands`'s body are
-/// both generated automatically from the single list in the `@master` arm.
+/// Drain methods (`drain_<field>_into`), `clear_all_commands`'s body, and
+/// `LuaAppData`'s queue fields (runtime.rs) are all generated automatically
+/// from this single list.
 #[macro_export]
 macro_rules! lua_queues {
     // ------------------------------------------------------------------
@@ -77,4 +76,26 @@ macro_rules! lua_queues {
         $d.$field.borrow_mut().clear();
     };
     (@clear_one $d:tt, $field:ident, preserve) => {};
+
+    // ------------------------------------------------------------------
+    // Whole-item generation of LuaAppData: `$extra` carries the non-queue
+    // fields verbatim (they don't come from the row list), spliced in
+    // alongside the generated queue fields within the SAME struct item.
+    // ------------------------------------------------------------------
+    (app_data_struct { $($extra:tt)* }) => {
+        $crate::lua_queues!{@master @dispatch_struct { $($extra)* }}
+    };
+
+    (@dispatch_struct { $($extra:tt)* } $(($field:ident, $ty:ty, $policy:ident)),* $(,)?) => {
+        /// Shared state accessible from Lua function closures.
+        /// This is stored in Lua's app_data and allows Lua functions to queue commands.
+        ///
+        /// Queue fields are generated from the single list in queue_registry.rs's
+        /// `@master` arm — add a row there, not here, to add a new queue.
+        #[derive(Default)]
+        pub(super) struct LuaAppData {
+            $( pub(super) $field: ::std::cell::RefCell<::std::vec::Vec<$ty>>, )*
+            $($extra)*
+        }
+    };
 }
