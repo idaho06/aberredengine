@@ -25,6 +25,7 @@ use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
+use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::determinism_taint::DeterminismTaint;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
@@ -102,6 +103,7 @@ impl EngineBuilder {
         world.insert_resource(AppState::default());
         world.insert_resource(SignalIntents::default());
         world.insert_resource(TrackedGroups::default());
+        world.insert_resource(CollisionRuleIndex::default());
         world.insert_resource(ScreenSize {
             w: render_width as i32,
             h: render_height as i32,

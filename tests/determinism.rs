@@ -637,7 +637,13 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // forces a conscious decision (update GOLDEN_HASH, and consider
     // bumping REPLAY_FORMAT_VERSION if old replay files would now diverge)
     // instead of a silent regression.
-    const GOLDEN_HASH: u64 = 0xcec7_81a2_f7c4_1bfa;
+    //
+    // Bumped for lua-refactor phase 04: registering
+    // `rebuild_collision_rule_index` in the sim schedule's `SimSet::Collision`
+    // (`.before(collision_detector)`) changes the deterministic
+    // single-threaded executor's per-tick system sequence, even though this
+    // scenario spawns no `CollisionRule` entity for the new system to act on.
+    const GOLDEN_HASH: u64 = 0x9f71_4dc6_36ff_e0a3;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,

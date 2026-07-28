@@ -48,7 +48,9 @@ use aberredengine::resources::texturedims::TextureDimsStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::worldtime::WorldTime;
 use aberredengine::systems::animation::{animation, animation_controller};
+use aberredengine::resources::collision_rule_index::CollisionRuleIndex;
 use aberredengine::systems::collision_detector::collision_detector;
+use aberredengine::systems::collision_rule_index::rebuild_collision_rule_index;
 use aberredengine::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
@@ -92,6 +94,7 @@ fn make_world(delta: f32) -> World {
     world.init_resource::<PostProcessShader>();
     world.insert_resource(CameraFollowConfig::default());
     world.insert_resource(InputBindings::default());
+    world.insert_resource(CollisionRuleIndex::default());
     common::insert_sim_rng(&mut world);
     world
 }
@@ -110,6 +113,7 @@ fn tick_ttl(world: &mut World) {
 
 fn tick_collision_detector(world: &mut World) {
     let mut schedule = Schedule::default();
+    schedule.add_systems(rebuild_collision_rule_index.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
 }
@@ -2880,6 +2884,89 @@ fn collision_rule_sides_passed_to_callback() {
 
     let signals = world.get::<Signals>(a).unwrap();
     assert!(signals.has_flag("sides_correct"));
+}
+
+/// Deliberate behavior change (lua-refactor phase 04): when multiple rules
+/// cover the same group pair, first-match is now deterministic (lowest
+/// `Entity` wins), not query-iteration order. Per
+/// `.claude/context/system-order.md`, `Entity`'s `Ord` does NOT correlate
+/// with spawn order (its niche encoding stores `!index`), so this test
+/// determines which of the two rules has the lower id *after* spawning
+/// both, rather than assuming spawn order predicts it.
+#[test]
+fn collision_rule_same_pair_multiple_rules_lowest_entity_wins() {
+    let mut world = make_world(0.0);
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(AppState::default());
+    world.insert_resource(InputState::default());
+
+    fn on_collision_first(
+        ent_a: Entity,
+        _ent_b: Entity,
+        _sides_a: &BoxSides,
+        _sides_b: &BoxSides,
+        ctx: &mut GameCtx,
+    ) {
+        if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+            signals.set_flag("first_rule_fired");
+        }
+    }
+
+    fn on_collision_second(
+        ent_a: Entity,
+        _ent_b: Entity,
+        _sides_a: &BoxSides,
+        _sides_b: &BoxSides,
+        ctx: &mut GameCtx,
+    ) {
+        if let Ok(mut signals) = ctx.signals.get_mut(ent_a) {
+            signals.set_flag("second_rule_fired");
+        }
+    }
+
+    let a = world
+        .spawn((
+            Group::new("ball"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Signals::default(),
+        ))
+        .id();
+    world.spawn((
+        Group::new("brick"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+
+    let rule_1 = world
+        .spawn(CollisionRule::new(
+            "ball",
+            "brick",
+            on_collision_first as CollisionCallback,
+        ))
+        .id();
+    let rule_2 = world
+        .spawn(CollisionRule::new(
+            "ball",
+            "brick",
+            on_collision_second as CollisionCallback,
+        ))
+        .id();
+    let first_rule_has_lower_entity = rule_1 < rule_2;
+
+    world.add_observer(rust_collision_observer);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    let (expected, unexpected) = if first_rule_has_lower_entity {
+        ("first_rule_fired", "second_rule_fired")
+    } else {
+        ("second_rule_fired", "first_rule_fired")
+    };
+    let signals = world.get::<Signals>(a).unwrap();
+    assert!(signals.has_flag(expected));
+    assert!(!signals.has_flag(unexpected));
 }
 
 // =============================================================================

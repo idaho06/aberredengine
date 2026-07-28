@@ -18,10 +18,11 @@ use bevy_ecs::prelude::*;
 use raylib::prelude::Rectangle;
 
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{BoxSides, get_colliding_sides};
+use crate::components::collision::{BoxSides, CollisionRule, get_colliding_sides};
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
+use smallvec::SmallVec;
 
 /// Resolve the world position of an entity.
 ///
@@ -75,6 +76,37 @@ pub fn resolve_groups<'q>(
     let ga = groups.get(a).ok()?;
     let gb = groups.get(b).ok()?;
     Some((ga.name(), gb.name()))
+}
+
+/// Scan a [`CollisionRuleIndex`](crate::resources::collision_rule_index::CollisionRuleIndex)
+/// bucket for the first rule whose groups still match `(ga, gb)`, skipping
+/// any entity that despawned between this tick's index rebuild and now.
+///
+/// Shared by [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer)
+/// and [`lua_collision_observer`](crate::systems::lua_collision::lua_collision_observer),
+/// which otherwise duplicated this loop identically (generic over the rule's
+/// callback payload `C`, since the two observers query `CollisionRule` and
+/// `LuaCollisionRule = CollisionRule<LuaCollisionCallback>` respectively).
+pub fn find_matching_rule<'q, C>(
+    bucket: &SmallVec<[Entity; 2]>,
+    rules: &'q Query<&CollisionRule<C>>,
+    a: Entity,
+    b: Entity,
+    ga: &str,
+    gb: &str,
+) -> Option<(&'q CollisionRule<C>, Entity, Entity)>
+where
+    C: Send + Sync + 'static,
+{
+    for &rule_entity in bucket {
+        let Ok(rule) = rules.get(rule_entity) else {
+            continue;
+        };
+        if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
+            return Some((rule, ent_a, ent_b));
+        }
+    }
+    None
 }
 
 #[cfg(test)]

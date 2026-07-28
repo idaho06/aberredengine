@@ -9,6 +9,7 @@
 //! - [`audio`] – dedicated audio thread and its own `bevy_ecs::World`
 //! - [`audio_bridge`] – logic-thread systems that shuttle `AudioCmd`/`AudioMessage` with the audio thread
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
+//! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
 //! - [`lua_collision`] – *(feature = "lua")* Lua-based collision observer and callback dispatch
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
@@ -45,6 +46,7 @@ pub mod audio_bridge;
 pub mod camera_follow;
 pub mod collision;
 pub mod collision_detector;
+pub mod collision_rule_index;
 pub mod dynamictext_size;
 pub mod game_ctx;
 pub mod gamestate;

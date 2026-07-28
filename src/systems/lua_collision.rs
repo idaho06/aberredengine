@@ -47,6 +47,7 @@ use crate::components::signals::Signals;
 use crate::events::collision::CollisionEvent;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
+use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::resources::lua_runtime::{
     CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_array_table,
     populate_entity_signals, set_opt,
@@ -54,7 +55,7 @@ use crate::resources::lua_runtime::{
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::systems::collision::{
-    compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
+    compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups, resolve_world_pos,
 };
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
@@ -68,6 +69,7 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
+    pub index: Res<'w, CollisionRuleIndex>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub entity_cmds: EntityCmdQueries<'w, 's>,
@@ -86,7 +88,7 @@ pub fn lua_collision_observer(
     mut phase_buf: Local<Vec<PhaseCmd>>,
     mut effect_bufs: Local<EffectCmdBufs>,
 ) {
-    if params.lua_rules.is_empty() {
+    if params.index.is_empty() {
         return;
     }
 
@@ -98,122 +100,126 @@ pub fn lua_collision_observer(
         None => return,
     };
 
-    for lua_rule in params.lua_rules.iter() {
-        if let Some((ent_a, ent_b)) = lua_rule.match_and_order(a, b, ga, gb) {
-            let callback_name = lua_rule.callback.name.as_str();
-            let pos_a = resolve_world_pos(
-                &params.entity_cmds.positions.as_readonly(),
-                &params.entity_cmds.global_transforms,
-                ent_a,
+    let Some(bucket) = params.index.lua_bucket(ga, gb) else {
+        return;
+    };
+
+    let Some((lua_rule, ent_a, ent_b)) =
+        find_matching_rule(bucket, &params.lua_rules, a, b, ga, gb)
+    else {
+        return;
+    };
+
+    let callback_name = lua_rule.callback.name.as_str();
+    let pos_a = resolve_world_pos(
+        &params.entity_cmds.positions.as_readonly(),
+        &params.entity_cmds.global_transforms,
+        ent_a,
+    )
+    .map(|v| (v.x, v.y));
+    let pos_b = resolve_world_pos(
+        &params.entity_cmds.positions.as_readonly(),
+        &params.entity_cmds.global_transforms,
+        ent_b,
+    )
+    .map(|v| (v.x, v.y));
+
+    let (vel_a, speed_sq_a) = params
+        .entity_cmds
+        .rigid_bodies
+        .get(ent_a)
+        .ok()
+        .map(|rb| {
+            (
+                Some((rb.velocity.x, rb.velocity.y)),
+                rb.velocity.length_sqr(),
             )
-            .map(|v| (v.x, v.y));
-            let pos_b = resolve_world_pos(
-                &params.entity_cmds.positions.as_readonly(),
-                &params.entity_cmds.global_transforms,
-                ent_b,
+        })
+        .unwrap_or((None, 0.0));
+    let (vel_b, speed_sq_b) = params
+        .entity_cmds
+        .rigid_bodies
+        .get(ent_b)
+        .ok()
+        .map(|rb| {
+            (
+                Some((rb.velocity.x, rb.velocity.y)),
+                rb.velocity.length_sqr(),
             )
-            .map(|v| (v.x, v.y));
+        })
+        .unwrap_or((None, 0.0));
 
-            let (vel_a, speed_sq_a) = params
-                .entity_cmds
-                .rigid_bodies
-                .get(ent_a)
-                .ok()
-                .map(|rb| {
-                    (
-                        Some((rb.velocity.x, rb.velocity.y)),
-                        rb.velocity.length_sqr(),
-                    )
-                })
-                .unwrap_or((None, 0.0));
-            let (vel_b, speed_sq_b) = params
-                .entity_cmds
-                .rigid_bodies
-                .get(ent_b)
-                .ok()
-                .map(|rb| {
-                    (
-                        Some((rb.velocity.x, rb.velocity.y)),
-                        rb.velocity.length_sqr(),
-                    )
-                })
-                .unwrap_or((None, 0.0));
+    let rect_a = resolve_collider_rect(
+        &params.entity_cmds.positions.as_readonly(),
+        &params.entity_cmds.global_transforms,
+        &params.box_colliders,
+        ent_a,
+    );
+    let rect_b = resolve_collider_rect(
+        &params.entity_cmds.positions.as_readonly(),
+        &params.entity_cmds.global_transforms,
+        &params.box_colliders,
+        ent_b,
+    );
+    let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
 
-            let rect_a = resolve_collider_rect(
-                &params.entity_cmds.positions.as_readonly(),
-                &params.entity_cmds.global_transforms,
-                &params.box_colliders,
-                ent_a,
-            );
-            let rect_b = resolve_collider_rect(
-                &params.entity_cmds.positions.as_readonly(),
-                &params.entity_cmds.global_transforms,
-                &params.box_colliders,
-                ent_b,
-            );
-            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
+    let signals_a = params.entity_cmds.signals.get(ent_a).ok();
+    let signals_b = params.entity_cmds.signals.get(ent_b).ok();
+    let (group_a, group_b) = if ent_a == a { (ga, gb) } else { (gb, ga) };
 
-            let signals_a = params.entity_cmds.signals.get(ent_a).ok();
-            let signals_b = params.entity_cmds.signals.get(ent_b).ok();
-            let (group_a, group_b) = if ent_a == a { (ga, gb) } else { (gb, ga) };
+    // Refresh the cached world-signal snapshot only when something has
+    // changed since the last refresh. lua_plugin::update primes the
+    // cache every frame; within a collision-heavy frame the common case
+    // (no signal writes between collisions) skips the snapshot entirely,
+    // avoiding a full per-collision re-clone of the dirtied domains.
+    if params.world_signals.is_dirty() {
+        params
+            .lua_runtime
+            .update_signal_cache(params.world_signals.snapshot());
+    }
 
-            // Refresh the cached world-signal snapshot only when something has
-            // changed since the last refresh. lua_plugin::update primes the
-            // cache every frame; within a collision-heavy frame the common case
-            // (no signal writes between collisions) skips the snapshot entirely,
-            // avoiding a full per-collision re-clone of the dirtied domains.
-            if params.world_signals.is_dirty() {
-                params
-                    .lua_runtime
-                    .update_signal_cache(params.world_signals.snapshot());
-            }
+    let callback_result = call_lua_collision_callback(
+        &params.lua_runtime,
+        callback_name,
+        ent_a.to_bits(),
+        ent_b.to_bits(),
+        pos_a,
+        pos_b,
+        vel_a,
+        vel_b,
+        speed_sq_a,
+        speed_sq_b,
+        rect_a.map(|r| (r.x, r.y, r.width, r.height)),
+        rect_b.map(|r| (r.x, r.y, r.width, r.height)),
+        &sides_a,
+        &sides_b,
+        signals_a,
+        signals_b,
+        Some(group_a),
+        Some(group_b),
+    );
 
-            let callback_result = call_lua_collision_callback(
-                &params.lua_runtime,
-                callback_name,
-                ent_a.to_bits(),
-                ent_b.to_bits(),
-                pos_a,
-                pos_b,
-                vel_a,
-                vel_b,
-                speed_sq_a,
-                speed_sq_b,
-                rect_a.map(|r| (r.x, r.y, r.width, r.height)),
-                rect_b.map(|r| (r.x, r.y, r.width, r.height)),
-                &sides_a,
-                &sides_b,
-                signals_a,
-                signals_b,
-                Some(group_a),
-                Some(group_b),
-            );
+    params
+        .lua_runtime
+        .drain_collision_phase_commands_into(&mut phase_buf);
+    for cmd in phase_buf.drain(..) {
+        process_phase_command(&mut params.luaphase_query, cmd);
+    }
 
-            params
-                .lua_runtime
-                .drain_collision_phase_commands_into(&mut phase_buf);
-            for cmd in phase_buf.drain(..) {
-                process_phase_command(&mut params.luaphase_query, cmd);
-            }
+    drain_and_process_effect_commands(
+        &params.lua_runtime,
+        DrainScope::Collision,
+        &mut effect_bufs,
+        &mut params.commands,
+        &mut params.world_signals,
+        &mut params.entity_cmds,
+        &mut params.audio_cmds,
+        &params.systems_store,
+        &params.animation_store,
+    );
 
-            drain_and_process_effect_commands(
-                &params.lua_runtime,
-                DrainScope::Collision,
-                &mut effect_bufs,
-                &mut params.commands,
-                &mut params.world_signals,
-                &mut params.entity_cmds,
-                &mut params.audio_cmds,
-                &params.systems_store,
-                &params.animation_store,
-            );
-
-            if let Err(e) = callback_result {
-                error!(target: "lua", "Collision callback '{}' error: {}", callback_name, e);
-            }
-
-            return;
-        }
+    if let Err(e) = callback_result {
+        error!(target: "lua", "Collision callback '{}' error: {}", callback_name, e);
     }
 }
 

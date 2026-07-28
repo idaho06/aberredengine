@@ -11,6 +11,7 @@
 //! - [`audio`] – resources used only by the audio thread's own `bevy_ecs::World`
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
+//! - [`collision_rule_index`] – pre-filters collision rule entities by group pair, avoiding a per-event linear scan
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
 //! - [`determinism_taint`] – flags a deterministic session that hit a known
@@ -38,6 +39,7 @@ pub mod appstate;
 pub mod audio;
 pub mod camera2d;
 pub mod camerafollowconfig;
+pub mod collision_rule_index;
 pub mod debugmode;
 pub mod debugoverlayconfig;
 pub mod determinism_taint;

@@ -41,23 +41,27 @@ use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
 use crate::events::collision::CollisionEvent;
+use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::GameCtx;
-use crate::systems::collision::{compute_sides, resolve_collider_rect, resolve_groups};
+use crate::systems::collision::{compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups};
 
 /// Observer that handles Rust collision rules.
 ///
 /// When a [`CollisionEvent`] is triggered:
 ///
 /// 1. Looks up [`Group`] names for both entities (returns early if missing)
-/// 2. Queries all [`CollisionRule`] entities for a matching rule
+/// 2. Looks up the [`CollisionRuleIndex`] bucket for the colliding pair's
+///    groups and scans just those [`CollisionRule`] entities for a match
+///    (deterministic lowest-`Entity`-first if more than one covers the pair)
 /// 3. Computes collision sides via [`compute_sides`]
 /// 4. Calls the matched callback with `(ent_a, ent_b, &sides_a, &sides_b, &mut ctx)`
 pub fn rust_collision_observer(
     trigger: On<CollisionEvent>,
     rules: Query<&CollisionRule>,
+    index: Res<CollisionRuleIndex>,
     mut ctx: GameCtx,
 ) {
-    if rules.is_empty() {
+    if index.is_empty() {
         return;
     }
 
@@ -69,25 +73,28 @@ pub fn rust_collision_observer(
         None => return,
     };
 
-    for rule in rules.iter() {
-        if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
-            let rect_a = resolve_collider_rect(
-                &ctx.positions.as_readonly(),
-                &ctx.global_transforms,
-                &ctx.box_colliders,
-                ent_a,
-            );
-            let rect_b = resolve_collider_rect(
-                &ctx.positions.as_readonly(),
-                &ctx.global_transforms,
-                &ctx.box_colliders,
-                ent_b,
-            );
-            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
+    let Some(bucket) = index.rust_bucket(ga, gb) else {
+        return;
+    };
 
-            let callback = rule.callback;
-            callback(ent_a, ent_b, &sides_a, &sides_b, &mut ctx);
-            return;
-        }
-    }
+    let Some((rule, ent_a, ent_b)) = find_matching_rule(bucket, &rules, a, b, ga, gb) else {
+        return;
+    };
+
+    let rect_a = resolve_collider_rect(
+        &ctx.positions.as_readonly(),
+        &ctx.global_transforms,
+        &ctx.box_colliders,
+        ent_a,
+    );
+    let rect_b = resolve_collider_rect(
+        &ctx.positions.as_readonly(),
+        &ctx.global_transforms,
+        &ctx.box_colliders,
+        ent_b,
+    );
+    let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
+
+    let callback = rule.callback;
+    callback(ent_a, ent_b, &sides_a, &sides_b, &mut ctx);
 }

@@ -17,6 +17,7 @@ use crate::systems::audio_bridge::{
 };
 use crate::systems::camera_follow::camera_follow_system;
 use crate::systems::collision_detector::collision_detector;
+use crate::systems::collision_rule_index::rebuild_collision_rule_index;
 use crate::systems::dynamictext_size::dynamictext_size_system;
 use crate::systems::gamestate::{check_pending_state, state_is_playing};
 use crate::systems::gridlayout::gridlayout_spawn_system;
@@ -339,6 +340,11 @@ impl EngineBuilder {
             camera_follow_system
                 .after(propagate_transforms)
                 .in_set(SimSet::Transforms),
+        );
+        sim.add_systems(
+            rebuild_collision_rule_index
+                .before(collision_detector)
+                .in_set(SimSet::Collision),
         );
         sim.add_systems(collision_detector.in_set(SimSet::Collision));
         sim.add_systems(
