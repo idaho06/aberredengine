@@ -140,8 +140,14 @@ impl Default for WorldSignals {
 }
 impl WorldSignals {
     /// Set a floating-point signal value.
+    ///
+    /// Only marks the domain dirty if the value actually changed.
     pub fn set_scalar(&mut self, key: impl Into<String>, value: f32) {
-        self.scalars.insert(key.into(), value);
+        let key = key.into();
+        if self.scalars.get(&key) == Some(&value) {
+            return;
+        }
+        self.scalars.insert(key, value);
         self.scalars_dirty = true;
     }
     /// Get a floating-point signal by key.
@@ -153,8 +159,14 @@ impl WorldSignals {
         &self.scalars
     }
     /// Set an integer signal value.
+    ///
+    /// Only marks the domain (and the group-count side effect) dirty if the
+    /// value actually changed.
     pub fn set_integer(&mut self, key: impl Into<String>, value: i32) {
         let key = key.into();
+        if self.integers.get(&key) == Some(&value) {
+            return;
+        }
         if let Some(group_name) = key.strip_prefix(sk::GROUP_COUNT_PREFIX) {
             self.group_counts
                 .insert(group_name.to_string(), value as u32);
@@ -224,8 +236,15 @@ impl WorldSignals {
         self.clear_integer_prefix(sk::GROUP_COUNT_PREFIX);
     }
     /// Set a string signal value.
+    ///
+    /// Only marks the domain dirty if the value actually changed.
     pub fn set_string(&mut self, key: impl Into<String>, value: impl Into<String>) {
-        self.strings.insert(key.into(), value.into());
+        let key = key.into();
+        let value = value.into();
+        if self.strings.get(&key) == Some(&value) {
+            return;
+        }
+        self.strings.insert(key, value);
         self.strings_dirty = true;
     }
     /// Get a string signal by key.
@@ -262,9 +281,12 @@ impl WorldSignals {
         result
     }
     /// Mark a flag as present/true.
+    ///
+    /// Only marks the domain dirty if the flag was not already present.
     pub fn set_flag(&mut self, key: impl Into<String>) {
-        self.flags.insert(key.into());
-        self.flags_dirty = true;
+        if self.flags.insert(key.into()) {
+            self.flags_dirty = true;
+        }
     }
     /// Remove a flag (make it false/absent).
     pub fn clear_flag(&mut self, key: &str) {
@@ -486,6 +508,18 @@ mod tests {
         assert_eq!(ws.get_scalars().len(), 1);
     }
 
+
+    #[test]
+    fn test_set_scalar_marks_dirty_only_when_changed() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("speed", 42.0);
+        ws.snapshot(); // clear dirty
+        ws.set_scalar("speed", 42.0); // same value, should not mark dirty
+        assert!(!ws.scalars_dirty);
+        ws.set_scalar("speed", 43.0); // changed value, should mark dirty
+        assert!(ws.scalars_dirty);
+    }
+
     #[test]
     fn test_scalar_missing_returns_none() {
         let ws = WorldSignals::default();
@@ -523,6 +557,36 @@ mod tests {
         assert_eq!(ws.get_integers().len(), 1);
     }
 
+
+    #[test]
+    fn test_set_integer_marks_dirty_only_when_changed() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("score", 100);
+        ws.snapshot(); // clear dirty
+        ws.set_integer("score", 100); // same value, should not mark dirty
+        assert!(!ws.integers_dirty);
+        ws.set_integer("score", 200); // changed value, should mark dirty
+        assert!(ws.integers_dirty);
+    }
+
+    #[test]
+    fn test_set_integer_group_count_side_effect_only_fires_on_change() {
+        let mut ws = WorldSignals::default();
+        let key = format!("{}enemy", sk::GROUP_COUNT_PREFIX);
+        ws.set_integer(key.clone(), 5);
+        ws.snapshot(); // clear dirty
+
+        ws.set_integer(key.clone(), 5); // same value, group_counts untouched
+        assert!(!ws.integers_dirty);
+        assert!(!ws.group_counts_dirty);
+        assert_eq!(ws.get_group_count("enemy"), Some(5));
+
+        ws.set_integer(key, 6); // changed value, group_counts updated
+        assert!(ws.integers_dirty);
+        assert!(ws.group_counts_dirty);
+        assert_eq!(ws.get_group_count("enemy"), Some(6));
+    }
+
     #[test]
     fn test_integer_missing_returns_none() {
         let ws = WorldSignals::default();
@@ -552,6 +616,18 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_string("scene", "menu");
         assert_eq!(ws.get_strings().len(), 1);
+    }
+
+
+    #[test]
+    fn test_set_string_marks_dirty_only_when_changed() {
+        let mut ws = WorldSignals::default();
+        ws.set_string("scene", "menu");
+        ws.snapshot(); // clear dirty
+        ws.set_string("scene", "menu"); // same value, should not mark dirty
+        assert!(!ws.strings_dirty);
+        ws.set_string("scene", "game"); // changed value, should mark dirty
+        assert!(ws.strings_dirty);
     }
 
     #[test]
@@ -589,6 +665,16 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_flag("paused");
         assert_eq!(ws.get_flags().len(), 1);
+    }
+
+
+    #[test]
+    fn test_set_flag_marks_dirty_only_when_new() {
+        let mut ws = WorldSignals::default();
+        ws.set_flag("paused");
+        ws.snapshot(); // clear dirty
+        ws.set_flag("paused"); // already present, should not mark dirty
+        assert!(!ws.flags_dirty);
     }
 
     #[test]
