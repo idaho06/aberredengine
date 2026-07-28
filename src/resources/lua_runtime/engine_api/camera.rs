@@ -16,7 +16,7 @@ impl LuaRuntime {
         );
 
         register_getter!(engine, self.lua, meta_fns, "get_camera",
-            |lua, ()| () {
+            |lua, ()| {
                 let (target_x, target_y, offset_x, offset_y, rotation, zoom) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {
@@ -49,7 +49,7 @@ impl LuaRuntime {
             params = [], returns = "table");
 
         register_getter!(engine, self.lua, meta_fns, "get_camera_view_rect",
-            |lua, ()| () {
+            |lua, ()| {
                 let (x, y, w, h) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {

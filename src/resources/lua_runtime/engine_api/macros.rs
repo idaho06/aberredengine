@@ -53,7 +53,31 @@ macro_rules! register_log_fn {
     };
 }
 
+/// Converts an optional trailing `returns = expr` into `Option<&str>`. Shared
+/// by `register_cmd!` and `register_getter!` so the `Option`-lifting isn't
+/// duplicated between them.
+macro_rules! opt_ret {
+    ($ret:expr) => {
+        Some($ret)
+    };
+    () => {
+        None
+    };
+}
+
 /// Registers a Lua function that pushes a command to a queue in `LuaAppData`.
+///
+/// The argument grammar is `|$args:pat_param| $arg_ty:ty` (type *after* the
+/// closing pipe), not the more familiar `|$args: $arg_ty|` — `macro_rules!`
+/// forbids a `:` immediately after a `pat_param`/`pat` fragment (its follow
+/// set is only `=> , = | if in`), and a raw `tt`-repetition workaround hits
+/// a second, harder limitation: `|` is itself an ordinary punctuation token,
+/// so `$($tt)*` can't unambiguously find the closing pipe either (rustc
+/// reports "local ambiguity ... built-in NTs tt"). This shape is therefore
+/// the closest to idiomatic closure syntax `register_cmd!` can express
+/// without requiring every call site to spell out the full queue-push body
+/// itself (which `register_getter!`'s `$closure:expr` route can do, since
+/// it doesn't need to synthesize anything around the caller's closure).
 macro_rules! register_cmd {
     // Variant with metadata
     ($engine:expr, $lua:expr, $meta_fns:expr, $name:expr, $queue:ident,
@@ -76,38 +100,44 @@ macro_rules! register_cmd {
         push_fn_meta(
             &$lua, &$meta_fns, $name, $desc, $cat,
             &[ $(($pname, $pty)),* ],
-            register_cmd!(@opt_ret $($ret)?)
+            opt_ret!($($ret)?)
         )?;
     };
-    // Helper to produce Option<&str> from optional returns
-    (@opt_ret $ret:expr) => { Some($ret) };
-    (@opt_ret) => { None };
 }
 
-/// Registers a read-only `engine.*` function plus its `__meta` entry in one
-/// invocation. The closure body runs synchronously against `LuaAppData`'s
-/// read caches (or pure Lua values) — it must not push to command queues
-/// (use `register_cmd!` for that).
+/// Registers an `engine.*` function plus its `__meta` entry in one
+/// invocation, for closures that don't push to a command queue (use
+/// `register_cmd!` for that) — read-only lookups against `LuaAppData`'s
+/// caches, or plain computations over Lua values with no `LuaAppData`
+/// access at all (e.g. `spawn()`/`clone()`'s builder constructors). The
+/// caller supplies the whole closure, so it's written exactly like any
+/// other Rust closure (`|lua, key: LuaString| { .. }`) — no macro-imposed
+/// argument grammar, unlike `register_cmd!` (see its doc comment for why).
 macro_rules! register_getter {
     ($engine:expr, $lua:expr, $meta_fns:expr, $name:expr,
-     |$lua_arg:pat_param, $args:pat_param| $arg_ty:ty $body:block,
+     $closure:expr,
      desc = $desc:expr, cat = $cat:expr,
      params = [ $( ($pname:expr, $pty:expr) ),* $(,)? ]
      $(, returns = $ret:expr )?
     ) => {
-        $engine.set($name, $lua.create_function(|$lua_arg, $args: $arg_ty| $body)?)?;
+        $engine.set($name, $lua.create_function($closure)?)?;
         push_fn_meta(&$lua, &$meta_fns, $name, $desc, $cat,
             &[ $(($pname, $pty)),* ],
-            register_getter!(@opt_ret $($ret)?))?;
+            opt_ret!($($ret)?))?;
     };
-    (@opt_ret $ret:expr) => { Some($ret) };
-    (@opt_ret) => { None };
 }
 
 /// Registers a declarative list of commands under `$queue`/`$cat`, with
 /// each Lua function name prefixed by `$prefix` and each description
 /// suffixed by `$desc_suffix`. Call once per context (regular / collision)
 /// with the same list to keep both twins in sync.
+///
+/// Each row's `|$args:pat_param| $arg_ty:ty` is forwarded to `register_cmd!`
+/// verbatim, so it has the same type-after-the-pipe grammar for the same
+/// reason — see `register_cmd!`'s doc comment. Every macro below that
+/// builds a row list for this macro (`define_signal_cmd_twins!`,
+/// `define_camera_cmd_twins!`, `define_audio_cmd_twins!`,
+/// `define_phase_cmd_twins!`, `define_entity_cmds!`) inherits it too.
 macro_rules! define_cmd_twins {
     ($engine:expr, $lua:expr, $meta_fns:expr, $prefix:literal, $queue:ident, $cat:expr, $desc_suffix:literal, [
         $( ($name:literal,

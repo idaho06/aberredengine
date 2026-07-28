@@ -36,7 +36,7 @@ impl LuaRuntime {
         );
 
         register_getter!(engine, self.lua, meta_fns, "get_binding",
-            |lua, action| LuaString {
+            |lua, action: LuaString| {
                 let s = action.to_str()?;
                 let canonical = action_from_str(&s).map(action_to_str).unwrap_or(&s);
                 Ok(lua

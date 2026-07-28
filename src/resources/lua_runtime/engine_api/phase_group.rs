@@ -51,7 +51,7 @@ impl LuaRuntime {
         );
 
         register_getter!(engine, self.lua, meta_fns, "has_tracked_group",
-            |lua, name| LuaString {
+            |lua, name: LuaString| {
                 let name = name.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()

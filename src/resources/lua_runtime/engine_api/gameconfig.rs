@@ -54,7 +54,7 @@ impl LuaRuntime {
         )?;
 
         register_getter!(engine, self.lua, meta_fns, "get_fullscreen",
-            |lua, ()| () {
+            |lua, ()| {
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().fullscreen)
@@ -64,7 +64,7 @@ impl LuaRuntime {
             params = [], returns = "boolean");
 
         register_getter!(engine, self.lua, meta_fns, "get_vsync",
-            |lua, ()| () {
+            |lua, ()| {
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().vsync)
@@ -100,7 +100,7 @@ impl LuaRuntime {
         );
 
         register_getter!(engine, self.lua, meta_fns, "get_pixel_snap_camera",
-            |lua, ()| () {
+            |lua, ()| {
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().pixel_snap_camera)
@@ -110,7 +110,7 @@ impl LuaRuntime {
             params = [], returns = "boolean");
 
         register_getter!(engine, self.lua, meta_fns, "get_target_fps",
-            |lua, ()| () {
+            |lua, ()| {
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().target_fps)
@@ -144,7 +144,7 @@ impl LuaRuntime {
         )?;
 
         register_getter!(engine, self.lua, meta_fns, "get_render_size",
-            |lua, ()| () {
+            |lua, ()| {
                 let (w, h) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {
@@ -182,7 +182,7 @@ impl LuaRuntime {
         )?;
 
         register_getter!(engine, self.lua, meta_fns, "get_background_color",
-            |lua, ()| () {
+            |lua, ()| {
                 let (r, g, b) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {

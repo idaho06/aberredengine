@@ -8,7 +8,7 @@ impl LuaRuntime {
         let meta_fns: LuaTable = meta.get("functions")?;
 
         register_getter!(engine, self.lua, meta_fns, "get_scalar",
-            |lua, key| LuaString {
+            |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
@@ -18,7 +18,7 @@ impl LuaRuntime {
             params = [("key", "string")], returns = "number?");
 
         register_getter!(engine, self.lua, meta_fns, "get_integer",
-            |lua, key| LuaString {
+            |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
@@ -28,7 +28,7 @@ impl LuaRuntime {
             params = [("key", "string")], returns = "integer?");
 
         register_getter!(engine, self.lua, meta_fns, "get_string",
-            |lua, key| LuaString {
+            |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
@@ -38,7 +38,7 @@ impl LuaRuntime {
             params = [("key", "string")], returns = "string?");
 
         register_getter!(engine, self.lua, meta_fns, "has_flag",
-            |lua, key| LuaString {
+            |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
@@ -49,7 +49,7 @@ impl LuaRuntime {
             params = [("key", "string")], returns = "boolean");
 
         register_getter!(engine, self.lua, meta_fns, "get_group_count",
-            |lua, group| LuaString {
+            |lua, group: LuaString| {
                 let group = group.to_str()?;
                 Ok(lua.app_data_ref::<LuaAppData>().and_then(|data| {
                     data.signal_snapshot
@@ -63,7 +63,7 @@ impl LuaRuntime {
             params = [("group", "string")], returns = "integer?");
 
         register_getter!(engine, self.lua, meta_fns, "get_entity",
-            |lua, key| LuaString {
+            |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
@@ -73,7 +73,7 @@ impl LuaRuntime {
             params = [("key", "string")], returns = "integer?");
 
         register_getter!(engine, self.lua, meta_fns, "get_scalars",
-            |lua, ()| () {
+            |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
@@ -87,7 +87,7 @@ impl LuaRuntime {
             params = [], returns = "table");
 
         register_getter!(engine, self.lua, meta_fns, "get_integers",
-            |lua, ()| () {
+            |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
@@ -101,7 +101,7 @@ impl LuaRuntime {
             params = [], returns = "table");
 
         register_getter!(engine, self.lua, meta_fns, "get_strings",
-            |lua, ()| () {
+            |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
@@ -115,7 +115,7 @@ impl LuaRuntime {
             params = [], returns = "table");
 
         register_getter!(engine, self.lua, meta_fns, "get_flags",
-            |lua, ()| () {
+            |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
                     let snapshot = data.signal_snapshot.borrow();
