@@ -24,6 +24,8 @@ impl LuaRuntime {
 
         engine.set(
             "clone",
+            // source_key is stored into the eventual SpawnCmd, not just read — stays an
+            // owned String rather than converting to mlua::LuaString.
             self.lua.create_function(|_, source_key: String| {
                 Ok(LuaEntityBuilder::new_clone(source_key))
             })?,

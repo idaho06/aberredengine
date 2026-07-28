@@ -9,10 +9,11 @@ impl LuaRuntime {
 
         engine.set(
             "get_scalar",
-            self.lua.create_function(|lua, key: String| {
+            self.lua.create_function(|lua, key: LuaString| {
+                let key = key.to_str()?;
                 let value = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_snapshot.borrow().scalars.get(&key).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().scalars.get(&*key).copied());
                 Ok(value)
             })?,
         )?;
@@ -28,10 +29,11 @@ impl LuaRuntime {
 
         engine.set(
             "get_integer",
-            self.lua.create_function(|lua, key: String| {
+            self.lua.create_function(|lua, key: LuaString| {
+                let key = key.to_str()?;
                 let value = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_snapshot.borrow().integers.get(&key).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().integers.get(&*key).copied());
                 Ok(value)
             })?,
         )?;
@@ -47,10 +49,11 @@ impl LuaRuntime {
 
         engine.set(
             "get_string",
-            self.lua.create_function(|lua, key: String| {
+            self.lua.create_function(|lua, key: LuaString| {
+                let key = key.to_str()?;
                 let value = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_snapshot.borrow().strings.get(&key).cloned());
+                    .and_then(|data| data.signal_snapshot.borrow().strings.get(&*key).cloned());
                 Ok(value)
             })?,
         )?;
@@ -66,10 +69,11 @@ impl LuaRuntime {
 
         engine.set(
             "has_flag",
-            self.lua.create_function(|lua, key: String| {
+            self.lua.create_function(|lua, key: LuaString| {
+                let key = key.to_str()?;
                 let has = lua
                     .app_data_ref::<LuaAppData>()
-                    .map(|data| data.signal_snapshot.borrow().flags.contains(&key))
+                    .map(|data| data.signal_snapshot.borrow().flags.contains(&*key))
                     .unwrap_or(false);
                 Ok(has)
             })?,
@@ -86,12 +90,13 @@ impl LuaRuntime {
 
         engine.set(
             "get_group_count",
-            self.lua.create_function(|lua, group: String| {
+            self.lua.create_function(|lua, group: LuaString| {
+                let group = group.to_str()?;
                 let count = lua.app_data_ref::<LuaAppData>().and_then(|data| {
                     data.signal_snapshot
                         .borrow()
                         .group_counts
-                        .get(&group)
+                        .get(&*group)
                         .copied()
                 });
                 Ok(count)
@@ -109,10 +114,11 @@ impl LuaRuntime {
 
         engine.set(
             "get_entity",
-            self.lua.create_function(|lua, key: String| {
+            self.lua.create_function(|lua, key: LuaString| {
+                let key = key.to_str()?;
                 let entity_id = lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.signal_snapshot.borrow().entities.get(&key).copied());
+                    .and_then(|data| data.signal_snapshot.borrow().entities.get(&*key).copied());
                 Ok(entity_id)
             })?,
         )?;
@@ -278,5 +284,186 @@ impl LuaRuntime {
         )?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustc_hash::{FxHashMap, FxHashSet};
+    use std::sync::Arc;
+
+    fn set_snapshot(runtime: &LuaRuntime, snapshot: crate::resources::worldsignals::SignalSnapshot) {
+        if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
+            *data.signal_snapshot.borrow_mut() = Arc::new(snapshot);
+        }
+    }
+
+    #[test]
+    fn get_scalar_returns_value_and_nil_for_missing_key() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut scalars = FxHashMap::default();
+        scalars.insert("hp".to_string(), 42.0f32);
+        set_snapshot(
+            &runtime,
+            crate::resources::worldsignals::SignalSnapshot {
+                scalars: Arc::new(scalars),
+                ..Default::default()
+            },
+        );
+
+        let hp: Option<f32> = runtime
+            .lua()
+            .load("return engine.get_scalar('hp')")
+            .eval()
+            .unwrap();
+        assert_eq!(hp, Some(42.0));
+
+        let missing: Option<f32> = runtime
+            .lua()
+            .load("return engine.get_scalar('missing')")
+            .eval()
+            .unwrap();
+        assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn get_integer_returns_value_and_nil_for_missing_key() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut integers = FxHashMap::default();
+        integers.insert("score".to_string(), 7);
+        set_snapshot(
+            &runtime,
+            crate::resources::worldsignals::SignalSnapshot {
+                integers: Arc::new(integers),
+                ..Default::default()
+            },
+        );
+
+        let score: Option<i32> = runtime
+            .lua()
+            .load("return engine.get_integer('score')")
+            .eval()
+            .unwrap();
+        assert_eq!(score, Some(7));
+
+        let missing: Option<i32> = runtime
+            .lua()
+            .load("return engine.get_integer('missing')")
+            .eval()
+            .unwrap();
+        assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn get_string_returns_value_and_nil_for_missing_key() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut strings = FxHashMap::default();
+        strings.insert("name".to_string(), "Aberred".to_string());
+        set_snapshot(
+            &runtime,
+            crate::resources::worldsignals::SignalSnapshot {
+                strings: Arc::new(strings),
+                ..Default::default()
+            },
+        );
+
+        let name: Option<String> = runtime
+            .lua()
+            .load("return engine.get_string('name')")
+            .eval()
+            .unwrap();
+        assert_eq!(name, Some("Aberred".to_string()));
+
+        let missing: Option<String> = runtime
+            .lua()
+            .load("return engine.get_string('missing')")
+            .eval()
+            .unwrap();
+        assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn has_flag_true_for_set_flag_false_for_missing() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut flags = FxHashSet::default();
+        flags.insert("paused".to_string());
+        set_snapshot(
+            &runtime,
+            crate::resources::worldsignals::SignalSnapshot {
+                flags: Arc::new(flags),
+                ..Default::default()
+            },
+        );
+
+        let paused: bool = runtime
+            .lua()
+            .load("return engine.has_flag('paused')")
+            .eval()
+            .unwrap();
+        assert!(paused);
+
+        let missing: bool = runtime
+            .lua()
+            .load("return engine.has_flag('missing')")
+            .eval()
+            .unwrap();
+        assert!(!missing);
+    }
+
+    #[test]
+    fn get_group_count_returns_value_and_nil_for_missing_key() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut group_counts = FxHashMap::default();
+        group_counts.insert("enemies".to_string(), 3u32);
+        set_snapshot(
+            &runtime,
+            crate::resources::worldsignals::SignalSnapshot {
+                group_counts: Arc::new(group_counts),
+                ..Default::default()
+            },
+        );
+
+        let count: Option<u32> = runtime
+            .lua()
+            .load("return engine.get_group_count('enemies')")
+            .eval()
+            .unwrap();
+        assert_eq!(count, Some(3));
+
+        let missing: Option<u32> = runtime
+            .lua()
+            .load("return engine.get_group_count('missing')")
+            .eval()
+            .unwrap();
+        assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn get_entity_returns_value_and_nil_for_missing_key() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut entities = FxHashMap::default();
+        entities.insert("player".to_string(), 99u64);
+        set_snapshot(
+            &runtime,
+            crate::resources::worldsignals::SignalSnapshot {
+                entities: Arc::new(entities),
+                ..Default::default()
+            },
+        );
+
+        let id: Option<u64> = runtime
+            .lua()
+            .load("return engine.get_entity('player')")
+            .eval()
+            .unwrap();
+        assert_eq!(id, Some(99));
+
+        let missing: Option<u64> = runtime
+            .lua()
+            .load("return engine.get_entity('missing')")
+            .eval()
+            .unwrap();
+        assert_eq!(missing, None);
     }
 }

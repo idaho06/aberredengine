@@ -52,10 +52,11 @@ impl LuaRuntime {
 
         engine.set(
             "has_tracked_group",
-            self.lua.create_function(|lua, name: String| {
+            self.lua.create_function(|lua, name: LuaString| {
+                let name = name.to_str()?;
                 let has = lua
                     .app_data_ref::<LuaAppData>()
-                    .map(|data| data.tracked_groups.borrow().contains(&name))
+                    .map(|data| data.tracked_groups.borrow().contains(&*name))
                     .unwrap_or(false);
                 Ok(has)
             })?,
@@ -71,5 +72,34 @@ impl LuaRuntime {
         )?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn has_tracked_group_true_for_tracked_false_for_missing() {
+        let runtime = LuaRuntime::new().unwrap();
+        if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
+            data.tracked_groups
+                .borrow_mut()
+                .insert("enemies".to_string());
+        }
+
+        let tracked: bool = runtime
+            .lua()
+            .load("return engine.has_tracked_group('enemies')")
+            .eval()
+            .unwrap();
+        assert!(tracked);
+
+        let missing: bool = runtime
+            .lua()
+            .load("return engine.has_tracked_group('missing')")
+            .eval()
+            .unwrap();
+        assert!(!missing);
     }
 }

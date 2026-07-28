@@ -35,8 +35,9 @@ macro_rules! register_log_fn {
     ($engine:expr, $lua:expr, $meta_fns:expr, $name:expr, $log_macro:ident, $desc:expr) => {
         $engine.set(
             $name,
-            $lua.create_function(|_, msg: String| {
-                $log_macro!(target: "lua", "{}", msg);
+            $lua.create_function(|_, msg: mlua::LuaString| {
+                let msg = msg.to_str()?;
+                $log_macro!(target: "lua", "{}", &*msg);
                 Ok(())
             })?,
         )?;
