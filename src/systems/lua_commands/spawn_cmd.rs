@@ -168,7 +168,7 @@ pub(super) fn apply_components(
 
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
-        world_signals.set_entity(&key, entity);
+        world_signals.set_entity(key, entity);
     }
 }
 
@@ -403,16 +403,16 @@ fn apply_signal_components(
     {
         let mut signals = Signals::default();
         for (key, value) in signal_scalars {
-            signals.set_scalar(&key, value);
+            signals.set_scalar(key, value);
         }
         for (key, value) in signal_integers {
-            signals.set_integer(&key, value);
+            signals.set_integer(key, value);
         }
         for flag in signal_flags {
-            signals.set_flag(&flag);
+            signals.set_flag(flag);
         }
         for (key, value) in signal_strings {
-            signals.set_string(&key, &value);
+            signals.set_string(key, value);
         }
         entity_commands.insert(signals);
     }

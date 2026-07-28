@@ -321,7 +321,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_flag(&flag);
+                signals.set_flag(flag);
             }
         }
         EntityCmd::SignalClearFlag { entity_id, flag } => {
@@ -349,7 +349,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_scalar(&key, value);
+                signals.set_scalar(key, value);
             }
         }
         EntityCmd::SignalClearScalar { entity_id, key } => {
@@ -369,7 +369,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_string(&key, &value);
+                signals.set_string(key, value);
             }
         }
         EntityCmd::SignalClearString { entity_id, key } => {
@@ -389,7 +389,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_integer(&key, value);
+                signals.set_integer(key, value);
             }
         }
         EntityCmd::SignalClearInteger { entity_id, key } => {
@@ -427,17 +427,17 @@ fn process_animation_cmd(
             let Some(entity) = resolve_entity(entity_id) else {
                 return;
             };
-            if let Ok(mut animation) = queries.animation.get_mut(entity) {
-                animation.animation_key = animation_key.clone();
-                animation.frame_index = 0;
-                animation.elapsed_time = 0.0;
-                animation.finished = false;
-            }
             // Also update the sprite's texture to match the new animation
             if let Some(anim_res) = anim_store.animations.get(&animation_key)
                 && let Ok(mut sprite) = queries.sprites.get_mut(entity)
             {
                 sprite.tex_key = anim_res.tex_key.clone();
+            }
+            if let Ok(mut animation) = queries.animation.get_mut(entity) {
+                animation.animation_key = animation_key;
+                animation.frame_index = 0;
+                animation.elapsed_time = 0.0;
+                animation.finished = false;
             }
         }
         EntityCmd::SetSpriteFlip {

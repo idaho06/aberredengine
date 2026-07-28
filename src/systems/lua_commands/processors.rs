@@ -80,13 +80,13 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
 pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) {
     match cmd {
         SignalCmd::SetScalar { key, value } => {
-            world_signals.set_scalar(&key, value);
+            world_signals.set_scalar(key, value);
         }
         SignalCmd::SetInteger { key, value } => {
-            world_signals.set_integer(&key, value);
+            world_signals.set_integer(key, value);
         }
         SignalCmd::SetFlag { key } => {
-            world_signals.set_flag(&key);
+            world_signals.set_flag(key);
         }
         SignalCmd::ClearFlag { key } => {
             world_signals.clear_flag(&key);
@@ -95,7 +95,7 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
             world_signals.toggle_flag(&key);
         }
         SignalCmd::SetString { key, value } => {
-            world_signals.set_string(&key, &value);
+            world_signals.set_string(key, value);
         }
         SignalCmd::ClearScalar { key } => {
             world_signals.clear_scalar(&key);
@@ -108,7 +108,7 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         }
         SignalCmd::SetEntity { key, entity_id } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
-                world_signals.set_entity(&key, entity);
+                world_signals.set_entity(key, entity);
             }
         }
         SignalCmd::RemoveEntity { key } => {
@@ -121,7 +121,7 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
 pub fn process_group_command(tracked_groups: &mut TrackedGroups, cmd: GroupCmd) {
     match cmd {
         GroupCmd::TrackGroup { name } => {
-            tracked_groups.add_group(&name);
+            tracked_groups.add_group(name);
         }
         GroupCmd::UntrackGroup { name } => {
             tracked_groups.remove_group(&name);
