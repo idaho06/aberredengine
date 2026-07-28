@@ -63,38 +63,17 @@ impl LuaRuntime {
             " (collision context)"
         );
 
-        engine.set(
-            "collision_spawn",
-            self.lua
-                .create_function(|_, ()| Ok(LuaEntityBuilder::new_collision()))?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "collision_spawn",
-            "Create a new entity builder (collision context)",
-            "collision",
-            &[],
-            Some("CollisionEntityBuilder"),
-        )?;
+        register_getter!(engine, self.lua, meta_fns, "collision_spawn",
+            |_lua, ()| () { Ok(LuaEntityBuilder::new_collision()) },
+            desc = "Create a new entity builder (collision context)", cat = "collision",
+            params = [], returns = "CollisionEntityBuilder");
 
-        engine.set(
-            "collision_clone",
-            // source_key is stored into the eventual SpawnCmd, not just read — stays an
-            // owned String rather than converting to mlua::LuaString.
-            self.lua.create_function(|_, source_key: String| {
-                Ok(LuaEntityBuilder::new_collision_clone(source_key))
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "collision_clone",
-            "Clone a registered entity (collision context)",
-            "collision",
-            &[("source_key", "string")],
-            Some("CollisionEntityBuilder"),
-        )?;
+        // source_key is stored into the eventual SpawnCmd, not just read — stays an
+        // owned String rather than converting to mlua::LuaString.
+        register_getter!(engine, self.lua, meta_fns, "collision_clone",
+            |_lua, source_key| String { Ok(LuaEntityBuilder::new_collision_clone(source_key)) },
+            desc = "Clone a registered entity (collision context)", cat = "collision",
+            params = [("source_key", "string")], returns = "CollisionEntityBuilder");
 
         Ok(())
     }

@@ -53,45 +53,25 @@ impl LuaRuntime {
             None,
         )?;
 
-        engine.set(
-            "get_fullscreen",
-            self.lua.create_function(|lua, ()| {
-                let value = lua
+        register_getter!(engine, self.lua, meta_fns, "get_fullscreen",
+            |lua, ()| () {
+                Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().fullscreen)
-                    .unwrap_or(false);
-                Ok(value)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_fullscreen",
-            "Get current fullscreen state",
-            "render",
-            &[],
-            Some("boolean"),
-        )?;
+                    .unwrap_or(false))
+            },
+            desc = "Get current fullscreen state", cat = "render",
+            params = [], returns = "boolean");
 
-        engine.set(
-            "get_vsync",
-            self.lua.create_function(|lua, ()| {
-                let value = lua
+        register_getter!(engine, self.lua, meta_fns, "get_vsync",
+            |lua, ()| () {
+                Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().vsync)
-                    .unwrap_or(false);
-                Ok(value)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_vsync",
-            "Get current vsync state",
-            "render",
-            &[],
-            Some("boolean"),
-        )?;
+                    .unwrap_or(false))
+            },
+            desc = "Get current vsync state", cat = "render",
+            params = [], returns = "boolean");
 
         register_cmd!(
             engine,
@@ -119,45 +99,25 @@ impl LuaRuntime {
             params = [("filter", "string")]
         );
 
-        engine.set(
-            "get_pixel_snap_camera",
-            self.lua.create_function(|lua, ()| {
-                let value = lua
+        register_getter!(engine, self.lua, meta_fns, "get_pixel_snap_camera",
+            |lua, ()| () {
+                Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().pixel_snap_camera)
-                    .unwrap_or(true);
-                Ok(value)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_pixel_snap_camera",
-            "Get whether the camera/view rect is snapped to integer pixels",
-            "render",
-            &[],
-            Some("boolean"),
-        )?;
+                    .unwrap_or(true))
+            },
+            desc = "Get whether the camera/view rect is snapped to integer pixels", cat = "render",
+            params = [], returns = "boolean");
 
-        engine.set(
-            "get_target_fps",
-            self.lua.create_function(|lua, ()| {
-                let value = lua
+        register_getter!(engine, self.lua, meta_fns, "get_target_fps",
+            |lua, ()| () {
+                Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| data.gameconfig_snapshot.borrow().target_fps)
-                    .unwrap_or(60);
-                Ok(value)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_target_fps",
-            "Get current target FPS",
-            "render",
-            &[],
-            Some("integer"),
-        )?;
+                    .unwrap_or(60))
+            },
+            desc = "Get current target FPS", cat = "render",
+            params = [], returns = "integer");
 
         engine.set(
             "set_render_size",
@@ -183,9 +143,8 @@ impl LuaRuntime {
             None,
         )?;
 
-        engine.set(
-            "get_render_size",
-            self.lua.create_function(|lua, ()| {
+        register_getter!(engine, self.lua, meta_fns, "get_render_size",
+            |lua, ()| () {
                 let (w, h) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {
@@ -197,17 +156,9 @@ impl LuaRuntime {
                 table.set("width", w)?;
                 table.set("height", h)?;
                 Ok(table)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_render_size",
-            "Get current internal render resolution",
-            "render",
-            &[],
-            Some("table"),
-        )?;
+            },
+            desc = "Get current internal render resolution", cat = "render",
+            params = [], returns = "table");
 
         engine.set(
             "set_background_color",
@@ -230,9 +181,8 @@ impl LuaRuntime {
             None,
         )?;
 
-        engine.set(
-            "get_background_color",
-            self.lua.create_function(|lua, ()| {
+        register_getter!(engine, self.lua, meta_fns, "get_background_color",
+            |lua, ()| () {
                 let (r, g, b) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {
@@ -245,17 +195,9 @@ impl LuaRuntime {
                 table.set("g", g)?;
                 table.set("b", b)?;
                 Ok(table)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_background_color",
-            "Get current background clear color",
-            "render",
-            &[],
-            Some("table"),
-        )?;
+            },
+            desc = "Get current background clear color", cat = "render",
+            params = [], returns = "table");
 
         Ok(())
     }

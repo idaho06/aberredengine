@@ -15,9 +15,8 @@ impl LuaRuntime {
             ""
         );
 
-        engine.set(
-            "get_camera",
-            self.lua.create_function(|lua, ()| {
+        register_getter!(engine, self.lua, meta_fns, "get_camera",
+            |lua, ()| () {
                 let (target_x, target_y, offset_x, offset_y, rotation, zoom) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {
@@ -40,25 +39,17 @@ impl LuaRuntime {
                 tbl.set("rotation", rotation)?;
                 tbl.set("zoom", zoom)?;
                 Ok(tbl)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_camera",
-            "Get the current 2D camera state (target, offset, rotation, zoom). \
+            },
+            desc = "Get the current 2D camera state (target, offset, rotation, zoom). \
              Returns values from the start of this frame after camera_follow_system has run. \
              If called in the same callback as set_camera(), returns pre-override values. \
              Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene. \
              Each call returns a new table; cache locally if reading multiple fields.",
-            "camera",
-            &[],
-            Some("table"),
-        )?;
+            cat = "camera",
+            params = [], returns = "table");
 
-        engine.set(
-            "get_camera_view_rect",
-            self.lua.create_function(|lua, ()| {
+        register_getter!(engine, self.lua, meta_fns, "get_camera_view_rect",
+            |lua, ()| () {
                 let (x, y, w, h) = lua
                     .app_data_ref::<LuaAppData>()
                     .map(|data| {
@@ -72,23 +63,16 @@ impl LuaRuntime {
                 tbl.set("w", w)?;
                 tbl.set("h", h)?;
                 Ok(tbl)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_camera_view_rect",
-            "Get the visible world-space rectangle for the current camera: top-left corner (x, y) \
+            },
+            desc = "Get the visible world-space rectangle for the current camera: top-left corner (x, y) \
              plus visible dimensions (w, h) in world units. \
              Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned \
              approximation only. \
              Only available during on_update callbacks; returns {{ x=0, y=0, w=0, h=0 }} from \
              on_setup / on_switch_scene. \
              Each call returns a new table; cache locally if reading multiple fields.",
-            "camera",
-            &[],
-            Some("table"),
-        )?;
+            cat = "camera",
+            params = [], returns = "table");
 
         Ok(())
     }

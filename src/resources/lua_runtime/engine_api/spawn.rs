@@ -7,38 +7,17 @@ impl LuaRuntime {
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
 
-        engine.set(
-            "spawn",
-            self.lua
-                .create_function(|_, ()| Ok(LuaEntityBuilder::new()))?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "spawn",
-            "Create a new entity builder",
-            "spawn",
-            &[],
-            Some("EntityBuilder"),
-        )?;
+        register_getter!(engine, self.lua, meta_fns, "spawn",
+            |_lua, ()| () { Ok(LuaEntityBuilder::new()) },
+            desc = "Create a new entity builder", cat = "spawn",
+            params = [], returns = "EntityBuilder");
 
-        engine.set(
-            "clone",
-            // source_key is stored into the eventual SpawnCmd, not just read — stays an
-            // owned String rather than converting to mlua::LuaString.
-            self.lua.create_function(|_, source_key: String| {
-                Ok(LuaEntityBuilder::new_clone(source_key))
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "clone",
-            "Clone a registered entity with optional overrides",
-            "spawn",
-            &[("source_key", "string")],
-            Some("EntityBuilder"),
-        )?;
+        // source_key is stored into the eventual SpawnCmd, not just read — stays an
+        // owned String rather than converting to mlua::LuaString.
+        register_getter!(engine, self.lua, meta_fns, "clone",
+            |_lua, source_key| String { Ok(LuaEntityBuilder::new_clone(source_key)) },
+            desc = "Clone a registered entity with optional overrides", cat = "spawn",
+            params = [("source_key", "string")], returns = "EntityBuilder");
 
         Ok(())
     }

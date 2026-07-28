@@ -84,6 +84,26 @@ macro_rules! register_cmd {
     (@opt_ret) => { None };
 }
 
+/// Registers a read-only `engine.*` function plus its `__meta` entry in one
+/// invocation. The closure body runs synchronously against `LuaAppData`'s
+/// read caches (or pure Lua values) — it must not push to command queues
+/// (use `register_cmd!` for that).
+macro_rules! register_getter {
+    ($engine:expr, $lua:expr, $meta_fns:expr, $name:expr,
+     |$lua_arg:pat_param, $args:pat_param| $arg_ty:ty $body:block,
+     desc = $desc:expr, cat = $cat:expr,
+     params = [ $( ($pname:expr, $pty:expr) ),* $(,)? ]
+     $(, returns = $ret:expr )?
+    ) => {
+        $engine.set($name, $lua.create_function(|$lua_arg, $args: $arg_ty| $body)?)?;
+        push_fn_meta(&$lua, &$meta_fns, $name, $desc, $cat,
+            &[ $(($pname, $pty)),* ],
+            register_getter!(@opt_ret $($ret)?))?;
+    };
+    (@opt_ret $ret:expr) => { Some($ret) };
+    (@opt_ret) => { None };
+}
+
 /// Registers a declarative list of commands under `$queue`/`$cat`, with
 /// each Lua function name prefixed by `$prefix` and each description
 /// suffixed by `$desc_suffix`. Call once per context (regular / collision)

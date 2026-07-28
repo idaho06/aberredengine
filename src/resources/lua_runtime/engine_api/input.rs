@@ -35,26 +35,16 @@ impl LuaRuntime {
             params = [("action", "string"), ("key", "string")]
         );
 
-        engine.set(
-            "get_binding",
-            self.lua.create_function(|lua, action: LuaString| {
+        register_getter!(engine, self.lua, meta_fns, "get_binding",
+            |lua, action| LuaString {
                 let s = action.to_str()?;
                 let canonical = action_from_str(&s).map(action_to_str).unwrap_or(&s);
-                let result = lua
+                Ok(lua
                     .app_data_ref::<LuaAppData>()
-                    .and_then(|data| data.bindings_snapshot.borrow().get(canonical).cloned());
-                Ok(result)
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "get_binding",
-            "Get the first key binding for an action as a string (nil if unbound)",
-            "input",
-            &[("action", "string")],
-            Some("string?"),
-        )?;
+                    .and_then(|data| data.bindings_snapshot.borrow().get(canonical).cloned()))
+            },
+            desc = "Get the first key binding for an action as a string (nil if unbound)", cat = "input",
+            params = [("action", "string")], returns = "string?");
 
         Ok(())
     }
