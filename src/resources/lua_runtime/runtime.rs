@@ -119,6 +119,28 @@ impl SignalsCtxTables {
     }
 }
 
+/// Tracks which optional ctx keys are currently non-nil in a pooled ctx table,
+/// so rebuilding the table can skip re-nil-ing keys that are already nil
+/// instead of unconditionally scrubbing every optional field every call.
+///
+/// Backed by `Rc<Cell<u32>>` (not a plain `u32`) so that cloning the owning
+/// `EntityCtxTables`/`CollisionCtxTables` handle (as `get_entity_ctx_pool`/
+/// `get_collision_ctx_pool` do on every call) shares the same mask storage
+/// rather than forking it — same sharing requirement as the pooled `LuaTable`
+/// fields alongside it, which are themselves ref-counted handles.
+#[derive(Clone, Default)]
+pub struct CtxOccupancy(std::rc::Rc<std::cell::Cell<u32>>);
+
+impl CtxOccupancy {
+    pub(crate) fn get(&self) -> u32 {
+        self.0.get()
+    }
+
+    pub(crate) fn set(&self, mask: u32) {
+        self.0.set(mask);
+    }
+}
+
 /// Pooled collision context tables, owned directly by `LuaRuntime` and reused for
 /// every collision via cheap `Clone` (each field is a ref-counted `LuaTable` handle).
 #[derive(Clone)]
@@ -138,6 +160,10 @@ pub struct CollisionCtxTables {
     pub signals_b_inner: SignalsCtxTables,
     pub sides_a: LuaTable,
     pub sides_b: LuaTable,
+    /// Occupancy mask for entity A's optional ctx fields (group/pos/vel/rect/signals).
+    pub occupancy_a: CtxOccupancy,
+    /// Occupancy mask for entity B's optional ctx fields.
+    pub occupancy_b: CtxOccupancy,
 }
 
 macro_rules! input_ctx_tables_fields {
@@ -172,6 +198,8 @@ pub struct EntityCtxTables {
     pub signals_inner: SignalsCtxTables,
     pub world_pos: LuaTable,
     pub world_scale: LuaTable,
+    /// Occupancy mask for this entity's optional ctx fields — see `CtxOccupancy`.
+    pub occupancy: CtxOccupancy,
 }
 
 /// Resource holding the Lua interpreter state.
@@ -358,6 +386,8 @@ impl LuaRuntime {
             signals_b_inner,
             sides_a,
             sides_b,
+            occupancy_a: CtxOccupancy::default(),
+            occupancy_b: CtxOccupancy::default(),
         })
     }
 
@@ -384,6 +414,7 @@ impl LuaRuntime {
             signals_inner: SignalsCtxTables::create(lua)?,
             world_pos: lua.create_table()?,
             world_scale: lua.create_table()?,
+            occupancy: CtxOccupancy::default(),
         })
     }
 

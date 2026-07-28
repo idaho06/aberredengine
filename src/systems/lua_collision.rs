@@ -48,7 +48,8 @@ use crate::events::collision::CollisionEvent;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{
-    LuaRuntime, PhaseCmd, SignalsCtxTables, clear_array_table, populate_entity_signals, set_opt,
+    CtxOccupancy, LuaRuntime, PhaseCmd, SignalsCtxTables, clear_array_table,
+    populate_entity_signals, set_opt,
 };
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
@@ -226,6 +227,13 @@ fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str
     }
 }
 
+/// Bit assignments for one side's `CtxOccupancy` mask (see `CollisionCtxTables::occupancy_a/b`).
+const COLL_BIT_GROUP: u32 = 1 << 0;
+const COLL_BIT_POS: u32 = 1 << 1;
+const COLL_BIT_VEL: u32 = 1 << 2;
+const COLL_BIT_RECT: u32 = 1 << 3;
+const COLL_BIT_SIGNALS: u32 = 1 << 4;
+
 /// Populate one side of a pooled collision context table for a single entity.
 #[allow(clippy::too_many_arguments)]
 fn populate_collision_entity(
@@ -235,6 +243,7 @@ fn populate_collision_entity(
     rect_table: &mlua::Table,
     signals_table: &mlua::Table,
     signals_inner: &SignalsCtxTables,
+    occupancy: &CtxOccupancy,
     id: u64,
     group: Option<&str>,
     speed_sq: f32,
@@ -244,36 +253,64 @@ fn populate_collision_entity(
     signals: Option<&Signals>,
 ) -> mlua::Result<()> {
     entity_table.set("id", id)?;
-    match group {
-        Some(g) => entity_table.set("group", g)?,
-        None => entity_table.set("group", mlua::Value::Nil)?,
-    }
     entity_table.set("speed_sq", speed_sq)?;
 
-    set_opt!(entity_table, "pos", pos, (x, y), {
+    let old = occupancy.get();
+    let mut new: u32 = 0;
+
+    match group {
+        Some(g) => {
+            entity_table.set("group", g)?;
+            new |= COLL_BIT_GROUP;
+        }
+        None if old & COLL_BIT_GROUP != 0 => entity_table.set("group", mlua::Value::Nil)?,
+        None => {}
+    }
+
+    set_opt!(entity_table, "pos", pos, (x, y), COLL_BIT_POS, old, new, {
         pos_table.set("x", x)?;
         pos_table.set("y", y)?;
         entity_table.set("pos", pos_table.clone())?;
     });
 
-    set_opt!(entity_table, "vel", vel, (vx, vy), {
+    set_opt!(entity_table, "vel", vel, (vx, vy), COLL_BIT_VEL, old, new, {
         vel_table.set("x", vx)?;
         vel_table.set("y", vy)?;
         entity_table.set("vel", vel_table.clone())?;
     });
 
-    set_opt!(entity_table, "rect", rect, (x, y, w, h), {
-        rect_table.set("x", x)?;
-        rect_table.set("y", y)?;
-        rect_table.set("w", w)?;
-        rect_table.set("h", h)?;
-        entity_table.set("rect", rect_table.clone())?;
-    });
+    set_opt!(
+        entity_table,
+        "rect",
+        rect,
+        (x, y, w, h),
+        COLL_BIT_RECT,
+        old,
+        new,
+        {
+            rect_table.set("x", x)?;
+            rect_table.set("y", y)?;
+            rect_table.set("w", w)?;
+            rect_table.set("h", h)?;
+            entity_table.set("rect", rect_table.clone())?;
+        }
+    );
 
-    set_opt!(entity_table, "signals", signals, s, {
-        populate_entity_signals(signals_table, signals_inner, s)?;
-        entity_table.set("signals", signals_table.clone())?;
-    });
+    set_opt!(
+        entity_table,
+        "signals",
+        signals,
+        s,
+        COLL_BIT_SIGNALS,
+        old,
+        new,
+        {
+            populate_entity_signals(signals_table, signals_inner, s)?;
+            entity_table.set("signals", signals_table.clone())?;
+        }
+    );
+
+    occupancy.set(new);
 
     Ok(())
 }
@@ -310,6 +347,7 @@ fn call_lua_collision_callback(
         &tables.rect_a,
         &tables.signals_a,
         &tables.signals_a_inner,
+        &tables.occupancy_a,
         entity_a_id,
         group_a,
         speed_sq_a,
@@ -326,6 +364,7 @@ fn call_lua_collision_callback(
         &tables.rect_b,
         &tables.signals_b,
         &tables.signals_b_inner,
+        &tables.occupancy_b,
         entity_b_id,
         group_b,
         speed_sq_b,
@@ -398,6 +437,7 @@ mod tests {
             scratch_keys: std::cell::RefCell::new(Vec::new()),
         };
 
+        let occupancy = CtxOccupancy::default();
         populate_collision_entity(
             &entity_table,
             &pos_table,
@@ -405,6 +445,7 @@ mod tests {
             &rect_table,
             &signals_table,
             &signals_inner,
+            &occupancy,
             1,
             None,
             0.0,
@@ -435,6 +476,7 @@ mod tests {
             scratch_keys: std::cell::RefCell::new(Vec::new()),
         };
 
+        let occupancy = CtxOccupancy::default();
         populate_collision_entity(
             &entity_table,
             &pos_table,
@@ -442,6 +484,7 @@ mod tests {
             &rect_table,
             &signals_table,
             &signals_inner,
+            &occupancy,
             1,
             Some("enemy"),
             0.0,
@@ -454,5 +497,167 @@ mod tests {
 
         let group: String = entity_table.get("group").unwrap();
         assert_eq!(group, "enemy");
+    }
+
+    struct CollisionEntityTables {
+        entity: mlua::Table,
+        pos: mlua::Table,
+        vel: mlua::Table,
+        rect: mlua::Table,
+        signals: mlua::Table,
+        signals_inner: SignalsCtxTables,
+    }
+
+    fn make_collision_entity_tables(lua: &mlua::Lua) -> CollisionEntityTables {
+        CollisionEntityTables {
+            entity: lua.create_table().unwrap(),
+            pos: lua.create_table().unwrap(),
+            vel: lua.create_table().unwrap(),
+            rect: lua.create_table().unwrap(),
+            signals: lua.create_table().unwrap(),
+            signals_inner: SignalsCtxTables {
+                flags: lua.create_table().unwrap(),
+                integers: lua.create_table().unwrap(),
+                scalars: lua.create_table().unwrap(),
+                strings: lua.create_table().unwrap(),
+                scratch_keys: std::cell::RefCell::new(Vec::new()),
+            },
+        }
+    }
+
+    fn assert_sparse_collision_ctx_shape(entity_table: &mlua::Table) {
+        let pos: mlua::Table = entity_table.get("pos").unwrap();
+        assert_eq!(pos.get::<f32>("x").unwrap(), 1.0);
+        assert_eq!(pos.get::<f32>("y").unwrap(), 2.0);
+        for key in ["group", "vel", "rect", "signals"] {
+            let value: mlua::Value = entity_table.get(key).unwrap();
+            assert!(matches!(value, mlua::Value::Nil), "expected {key} to be nil");
+        }
+    }
+
+    fn assert_full_collision_ctx_shape(entity_table: &mlua::Table) {
+        assert_eq!(entity_table.get::<String>("group").unwrap(), "enemy");
+        assert!(entity_table.get::<mlua::Table>("pos").is_ok());
+        assert!(entity_table.get::<mlua::Table>("vel").is_ok());
+        assert!(entity_table.get::<mlua::Table>("rect").is_ok());
+        assert!(entity_table.get::<mlua::Table>("signals").is_ok());
+    }
+
+    #[test]
+    fn populate_collision_entity_sparse_then_sparse_leaves_absent_fields_nil() {
+        let lua = mlua::Lua::new();
+        let t = make_collision_entity_tables(&lua);
+        let occupancy = CtxOccupancy::default();
+
+        for _ in 0..2 {
+            populate_collision_entity(
+                &t.entity,
+                &t.pos,
+                &t.vel,
+                &t.rect,
+                &t.signals,
+                &t.signals_inner,
+                &occupancy,
+                1,
+                None,
+                0.0,
+                Some((1.0, 2.0)),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            assert_sparse_collision_ctx_shape(&t.entity);
+        }
+    }
+
+    #[test]
+    fn populate_collision_entity_sparse_then_full_reveals_fields() {
+        let lua = mlua::Lua::new();
+        let t = make_collision_entity_tables(&lua);
+        let occupancy = CtxOccupancy::default();
+        let signals = Signals::default();
+
+        populate_collision_entity(
+            &t.entity,
+            &t.pos,
+            &t.vel,
+            &t.rect,
+            &t.signals,
+            &t.signals_inner,
+            &occupancy,
+            1,
+            None,
+            0.0,
+            Some((1.0, 2.0)),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        populate_collision_entity(
+            &t.entity,
+            &t.pos,
+            &t.vel,
+            &t.rect,
+            &t.signals,
+            &t.signals_inner,
+            &occupancy,
+            1,
+            Some("enemy"),
+            0.0,
+            Some((1.0, 2.0)),
+            Some((3.0, 4.0)),
+            Some((0.0, 0.0, 10.0, 10.0)),
+            Some(&signals),
+        )
+        .unwrap();
+        assert_full_collision_ctx_shape(&t.entity);
+    }
+
+    #[test]
+    fn populate_collision_entity_full_then_sparse_scrubs_fields() {
+        let lua = mlua::Lua::new();
+        let t = make_collision_entity_tables(&lua);
+        let occupancy = CtxOccupancy::default();
+        let signals = Signals::default();
+
+        populate_collision_entity(
+            &t.entity,
+            &t.pos,
+            &t.vel,
+            &t.rect,
+            &t.signals,
+            &t.signals_inner,
+            &occupancy,
+            1,
+            Some("enemy"),
+            0.0,
+            Some((1.0, 2.0)),
+            Some((3.0, 4.0)),
+            Some((0.0, 0.0, 10.0, 10.0)),
+            Some(&signals),
+        )
+        .unwrap();
+
+        populate_collision_entity(
+            &t.entity,
+            &t.pos,
+            &t.vel,
+            &t.rect,
+            &t.signals,
+            &t.signals_inner,
+            &occupancy,
+            1,
+            None,
+            0.0,
+            Some((1.0, 2.0)),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_sparse_collision_ctx_shape(&t.entity);
     }
 }

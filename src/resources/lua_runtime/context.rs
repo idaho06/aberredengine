@@ -26,12 +26,39 @@
 //! they have variable keys per entity.
 //!
 //! **Important**: Pooled context tables are reused. Lua scripts must not store
-//! references to `ctx` or its subtables for later use.
+//! references to `ctx` or its subtables for later use, and must not *write* to
+//! `ctx` or its subtables either — `build_entity_context_pooled` tracks which
+//! optional fields are currently non-nil via an occupancy bitmask
+//! (`EntityCtxTables::occupancy`) to skip redundant Nil writes; a script write
+//! desyncs that mask, and the stale value can leak into a later callback's ctx.
 
 use super::runtime::{EntityCtxTables, SignalsCtxTables};
 use crate::components::signals::Signals;
 use mlua::{Lua, Result as LuaResult, Table as LuaTable, Value as LuaValue};
 use std::cell::RefCell;
+
+/// Bit assignments for `CtxOccupancy`'s entity-side mask (see `EntityCtxTables::occupancy`).
+/// Each bit tracks one independently-set optional ctx key or key-group; unset bits mean
+/// the ctx table already reads nil for those keys, so a rebuild can skip re-nil-ing them.
+const BIT_GROUP: u32 = 1 << 0;
+const BIT_ROTATION: u32 = 1 << 1;
+const BIT_PREVIOUS_PHASE: u32 = 1 << 2;
+const BIT_WORLD_ROTATION: u32 = 1 << 3;
+const BIT_PARENT_ID: u32 = 1 << 4;
+const BIT_POS: u32 = 1 << 5;
+const BIT_SCREEN_POS: u32 = 1 << 6;
+const BIT_SCALE: u32 = 1 << 7;
+const BIT_WORLD_POS: u32 = 1 << 8;
+const BIT_WORLD_SCALE: u32 = 1 << 9;
+/// vel + speed_sq + frozen, set/cleared together — one bit.
+const BIT_PHYSICS: u32 = 1 << 10;
+const BIT_RECT: u32 = 1 << 11;
+const BIT_SPRITE: u32 = 1 << 12;
+const BIT_ANIMATION: u32 = 1 << 13;
+const BIT_SIGNALS: u32 = 1 << 14;
+/// phase + time_in_phase, set/cleared together — one bit.
+const BIT_PHASE: u32 = 1 << 15;
+const BIT_TIMER: u32 = 1 << 16;
 
 /// Snapshot of RigidBody data for context building.
 #[derive(Debug, Clone)]
@@ -104,24 +131,33 @@ pub struct EntitySnapshot<'a> {
     pub parent_id: Option<u64>,
 }
 
-/// Expand an `Option` into a Lua context field, setting `LuaValue::Nil` in the absent case.
+/// Expand an `Option` into a Lua context field, setting `LuaValue::Nil` only when the
+/// field was previously non-nil (tracked via an occupancy bitmask) — see `CtxOccupancy`.
 ///
 /// Two forms:
-/// - `set_opt!(ctx, "key", opt)` — scalar: sets `opt`'s inner value or Nil directly on ctx.
-/// - `set_opt!(ctx, "key", opt, pat, { body })` — block: runs `body` (which is responsible for
-///   setting ctx["key"] via a subtable) or sets Nil. The key is only used for the Nil branch.
+/// - `set_opt!(ctx, "key", opt, bit, old, new)` — scalar: sets `opt`'s inner value or
+///   scrubs to Nil directly on ctx.
+/// - `set_opt!(ctx, "key", opt, pat, bit, old, new, { body })` — block: runs `body`
+///   (responsible for setting ctx["key"] via a subtable) or scrubs to Nil. The key is
+///   only used for the Nil branch.
+///
+/// `old` is the occupancy mask read once before any fields are built this call; `new`
+/// is a local accumulator that every `set_opt!`/hand-rolled site ORs its bit into when
+/// the value is `Some`, written back to the pool's `CtxOccupancy` once at the end.
 macro_rules! set_opt {
-    ($ctx:expr, $key:literal, $val:expr) => {
+    ($ctx:expr, $key:literal, $val:expr, $bit:expr, $old:expr, $new:expr) => {
         if let Some(v) = $val {
             $ctx.set($key, v)?;
-        } else {
+            $new |= $bit;
+        } else if $old & $bit != 0 {
             $ctx.set($key, mlua::Value::Nil)?;
         }
     };
-    ($ctx:expr, $key:literal, $val:expr, $v:pat, $body:block) => {
+    ($ctx:expr, $key:literal, $val:expr, $v:pat, $bit:expr, $old:expr, $new:expr, $body:block) => {
         if let Some($v) = $val {
             $body
-        } else {
+            $new |= $bit;
+        } else if $old & $bit != 0 {
             $ctx.set($key, mlua::Value::Nil)?;
         }
     };
@@ -208,69 +244,155 @@ pub fn build_entity_context_pooled<'a>(
     // Core identity (id is always present)
     tables.ctx.set("id", snapshot.entity_id)?;
 
+    let old = tables.occupancy.get();
+    let mut new: u32 = 0;
+
     // Scalar optionals
-    set_opt!(tables.ctx, "group", snapshot.group);
-    set_opt!(tables.ctx, "rotation", snapshot.rotation);
-    set_opt!(tables.ctx, "previous_phase", snapshot.previous_phase);
-    set_opt!(tables.ctx, "world_rotation", snapshot.world_rotation);
-    set_opt!(tables.ctx, "parent_id", snapshot.parent_id);
+    set_opt!(tables.ctx, "group", snapshot.group, BIT_GROUP, old, new);
+    set_opt!(
+        tables.ctx,
+        "rotation",
+        snapshot.rotation,
+        BIT_ROTATION,
+        old,
+        new
+    );
+    set_opt!(
+        tables.ctx,
+        "previous_phase",
+        snapshot.previous_phase,
+        BIT_PREVIOUS_PHASE,
+        old,
+        new
+    );
+    set_opt!(
+        tables.ctx,
+        "world_rotation",
+        snapshot.world_rotation,
+        BIT_WORLD_ROTATION,
+        old,
+        new
+    );
+    set_opt!(
+        tables.ctx,
+        "parent_id",
+        snapshot.parent_id,
+        BIT_PARENT_ID,
+        old,
+        new
+    );
 
     // XY position subtables
-    set_opt!(tables.ctx, "pos", snapshot.map_pos, (x, y), {
+    set_opt!(tables.ctx, "pos", snapshot.map_pos, (x, y), BIT_POS, old, new, {
         tables.pos.set("x", x)?;
         tables.pos.set("y", y)?;
         tables.ctx.set("pos", tables.pos.clone())?;
     });
-    set_opt!(tables.ctx, "screen_pos", snapshot.screen_pos, (x, y), {
-        tables.screen_pos.set("x", x)?;
-        tables.screen_pos.set("y", y)?;
-        tables.ctx.set("screen_pos", tables.screen_pos.clone())?;
-    });
-    set_opt!(tables.ctx, "scale", snapshot.scale, (sx, sy), {
-        tables.scale.set("x", sx)?;
-        tables.scale.set("y", sy)?;
-        tables.ctx.set("scale", tables.scale.clone())?;
-    });
-    set_opt!(tables.ctx, "world_pos", snapshot.world_pos, (x, y), {
-        tables.world_pos.set("x", x)?;
-        tables.world_pos.set("y", y)?;
-        tables.ctx.set("world_pos", tables.world_pos.clone())?;
-    });
-    set_opt!(tables.ctx, "world_scale", snapshot.world_scale, (sx, sy), {
-        tables.world_scale.set("x", sx)?;
-        tables.world_scale.set("y", sy)?;
-        tables.ctx.set("world_scale", tables.world_scale.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "screen_pos",
+        snapshot.screen_pos,
+        (x, y),
+        BIT_SCREEN_POS,
+        old,
+        new,
+        {
+            tables.screen_pos.set("x", x)?;
+            tables.screen_pos.set("y", y)?;
+            tables.ctx.set("screen_pos", tables.screen_pos.clone())?;
+        }
+    );
+    set_opt!(
+        tables.ctx,
+        "scale",
+        snapshot.scale,
+        (sx, sy),
+        BIT_SCALE,
+        old,
+        new,
+        {
+            tables.scale.set("x", sx)?;
+            tables.scale.set("y", sy)?;
+            tables.ctx.set("scale", tables.scale.clone())?;
+        }
+    );
+    set_opt!(
+        tables.ctx,
+        "world_pos",
+        snapshot.world_pos,
+        (x, y),
+        BIT_WORLD_POS,
+        old,
+        new,
+        {
+            tables.world_pos.set("x", x)?;
+            tables.world_pos.set("y", y)?;
+            tables.ctx.set("world_pos", tables.world_pos.clone())?;
+        }
+    );
+    set_opt!(
+        tables.ctx,
+        "world_scale",
+        snapshot.world_scale,
+        (sx, sy),
+        BIT_WORLD_SCALE,
+        old,
+        new,
+        {
+            tables.world_scale.set("x", sx)?;
+            tables.world_scale.set("y", sy)?;
+            tables.ctx.set("world_scale", tables.world_scale.clone())?;
+        }
+    );
 
-    // Physics from RigidBody (sets three ctx keys — not a single-key pattern)
+    // Physics from RigidBody (sets three ctx keys — not a single-key set_opt! pattern)
     if let Some(rb) = snapshot.rigid_body.as_ref() {
         tables.vel.set("x", rb.velocity.0)?;
         tables.vel.set("y", rb.velocity.1)?;
         tables.ctx.set("vel", tables.vel.clone())?;
         tables.ctx.set("speed_sq", rb.speed_sq)?;
         tables.ctx.set("frozen", rb.frozen)?;
-    } else {
+        new |= BIT_PHYSICS;
+    } else if old & BIT_PHYSICS != 0 {
         tables.ctx.set("vel", LuaValue::Nil)?;
         tables.ctx.set("speed_sq", LuaValue::Nil)?;
         tables.ctx.set("frozen", LuaValue::Nil)?;
     }
 
     // Collision rect from BoxCollider
-    set_opt!(tables.ctx, "rect", snapshot.rect, (x, y, w, h), {
-        tables.rect.set("x", x)?;
-        tables.rect.set("y", y)?;
-        tables.rect.set("w", w)?;
-        tables.rect.set("h", h)?;
-        tables.ctx.set("rect", tables.rect.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "rect",
+        snapshot.rect,
+        (x, y, w, h),
+        BIT_RECT,
+        old,
+        new,
+        {
+            tables.rect.set("x", x)?;
+            tables.rect.set("y", y)?;
+            tables.rect.set("w", w)?;
+            tables.rect.set("h", h)?;
+            tables.ctx.set("rect", tables.rect.clone())?;
+        }
+    );
 
     // Sprite
-    set_opt!(tables.ctx, "sprite", snapshot.sprite.as_ref(), spr, {
-        tables.sprite.set("tex_key", spr.tex_key)?;
-        tables.sprite.set("flip_h", spr.flip_h)?;
-        tables.sprite.set("flip_v", spr.flip_v)?;
-        tables.ctx.set("sprite", tables.sprite.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "sprite",
+        snapshot.sprite.as_ref(),
+        spr,
+        BIT_SPRITE,
+        old,
+        new,
+        {
+            tables.sprite.set("tex_key", spr.tex_key)?;
+            tables.sprite.set("flip_h", spr.flip_h)?;
+            tables.sprite.set("flip_v", spr.flip_v)?;
+            tables.ctx.set("sprite", tables.sprite.clone())?;
+        }
+    );
 
     // Animation
     set_opt!(
@@ -278,6 +400,9 @@ pub fn build_entity_context_pooled<'a>(
         "animation",
         snapshot.animation.as_ref(),
         anim,
+        BIT_ANIMATION,
+        old,
+        new,
         {
             tables.animation.set("key", anim.key)?;
             tables.animation.set("frame_index", anim.frame_index)?;
@@ -287,27 +412,48 @@ pub fn build_entity_context_pooled<'a>(
     );
 
     // Signals (creates fresh inner tables for variable-length data)
-    set_opt!(tables.ctx, "signals", snapshot.signals, signals, {
-        populate_entity_signals(&tables.signals, &tables.signals_inner, signals)?;
-        tables.ctx.set("signals", tables.signals.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "signals",
+        snapshot.signals,
+        signals,
+        BIT_SIGNALS,
+        old,
+        new,
+        {
+            populate_entity_signals(&tables.signals, &tables.signals_inner, signals)?;
+            tables.ctx.set("signals", tables.signals.clone())?;
+        }
+    );
 
-    // Phase info from LuaPhase (sets two ctx keys — not a single-key pattern)
+    // Phase info from LuaPhase (sets two ctx keys — not a single-key set_opt! pattern)
     if let Some(phase) = snapshot.lua_phase.as_ref() {
         tables.ctx.set("phase", phase.current)?;
         tables.ctx.set("time_in_phase", phase.time_in_phase)?;
-    } else {
+        new |= BIT_PHASE;
+    } else if old & BIT_PHASE != 0 {
         tables.ctx.set("phase", LuaValue::Nil)?;
         tables.ctx.set("time_in_phase", LuaValue::Nil)?;
     }
 
     // Timer info from LuaTimer
-    set_opt!(tables.ctx, "timer", snapshot.lua_timer.as_ref(), timer, {
-        tables.timer.set("duration", timer.duration)?;
-        tables.timer.set("elapsed", timer.elapsed)?;
-        tables.timer.set("callback", timer.callback)?;
-        tables.ctx.set("timer", tables.timer.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "timer",
+        snapshot.lua_timer.as_ref(),
+        timer,
+        BIT_TIMER,
+        old,
+        new,
+        {
+            tables.timer.set("duration", timer.duration)?;
+            tables.timer.set("elapsed", timer.elapsed)?;
+            tables.timer.set("callback", timer.callback)?;
+            tables.ctx.set("timer", tables.timer.clone())?;
+        }
+    );
+
+    tables.occupancy.set(new);
 
     Ok(tables.ctx.clone())
 }
@@ -379,5 +525,169 @@ mod tests {
         for _ in 0..20_000 {
             populate_entity_signals(&signals_table, &inner, &signals).unwrap();
         }
+    }
+
+    fn sparse_snapshot(signals: &Signals) -> EntitySnapshot<'_> {
+        EntitySnapshot {
+            entity_id: 1,
+            group: None,
+            map_pos: Some((1.0, 2.0)),
+            screen_pos: None,
+            rigid_body: None,
+            rotation: None,
+            scale: None,
+            rect: None,
+            sprite: None,
+            animation: None,
+            signals: Some(signals),
+            lua_phase: None,
+            lua_timer: None,
+            previous_phase: None,
+            world_pos: None,
+            world_rotation: None,
+            world_scale: None,
+            parent_id: None,
+        }
+    }
+
+    fn full_snapshot(signals: &Signals) -> EntitySnapshot<'_> {
+        EntitySnapshot {
+            entity_id: 1,
+            group: Some("enemies"),
+            map_pos: Some((1.0, 2.0)),
+            screen_pos: Some((3.0, 4.0)),
+            rigid_body: Some(RigidBodySnapshot {
+                velocity: (5.0, 6.0),
+                speed_sq: 61.0,
+                frozen: false,
+            }),
+            rotation: Some(45.0),
+            scale: Some((1.5, 1.5)),
+            rect: Some((0.0, 0.0, 10.0, 10.0)),
+            sprite: Some(SpriteSnapshot {
+                tex_key: "player",
+                flip_h: false,
+                flip_v: false,
+            }),
+            animation: Some(AnimationSnapshot {
+                key: "walk",
+                frame_index: 0,
+                elapsed: 0.0,
+            }),
+            signals: Some(signals),
+            lua_phase: Some(LuaPhaseSnapshot {
+                current: "idle",
+                time_in_phase: 1.0,
+            }),
+            lua_timer: Some(LuaTimerSnapshot {
+                duration: 1.0,
+                elapsed: 0.5,
+                callback: "on_timer",
+            }),
+            previous_phase: Some("attack"),
+            world_pos: Some((7.0, 8.0)),
+            world_rotation: Some(90.0),
+            world_scale: Some((2.0, 2.0)),
+            parent_id: Some(42),
+        }
+    }
+
+    /// The set of optional ctx keys `sparse_snapshot` leaves absent.
+    const SPARSE_ABSENT_KEYS: &[&str] = &[
+        "group",
+        "rotation",
+        "previous_phase",
+        "world_rotation",
+        "parent_id",
+        "screen_pos",
+        "scale",
+        "world_pos",
+        "world_scale",
+        "vel",
+        "speed_sq",
+        "frozen",
+        "rect",
+        "sprite",
+        "animation",
+        "phase",
+        "time_in_phase",
+        "timer",
+    ];
+
+    fn assert_sparse_ctx_shape(ctx: &LuaTable) {
+        assert_eq!(ctx.get::<u64>("id").unwrap(), 1);
+        let pos: LuaTable = ctx.get("pos").unwrap();
+        assert_eq!(pos.get::<f32>("x").unwrap(), 1.0);
+        assert_eq!(pos.get::<f32>("y").unwrap(), 2.0);
+        assert!(ctx.get::<LuaTable>("signals").is_ok());
+        for key in SPARSE_ABSENT_KEYS {
+            let value: LuaValue = ctx.get(*key).unwrap();
+            assert!(matches!(value, LuaValue::Nil), "expected {key} to be nil");
+        }
+    }
+
+    fn assert_full_ctx_shape(ctx: &LuaTable) {
+        assert_eq!(ctx.get::<u64>("id").unwrap(), 1);
+        assert_eq!(ctx.get::<String>("group").unwrap(), "enemies");
+        assert_eq!(ctx.get::<f32>("rotation").unwrap(), 45.0);
+        assert_eq!(ctx.get::<String>("previous_phase").unwrap(), "attack");
+        assert_eq!(ctx.get::<f32>("world_rotation").unwrap(), 90.0);
+        assert_eq!(ctx.get::<u64>("parent_id").unwrap(), 42);
+        assert!(ctx.get::<LuaTable>("screen_pos").is_ok());
+        assert!(ctx.get::<LuaTable>("scale").is_ok());
+        assert!(ctx.get::<LuaTable>("world_pos").is_ok());
+        assert!(ctx.get::<LuaTable>("world_scale").is_ok());
+        assert!(ctx.get::<LuaTable>("vel").is_ok());
+        assert_eq!(ctx.get::<f32>("speed_sq").unwrap(), 61.0);
+        assert!(!ctx.get::<bool>("frozen").unwrap());
+        assert!(ctx.get::<LuaTable>("rect").is_ok());
+        assert!(ctx.get::<LuaTable>("sprite").is_ok());
+        assert!(ctx.get::<LuaTable>("animation").is_ok());
+        assert_eq!(ctx.get::<String>("phase").unwrap(), "idle");
+        assert_eq!(ctx.get::<f32>("time_in_phase").unwrap(), 1.0);
+        assert!(ctx.get::<LuaTable>("timer").is_ok());
+    }
+
+    #[test]
+    fn build_entity_context_pooled_sparse_then_sparse_leaves_absent_fields_nil() {
+        let runtime = super::super::runtime::LuaRuntime::new().unwrap();
+        let tables = runtime.get_entity_ctx_pool();
+        let signals = Signals::default();
+
+        let ctx = build_entity_context_pooled(runtime.lua(), &tables, &sparse_snapshot(&signals))
+            .unwrap();
+        assert_sparse_ctx_shape(&ctx);
+
+        // Build again with the same sparse snapshot — must still be correct
+        // (exercises the skip-path: already-nil keys are not rewritten).
+        let ctx = build_entity_context_pooled(runtime.lua(), &tables, &sparse_snapshot(&signals))
+            .unwrap();
+        assert_sparse_ctx_shape(&ctx);
+    }
+
+    #[test]
+    fn build_entity_context_pooled_sparse_then_full_reveals_fields() {
+        let runtime = super::super::runtime::LuaRuntime::new().unwrap();
+        let tables = runtime.get_entity_ctx_pool();
+        let signals = Signals::default();
+
+        build_entity_context_pooled(runtime.lua(), &tables, &sparse_snapshot(&signals)).unwrap();
+
+        let ctx =
+            build_entity_context_pooled(runtime.lua(), &tables, &full_snapshot(&signals)).unwrap();
+        assert_full_ctx_shape(&ctx);
+    }
+
+    #[test]
+    fn build_entity_context_pooled_full_then_sparse_scrubs_fields() {
+        let runtime = super::super::runtime::LuaRuntime::new().unwrap();
+        let tables = runtime.get_entity_ctx_pool();
+        let signals = Signals::default();
+
+        build_entity_context_pooled(runtime.lua(), &tables, &full_snapshot(&signals)).unwrap();
+
+        let ctx = build_entity_context_pooled(runtime.lua(), &tables, &sparse_snapshot(&signals))
+            .unwrap();
+        assert_sparse_ctx_shape(&ctx);
     }
 }

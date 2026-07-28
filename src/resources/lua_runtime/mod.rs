@@ -54,5 +54,5 @@ pub use context::{
 pub(crate) use context::{clear_array_table, populate_entity_signals, set_opt};
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
-pub use runtime::{LuaRuntime, SignalsCtxTables, action_from_str};
+pub use runtime::{CtxOccupancy, LuaRuntime, SignalsCtxTables, action_from_str};
 pub use spawn_data::*;
