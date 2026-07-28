@@ -57,7 +57,7 @@ use log::warn;
 /// `Added<T>`, not by this function.
 pub fn process_spawn_command(
     commands: &mut Commands,
-    cmd: SpawnCmd,
+    cmd: Box<SpawnCmd>,
     world_signals: &mut WorldSignals,
 ) {
     let mut entity_commands = commands.spawn_empty();
@@ -67,7 +67,7 @@ pub fn process_spawn_command(
 
 pub(super) fn apply_components(
     entity_commands: &mut EntityCommands,
-    cmd: SpawnCmd,
+    cmd: Box<SpawnCmd>,
     world_signals: &mut WorldSignals,
     entity: Entity,
 ) {
@@ -728,7 +728,7 @@ mod tests {
                 &mut commands,
                 CloneCmd {
                     source_key: "tpl".to_string(),
-                    overrides: SpawnCmd::default(),
+                    overrides: Box::new(SpawnCmd::default()),
                 },
                 &mut world_signals,
             );
@@ -758,7 +758,7 @@ mod tests {
                 &mut commands,
                 CloneCmd {
                     source_key: "tpl".to_string(),
-                    overrides: SpawnCmd::default(),
+                    overrides: Box::new(SpawnCmd::default()),
                 },
                 &mut world_signals,
             );

@@ -20,7 +20,7 @@ macro_rules! lua_queues {
     (@master $($rest:tt)*) => {
         $crate::lua_queues!{ $($rest)*
             (asset_commands,            AssetCmd,         preserve),
-            (spawn_commands,            SpawnCmd,         clear),
+            (spawn_commands,            Box<SpawnCmd>,    clear),
             (audio_commands,            AudioLuaCmd,      clear),
             (signal_commands,           SignalCmd,        clear),
             (phase_commands,            PhaseCmd,         clear),
@@ -38,7 +38,7 @@ macro_rules! lua_queues {
             (collision_entity_commands, EntityCmd,        clear),
             (collision_signal_commands, SignalCmd,        clear),
             (collision_audio_commands,  AudioLuaCmd,      clear),
-            (collision_spawn_commands,  SpawnCmd,         clear),
+            (collision_spawn_commands,  Box<SpawnCmd>,    clear),
             (collision_clone_commands,  CloneCmd,         clear),
             (collision_phase_commands,  PhaseCmd,         clear),
             (collision_camera_commands, CameraCmd,        clear),

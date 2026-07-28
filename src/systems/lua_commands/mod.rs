@@ -82,7 +82,10 @@ use crate::resources::worldsignals::WorldSignals;
 pub struct EffectCmdBufs {
     pub(crate) signals: Vec<SignalCmd>,
     pub(crate) entities: Vec<EntityCmd>,
-    pub(crate) spawns: Vec<SpawnCmd>,
+    // SpawnCmd is ~2KB; boxing keeps this Vec's per-element push/drain/realloc cost
+    // at 8 bytes instead of a full-struct memcpy.
+    #[allow(clippy::vec_box)]
+    pub(crate) spawns: Vec<Box<SpawnCmd>>,
     pub(crate) clones: Vec<CloneCmd>,
     pub(crate) audios: Vec<AudioLuaCmd>,
     pub(crate) cameras: Vec<CameraCmd>,

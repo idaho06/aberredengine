@@ -284,19 +284,19 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 app_data
                     .spawn_commands
                     .borrow_mut()
-                    .push(std::mem::take(&mut this.cmd));
+                    .push(Box::new(std::mem::take(&mut this.cmd)));
             }
             (BuilderMode::Spawn, BuilderContext::Collision) => {
                 app_data
                     .collision_spawn_commands
                     .borrow_mut()
-                    .push(std::mem::take(&mut this.cmd));
+                    .push(Box::new(std::mem::take(&mut this.cmd)));
             }
             (BuilderMode::Clone, BuilderContext::Regular) => {
                 let source_key = this.source_key.take().unwrap_or_default();
                 app_data.clone_commands.borrow_mut().push(CloneCmd {
                     source_key,
-                    overrides: std::mem::take(&mut this.cmd),
+                    overrides: Box::new(std::mem::take(&mut this.cmd)),
                 });
             }
             (BuilderMode::Clone, BuilderContext::Collision) => {
@@ -306,7 +306,7 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     .borrow_mut()
                     .push(CloneCmd {
                         source_key,
-                        overrides: std::mem::take(&mut this.cmd),
+                        overrides: Box::new(std::mem::take(&mut this.cmd)),
                     });
             }
         }

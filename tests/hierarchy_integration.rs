@@ -747,7 +747,7 @@ fn spawn_cmd_with_parent_applies_childof() {
     let (mut commands, mut world_signals) = state
         .get_mut(&mut world)
         .expect("Hierarchy test params should fetch");
-    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    process_spawn_command(&mut commands, Box::new(cmd), &mut world_signals);
     state.apply(&mut world);
 
     // Find the spawned child (entity that has ChildOf)
@@ -822,7 +822,7 @@ fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
     let (mut commands, mut world_signals) = state
         .get_mut(&mut world)
         .expect("Hierarchy test params should fetch");
-    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    process_spawn_command(&mut commands, Box::new(cmd), &mut world_signals);
     state.apply(&mut world);
 
     let mut child_entity = None;
@@ -898,7 +898,7 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
     let (mut commands, mut world_signals) = state
         .get_mut(&mut world)
         .expect("Hierarchy test params should fetch");
-    process_spawn_command(&mut commands, cmd, &mut world_signals);
+    process_spawn_command(&mut commands, Box::new(cmd), &mut world_signals);
     state.apply(&mut world);
 
     let mut child_entity = None;

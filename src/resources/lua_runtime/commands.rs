@@ -526,7 +526,7 @@ pub struct CloneCmd {
     /// WorldSignals key to look up the source entity
     pub source_key: String,
     /// Component overrides (builder values win over template)
-    pub overrides: SpawnCmd,
+    pub overrides: Box<SpawnCmd>,
 }
 
 /// Commands for runtime game configuration changes from Lua.
