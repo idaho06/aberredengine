@@ -49,7 +49,7 @@ use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::resources::lua_runtime::{
-    CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_array_table,
+    CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
     populate_entity_signals, set_opt,
 };
 use crate::resources::systemsstore::SystemsStore;
@@ -370,12 +370,12 @@ fn call_lua_collision_callback(
         signals_b,
     )?;
 
-    clear_array_table(&tables.sides_a)?;
+    clear_table(&tables.sides_a)?;
     for (i, side) in sides_a.iter().enumerate() {
         tables.sides_a.set(i + 1, box_side_to_str(side))?;
     }
 
-    clear_array_table(&tables.sides_b)?;
+    clear_table(&tables.sides_b)?;
     for (i, side) in sides_b.iter().enumerate() {
         tables.sides_b.set(i + 1, box_side_to_str(side))?;
     }
@@ -494,7 +494,6 @@ mod tests {
                 integers: lua.create_table().unwrap(),
                 scalars: lua.create_table().unwrap(),
                 strings: lua.create_table().unwrap(),
-                scratch_keys: std::cell::RefCell::new(Vec::new()),
             },
         }
     }

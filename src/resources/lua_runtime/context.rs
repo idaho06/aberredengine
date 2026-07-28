@@ -34,8 +34,7 @@
 
 use super::runtime::{EntityCtxTables, SignalsCtxTables};
 use crate::components::signals::Signals;
-use mlua::{Lua, Result as LuaResult, Table as LuaTable, Value as LuaValue};
-use std::cell::RefCell;
+use mlua::{Lua, Result as LuaResult, Table as LuaTable};
 
 /// Accumulates one `build_entity_context_pooled`/`populate_collision_entity` call's
 /// occupancy mask transition: `old` is read once from `CtxOccupancy` at the top of the
@@ -187,37 +186,11 @@ macro_rules! set_opt {
 }
 pub(crate) use set_opt;
 
-/// Clears all numeric indices `1..=len` from an array-style Lua table.
-pub(crate) fn clear_array_table(table: &LuaTable) -> LuaResult<()> {
-    let len = table.raw_len();
-    for i in 1..=len {
-        table.raw_set(i, LuaValue::Nil)?;
-    }
-    Ok(())
-}
-
-/// Clears all entries from a hash-style (string/number keyed) Lua table.
-///
-/// Deliberately does NOT use `mlua::Table::clear()`: in mlua 0.11.6's
-/// non-Luau implementation, `clear()` pushes the table onto the Lua stack via
-/// `push_ref` but never pops it, leaking one stack slot per call — with this
-/// called 3x per entity per callback, the main Lua stack overflows
-/// (`StackError`) within seconds. Collecting keys via `pairs` and nil-ing
-/// them through the safe `set` path does not leak.
-///
-/// `scratch` is a caller-owned buffer reused across calls to avoid allocating
-/// a fresh `Vec` every time; it is left empty when this function returns.
-fn clear_map_table(table: &LuaTable, scratch: &RefCell<Vec<LuaValue>>) -> LuaResult<()> {
-    let mut keys = scratch.borrow_mut();
-    keys.clear();
-    for pair in table.pairs::<LuaValue, LuaValue>() {
-        let (k, _) = pair?;
-        keys.push(k);
-    }
-    for key in keys.drain(..) {
-        table.set(key, LuaValue::Nil)?;
-    }
-    Ok(())
+/// Clears every entry (array and hash part) from a pooled Lua table via
+/// `mlua::Table::clear()` (requires mlua >= 0.12 — see
+/// `populate_entity_signals_does_not_leak_lua_stack_slots` below).
+pub(crate) fn clear_table(table: &LuaTable) -> LuaResult<()> {
+    table.clear()
 }
 
 /// Populate entity signal tables, reusing the pooled inner tables in place.
@@ -227,28 +200,28 @@ pub(crate) fn populate_entity_signals(
     signals: &Signals,
 ) -> LuaResult<()> {
     // Flags array (variable length)
-    clear_array_table(&inner.flags)?;
+    clear_table(&inner.flags)?;
     for (i, flag) in signals.get_flags().iter().enumerate() {
         inner.flags.set(i + 1, flag.as_str())?;
     }
     signals_table.set("flags", inner.flags.clone())?;
 
     // Integers map (variable keys)
-    clear_map_table(&inner.integers, &inner.scratch_keys)?;
+    clear_table(&inner.integers)?;
     for (key, value) in signals.get_integers() {
         inner.integers.set(key.as_str(), *value)?;
     }
     signals_table.set("integers", inner.integers.clone())?;
 
     // Scalars map (variable keys)
-    clear_map_table(&inner.scalars, &inner.scratch_keys)?;
+    clear_table(&inner.scalars)?;
     for (key, value) in signals.get_scalars() {
         inner.scalars.set(key.as_str(), *value)?;
     }
     signals_table.set("scalars", inner.scalars.clone())?;
 
     // Strings map (variable keys)
-    clear_map_table(&inner.strings, &inner.scratch_keys)?;
+    clear_table(&inner.strings)?;
     for (key, value) in signals.get_strings() {
         inner.strings.set(key.as_str(), value.as_str())?;
     }
@@ -471,6 +444,7 @@ pub fn build_entity_context_pooled<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mlua::Value as LuaValue;
 
     #[test]
     fn populate_entity_signals_replaces_variable_length_tables() {
@@ -481,7 +455,6 @@ mod tests {
             integers: lua.create_table().unwrap(),
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
-            scratch_keys: RefCell::new(Vec::new()),
         };
 
         let mut first = Signals::default();
@@ -511,11 +484,13 @@ mod tests {
 
     #[test]
     fn populate_entity_signals_does_not_leak_lua_stack_slots() {
-        // Regression test: mlua 0.11.6's `Table::clear()` (non-Luau) pushes
-        // the table ref via `push_ref` and never pops it, leaking one main
-        // stack slot per call. populate_entity_signals must not rely on
-        // `Table::clear()` directly, or repeated calls overflow the Lua
-        // stack (`StackError`) within a few thousand iterations.
+        // Forward-looking regression guard: mlua 0.11.6's `Table::clear()`
+        // (non-Luau) pushed the table ref via `push_ref` and never popped
+        // it, leaking one main stack slot per call. mlua >= 0.12 fixes this
+        // with a `StackGuard`, and populate_entity_signals now relies on
+        // `Table::clear()` directly — if a future mlua version ever
+        // regresses, this test overflows the Lua stack (`StackError`)
+        // within a few thousand iterations.
         let lua = Lua::new();
         let signals_table = lua.create_table().unwrap();
         let inner = SignalsCtxTables {
@@ -523,7 +498,6 @@ mod tests {
             integers: lua.create_table().unwrap(),
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
-            scratch_keys: RefCell::new(Vec::new()),
         };
 
         let mut signals = Signals::default();
