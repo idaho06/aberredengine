@@ -37,6 +37,21 @@ use crate::components::signals::Signals;
 use mlua::{Lua, Result as LuaResult, Table as LuaTable, Value as LuaValue};
 use std::cell::RefCell;
 
+/// Accumulates one `build_entity_context_pooled`/`populate_collision_entity` call's
+/// occupancy mask transition: `old` is read once from `CtxOccupancy` at the top of the
+/// call, `new` is OR'd into as each `set_opt!` site finds its field present, and the
+/// final `new` is written back to `CtxOccupancy` at the end.
+pub(crate) struct OccMask {
+    pub old: u32,
+    pub new: u32,
+}
+
+impl OccMask {
+    pub(crate) fn new(old: u32) -> Self {
+        Self { old, new: 0 }
+    }
+}
+
 /// Bit assignments for `CtxOccupancy`'s entity-side mask (see `EntityCtxTables::occupancy`).
 /// Each bit tracks one independently-set optional ctx key or key-group; unset bits mean
 /// the ctx table already reads nil for those keys, so a rebuild can skip re-nil-ing them.
@@ -134,31 +149,39 @@ pub struct EntitySnapshot<'a> {
 /// Expand an `Option` into a Lua context field, setting `LuaValue::Nil` only when the
 /// field was previously non-nil (tracked via an occupancy bitmask) — see `CtxOccupancy`.
 ///
-/// Two forms:
-/// - `set_opt!(ctx, "key", opt, bit, old, new)` — scalar: sets `opt`'s inner value or
+/// Three forms:
+/// - `set_opt!(ctx, "key", opt, bit, mask)` — scalar: sets `opt`'s inner value or
 ///   scrubs to Nil directly on ctx.
-/// - `set_opt!(ctx, "key", opt, pat, bit, old, new, { body })` — block: runs `body`
+/// - `set_opt!(ctx, "key", opt, pat, bit, mask, { body })` — block: runs `body`
 ///   (responsible for setting ctx["key"] via a subtable) or scrubs to Nil. The key is
 ///   only used for the Nil branch.
+/// - `set_opt!(ctx, ["key1", "key2", ...], opt, pat, bit, mask, { body })` — block
+///   variant for a group that spans multiple ctx keys (e.g. physics' `vel`/`speed_sq`/
+///   `frozen`): scrubs every listed key to Nil in the absent branch.
 ///
-/// `old` is the occupancy mask read once before any fields are built this call; `new`
-/// is a local accumulator that every `set_opt!`/hand-rolled site ORs its bit into when
-/// the value is `Some`, written back to the pool's `CtxOccupancy` once at the end.
+/// `mask: &mut OccMask` carries `old` (the occupancy read once before any fields are
+/// built this call) and `new` (accumulates the bit for every field found present);
+/// `new` is written back to the pool's `CtxOccupancy` once at the end.
 macro_rules! set_opt {
-    ($ctx:expr, $key:literal, $val:expr, $bit:expr, $old:expr, $new:expr) => {
-        if let Some(v) = $val {
+    ($ctx:expr, $key:literal, $val:expr, $bit:expr, $mask:expr) => {
+        set_opt!($ctx, $key, $val, v, $bit, $mask, {
             $ctx.set($key, v)?;
-            $new |= $bit;
-        } else if $old & $bit != 0 {
+        });
+    };
+    ($ctx:expr, $key:literal, $val:expr, $v:pat, $bit:expr, $mask:expr, $body:block) => {
+        if let Some($v) = $val {
+            $body
+            $mask.new |= $bit;
+        } else if $mask.old & $bit != 0 {
             $ctx.set($key, mlua::Value::Nil)?;
         }
     };
-    ($ctx:expr, $key:literal, $val:expr, $v:pat, $bit:expr, $old:expr, $new:expr, $body:block) => {
+    ($ctx:expr, [$($key:literal),+ $(,)?], $val:expr, $v:pat, $bit:expr, $mask:expr, $body:block) => {
         if let Some($v) = $val {
             $body
-            $new |= $bit;
-        } else if $old & $bit != 0 {
-            $ctx.set($key, mlua::Value::Nil)?;
+            $mask.new |= $bit;
+        } else if $mask.old & $bit != 0 {
+            $( $ctx.set($key, mlua::Value::Nil)?; )+
         }
     };
 }
@@ -244,46 +267,35 @@ pub fn build_entity_context_pooled<'a>(
     // Core identity (id is always present)
     tables.ctx.set("id", snapshot.entity_id)?;
 
-    let old = tables.occupancy.get();
-    let mut new: u32 = 0;
+    let mut mask = OccMask::new(tables.occupancy.get());
 
     // Scalar optionals
-    set_opt!(tables.ctx, "group", snapshot.group, BIT_GROUP, old, new);
-    set_opt!(
-        tables.ctx,
-        "rotation",
-        snapshot.rotation,
-        BIT_ROTATION,
-        old,
-        new
-    );
+    set_opt!(tables.ctx, "group", snapshot.group, BIT_GROUP, mask);
+    set_opt!(tables.ctx, "rotation", snapshot.rotation, BIT_ROTATION, mask);
     set_opt!(
         tables.ctx,
         "previous_phase",
         snapshot.previous_phase,
         BIT_PREVIOUS_PHASE,
-        old,
-        new
+        mask
     );
     set_opt!(
         tables.ctx,
         "world_rotation",
         snapshot.world_rotation,
         BIT_WORLD_ROTATION,
-        old,
-        new
+        mask
     );
     set_opt!(
         tables.ctx,
         "parent_id",
         snapshot.parent_id,
         BIT_PARENT_ID,
-        old,
-        new
+        mask
     );
 
     // XY position subtables
-    set_opt!(tables.ctx, "pos", snapshot.map_pos, (x, y), BIT_POS, old, new, {
+    set_opt!(tables.ctx, "pos", snapshot.map_pos, (x, y), BIT_POS, mask, {
         tables.pos.set("x", x)?;
         tables.pos.set("y", y)?;
         tables.ctx.set("pos", tables.pos.clone())?;
@@ -294,8 +306,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.screen_pos,
         (x, y),
         BIT_SCREEN_POS,
-        old,
-        new,
+        mask,
         {
             tables.screen_pos.set("x", x)?;
             tables.screen_pos.set("y", y)?;
@@ -308,8 +319,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.scale,
         (sx, sy),
         BIT_SCALE,
-        old,
-        new,
+        mask,
         {
             tables.scale.set("x", sx)?;
             tables.scale.set("y", sy)?;
@@ -322,8 +332,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.world_pos,
         (x, y),
         BIT_WORLD_POS,
-        old,
-        new,
+        mask,
         {
             tables.world_pos.set("x", x)?;
             tables.world_pos.set("y", y)?;
@@ -336,8 +345,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.world_scale,
         (sx, sy),
         BIT_WORLD_SCALE,
-        old,
-        new,
+        mask,
         {
             tables.world_scale.set("x", sx)?;
             tables.world_scale.set("y", sy)?;
@@ -345,19 +353,22 @@ pub fn build_entity_context_pooled<'a>(
         }
     );
 
-    // Physics from RigidBody (sets three ctx keys — not a single-key set_opt! pattern)
-    if let Some(rb) = snapshot.rigid_body.as_ref() {
-        tables.vel.set("x", rb.velocity.0)?;
-        tables.vel.set("y", rb.velocity.1)?;
-        tables.ctx.set("vel", tables.vel.clone())?;
-        tables.ctx.set("speed_sq", rb.speed_sq)?;
-        tables.ctx.set("frozen", rb.frozen)?;
-        new |= BIT_PHYSICS;
-    } else if old & BIT_PHYSICS != 0 {
-        tables.ctx.set("vel", LuaValue::Nil)?;
-        tables.ctx.set("speed_sq", LuaValue::Nil)?;
-        tables.ctx.set("frozen", LuaValue::Nil)?;
-    }
+    // Physics from RigidBody (sets three ctx keys)
+    set_opt!(
+        tables.ctx,
+        ["vel", "speed_sq", "frozen"],
+        snapshot.rigid_body.as_ref(),
+        rb,
+        BIT_PHYSICS,
+        mask,
+        {
+            tables.vel.set("x", rb.velocity.0)?;
+            tables.vel.set("y", rb.velocity.1)?;
+            tables.ctx.set("vel", tables.vel.clone())?;
+            tables.ctx.set("speed_sq", rb.speed_sq)?;
+            tables.ctx.set("frozen", rb.frozen)?;
+        }
+    );
 
     // Collision rect from BoxCollider
     set_opt!(
@@ -366,8 +377,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.rect,
         (x, y, w, h),
         BIT_RECT,
-        old,
-        new,
+        mask,
         {
             tables.rect.set("x", x)?;
             tables.rect.set("y", y)?;
@@ -384,8 +394,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.sprite.as_ref(),
         spr,
         BIT_SPRITE,
-        old,
-        new,
+        mask,
         {
             tables.sprite.set("tex_key", spr.tex_key)?;
             tables.sprite.set("flip_h", spr.flip_h)?;
@@ -401,8 +410,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.animation.as_ref(),
         anim,
         BIT_ANIMATION,
-        old,
-        new,
+        mask,
         {
             tables.animation.set("key", anim.key)?;
             tables.animation.set("frame_index", anim.frame_index)?;
@@ -418,23 +426,26 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.signals,
         signals,
         BIT_SIGNALS,
-        old,
-        new,
+        mask,
         {
             populate_entity_signals(&tables.signals, &tables.signals_inner, signals)?;
             tables.ctx.set("signals", tables.signals.clone())?;
         }
     );
 
-    // Phase info from LuaPhase (sets two ctx keys — not a single-key set_opt! pattern)
-    if let Some(phase) = snapshot.lua_phase.as_ref() {
-        tables.ctx.set("phase", phase.current)?;
-        tables.ctx.set("time_in_phase", phase.time_in_phase)?;
-        new |= BIT_PHASE;
-    } else if old & BIT_PHASE != 0 {
-        tables.ctx.set("phase", LuaValue::Nil)?;
-        tables.ctx.set("time_in_phase", LuaValue::Nil)?;
-    }
+    // Phase info from LuaPhase (sets two ctx keys)
+    set_opt!(
+        tables.ctx,
+        ["phase", "time_in_phase"],
+        snapshot.lua_phase.as_ref(),
+        phase,
+        BIT_PHASE,
+        mask,
+        {
+            tables.ctx.set("phase", phase.current)?;
+            tables.ctx.set("time_in_phase", phase.time_in_phase)?;
+        }
+    );
 
     // Timer info from LuaTimer
     set_opt!(
@@ -443,8 +454,7 @@ pub fn build_entity_context_pooled<'a>(
         snapshot.lua_timer.as_ref(),
         timer,
         BIT_TIMER,
-        old,
-        new,
+        mask,
         {
             tables.timer.set("duration", timer.duration)?;
             tables.timer.set("elapsed", timer.elapsed)?;
@@ -453,7 +463,7 @@ pub fn build_entity_context_pooled<'a>(
         }
     );
 
-    tables.occupancy.set(new);
+    tables.occupancy.set(mask.new);
 
     Ok(tables.ctx.clone())
 }

@@ -123,23 +123,13 @@ impl SignalsCtxTables {
 /// so rebuilding the table can skip re-nil-ing keys that are already nil
 /// instead of unconditionally scrubbing every optional field every call.
 ///
-/// Backed by `Rc<Cell<u32>>` (not a plain `u32`) so that cloning the owning
+/// `Rc<Cell<u32>>` (not a plain `u32`) so that cloning the owning
 /// `EntityCtxTables`/`CollisionCtxTables` handle (as `get_entity_ctx_pool`/
 /// `get_collision_ctx_pool` do on every call) shares the same mask storage
 /// rather than forking it — same sharing requirement as the pooled `LuaTable`
-/// fields alongside it, which are themselves ref-counted handles.
-#[derive(Clone, Default)]
-pub struct CtxOccupancy(std::rc::Rc<std::cell::Cell<u32>>);
-
-impl CtxOccupancy {
-    pub(crate) fn get(&self) -> u32 {
-        self.0.get()
-    }
-
-    pub(crate) fn set(&self, mask: u32) {
-        self.0.set(mask);
-    }
-}
+/// fields alongside it, which are themselves ref-counted handles. `Cell`
+/// already provides the `get`/`set` this needs, so no wrapper type is needed.
+pub type CtxOccupancy = std::rc::Rc<std::cell::Cell<u32>>;
 
 /// Pooled collision context tables, owned directly by `LuaRuntime` and reused for
 /// every collision via cheap `Clone` (each field is a ref-counted `LuaTable` handle).

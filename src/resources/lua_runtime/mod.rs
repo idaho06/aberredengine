@@ -51,7 +51,7 @@ pub use context::{
     AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
     SpriteSnapshot, build_entity_context_pooled,
 };
-pub(crate) use context::{clear_array_table, populate_entity_signals, set_opt};
+pub(crate) use context::{OccMask, clear_array_table, populate_entity_signals, set_opt};
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
 pub use runtime::{CtxOccupancy, LuaRuntime, SignalsCtxTables, action_from_str};

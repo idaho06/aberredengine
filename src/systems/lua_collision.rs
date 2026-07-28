@@ -48,7 +48,7 @@ use crate::events::collision::CollisionEvent;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{
-    CtxOccupancy, LuaRuntime, PhaseCmd, SignalsCtxTables, clear_array_table,
+    CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_array_table,
     populate_entity_signals, set_opt,
 };
 use crate::resources::systemsstore::SystemsStore;
@@ -255,25 +255,17 @@ fn populate_collision_entity(
     entity_table.set("id", id)?;
     entity_table.set("speed_sq", speed_sq)?;
 
-    let old = occupancy.get();
-    let mut new: u32 = 0;
+    let mut mask = OccMask::new(occupancy.get());
 
-    match group {
-        Some(g) => {
-            entity_table.set("group", g)?;
-            new |= COLL_BIT_GROUP;
-        }
-        None if old & COLL_BIT_GROUP != 0 => entity_table.set("group", mlua::Value::Nil)?,
-        None => {}
-    }
+    set_opt!(entity_table, "group", group, COLL_BIT_GROUP, mask);
 
-    set_opt!(entity_table, "pos", pos, (x, y), COLL_BIT_POS, old, new, {
+    set_opt!(entity_table, "pos", pos, (x, y), COLL_BIT_POS, mask, {
         pos_table.set("x", x)?;
         pos_table.set("y", y)?;
         entity_table.set("pos", pos_table.clone())?;
     });
 
-    set_opt!(entity_table, "vel", vel, (vx, vy), COLL_BIT_VEL, old, new, {
+    set_opt!(entity_table, "vel", vel, (vx, vy), COLL_BIT_VEL, mask, {
         vel_table.set("x", vx)?;
         vel_table.set("y", vy)?;
         entity_table.set("vel", vel_table.clone())?;
@@ -285,8 +277,7 @@ fn populate_collision_entity(
         rect,
         (x, y, w, h),
         COLL_BIT_RECT,
-        old,
-        new,
+        mask,
         {
             rect_table.set("x", x)?;
             rect_table.set("y", y)?;
@@ -302,15 +293,14 @@ fn populate_collision_entity(
         signals,
         s,
         COLL_BIT_SIGNALS,
-        old,
-        new,
+        mask,
         {
             populate_entity_signals(signals_table, signals_inner, s)?;
             entity_table.set("signals", signals_table.clone())?;
         }
     );
 
-    occupancy.set(new);
+    occupancy.set(mask.new);
 
     Ok(())
 }
@@ -424,27 +414,16 @@ mod tests {
     #[test]
     fn populate_collision_entity_group_none_is_nil() {
         let lua = mlua::Lua::new();
-        let entity_table = lua.create_table().unwrap();
-        let pos_table = lua.create_table().unwrap();
-        let vel_table = lua.create_table().unwrap();
-        let rect_table = lua.create_table().unwrap();
-        let signals_table = lua.create_table().unwrap();
-        let signals_inner = SignalsCtxTables {
-            flags: lua.create_table().unwrap(),
-            integers: lua.create_table().unwrap(),
-            scalars: lua.create_table().unwrap(),
-            strings: lua.create_table().unwrap(),
-            scratch_keys: std::cell::RefCell::new(Vec::new()),
-        };
-
+        let t = make_collision_entity_tables(&lua);
         let occupancy = CtxOccupancy::default();
+
         populate_collision_entity(
-            &entity_table,
-            &pos_table,
-            &vel_table,
-            &rect_table,
-            &signals_table,
-            &signals_inner,
+            &t.entity,
+            &t.pos,
+            &t.vel,
+            &t.rect,
+            &t.signals,
+            &t.signals_inner,
             &occupancy,
             1,
             None,
@@ -456,34 +435,23 @@ mod tests {
         )
         .unwrap();
 
-        let group: mlua::Value = entity_table.get("group").unwrap();
+        let group: mlua::Value = t.entity.get("group").unwrap();
         assert!(matches!(group, mlua::Value::Nil));
     }
 
     #[test]
     fn populate_collision_entity_group_some_is_string() {
         let lua = mlua::Lua::new();
-        let entity_table = lua.create_table().unwrap();
-        let pos_table = lua.create_table().unwrap();
-        let vel_table = lua.create_table().unwrap();
-        let rect_table = lua.create_table().unwrap();
-        let signals_table = lua.create_table().unwrap();
-        let signals_inner = SignalsCtxTables {
-            flags: lua.create_table().unwrap(),
-            integers: lua.create_table().unwrap(),
-            scalars: lua.create_table().unwrap(),
-            strings: lua.create_table().unwrap(),
-            scratch_keys: std::cell::RefCell::new(Vec::new()),
-        };
-
+        let t = make_collision_entity_tables(&lua);
         let occupancy = CtxOccupancy::default();
+
         populate_collision_entity(
-            &entity_table,
-            &pos_table,
-            &vel_table,
-            &rect_table,
-            &signals_table,
-            &signals_inner,
+            &t.entity,
+            &t.pos,
+            &t.vel,
+            &t.rect,
+            &t.signals,
+            &t.signals_inner,
             &occupancy,
             1,
             Some("enemy"),
@@ -495,7 +463,7 @@ mod tests {
         )
         .unwrap();
 
-        let group: String = entity_table.get("group").unwrap();
+        let group: String = t.entity.get("group").unwrap();
         assert_eq!(group, "enemy");
     }
 
