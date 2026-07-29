@@ -29,17 +29,19 @@
 //! { "animation_key": "death", "on_animation_end": "on_death_done" }
 //! ```
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::Component;
 
 /// Attaches a Lua callback to be called when the entity's non-looped animation finishes.
 #[derive(Component, Clone, Debug)]
 pub struct LuaOnAnimationEnd {
     /// Name of the Lua function to call.
-    pub callback: String,
+    pub callback: Arc<str>,
 }
 
 impl LuaOnAnimationEnd {
-    pub fn new(callback: impl Into<String>) -> Self {
+    pub fn new(callback: impl Into<Arc<str>>) -> Self {
         Self {
             callback: callback.into(),
         }

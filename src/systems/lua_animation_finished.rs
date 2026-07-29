@@ -30,7 +30,5 @@ pub fn lua_animation_finished_observer(
     let Ok(callback) = on_end_query.get(entity) else {
         return;
     };
-    let callback_name = callback.callback.clone();
-
-    dispatch_and_drain(&mut p, entity, &callback_name, "on_animation_end");
+    dispatch_and_drain(&mut p, entity, &callback.callback, "on_animation_end");
 }

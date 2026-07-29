@@ -34,7 +34,5 @@ pub fn lua_tween_finished_observer<T: TweenValue>(
     let Ok(callback) = on_finished_query.get(entity) else {
         return;
     };
-    let callback_name = callback.callback.clone();
-
-    dispatch_and_drain(&mut p, entity, &callback_name, "on_tween_finished");
+    dispatch_and_drain(&mut p, entity, &callback.callback, "on_tween_finished");
 }

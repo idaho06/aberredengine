@@ -207,7 +207,7 @@ pub(crate) fn apply_tween_finished_callback<T: TweenValue>(
     if config.callback.is_empty() {
         ec.try_remove::<LuaOnTweenFinished<T>>();
     } else {
-        ec.try_insert(LuaOnTweenFinished::<T>::new(config.callback.clone()));
+        ec.try_insert(LuaOnTweenFinished::<T>::new(config.callback.as_str()));
     }
 }
 

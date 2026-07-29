@@ -25,6 +25,7 @@
 //! ```
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
 
@@ -34,12 +35,12 @@ use crate::components::tween::TweenValue;
 #[derive(Component, Clone, Debug)]
 pub struct LuaOnTweenFinished<T: TweenValue> {
     /// Name of the Lua function to call.
-    pub callback: String,
+    pub callback: Arc<str>,
     _marker: PhantomData<T>,
 }
 
 impl<T: TweenValue> LuaOnTweenFinished<T> {
-    pub fn new(callback: impl Into<String>) -> Self {
+    pub fn new(callback: impl Into<Arc<str>>) -> Self {
         Self {
             callback: callback.into(),
             _marker: PhantomData,
