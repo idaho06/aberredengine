@@ -10,7 +10,10 @@
 #[cfg(feature = "tracy")]
 #[global_allocator]
 static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
-    tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+    // LuaJIT allocations can pass through JITed frames that glibc/libgcc
+    // backtrace unwinding does not handle reliably under Tracy on Linux.
+    // Keep allocation profiling enabled, but disable per-allocation callstacks.
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 0);
 
 use aberredengine::engine_app::EngineBuilder;
 use clap::Parser;
