@@ -422,9 +422,9 @@ pub fn update(
 
     if let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count) {
         match lua_runtime.get_function_cached(cached_callback.as_str()) {
-            Ok(Some(_)) => {
+            Ok(Some(func)) => {
                 missing_callback_warned.clear();
-                lua_runtime.call_named(cached_callback.as_str(), "Scene", |func| {
+                lua_runtime.call_resolved(func, cached_callback.as_str(), |func| {
                     func.call::<()>((input_table, delta_sec))
                 });
             }

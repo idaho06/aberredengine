@@ -681,31 +681,45 @@ impl LuaRuntime {
         }
     }
 
-    /// Resolves `name` via [`get_function_cached`](Self::get_function_cached) and invokes it
-    /// through `f`, centralizing the not-found/error logging shared by every callback dispatch
-    /// site (phase, timer, setup, animation-end).
+    /// Resolves `name` via [`get_function_cached`](Self::get_function_cached), then delegates
+    /// to [`call_resolved`](Self::call_resolved) to invoke it through `f`, centralizing the
+    /// not-found/error logging shared by every callback dispatch site (phase, timer, setup,
+    /// animation-end).
     ///
     /// `label` identifies the callback kind for the "not found" warning (e.g. `"Phase"`,
     /// `"Timer"`). Returns `None` if the callback is missing or resolving/calling it errors;
-    /// the error is logged in both cases.
+    /// the error is logged in both cases. If you already hold a resolved `LuaFunction` (e.g.
+    /// from a prior `get_function_cached` call this same tick), call `call_resolved` directly
+    /// instead to skip the redundant re-resolution.
     pub fn call_named<R, F>(&self, name: &str, label: &str, f: F) -> Option<R>
     where
         F: FnOnce(LuaFunction) -> LuaResult<R>,
     {
         match self.get_function_cached(name) {
-            Ok(Some(func)) => match f(func) {
-                Ok(r) => Some(r),
-                Err(e) => {
-                    log::error!(target: "lua", "Error in {}(): {}", name, e);
-                    None
-                }
-            },
+            Ok(Some(func)) => self.call_resolved(func, name, f),
             Ok(None) => {
                 log::warn!(target: "lua", "{} callback '{}' not found", label, name);
                 None
             }
             Err(e) => {
                 log::error!(target: "lua", "Error resolving {}(): {}", name, e);
+                None
+            }
+        }
+    }
+
+    /// Invokes an already-resolved `func` through `f`, logging on error. Use
+    /// this instead of `call_named` when the caller already holds a resolved
+    /// `LuaFunction` (e.g. from a prior `get_function_cached` call this same
+    /// tick) — it skips the redundant re-resolution `call_named` would do.
+    pub fn call_resolved<R, F>(&self, func: LuaFunction, name: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(LuaFunction) -> LuaResult<R>,
+    {
+        match f(func) {
+            Ok(r) => Some(r),
+            Err(e) => {
+                log::error!(target: "lua", "Error in {}(): {}", name, e);
                 None
             }
         }
