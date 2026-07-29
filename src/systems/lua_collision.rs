@@ -258,23 +258,23 @@ fn populate_collision_entity(
     rect: Option<(f32, f32, f32, f32)>,
     signals: Option<&Signals>,
 ) -> mlua::Result<()> {
-    entity_table.set("id", id)?;
-    entity_table.set("speed_sq", speed_sq)?;
+    entity_table.raw_set("id", id)?;
+    entity_table.raw_set("speed_sq", speed_sq)?;
 
     let mut mask = OccMask::new(occupancy.get());
 
     set_opt!(entity_table, "group", group, COLL_BIT_GROUP, mask);
 
     set_opt!(entity_table, "pos", pos, (x, y), COLL_BIT_POS, mask, {
-        pos_table.set("x", x)?;
-        pos_table.set("y", y)?;
-        entity_table.set("pos", pos_table.clone())?;
+        pos_table.raw_set("x", x)?;
+        pos_table.raw_set("y", y)?;
+        entity_table.raw_set("pos", pos_table.clone())?;
     });
 
     set_opt!(entity_table, "vel", vel, (vx, vy), COLL_BIT_VEL, mask, {
-        vel_table.set("x", vx)?;
-        vel_table.set("y", vy)?;
-        entity_table.set("vel", vel_table.clone())?;
+        vel_table.raw_set("x", vx)?;
+        vel_table.raw_set("y", vy)?;
+        entity_table.raw_set("vel", vel_table.clone())?;
     });
 
     set_opt!(
@@ -285,11 +285,11 @@ fn populate_collision_entity(
         COLL_BIT_RECT,
         mask,
         {
-            rect_table.set("x", x)?;
-            rect_table.set("y", y)?;
-            rect_table.set("w", w)?;
-            rect_table.set("h", h)?;
-            entity_table.set("rect", rect_table.clone())?;
+            rect_table.raw_set("x", x)?;
+            rect_table.raw_set("y", y)?;
+            rect_table.raw_set("w", w)?;
+            rect_table.raw_set("h", h)?;
+            entity_table.raw_set("rect", rect_table.clone())?;
         }
     );
 
@@ -302,7 +302,7 @@ fn populate_collision_entity(
         mask,
         {
             populate_entity_signals(signals_inner, s)?;
-            entity_table.set("signals", signals_table.clone())?;
+            entity_table.raw_set("signals", signals_table.clone())?;
         }
     );
 
@@ -372,12 +372,12 @@ fn call_lua_collision_callback(
 
     clear_table(&tables.sides_a)?;
     for (i, side) in sides_a.iter().enumerate() {
-        tables.sides_a.set(i + 1, box_side_to_str(side))?;
+        tables.sides_a.raw_set(i + 1, box_side_to_str(side))?;
     }
 
     clear_table(&tables.sides_b)?;
     for (i, side) in sides_b.iter().enumerate() {
-        tables.sides_b.set(i + 1, box_side_to_str(side))?;
+        tables.sides_b.raw_set(i + 1, box_side_to_str(side))?;
     }
 
     match lua_runtime.get_function_cached(callback_name)? {

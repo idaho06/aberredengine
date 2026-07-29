@@ -161,10 +161,16 @@ pub struct EntitySnapshot<'a> {
 /// `mask: &mut OccMask` carries `old` (the occupancy read once before any fields are
 /// built this call) and `new` (accumulates the bit for every field found present);
 /// `new` is written back to the pool's `CtxOccupancy` once at the end.
+///
+/// Writes via `raw_set`, not `set` — safe only because these pooled ctx tables never
+/// have a metatable attached anywhere in the codebase. If that ever changes (e.g. a
+/// `__newindex` guard added to enforce the "never write to ctx" contract), `raw_set`
+/// would silently bypass it; switch back to `set` here (and at the other pooled-table
+/// call sites converted alongside this macro) if that's ever needed.
 macro_rules! set_opt {
     ($ctx:expr, $key:literal, $val:expr, $bit:expr, $mask:expr) => {
         set_opt!($ctx, $key, $val, v, $bit, $mask, {
-            $ctx.set($key, v)?;
+            $ctx.raw_set($key, v)?;
         });
     };
     ($ctx:expr, $key:literal, $val:expr, $v:pat, $bit:expr, $mask:expr, $body:block) => {
@@ -172,7 +178,7 @@ macro_rules! set_opt {
             $body
             $mask.new |= $bit;
         } else if $mask.old & $bit != 0 {
-            $ctx.set($key, mlua::Value::Nil)?;
+            $ctx.raw_set($key, mlua::Value::Nil)?;
         }
     };
     ($ctx:expr, [$($key:literal),+ $(,)?], $val:expr, $v:pat, $bit:expr, $mask:expr, $body:block) => {
@@ -180,7 +186,7 @@ macro_rules! set_opt {
             $body
             $mask.new |= $bit;
         } else if $mask.old & $bit != 0 {
-            $( $ctx.set($key, mlua::Value::Nil)?; )+
+            $( $ctx.raw_set($key, mlua::Value::Nil)?; )+
         }
     };
 }
@@ -201,25 +207,25 @@ pub(crate) fn populate_entity_signals(
     // Flags array (variable length)
     clear_table(&inner.flags)?;
     for (i, flag) in signals.get_flags().iter().enumerate() {
-        inner.flags.set(i + 1, flag.as_str())?;
+        inner.flags.raw_set(i + 1, flag.as_str())?;
     }
 
     // Integers map (variable keys)
     clear_table(&inner.integers)?;
     for (key, value) in signals.get_integers() {
-        inner.integers.set(key.as_str(), *value)?;
+        inner.integers.raw_set(key.as_str(), *value)?;
     }
 
     // Scalars map (variable keys)
     clear_table(&inner.scalars)?;
     for (key, value) in signals.get_scalars() {
-        inner.scalars.set(key.as_str(), *value)?;
+        inner.scalars.raw_set(key.as_str(), *value)?;
     }
 
     // Strings map (variable keys)
     clear_table(&inner.strings)?;
     for (key, value) in signals.get_strings() {
-        inner.strings.set(key.as_str(), value.as_str())?;
+        inner.strings.raw_set(key.as_str(), value.as_str())?;
     }
 
     Ok(())
@@ -233,7 +239,7 @@ pub fn build_entity_context_pooled<'a>(
     snapshot: &EntitySnapshot<'a>,
 ) -> LuaResult<LuaTable> {
     // Core identity (id is always present)
-    tables.ctx.set("id", snapshot.entity_id)?;
+    tables.ctx.raw_set("id", snapshot.entity_id)?;
 
     let mut mask = OccMask::new(tables.occupancy.get());
 
@@ -264,9 +270,9 @@ pub fn build_entity_context_pooled<'a>(
 
     // XY position subtables
     set_opt!(tables.ctx, "pos", snapshot.map_pos, (x, y), BIT_POS, mask, {
-        tables.pos.set("x", x)?;
-        tables.pos.set("y", y)?;
-        tables.ctx.set("pos", tables.pos.clone())?;
+        tables.pos.raw_set("x", x)?;
+        tables.pos.raw_set("y", y)?;
+        tables.ctx.raw_set("pos", tables.pos.clone())?;
     });
     set_opt!(
         tables.ctx,
@@ -276,9 +282,11 @@ pub fn build_entity_context_pooled<'a>(
         BIT_SCREEN_POS,
         mask,
         {
-            tables.screen_pos.set("x", x)?;
-            tables.screen_pos.set("y", y)?;
-            tables.ctx.set("screen_pos", tables.screen_pos.clone())?;
+            tables.screen_pos.raw_set("x", x)?;
+            tables.screen_pos.raw_set("y", y)?;
+            tables
+                .ctx
+                .raw_set("screen_pos", tables.screen_pos.clone())?;
         }
     );
     set_opt!(
@@ -289,9 +297,9 @@ pub fn build_entity_context_pooled<'a>(
         BIT_SCALE,
         mask,
         {
-            tables.scale.set("x", sx)?;
-            tables.scale.set("y", sy)?;
-            tables.ctx.set("scale", tables.scale.clone())?;
+            tables.scale.raw_set("x", sx)?;
+            tables.scale.raw_set("y", sy)?;
+            tables.ctx.raw_set("scale", tables.scale.clone())?;
         }
     );
     set_opt!(
@@ -302,9 +310,9 @@ pub fn build_entity_context_pooled<'a>(
         BIT_WORLD_POS,
         mask,
         {
-            tables.world_pos.set("x", x)?;
-            tables.world_pos.set("y", y)?;
-            tables.ctx.set("world_pos", tables.world_pos.clone())?;
+            tables.world_pos.raw_set("x", x)?;
+            tables.world_pos.raw_set("y", y)?;
+            tables.ctx.raw_set("world_pos", tables.world_pos.clone())?;
         }
     );
     set_opt!(
@@ -315,9 +323,11 @@ pub fn build_entity_context_pooled<'a>(
         BIT_WORLD_SCALE,
         mask,
         {
-            tables.world_scale.set("x", sx)?;
-            tables.world_scale.set("y", sy)?;
-            tables.ctx.set("world_scale", tables.world_scale.clone())?;
+            tables.world_scale.raw_set("x", sx)?;
+            tables.world_scale.raw_set("y", sy)?;
+            tables
+                .ctx
+                .raw_set("world_scale", tables.world_scale.clone())?;
         }
     );
 
@@ -330,11 +340,11 @@ pub fn build_entity_context_pooled<'a>(
         BIT_PHYSICS,
         mask,
         {
-            tables.vel.set("x", rb.velocity.0)?;
-            tables.vel.set("y", rb.velocity.1)?;
-            tables.ctx.set("vel", tables.vel.clone())?;
-            tables.ctx.set("speed_sq", rb.speed_sq)?;
-            tables.ctx.set("frozen", rb.frozen)?;
+            tables.vel.raw_set("x", rb.velocity.0)?;
+            tables.vel.raw_set("y", rb.velocity.1)?;
+            tables.ctx.raw_set("vel", tables.vel.clone())?;
+            tables.ctx.raw_set("speed_sq", rb.speed_sq)?;
+            tables.ctx.raw_set("frozen", rb.frozen)?;
         }
     );
 
@@ -347,11 +357,11 @@ pub fn build_entity_context_pooled<'a>(
         BIT_RECT,
         mask,
         {
-            tables.rect.set("x", x)?;
-            tables.rect.set("y", y)?;
-            tables.rect.set("w", w)?;
-            tables.rect.set("h", h)?;
-            tables.ctx.set("rect", tables.rect.clone())?;
+            tables.rect.raw_set("x", x)?;
+            tables.rect.raw_set("y", y)?;
+            tables.rect.raw_set("w", w)?;
+            tables.rect.raw_set("h", h)?;
+            tables.ctx.raw_set("rect", tables.rect.clone())?;
         }
     );
 
@@ -364,10 +374,10 @@ pub fn build_entity_context_pooled<'a>(
         BIT_SPRITE,
         mask,
         {
-            tables.sprite.set("tex_key", spr.tex_key)?;
-            tables.sprite.set("flip_h", spr.flip_h)?;
-            tables.sprite.set("flip_v", spr.flip_v)?;
-            tables.ctx.set("sprite", tables.sprite.clone())?;
+            tables.sprite.raw_set("tex_key", spr.tex_key)?;
+            tables.sprite.raw_set("flip_h", spr.flip_h)?;
+            tables.sprite.raw_set("flip_v", spr.flip_v)?;
+            tables.ctx.raw_set("sprite", tables.sprite.clone())?;
         }
     );
 
@@ -380,10 +390,10 @@ pub fn build_entity_context_pooled<'a>(
         BIT_ANIMATION,
         mask,
         {
-            tables.animation.set("key", anim.key)?;
-            tables.animation.set("frame_index", anim.frame_index)?;
-            tables.animation.set("elapsed", anim.elapsed)?;
-            tables.ctx.set("animation", tables.animation.clone())?;
+            tables.animation.raw_set("key", anim.key)?;
+            tables.animation.raw_set("frame_index", anim.frame_index)?;
+            tables.animation.raw_set("elapsed", anim.elapsed)?;
+            tables.ctx.raw_set("animation", tables.animation.clone())?;
         }
     );
 
@@ -397,7 +407,7 @@ pub fn build_entity_context_pooled<'a>(
         mask,
         {
             populate_entity_signals(&tables.signals_inner, signals)?;
-            tables.ctx.set("signals", tables.signals.clone())?;
+            tables.ctx.raw_set("signals", tables.signals.clone())?;
         }
     );
 
@@ -410,8 +420,8 @@ pub fn build_entity_context_pooled<'a>(
         BIT_PHASE,
         mask,
         {
-            tables.ctx.set("phase", phase.current)?;
-            tables.ctx.set("time_in_phase", phase.time_in_phase)?;
+            tables.ctx.raw_set("phase", phase.current)?;
+            tables.ctx.raw_set("time_in_phase", phase.time_in_phase)?;
         }
     );
 
@@ -424,10 +434,10 @@ pub fn build_entity_context_pooled<'a>(
         BIT_TIMER,
         mask,
         {
-            tables.timer.set("duration", timer.duration)?;
-            tables.timer.set("elapsed", timer.elapsed)?;
-            tables.timer.set("callback", timer.callback)?;
-            tables.ctx.set("timer", tables.timer.clone())?;
+            tables.timer.raw_set("duration", timer.duration)?;
+            tables.timer.raw_set("elapsed", timer.elapsed)?;
+            tables.timer.raw_set("callback", timer.callback)?;
+            tables.ctx.raw_set("timer", tables.timer.clone())?;
         }
     );
 

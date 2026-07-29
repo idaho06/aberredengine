@@ -467,9 +467,9 @@ impl LuaRuntime {
         table: &LuaTable,
         state: &super::input_snapshot::DigitalButtonState,
     ) -> LuaResult<()> {
-        table.set("pressed", state.pressed)?;
-        table.set("just_pressed", state.just_pressed)?;
-        table.set("just_released", state.just_released)?;
+        table.raw_set("pressed", state.pressed)?;
+        table.raw_set("just_pressed", state.just_pressed)?;
+        table.raw_set("just_released", state.just_released)?;
         Ok(())
     }
 
@@ -511,20 +511,24 @@ impl LuaRuntime {
         tables: &InputCtxTables,
         analog: &super::input_snapshot::AnalogInputs,
     ) -> LuaResult<()> {
-        tables.analog.set("scroll_y", analog.scroll_y)?;
-        tables.analog.set("mouse_x", analog.mouse_x)?;
-        tables.analog.set("mouse_y", analog.mouse_y)?;
-        tables.analog.set("mouse_world_x", analog.mouse_world_x)?;
-        tables.analog.set("mouse_world_y", analog.mouse_world_y)?;
+        tables.analog.raw_set("scroll_y", analog.scroll_y)?;
+        tables.analog.raw_set("mouse_x", analog.mouse_x)?;
+        tables.analog.raw_set("mouse_y", analog.mouse_y)?;
         tables
             .analog
-            .set("gamepad_connected", analog.gamepad_connected)?;
-        tables.analog.set("pad_left_x", analog.pad_left_x)?;
-        tables.analog.set("pad_left_y", analog.pad_left_y)?;
-        tables.analog.set("pad_right_x", analog.pad_right_x)?;
-        tables.analog.set("pad_right_y", analog.pad_right_y)?;
-        tables.analog.set("pad_lt", analog.pad_lt)?;
-        tables.analog.set("pad_rt", analog.pad_rt)?;
+            .raw_set("mouse_world_x", analog.mouse_world_x)?;
+        tables
+            .analog
+            .raw_set("mouse_world_y", analog.mouse_world_y)?;
+        tables
+            .analog
+            .raw_set("gamepad_connected", analog.gamepad_connected)?;
+        tables.analog.raw_set("pad_left_x", analog.pad_left_x)?;
+        tables.analog.raw_set("pad_left_y", analog.pad_left_y)?;
+        tables.analog.raw_set("pad_right_x", analog.pad_right_x)?;
+        tables.analog.raw_set("pad_right_y", analog.pad_right_y)?;
+        tables.analog.raw_set("pad_lt", analog.pad_lt)?;
+        tables.analog.raw_set("pad_rt", analog.pad_rt)?;
         Ok(())
     }
 
