@@ -755,7 +755,7 @@ mod tests {
             GuiButton {
                 size: Vector2::new(100.0, 30.0),
                 caption: "Play".to_string(),
-                callback_name: "on_play".to_string(),
+                callback_name: "on_play".into(),
                 disabled: false,
                 theme_key: Arc::from("default"),
             },

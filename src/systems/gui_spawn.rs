@@ -123,7 +123,7 @@ pub fn gui_button_spawn_system(
     for (entity, button, z_index) in &query {
         let mut interactable = GuiInteractable::new(button.size.x, button.size.y);
         if !button.callback_name.is_empty() {
-            interactable = interactable.with_on_click_callback(button.callback_name.clone());
+            interactable = interactable.with_on_click_callback(button.callback_name.to_string());
         }
         if button.disabled {
             interactable = interactable.with_disabled();
@@ -179,7 +179,7 @@ pub fn gui_image_spawn_system(
     for (entity, image) in &query {
         let mut interactable = GuiInteractable::new(image.size.x, image.size.y);
         if !image.callback_name.is_empty() {
-            interactable = interactable.with_on_click_callback(image.callback_name.clone());
+            interactable = interactable.with_on_click_callback(image.callback_name.to_string());
         }
         commands.entity(entity).insert_if_new((
             interactable,

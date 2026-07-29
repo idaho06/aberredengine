@@ -31,7 +31,7 @@ pub struct GuiButton {
     /// Lua callback name, checked first by the click dispatch chain. Empty
     /// string = no callback wired (`GuiInteractable.on_click_callback` stays
     /// `None`).
-    pub callback_name: String,
+    pub callback_name: Arc<str>,
     /// Authored disabled state, applied to the spawned `GuiInteractable.state`
     /// once at spawn time. Mutating this field after spawn has no further
     /// effect — toggle `GuiInteractable.state` directly for runtime
@@ -47,7 +47,7 @@ impl GuiButton {
         Self {
             size: Vector2::new(width, height),
             caption: caption.into(),
-            callback_name: String::new(),
+            callback_name: Arc::from(""),
             disabled: false,
             theme_key: Arc::from(DEFAULT_GUI_THEME_KEY),
         }
@@ -63,7 +63,7 @@ impl GuiButton {
         width: f32,
         height: f32,
         caption: impl Into<String>,
-        callback_name: impl Into<String>,
+        callback_name: impl Into<Arc<str>>,
     ) -> Self {
         Self {
             callback_name: callback_name.into(),
@@ -107,7 +107,7 @@ mod tests {
     fn test_guibutton_with_lua_callback() {
         let b = GuiButton::with_lua_callback(80.0, 24.0, "Start", "on_start_clicked");
         assert_eq!(b.caption, "Start");
-        assert_eq!(b.callback_name, "on_start_clicked");
+        assert_eq!(&*b.callback_name, "on_start_clicked");
     }
 
     #[test]

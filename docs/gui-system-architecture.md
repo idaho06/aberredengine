@@ -228,7 +228,7 @@ ctx.commands.spawn((
 Themed, clickable button. Carries its own caption, callback name, and disabled state.
 
 ```
-GuiButton { size: Vector2, caption: String, callback_name: String, disabled: bool, theme_key: Arc<str> }
+GuiButton { size: Vector2, caption: String, callback_name: Arc<str>, disabled: bool, theme_key: Arc<str> }
 ```
 
 `gui_button_spawn_system` reacts on `Added<GuiButton>` and, **one frame later**:
@@ -342,7 +342,7 @@ Clickable image slot for icon-style buttons (inventory, skill icons, etc.). No t
 ```
 GuiImage { size: Vector2, tex_key: String, offset: Vector2,
            offset_hover: Option<Vector2>, offset_pressed: Option<Vector2>,
-           offset_disabled: Option<Vector2>, callback_name: String }
+           offset_disabled: Option<Vector2>, callback_name: Arc<str> }
 ```
 
 `gui_image_spawn_system` reacts on `Added<GuiImage>` and, **one frame later**, inserts a

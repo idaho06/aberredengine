@@ -110,7 +110,7 @@ pub fn lua_collision_observer(
         return;
     };
 
-    let callback_name = lua_rule.callback.name.as_str();
+    let callback_name: &str = &lua_rule.callback.name;
     let pos_a = resolve_world_pos(
         &params.entity_cmds.positions.as_readonly(),
         &params.entity_cmds.global_transforms,

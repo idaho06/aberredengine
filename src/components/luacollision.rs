@@ -25,6 +25,8 @@
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::systems::lua_collision`] – Lua collision observer
 
+use std::sync::Arc;
+
 use crate::components::collision::CollisionRule;
 
 /// Lua callback function name for a collision rule.
@@ -34,7 +36,7 @@ use crate::components::collision::CollisionRule;
 #[derive(Clone, Debug)]
 pub struct LuaCollisionCallback {
     /// Name of the Lua function to call on collision.
-    pub name: String,
+    pub name: Arc<str>,
 }
 
 /// Collision rule that invokes a Lua callback function.
@@ -104,6 +106,6 @@ mod tests {
     #[test]
     fn test_lua_callback_name_accessible() {
         let rule = make_rule("ball", "brick", "my_callback");
-        assert_eq!(rule.callback.name, "my_callback");
+        assert_eq!(&*rule.callback.name, "my_callback");
     }
 }

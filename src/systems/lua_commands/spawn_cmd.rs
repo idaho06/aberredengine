@@ -473,7 +473,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
             rule_data.group_a,
             rule_data.group_b,
             LuaCollisionCallback {
-                name: rule_data.callback,
+                name: rule_data.callback.into(),
             },
         ));
     }

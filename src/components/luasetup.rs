@@ -46,6 +46,7 @@
 //! ```
 
 use bevy_ecs::prelude::Component;
+use std::sync::Arc;
 
 /// Attaches a one-shot Lua setup callback to an entity.
 ///
@@ -55,11 +56,11 @@ use bevy_ecs::prelude::Component;
 #[derive(Component, Clone, Debug)]
 pub struct LuaSetup {
     /// Name of the Lua function to call.
-    pub callback: String,
+    pub callback: Arc<str>,
 }
 
 impl LuaSetup {
-    pub fn new(callback: impl Into<String>) -> Self {
+    pub fn new(callback: impl Into<Arc<str>>) -> Self {
         Self {
             callback: callback.into(),
         }

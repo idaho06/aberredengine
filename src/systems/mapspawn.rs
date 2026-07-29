@@ -203,7 +203,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     }
     #[cfg(feature = "lua")]
     if let Some(ref callback) = def.lua_setup {
-        ec.insert(LuaSetup::new(callback.clone()));
+        ec.insert(LuaSetup::new(callback.as_str()));
     }
     #[cfg(feature = "lua")]
     if let Some(ref callback) = def.on_animation_end {

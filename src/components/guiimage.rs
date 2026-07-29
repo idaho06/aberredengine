@@ -16,6 +16,8 @@
 //! hover/press/disabled visual feedback itself (for example by setting
 //! `Tint` from a callback), and drag behavior lives outside this component.
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::Component;
 use raylib::prelude::Vector2;
 
@@ -46,7 +48,7 @@ pub struct GuiImage {
     /// string = no callback wired (`GuiInteractable.on_click_callback` stays
     /// `None`) — the image still hit-tests/hovers/presses, it just has
     /// nothing to dispatch on click.
-    pub callback_name: String,
+    pub callback_name: Arc<str>,
 }
 
 impl GuiImage {
@@ -64,7 +66,7 @@ impl GuiImage {
             offset_hover: None,
             offset_pressed: None,
             offset_disabled: None,
-            callback_name: String::new(),
+            callback_name: Arc::from(""),
         }
     }
 
@@ -80,7 +82,7 @@ impl GuiImage {
         tex_key: impl Into<String>,
         offset_x: f32,
         offset_y: f32,
-        callback_name: impl Into<String>,
+        callback_name: impl Into<Arc<str>>,
     ) -> Self {
         Self {
             callback_name: callback_name.into(),
@@ -127,7 +129,7 @@ mod tests {
         assert_eq!(img.tex_key, "item_sword");
         assert!((img.offset.x - 64.0).abs() < f32::EPSILON);
         assert!((img.offset.y - 32.0).abs() < f32::EPSILON);
-        assert_eq!(img.callback_name, "on_sword_clicked");
+        assert_eq!(&*img.callback_name, "on_sword_clicked");
     }
 
     #[test]
