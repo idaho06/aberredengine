@@ -41,7 +41,7 @@ use crate::components::luaphase::LuaPhase;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
+use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -269,9 +269,7 @@ pub fn lua_phase_system(
     // Update signal cache so Lua can read current values
     lua_runtime.update_signal_cache(world_signals.snapshot());
 
-    // Create input snapshot once for all callbacks this frame
-    let input_snapshot = InputSnapshot::from_input_state(&input);
-    let input_table = match lua_runtime.update_input_table(&input_snapshot, time.frame_count) {
+    let input_table = match lua_runtime.resolve_input_table(&input, time.frame_count) {
         Ok(table) => table,
         Err(e) => {
             error!("Error creating input table for phase system: {}", e);

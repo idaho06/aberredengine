@@ -27,8 +27,8 @@ use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::input::InputState;
 use crate::resources::input_bindings::InputBindings;
 use crate::resources::lua_runtime::{
-    AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, InputSnapshot,
-    LuaRuntime, PhaseCmd, RenderCmd,
+    AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
+    PhaseCmd, RenderCmd,
 };
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::screensize::ScreenSize;
@@ -330,15 +330,15 @@ fn refresh_cached_callback_name(cached: &mut String, scene: &str) {
 
 /// Builds the Lua input table for this tick from `input`, logging and
 /// returning `None` on failure. Called once per sim tick by [`update`] (its
-/// only caller) -- the `(frame_count, InputSnapshot)` diff-guard inside
-/// `update_input_table` makes repeated calls within the same tick no-ops.
+/// only caller) -- delegates to `LuaRuntime::resolve_input_table`, whose
+/// `(frame_count, InputSnapshot)` diff-guard makes repeated calls within the
+/// same tick no-ops without needing to build an `InputSnapshot` at all.
 fn resolve_input_table(
     lua_runtime: &LuaRuntime,
     input: &InputState,
     frame_count: u64,
 ) -> Option<LuaTable> {
-    let input_snapshot = InputSnapshot::from_input_state(input);
-    match lua_runtime.update_input_table(&input_snapshot, frame_count) {
+    match lua_runtime.resolve_input_table(input, frame_count) {
         Ok(table) => Some(table),
         Err(e) => {
             error!("Error creating input table: {}", e);

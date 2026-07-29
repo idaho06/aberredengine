@@ -21,7 +21,7 @@ use crate::components::luaphase::LuaPhase;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::input::InputState;
-use crate::resources::lua_runtime::{InputSnapshot, LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
+use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
@@ -86,10 +86,9 @@ pub fn call_entity_callback(
 ) -> bool {
     let input_table = match call_shape {
         CallShape::CtxAndInput => {
-            let input_snapshot = InputSnapshot::from_input_state(&p.input);
             match p
                 .lua_runtime
-                .update_input_table(&input_snapshot, p.time.frame_count)
+                .resolve_input_table(&p.input, p.time.frame_count)
             {
                 Ok(table) => Some(table),
                 Err(e) => {

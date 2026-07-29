@@ -7,6 +7,7 @@ use super::commands::*;
 use super::input_snapshot::InputSnapshot;
 use super::input_snapshot::for_each_digital_button;
 use super::spawn_data::*;
+use crate::resources::input::InputState;
 use crate::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -527,6 +528,36 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Fast-path check for [`update_input_table`](Self::update_input_table): if
+    /// the pooled input table was already refreshed for `frame_count` by an
+    /// earlier call site this tick, returns it directly — the caller can skip
+    /// building an `InputSnapshot` entirely. Returns `None` on the first call
+    /// for a new frame (or if `LuaAppData` is unavailable), meaning the caller
+    /// must build a snapshot and go through `update_input_table`. Private:
+    /// only [`resolve_input_table`](Self::resolve_input_table), the entry
+    /// point callers should use, calls this.
+    fn input_table_for_frame(&self, frame_count: u64) -> Option<LuaTable> {
+        let data = self.lua.app_data_ref::<LuaAppData>()?;
+        match data.last_input.borrow().as_ref() {
+            Some((f, _)) if *f == frame_count => Some(self.get_input_ctx_pool().input),
+            _ => None,
+        }
+    }
+
+    /// Resolves the pooled Lua input table for `frame_count`: reuses it as-is
+    /// via [`input_table_for_frame`](Self::input_table_for_frame) if an earlier
+    /// call site already refreshed it this tick, otherwise builds an
+    /// `InputSnapshot` from `input` and goes through
+    /// [`update_input_table`](Self::update_input_table). The entry point every
+    /// per-tick/per-callback call site should use instead of unconditionally
+    /// building an `InputSnapshot` up front.
+    pub fn resolve_input_table(&self, input: &InputState, frame_count: u64) -> LuaResult<LuaTable> {
+        if let Some(table) = self.input_table_for_frame(frame_count) {
+            return Ok(table);
+        }
+        self.update_input_table(InputSnapshot::from_input_state(input), frame_count)
+    }
+
     /// Updates the pooled input callback table in-place and returns it.
     ///
     /// The returned table is ephemeral, reused across callbacks, and has the
@@ -558,10 +589,12 @@ impl LuaRuntime {
     /// `frame_count` lets repeated calls within the same frame (from
     /// different callback sites) short-circuit entirely, and lets calls on a
     /// new frame diff against the previous frame's snapshot, writing only the
-    /// digital buttons and analog values that actually changed.
+    /// digital buttons and analog values that actually changed. Most callers
+    /// should use [`resolve_input_table`](Self::resolve_input_table) instead,
+    /// which avoids building `snapshot` at all on the short-circuit path.
     pub fn update_input_table(
         &self,
-        snapshot: &InputSnapshot,
+        snapshot: InputSnapshot,
         frame_count: u64,
     ) -> LuaResult<LuaTable> {
         let tables = self.get_input_ctx_pool();
@@ -587,7 +620,7 @@ impl LuaRuntime {
                 Self::write_analog_table(&tables, &snapshot.analog)?;
             }
         }
-        *last_input = Some((frame_count, snapshot.clone()));
+        *last_input = Some((frame_count, snapshot));
 
         Ok(tables.input)
     }
@@ -813,7 +846,7 @@ mod tests {
         snapshot.analog.mouse_x = 12.5;
         snapshot.analog.mouse_world_y = -4.0;
 
-        let input = runtime.update_input_table(&snapshot, 1).unwrap();
+        let input = runtime.update_input_table(snapshot, 1).unwrap();
         let digital: LuaTable = input.get("digital").unwrap();
         let action_1: LuaTable = digital.get("action_1").unwrap();
         let analog: LuaTable = input.get("analog").unwrap();
@@ -828,7 +861,7 @@ mod tests {
     fn digital_table_has_exactly_20_button_keys() {
         let runtime = LuaRuntime::new().unwrap();
         let input = runtime
-            .update_input_table(&InputSnapshot::default(), 1)
+            .update_input_table(InputSnapshot::default(), 1)
             .unwrap();
         let digital: LuaTable = input.get("digital").unwrap();
         let count = digital.pairs::<String, LuaTable>().count();
@@ -842,12 +875,12 @@ mod tests {
     fn pooled_input_table_reuses_same_lua_table() {
         let runtime = LuaRuntime::new().unwrap();
         let first = runtime
-            .update_input_table(&InputSnapshot::default(), 1)
+            .update_input_table(InputSnapshot::default(), 1)
             .unwrap();
 
         let mut snapshot = InputSnapshot::default();
         snapshot.digital.back.just_pressed = true;
-        let second = runtime.update_input_table(&snapshot, 2).unwrap();
+        let second = runtime.update_input_table(snapshot, 2).unwrap();
 
         let globals = runtime.lua().globals();
         globals.set("first_input", first).unwrap();
@@ -867,7 +900,7 @@ mod tests {
 
         let mut snapshot = InputSnapshot::default();
         snapshot.digital.action_1.pressed = true;
-        let input = runtime.update_input_table(&snapshot, 7).unwrap();
+        let input = runtime.update_input_table(snapshot.clone(), 7).unwrap();
         let digital: LuaTable = input.get("digital").unwrap();
         let action_1: LuaTable = digital.get("action_1").unwrap();
         assert!(action_1.get::<bool>("pressed").unwrap());
@@ -876,7 +909,7 @@ mod tests {
         // count — the second call must be a no-op and not overwrite our
         // out-of-band change.
         action_1.set("pressed", false).unwrap();
-        let input_again = runtime.update_input_table(&snapshot, 7).unwrap();
+        let input_again = runtime.update_input_table(snapshot, 7).unwrap();
         let digital_again: LuaTable = input_again.get("digital").unwrap();
         let action_1_again: LuaTable = digital_again.get("action_1").unwrap();
         assert!(!action_1_again.get::<bool>("pressed").unwrap());
@@ -887,7 +920,7 @@ mod tests {
         let runtime = LuaRuntime::new().unwrap();
 
         let snapshot_a = InputSnapshot::default();
-        let input = runtime.update_input_table(&snapshot_a, 1).unwrap();
+        let input = runtime.update_input_table(snapshot_a, 1).unwrap();
         let digital: LuaTable = input.get("digital").unwrap();
         let action_1: LuaTable = digital.get("action_1").unwrap();
         let back: LuaTable = digital.get("back").unwrap();
@@ -897,7 +930,7 @@ mod tests {
         let mut snapshot_b = InputSnapshot::default();
         snapshot_b.digital.action_1.pressed = true;
         snapshot_b.digital.action_1.just_pressed = true;
-        let _ = runtime.update_input_table(&snapshot_b, 2).unwrap();
+        let _ = runtime.update_input_table(snapshot_b, 2).unwrap();
 
         // Changed button reflects the new state.
         assert!(action_1.get::<bool>("pressed").unwrap());
