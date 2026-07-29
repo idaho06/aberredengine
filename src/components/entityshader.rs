@@ -22,7 +22,7 @@ use crate::resources::uniformvalue::UniformValue;
 ///
 /// // With uniforms
 /// let mut shader = EntityShader::new("glow");
-/// shader.uniforms_mut().insert(Arc::from("uIntensity"), UniformValue::Float(0.8));
+/// shader.set_uniform("uIntensity", UniformValue::Float(0.8));
 /// ```
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct EntityShader {
@@ -49,6 +49,20 @@ impl EntityShader {
     pub fn uniforms_mut(&mut self) -> &mut FxHashMap<Arc<str>, UniformValue> {
         Arc::make_mut(&mut self.uniforms)
     }
+
+    /// Set a uniform by name, mutating the existing entry in place when
+    /// present instead of allocating a fresh `Arc<str>` key for a name
+    /// that's already stored — the common case for uniforms re-set every
+    /// tick (e.g. from `on_update_<scene>`). Only allocates the `Arc<str>`
+    /// key on an actual first insert.
+    pub fn set_uniform(&mut self, name: &str, value: UniformValue) {
+        let uniforms = self.uniforms_mut();
+        if let Some(slot) = uniforms.get_mut(name) {
+            *slot = value;
+        } else {
+            uniforms.insert(Arc::from(name), value);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -67,6 +81,30 @@ mod tests {
         let key: Arc<str> = Arc::from("bloom");
         let shader = EntityShader::new(key);
         assert_eq!(&*shader.shader_key, "bloom");
+    }
+
+    #[test]
+    fn set_uniform_mutates_in_place_without_reallocating_key() {
+        let mut shader = EntityShader::new("test");
+
+        shader.set_uniform("uIntensity", UniformValue::Float(1.0));
+        let first_key_ptr = Arc::as_ptr(shader.uniforms.keys().next().unwrap());
+        assert!(matches!(
+            shader.uniforms.get("uIntensity"),
+            Some(UniformValue::Float(v)) if (*v - 1.0).abs() < f32::EPSILON
+        ));
+
+        shader.set_uniform("uIntensity", UniformValue::Float(2.0));
+        assert_eq!(shader.uniforms.len(), 1);
+        assert!(matches!(
+            shader.uniforms.get("uIntensity"),
+            Some(UniformValue::Float(v)) if (*v - 2.0).abs() < f32::EPSILON
+        ));
+        let second_key_ptr = Arc::as_ptr(shader.uniforms.keys().next().unwrap());
+        assert_eq!(
+            first_key_ptr, second_key_ptr,
+            "repeat set_uniform on an existing name must not reallocate its Arc<str> key"
+        );
     }
 
     #[test]

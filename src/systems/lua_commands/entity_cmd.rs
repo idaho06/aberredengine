@@ -3,8 +3,6 @@
 //! [`process_entity_commands`] dispatches all [`EntityCmd`] variants to modify
 //! live entities — physics, signals, transforms, animation, shaders, tweens, etc.
 
-use std::sync::Arc;
-
 use log::warn;
 
 use bevy_ecs::hierarchy::ChildOf;
@@ -658,7 +656,7 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
         return;
     };
     if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-        shader.uniforms_mut().insert(Arc::from(name), value);
+        shader.set_uniform(&name, value);
     }
 }
 
@@ -917,6 +915,43 @@ mod tests {
             );
         }
         system_state.apply(world);
+    }
+
+    #[test]
+    fn shader_set_float_cmd_updates_the_named_uniform_on_the_target_entity() {
+        let mut world = World::new();
+        let entity = world.spawn(EntityShader::new("test")).id();
+        let mut world_signals = WorldSignals::default();
+
+        run_entity_cmd(
+            &mut world,
+            &mut world_signals,
+            EntityCmd::ShaderSetFloat {
+                entity_id: entity.to_bits(),
+                name: "uIntensity".to_string(),
+                value: 1.0,
+            },
+        );
+        run_entity_cmd(
+            &mut world,
+            &mut world_signals,
+            EntityCmd::ShaderSetFloat {
+                entity_id: entity.to_bits(),
+                name: "uIntensity".to_string(),
+                value: 2.0,
+            },
+        );
+
+        // Allocation behavior (no reallocated `Arc<str>` key on a repeat write) is
+        // covered at the unit level by `EntityShader::set_uniform`'s own test
+        // (components/entityshader.rs); this integration test only needs to prove
+        // the command correctly reaches the target entity's shader.
+        let shader = world.get::<EntityShader>(entity).unwrap();
+        assert_eq!(shader.uniforms.len(), 1);
+        assert!(matches!(
+            shader.uniforms.get("uIntensity"),
+            Some(UniformValue::Float(v)) if (*v - 2.0).abs() < f32::EPSILON
+        ));
     }
 
     #[test]
