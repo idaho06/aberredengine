@@ -105,13 +105,25 @@ pub struct SignalsCtxTables {
 }
 
 impl SignalsCtxTables {
-    fn create(lua: &Lua) -> LuaResult<Self> {
-        Ok(Self {
+    /// Creates the four pooled inner signal tables and wires them into
+    /// `parent` once. The wiring is permanent for the pool's lifetime —
+    /// `populate_entity_signals` only ever mutates these tables' contents,
+    /// never re-assigns them. This depends on the same "never write to
+    /// ctx/its subtables" Lua contract as `CtxOccupancy` (see CLAUDE.md's
+    /// "Lua ctx pooling" gotcha): a script that clobbers `ctx.signals.flags`
+    /// would previously self-heal on the next call, and now won't.
+    fn create(lua: &Lua, parent: &LuaTable) -> LuaResult<Self> {
+        let tables = Self {
             flags: lua.create_table()?,
             integers: lua.create_table()?,
             scalars: lua.create_table()?,
             strings: lua.create_table()?,
-        })
+        };
+        parent.set("flags", tables.flags.clone())?;
+        parent.set("integers", tables.integers.clone())?;
+        parent.set("scalars", tables.scalars.clone())?;
+        parent.set("strings", tables.strings.clone())?;
+        Ok(tables)
     }
 }
 
@@ -353,8 +365,8 @@ impl LuaRuntime {
         ctx.set("b", entity_b.clone())?;
         ctx.set("sides", sides.clone())?;
 
-        let signals_a_inner = SignalsCtxTables::create(lua)?;
-        let signals_b_inner = SignalsCtxTables::create(lua)?;
+        let signals_a_inner = SignalsCtxTables::create(lua, &signals_a)?;
+        let signals_b_inner = SignalsCtxTables::create(lua, &signals_b)?;
 
         Ok(CollisionCtxTables {
             ctx,
@@ -385,7 +397,11 @@ impl LuaRuntime {
 
     /// Creates the pooled entity context tables for LuaPhase/LuaTimer callbacks.
     fn create_entity_ctx_tables(lua: &Lua) -> LuaResult<EntityCtxTables> {
-        // Create all tables (not wired together since fields are optional)
+        // Create all tables (not wired together since fields are optional,
+        // except signals: its 4 inner tables are wired into it once here,
+        // by SignalsCtxTables::create — see that fn's doc comment)
+        let signals = lua.create_table()?;
+        let signals_inner = SignalsCtxTables::create(lua, &signals)?;
         Ok(EntityCtxTables {
             ctx: lua.create_table()?,
             pos: lua.create_table()?,
@@ -396,8 +412,8 @@ impl LuaRuntime {
             sprite: lua.create_table()?,
             animation: lua.create_table()?,
             timer: lua.create_table()?,
-            signals: lua.create_table()?,
-            signals_inner: SignalsCtxTables::create(lua)?,
+            signals,
+            signals_inner,
             world_pos: lua.create_table()?,
             world_scale: lua.create_table()?,
             occupancy: CtxOccupancy::default(),

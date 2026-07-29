@@ -195,7 +195,6 @@ pub(crate) fn clear_table(table: &LuaTable) -> LuaResult<()> {
 
 /// Populate entity signal tables, reusing the pooled inner tables in place.
 pub(crate) fn populate_entity_signals(
-    signals_table: &LuaTable,
     inner: &SignalsCtxTables,
     signals: &Signals,
 ) -> LuaResult<()> {
@@ -204,28 +203,24 @@ pub(crate) fn populate_entity_signals(
     for (i, flag) in signals.get_flags().iter().enumerate() {
         inner.flags.set(i + 1, flag.as_str())?;
     }
-    signals_table.set("flags", inner.flags.clone())?;
 
     // Integers map (variable keys)
     clear_table(&inner.integers)?;
     for (key, value) in signals.get_integers() {
         inner.integers.set(key.as_str(), *value)?;
     }
-    signals_table.set("integers", inner.integers.clone())?;
 
     // Scalars map (variable keys)
     clear_table(&inner.scalars)?;
     for (key, value) in signals.get_scalars() {
         inner.scalars.set(key.as_str(), *value)?;
     }
-    signals_table.set("scalars", inner.scalars.clone())?;
 
     // Strings map (variable keys)
     clear_table(&inner.strings)?;
     for (key, value) in signals.get_strings() {
         inner.strings.set(key.as_str(), value.as_str())?;
     }
-    signals_table.set("strings", inner.strings.clone())?;
 
     Ok(())
 }
@@ -401,7 +396,7 @@ pub fn build_entity_context_pooled<'a>(
         BIT_SIGNALS,
         mask,
         {
-            populate_entity_signals(&tables.signals, &tables.signals_inner, signals)?;
+            populate_entity_signals(&tables.signals_inner, signals)?;
             tables.ctx.set("signals", tables.signals.clone())?;
         }
     );
@@ -456,18 +451,22 @@ mod tests {
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
         };
+        signals_table.set("flags", inner.flags.clone()).unwrap();
+        signals_table.set("integers", inner.integers.clone()).unwrap();
+        signals_table.set("scalars", inner.scalars.clone()).unwrap();
+        signals_table.set("strings", inner.strings.clone()).unwrap();
 
         let mut first = Signals::default();
         first.set_flag("active");
         first.set_integer("score", 7);
         first.set_scalar("speed", 2.5);
         first.set_string("state", "running");
-        populate_entity_signals(&signals_table, &inner, &first).unwrap();
+        populate_entity_signals(&inner, &first).unwrap();
 
         let mut second = Signals::default();
         second.set_flag("paused");
         second.set_scalar("momentum", 1.25);
-        populate_entity_signals(&signals_table, &inner, &second).unwrap();
+        populate_entity_signals(&inner, &second).unwrap();
 
         let flags: LuaTable = signals_table.get("flags").unwrap();
         let integers: LuaTable = signals_table.get("integers").unwrap();
@@ -499,6 +498,10 @@ mod tests {
             scalars: lua.create_table().unwrap(),
             strings: lua.create_table().unwrap(),
         };
+        signals_table.set("flags", inner.flags.clone()).unwrap();
+        signals_table.set("integers", inner.integers.clone()).unwrap();
+        signals_table.set("scalars", inner.scalars.clone()).unwrap();
+        signals_table.set("strings", inner.strings.clone()).unwrap();
 
         let mut signals = Signals::default();
         signals.set_flag("active");
@@ -507,7 +510,7 @@ mod tests {
         signals.set_string("state", "running");
 
         for _ in 0..20_000 {
-            populate_entity_signals(&signals_table, &inner, &signals).unwrap();
+            populate_entity_signals(&inner, &signals).unwrap();
         }
     }
 

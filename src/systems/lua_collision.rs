@@ -301,7 +301,7 @@ fn populate_collision_entity(
         COLL_BIT_SIGNALS,
         mask,
         {
-            populate_entity_signals(signals_table, signals_inner, s)?;
+            populate_entity_signals(signals_inner, s)?;
             entity_table.set("signals", signals_table.clone())?;
         }
     );
