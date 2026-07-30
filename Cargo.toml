@@ -1,6 +1,6 @@
 [package]
 name = "aberredengine"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -15,7 +15,7 @@ tracy-client = { version = "0.18.4", features = ["enable"], optional = true }
 arrayvec = "0.7"
 smallvec = "1.15"
 configparser = "3"
-fastrand = "2.4"
+fastrand = "2.5"
 log = "0.4"
 env_logger = "0.11"
 clap = { version = "4", features = ["derive"] }
