@@ -187,13 +187,13 @@ impl InputSnapshot {
 mod tests {
     use super::*;
     use crate::resources::input::BoolState;
-    use raylib::prelude::KeyboardKey;
+    use crate::resources::input_bindings::Key;
 
     fn default_input() -> InputState {
         InputState::default()
     }
 
-    fn bool_state_pressed(_key: KeyboardKey) -> BoolState {
+    fn bool_state_pressed(_key: Key) -> BoolState {
         BoolState {
             active: true,
             just_pressed: true,
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn test_action_buttons_map_directly() {
         let mut input = default_input();
-        input.action_1 = bool_state_pressed(KeyboardKey::KEY_SPACE);
+        input.action_1 = bool_state_pressed(Key::KEY_SPACE);
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.action_1.pressed);
         assert!(snap.digital.action_1.just_pressed);

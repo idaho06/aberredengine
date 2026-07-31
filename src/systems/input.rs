@@ -29,7 +29,7 @@ use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::resources::camera2d::Camera2DRes;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::{BoolState, InputState};
-use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings};
+use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings, MouseButton};
 use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
@@ -69,12 +69,12 @@ fn action_active(
     deadzone: f32,
 ) -> bool {
     bindings.get_bindings(action).iter().any(|b| match b {
-        InputBinding::Keyboard(k) => raw.is_key_down(*k as u32),
-        InputBinding::MouseButton(m) => raw.is_mouse_button_down(*m as u8),
+        InputBinding::Keyboard(k) => raw.is_key_down(k.as_u32()),
+        InputBinding::MouseButton(m) => raw.is_mouse_button_down(m.as_u8()),
         InputBinding::GamepadButton { pad, button } => raw
             .gamepads
             .get(*pad as usize)
-            .is_some_and(|g| g.is_button_down(*button as u32)),
+            .is_some_and(|g| g.is_button_down(button.as_u32())),
         InputBinding::GamepadAxis {
             pad,
             axis,
@@ -83,7 +83,7 @@ fn action_active(
             let Some(gamepad) = raw.gamepads.get(*pad as usize) else {
                 return false;
             };
-            let v = apply_deadzone(gamepad.axes[*axis as usize], deadzone);
+            let v = apply_deadzone(gamepad.axes[axis.as_usize()], deadzone);
             match direction {
                 AxisDirection::Positive => v > GAMEPAD_AXIS_THRESHOLD,
                 AxisDirection::Negative => v < -GAMEPAD_AXIS_THRESHOLD,
@@ -113,7 +113,7 @@ fn resolve_action(
 /// GUI hit-testing always reacts to the literal left button) the same way as
 /// [`resolve_action`].
 fn resolve_mouse_left(state: &mut BoolState, prev: &RawDeviceSnapshot, sample: &RawDeviceSnapshot) {
-    let left = raylib::ffi::MouseButton::MOUSE_BUTTON_LEFT as u8;
+    let left = MouseButton::MOUSE_BUTTON_LEFT.as_u8();
     let was = prev.is_mouse_button_down(left);
     let now = sample.is_mouse_button_down(left);
     state.apply_edge(was, now);
@@ -353,8 +353,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 mod tests {
     use super::*;
     use crate::resources::render::imgui_bridge::ImguiCaptureState;
-    use raylib::ffi::KeyboardKey;
-    use raylib::ffi::{GamepadAxis, GamepadButton};
+    use crate::resources::input_bindings::{GamepadAxis, GamepadButton, Key};
     use raylib::prelude::Camera2D;
 
     fn test_camera(target: (f32, f32), offset: (f32, f32), zoom: f32, rotation: f32) -> Camera2D {
@@ -442,13 +441,13 @@ mod tests {
 
     /// A raw snapshot with only `action` (bound to `key` by default bindings)
     /// held down, at the given window-space mouse position.
-    fn raw_with_key_down(key: KeyboardKey, mouse: (f32, f32)) -> RawDeviceSnapshot {
+    fn raw_with_key_down(key: Key, mouse: (f32, f32)) -> RawDeviceSnapshot {
         let mut raw = RawDeviceSnapshot {
             mouse_x: mouse.0,
             mouse_y: mouse.1,
             ..raw()
         };
-        raw.set_key(key as u32);
+        raw.set_key(key.as_u32());
         raw
     }
 
@@ -458,7 +457,7 @@ mod tests {
         // screen size, so letterbox is a no-op and game coords == window
         // coords).
         let mut world = build_world(test_camera((100.0, 50.0), (400.0, 300.0), 2.0, 0.0));
-        let mut sample = raw_with_key_down(KeyboardKey::KEY_SPACE, (500.0, 300.0));
+        let mut sample = raw_with_key_down(Key::KEY_SPACE, (500.0, 300.0));
         sample.scroll_y = 1.5;
 
         resolve_input_backlog(&mut world, &[sample]);
@@ -476,13 +475,13 @@ mod tests {
     fn resolve_fires_press_then_release_across_ticks() {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
 
-        let down = raw_with_key_down(KeyboardKey::KEY_SPACE, (0.0, 0.0));
+        let down = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         resolve_input_backlog(&mut world, &[down]);
         assert!(world.resource::<InputState>().action_1.just_pressed);
         assert!(world.resource::<InputState>().action_1.active);
 
         // Same key still down: no new edge (active stays true).
-        let held = raw_with_key_down(KeyboardKey::KEY_SPACE, (0.0, 0.0));
+        let held = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         // Simulate the per-tick edge clear that `run_sim_tick` performs.
         world.resource_mut::<InputState>().clear_edges();
         resolve_input_backlog(&mut world, &[held]);
@@ -506,7 +505,7 @@ mod tests {
         // report NOTHING, but the sequential per-sample model must still
         // fire both edges since the transition happened in between.
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
-        let down = raw_with_key_down(KeyboardKey::KEY_SPACE, (0.0, 0.0));
+        let down = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         let up = raw();
 
         resolve_input_backlog(&mut world, &[down, up]);
@@ -533,16 +532,16 @@ mod tests {
             let mut bindings = world.resource_mut::<InputBindings>();
             bindings.rebind(
                 InputAction::Action1,
-                InputBinding::Keyboard(KeyboardKey::KEY_Z),
+                InputBinding::Keyboard(Key::KEY_Z),
             );
             bindings.add_binding(
                 InputAction::Action1,
-                InputBinding::Keyboard(KeyboardKey::KEY_X),
+                InputBinding::Keyboard(Key::KEY_X),
             );
         }
 
         let mut z_down = raw();
-        z_down.set_key(KeyboardKey::KEY_Z as u32);
+        z_down.set_key(Key::KEY_Z.as_u32());
         resolve_input_backlog(&mut world, &[z_down]);
         assert!(world.resource::<InputState>().action_1.just_pressed);
         world.resource_mut::<InputState>().clear_edges();
@@ -551,10 +550,10 @@ mod tests {
         // then only X down. `active` (any-bound-down) never goes false, so
         // no new just_pressed should fire.
         let mut both_down = raw();
-        both_down.set_key(KeyboardKey::KEY_Z as u32);
-        both_down.set_key(KeyboardKey::KEY_X as u32);
+        both_down.set_key(Key::KEY_Z.as_u32());
+        both_down.set_key(Key::KEY_X.as_u32());
         let mut x_only = raw();
-        x_only.set_key(KeyboardKey::KEY_X as u32);
+        x_only.set_key(Key::KEY_X.as_u32());
 
         resolve_input_backlog(&mut world, &[both_down, x_only]);
 
@@ -577,7 +576,7 @@ mod tests {
             keyboard: false,
         }));
         let mut pressed = raw();
-        pressed.set_mouse_button(raylib::ffi::MouseButton::MOUSE_BUTTON_LEFT as u8);
+        pressed.set_mouse_button(MouseButton::MOUSE_BUTTON_LEFT.as_u8());
 
         resolve_input_backlog(&mut world, &[pressed]);
 
@@ -607,7 +606,7 @@ mod tests {
             mouse: false,
             keyboard: true,
         }));
-        let sample = raw_with_key_down(KeyboardKey::KEY_SPACE, (0.0, 0.0));
+        let sample = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
 
         resolve_input_backlog(&mut world, &[sample]);
 
@@ -666,8 +665,8 @@ mod tests {
             keyboard: true,
         }));
         let mut sample = raw();
-        sample.set_key(KeyboardKey::KEY_F11 as u32);
-        sample.set_key(KeyboardKey::KEY_F10 as u32);
+        sample.set_key(Key::KEY_F11.as_u32());
+        sample.set_key(Key::KEY_F10.as_u32());
 
         resolve_input_backlog(&mut world, &[sample]);
 
@@ -693,13 +692,13 @@ mod tests {
         // seed the prior press via a first sample, then release via a
         // second, and confirm ordering follows struct field declaration
         // order (action_back before action_1).
-        sample.set_key(KeyboardKey::KEY_ESCAPE as u32); // action_back
+        sample.set_key(Key::KEY_ESCAPE.as_u32()); // action_back
         resolve_input_backlog(&mut world, &[sample]);
         world.resource_mut::<InputState>().clear_edges();
         world.resource_mut::<EventLog>().input_events.clear();
 
         let mut release_back_press_action1 = raw();
-        release_back_press_action1.set_key(KeyboardKey::KEY_SPACE as u32);
+        release_back_press_action1.set_key(Key::KEY_SPACE.as_u32());
         resolve_input_backlog(&mut world, &[release_back_press_action1]);
 
         let log = world.resource::<EventLog>();
@@ -734,7 +733,7 @@ mod tests {
         // Default bindings map pad0's RIGHT_FACE_DOWN to Action1.
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let down = raw_with_gamepad(
-            Some(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN as u32),
+            Some(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN.as_u32()),
             [0.0; 6],
         );
         resolve_input_backlog(&mut world, &[down]);
@@ -761,7 +760,7 @@ mod tests {
 
         world.resource_mut::<InputState>().clear_edges();
         let mut axes = [0.0; 6];
-        axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.8;
+        axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X.as_usize()] = 0.8;
         let pushed_right = raw_with_gamepad(None, axes);
         resolve_input_backlog(&mut world, &[pushed_right]);
         let input = world.resource::<InputState>();
@@ -781,7 +780,7 @@ mod tests {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         // Default deadzone is 0.15; 0.1 is inside it.
         let mut axes = [0.0; 6];
-        axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.1;
+        axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X.as_usize()] = 0.1;
         let sample = raw_with_gamepad(None, axes);
         resolve_input_backlog(&mut world, &[sample]);
         let input = world.resource::<InputState>();
@@ -796,7 +795,7 @@ mod tests {
         // must fire just_released, not freeze at active=true.
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let connected_and_pressed = raw_with_gamepad(
-            Some(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN as u32),
+            Some(GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN.as_u32()),
             [0.0; 6],
         );
         let disconnected = raw(); // gamepads[0] defaults to RawGamepad::default()
@@ -814,17 +813,17 @@ mod tests {
     fn resolve_gamepad_axes_and_connected_are_last_sample_wins() {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let mut axes1 = [0.0; 6];
-        axes1[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.9;
+        axes1[GamepadAxis::GAMEPAD_AXIS_LEFT_X.as_usize()] = 0.9;
         let sample1 = raw_with_gamepad(None, axes1);
         let mut axes2 = [0.0; 6];
-        axes2[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize] = 0.3;
+        axes2[GamepadAxis::GAMEPAD_AXIS_LEFT_X.as_usize()] = 0.3;
         let sample2 = raw_with_gamepad(None, axes2);
 
         resolve_input_backlog(&mut world, &[sample1, sample2]);
         let input = world.resource::<InputState>();
         assert!(input.gamepad_connected);
         assert_eq!(
-            input.gamepad_axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X as usize],
+            input.gamepad_axes[GamepadAxis::GAMEPAD_AXIS_LEFT_X.as_usize()],
             0.3
         );
     }

@@ -11,10 +11,10 @@
 
 use aberredengine::events::input::InputAction;
 use aberredengine::resources::input_bindings::{
-    InputBinding, InputBindings, binding_from_str, key_from_str, key_to_str,
+    GamepadButton, InputBinding, InputBindings, Key, MouseButton, binding_from_str, key_from_str,
+    key_to_str,
 };
 use bevy_ecs::prelude::*;
-use raylib::ffi::{GamepadButton, KeyboardKey, MouseButton};
 
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{InputCmd, action_from_str};
@@ -86,12 +86,12 @@ fn test_rebind_replaces_all_existing_bindings() {
 
     bindings.rebind(
         InputAction::Action1,
-        InputBinding::Keyboard(KeyboardKey::KEY_Z),
+        InputBinding::Keyboard(Key::KEY_Z),
     );
 
     let keys = bindings.get_bindings(InputAction::Action1);
     assert_eq!(keys.len(), 1);
-    assert_eq!(keys[0], InputBinding::Keyboard(KeyboardKey::KEY_Z));
+    assert_eq!(keys[0], InputBinding::Keyboard(Key::KEY_Z));
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn test_add_binding_appends_without_removing_existing() {
 
     bindings.add_binding(
         InputAction::Action2,
-        InputBinding::Keyboard(KeyboardKey::KEY_X),
+        InputBinding::Keyboard(Key::KEY_X),
     );
 
     let count_after = bindings.get_bindings(InputAction::Action2).len();
@@ -278,7 +278,7 @@ fn test_process_input_cmd_rebind_updates_binding() {
 
     let keys = bindings.get_bindings(InputAction::Action1);
     assert_eq!(keys.len(), 1);
-    assert_eq!(keys[0], InputBinding::Keyboard(KeyboardKey::KEY_Z));
+    assert_eq!(keys[0], InputBinding::Keyboard(Key::KEY_Z));
 }
 
 #[cfg(feature = "lua")]
@@ -382,14 +382,14 @@ fn test_input_bindings_mutation_via_ecs_system_state() {
             .expect("InputBindings resource should fetch");
         bindings.rebind(
             InputAction::Action1,
-            InputBinding::Keyboard(KeyboardKey::KEY_Z),
+            InputBinding::Keyboard(Key::KEY_Z),
         );
     }
     state.apply(&mut world);
 
     let bindings = world.get_resource::<InputBindings>().unwrap();
     let keys = bindings.get_bindings(InputAction::Action1);
-    assert_eq!(keys, &[InputBinding::Keyboard(KeyboardKey::KEY_Z)]);
+    assert_eq!(keys, &[InputBinding::Keyboard(Key::KEY_Z)]);
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +501,7 @@ fn test_binding_from_str_in_integration() {
     );
     assert_eq!(
         binding_from_str("space"),
-        Some(InputBinding::Keyboard(KeyboardKey::KEY_SPACE))
+        Some(InputBinding::Keyboard(Key::KEY_SPACE))
     );
     assert_eq!(binding_from_str("not_a_binding"), None);
 }

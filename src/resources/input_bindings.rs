@@ -9,23 +9,220 @@
 //!
 //! ```rust,ignore
 //! // Rebind Action1 from Space to Z
-//! bindings.rebind(InputAction::Action1, InputBinding::Keyboard(KeyboardKey::KEY_Z));
+//! bindings.rebind(InputAction::Action1, InputBinding::Keyboard(Key::KEY_Z));
 //!
 //! // Add a second binding (multi-bind: both Z and X trigger Action1)
-//! bindings.add_binding(InputAction::Action1, InputBinding::Keyboard(KeyboardKey::KEY_X));
+//! bindings.add_binding(InputAction::Action1, InputBinding::Keyboard(Key::KEY_X));
 //!
 //! // Read bindings in the input polling system
 //! let keys = bindings.get_bindings(InputAction::Action1);
 //! ```
 
 use bevy_ecs::prelude::*;
-use raylib::ffi::GamepadAxis;
-use raylib::ffi::GamepadButton;
-use raylib::ffi::KeyboardKey;
-use raylib::ffi::MouseButton;
 
 use crate::events::input::InputAction;
 use crate::protocol::raw_input::MAX_GAMEPADS;
+
+/// Engine-owned hardware keyboard key code. Numeric values match raylib's
+/// `KeyboardKey` codes (GLFW-derived) 1:1 -- verified against this project's
+/// vendored `sola-raylib-sys` FFI bindings, not transcribed from memory. A
+/// raylib version bump that renumbers keys would be caught by the exhaustive
+/// parity check in `tests/input_types_raylib_parity.rs`. No exhaustive match is
+/// expected: an unmapped `u16` is representable but simply never equals any
+/// `KEY_*` const, mirroring raylib's own permissive int-based key codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Key(pub u16);
+
+impl Key {
+    pub const KEY_NULL: Key = Key(0);
+    pub const KEY_APOSTROPHE: Key = Key(39);
+    pub const KEY_COMMA: Key = Key(44);
+    pub const KEY_MINUS: Key = Key(45);
+    pub const KEY_PERIOD: Key = Key(46);
+    pub const KEY_SLASH: Key = Key(47);
+    pub const KEY_ZERO: Key = Key(48);
+    pub const KEY_ONE: Key = Key(49);
+    pub const KEY_TWO: Key = Key(50);
+    pub const KEY_THREE: Key = Key(51);
+    pub const KEY_FOUR: Key = Key(52);
+    pub const KEY_FIVE: Key = Key(53);
+    pub const KEY_SIX: Key = Key(54);
+    pub const KEY_SEVEN: Key = Key(55);
+    pub const KEY_EIGHT: Key = Key(56);
+    pub const KEY_NINE: Key = Key(57);
+    pub const KEY_SEMICOLON: Key = Key(59);
+    pub const KEY_EQUAL: Key = Key(61);
+    pub const KEY_A: Key = Key(65);
+    pub const KEY_B: Key = Key(66);
+    pub const KEY_C: Key = Key(67);
+    pub const KEY_D: Key = Key(68);
+    pub const KEY_E: Key = Key(69);
+    pub const KEY_F: Key = Key(70);
+    pub const KEY_G: Key = Key(71);
+    pub const KEY_H: Key = Key(72);
+    pub const KEY_I: Key = Key(73);
+    pub const KEY_J: Key = Key(74);
+    pub const KEY_K: Key = Key(75);
+    pub const KEY_L: Key = Key(76);
+    pub const KEY_M: Key = Key(77);
+    pub const KEY_N: Key = Key(78);
+    pub const KEY_O: Key = Key(79);
+    pub const KEY_P: Key = Key(80);
+    pub const KEY_Q: Key = Key(81);
+    pub const KEY_R: Key = Key(82);
+    pub const KEY_S: Key = Key(83);
+    pub const KEY_T: Key = Key(84);
+    pub const KEY_U: Key = Key(85);
+    pub const KEY_V: Key = Key(86);
+    pub const KEY_W: Key = Key(87);
+    pub const KEY_X: Key = Key(88);
+    pub const KEY_Y: Key = Key(89);
+    pub const KEY_Z: Key = Key(90);
+    pub const KEY_LEFT_BRACKET: Key = Key(91);
+    pub const KEY_BACKSLASH: Key = Key(92);
+    pub const KEY_RIGHT_BRACKET: Key = Key(93);
+    pub const KEY_GRAVE: Key = Key(96);
+    pub const KEY_SPACE: Key = Key(32);
+    pub const KEY_ESCAPE: Key = Key(256);
+    pub const KEY_ENTER: Key = Key(257);
+    pub const KEY_TAB: Key = Key(258);
+    pub const KEY_BACKSPACE: Key = Key(259);
+    pub const KEY_INSERT: Key = Key(260);
+    pub const KEY_DELETE: Key = Key(261);
+    pub const KEY_RIGHT: Key = Key(262);
+    pub const KEY_LEFT: Key = Key(263);
+    pub const KEY_DOWN: Key = Key(264);
+    pub const KEY_UP: Key = Key(265);
+    pub const KEY_PAGE_UP: Key = Key(266);
+    pub const KEY_PAGE_DOWN: Key = Key(267);
+    pub const KEY_HOME: Key = Key(268);
+    pub const KEY_END: Key = Key(269);
+    pub const KEY_CAPS_LOCK: Key = Key(280);
+    pub const KEY_SCROLL_LOCK: Key = Key(281);
+    pub const KEY_NUM_LOCK: Key = Key(282);
+    pub const KEY_PRINT_SCREEN: Key = Key(283);
+    pub const KEY_PAUSE: Key = Key(284);
+    pub const KEY_F1: Key = Key(290);
+    pub const KEY_F2: Key = Key(291);
+    pub const KEY_F3: Key = Key(292);
+    pub const KEY_F4: Key = Key(293);
+    pub const KEY_F5: Key = Key(294);
+    pub const KEY_F6: Key = Key(295);
+    pub const KEY_F7: Key = Key(296);
+    pub const KEY_F8: Key = Key(297);
+    pub const KEY_F9: Key = Key(298);
+    pub const KEY_F10: Key = Key(299);
+    pub const KEY_F11: Key = Key(300);
+    pub const KEY_F12: Key = Key(301);
+    pub const KEY_LEFT_SHIFT: Key = Key(340);
+    pub const KEY_LEFT_CONTROL: Key = Key(341);
+    pub const KEY_LEFT_ALT: Key = Key(342);
+    pub const KEY_LEFT_SUPER: Key = Key(343);
+    pub const KEY_RIGHT_SHIFT: Key = Key(344);
+    pub const KEY_RIGHT_CONTROL: Key = Key(345);
+    pub const KEY_RIGHT_ALT: Key = Key(346);
+    pub const KEY_RIGHT_SUPER: Key = Key(347);
+    pub const KEY_KB_MENU: Key = Key(348);
+    pub const KEY_KP_0: Key = Key(320);
+    pub const KEY_KP_1: Key = Key(321);
+    pub const KEY_KP_2: Key = Key(322);
+    pub const KEY_KP_3: Key = Key(323);
+    pub const KEY_KP_4: Key = Key(324);
+    pub const KEY_KP_5: Key = Key(325);
+    pub const KEY_KP_6: Key = Key(326);
+    pub const KEY_KP_7: Key = Key(327);
+    pub const KEY_KP_8: Key = Key(328);
+    pub const KEY_KP_9: Key = Key(329);
+    pub const KEY_KP_DECIMAL: Key = Key(330);
+    pub const KEY_KP_DIVIDE: Key = Key(331);
+    pub const KEY_KP_MULTIPLY: Key = Key(332);
+    pub const KEY_KP_SUBTRACT: Key = Key(333);
+    pub const KEY_KP_ADD: Key = Key(334);
+    pub const KEY_KP_ENTER: Key = Key(335);
+    pub const KEY_KP_EQUAL: Key = Key(336);
+    pub const KEY_BACK: Key = Key(4);
+    pub const KEY_MENU: Key = Key(5);
+    pub const KEY_VOLUME_UP: Key = Key(24);
+    pub const KEY_VOLUME_DOWN: Key = Key(25);
+
+    /// Widen to the `u32` code width `RawDeviceSnapshot`'s keyboard bitset
+    /// indexes with.
+    pub const fn as_u32(self) -> u32 {
+        self.0 as u32
+    }
+}
+
+/// Engine-owned mouse button code. Numeric values match raylib's
+/// `MouseButton` codes 1:1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MouseButton(pub u16);
+
+impl MouseButton {
+    pub const MOUSE_BUTTON_LEFT: MouseButton = MouseButton(0);
+    pub const MOUSE_BUTTON_RIGHT: MouseButton = MouseButton(1);
+    pub const MOUSE_BUTTON_MIDDLE: MouseButton = MouseButton(2);
+    pub const MOUSE_BUTTON_SIDE: MouseButton = MouseButton(3);
+    pub const MOUSE_BUTTON_EXTRA: MouseButton = MouseButton(4);
+    pub const MOUSE_BUTTON_FORWARD: MouseButton = MouseButton(5);
+    pub const MOUSE_BUTTON_BACK: MouseButton = MouseButton(6);
+
+    /// Widen to the `u8` code width `RawDeviceSnapshot`'s mouse-button
+    /// bitmask indexes with.
+    pub const fn as_u8(self) -> u8 {
+        self.0 as u8
+    }
+}
+
+/// Engine-owned gamepad button code. Numeric values match raylib's
+/// `GamepadButton` codes 1:1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GamepadButton(pub u16);
+
+impl GamepadButton {
+    pub const GAMEPAD_BUTTON_UNKNOWN: GamepadButton = GamepadButton(0);
+    pub const GAMEPAD_BUTTON_LEFT_FACE_UP: GamepadButton = GamepadButton(1);
+    pub const GAMEPAD_BUTTON_LEFT_FACE_RIGHT: GamepadButton = GamepadButton(2);
+    pub const GAMEPAD_BUTTON_LEFT_FACE_DOWN: GamepadButton = GamepadButton(3);
+    pub const GAMEPAD_BUTTON_LEFT_FACE_LEFT: GamepadButton = GamepadButton(4);
+    pub const GAMEPAD_BUTTON_RIGHT_FACE_UP: GamepadButton = GamepadButton(5);
+    pub const GAMEPAD_BUTTON_RIGHT_FACE_RIGHT: GamepadButton = GamepadButton(6);
+    pub const GAMEPAD_BUTTON_RIGHT_FACE_DOWN: GamepadButton = GamepadButton(7);
+    pub const GAMEPAD_BUTTON_RIGHT_FACE_LEFT: GamepadButton = GamepadButton(8);
+    pub const GAMEPAD_BUTTON_LEFT_TRIGGER_1: GamepadButton = GamepadButton(9);
+    pub const GAMEPAD_BUTTON_LEFT_TRIGGER_2: GamepadButton = GamepadButton(10);
+    pub const GAMEPAD_BUTTON_RIGHT_TRIGGER_1: GamepadButton = GamepadButton(11);
+    pub const GAMEPAD_BUTTON_RIGHT_TRIGGER_2: GamepadButton = GamepadButton(12);
+    pub const GAMEPAD_BUTTON_MIDDLE_LEFT: GamepadButton = GamepadButton(13);
+    pub const GAMEPAD_BUTTON_MIDDLE: GamepadButton = GamepadButton(14);
+    pub const GAMEPAD_BUTTON_MIDDLE_RIGHT: GamepadButton = GamepadButton(15);
+    pub const GAMEPAD_BUTTON_LEFT_THUMB: GamepadButton = GamepadButton(16);
+    pub const GAMEPAD_BUTTON_RIGHT_THUMB: GamepadButton = GamepadButton(17);
+
+    /// Widen to the `u32` code width `RawGamepad`'s button bitmask indexes
+    /// with.
+    pub const fn as_u32(self) -> u32 {
+        self.0 as u32
+    }
+}
+
+/// Engine-owned gamepad axis code. Numeric values match raylib's
+/// `GamepadAxis` codes 1:1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GamepadAxis(pub u16);
+
+impl GamepadAxis {
+    pub const GAMEPAD_AXIS_LEFT_X: GamepadAxis = GamepadAxis(0);
+    pub const GAMEPAD_AXIS_LEFT_Y: GamepadAxis = GamepadAxis(1);
+    pub const GAMEPAD_AXIS_RIGHT_X: GamepadAxis = GamepadAxis(2);
+    pub const GAMEPAD_AXIS_RIGHT_Y: GamepadAxis = GamepadAxis(3);
+    pub const GAMEPAD_AXIS_LEFT_TRIGGER: GamepadAxis = GamepadAxis(4);
+    pub const GAMEPAD_AXIS_RIGHT_TRIGGER: GamepadAxis = GamepadAxis(5);
+
+    /// Widen to the array-index width `RawGamepad::axes` is indexed with.
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}
 
 /// Which side of zero a [`GamepadAxis`] must cross to register as "down" for
 /// [`InputBinding::GamepadAxis`]. The crossing threshold itself is a single
@@ -42,7 +239,7 @@ pub enum AxisDirection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InputBinding {
     /// A physical keyboard key.
-    Keyboard(KeyboardKey),
+    Keyboard(Key),
     /// A mouse button (left, right, middle, etc.).
     MouseButton(MouseButton),
     /// A gamepad button, on pad `pad` (`0..MAX_GAMEPADS`).
@@ -128,29 +325,29 @@ impl InputBindings {
 impl Default for InputBindings {
     /// The engine's default key assignments for every input action.
     fn default() -> Self {
-        let k = |key: KeyboardKey| InputBinding::Keyboard(key);
+        let k = |key: Key| InputBinding::Keyboard(key);
         let m = |btn: MouseButton| InputBinding::MouseButton(btn);
         let mut map: [Vec<InputBinding>; InputAction::COUNT] = std::array::from_fn(|_| Vec::new());
 
-        map[InputAction::MainDirectionUp.index()] = vec![k(KeyboardKey::KEY_W)];
-        map[InputAction::MainDirectionDown.index()] = vec![k(KeyboardKey::KEY_S)];
-        map[InputAction::MainDirectionLeft.index()] = vec![k(KeyboardKey::KEY_A)];
-        map[InputAction::MainDirectionRight.index()] = vec![k(KeyboardKey::KEY_D)];
-        map[InputAction::SecondaryDirectionUp.index()] = vec![k(KeyboardKey::KEY_UP)];
-        map[InputAction::SecondaryDirectionDown.index()] = vec![k(KeyboardKey::KEY_DOWN)];
-        map[InputAction::SecondaryDirectionLeft.index()] = vec![k(KeyboardKey::KEY_LEFT)];
-        map[InputAction::SecondaryDirectionRight.index()] = vec![k(KeyboardKey::KEY_RIGHT)];
-        map[InputAction::Back.index()] = vec![k(KeyboardKey::KEY_ESCAPE)];
+        map[InputAction::MainDirectionUp.index()] = vec![k(Key::KEY_W)];
+        map[InputAction::MainDirectionDown.index()] = vec![k(Key::KEY_S)];
+        map[InputAction::MainDirectionLeft.index()] = vec![k(Key::KEY_A)];
+        map[InputAction::MainDirectionRight.index()] = vec![k(Key::KEY_D)];
+        map[InputAction::SecondaryDirectionUp.index()] = vec![k(Key::KEY_UP)];
+        map[InputAction::SecondaryDirectionDown.index()] = vec![k(Key::KEY_DOWN)];
+        map[InputAction::SecondaryDirectionLeft.index()] = vec![k(Key::KEY_LEFT)];
+        map[InputAction::SecondaryDirectionRight.index()] = vec![k(Key::KEY_RIGHT)];
+        map[InputAction::Back.index()] = vec![k(Key::KEY_ESCAPE)];
         map[InputAction::Action1.index()] =
-            vec![k(KeyboardKey::KEY_SPACE), m(MouseButton::MOUSE_BUTTON_LEFT)];
+            vec![k(Key::KEY_SPACE), m(MouseButton::MOUSE_BUTTON_LEFT)];
         map[InputAction::Action2.index()] = vec![
-            k(KeyboardKey::KEY_ENTER),
+            k(Key::KEY_ENTER),
             m(MouseButton::MOUSE_BUTTON_RIGHT),
         ];
         map[InputAction::Action3.index()] = vec![m(MouseButton::MOUSE_BUTTON_MIDDLE)];
-        map[InputAction::Special.index()] = vec![k(KeyboardKey::KEY_F12)];
-        map[InputAction::ToggleDebug.index()] = vec![k(KeyboardKey::KEY_F11)];
-        map[InputAction::ToggleFullscreen.index()] = vec![k(KeyboardKey::KEY_F10)];
+        map[InputAction::Special.index()] = vec![k(Key::KEY_F12)];
+        map[InputAction::ToggleDebug.index()] = vec![k(Key::KEY_F11)];
+        map[InputAction::ToggleFullscreen.index()] = vec![k(Key::KEY_F10)];
 
         let mut bindings = Self { map, dirty: true };
         bindings.add_pad0_defaults();
@@ -268,97 +465,97 @@ fn table_reverse<T: Copy + PartialEq>(table: &[(&'static str, T)], value: T) -> 
 /// both [`key_from_str`] and [`key_to_str`]. Alias names (`"return"`,
 /// `"esc"`, `"shift"`, `"ctrl"`) are handled separately since they have no
 /// corresponding canonical-name entry to round-trip to.
-const KEY_NAME_TABLE: &[(&str, KeyboardKey)] = &[
+const KEY_NAME_TABLE: &[(&str, Key)] = &[
     // Letters
-    ("a", KeyboardKey::KEY_A),
-    ("b", KeyboardKey::KEY_B),
-    ("c", KeyboardKey::KEY_C),
-    ("d", KeyboardKey::KEY_D),
-    ("e", KeyboardKey::KEY_E),
-    ("f", KeyboardKey::KEY_F),
-    ("g", KeyboardKey::KEY_G),
-    ("h", KeyboardKey::KEY_H),
-    ("i", KeyboardKey::KEY_I),
-    ("j", KeyboardKey::KEY_J),
-    ("k", KeyboardKey::KEY_K),
-    ("l", KeyboardKey::KEY_L),
-    ("m", KeyboardKey::KEY_M),
-    ("n", KeyboardKey::KEY_N),
-    ("o", KeyboardKey::KEY_O),
-    ("p", KeyboardKey::KEY_P),
-    ("q", KeyboardKey::KEY_Q),
-    ("r", KeyboardKey::KEY_R),
-    ("s", KeyboardKey::KEY_S),
-    ("t", KeyboardKey::KEY_T),
-    ("u", KeyboardKey::KEY_U),
-    ("v", KeyboardKey::KEY_V),
-    ("w", KeyboardKey::KEY_W),
-    ("x", KeyboardKey::KEY_X),
-    ("y", KeyboardKey::KEY_Y),
-    ("z", KeyboardKey::KEY_Z),
+    ("a", Key::KEY_A),
+    ("b", Key::KEY_B),
+    ("c", Key::KEY_C),
+    ("d", Key::KEY_D),
+    ("e", Key::KEY_E),
+    ("f", Key::KEY_F),
+    ("g", Key::KEY_G),
+    ("h", Key::KEY_H),
+    ("i", Key::KEY_I),
+    ("j", Key::KEY_J),
+    ("k", Key::KEY_K),
+    ("l", Key::KEY_L),
+    ("m", Key::KEY_M),
+    ("n", Key::KEY_N),
+    ("o", Key::KEY_O),
+    ("p", Key::KEY_P),
+    ("q", Key::KEY_Q),
+    ("r", Key::KEY_R),
+    ("s", Key::KEY_S),
+    ("t", Key::KEY_T),
+    ("u", Key::KEY_U),
+    ("v", Key::KEY_V),
+    ("w", Key::KEY_W),
+    ("x", Key::KEY_X),
+    ("y", Key::KEY_Y),
+    ("z", Key::KEY_Z),
     // Digits
-    ("0", KeyboardKey::KEY_ZERO),
-    ("1", KeyboardKey::KEY_ONE),
-    ("2", KeyboardKey::KEY_TWO),
-    ("3", KeyboardKey::KEY_THREE),
-    ("4", KeyboardKey::KEY_FOUR),
-    ("5", KeyboardKey::KEY_FIVE),
-    ("6", KeyboardKey::KEY_SIX),
-    ("7", KeyboardKey::KEY_SEVEN),
-    ("8", KeyboardKey::KEY_EIGHT),
-    ("9", KeyboardKey::KEY_NINE),
+    ("0", Key::KEY_ZERO),
+    ("1", Key::KEY_ONE),
+    ("2", Key::KEY_TWO),
+    ("3", Key::KEY_THREE),
+    ("4", Key::KEY_FOUR),
+    ("5", Key::KEY_FIVE),
+    ("6", Key::KEY_SIX),
+    ("7", Key::KEY_SEVEN),
+    ("8", Key::KEY_EIGHT),
+    ("9", Key::KEY_NINE),
     // Special
-    ("space", KeyboardKey::KEY_SPACE),
-    ("enter", KeyboardKey::KEY_ENTER),
-    ("escape", KeyboardKey::KEY_ESCAPE),
-    ("backspace", KeyboardKey::KEY_BACKSPACE),
-    ("tab", KeyboardKey::KEY_TAB),
+    ("space", Key::KEY_SPACE),
+    ("enter", Key::KEY_ENTER),
+    ("escape", Key::KEY_ESCAPE),
+    ("backspace", Key::KEY_BACKSPACE),
+    ("tab", Key::KEY_TAB),
     // Arrows
-    ("up", KeyboardKey::KEY_UP),
-    ("down", KeyboardKey::KEY_DOWN),
-    ("left", KeyboardKey::KEY_LEFT),
-    ("right", KeyboardKey::KEY_RIGHT),
+    ("up", Key::KEY_UP),
+    ("down", Key::KEY_DOWN),
+    ("left", Key::KEY_LEFT),
+    ("right", Key::KEY_RIGHT),
     // Modifiers
-    ("lshift", KeyboardKey::KEY_LEFT_SHIFT),
-    ("rshift", KeyboardKey::KEY_RIGHT_SHIFT),
-    ("lctrl", KeyboardKey::KEY_LEFT_CONTROL),
-    ("rctrl", KeyboardKey::KEY_RIGHT_CONTROL),
-    ("lalt", KeyboardKey::KEY_LEFT_ALT),
-    ("ralt", KeyboardKey::KEY_RIGHT_ALT),
+    ("lshift", Key::KEY_LEFT_SHIFT),
+    ("rshift", Key::KEY_RIGHT_SHIFT),
+    ("lctrl", Key::KEY_LEFT_CONTROL),
+    ("rctrl", Key::KEY_RIGHT_CONTROL),
+    ("lalt", Key::KEY_LEFT_ALT),
+    ("ralt", Key::KEY_RIGHT_ALT),
     // Function keys
-    ("f1", KeyboardKey::KEY_F1),
-    ("f2", KeyboardKey::KEY_F2),
-    ("f3", KeyboardKey::KEY_F3),
-    ("f4", KeyboardKey::KEY_F4),
-    ("f5", KeyboardKey::KEY_F5),
-    ("f6", KeyboardKey::KEY_F6),
-    ("f7", KeyboardKey::KEY_F7),
-    ("f8", KeyboardKey::KEY_F8),
-    ("f9", KeyboardKey::KEY_F9),
-    ("f10", KeyboardKey::KEY_F10),
-    ("f11", KeyboardKey::KEY_F11),
-    ("f12", KeyboardKey::KEY_F12),
+    ("f1", Key::KEY_F1),
+    ("f2", Key::KEY_F2),
+    ("f3", Key::KEY_F3),
+    ("f4", Key::KEY_F4),
+    ("f5", Key::KEY_F5),
+    ("f6", Key::KEY_F6),
+    ("f7", Key::KEY_F7),
+    ("f8", Key::KEY_F8),
+    ("f9", Key::KEY_F9),
+    ("f10", Key::KEY_F10),
+    ("f11", Key::KEY_F11),
+    ("f12", Key::KEY_F12),
 ];
 
-/// Parse a human-readable key name into a [`KeyboardKey`].
+/// Parse a human-readable key name into a [`Key`].
 ///
 /// Returns `None` for unknown names. Names are lowercase, e.g. `"w"`, `"space"`,
 /// `"f11"`. Common aliases (`"return"` → `KEY_ENTER`, `"esc"` → `KEY_ESCAPE`) are
 /// accepted.
-pub fn key_from_str(s: &str) -> Option<KeyboardKey> {
+pub fn key_from_str(s: &str) -> Option<Key> {
     table_lookup(KEY_NAME_TABLE, s).or(match s {
-        "return" => Some(KeyboardKey::KEY_ENTER),
-        "esc" => Some(KeyboardKey::KEY_ESCAPE),
-        "shift" => Some(KeyboardKey::KEY_LEFT_SHIFT),
-        "ctrl" => Some(KeyboardKey::KEY_LEFT_CONTROL),
+        "return" => Some(Key::KEY_ENTER),
+        "esc" => Some(Key::KEY_ESCAPE),
+        "shift" => Some(Key::KEY_LEFT_SHIFT),
+        "ctrl" => Some(Key::KEY_LEFT_CONTROL),
         _ => None,
     })
 }
 
-/// Serialize a [`KeyboardKey`] to a canonical lowercase string.
+/// Serialize a [`Key`] to a canonical lowercase string.
 ///
 /// Returns `"unknown"` for keys not covered by the mapping.
-pub fn key_to_str(k: KeyboardKey) -> &'static str {
+pub fn key_to_str(k: Key) -> &'static str {
     table_reverse(KEY_NAME_TABLE, k)
 }
 
@@ -555,51 +752,51 @@ mod tests {
         let b = InputBindings::default();
         assert_eq!(
             b.get_bindings(InputAction::MainDirectionUp)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_W)
+            InputBinding::Keyboard(Key::KEY_W)
         );
         assert_eq!(
             b.get_bindings(InputAction::MainDirectionDown)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_S)
+            InputBinding::Keyboard(Key::KEY_S)
         );
         assert_eq!(
             b.get_bindings(InputAction::MainDirectionLeft)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_A)
+            InputBinding::Keyboard(Key::KEY_A)
         );
         assert_eq!(
             b.get_bindings(InputAction::MainDirectionRight)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_D)
+            InputBinding::Keyboard(Key::KEY_D)
         );
         assert_eq!(
             b.get_bindings(InputAction::SecondaryDirectionUp)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_UP)
+            InputBinding::Keyboard(Key::KEY_UP)
         );
         assert_eq!(
             b.get_bindings(InputAction::SecondaryDirectionDown)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_DOWN)
+            InputBinding::Keyboard(Key::KEY_DOWN)
         );
         assert_eq!(
             b.get_bindings(InputAction::SecondaryDirectionLeft)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_LEFT)
+            InputBinding::Keyboard(Key::KEY_LEFT)
         );
         assert_eq!(
             b.get_bindings(InputAction::SecondaryDirectionRight)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_RIGHT)
+            InputBinding::Keyboard(Key::KEY_RIGHT)
         );
         assert_eq!(
             b.get_bindings(InputAction::Back)[0],
-            InputBinding::Keyboard(KeyboardKey::KEY_ESCAPE)
+            InputBinding::Keyboard(Key::KEY_ESCAPE)
         );
         assert_eq!(
             &b.get_bindings(InputAction::Action1)[..2],
             &[
-                InputBinding::Keyboard(KeyboardKey::KEY_SPACE),
+                InputBinding::Keyboard(Key::KEY_SPACE),
                 InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT),
             ]
         );
         assert_eq!(
             &b.get_bindings(InputAction::Action2)[..2],
             &[
-                InputBinding::Keyboard(KeyboardKey::KEY_ENTER),
+                InputBinding::Keyboard(Key::KEY_ENTER),
                 InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_RIGHT),
             ]
         );
@@ -609,15 +806,15 @@ mod tests {
         );
         assert_eq!(
             b.get_bindings(InputAction::Special),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_F12)]
+            &[InputBinding::Keyboard(Key::KEY_F12)]
         );
         assert_eq!(
             b.get_bindings(InputAction::ToggleDebug),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_F11)]
+            &[InputBinding::Keyboard(Key::KEY_F11)]
         );
         assert_eq!(
             b.get_bindings(InputAction::ToggleFullscreen),
-            &[InputBinding::Keyboard(KeyboardKey::KEY_F10)]
+            &[InputBinding::Keyboard(Key::KEY_F10)]
         );
     }
 
@@ -678,11 +875,11 @@ mod tests {
         let mut b = InputBindings::default();
         b.rebind(
             InputAction::Action1,
-            InputBinding::Keyboard(KeyboardKey::KEY_Z),
+            InputBinding::Keyboard(Key::KEY_Z),
         );
         let bl = b.get_bindings(InputAction::Action1);
         assert_eq!(bl.len(), 1);
-        assert_eq!(bl[0], InputBinding::Keyboard(KeyboardKey::KEY_Z));
+        assert_eq!(bl[0], InputBinding::Keyboard(Key::KEY_Z));
     }
 
     #[test]
@@ -690,18 +887,18 @@ mod tests {
         let mut b = InputBindings::default();
         b.add_binding(
             InputAction::Action1,
-            InputBinding::Keyboard(KeyboardKey::KEY_Z),
+            InputBinding::Keyboard(Key::KEY_Z),
         );
         let bl = b.get_bindings(InputAction::Action1);
         // default: Space + MouseLeft + pad0 face_down, plus new Z appended last
-        assert_eq!(bl[0], InputBinding::Keyboard(KeyboardKey::KEY_SPACE));
+        assert_eq!(bl[0], InputBinding::Keyboard(Key::KEY_SPACE));
         assert_eq!(
             bl[1],
             InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)
         );
         assert_eq!(
             *bl.last().unwrap(),
-            InputBinding::Keyboard(KeyboardKey::KEY_Z)
+            InputBinding::Keyboard(Key::KEY_Z)
         );
     }
 
@@ -742,26 +939,26 @@ mod tests {
 
     #[test]
     fn test_key_from_str_roundtrip() {
-        let pairs: &[(&str, KeyboardKey)] = &[
-            ("w", KeyboardKey::KEY_W),
-            ("a", KeyboardKey::KEY_A),
-            ("s", KeyboardKey::KEY_S),
-            ("d", KeyboardKey::KEY_D),
-            ("space", KeyboardKey::KEY_SPACE),
-            ("enter", KeyboardKey::KEY_ENTER),
-            ("escape", KeyboardKey::KEY_ESCAPE),
-            ("up", KeyboardKey::KEY_UP),
-            ("down", KeyboardKey::KEY_DOWN),
-            ("left", KeyboardKey::KEY_LEFT),
-            ("right", KeyboardKey::KEY_RIGHT),
-            ("f10", KeyboardKey::KEY_F10),
-            ("f11", KeyboardKey::KEY_F11),
-            ("f12", KeyboardKey::KEY_F12),
-            ("z", KeyboardKey::KEY_Z),
-            ("backspace", KeyboardKey::KEY_BACKSPACE),
-            ("tab", KeyboardKey::KEY_TAB),
-            ("lshift", KeyboardKey::KEY_LEFT_SHIFT),
-            ("lctrl", KeyboardKey::KEY_LEFT_CONTROL),
+        let pairs: &[(&str, Key)] = &[
+            ("w", Key::KEY_W),
+            ("a", Key::KEY_A),
+            ("s", Key::KEY_S),
+            ("d", Key::KEY_D),
+            ("space", Key::KEY_SPACE),
+            ("enter", Key::KEY_ENTER),
+            ("escape", Key::KEY_ESCAPE),
+            ("up", Key::KEY_UP),
+            ("down", Key::KEY_DOWN),
+            ("left", Key::KEY_LEFT),
+            ("right", Key::KEY_RIGHT),
+            ("f10", Key::KEY_F10),
+            ("f11", Key::KEY_F11),
+            ("f12", Key::KEY_F12),
+            ("z", Key::KEY_Z),
+            ("backspace", Key::KEY_BACKSPACE),
+            ("tab", Key::KEY_TAB),
+            ("lshift", Key::KEY_LEFT_SHIFT),
+            ("lctrl", Key::KEY_LEFT_CONTROL),
         ];
         for (name, key) in pairs {
             assert_eq!(
@@ -784,13 +981,13 @@ mod tests {
     #[test]
     fn test_key_from_str_aliases() {
         // "return" is an alias for "enter"
-        assert_eq!(key_from_str("return"), Some(KeyboardKey::KEY_ENTER));
+        assert_eq!(key_from_str("return"), Some(Key::KEY_ENTER));
         // "esc" is an alias for "escape"
-        assert_eq!(key_from_str("esc"), Some(KeyboardKey::KEY_ESCAPE));
+        assert_eq!(key_from_str("esc"), Some(Key::KEY_ESCAPE));
         // "shift" is an alias for "lshift"
-        assert_eq!(key_from_str("shift"), Some(KeyboardKey::KEY_LEFT_SHIFT));
+        assert_eq!(key_from_str("shift"), Some(Key::KEY_LEFT_SHIFT));
         // "ctrl" is an alias for "lctrl"
-        assert_eq!(key_from_str("ctrl"), Some(KeyboardKey::KEY_LEFT_CONTROL));
+        assert_eq!(key_from_str("ctrl"), Some(Key::KEY_LEFT_CONTROL));
     }
 
     #[test]
@@ -824,11 +1021,11 @@ mod tests {
     fn test_binding_from_str_keyboard() {
         assert_eq!(
             binding_from_str("space"),
-            Some(InputBinding::Keyboard(KeyboardKey::KEY_SPACE))
+            Some(InputBinding::Keyboard(Key::KEY_SPACE))
         );
         assert_eq!(
             binding_from_str("w"),
-            Some(InputBinding::Keyboard(KeyboardKey::KEY_W))
+            Some(InputBinding::Keyboard(Key::KEY_W))
         );
     }
 
@@ -857,7 +1054,7 @@ mod tests {
     #[test]
     fn test_binding_to_str_keyboard() {
         assert_eq!(
-            binding_to_str(InputBinding::Keyboard(KeyboardKey::KEY_SPACE)),
+            binding_to_str(InputBinding::Keyboard(Key::KEY_SPACE)),
             "space"
         );
     }
