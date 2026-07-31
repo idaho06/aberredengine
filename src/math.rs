@@ -9,14 +9,13 @@
 
 pub use glam::Vec2;
 
-/// Scalar linear interpolation.
-pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+/// Linear interpolation, generic over anything with the right operator set
+/// (covers both scalar `f32` and `Vec2`).
+pub fn lerp<T>(a: T, b: T, t: f32) -> T
+where
+    T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::ops::Mul<f32, Output = T>,
+{
     a + (b - a) * t
-}
-
-/// Component-wise linear interpolation.
-pub fn vec2_lerp(a: Vec2, b: Vec2, t: f32) -> Vec2 {
-    Vec2::new(lerp(a.x, b.x, t), lerp(a.y, b.y, t))
 }
 
 /// RGBA color, `u8` channels. Layout-identical to raylib's `Color` (see the
@@ -251,28 +250,28 @@ mod tests {
     }
 
     #[test]
-    fn vec2_lerp_zero_stays() {
+    fn lerp_vec2_zero_stays() {
         let a = Vec2::new(10.0, 20.0);
         let b = Vec2::new(50.0, 60.0);
-        let r = vec2_lerp(a, b, 0.0);
+        let r = lerp(a, b, 0.0);
         assert!(approx_eq(r.x, 10.0));
         assert!(approx_eq(r.y, 20.0));
     }
 
     #[test]
-    fn vec2_lerp_one_reaches_target() {
+    fn lerp_vec2_one_reaches_target() {
         let a = Vec2::new(10.0, 20.0);
         let b = Vec2::new(50.0, 60.0);
-        let r = vec2_lerp(a, b, 1.0);
+        let r = lerp(a, b, 1.0);
         assert!(approx_eq(r.x, 50.0));
         assert!(approx_eq(r.y, 60.0));
     }
 
     #[test]
-    fn vec2_lerp_half_is_midpoint() {
+    fn lerp_vec2_half_is_midpoint() {
         let a = Vec2::new(0.0, 0.0);
         let b = Vec2::new(100.0, 200.0);
-        let r = vec2_lerp(a, b, 0.5);
+        let r = lerp(a, b, 0.5);
         assert!(approx_eq(r.x, 50.0));
         assert!(approx_eq(r.y, 100.0));
     }
