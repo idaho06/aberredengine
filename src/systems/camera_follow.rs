@@ -62,7 +62,10 @@ pub fn camera_follow_system(
 
         FollowMode::Lerp => {
             let alpha = lerp_alpha(config.easing, config.lerp_speed, dt);
-            vec2_lerp(current, desired, alpha)
+            Vector2 {
+                x: crate::math::lerp(current.x, desired.x, alpha),
+                y: crate::math::lerp(current.y, desired.y, alpha),
+            }
         }
 
         FollowMode::SmoothDamp => {
@@ -130,7 +133,7 @@ pub fn camera_follow_system(
     // --- 6. Apply zoom ---
     if (camera.0.zoom - ct.zoom).abs() > 1e-5 {
         let zoom_alpha = lerp_alpha(EasingCurve::EaseOut, config.zoom_lerp_speed, dt);
-        camera.0.zoom = lerp_f32(camera.0.zoom, ct.zoom, zoom_alpha).max(f32::EPSILON);
+        camera.0.zoom = crate::math::lerp(camera.0.zoom, ct.zoom, zoom_alpha).max(f32::EPSILON);
     }
 }
 
@@ -161,25 +164,12 @@ fn lerp_alpha(easing: EasingCurve, speed: f32, dt: f32) -> f32 {
     }
 }
 
-/// Scalar linear interpolation.
-fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
-}
-
 /// Clamp a camera axis to bounds without ever inverting the clamp range.
 fn clamp_axis_to_bounds(target: f32, origin: f32, size: f32, half_viewport: f32) -> f32 {
     let midpoint = origin + size * 0.5;
     let min = (origin + half_viewport).min(midpoint);
     let max = (origin + size - half_viewport).max(midpoint);
     target.clamp(min, max)
-}
-
-/// Component-wise linear interpolation.
-fn vec2_lerp(a: Vector2, b: Vector2, t: f32) -> Vector2 {
-    Vector2 {
-        x: a.x + (b.x - a.x) * t,
-        y: a.y + (b.y - a.y) * t,
-    }
 }
 
 #[cfg(test)]
@@ -233,34 +223,5 @@ mod tests {
         // smoothstep(0.5) = 0.5
         let a = lerp_alpha(EasingCurve::EaseInOut, 5.0, 0.1);
         assert!(approx_eq(a, 0.5));
-    }
-
-    // --- vec2_lerp tests ---
-
-    #[test]
-    fn lerp_zero_stays() {
-        let a = Vector2 { x: 10.0, y: 20.0 };
-        let b = Vector2 { x: 50.0, y: 60.0 };
-        let r = vec2_lerp(a, b, 0.0);
-        assert!(approx_eq(r.x, 10.0));
-        assert!(approx_eq(r.y, 20.0));
-    }
-
-    #[test]
-    fn lerp_one_reaches_target() {
-        let a = Vector2 { x: 10.0, y: 20.0 };
-        let b = Vector2 { x: 50.0, y: 60.0 };
-        let r = vec2_lerp(a, b, 1.0);
-        assert!(approx_eq(r.x, 50.0));
-        assert!(approx_eq(r.y, 60.0));
-    }
-
-    #[test]
-    fn lerp_half_is_midpoint() {
-        let a = Vector2 { x: 0.0, y: 0.0 };
-        let b = Vector2 { x: 100.0, y: 200.0 };
-        let r = vec2_lerp(a, b, 0.5);
-        assert!(approx_eq(r.x, 50.0));
-        assert!(approx_eq(r.y, 100.0));
     }
 }

@@ -17,6 +17,7 @@ pub mod events;
 pub mod lua_plugin;
 #[cfg(feature = "lua")]
 pub mod luarc_generator;
+pub mod math;
 pub(crate) mod pacing;
 pub mod protocol;
 pub mod resources;
