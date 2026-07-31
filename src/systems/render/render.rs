@@ -839,7 +839,7 @@ pub fn render_system(
                 .and_then(|desc| desc.world_draw_callback)
             {
                 cb(
-                    &mut d2,
+                    &mut crate::systems::render::math::RaylibWorldDraw(&mut d2),
                     &res.camera.0,
                     &res.screensize,
                     &res.app_state.0,

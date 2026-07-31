@@ -9,13 +9,61 @@
 //! NOTE: once the workspace split (`docs/plans/workspaces-implementation.md`)
 //! makes `aberred-render` and `raylib` genuinely separate crates, `aberred-render`
 //! will own neither `crate::math::Color`/`Rect` nor `raylib::prelude::Color`/
-//! `Rectangle`, and these `impl From` blocks will hit Rust's orphan rule. See
-//! the parent plan's §5.2 finding (the `WorldDraw` blanket-impl case) for the
-//! same problem; the fix there (a newtype wrapper) applies here too.
+//! `Rectangle`, and these `impl From` blocks will hit Rust's orphan rule.
+//! `RaylibWorldDraw` below already sidesteps the equivalent problem for
+//! `WorldDraw`/`RaylibDraw` via a newtype instead of a blanket impl — the
+//! same fix would apply here too if these `impl From` blocks ever need it.
 
 use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::math::{Color, Rect};
+use crate::systems::scene_dispatch::WorldDraw;
+
+/// Adapts any raylib draw handle to the core-owned [`WorldDraw`] trait.
+///
+/// A newtype instead of a blanket `impl<T: RaylibDraw> WorldDraw for T` —
+/// once core/render split into separate crates, `aberred-render` owns
+/// neither `WorldDraw` (core) nor `RaylibDraw` (raylib), so a blanket impl
+/// would hit Rust's orphan rule. This newtype is owned by render, so the
+/// impl is legal regardless of crate split.
+pub(super) struct RaylibWorldDraw<'a, T: raylib::prelude::RaylibDraw>(pub &'a mut T);
+
+impl<T: raylib::prelude::RaylibDraw> WorldDraw for RaylibWorldDraw<'_, T> {
+    fn draw_line_v(&mut self, start: raylib::prelude::Vector2, end: raylib::prelude::Vector2, color: Color) {
+        let color: raylib::prelude::Color = color.into();
+        raylib::prelude::RaylibDraw::draw_line_v(self.0, start, end, color);
+    }
+
+    fn draw_line_ex(
+        &mut self,
+        start_pos: raylib::prelude::Vector2,
+        end_pos: raylib::prelude::Vector2,
+        thick: f32,
+        color: Color,
+    ) {
+        let color: raylib::prelude::Color = color.into();
+        raylib::prelude::RaylibDraw::draw_line_ex(self.0, start_pos, end_pos, thick, color);
+    }
+
+    fn draw_line_dashed(
+        &mut self,
+        start_pos: raylib::prelude::Vector2,
+        end_pos: raylib::prelude::Vector2,
+        dash_size: i32,
+        space_size: i32,
+        color: Color,
+    ) {
+        let color: raylib::prelude::Color = color.into();
+        raylib::prelude::RaylibDraw::draw_line_dashed(
+            self.0, start_pos, end_pos, dash_size, space_size, color,
+        );
+    }
+
+    fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
+        let color: raylib::prelude::Color = color.into();
+        raylib::prelude::RaylibDraw::draw_line(self.0, x1, y1, x2, y2, color);
+    }
+}
 
 /// Resolves a sprite's color for a draw call: an optional [`Tint`] *replaces*
 /// `Color::WHITE` (see [`Tint`]'s own doc comment), converted to raylib's

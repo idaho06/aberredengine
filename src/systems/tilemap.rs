@@ -3,6 +3,7 @@
 //! These functions are always compiled (no feature gates) so Rust-only downstream
 //! crates can use them without enabling the `lua` feature.
 
+use std::io::Read;
 use std::sync::Arc;
 
 use bevy_ecs::hierarchy::ChildOf;
@@ -51,6 +52,35 @@ fn path_stem(path: &str) -> &str {
     path.split('/').next_back().unwrap_or(path)
 }
 
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+
+/// Reads a PNG's width/height straight out of its `IHDR` chunk, without
+/// decoding any pixel data. A PNG always starts with an 8-byte signature,
+/// then its first chunk — by spec, always `IHDR` — as a 4-byte length, a
+/// 4-byte type tag, then the chunk body: 4-byte big-endian width, 4-byte
+/// big-endian height. Only the first 24 bytes are read.
+fn read_png_dimensions(mut reader: impl Read, path: &str) -> Result<(i32, i32), String> {
+    let mut header = [0u8; 24];
+    reader
+        .read_exact(&mut header)
+        .map_err(|err| format!("Failed to read tilemap texture '{}': {err}", path))?;
+
+    if header[0..8] != PNG_SIGNATURE {
+        return Err(format!("'{}' is not a valid PNG file", path));
+    }
+    if &header[12..16] != b"IHDR" {
+        return Err(format!("'{}' has no IHDR chunk", path));
+    }
+
+    let read_dim = |range: std::ops::Range<usize>, label: &str| -> Result<i32, String> {
+        let raw = u32::from_be_bytes(header[range].try_into().unwrap());
+        i32::try_from(raw).map_err(|_| format!("'{}' has an unrepresentable {label}: {raw}", path))
+    };
+    let width = read_dim(16..20, "width")?;
+    let height = read_dim(20..24, "height")?;
+    Ok((width, height))
+}
+
 /// Load tilemap JSON and read atlas PNG dimensions, CPU-only (no GL context
 /// required). `path` is a directory; the last path segment is
 /// used as the stem for `<stem>.png` (texture) and `<stem>.txt` (JSON
@@ -62,16 +92,9 @@ pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), Stri
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
 
-    // Full CPU pixel decode just to read width/height — raylib has no
-    // header-only image reader. `process_render_asset_cmds`'s
-    // `RenderAssetCmd::TilemapTexture` handler decodes the same PNG a
-    // second time to actually upload it, so a tilemap spawn now decodes
-    // its atlas twice. Accepted: this is one-time, scene-load-time cost
-    // (not a hot path), and atlases are small; revisit with a header-only
-    // reader only if a large atlas makes this measurable.
-    let image = raylib::prelude::Image::load_image(&png_path)
+    let file = std::fs::File::open(&png_path)
         .map_err(|err| format!("Failed to read tilemap texture '{}': {err}", png_path))?;
-    let (tex_w, tex_h) = (image.width(), image.height());
+    let (tex_w, tex_h) = read_png_dimensions(file, &png_path)?;
 
     let json_string = std::fs::read_to_string(&json_path)
         .map_err(|err| format!("Failed to load tilemap JSON '{}': {err}", json_path))?;
@@ -236,5 +259,30 @@ mod tests {
     fn load_tilemap_data_reports_error_for_missing_directory() {
         let result = load_tilemap_data("assets/tilemaps/does_not_exist");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn read_png_dimensions_reads_valid_header() {
+        let file = std::fs::File::open(
+            "assets/tilemaps/sidescroller_test01/sidescroller_test01.png",
+        )
+        .expect("fixture PNG should exist");
+        let (w, h) = read_png_dimensions(file, "fixture.png").expect("valid PNG header");
+        assert_eq!((w, h), (192, 120));
+    }
+
+    #[test]
+    fn read_png_dimensions_reports_error_for_truncated_file() {
+        let truncated: &[u8] = &PNG_SIGNATURE;
+        let result = read_png_dimensions(truncated, "truncated.png");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn read_png_dimensions_reports_error_for_non_png_file() {
+        let not_png = [0u8; 24];
+        let result = read_png_dimensions(&not_png[..], "not_a.png");
+        let err = result.expect_err("non-PNG bytes should be rejected");
+        assert!(err.contains("not a valid PNG"), "unexpected error: {err}");
     }
 }
