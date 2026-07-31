@@ -22,7 +22,9 @@
 //! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::{Rectangle, Vector2};
+use raylib::prelude::Vector2;
+
+use crate::math::Rect;
 
 /// Axis-aligned rectangular collider in local space.
 ///
@@ -80,23 +82,16 @@ impl BoxCollider {
         (min.x, min.y, max.x - min.x, max.y - min.y)
     }
 
-    /// AABB vs AABB overlap test against another BoxCollider at a different entity position.
-    pub fn overlaps(&self, position: Vector2, other: &Self, other_position: Vector2) -> bool {
-        let (min_a, max_a) = self.aabb(position);
-        let (min_b, max_b) = other.aabb(other_position);
-        min_a.x < max_b.x && max_a.x > min_b.x && min_a.y < max_b.y && max_a.y > min_b.y
-    }
-
     /// Point containment in world space.
     pub fn contains_point(&self, position: Vector2, point: Vector2) -> bool {
         let (min, max) = self.aabb(position);
         point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
     }
 
-    /// Get the collider as a Raylib Rectangle given the entity position.
-    pub fn as_rectangle(&self, position: Vector2) -> Rectangle {
+    /// Get the collider as a Rect given the entity position.
+    pub fn as_rectangle(&self, position: Vector2) -> Rect {
         let (x, y, w, h) = self.get_aabb(position);
-        Rectangle::new(x, y, w, h)
+        Rect::new(x, y, w, h)
     }
 }
 
@@ -229,58 +224,6 @@ mod tests {
         assert!(approx_eq(y, 10.0));
         assert!(approx_eq(w, 20.0));
         assert!(approx_eq(h, 30.0));
-    }
-
-    // ==================== OVERLAPS TESTS ====================
-
-    #[test]
-    fn test_overlaps_true() {
-        let col_a = BoxCollider::new(10.0, 10.0);
-        let col_b = BoxCollider::new(10.0, 10.0);
-        let pos_a = Vector2::new(0.0, 0.0);
-        let pos_b = Vector2::new(5.0, 5.0); // overlapping
-        assert!(col_a.overlaps(pos_a, &col_b, pos_b));
-    }
-
-    #[test]
-    fn test_overlaps_false() {
-        let col_a = BoxCollider::new(10.0, 10.0);
-        let col_b = BoxCollider::new(10.0, 10.0);
-        let pos_a = Vector2::new(0.0, 0.0);
-        let pos_b = Vector2::new(20.0, 0.0); // no overlap
-        assert!(!col_a.overlaps(pos_a, &col_b, pos_b));
-    }
-
-    #[test]
-    fn test_overlaps_edge_touching() {
-        // Edge-to-edge touching is NOT an overlap (strict inequality)
-        let col_a = BoxCollider::new(10.0, 10.0);
-        let col_b = BoxCollider::new(10.0, 10.0);
-        let pos_a = Vector2::new(0.0, 0.0);
-        let pos_b = Vector2::new(10.0, 0.0); // exactly touching
-        assert!(!col_a.overlaps(pos_a, &col_b, pos_b));
-    }
-
-    #[test]
-    fn test_overlaps_contained() {
-        let col_a = BoxCollider::new(20.0, 20.0);
-        let col_b = BoxCollider::new(5.0, 5.0);
-        let pos_a = Vector2::new(0.0, 0.0);
-        let pos_b = Vector2::new(5.0, 5.0); // b inside a
-        assert!(col_a.overlaps(pos_a, &col_b, pos_b));
-    }
-
-    #[test]
-    fn test_overlaps_symmetric() {
-        let col_a = BoxCollider::new(10.0, 10.0);
-        let col_b = BoxCollider::new(10.0, 10.0);
-        let pos_a = Vector2::new(0.0, 0.0);
-        let pos_b = Vector2::new(5.0, 5.0);
-        // a overlaps b == b overlaps a
-        assert_eq!(
-            col_a.overlaps(pos_a, &col_b, pos_b),
-            col_b.overlaps(pos_b, &col_a, pos_a)
-        );
     }
 
     // ==================== CONTAINS_POINT TESTS ====================

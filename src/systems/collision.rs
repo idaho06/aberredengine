@@ -15,13 +15,13 @@
 //! - [`crate::components::collision`] – collision types and side detection
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Rectangle;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::collision::{BoxSides, CollisionRule, get_colliding_sides};
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
+use crate::math::Rect;
 use smallvec::SmallVec;
 
 /// Resolve the world position of an entity.
@@ -49,7 +49,7 @@ pub fn resolve_collider_rect(
     global_transforms: &Query<&GlobalTransform2D>,
     box_colliders: &Query<&BoxCollider>,
     entity: Entity,
-) -> Option<Rectangle> {
+) -> Option<Rect> {
     let pos = resolve_world_pos(positions, global_transforms, entity)?;
     box_colliders.get(entity).ok().map(|c| c.as_rectangle(pos))
 }
@@ -58,7 +58,7 @@ pub fn resolve_collider_rect(
 ///
 /// Returns `(BoxSides, BoxSides)` — both empty if either rectangle is `None`
 /// or if there is no overlap.
-pub fn compute_sides(rect_a: Option<Rectangle>, rect_b: Option<Rectangle>) -> (BoxSides, BoxSides) {
+pub fn compute_sides(rect_a: Option<Rect>, rect_b: Option<Rect>) -> (BoxSides, BoxSides) {
     match (rect_a, rect_b) {
         (Some(ra), Some(rb)) => get_colliding_sides(&ra, &rb).unwrap_or_default(),
         _ => Default::default(),
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn compute_sides_one_none() {
-        let rect = Rectangle {
+        let rect = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
@@ -190,13 +190,13 @@ mod tests {
 
     #[test]
     fn compute_sides_no_overlap() {
-        let ra = Rectangle {
+        let ra = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rb = Rectangle {
+        let rb = Rect {
             x: 50.0,
             y: 50.0,
             width: 10.0,
@@ -210,13 +210,13 @@ mod tests {
     #[test]
     fn compute_sides_overlap() {
         use crate::components::collision::BoxSide;
-        let ra = Rectangle {
+        let ra = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rb = Rectangle {
+        let rb = Rect {
             x: 8.0,
             y: 0.0,
             width: 10.0,

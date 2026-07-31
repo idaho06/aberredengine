@@ -4,6 +4,7 @@
 //! game's render resolution. Updated each frame to handle window resizing.
 
 use bevy_ecs::prelude::Resource;
+use crate::math::Rect;
 use raylib::prelude::*;
 
 /// Current window size in pixels.
@@ -32,7 +33,7 @@ impl WindowSize {
     /// - Preserves the game's aspect ratio
     /// - Fits within the window bounds
     /// - Centers the content (letterbox/pillarbox as needed)
-    pub fn calculate_letterbox(&self, game_width: u32, game_height: u32) -> Rectangle {
+    pub fn calculate_letterbox(&self, game_width: u32, game_height: u32) -> Rect {
         let game_w = game_width as f32;
         let game_h = game_height as f32;
         let window_w = self.w as f32;
@@ -45,7 +46,7 @@ impl WindowSize {
             // Window is wider than game - pillarbox (black bars on sides)
             let scale = window_h / game_h;
             let scaled_w = game_w * scale;
-            Rectangle {
+            Rect {
                 x: (window_w - scaled_w) / 2.0,
                 y: 0.0,
                 width: scaled_w,
@@ -55,7 +56,7 @@ impl WindowSize {
             // Window is taller than game - letterbox (black bars top/bottom)
             let scale = window_w / game_w;
             let scaled_h = game_h * scale;
-            Rectangle {
+            Rect {
                 x: 0.0,
                 y: (window_h - scaled_h) / 2.0,
                 width: window_w,

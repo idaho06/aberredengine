@@ -7,10 +7,11 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
-use raylib::prelude::{Camera2D, Color, Rectangle, Vector2};
+use raylib::prelude::{Camera2D, Vector2};
 
 use crate::components::phase::Phase;
 use crate::components::shadow::Shadow;
+use crate::math::{Color, Rect};
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
@@ -270,7 +271,7 @@ fn build_nine_patch(
 ) -> GuiNinePatch {
     GuiNinePatch {
         tex_key: Arc::from(tex_key),
-        source: Rectangle::new(source_x, source_y, source_w, source_h),
+        source: Rect::new(source_x, source_y, source_w, source_h),
         left,
         top,
         right,
@@ -545,7 +546,7 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
             config.offset = Vector2 { x, y };
         }
         CameraFollowCmd::SetBounds { x, y, w, h } => {
-            config.bounds = Some(raylib::prelude::Rectangle {
+            config.bounds = Some(Rect {
                 x,
                 y,
                 width: w,
@@ -633,12 +634,13 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::prelude::{MessageReader, MessageWriter, World};
     use bevy_ecs::system::SystemState;
-    use raylib::prelude::{Color, Vector2};
+    use raylib::prelude::Vector2;
 
     use super::{
         process_animation_command, process_audio_command, process_render_command,
         process_signal_command, translate_asset_command,
     };
+    use crate::math::Color;
     use crate::protocol::audio::AudioCmd;
     use crate::protocol::render_assets::RenderAssetCmd;
     use crate::resources::animationstore::AnimationStore;

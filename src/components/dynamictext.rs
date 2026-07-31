@@ -42,11 +42,13 @@ use std::sync::Arc;
 use bevy_ecs::prelude::Component;
 use raylib::math::Vector2;
 
+use crate::math::Color;
+
 /// Dynamic text component for rendering variable strings in the world or screen.
 ///
 /// Unlike static sprite-based text, this component's content can be modified
 /// at runtime via [`set_content`](DynamicText::set_content).
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct DynamicText {
     /// The text content to render.
     pub text: Arc<str>,
@@ -55,30 +57,14 @@ pub struct DynamicText {
     /// Font size in world units.
     pub font_size: f32,
     /// Color of the text.
-    pub color: raylib::prelude::Color,
+    pub color: Color,
     /// Original configured text. Set on creation/update; never modified at runtime.
     /// Used by the editor to save the correct value regardless of runtime mutations.
     pub initial_text: Arc<str>,
     /// Original configured color. Set on creation/update; never modified at runtime.
-    pub initial_color: raylib::prelude::Color,
+    pub initial_color: Color,
     /// Size of the text bounding box
     size: Vector2,
-}
-
-/// Manual, not derived: `color`/`initial_color` are `raylib::Color`, a
-/// foreign type with no `PartialEq` impl (and the orphan rule blocks adding
-/// one here), so `#[derive(PartialEq)]` can't be used on this struct.
-impl PartialEq for DynamicText {
-    fn eq(&self, other: &Self) -> bool {
-        let color = |c: raylib::prelude::Color| (c.r, c.g, c.b, c.a);
-        self.text == other.text
-            && self.font == other.font
-            && self.font_size == other.font_size
-            && color(self.color) == color(other.color)
-            && self.initial_text == other.initial_text
-            && color(self.initial_color) == color(other.initial_color)
-            && self.size == other.size
-    }
 }
 
 impl DynamicText {
@@ -87,12 +73,7 @@ impl DynamicText {
     /// The `size` field is initialized to zero and will be calculated
     /// by [`dynamictext_size_system`](crate::systems::dynamictext_size_system)
     /// on the first frame.
-    pub fn new(
-        content: impl Into<String>,
-        font: impl Into<String>,
-        font_size: f32,
-        color: raylib::prelude::Color,
-    ) -> Self {
+    pub fn new(content: impl Into<String>, font: impl Into<String>, font_size: f32, color: Color) -> Self {
         let text: Arc<str> = Arc::from(content.into());
         Self {
             initial_text: Arc::clone(&text),
@@ -131,7 +112,6 @@ impl DynamicText {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use raylib::prelude::Color;
 
     #[test]
     fn test_new_stores_fields() {

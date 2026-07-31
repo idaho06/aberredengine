@@ -5,11 +5,12 @@
 //! offset, and bounds clamping.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::{Camera2D, Rectangle, Vector2};
+use raylib::prelude::{Camera2D, Vector2};
 
 use aberredengine::components::cameratarget::CameraTarget;
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
+use aberredengine::math::Rect;
 use aberredengine::resources::camera2d::Camera2DRes;
 use aberredengine::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberredengine::resources::screensize::ScreenSize;
@@ -477,7 +478,7 @@ fn bounds_clamp_prevents_camera_leaving_world() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 0.0,
             y: 0.0,
             width: 1000.0,
@@ -503,7 +504,7 @@ fn bounds_clamp_far_edge() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 0.0,
             y: 0.0,
             width: 1000.0,
@@ -535,7 +536,7 @@ fn bounds_clamp_respects_zoom() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 0.0,
             y: 0.0,
             width: 500.0,
@@ -564,7 +565,7 @@ fn bounds_smaller_than_viewport_centers_camera() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 10.0,
             y: 20.0,
             width: 100.0,
@@ -587,7 +588,7 @@ fn bounds_smaller_than_viewport_only_on_x_centers_that_axis() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 10.0,
             y: 20.0,
             width: 100.0,
@@ -610,7 +611,7 @@ fn zero_width_bounds_center_x() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 25.0,
             y: 20.0,
             width: 0.0,
@@ -643,7 +644,7 @@ fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.bounds = Some(Rectangle {
+        cfg.bounds = Some(Rect {
             x: 50.0,
             y: 70.0,
             width: 500.0,

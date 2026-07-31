@@ -33,9 +33,9 @@
 use bevy_ecs::prelude::*;
 use configparser::ini::Ini;
 use log::{debug, info, warn};
-use raylib::prelude::Color;
 use std::path::PathBuf;
 
+use crate::math::Color;
 use crate::resources::texturefilter::TextureFilter;
 
 /// Default safe values for startup

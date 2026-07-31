@@ -678,7 +678,7 @@ mod mirror_tests {
         with_tint.tint = Some(Tint::default());
         with_tint.shadow = Some(Shadow {
             offset: Vector2::new(1.0, 1.0),
-            color: raylib::prelude::Color::BLACK,
+            color: crate::math::Color::BLACK,
         });
         reconcile_map_sprites(&mut world, &[with_tint]);
 
@@ -758,7 +758,7 @@ mod mirror_tests {
     fn make_map_text_entry(entity: Entity, z_index: f32) -> MapTextEntry {
         MapTextEntry {
             entity,
-            text: DynamicText::new("hi", "font", 16.0, raylib::prelude::Color::WHITE),
+            text: DynamicText::new("hi", "font", 16.0, crate::math::Color::WHITE),
             position: MapPosition::from_vec(Vector2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             shader: None,
@@ -927,7 +927,7 @@ mod mirror_tests {
         let mut with_shadow = make_screen_sprite_entry(sim_entity, 1.0);
         with_shadow.shadow = Some(Shadow {
             offset: Vector2::new(1.0, 1.0),
-            color: raylib::prelude::Color::BLACK,
+            color: crate::math::Color::BLACK,
         });
         reconcile_screen_sprites(&mut world, &[with_shadow]);
         let mirror_entity = *world
@@ -984,7 +984,7 @@ mod mirror_tests {
     fn make_screen_text_entry(entity: Entity, z_index: f32) -> ScreenTextEntry {
         ScreenTextEntry {
             entity,
-            text: DynamicText::new("hi", "font", 16.0, raylib::prelude::Color::WHITE),
+            text: DynamicText::new("hi", "font", 16.0, crate::math::Color::WHITE),
             position: ScreenPosition::new(1.0, 2.0),
             z_index: ZIndex(z_index),
             tint: None,

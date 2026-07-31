@@ -1,5 +1,6 @@
 use raylib::prelude::*;
 
+use super::math::shadow_color;
 use super::render::{ScreenPanelBufferItem, ScreenProgressBarBufferItem};
 use crate::components::shadow::Shadow;
 use crate::resources::guitheme::GuiNinePatch;
@@ -16,7 +17,7 @@ pub(super) fn draw_screen_panel_item(
             d,
             &item.panel,
             shadow_offset_rect(item.dest, shadow),
-            shadow.color,
+            shadow_color(shadow),
             textures,
         );
     }
@@ -35,7 +36,7 @@ pub(super) fn draw_screen_progress_bar_item(
     if let Some(shadow) = item.maybe_shadow {
         let shadow_dest = shadow_offset_rect(item.track_dest, shadow);
         let shadow_patch = item.track.as_ref().unwrap_or(&item.fill);
-        draw_nine_patch_tinted(d, shadow_patch, shadow_dest, shadow.color, textures);
+        draw_nine_patch_tinted(d, shadow_patch, shadow_dest, shadow_color(shadow), textures);
     }
     if let Some(track) = &item.track {
         draw_nine_patch(d, track, item.track_dest, textures);
@@ -73,7 +74,7 @@ fn draw_nine_patch_tinted(
         d.draw_texture_n_patch(
             tex,
             NPatchInfo {
-                source: patch.source,
+                source: patch.source.into(),
                 left: patch.left,
                 top: patch.top,
                 right: patch.right,

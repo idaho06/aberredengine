@@ -221,6 +221,21 @@ impl Rect {
     pub fn contains_point(&self, p: Vec2) -> bool {
         p.x >= self.x && p.x <= self.x + self.width && p.y >= self.y && p.y <= self.y + self.height
     }
+
+    /// Overlap rectangle of two rects, or `None` if they don't overlap.
+    /// Replaces raylib's `Rectangle::get_collision_rec`. Computes each edge
+    /// once rather than deferring to `overlaps` and redoing the same
+    /// min/max arithmetic — this sits on the collision-detection hot path.
+    pub fn intersection(&self, other: &Rect) -> Option<Rect> {
+        let x = self.x.max(other.x);
+        let y = self.y.max(other.y);
+        let x2 = (self.x + self.width).min(other.x + other.width);
+        let y2 = (self.y + self.height).min(other.y + other.height);
+        if x2 <= x || y2 <= y {
+            return None;
+        }
+        Some(Rect::new(x, y, x2 - x, y2 - y))
+    }
 }
 
 #[cfg(test)]
@@ -318,5 +333,27 @@ mod tests {
         let r = Rect::new(0.0, 0.0, 10.0, 10.0);
         assert!(r.contains_point(Vec2::new(5.0, 5.0)));
         assert!(!r.contains_point(Vec2::new(15.0, 5.0)));
+    }
+
+    #[test]
+    fn rect_intersection_no_overlap_is_none() {
+        // Mirrors sola-raylib 6.2.0's `get_collision_rec` doctest
+        // (core/collision.rs:22-29).
+        let r1 = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let r2 = Rect::new(20.0, 20.0, 10.0, 10.0);
+        assert_eq!(r1.intersection(&r2), None);
+    }
+
+    #[test]
+    fn rect_intersection_self_is_self() {
+        let r1 = Rect::new(0.0, 0.0, 10.0, 10.0);
+        assert_eq!(r1.intersection(&r1), Some(r1));
+    }
+
+    #[test]
+    fn rect_intersection_partial_overlap() {
+        let a = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let b = Rect::new(5.0, 5.0, 10.0, 10.0);
+        assert_eq!(a.intersection(&b), Some(Rect::new(5.0, 5.0, 5.0, 5.0)));
     }
 }

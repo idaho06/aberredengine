@@ -17,17 +17,18 @@
 //! they're the topmost hit.
 
 use bevy_ecs::prelude::*;
-use raylib::math::{Rectangle, Vector2};
+use raylib::math::Vector2;
 
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
 use crate::components::screenposition::ScreenPosition;
 use crate::components::zindex::ZIndex;
 use crate::events::gui_interactable::GuiInteractableClickEvent;
+use crate::math::{Rect, Vec2};
 use crate::resources::guiinputstate::GuiInputState;
 use crate::resources::input::InputState;
 
 fn contains_point(pos: Vector2, size: Vector2, point: Vector2) -> bool {
-    Rectangle::new(pos.x, pos.y, size.x, size.y).check_collision_point_rec(point)
+    Rect::new(pos.x, pos.y, size.x, size.y).contains_point(Vec2::new(point.x, point.y))
 }
 
 /// Resolves hover/press/click state for every `GuiInteractable` with a

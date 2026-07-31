@@ -12,10 +12,10 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::{Color, Rectangle};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::components::shadow::Shadow;
+use crate::math::{Color, Rect};
 
 /// Default theme key used by widgets that never call `:with_gui_theme_key`.
 pub const DEFAULT_GUI_THEME_KEY: &str = "default";
@@ -25,7 +25,7 @@ pub const DEFAULT_GUI_THEME_KEY: &str = "default";
 #[derive(Clone, Debug, Default)]
 pub struct GuiNinePatch {
     pub tex_key: Arc<str>,
-    pub source: Rectangle,
+    pub source: Rect,
     pub left: i32,
     pub top: i32,
     pub right: i32,
@@ -214,7 +214,7 @@ mod tests {
         let theme = GuiTheme {
             panel: GuiNinePatch {
                 tex_key: Arc::from("gui_panel"),
-                source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+                source: Rect::new(0.0, 0.0, 64.0, 64.0),
                 left: 6,
                 top: 6,
                 right: 6,

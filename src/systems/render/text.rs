@@ -1,5 +1,6 @@
 use raylib::prelude::*;
 
+use super::math::{resolve_text_tint, shadow_color};
 use super::render::ScreenTextBufferItem;
 use crate::resources::render::fontstore::FontStore;
 
@@ -12,10 +13,7 @@ pub(super) fn draw_screen_text_item(
 ) {
     let pos = item.pos;
     if let Some(font) = fonts.get(&item.font) {
-        let final_color = item
-            .maybe_tint
-            .map(|t| t.multiply(item.color))
-            .unwrap_or(item.color);
+        let final_color = resolve_text_tint(item.maybe_tint, item.color);
         if let Some(shadow) = item.maybe_shadow {
             let shadow_pos = Vector2 {
                 x: pos.pos.x + shadow.offset.x,
@@ -27,7 +25,7 @@ pub(super) fn draw_screen_text_item(
                 shadow_pos,
                 item.font_size,
                 1.0,
-                shadow.color,
+                shadow_color(shadow),
             );
         }
         d.draw_text_ex(font, &item.text, pos.pos, item.font_size, 1.0, final_color);

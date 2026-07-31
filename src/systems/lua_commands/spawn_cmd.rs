@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::{Color, Vector2};
+use raylib::prelude::Vector2;
 
 use crate::components::animation::{Animation, AnimationController};
 use crate::components::boxcollider::BoxCollider;
@@ -16,6 +16,7 @@ use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::group::Group;
 use crate::components::guioffset::GuiOffset;
+use crate::math::Color;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};

@@ -13,7 +13,29 @@
 //! the parent plan's §5.2 finding (the `WorldDraw` blanket-impl case) for the
 //! same problem; the fix there (a newtype wrapper) applies here too.
 
+use crate::components::shadow::Shadow;
+use crate::components::tint::Tint;
 use crate::math::{Color, Rect};
+
+/// Resolves a sprite's color for a draw call: an optional [`Tint`] *replaces*
+/// `Color::WHITE` (see [`Tint`]'s own doc comment), converted to raylib's
+/// `Color` at this one call site instead of at every sprite draw path.
+pub(super) fn resolve_sprite_tint(maybe_tint: Option<Tint>) -> raylib::prelude::Color {
+    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE).into()
+}
+
+/// Resolves a text item's color for a draw call: an optional [`Tint`]
+/// *multiplies* with the base color (see [`Tint`]'s own doc comment),
+/// converted to raylib's `Color` at this one call site instead of at every
+/// text draw path.
+pub(super) fn resolve_text_tint(maybe_tint: Option<Tint>, base: Color) -> raylib::prelude::Color {
+    maybe_tint.map(|t| t.multiply(base)).unwrap_or(base).into()
+}
+
+/// Resolves a [`Shadow`]'s color for a draw call.
+pub(super) fn shadow_color(shadow: Shadow) -> raylib::prelude::Color {
+    shadow.color.into()
+}
 
 impl From<Color> for raylib::prelude::Color {
     fn from(c: Color) -> Self {

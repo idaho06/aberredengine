@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::Component;
 use raylib::math::Vector2;
-use raylib::prelude::Color;
+
+use crate::math::Color;
 
 /// Drop shadow component for rendering sprites and text.
 ///
@@ -10,22 +11,12 @@ use raylib::prelude::Color;
 /// always uses `color` directly and bypasses entity shaders.
 ///
 /// Works for both world-space and screen-space positions.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct Shadow {
     /// World/screen-space displacement of the shadow from the entity position.
     pub offset: Vector2,
     /// Shadow color (typically semi-transparent black).
     pub color: Color,
-}
-
-/// Manual, not derived: `Color` is a foreign type with no `PartialEq` impl
-/// (and the orphan rule blocks adding one here), so `#[derive(PartialEq)]`
-/// can't be used on this struct.
-impl PartialEq for Shadow {
-    fn eq(&self, other: &Self) -> bool {
-        let c = |c: Color| (c.r, c.g, c.b, c.a);
-        self.offset == other.offset && c(self.color) == c(other.color)
-    }
 }
 
 impl Shadow {

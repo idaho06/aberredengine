@@ -63,6 +63,7 @@ use super::geometry::{
     draw_rotated_rect_lines, resolve_world_transform,
 };
 use super::gui_panel::{self, draw_screen_panel_item};
+use super::math::{resolve_sprite_tint, resolve_text_tint, shadow_color};
 use super::postprocess::{
     apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
@@ -127,7 +128,7 @@ pub(super) struct ScreenTextBufferItem {
     pub(super) text: Arc<str>,
     pub(super) font: Arc<str>,
     pub(super) font_size: f32,
-    pub(super) color: Color,
+    pub(super) color: crate::math::Color,
     pub(super) size: Vector2,
     pub(super) z_index: ZIndex,
     pub(super) pos: ScreenPosition,
@@ -359,7 +360,8 @@ pub fn render_system(
     {
         crate::tracy::tracy_span!("render/to_texture");
         let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
-        d.clear_background(res.game_config.0.background_color);
+        let bg_color: Color = res.game_config.0.background_color.into();
+        d.clear_background(bg_color);
 
         {
             // Draw in world coordinates using Camera2D.
@@ -470,7 +472,7 @@ pub fn render_system(
                         let origin_scaled = geom.origin;
                         let rotation = geom.rotation;
 
-                        let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+                        let tint_color = resolve_sprite_tint(item.maybe_tint);
 
                         if let Some(shadow) = item.maybe_shadow {
                             let shadow_dest = Rectangle {
@@ -484,7 +486,7 @@ pub fn render_system(
                                 shadow_dest,
                                 origin_scaled,
                                 rotation,
-                                shadow.color,
+                                shadow_color(shadow),
                             );
                         }
 
@@ -644,10 +646,7 @@ pub fn render_system(
                 crate::tracy::tracy_span!("render/draw_world_texts");
                 for item in text_buffer.iter() {
                     if let Some(font) = fonts.get(&item.text.font) {
-                        let final_color = item
-                            .maybe_tint
-                            .map(|t| t.multiply(item.text.color))
-                            .unwrap_or(item.text.color);
+                        let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
 
                         if let Some(shadow) = item.maybe_shadow {
                             let shadow_pos = Vector2 {
@@ -660,7 +659,7 @@ pub fn render_system(
                                 shadow_pos,
                                 item.text.font_size,
                                 1.0,
-                                shadow.color,
+                                shadow_color(shadow),
                             );
                         }
 
@@ -1432,7 +1431,7 @@ mod screen_draw_buffer_tests {
             text: Arc::from("hi"),
             font: Arc::from("font"),
             font_size: 12.0,
-            color: Color::WHITE,
+            color: crate::math::Color::WHITE,
             size: Vector2::zero(),
             z_index: ZIndex(z),
             pos: ScreenPosition::new(0.0, 0.0),

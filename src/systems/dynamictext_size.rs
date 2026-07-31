@@ -48,8 +48,8 @@ mod tests {
     use bevy_ecs::system::RunSystemOnce;
 
     use crate::components::dynamictext::DynamicText;
+    use crate::math::Color;
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
-    use raylib::prelude::Color;
 
     fn new_test_world() -> World {
         let mut world = World::new();

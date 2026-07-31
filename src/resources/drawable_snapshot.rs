@@ -679,8 +679,9 @@ mod tests {
     use super::*;
     use crate::components::guiinteractable::GuiWidgetState;
     use crate::components::guiprogressbar::ProgressBarDirection;
+    use crate::math::Color;
     use bevy_ecs::system::RunSystemOnce;
-    use raylib::prelude::{Color, Vector2};
+    use raylib::prelude::Vector2;
     use std::sync::Arc;
 
     fn new_test_world() -> World {

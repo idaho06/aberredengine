@@ -1,5 +1,6 @@
 use raylib::prelude::*;
 
+use super::math::{resolve_sprite_tint, shadow_color};
 use super::render::ScreenSpriteBufferItem;
 
 /// Draw one already-resolved screen-space sprite item (UI layer).
@@ -42,10 +43,10 @@ pub(super) fn draw_screen_sprite_item(
                 y: dest.y + shadow.offset.y,
                 ..dest
             };
-            d.draw_texture_pro(tex, src, shadow_dest, origin, 0.0, shadow.color);
+            d.draw_texture_pro(tex, src, shadow_dest, origin, 0.0, shadow_color(shadow));
         }
 
-        let tint_color = item.maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE);
+        let tint_color = resolve_sprite_tint(item.maybe_tint);
         d.draw_texture_pro(tex, src, dest, origin, 0.0, tint_color);
     }
     if debug {

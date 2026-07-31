@@ -48,7 +48,7 @@ pub fn collision_detector(
         let world_pos_b = maybe_gt_b.map_or(position_b.pos, |gt| gt.position);
         let rect_a = collider_a.as_rectangle(world_pos_a);
         let rect_b = collider_b.as_rectangle(world_pos_b);
-        if rect_a.check_collision_recs(&rect_b) {
+        if rect_a.overlaps(&rect_b) {
             commands.trigger(CollisionEvent {
                 a: entity_a,
                 b: entity_b,

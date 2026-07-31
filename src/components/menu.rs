@@ -10,9 +10,10 @@
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
 
 use bevy_ecs::prelude::{Component, Entity};
-use raylib::prelude::{Color, Vector2};
+use raylib::prelude::Vector2;
 use rustc_hash::FxHashMap;
 
+use crate::math::Color;
 use crate::systems::GameCtx;
 
 /// Type alias for a Rust menu selection callback.

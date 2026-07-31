@@ -38,9 +38,9 @@
 //! - [`super::group::Group`] – group tag used for rule matching
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Rectangle;
 use smallvec::SmallVec;
 
+use crate::math::Rect;
 use crate::systems::GameCtx;
 
 /// Callback type for Rust collision rules.
@@ -152,8 +152,8 @@ pub type BoxSides = SmallVec<[BoxSide; 4]>;
 ///
 /// Uses `SmallVec<[BoxSide; 4]>` to avoid heap allocations since each
 /// rectangle can have at most 4 colliding sides.
-pub fn get_colliding_sides(rect_a: &Rectangle, rect_b: &Rectangle) -> Option<(BoxSides, BoxSides)> {
-    let overlap_rect = rect_a.get_collision_rec(rect_b)?;
+pub fn get_colliding_sides(rect_a: &Rect, rect_b: &Rect) -> Option<(BoxSides, BoxSides)> {
+    let overlap_rect = rect_a.intersection(rect_b)?;
     let mut sides_a = SmallVec::new();
     let mut sides_b = SmallVec::new();
 
@@ -192,13 +192,13 @@ mod tests {
 
     #[test]
     fn test_no_collision_returns_none() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 20.0,
             y: 20.0,
             width: 10.0,
@@ -209,13 +209,13 @@ mod tests {
 
     #[test]
     fn test_collision_from_right() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 8.0,
             y: 0.0,
             width: 10.0,
@@ -230,13 +230,13 @@ mod tests {
 
     #[test]
     fn test_collision_from_left() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 10.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 2.0,
             y: 0.0,
             width: 10.0,
@@ -251,13 +251,13 @@ mod tests {
 
     #[test]
     fn test_collision_from_bottom() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 0.0,
             y: 8.0,
             width: 10.0,
@@ -272,13 +272,13 @@ mod tests {
 
     #[test]
     fn test_collision_from_top() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 10.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 0.0,
             y: 2.0,
             width: 10.0,
@@ -293,13 +293,13 @@ mod tests {
 
     #[test]
     fn test_rect_a_fully_inside_rect_b() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 5.0,
             y: 5.0,
             width: 5.0,
             height: 5.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 0.0,
             y: 0.0,
             width: 20.0,
@@ -316,13 +316,13 @@ mod tests {
 
     #[test]
     fn test_rect_b_fully_inside_rect_a() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 20.0,
             height: 20.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 5.0,
             y: 5.0,
             width: 5.0,
@@ -339,13 +339,13 @@ mod tests {
 
     #[test]
     fn test_identical_rectangles() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
@@ -361,13 +361,13 @@ mod tests {
 
     #[test]
     fn test_corner_collision() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 8.0,
             y: 8.0,
             width: 10.0,
@@ -386,13 +386,13 @@ mod tests {
 
     #[test]
     fn test_edge_touching_horizontal() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 10.0,
             y: 0.0,
             width: 10.0,
@@ -410,13 +410,13 @@ mod tests {
 
     #[test]
     fn test_edge_touching_vertical() {
-        let rect_a = Rectangle {
+        let rect_a = Rect {
             x: 0.0,
             y: 0.0,
             width: 10.0,
             height: 10.0,
         };
-        let rect_b = Rectangle {
+        let rect_b = Rect {
             x: 0.0,
             y: 10.0,
             width: 10.0,

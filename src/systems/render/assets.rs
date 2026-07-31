@@ -186,7 +186,7 @@ pub(crate) fn apply_render_asset_cmd(
                 );
                 return;
             };
-            match load_texture_from_text(rl, th, font, &text, font_size, spacing, color) {
+            match load_texture_from_text(rl, th, font, &text, font_size, spacing, color.into()) {
                 Some(tex) => {
                     let (width, height) = (tex.width, tex.height);
                     tex_store.insert(

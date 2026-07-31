@@ -41,7 +41,9 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
     let src = render_target.source_rect();
 
     // Destination rectangle (letterboxed to fit window)
-    let dest = window_size.calculate_letterbox(render_target.game_width, render_target.game_height);
+    let dest: Rectangle = window_size
+        .calculate_letterbox(render_target.game_width, render_target.game_height)
+        .into();
 
     // Full-screen destination for intermediate passes (no letterboxing)
     let full_dest = Rectangle {

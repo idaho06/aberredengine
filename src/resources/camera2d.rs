@@ -4,8 +4,9 @@
 //! a single world/screen transform. Update this resource to pan/zoom the view.
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::{Camera2D, Rectangle, Vector2};
+use raylib::prelude::{Camera2D, Vector2};
 
+use crate::math::Rect;
 use crate::resources::screensize::ScreenSize;
 
 /// ECS resource that holds the active 2D camera parameters.
@@ -35,7 +36,7 @@ impl Camera2DRes {
     ///
     /// Use alongside [`pixel_snapped`](Self::pixel_snapped) when the render pass needs
     /// a culling rectangle that matches the snapped GPU transform.
-    pub fn world_visible_rect_snapped(&self, screen: &ScreenSize) -> Rectangle {
+    pub fn world_visible_rect_snapped(&self, screen: &ScreenSize) -> Rect {
         Camera2DRes(self.pixel_snapped()).world_visible_rect(screen)
     }
 
@@ -46,13 +47,13 @@ impl Camera2DRes {
     /// exact when `rotation == 0`.
     ///
     /// Guards against `zoom == 0` via `f32::EPSILON` to avoid division-by-zero.
-    pub fn world_visible_rect(&self, screen: &ScreenSize) -> Rectangle {
+    pub fn world_visible_rect(&self, screen: &ScreenSize) -> Rect {
         let zoom = self.0.zoom.max(f32::EPSILON);
         let w = screen.w as f32 / zoom;
         let h = screen.h as f32 / zoom;
         let x = self.0.target.x - self.0.offset.x / zoom;
         let y = self.0.target.y - self.0.offset.y / zoom;
-        Rectangle {
+        Rect {
             x,
             y,
             width: w,

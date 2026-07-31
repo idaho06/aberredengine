@@ -21,6 +21,7 @@ use crate::components::group::Group;
 #[cfg(feature = "lua")]
 use crate::components::luasetup::LuaSetup;
 use crate::components::mapposition::MapPosition;
+use crate::math::Color;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;

@@ -5,7 +5,8 @@
 //! - For text: multiplies with the existing `DynamicText.color`
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Color;
+
+use crate::math::Color;
 
 /// Color tint component for rendering modulation.
 ///
@@ -14,19 +15,9 @@ use raylib::prelude::Color;
 ///
 /// When attached to an entity with [`DynamicText`](crate::components::dynamictext::DynamicText),
 /// the tint color is multiplied with the text's existing color.
-#[derive(Component, Clone, Debug, Copy)]
+#[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Tint {
     pub color: Color,
-}
-
-/// Manual, not derived: `Color` is a foreign type with no `PartialEq` impl
-/// (and the orphan rule blocks adding one here), so `#[derive(PartialEq)]`
-/// can't be used on this struct.
-impl PartialEq for Tint {
-    fn eq(&self, other: &Self) -> bool {
-        let c = |c: Color| (c.r, c.g, c.b, c.a);
-        c(self.color) == c(other.color)
-    }
 }
 
 impl Tint {

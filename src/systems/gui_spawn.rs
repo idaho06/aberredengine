@@ -199,10 +199,10 @@ pub fn gui_image_spawn_system(
 #[cfg(test)]
 mod tests {
     use bevy_ecs::system::RunSystemOnce;
-    use raylib::prelude::Color;
 
     use super::*;
     use crate::components::guiinteractable::GuiWidgetState;
+    use crate::math::Color;
     use crate::components::guiwindow::GuiWindow;
     use crate::components::screenposition::ScreenPosition;
 

@@ -27,10 +27,11 @@
 use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
-use raylib::prelude::{Camera2D, Color, Vector2};
+use raylib::prelude::{Camera2D, Vector2};
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::{CleanableEntity, Persistent};
+use crate::math::Color;
 use crate::resources::appstate::AppState;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
@@ -107,12 +108,18 @@ pub trait WorldDraw {
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color);
 }
 
+// TODO(phase 6): this blanket impl moves to the render crate once it exists
+// (orphan rule blocks it there today — see docs/plans, §5.2); the `.into()`
+// calls below exist only because core and render are still one crate, so
+// `crate::systems::render::math`'s Color shim is reachable from here.
 impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
     fn draw_line_v(&mut self, start: Vector2, end: Vector2, color: Color) {
+        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_v(self, start, end, color);
     }
 
     fn draw_line_ex(&mut self, start_pos: Vector2, end_pos: Vector2, thick: f32, color: Color) {
+        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_ex(self, start_pos, end_pos, thick, color);
     }
 
@@ -124,12 +131,14 @@ impl<T: raylib::prelude::RaylibDraw> WorldDraw for T {
         space_size: i32,
         color: Color,
     ) {
+        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_dashed(
             self, start_pos, end_pos, dash_size, space_size, color,
         );
     }
 
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
+        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line(self, x1, y1, x2, y2, color);
     }
 }

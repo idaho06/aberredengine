@@ -15,8 +15,8 @@
 //! consumption.
 
 use bevy_ecs::message::Message;
-use raylib::prelude::Color;
 
+use crate::math::Color;
 use crate::resources::texturefilter::TextureFilter;
 
 /// GL asset-load/upload commands. Consumed once per frame by

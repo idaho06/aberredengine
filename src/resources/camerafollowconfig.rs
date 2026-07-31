@@ -6,7 +6,9 @@
 //! at any time.
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::{Rectangle, Vector2};
+use raylib::prelude::Vector2;
+
+use crate::math::Rect;
 
 /// How the camera approaches its target position.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -88,7 +90,7 @@ pub struct CameraFollowConfig {
     pub offset: Vector2,
     /// Optional world-space bounding rectangle. When set, the camera position
     /// is clamped so that the viewport stays inside these bounds.
-    pub bounds: Option<Rectangle>,
+    pub bounds: Option<Rect>,
 
     // -- internal state (not intended for direct user modification) ----------
     /// Spring velocity for [`FollowMode::SmoothDamp`]. Reset to zero when
