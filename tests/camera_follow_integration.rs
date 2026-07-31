@@ -5,14 +5,13 @@
 //! offset, and bounds clamping.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Camera2D;
 use aberredengine::math::Vec2;
 
 use aberredengine::components::cameratarget::CameraTarget;
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::math::Rect;
-use aberredengine::resources::camera2d::Camera2DRes;
+use aberredengine::resources::camera2d::{Camera2D, Camera2DRes};
 use aberredengine::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::worldtime::WorldTime;
@@ -30,11 +29,11 @@ fn approx_eq(a: f32, b: f32) -> bool {
 
 fn make_camera(target_x: f32, target_y: f32) -> Camera2DRes {
     Camera2DRes(Camera2D {
-        target: raylib::prelude::Vector2 {
+        target: Vec2 {
             x: target_x,
             y: target_y,
         },
-        offset: raylib::prelude::Vector2 { x: 160.0, y: 120.0 },
+        offset: Vec2 { x: 160.0, y: 120.0 },
         rotation: 0.0,
         zoom: 1.0,
     })
@@ -530,8 +529,8 @@ fn bounds_clamp_respects_zoom() {
     let mut world = setup_world();
     // Set zoom = 2.0 → half viewport in world units = 160/2=80, 120/2=60
     world.insert_resource(Camera2DRes(Camera2D {
-        target: raylib::prelude::Vector2 { x: 0.0, y: 0.0 },
-        offset: raylib::prelude::Vector2 { x: 160.0, y: 120.0 },
+        target: Vec2 { x: 0.0, y: 0.0 },
+        offset: Vec2 { x: 160.0, y: 120.0 },
         rotation: 0.0,
         zoom: 2.0,
     }));
@@ -638,8 +637,8 @@ fn zero_width_bounds_center_x() {
 fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
     let mut world = setup_world();
     world.insert_resource(Camera2DRes(Camera2D {
-        target: raylib::prelude::Vector2 { x: 0.0, y: 0.0 },
-        offset: raylib::prelude::Vector2 { x: 160.0, y: 120.0 },
+        target: Vec2 { x: 0.0, y: 0.0 },
+        offset: Vec2 { x: 160.0, y: 120.0 },
         rotation: 0.0,
         zoom: 0.1,
     }));

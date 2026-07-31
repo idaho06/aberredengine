@@ -49,9 +49,8 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
 use mlua::prelude::LuaTable;
-use raylib::prelude::Camera2D;
-#[cfg(test)]
 use crate::math::Vec2;
+use crate::resources::camera2d::Camera2D;
 use rustc_hash::FxHashSet;
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
@@ -115,8 +114,8 @@ pub fn setup(
     // The camera will be overridden later in the scene setup. Offset centers
     // on the internal render resolution (same default `setup_world` uses).
     let camera = Camera2D {
-        target: raylib::prelude::Vector2 { x: 0.0, y: 0.0 },
-        offset: raylib::prelude::Vector2 {
+        target: Vec2 { x: 0.0, y: 0.0 },
+        offset: Vec2 {
             x: screen_size.w as f32 * 0.5,
             y: screen_size.h as f32 * 0.5,
         },
@@ -817,8 +816,8 @@ mod tests {
         world.insert_resource(InputState::default());
         world.insert_resource(ScreenSize { w: 800, h: 600 });
         world.insert_resource(Camera2DRes(Camera2D {
-            target: raylib::prelude::Vector2 { x: 0.0, y: 0.0 },
-            offset: raylib::prelude::Vector2 { x: 400.0, y: 300.0 },
+            target: Vec2 { x: 0.0, y: 0.0 },
+            offset: Vec2 { x: 400.0, y: 300.0 },
             rotation: 0.0,
             zoom: 1.0,
         }));

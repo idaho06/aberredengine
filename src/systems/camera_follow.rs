@@ -128,7 +128,7 @@ pub fn camera_follow_system(
     };
 
     // --- 5. Commit ---
-    camera.0.target = raylib::prelude::Vector2::new(clamped.x, clamped.y);
+    camera.0.target = clamped;
 
     // --- 6. Apply zoom ---
     if (camera.0.zoom - ct.zoom).abs() > 1e-5 {

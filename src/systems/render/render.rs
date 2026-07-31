@@ -4,8 +4,8 @@
 //! Renders to a fixed-resolution texture, then scales to fit the window with
 //! letterboxing/pillarboxing to preserve aspect ratio.
 //!
-//! World-space rendering uses the shared [`Camera2DRes`] to transform between
-//! world and screen coordinates.
+//! World-space rendering uses the render-world [`RenderCamera`] mirror to
+//! transform between world and screen coordinates.
 //!
 //! When the active scene descriptor provides a [`GuiCallback`], an ImGui frame
 //! is opened every render pass and the callback is invoked. This path is
@@ -38,7 +38,6 @@ use crate::components::shadow::Shadow;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
-use crate::resources::camera2d::Camera2DRes;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::render::fontstore::FontStore;
@@ -370,7 +369,13 @@ pub fn render_system(
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
             let render_cam = if res.game_config.0.pixel_snap_camera {
-                Camera2DRes(res.camera.0).pixel_snapped()
+                raylib::prelude::Camera2D {
+                    target: raylib::prelude::Vector2 {
+                        x: res.camera.0.target.x.round(),
+                        y: res.camera.0.target.y.round(),
+                    },
+                    ..res.camera.0
+                }
             } else {
                 res.camera.0
             };
@@ -380,7 +385,13 @@ pub fn render_system(
                 screensize.w as f32,
                 screensize.h as f32,
                 render_cam,
-                |pos, cam| d2.get_screen_to_world2D(pos, cam),
+                |pos, cam| {
+                    let world = crate::systems::input::screen_to_world2d(
+                        vec2_from_raylib(pos),
+                        &crate::resources::camera2d::Camera2D::from(cam),
+                    );
+                    vec2_to_raylib(world)
+                },
             );
 
             {
@@ -842,9 +853,10 @@ pub fn render_system(
                 .and_then(|(table, name)| table.get(name))
                 .and_then(|desc| desc.world_draw_callback)
             {
+                let core_camera: crate::resources::camera2d::Camera2D = res.camera.0.into();
                 cb(
                     &mut crate::systems::render::math::RaylibWorldDraw(&mut d2),
-                    &res.camera.0,
+                    &core_camera,
                     &res.screensize,
                     &res.app_state.0,
                     &res.signals.0,
@@ -948,7 +960,10 @@ pub fn render_system(
                 screensize.w as u32,
                 screensize.h as u32,
             ));
-            let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, res.camera.0);
+            let mouse_world = vec2_to_raylib(crate::systems::input::screen_to_world2d(
+                vec2_from_raylib(game_mouse_pos),
+                &crate::resources::camera2d::Camera2D::from(res.camera.0),
+            ));
             // Query::count() (not .iter().count()) takes the optimized path for
             // archetypal queries -- table/archetype-count arithmetic instead of
             // walking every matched entity, closer to the old Vec::len() cost.

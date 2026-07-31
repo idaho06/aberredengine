@@ -20,7 +20,17 @@ pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
 /// shapes are unchanged from `2`, but a v2 file's digest was computed over
 /// a different field set, so replaying it would fail as a *config* mismatch
 /// — a misleading error for what is a format change.
-pub const REPLAY_FORMAT_VERSION: u32 = 3;
+///
+/// `4`: `screen_to_world2d` (`src/systems/input.rs`) was ported from
+/// `raylib::ffi::GetScreenToWorld2D` (C, SSE-accelerated `MatrixMultiply`,
+/// system `libm` `sinf`/`cosf`) to a pure-Rust `glam::Mat3` implementation
+/// (remove-raylib-from-aberred-core plan, Phase 5). Not bit-identical to
+/// the old path — different accumulation order, `libm` crate vs system
+/// `libm` — so `InputState.mouse_world_x/y`, which is sim-visible and
+/// `state_hash`-reachable, changes. A v3 replay's recorded ticks would
+/// diverge on first mouse-world read, so it's refused rather than
+/// best-effort replayed.
+pub const REPLAY_FORMAT_VERSION: u32 = 4;
 
 /// A stable, version-controlled FNV-1a-style hash mixer.
 ///

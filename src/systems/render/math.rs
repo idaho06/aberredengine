@@ -2,9 +2,13 @@
 //!
 //! `crate::math::Color`/`Rect` are layout-identical to raylib's own
 //! `Color`/`Rectangle` (asserted in `crate::math`'s own tests), so these are
-//! plain field copies, not real conversions. They live here — not in
-//! `crate::math` itself — because that module must stay raylib-free (see its
-//! doc comment); only the render tree is allowed to know raylib exists.
+//! plain field copies, not real conversions. `crate::resources::camera2d::Camera2D`
+//! is not layout-identical to raylib's `Camera2D` (its `target`/`offset`
+//! fields are `Vec2`, not raylib's `Vector2`), so its `From` impls delegate
+//! to `vec2_to_raylib`/`vec2_from_raylib` below for those two fields. They
+//! live here — not in `crate::math`/`crate::resources::camera2d` themselves —
+//! because those modules must stay raylib-free; only the render tree is
+//! allowed to know raylib exists.
 //!
 //! NOTE: once the workspace split (`docs/plans/workspaces-implementation.md`)
 //! makes `aberred-render` and `raylib` genuinely separate crates, `aberred-render`
@@ -17,6 +21,7 @@
 use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::math::{Color, Rect, Vec2};
+use crate::resources::camera2d::Camera2D;
 use crate::systems::scene_dispatch::WorldDraw;
 
 /// Adapts any raylib draw handle to the core-owned [`WorldDraw`] trait.
@@ -119,6 +124,28 @@ impl From<raylib::prelude::Rectangle> for Rect {
     }
 }
 
+impl From<Camera2D> for raylib::prelude::Camera2D {
+    fn from(c: Camera2D) -> Self {
+        raylib::prelude::Camera2D {
+            target: vec2_to_raylib(c.target),
+            offset: vec2_to_raylib(c.offset),
+            rotation: c.rotation,
+            zoom: c.zoom,
+        }
+    }
+}
+
+impl From<raylib::prelude::Camera2D> for Camera2D {
+    fn from(c: raylib::prelude::Camera2D) -> Self {
+        Camera2D {
+            target: vec2_from_raylib(c.target),
+            offset: vec2_from_raylib(c.offset),
+            rotation: c.rotation,
+            zoom: c.zoom,
+        }
+    }
+}
+
 // `Vec2` is a bare `pub use glam::Vec2;` re-export (Phase 1 decision), not a
 // local newtype like `Color`/`Rect` — so unlike those, `impl From<Vec2> for
 // raylib::prelude::Vector2` would violate the orphan rule (neither `Vec2`
@@ -150,5 +177,18 @@ mod tests {
         let rr: raylib::prelude::Rectangle = r.into();
         let back: Rect = rr.into();
         assert_eq!(r, back);
+    }
+
+    #[test]
+    fn camera2d_round_trips_through_raylib() {
+        let c = Camera2D {
+            target: Vec2::new(1.0, 2.0),
+            offset: Vec2::new(3.0, 4.0),
+            rotation: 45.0,
+            zoom: 2.0,
+        };
+        let rc: raylib::prelude::Camera2D = c.into();
+        let back: Camera2D = rc.into();
+        assert_eq!(c, back);
     }
 }

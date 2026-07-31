@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
-use raylib::prelude::Camera2D;
 use crate::math::Vec2;
+use crate::resources::camera2d::Camera2D;
 
 use crate::components::phase::Phase;
 use crate::components::shadow::Shadow;
@@ -146,11 +146,11 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
             zoom,
         } => {
             commands.insert_resource(Camera2DRes(Camera2D {
-                target: raylib::prelude::Vector2 {
+                target: Vec2 {
                     x: target_x,
                     y: target_y,
                 },
-                offset: raylib::prelude::Vector2 {
+                offset: Vec2 {
                     x: offset_x,
                     y: offset_y,
                 },

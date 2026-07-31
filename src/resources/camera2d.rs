@@ -1,13 +1,25 @@
 //! Shared 2D camera resource.
 //!
-//! Wraps raylib's [`raylib::prelude::Camera2D`] so that systems can agree on
-//! a single world/screen transform. Update this resource to pan/zoom the view.
+//! Engine-owned equivalent of raylib's `Camera2D` (fields are `Vec2`, not
+//! raylib's `Vector2`, so systems can agree on a single world/screen
+//! transform with no raylib dependency). Update this resource to pan/zoom
+//! the view. Render converts to/from raylib's `Camera2D` at the render-tree
+//! boundary (`src/systems/render/math.rs`'s `From` impls).
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::{Camera2D, Vector2};
 
-use crate::math::Rect;
+use crate::math::{Rect, Vec2};
 use crate::resources::screensize::ScreenSize;
+
+/// 2D camera parameters: world position (`target`), screen anchor
+/// (`offset`), rotation in degrees, and zoom.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Camera2D {
+    pub target: Vec2,
+    pub offset: Vec2,
+    pub rotation: f32,
+    pub zoom: f32,
+}
 
 /// ECS resource that holds the active 2D camera parameters.
 ///
@@ -24,7 +36,7 @@ impl Camera2DRes {
     /// The stored `Camera2DRes` is unchanged so game-logic systems keep full float precision.
     pub fn pixel_snapped(&self) -> Camera2D {
         Camera2D {
-            target: Vector2 {
+            target: Vec2 {
                 x: self.0.target.x.round(),
                 y: self.0.target.y.round(),
             },
@@ -66,7 +78,7 @@ impl Camera2DRes {
 mod tests {
     use super::*;
 
-    fn make_camera(target: Vector2, offset: Vector2, zoom: f32) -> Camera2DRes {
+    fn make_camera(target: Vec2, offset: Vec2, zoom: f32) -> Camera2DRes {
         Camera2DRes(Camera2D {
             target,
             offset,
@@ -78,8 +90,8 @@ mod tests {
     #[test]
     fn view_rect_default_camera() {
         let cam = make_camera(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 320.0, y: 180.0 },
+            Vec2 { x: 0.0, y: 0.0 },
+            Vec2 { x: 320.0, y: 180.0 },
             1.0,
         );
         let screen = ScreenSize { w: 640, h: 360 };
@@ -93,8 +105,8 @@ mod tests {
     #[test]
     fn view_rect_zoom_2x() {
         let cam = make_camera(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 320.0, y: 180.0 },
+            Vec2 { x: 0.0, y: 0.0 },
+            Vec2 { x: 320.0, y: 180.0 },
             2.0,
         );
         let screen = ScreenSize { w: 640, h: 360 };
@@ -108,8 +120,8 @@ mod tests {
     #[test]
     fn pixel_snapped_rounds_target() {
         let cam = make_camera(
-            Vector2 { x: 10.7, y: -3.2 },
-            Vector2 { x: 320.0, y: 180.0 },
+            Vec2 { x: 10.7, y: -3.2 },
+            Vec2 { x: 320.0, y: 180.0 },
             1.0,
         );
         let snapped = cam.pixel_snapped();
@@ -120,8 +132,8 @@ mod tests {
     #[test]
     fn pixel_snapped_preserves_other_fields() {
         let cam = Camera2DRes(Camera2D {
-            target: Vector2 { x: 1.5, y: 2.5 },
-            offset: Vector2 { x: 100.0, y: 200.0 },
+            target: Vec2 { x: 1.5, y: 2.5 },
+            offset: Vec2 { x: 100.0, y: 200.0 },
             rotation: 45.0,
             zoom: 2.0,
         });
@@ -135,8 +147,8 @@ mod tests {
     #[test]
     fn world_visible_rect_snapped_matches_snapped_camera() {
         let cam = make_camera(
-            Vector2 { x: 10.7, y: -3.2 },
-            Vector2 { x: 320.0, y: 180.0 },
+            Vec2 { x: 10.7, y: -3.2 },
+            Vec2 { x: 320.0, y: 180.0 },
             1.0,
         );
         let screen = ScreenSize { w: 640, h: 360 };
@@ -152,8 +164,8 @@ mod tests {
     #[test]
     fn view_rect_zoom_zero_no_panic() {
         let cam = make_camera(
-            Vector2 { x: 0.0, y: 0.0 },
-            Vector2 { x: 320.0, y: 180.0 },
+            Vec2 { x: 0.0, y: 0.0 },
+            Vec2 { x: 320.0, y: 180.0 },
             0.0,
         );
         let screen = ScreenSize { w: 640, h: 360 };

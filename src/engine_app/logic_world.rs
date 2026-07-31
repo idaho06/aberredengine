@@ -23,7 +23,7 @@ use crate::protocol::endpoints::{RenderTx, setup_audio};
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::appstate::AppState;
-use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camera2d::{Camera2D, Camera2DRes};
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -56,8 +56,8 @@ use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_selection_observer};
 use crate::systems::rust_collision::rust_collision_observer;
 use crate::systems::scene_dispatch::{scene_enter_play, scene_switch_system};
+use crate::math::Vec2;
 use crate::systems::timer::timer_observer;
-use raylib::prelude::{Camera2D, Vector2};
 
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
@@ -160,8 +160,8 @@ impl EngineBuilder {
         world.insert_resource(TextureDimsStore::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
         world.insert_resource(Camera2DRes(Camera2D {
-            target: Vector2 { x: 0.0, y: 0.0 },
-            offset: Vector2 {
+            target: Vec2 { x: 0.0, y: 0.0 },
+            offset: Vec2 {
                 x: render_width as f32 * 0.5,
                 y: render_height as f32 * 0.5,
             },

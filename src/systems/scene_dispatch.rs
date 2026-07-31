@@ -27,12 +27,12 @@
 use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
-use raylib::prelude::Camera2D;
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::{CleanableEntity, Persistent};
 use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
+use crate::resources::camera2d::Camera2D;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
 use crate::resources::render::fontstore::FontStore;
@@ -121,8 +121,7 @@ pub type GuiCallback =
 ///
 /// The [`SignalSnapshot`] param is read-only, mirroring [`GuiCallback`], which likewise takes
 /// no live `&WorldSignals`.
-pub type WorldDrawCallback =
-    fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
+pub type WorldDrawCallback = fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
 
 // ---------------------------------------------------------------------------
 // SceneDescriptor

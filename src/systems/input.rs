@@ -21,12 +21,12 @@ use bevy_ecs::prelude::*;
 use log::debug;
 
 use crate::math::Vec2;
-use raylib::prelude::Camera2D;
+use glam::Mat3;
 
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::switchdebug::SwitchDebugEvent;
 use crate::protocol::raw_input::RawDeviceSnapshot;
-use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camera2d::{Camera2D, Camera2DRes};
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::{BoolState, InputState};
 use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings, MouseButton};
@@ -46,17 +46,28 @@ fn apply_deadzone(v: f32, deadzone: f32) -> f32 {
 }
 
 /// Project a game-space (render-target) position into world space through a
-/// 2D camera — the handle-free equivalent of
+/// 2D camera — the handle-free, pure-Rust equivalent of
 /// `RaylibHandle::get_screen_to_world2D`.
 ///
-/// SAFETY: `GetScreenToWorld2D` is pure matrix math (camera matrix +
-/// inverse, rcore.c); it reads no window/GL state and is safe to call
-/// without `InitWindow`, which is what lets the logic side compute the
-/// world-space mouse without a `RaylibHandle`.
+/// Derived from raylib's own `GetCameraMatrix2D` (`rcore.c`) composition —
+/// `origin` (translate by `-target`) applied first, then `scale`, then
+/// `rotation`, then `translation` (by `offset`) applied last — expressed
+/// here as a single 2D affine `Mat3`, inverted, and applied to `position`.
+/// No window/GL state involved, so this runs identically on the logic
+/// thread without a `RaylibHandle`. Verified against the closed-form
+/// `world = target + R(-rotation) * (screen - offset) / zoom` relationship
+/// across a spread of cameras (identity, offset-only, zoom != 1,
+/// rotation != 0 incl. negative, negative target, extreme zoom) — see this
+/// module's `screen_to_world2d_broad_spread` test. That relationship is the
+/// same one the pre-existing `screen_to_world2d_identity_camera` /
+/// `_target_offset_zoom` / `_rotation` tests already validated against the
+/// old raylib-FFI implementation this function replaces.
 pub fn screen_to_world2d(position: Vec2, camera: &Camera2D) -> Vec2 {
-    let raylib_pos = raylib::prelude::Vector2::new(position.x, position.y);
-    let world = unsafe { raylib::ffi::GetScreenToWorld2D(raylib_pos.into(), (*camera).into()) };
-    Vec2::new(world.x, world.y)
+    let camera_matrix = Mat3::from_translation(camera.offset)
+        * Mat3::from_angle(camera.rotation.to_radians())
+        * Mat3::from_scale(Vec2::splat(camera.zoom))
+        * Mat3::from_translation(-camera.target);
+    camera_matrix.inverse().transform_point2(position)
 }
 
 // ---------------------------------------------------------------------------
@@ -356,15 +367,14 @@ mod tests {
     use super::*;
     use crate::resources::render::imgui_bridge::ImguiCaptureState;
     use crate::resources::input_bindings::{GamepadAxis, GamepadButton, Key};
-    use raylib::prelude::Camera2D;
 
     fn test_camera(target: (f32, f32), offset: (f32, f32), zoom: f32, rotation: f32) -> Camera2D {
         Camera2D {
-            target: raylib::prelude::Vector2 {
+            target: Vec2 {
                 x: target.0,
                 y: target.1,
             },
-            offset: raylib::prelude::Vector2 {
+            offset: Vec2 {
                 x: offset.0,
                 y: offset.1,
             },
@@ -402,6 +412,55 @@ mod tests {
         let world = screen_to_world2d(Vec2 { x: 10.0, y: 0.0 }, &cam);
         assert!(world.x.abs() < 1e-3, "x = {}", world.x);
         assert!((world.y - -10.0).abs() < 1e-3, "y = {}", world.y);
+    }
+
+    /// Permanent regression table for the pure-Rust `screen_to_world2d`
+    /// port (Phase 5 of `docs/plans/remove-raylib-from-aberred-core.md`).
+    /// Every expected value here is the closed form
+    /// `world = target + R(-rotation) * (screen - offset) / zoom` worked out
+    /// by hand -- the same relationship `screen_to_world2d_identity_camera`,
+    /// `_target_offset_zoom`, and `_rotation` above already validated against
+    /// the old raylib-FFI implementation this function replaced, extended
+    /// here to a wider spread (negative target, offset-only, negative
+    /// rotation, 180°, and both extreme-small and extreme-large zoom) so the
+    /// table keeps meaning after that old implementation is gone.
+    #[test]
+    fn screen_to_world2d_broad_spread() {
+        // Negative target, zero rotation/offset, zoom 1: world = target + screen.
+        let cam = test_camera((-50.0, -30.0), (0.0, 0.0), 1.0, 0.0);
+        let world = screen_to_world2d(Vec2 { x: 20.0, y: 10.0 }, &cam);
+        assert!((world.x - -30.0).abs() < 1e-3, "x = {}", world.x);
+        assert!((world.y - -20.0).abs() < 1e-3, "y = {}", world.y);
+
+        // Offset-only: world = screen - offset.
+        let cam = test_camera((0.0, 0.0), (100.0, 50.0), 1.0, 0.0);
+        let world = screen_to_world2d(Vec2 { x: 150.0, y: 80.0 }, &cam);
+        assert!((world.x - 50.0).abs() < 1e-3, "x = {}", world.x);
+        assert!((world.y - 30.0).abs() < 1e-3, "y = {}", world.y);
+
+        // Extreme small zoom: world = screen / zoom.
+        let cam = test_camera((0.0, 0.0), (0.0, 0.0), 0.01, 0.0);
+        let world = screen_to_world2d(Vec2 { x: 1.0, y: 2.0 }, &cam);
+        assert!((world.x - 100.0).abs() < 1e-1, "x = {}", world.x);
+        assert!((world.y - 200.0).abs() < 1e-1, "y = {}", world.y);
+
+        // Extreme large zoom: world = screen / zoom.
+        let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1000.0, 0.0);
+        let world = screen_to_world2d(Vec2 { x: 1000.0, y: 2000.0 }, &cam);
+        assert!((world.x - 1.0).abs() < 1e-3, "x = {}", world.x);
+        assert!((world.y - 2.0).abs() < 1e-3, "y = {}", world.y);
+
+        // 180° rotation, zoom 1: world = R(180°) * screen = -screen.
+        let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 180.0);
+        let world = screen_to_world2d(Vec2 { x: 5.0, y: 3.0 }, &cam);
+        assert!((world.x - -5.0).abs() < 1e-3, "x = {}", world.x);
+        assert!((world.y - -3.0).abs() < 1e-3, "y = {}", world.y);
+
+        // Negative rotation (-90°): world = R(90°) * screen.
+        let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, -90.0);
+        let world = screen_to_world2d(Vec2 { x: 10.0, y: 0.0 }, &cam);
+        assert!(world.x.abs() < 1e-3, "x = {}", world.x);
+        assert!((world.y - 10.0).abs() < 1e-3, "y = {}", world.y);
     }
 
     #[derive(Resource, Default)]

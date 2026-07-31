@@ -15,7 +15,6 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use raylib::prelude::Camera2D;
 use crate::math::Vec2;
 
 use crate::components::boxcollider::BoxCollider;
@@ -39,7 +38,7 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::protocol::stats::ThreadStats;
 use crate::resources::appstate::AppState;
-use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camera2d::{Camera2D, Camera2DRes};
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -688,8 +687,8 @@ mod tests {
     fn new_test_world() -> World {
         let mut world = World::new();
         world.insert_resource(Camera2DRes(Camera2D {
-            offset: raylib::prelude::Vector2::new(0.0, 0.0),
-            target: raylib::prelude::Vector2::new(1.0, 2.0),
+            offset: Vec2::new(0.0, 0.0),
+            target: Vec2::new(1.0, 2.0),
             rotation: 0.0,
             zoom: 1.0,
         }));
@@ -826,10 +825,7 @@ mod tests {
         assert_eq!(snapshot.game_config.target_fps, 72);
         assert_eq!(snapshot.game_config.window_title, "phase4");
         assert_eq!(snapshot.game_config, *world.resource::<GameConfig>());
-        assert_eq!(
-            snapshot.camera.target,
-            raylib::prelude::Vector2::new(1.0, 2.0)
-        );
+        assert_eq!(snapshot.camera.target, Vec2::new(1.0, 2.0));
     }
 
     #[test]

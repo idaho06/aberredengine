@@ -65,7 +65,7 @@ pub fn receive_snapshot(world: &mut World) {
         reconcile_gui_labels(world, &snap.gui_labels);
         reconcile_gui_progress_bars(world, &snap.gui_progress_bars);
 
-        world.resource_mut::<RenderCamera>().0 = snap.camera;
+        world.resource_mut::<RenderCamera>().0 = snap.camera.into();
         world
             .resource_mut::<RenderGameConfig>()
             .0
