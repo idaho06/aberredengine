@@ -159,6 +159,23 @@ pub(super) fn vec2_from_raylib(v: raylib::prelude::Vector2) -> Vec2 {
     Vec2::new(v.x, v.y)
 }
 
+/// Projects a raylib-space point through an already-core-typed camera,
+/// delegating to the pure-Rust `crate::systems::input::screen_to_world2d`.
+///
+/// Takes `camera` pre-converted (rather than raylib's `Camera2D`) so a
+/// caller projecting several points against the same camera in a loop
+/// (e.g. `compute_view_bounds`'s 4-corner closure) converts it once and
+/// passes a reference, instead of re-converting on every call.
+pub(super) fn screen_to_world2d_raylib(
+    pos: raylib::prelude::Vector2,
+    camera: &Camera2D,
+) -> raylib::prelude::Vector2 {
+    vec2_to_raylib(crate::systems::input::screen_to_world2d(
+        vec2_from_raylib(pos),
+        camera,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

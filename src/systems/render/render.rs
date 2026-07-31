@@ -369,29 +369,23 @@ pub fn render_system(
             // Draw in world coordinates using Camera2D.
             crate::tracy::tracy_span!("render/world_space");
             let render_cam = if res.game_config.0.pixel_snap_camera {
-                raylib::prelude::Camera2D {
-                    target: raylib::prelude::Vector2 {
-                        x: res.camera.0.target.x.round(),
-                        y: res.camera.0.target.y.round(),
-                    },
-                    ..res.camera.0
-                }
+                crate::resources::camera2d::Camera2DRes(res.camera.0.into())
+                    .pixel_snapped()
+                    .into()
             } else {
                 res.camera.0
             };
             let mut d2 = d.begin_mode2D(render_cam);
 
+            // `render_cam` converted to core once above and reused here across
+            // all 4 corners -- `compute_view_bounds` calls this closure once
+            // per corner with the same camera every time.
+            let render_cam_core: crate::resources::camera2d::Camera2D = render_cam.into();
             let (view_min, view_max) = compute_view_bounds(
                 screensize.w as f32,
                 screensize.h as f32,
                 render_cam,
-                |pos, cam| {
-                    let world = crate::systems::input::screen_to_world2d(
-                        vec2_from_raylib(pos),
-                        &crate::resources::camera2d::Camera2D::from(cam),
-                    );
-                    vec2_to_raylib(world)
-                },
+                |pos, _cam| super::math::screen_to_world2d_raylib(pos, &render_cam_core),
             );
 
             {
@@ -960,10 +954,8 @@ pub fn render_system(
                 screensize.w as u32,
                 screensize.h as u32,
             ));
-            let mouse_world = vec2_to_raylib(crate::systems::input::screen_to_world2d(
-                vec2_from_raylib(game_mouse_pos),
-                &crate::resources::camera2d::Camera2D::from(res.camera.0),
-            ));
+            let mouse_world =
+                super::math::screen_to_world2d_raylib(game_mouse_pos, &res.camera.0.into());
             // Query::count() (not .iter().count()) takes the optimized path for
             // archetypal queries -- table/archetype-count arithmetic instead of
             // walking every matched entity, closer to the old Vec::len() cost.
