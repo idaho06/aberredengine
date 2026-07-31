@@ -21,7 +21,7 @@ mod gameconfig;
 pub mod geometry;
 mod gui_panel;
 pub mod input;
-mod math;
+pub(crate) mod math;
 pub mod messages;
 pub mod mirror;
 pub mod output;

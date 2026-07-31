@@ -149,11 +149,17 @@ fn emit_particles(
         let (speed_min, speed_max) = emitter.speed_range;
         let speed = random_f32_range(rng, speed_min, speed_max);
 
-        // Convert angle to direction vector (0° = up, Y+ is down)
+        // Convert angle to direction vector (0° = up, Y+ is down). Routed
+        // through `libm` (not `f32::sin`/`cos`) so this sim-visible value is
+        // portably reproducible across platforms' system libm
+        // implementations, not just bit-identical on one machine.
+        // `sincosf` shares range-reduction work between sin and cos instead
+        // of computing each independently.
         let theta = angle_deg.to_radians();
+        let (sin_theta, cos_theta) = libm::sincosf(theta);
         let dir = Vec2 {
-            x: theta.sin(),
-            y: -theta.cos(),
+            x: sin_theta,
+            y: -cos_theta,
         };
         let velocity = Vec2 {
             x: dir.x * speed,

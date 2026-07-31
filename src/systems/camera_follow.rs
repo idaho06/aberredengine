@@ -147,8 +147,10 @@ fn lerp_alpha(easing: EasingCurve, speed: f32, dt: f32) -> f32 {
         // constant-rate: just clamp so we never overshoot
         EasingCurve::Linear => (speed * dt).min(1.0),
 
-        // exponential decay (frame-rate independent)
-        EasingCurve::EaseOut => 1.0 - (-speed * dt).exp(),
+        // exponential decay (frame-rate independent); libm::expf (not
+        // f32::exp) keeps this sim-visible value portably reproducible
+        // across platforms' system libm implementations.
+        EasingCurve::EaseOut => 1.0 - libm::expf(-speed * dt),
 
         // slow start: square the linear alpha
         EasingCurve::EaseIn => {

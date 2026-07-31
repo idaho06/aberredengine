@@ -4,6 +4,7 @@
 //! objects keyed by string IDs. Insert textures during setup and read them in
 //! render systems.
 use crate::resources::texturefilter::TextureFilter;
+use crate::systems::render::math::texture_filter_to_ffi;
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;
 use raylib::prelude::Texture2D;
@@ -83,7 +84,7 @@ impl TextureStore {
         path: Option<String>,
     ) {
         unsafe {
-            ffi::SetTextureFilter(*texture, filter.to_ffi());
+            ffi::SetTextureFilter(*texture, texture_filter_to_ffi(filter));
         }
         let key = key.into();
         self.filters.insert(key.clone(), filter);
@@ -126,7 +127,7 @@ impl TextureStore {
             return false;
         };
         unsafe {
-            ffi::SetTextureFilter(**texture, filter.to_ffi());
+            ffi::SetTextureFilter(**texture, texture_filter_to_ffi(filter));
         }
         self.filters.insert(key.as_ref().to_string(), filter);
         true

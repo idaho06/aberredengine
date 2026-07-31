@@ -1,8 +1,6 @@
 //! Texture filtering mode shared by [`crate::resources::render::texturestore::TextureStore`]
 //! and [`crate::resources::render::rendertarget::RenderTarget`].
 
-use raylib::ffi::TextureFilter as FfiTextureFilter;
-
 /// Texture sampling filter mode.
 ///
 /// `Nearest` (point/nearest-neighbor) is sharp and avoids sprite atlas
@@ -24,22 +22,6 @@ pub enum TextureFilter {
     Anisotropic8x,
     /// 16x anisotropic filtering.
     Anisotropic16x,
-}
-
-impl TextureFilter {
-    /// Map to the raylib `TextureFilter` FFI constant.
-    pub(crate) fn to_ffi(self) -> i32 {
-        match self {
-            TextureFilter::Nearest => FfiTextureFilter::TEXTURE_FILTER_POINT as i32,
-            TextureFilter::Bilinear => FfiTextureFilter::TEXTURE_FILTER_BILINEAR as i32,
-            TextureFilter::Trilinear => FfiTextureFilter::TEXTURE_FILTER_TRILINEAR as i32,
-            TextureFilter::Anisotropic4x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_4X as i32,
-            TextureFilter::Anisotropic8x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X as i32,
-            TextureFilter::Anisotropic16x => {
-                FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_16X as i32
-            }
-        }
-    }
 }
 
 impl TextureFilter {
@@ -133,12 +115,5 @@ mod tests {
         assert_eq!("".parse::<TextureFilter>(), Err(()));
         assert_eq!("Nearest".parse::<TextureFilter>(), Err(()));
         assert_eq!("smooth".parse::<TextureFilter>(), Err(()));
-    }
-
-    #[test]
-    fn to_ffi_maps_to_distinct_raylib_constants() {
-        use std::collections::HashSet;
-        let ffi_values: HashSet<i32> = TextureFilter::ALL.iter().map(|f| f.to_ffi()).collect();
-        assert_eq!(ffi_values.len(), TextureFilter::ALL.len());
     }
 }

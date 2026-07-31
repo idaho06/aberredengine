@@ -22,6 +22,7 @@ use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
 use crate::math::{Color, Rect, Vec2};
 use crate::resources::camera2d::Camera2D;
+use crate::resources::texturefilter::TextureFilter;
 use crate::systems::scene_dispatch::WorldDraw;
 
 /// Adapts any raylib draw handle to the core-owned [`WorldDraw`] trait.
@@ -176,6 +177,24 @@ pub(super) fn screen_to_world2d_raylib(
     ))
 }
 
+/// Maps [`TextureFilter`] to raylib's `TextureFilter` FFI constant. The enum
+/// itself stays in `crate::resources::texturefilter` (engine-owned, no
+/// raylib reference); only this conversion needs raylib, so it lives here
+/// alongside the other render-boundary shims.
+pub(crate) fn texture_filter_to_ffi(filter: TextureFilter) -> i32 {
+    use raylib::ffi::TextureFilter as FfiTextureFilter;
+    match filter {
+        TextureFilter::Nearest => FfiTextureFilter::TEXTURE_FILTER_POINT as i32,
+        TextureFilter::Bilinear => FfiTextureFilter::TEXTURE_FILTER_BILINEAR as i32,
+        TextureFilter::Trilinear => FfiTextureFilter::TEXTURE_FILTER_TRILINEAR as i32,
+        TextureFilter::Anisotropic4x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_4X as i32,
+        TextureFilter::Anisotropic8x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X as i32,
+        TextureFilter::Anisotropic16x => {
+            FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_16X as i32
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +226,15 @@ mod tests {
         let rc: raylib::prelude::Camera2D = c.into();
         let back: Camera2D = rc.into();
         assert_eq!(c, back);
+    }
+
+    #[test]
+    fn texture_filter_to_ffi_maps_to_distinct_raylib_constants() {
+        use std::collections::HashSet;
+        let ffi_values: HashSet<i32> = TextureFilter::ALL
+            .iter()
+            .map(|f| texture_filter_to_ffi(*f))
+            .collect();
+        assert_eq!(ffi_values.len(), TextureFilter::ALL.len());
     }
 }

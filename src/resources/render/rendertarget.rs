@@ -5,6 +5,7 @@
 //! rendering with proper aspect ratio preservation.
 
 use crate::resources::texturefilter::TextureFilter;
+use crate::systems::render::math::texture_filter_to_ffi;
 use raylib::ffi;
 use raylib::prelude::*;
 
@@ -74,7 +75,7 @@ impl RenderTarget {
         rl: &mut RaylibHandle,
         th: &RaylibThread,
     ) -> Result<(), String> {
-        let filter_value = self.filter.to_ffi();
+        let filter_value = texture_filter_to_ffi(self.filter);
 
         if self.ping.is_none() {
             let ping = rl
@@ -107,9 +108,8 @@ impl RenderTarget {
 
     /// Apply the current filter setting to the main texture via FFI.
     fn apply_filter(&mut self) {
-        let filter_value = self.filter.to_ffi();
         unsafe {
-            ffi::SetTextureFilter(self.texture.texture, filter_value);
+            ffi::SetTextureFilter(self.texture.texture, texture_filter_to_ffi(self.filter));
         }
     }
 
@@ -139,7 +139,7 @@ impl RenderTarget {
         self.apply_filter();
 
         // Recreate ping/pong buffers if they exist
-        let filter_value = self.filter.to_ffi();
+        let filter_value = texture_filter_to_ffi(self.filter);
 
         if self.ping.is_some() {
             let ping = rl
