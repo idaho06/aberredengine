@@ -4,7 +4,7 @@
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemState;
-use raylib::prelude::Vector2;
+use aberredengine::math::Vec2;
 
 use aberredengine::components::animation::{Animation, AnimationController, Condition};
 use aberredengine::components::boxcollider::BoxCollider;
@@ -122,7 +122,7 @@ fn tick_collision_detector(world: &mut World) {
 fn movement_integrates_velocity_into_position() {
     let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
-    rb.velocity = Vector2 { x: 10.0, y: 0.0 };
+    rb.velocity = Vec2 { x: 10.0, y: 0.0 };
 
     let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
 
@@ -138,7 +138,7 @@ fn movement_integrates_velocity_into_position() {
 fn movement_applies_acceleration_forces() {
     let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
-    rb.add_force("thrust", Vector2 { x: 2.0, y: 0.0 });
+    rb.add_force("thrust", Vec2 { x: 2.0, y: 0.0 });
 
     let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
 
@@ -157,7 +157,7 @@ fn movement_applies_acceleration_forces() {
 fn movement_sets_signals_moving_and_speed_sq() {
     let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
-    rb.velocity = Vector2 { x: 3.0, y: 4.0 };
+    rb.velocity = Vec2 { x: 3.0, y: 4.0 };
 
     let entity = world
         .spawn((MapPosition::new(0.0, 0.0), rb, Signals::default()))
@@ -175,7 +175,7 @@ fn movement_sets_signals_moving_and_speed_sq() {
 fn movement_skips_frozen_but_clears_signals() {
     let mut world = make_world(0.0);
     let mut rb = RigidBody::new();
-    rb.velocity = Vector2 { x: 5.0, y: 0.0 };
+    rb.velocity = Vec2 { x: 5.0, y: 0.0 };
     rb.freeze();
 
     let mut signals = Signals::default().with_flag("moving");
@@ -423,7 +423,7 @@ fn stuckto_applies_offset() {
     let follower = world
         .spawn((
             MapPosition::new(0.0, 0.0),
-            StuckTo::new(target).with_offset(Vector2 { x: 10.0, y: -20.0 }),
+            StuckTo::new(target).with_offset(Vec2 { x: 10.0, y: -20.0 }),
         ))
         .id();
 
@@ -830,8 +830,8 @@ fn tween_position_interpolates_linearly() {
     let mut world = make_world(0.5); // 0.5 second delta
 
     let tween = Tween::new(
-        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vector2 { x: 100.0, y: 200.0 }),
+        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 100.0, y: 200.0 }),
         1.0, // 1 second duration
     );
 
@@ -849,8 +849,8 @@ fn tween_position_stops_at_end_with_once_mode() {
     let mut world = make_world(1.0);
 
     let tween = Tween::new(
-        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
         0.5, // Half second duration
     )
     .with_loop_mode(LoopMode::Once);
@@ -870,8 +870,8 @@ fn tween_position_loops_with_loop_mode() {
     let mut world = make_world(0.6);
 
     let tween = Tween::new(
-        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
         0.5,
     )
     .with_loop_mode(LoopMode::Loop);
@@ -890,8 +890,8 @@ fn tween_position_pingpong_reverses() {
     let mut world = make_world(0.6);
 
     let tween = Tween::new(
-        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
         0.5,
     )
     .with_loop_mode(LoopMode::PingPong);
@@ -939,8 +939,8 @@ fn tween_position_with_quad_in_easing() {
     let mut world = make_world(0.5);
 
     let tween = Tween::new(
-        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vector2 { x: 100.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
         1.0,
     )
     .with_easing(Easing::QuadIn);
@@ -1498,7 +1498,7 @@ fn time_scale_zero_freezes_movement() {
     world.init_resource::<Messages<AudioCmd>>();
 
     let mut rb = RigidBody::new();
-    rb.velocity = Vector2 { x: 100.0, y: 0.0 };
+    rb.velocity = Vec2 { x: 100.0, y: 0.0 };
 
     let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
 
@@ -1522,7 +1522,7 @@ fn time_scale_doubles_effective_movement() {
     world.init_resource::<Messages<AudioCmd>>();
 
     let mut rb = RigidBody::new();
-    rb.velocity = Vector2 { x: 10.0, y: 0.0 };
+    rb.velocity = Vec2 { x: 10.0, y: 0.0 };
 
     let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
 
@@ -3049,7 +3049,7 @@ fn make_animation_resource(
 ) -> AnimationResource {
     AnimationResource {
         tex_key: Arc::from(tex_key),
-        position: Vector2 {
+        position: Vec2 {
             x: position.0,
             y: position.1,
         },
@@ -3092,8 +3092,8 @@ fn make_sprite(tex_key: &str) -> Sprite {
         tex_key: Arc::from(tex_key),
         width: 64.0,
         height: 64.0,
-        offset: Vector2 { x: 0.0, y: 0.0 },
-        origin: Vector2 { x: 0.0, y: 0.0 },
+        offset: Vec2 { x: 0.0, y: 0.0 },
+        origin: Vec2 { x: 0.0, y: 0.0 },
         flip_h: false,
         flip_v: false,
     }

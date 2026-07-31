@@ -275,6 +275,7 @@ pub(super) fn draw_rotated_rect_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::math::Vec2;
     use std::sync::Arc;
 
     const EPSILON: f32 = 1e-6;
@@ -288,8 +289,8 @@ mod tests {
             tex_key: Arc::from("test"),
             width: w,
             height: h,
-            offset: Vector2 { x: 0.0, y: 0.0 },
-            origin: Vector2 {
+            offset: Vec2 { x: 0.0, y: 0.0 },
+            origin: Vec2 {
                 x: origin_x,
                 y: origin_y,
             },

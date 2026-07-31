@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::gui_themed::Themed;
 use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
@@ -25,7 +25,7 @@ use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 /// data and `menu_spawn_system` reacts on `Added<Menu>`.
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiButton {
-    pub size: Vector2,
+    pub size: Vec2,
     /// Empty string = captionless button, no caption child spawned.
     pub caption: String,
     /// Lua callback name, checked first by the click dispatch chain. Empty
@@ -45,7 +45,7 @@ pub struct GuiButton {
 impl GuiButton {
     pub fn new(width: f32, height: f32, caption: impl Into<String>) -> Self {
         Self {
-            size: Vector2::new(width, height),
+            size: Vec2::new(width, height),
             caption: caption.into(),
             callback_name: Arc::from(""),
             disabled: false,

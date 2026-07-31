@@ -5,7 +5,7 @@
 //! [`InputControlled`](crate::components::inputcontrolled::InputControlled)
 //! component. Diagonal movement is normalized to maintain constant speed.
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::rigidbody::RigidBody;
@@ -18,7 +18,7 @@ pub fn input_simple_controller(
 ) {
     for (keyboard_controlled, mut rigidbody) in query.iter_mut() {
         // Reset velocity
-        rigidbody.velocity = Vector2 { x: 0.0, y: 0.0 };
+        rigidbody.velocity = Vec2 { x: 0.0, y: 0.0 };
 
         // Update velocity based on input
         if input_state.maindirection_up.active {

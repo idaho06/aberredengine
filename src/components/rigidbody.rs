@@ -10,21 +10,21 @@
 //! to paddle).
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 use rustc_hash::FxHashMap;
 
 /// A named acceleration force that can be toggled on/off.
 #[derive(Clone, Copy, Debug)]
 pub struct AccelerationForce {
     /// The acceleration vector in world units per second squared.
-    pub value: Vector2,
+    pub value: Vec2,
     /// Whether this force is currently active.
     pub enabled: bool,
 }
 
 impl AccelerationForce {
     /// Create a new enabled acceleration force.
-    pub fn new(value: Vector2) -> Self {
+    pub fn new(value: Vec2) -> Self {
         Self {
             value,
             enabled: true,
@@ -32,7 +32,7 @@ impl AccelerationForce {
     }
 
     /// Create a new acceleration force with specified enabled state.
-    pub fn with_enabled(value: Vector2, enabled: bool) -> Self {
+    pub fn with_enabled(value: Vec2, enabled: bool) -> Self {
         Self { value, enabled }
     }
 }
@@ -52,9 +52,9 @@ impl AccelerationForce {
 /// # Example
 /// ```ignore
 /// let mut rb = RigidBody::with_physics(5.0, Some(300.0));
-/// rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
-/// rb.add_force("wind", Vector2 { x: 50.0, y: 0.0 });
-/// rb.add_force("motor", Vector2 { x: 0.0, y: -500.0 });
+/// rb.add_force("gravity", Vec2 { x: 0.0, y: 980.0 });
+/// rb.add_force("wind", Vec2 { x: 50.0, y: 0.0 });
+/// rb.add_force("motor", Vec2 { x: 0.0, y: -500.0 });
 ///
 /// // Disable gravity when on ground
 /// rb.set_force_enabled("gravity", false);
@@ -65,7 +65,7 @@ impl AccelerationForce {
 #[derive(Component, Clone, Debug)]
 pub struct RigidBody {
     /// Current velocity in world units per second.
-    pub velocity: Vector2,
+    pub velocity: Vec2,
     /// Named acceleration forces. The total acceleration is the sum of all enabled forces.
     pub forces: FxHashMap<String, AccelerationForce>,
     /// Velocity damping factor. Applied as: velocity *= (1 - friction * delta).
@@ -88,7 +88,7 @@ impl RigidBody {
     /// Create a RigidBody with zero velocity and no forces.
     pub fn new() -> Self {
         Self {
-            velocity: Vector2 { x: 0.0, y: 0.0 },
+            velocity: Vec2 { x: 0.0, y: 0.0 },
             forces: FxHashMap::default(),
             friction: 0.0,
             max_speed: None,
@@ -103,7 +103,7 @@ impl RigidBody {
     /// * `max_speed` - Optional velocity magnitude limit
     pub fn with_physics(friction: f32, max_speed: Option<f32>) -> Self {
         Self {
-            velocity: Vector2 { x: 0.0, y: 0.0 },
+            velocity: Vec2 { x: 0.0, y: 0.0 },
             forces: FxHashMap::default(),
             friction,
             max_speed,
@@ -112,13 +112,13 @@ impl RigidBody {
     }
 
     /// Add or update a named acceleration force (enabled by default).
-    pub fn add_force(&mut self, name: &str, value: Vector2) {
+    pub fn add_force(&mut self, name: &str, value: Vec2) {
         self.forces
             .insert(name.to_string(), AccelerationForce::new(value));
     }
 
     /// Add or update a named acceleration force with specified enabled state.
-    pub fn add_force_with_state(&mut self, name: &str, value: Vector2, enabled: bool) {
+    pub fn add_force_with_state(&mut self, name: &str, value: Vec2, enabled: bool) {
         self.forces.insert(
             name.to_string(),
             AccelerationForce::with_enabled(value, enabled),
@@ -148,7 +148,7 @@ impl RigidBody {
 
     /// Update the value of an existing force.
     /// Returns false if the force doesn't exist.
-    pub fn set_force_value(&mut self, name: &str, value: Vector2) -> bool {
+    pub fn set_force_value(&mut self, name: &str, value: Vec2) -> bool {
         if let Some(force) = self.forces.get_mut(name) {
             force.value = value;
             true
@@ -173,8 +173,8 @@ impl RigidBody {
     /// `FxHashMap` rather than restructured to a `Vec`/sorted-key summation:
     /// the only genuinely order-sensitive site surveyed in that audit, but
     /// reproducible as-is.
-    pub fn total_acceleration(&self) -> Vector2 {
-        let mut total = Vector2 { x: 0.0, y: 0.0 };
+    pub fn total_acceleration(&self) -> Vec2 {
+        let mut total = Vec2 { x: 0.0, y: 0.0 };
         for force in self.forces.values() {
             if force.enabled {
                 total += force.value;
@@ -184,12 +184,12 @@ impl RigidBody {
     }
 
     /// Set the velocity of the RigidBody.
-    pub fn set_velocity(&mut self, velocity: Vector2) {
+    pub fn set_velocity(&mut self, velocity: Vec2) {
         self.velocity = velocity;
     }
 
     /// Get the current velocity.
-    pub fn velocity(&self) -> Vector2 {
+    pub fn velocity(&self) -> Vec2 {
         self.velocity
     }
 
@@ -219,7 +219,7 @@ impl RigidBody {
     pub fn set_speed(&mut self, new_speed: f32) {
         let current_speed = self.velocity.length();
         if current_speed > 0.0 {
-            self.velocity = self.velocity.normalized() * new_speed;
+            self.velocity = self.velocity.normalize() * new_speed;
         } else {
             log::warn!("RigidBody::set_speed called with zero velocity - operation ignored");
         }
@@ -236,7 +236,7 @@ mod tests {
         (a - b).abs() < EPSILON
     }
 
-    fn vec_approx_eq(a: Vector2, b: Vector2) -> bool {
+    fn vec_approx_eq(a: Vec2, b: Vec2) -> bool {
         approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
     }
 
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_acceleration_force_new() {
-        let force = AccelerationForce::new(Vector2 { x: 10.0, y: 20.0 });
+        let force = AccelerationForce::new(Vec2 { x: 10.0, y: 20.0 });
         assert!(approx_eq(force.value.x, 10.0));
         assert!(approx_eq(force.value.y, 20.0));
         assert!(force.enabled); // enabled by default
@@ -252,13 +252,13 @@ mod tests {
 
     #[test]
     fn test_acceleration_force_with_enabled_true() {
-        let force = AccelerationForce::with_enabled(Vector2 { x: 5.0, y: 5.0 }, true);
+        let force = AccelerationForce::with_enabled(Vec2 { x: 5.0, y: 5.0 }, true);
         assert!(force.enabled);
     }
 
     #[test]
     fn test_acceleration_force_with_enabled_false() {
-        let force = AccelerationForce::with_enabled(Vector2 { x: 5.0, y: 5.0 }, false);
+        let force = AccelerationForce::with_enabled(Vec2 { x: 5.0, y: 5.0 }, false);
         assert!(!force.enabled);
     }
 
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn test_rigidbody_new() {
         let rb = RigidBody::new();
-        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(vec_approx_eq(rb.velocity, Vec2 { x: 0.0, y: 0.0 }));
         assert!(rb.forces.is_empty());
         assert!(approx_eq(rb.friction, 0.0));
         assert!(rb.max_speed.is_none());
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn test_rigidbody_default() {
         let rb = RigidBody::default();
-        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(vec_approx_eq(rb.velocity, Vec2 { x: 0.0, y: 0.0 }));
         assert!(rb.forces.is_empty());
     }
 
@@ -286,7 +286,7 @@ mod tests {
         let rb = RigidBody::with_physics(5.0, Some(300.0));
         assert!(approx_eq(rb.friction, 5.0));
         assert_eq!(rb.max_speed, Some(300.0));
-        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(vec_approx_eq(rb.velocity, Vec2 { x: 0.0, y: 0.0 }));
         assert!(!rb.frozen);
     }
 
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn test_add_force() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 980.0 });
         assert_eq!(rb.forces.len(), 1);
         let force = rb.get_force("gravity").unwrap();
         assert!(approx_eq(force.value.y, 980.0));
@@ -312,8 +312,8 @@ mod tests {
     #[test]
     fn test_add_force_overwrites() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 200.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 100.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 200.0 });
         assert_eq!(rb.forces.len(), 1);
         let force = rb.get_force("gravity").unwrap();
         assert!(approx_eq(force.value.y, 200.0));
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_add_force_with_state_enabled() {
         let mut rb = RigidBody::new();
-        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, true);
+        rb.add_force_with_state("wind", Vec2 { x: 50.0, y: 0.0 }, true);
         let force = rb.get_force("wind").unwrap();
         assert!(force.enabled);
     }
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn test_add_force_with_state_disabled() {
         let mut rb = RigidBody::new();
-        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, false);
+        rb.add_force_with_state("wind", Vec2 { x: 50.0, y: 0.0 }, false);
         let force = rb.get_force("wind").unwrap();
         assert!(!force.enabled);
     }
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_remove_force() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 980.0 });
         assert_eq!(rb.forces.len(), 1);
         rb.remove_force("gravity");
         assert!(rb.forces.is_empty());
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_set_force_enabled() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 980.0 });
         assert!(rb.is_force_enabled("gravity"));
 
         let result = rb.set_force_enabled("gravity", false);
@@ -382,9 +382,9 @@ mod tests {
     #[test]
     fn test_set_force_value() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 100.0 });
 
-        let result = rb.set_force_value("gravity", Vector2 { x: 0.0, y: 200.0 });
+        let result = rb.set_force_value("gravity", Vec2 { x: 0.0, y: 200.0 });
         assert!(result);
         let force = rb.get_force("gravity").unwrap();
         assert!(approx_eq(force.value.y, 200.0));
@@ -393,14 +393,14 @@ mod tests {
     #[test]
     fn test_set_force_value_nonexistent() {
         let mut rb = RigidBody::new();
-        let result = rb.set_force_value("nonexistent", Vector2 { x: 0.0, y: 0.0 });
+        let result = rb.set_force_value("nonexistent", Vec2 { x: 0.0, y: 0.0 });
         assert!(!result);
     }
 
     #[test]
     fn test_get_force() {
         let mut rb = RigidBody::new();
-        rb.add_force("test", Vector2 { x: 1.0, y: 2.0 });
+        rb.add_force("test", Vec2 { x: 1.0, y: 2.0 });
         let force = rb.get_force("test");
         assert!(force.is_some());
         assert!(approx_eq(force.unwrap().value.x, 1.0));
@@ -418,43 +418,43 @@ mod tests {
     fn test_total_acceleration_empty() {
         let rb = RigidBody::new();
         let total = rb.total_acceleration();
-        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(vec_approx_eq(total, Vec2 { x: 0.0, y: 0.0 }));
     }
 
     #[test]
     fn test_total_acceleration_single_force() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 980.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 980.0 });
         let total = rb.total_acceleration();
-        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 980.0 }));
+        assert!(vec_approx_eq(total, Vec2 { x: 0.0, y: 980.0 }));
     }
 
     #[test]
     fn test_total_acceleration_multiple_forces() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
-        rb.add_force("wind", Vector2 { x: 50.0, y: 0.0 });
-        rb.add_force("thrust", Vector2 { x: 0.0, y: -30.0 });
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 100.0 });
+        rb.add_force("wind", Vec2 { x: 50.0, y: 0.0 });
+        rb.add_force("thrust", Vec2 { x: 0.0, y: -30.0 });
         let total = rb.total_acceleration();
-        assert!(vec_approx_eq(total, Vector2 { x: 50.0, y: 70.0 }));
+        assert!(vec_approx_eq(total, Vec2 { x: 50.0, y: 70.0 }));
     }
 
     #[test]
     fn test_total_acceleration_disabled_forces_excluded() {
         let mut rb = RigidBody::new();
-        rb.add_force("gravity", Vector2 { x: 0.0, y: 100.0 });
-        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, false);
+        rb.add_force("gravity", Vec2 { x: 0.0, y: 100.0 });
+        rb.add_force_with_state("wind", Vec2 { x: 50.0, y: 0.0 }, false);
         let total = rb.total_acceleration();
-        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 100.0 }));
+        assert!(vec_approx_eq(total, Vec2 { x: 0.0, y: 100.0 }));
     }
 
     #[test]
     fn test_total_acceleration_all_disabled() {
         let mut rb = RigidBody::new();
-        rb.add_force_with_state("gravity", Vector2 { x: 0.0, y: 100.0 }, false);
-        rb.add_force_with_state("wind", Vector2 { x: 50.0, y: 0.0 }, false);
+        rb.add_force_with_state("gravity", Vec2 { x: 0.0, y: 100.0 }, false);
+        rb.add_force_with_state("wind", Vec2 { x: 50.0, y: 0.0 }, false);
         let total = rb.total_acceleration();
-        assert!(vec_approx_eq(total, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(vec_approx_eq(total, Vec2 { x: 0.0, y: 0.0 }));
     }
 
     // ==================== VELOCITY TESTS ====================
@@ -462,24 +462,24 @@ mod tests {
     #[test]
     fn test_set_velocity() {
         let mut rb = RigidBody::new();
-        rb.set_velocity(Vector2 { x: 100.0, y: 200.0 });
-        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 100.0, y: 200.0 }));
+        rb.set_velocity(Vec2 { x: 100.0, y: 200.0 });
+        assert!(vec_approx_eq(rb.velocity, Vec2 { x: 100.0, y: 200.0 }));
     }
 
     #[test]
     fn test_velocity_getter() {
         let mut rb = RigidBody::new();
-        rb.velocity = Vector2 { x: 50.0, y: 75.0 };
+        rb.velocity = Vec2 { x: 50.0, y: 75.0 };
         let vel = rb.velocity();
-        assert!(vec_approx_eq(vel, Vector2 { x: 50.0, y: 75.0 }));
+        assert!(vec_approx_eq(vel, Vec2 { x: 50.0, y: 75.0 }));
     }
 
     #[test]
     fn test_translate() {
         let mut rb = RigidBody::new();
-        rb.velocity = Vector2 { x: 10.0, y: 20.0 };
+        rb.velocity = Vec2 { x: 10.0, y: 20.0 };
         rb.translate(5.0, -3.0);
-        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 15.0, y: 17.0 }));
+        assert!(vec_approx_eq(rb.velocity, Vec2 { x: 15.0, y: 17.0 }));
     }
 
     // ==================== FREEZE/UNFREEZE TESTS ====================
@@ -505,7 +505,7 @@ mod tests {
     #[test]
     fn test_set_speed_maintains_direction() {
         let mut rb = RigidBody::new();
-        rb.velocity = Vector2 { x: 3.0, y: 4.0 }; // magnitude = 5
+        rb.velocity = Vec2 { x: 3.0, y: 4.0 }; // magnitude = 5
         rb.set_speed(10.0);
         // Direction should be preserved: (0.6, 0.8) * 10 = (6, 8)
         assert!(approx_eq(rb.velocity.x, 6.0));
@@ -516,16 +516,16 @@ mod tests {
     #[test]
     fn test_set_speed_with_zero_velocity() {
         let mut rb = RigidBody::new();
-        rb.velocity = Vector2 { x: 0.0, y: 0.0 };
+        rb.velocity = Vec2 { x: 0.0, y: 0.0 };
         rb.set_speed(10.0);
         // Should be no-op when velocity is zero
-        assert!(vec_approx_eq(rb.velocity, Vector2 { x: 0.0, y: 0.0 }));
+        assert!(vec_approx_eq(rb.velocity, Vec2 { x: 0.0, y: 0.0 }));
     }
 
     #[test]
     fn test_set_speed_to_zero() {
         let mut rb = RigidBody::new();
-        rb.velocity = Vector2 { x: 3.0, y: 4.0 };
+        rb.velocity = Vec2 { x: 3.0, y: 4.0 };
         rb.set_speed(0.0);
         assert!(approx_eq(rb.velocity.length(), 0.0));
     }
@@ -533,7 +533,7 @@ mod tests {
     #[test]
     fn test_set_speed_negative_direction() {
         let mut rb = RigidBody::new();
-        rb.velocity = Vector2 { x: -3.0, y: -4.0 }; // magnitude = 5
+        rb.velocity = Vec2 { x: -3.0, y: -4.0 }; // magnitude = 5
         rb.set_speed(10.0);
         // Direction preserved: (-0.6, -0.8) * 10 = (-6, -8)
         assert!(approx_eq(rb.velocity.x, -6.0));

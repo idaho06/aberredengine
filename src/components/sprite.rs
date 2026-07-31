@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 #[derive(Component, Clone, Debug, PartialEq)]
 /// Describes how to render a textured quad for an entity.
@@ -20,9 +20,9 @@ pub struct Sprite {
     /// Height in world units.
     pub height: f32,
     /// Pixel offset into the texture (e.g. frame origin in a spritesheet).
-    pub offset: Vector2,
+    pub offset: Vec2,
     /// Pixel pivot relative to the texture's top-left for transforms.
-    pub origin: Vector2,
+    pub origin: Vec2,
     /// Flip horizontally at render time.
     pub flip_h: bool,
     /// Flip vertically at render time.

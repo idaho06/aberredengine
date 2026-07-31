@@ -8,12 +8,12 @@
 //! positioning.
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// Position offset from a GUI entity's parent, resolved into `ScreenPosition`
 /// by `gui_layout_system`.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct GuiOffset(pub Vector2);
+pub struct GuiOffset(pub Vec2);
 
 #[cfg(test)]
 mod tests {
@@ -21,7 +21,7 @@ mod tests {
 
     #[test]
     fn test_guioffset_construction() {
-        let offset = GuiOffset(Vector2::new(20.0, 40.0));
+        let offset = GuiOffset(Vec2::new(20.0, 40.0));
         assert!((offset.0.x - 20.0).abs() < f32::EPSILON);
         assert!((offset.0.y - 40.0).abs() < f32::EPSILON);
     }

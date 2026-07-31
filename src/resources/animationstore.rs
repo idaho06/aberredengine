@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 use rustc_hash::FxHashMap;
 
 /// Central registry of reusable animation definitions keyed by string IDs.
@@ -33,7 +33,7 @@ pub struct AnimationResource {
     /// Texture key in [`crate::resources::render::texturestore::TextureStore`].
     pub tex_key: Arc<str>,
     /// Pixel origin within the texture where frame 0 starts (texture-space, not world/screen).
-    pub position: Vector2,
+    pub position: Vec2,
     /// Per-frame horizontal displacement (also the frame width, as frames are packed with no gaps).
     pub horizontal_displacement: f32,
     /// Vertical displacement per row. When non-zero, enables row-wrapping: frames that exceed

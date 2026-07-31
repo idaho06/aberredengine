@@ -1,6 +1,6 @@
 use raylib::prelude::*;
 
-use super::math::{resolve_text_tint, shadow_color};
+use super::math::{resolve_text_tint, shadow_color, vec2_to_raylib};
 use super::render::ScreenTextBufferItem;
 use crate::resources::render::fontstore::FontStore;
 
@@ -28,7 +28,14 @@ pub(super) fn draw_screen_text_item(
                 shadow_color(shadow),
             );
         }
-        d.draw_text_ex(font, &item.text, pos.pos, item.font_size, 1.0, final_color);
+        d.draw_text_ex(
+            font,
+            &item.text,
+            vec2_to_raylib(pos.pos),
+            item.font_size,
+            1.0,
+            final_color,
+        );
         if debug {
             d.draw_rectangle_lines(
                 pos.pos.x as i32,

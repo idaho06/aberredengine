@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::gui_themed::Themed;
 use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
@@ -36,7 +36,7 @@ pub enum ProgressBarDirection {
 /// as fallback), so the bar stays in sync without Lua polling.
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiProgressBar {
-    pub size: Vector2,
+    pub size: Vec2,
     /// Current fill level. Clamped to `[0, max]` at construction and by
     /// the entity command handlers — not re-clamped at render time.
     pub value: f32,
@@ -54,7 +54,7 @@ impl GuiProgressBar {
     pub fn new(width: f32, height: f32, value: f32, max: f32) -> Self {
         let max = max.max(0.0);
         Self {
-            size: Vector2::new(width, height),
+            size: Vec2::new(width, height),
             value: value.clamp(0.0, max),
             max,
             direction: ProgressBarDirection::default(),

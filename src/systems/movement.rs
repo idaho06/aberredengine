@@ -8,7 +8,7 @@
 //! to control their position directly.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
@@ -68,14 +68,14 @@ pub fn movement(
 
             // Zero out very small velocities to prevent drift
             const VELOCITY_EPSILON_SQ: f32 = 0.01 * 0.01;
-            if rigidbody.velocity.length_sqr() < VELOCITY_EPSILON_SQ {
-                rigidbody.velocity = Vector2 { x: 0.0, y: 0.0 };
+            if rigidbody.velocity.length_squared() < VELOCITY_EPSILON_SQ {
+                rigidbody.velocity = Vec2 { x: 0.0, y: 0.0 };
             }
         }
 
         // Step 5: Clamp velocity to max_speed if configured
         if let Some(max_speed) = rigidbody.max_speed {
-            let speed_sq = rigidbody.velocity.length_sqr();
+            let speed_sq = rigidbody.velocity.length_squared();
             if speed_sq > max_speed * max_speed {
                 let speed = speed_sq.sqrt(); // single sqrt, only when clamping
                 rigidbody.velocity = rigidbody.velocity / speed * max_speed;
@@ -87,7 +87,7 @@ pub fn movement(
 
         // Step 7: Update movement signals
         if let Some(signals) = maybe_signals.as_mut() {
-            let speed_sq = rigidbody.velocity.length_sqr();
+            let speed_sq = rigidbody.velocity.length_squared();
             if speed_sq > 0.0 {
                 signals.ensure_flag(sk::MOVING);
             } else {

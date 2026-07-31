@@ -21,7 +21,7 @@
 //!     // Full access to ECS queries and resources via ctx
 //!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
 //!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
-//!         rb.velocity = Vector2::zero();
+//!         rb.velocity = Vec2::ZERO;
 //!     }
 //! }
 //! ```

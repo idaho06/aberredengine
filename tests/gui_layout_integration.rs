@@ -10,7 +10,7 @@
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use raylib::math::Vector2;
+use aberredengine::math::Vec2;
 
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::guioffset::GuiOffset;
@@ -41,7 +41,7 @@ fn spawn_window_and_child(
         .spawn(ScreenPosition::new(parent_pos.0, parent_pos.1))
         .id();
     let child = world
-        .spawn((GuiOffset(Vector2::new(offset.0, offset.1)), ChildOf(parent)))
+        .spawn((GuiOffset(Vec2::new(offset.0, offset.1)), ChildOf(parent)))
         .id();
     world.flush();
     (parent, child)
@@ -67,7 +67,7 @@ fn nested_grandchild_cascades_additively() {
 
     let (_, button) = spawn_window_and_child(&mut world, (100.0, 100.0), (20.0, 40.0));
     let label = world
-        .spawn((GuiOffset(Vector2::new(5.0, 5.0)), ChildOf(button)))
+        .spawn((GuiOffset(Vec2::new(5.0, 5.0)), ChildOf(button)))
         .id();
     world.flush();
 
@@ -89,7 +89,7 @@ fn hiding_parent_removes_descendant_screen_position() {
 
     let (window, button) = spawn_window_and_child(&mut world, (100.0, 100.0), (20.0, 40.0));
     let label = world
-        .spawn((GuiOffset(Vector2::new(5.0, 5.0)), ChildOf(button)))
+        .spawn((GuiOffset(Vec2::new(5.0, 5.0)), ChildOf(button)))
         .id();
     world.flush();
 

@@ -19,7 +19,7 @@
 //! - [`crate::resources::animationstore::AnimationStore`] – animation definitions
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::animation::{Animation, AnimationController, CmpOp, Condition};
 use crate::components::mapposition::MapPosition;
@@ -125,11 +125,11 @@ pub fn animation(
 /// horizontally without wrapping (original behaviour).
 pub(crate) fn compute_frame_offset(
     frame_index: usize,
-    position: Vector2,
+    position: Vec2,
     h_disp: f32,
     v_disp: f32,
     tex_width: Option<f32>,
-) -> Vector2 {
+) -> Vec2 {
     let raw_x = position.x + (frame_index as f32 * h_disp);
 
     if v_disp > 0.0
@@ -142,14 +142,14 @@ pub(crate) fn compute_frame_offset(
             let frames_per_full_row = (tw / h_disp).floor() as usize;
             let row = remaining / frames_per_full_row + 1;
             let col = remaining % frames_per_full_row;
-            return Vector2 {
+            return Vec2 {
                 x: col as f32 * h_disp,
                 y: position.y + row as f32 * v_disp,
             };
         }
     }
 
-    Vector2 {
+    Vec2 {
         x: raw_x,
         y: position.y,
     }
@@ -623,11 +623,11 @@ mod tests {
 
     // --- compute_frame_offset ---
 
-    fn v2(x: f32, y: f32) -> Vector2 {
-        Vector2 { x, y }
+    fn v2(x: f32, y: f32) -> Vec2 {
+        Vec2 { x, y }
     }
 
-    fn assert_offset(result: Vector2, expected_x: f32, expected_y: f32) {
+    fn assert_offset(result: Vec2, expected_x: f32, expected_y: f32) {
         assert!(
             (result.x - expected_x).abs() < f32::EPSILON
                 && (result.y - expected_y).abs() < f32::EPSILON,
@@ -868,7 +868,7 @@ mod tests {
             "die".to_string(),
             AnimationResource {
                 tex_key: Arc::from("t"),
-                position: Vector2 { x: 0.0, y: 0.0 },
+                position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
                 vertical_displacement: 0.0,
                 frame_count: 1,
@@ -892,8 +892,8 @@ mod tests {
             tex_key: Arc::from("t"),
             width: 32.0,
             height: 32.0,
-            offset: Vector2 { x: 0.0, y: 0.0 },
-            origin: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vec2 { x: 0.0, y: 0.0 },
+            origin: Vec2 { x: 0.0, y: 0.0 },
             flip_h: false,
             flip_v: false,
         };
@@ -963,7 +963,7 @@ mod tests {
             "death".to_string(),
             AnimationResource {
                 tex_key: Arc::from("t"),
-                position: Vector2 { x: 0.0, y: 0.0 },
+                position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
                 vertical_displacement: 0.0,
                 frame_count: 4,
@@ -975,7 +975,7 @@ mod tests {
             "idle".to_string(),
             AnimationResource {
                 tex_key: Arc::from("t"),
-                position: Vector2 { x: 0.0, y: 0.0 },
+                position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
                 vertical_displacement: 0.0,
                 frame_count: 4,
@@ -989,8 +989,8 @@ mod tests {
             tex_key: Arc::from("t"),
             width: 32.0,
             height: 32.0,
-            offset: Vector2 { x: 0.0, y: 0.0 },
-            origin: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vec2 { x: 0.0, y: 0.0 },
+            origin: Vec2 { x: 0.0, y: 0.0 },
             flip_h: false,
             flip_v: false,
         };
@@ -1068,7 +1068,7 @@ mod tests {
             "die".to_string(),
             AnimationResource {
                 tex_key: Arc::from("t"),
-                position: Vector2 { x: 0.0, y: 0.0 },
+                position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
                 vertical_displacement: 0.0,
                 frame_count: 4,
@@ -1082,8 +1082,8 @@ mod tests {
             tex_key: Arc::from("t"),
             width: 32.0,
             height: 32.0,
-            offset: Vector2 { x: 0.0, y: 0.0 },
-            origin: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vec2 { x: 0.0, y: 0.0 },
+            origin: Vec2 { x: 0.0, y: 0.0 },
             flip_h: false,
             flip_v: false,
         };

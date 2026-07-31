@@ -18,6 +18,18 @@ where
     a + (b - a) * t
 }
 
+/// Rotate `v` by `radians` (counter-clockwise, standard math convention).
+///
+/// Replaces raylib's `Vector2::rotated(angle)` — glam's own `Vec2::rotate`
+/// takes a unit rotor (complex-number-style), not a raw angle, so this
+/// composes it with `Vec2::from_angle` rather than hand-rolling the same
+/// `sin`/`cos` formula a second time. Also keeps rotation on glam's own
+/// `sin_cos` (routes through the `libm` feature enabled in `Cargo.toml`,
+/// same determinism rationale as the rest of this module).
+pub fn rotate(v: Vec2, radians: f32) -> Vec2 {
+    Vec2::from_angle(radians).rotate(v)
+}
+
 /// RGBA color, `u8` channels. Layout-identical to raylib's `Color` (see the
 /// `color_layout_matches_raylib` test) so the render tree's `From`/`Into`
 /// shims are a bit-for-bit reinterpretation, not a conversion.
@@ -247,6 +259,21 @@ mod tests {
 
     fn approx_eq(a: f32, b: f32) -> bool {
         (a - b).abs() < EPSILON
+    }
+
+    #[test]
+    fn rotate_by_90_degrees() {
+        let r = rotate(Vec2::new(10.0, 0.0), std::f32::consts::FRAC_PI_2);
+        assert!(approx_eq(r.x, 0.0));
+        assert!(approx_eq(r.y, 10.0));
+    }
+
+    #[test]
+    fn rotate_by_zero_is_identity() {
+        let v = Vec2::new(3.0, 4.0);
+        let r = rotate(v, 0.0);
+        assert!(approx_eq(r.x, v.x));
+        assert!(approx_eq(r.y, v.y));
     }
 
     #[test]

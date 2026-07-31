@@ -7,7 +7,7 @@
 //! system computes the resulting world-space values and stores them here.
 
 use bevy_ecs::prelude::*;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 
 /// Computed world-space transform for hierarchical entities.
 ///
@@ -17,19 +17,19 @@ use raylib::math::Vector2;
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct GlobalTransform2D {
     /// World-space position.
-    pub position: Vector2,
+    pub position: Vec2,
     /// World-space rotation in degrees.
     pub rotation_degrees: f32,
     /// World-space scale.
-    pub scale: Vector2,
+    pub scale: Vec2,
 }
 
 impl Default for GlobalTransform2D {
     fn default() -> Self {
         Self {
-            position: Vector2 { x: 0.0, y: 0.0 },
+            position: Vec2 { x: 0.0, y: 0.0 },
             rotation_degrees: 0.0,
-            scale: Vector2 { x: 1.0, y: 1.0 },
+            scale: Vec2 { x: 1.0, y: 1.0 },
         }
     }
 }

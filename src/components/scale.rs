@@ -5,7 +5,7 @@
 //! shrink it. Negative values can be used to flip.
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// 2D scale factor for sprite rendering.
 ///
@@ -13,12 +13,12 @@ use raylib::prelude::Vector2;
 /// animated via `Tween<Scale>`.
 #[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Scale {
-    pub scale: Vector2,
+    pub scale: Vec2,
 }
 impl Scale {
     pub fn new(sx: f32, sy: f32) -> Self {
         Self {
-            scale: Vector2 { x: sx, y: sy },
+            scale: Vec2 { x: sx, y: sy },
         }
     }
 }

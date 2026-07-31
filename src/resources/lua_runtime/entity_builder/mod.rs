@@ -18,7 +18,7 @@ use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use crate::components::guiwindow::GuiWindow;
 use mlua::MaybeSend;
 use mlua::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 mod behavior;
 mod gui;

@@ -32,7 +32,7 @@ pub fn resolve_world_pos(
     positions: &Query<&MapPosition>,
     global_transforms: &Query<&GlobalTransform2D>,
     entity: Entity,
-) -> Option<raylib::math::Vector2> {
+) -> Option<crate::math::Vec2> {
     positions.get(entity).ok().map(|p| {
         global_transforms
             .get(entity)
@@ -268,9 +268,9 @@ mod tests {
             .spawn((
                 MapPosition::new(5.0, 10.0),
                 GlobalTransform2D {
-                    position: raylib::math::Vector2 { x: 100.0, y: 200.0 },
+                    position: crate::math::Vec2 { x: 100.0, y: 200.0 },
                     rotation_degrees: 0.0,
-                    scale: raylib::math::Vector2 { x: 1.0, y: 1.0 },
+                    scale: crate::math::Vec2 { x: 1.0, y: 1.0 },
                 },
             ))
             .id();

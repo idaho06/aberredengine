@@ -9,7 +9,7 @@ use std::sync::Arc;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use log::warn;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 use serde::Deserialize;
 
 use crate::components::group::Group;
@@ -139,11 +139,11 @@ pub fn spawn_tiles(
                         tex_key: tilemap_tex_key.clone(),
                         width: tile_size,
                         height: tile_size,
-                        offset: Vector2 {
+                        offset: Vec2 {
                             x: col as f32 * tile_size,
                             y: row as f32 * tile_size,
                         },
-                        origin: Vector2::zero(),
+                        origin: Vec2::ZERO,
                         flip_h: false,
                         flip_v: false,
                     },

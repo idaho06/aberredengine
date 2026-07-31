@@ -11,7 +11,7 @@
 //! insert the co-located `GuiInteractable` one frame later.
 
 use bevy_ecs::prelude::{Component, Entity};
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::systems::GameCtx;
 
@@ -40,7 +40,7 @@ pub type GuiRustCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
 /// `GuiImage`, and any other widget that carries `GuiInteractable`).
 #[derive(Component, Clone, Debug)]
 pub struct GuiInteractable {
-    pub size: Vector2,
+    pub size: Vec2,
     pub state: GuiWidgetState,
     /// Lua callback name, checked first.
     pub on_click_callback: Option<String>,
@@ -70,7 +70,7 @@ impl PartialEq for GuiInteractable {
 impl GuiInteractable {
     pub fn new(width: f32, height: f32) -> Self {
         Self {
-            size: Vector2::new(width, height),
+            size: Vec2::new(width, height),
             state: GuiWidgetState::Normal,
             on_click_callback: None,
             on_rust_callback: None,

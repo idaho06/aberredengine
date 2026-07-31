@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::gui_themed::Themed;
 use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
@@ -22,7 +22,7 @@ use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
 /// spawn the caption `DynamicText` child.
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiLabel {
-    pub size: Vector2,
+    pub size: Vec2,
     /// Empty string = captionless label, no caption child spawned.
     pub caption: String,
     /// Selects which named theme in `GuiThemeStore` to render this label
@@ -44,7 +44,7 @@ pub struct GuiLabel {
 impl GuiLabel {
     pub fn new(width: f32, height: f32, caption: impl Into<String>) -> Self {
         Self {
-            size: Vector2::new(width, height),
+            size: Vec2::new(width, height),
             caption: caption.into(),
             theme_key: Arc::from(DEFAULT_GUI_THEME_KEY),
             signal_binding: None,

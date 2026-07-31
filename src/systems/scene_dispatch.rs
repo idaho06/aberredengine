@@ -27,11 +27,11 @@
 use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
-use raylib::prelude::{Camera2D, Vector2};
+use raylib::prelude::Camera2D;
 use rustc_hash::FxHashSet;
 
 use crate::components::persistent::{CleanableEntity, Persistent};
-use crate::math::Color;
+use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
@@ -95,12 +95,12 @@ pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 /// Minimal world-space drawing interface for `WorldDrawCallback`.
 /// Uses concrete types only so the callback stays object-safe.
 pub trait WorldDraw {
-    fn draw_line_v(&mut self, start: Vector2, end: Vector2, color: Color);
-    fn draw_line_ex(&mut self, start_pos: Vector2, end_pos: Vector2, thick: f32, color: Color);
+    fn draw_line_v(&mut self, start: Vec2, end: Vec2, color: Color);
+    fn draw_line_ex(&mut self, start_pos: Vec2, end_pos: Vec2, thick: f32, color: Color);
     fn draw_line_dashed(
         &mut self,
-        start_pos: Vector2,
-        end_pos: Vector2,
+        start_pos: Vec2,
+        end_pos: Vec2,
         dash_size: i32,
         space_size: i32,
         color: Color,

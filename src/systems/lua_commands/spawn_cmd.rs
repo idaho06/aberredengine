@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::animation::{Animation, AnimationController};
 use crate::components::boxcollider::BoxCollider;
@@ -200,7 +200,7 @@ fn apply_transform_components(
     }
     if let Some((sx, sy)) = transform.scale {
         entity_commands.insert(Scale {
-            scale: Vector2 { x: sx, y: sy },
+            scale: Vec2 { x: sx, y: sy },
         });
     }
     // Set ChildOf and immediately compute the correct initial GlobalTransform2D
@@ -213,13 +213,13 @@ fn apply_transform_components(
         entity_commands.queue(ComputeInitialGlobalTransform);
     }
     if let Some((x, y)) = transform.gui_offset {
-        entity_commands.insert(GuiOffset(Vector2 { x, y }));
+        entity_commands.insert(GuiOffset(Vec2 { x, y }));
     }
     if let Some(stuckto_data) = transform.stuckto
         && let Some(target) = super::entity_cmd::resolve_entity(stuckto_data.target_entity_id)
     {
         let mut stuckto = StuckTo::new(target);
-        stuckto.offset = Vector2 {
+        stuckto.offset = Vec2 {
             x: stuckto_data.offset_x,
             y: stuckto_data.offset_y,
         };
@@ -227,7 +227,7 @@ fn apply_transform_components(
         stuckto.follow_y = stuckto_data.follow_y;
         stuckto.stored_velocity = stuckto_data
             .stored_velocity
-            .map(|(vx, vy)| Vector2 { x: vx, y: vy });
+            .map(|(vx, vy)| Vec2 { x: vx, y: vy });
         entity_commands.insert(stuckto);
     }
     if let Some(priority) = transform.camera_target {
@@ -243,7 +243,7 @@ fn apply_physics_components(
 ) {
     if let Some(rb_data) = rigidbody {
         let mut rb = RigidBody::with_physics(rb_data.friction, rb_data.max_speed);
-        rb.velocity = Vector2 {
+        rb.velocity = Vec2 {
             x: rb_data.velocity_x,
             y: rb_data.velocity_y,
         };
@@ -251,7 +251,7 @@ fn apply_physics_components(
         for force in rb_data.forces {
             rb.add_force_with_state(
                 &force.name,
-                Vector2 {
+                Vec2 {
                     x: force.x,
                     y: force.y,
                 },
@@ -262,15 +262,15 @@ fn apply_physics_components(
     }
     if let Some(collider_data) = collider {
         entity_commands.insert(BoxCollider {
-            size: Vector2 {
+            size: Vec2 {
                 x: collider_data.width,
                 y: collider_data.height,
             },
-            offset: Vector2 {
+            offset: Vec2 {
                 x: collider_data.offset_x,
                 y: collider_data.offset_y,
             },
-            origin: Vector2 {
+            origin: Vec2 {
                 x: collider_data.origin_x,
                 y: collider_data.origin_y,
             },
@@ -291,11 +291,11 @@ fn apply_render_components(
             tex_key: Arc::from(sprite_data.tex_key),
             width: sprite_data.width,
             height: sprite_data.height,
-            origin: Vector2 {
+            origin: Vec2 {
                 x: sprite_data.origin_x,
                 y: sprite_data.origin_y,
             },
-            offset: Vector2 {
+            offset: Vec2 {
                 x: sprite_data.offset_x,
                 y: sprite_data.offset_y,
             },
@@ -343,11 +343,11 @@ fn apply_animation_components(
     }
     if let Some(td) = tween_position {
         entity_commands.insert(super::build_tween(
-            MapPosition::from_vec(Vector2 {
+            MapPosition::from_vec(Vec2 {
                 x: td.from_x,
                 y: td.from_y,
             }),
-            MapPosition::from_vec(Vector2 {
+            MapPosition::from_vec(Vec2 {
                 x: td.to_x,
                 y: td.to_y,
             }),
@@ -357,11 +357,11 @@ fn apply_animation_components(
     }
     if let Some(td) = tween_screen_position {
         entity_commands.insert(super::build_tween(
-            ScreenPosition::from_vec(Vector2 {
+            ScreenPosition::from_vec(Vec2 {
                 x: td.from_x,
                 y: td.from_y,
             }),
-            ScreenPosition::from_vec(Vector2 {
+            ScreenPosition::from_vec(Vec2 {
                 x: td.to_x,
                 y: td.to_y,
             }),
@@ -512,7 +512,7 @@ fn apply_ui_components(
             .collect();
         let mut menu_component = Menu::new(
             &labels,
-            Vector2 {
+            Vec2 {
                 x: menu_data.origin_x,
                 y: menu_data.origin_y,
             },
@@ -626,7 +626,7 @@ fn apply_particle_emitter(
     entity_commands.insert(ParticleEmitter {
         templates,
         shape,
-        offset: Vector2 {
+        offset: Vec2 {
             x: emitter_data.offset_x,
             y: emitter_data.offset_y,
         },

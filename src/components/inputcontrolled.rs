@@ -12,7 +12,7 @@
 //! entity positions or velocities.
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// Movement intent derived from player keyboard input.
 ///
@@ -22,13 +22,13 @@ use raylib::prelude::Vector2;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct InputControlled {
     /// Velocity when moving up.
-    pub up_velocity: Vector2,
+    pub up_velocity: Vec2,
     /// Velocity when moving down.
-    pub down_velocity: Vector2,
+    pub down_velocity: Vec2,
     /// Velocity when moving left.
-    pub left_velocity: Vector2,
+    pub left_velocity: Vec2,
     /// Velocity when moving right.
-    pub right_velocity: Vector2,
+    pub right_velocity: Vec2,
 }
 
 /// Movement controlled by mouse position.
@@ -54,13 +54,13 @@ pub struct MouseControlled {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct AccelerationControlled {
     /// Acceleration when moving up (typically negative Y).
-    pub up_acceleration: Vector2,
+    pub up_acceleration: Vec2,
     /// Acceleration when moving down (typically positive Y).
-    pub down_acceleration: Vector2,
+    pub down_acceleration: Vec2,
     /// Acceleration when moving left (typically negative X).
-    pub left_acceleration: Vector2,
+    pub left_acceleration: Vec2,
     /// Acceleration when moving right (typically positive X).
-    pub right_acceleration: Vector2,
+    pub right_acceleration: Vec2,
 }
 
 impl AccelerationControlled {
@@ -70,10 +70,10 @@ impl AccelerationControlled {
     /// * `accel` - Acceleration magnitude in world units per second squared
     pub fn symmetric(accel: f32) -> Self {
         Self {
-            up_acceleration: Vector2 { x: 0.0, y: -accel },
-            down_acceleration: Vector2 { x: 0.0, y: accel },
-            left_acceleration: Vector2 { x: -accel, y: 0.0 },
-            right_acceleration: Vector2 { x: accel, y: 0.0 },
+            up_acceleration: Vec2 { x: 0.0, y: -accel },
+            down_acceleration: Vec2 { x: 0.0, y: accel },
+            left_acceleration: Vec2 { x: -accel, y: 0.0 },
+            right_acceleration: Vec2 { x: accel, y: 0.0 },
         }
     }
 }

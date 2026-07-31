@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use super::builder::EngineBuilder;
 use super::logic_thread::run_sim_tick;
@@ -336,8 +336,8 @@ fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
                 tex_key: Arc::from(""),
                 width: 0.0,
                 height: 0.0,
-                offset: Vector2::default(),
-                origin: Vector2::default(),
+                offset: Vec2::default(),
+                origin: Vec2::default(),
                 flip_h: false,
                 flip_v: false,
             },

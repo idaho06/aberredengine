@@ -22,8 +22,8 @@
 //! // Attach ball to player, release after 2 seconds
 //! commands.entity(ball).insert((
 //!     StuckTo::follow_x_only(player_entity)
-//!         .with_offset(Vector2 { x: 0.0, y: -12.0 })
-//!         .with_stored_velocity(Vector2 { x: 300.0, y: -300.0 }),
+//!         .with_offset(Vec2 { x: 0.0, y: -12.0 })
+//!         .with_stored_velocity(Vec2 { x: 300.0, y: -300.0 }),
 //!     Timer::new(2.0, "remove_stuck_to"),
 //! ));
 //! ```
@@ -34,7 +34,7 @@
 //! - [`super::timer::Timer`] – can be used to auto-remove `StuckTo` after a delay
 
 use bevy_ecs::prelude::{Component, Entity};
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// Component that makes an entity follow another entity's position.
 ///
@@ -45,13 +45,13 @@ pub struct StuckTo {
     /// The entity to follow.
     pub target: Entity,
     /// Offset from the target's position.
-    pub offset: Vector2,
+    pub offset: Vec2,
     /// If true, only follow the X axis.
     pub follow_x: bool,
     /// If true, only follow the Y axis.
     pub follow_y: bool,
     /// Stored velocity to restore when unstuck (optional).
-    pub stored_velocity: Option<Vector2>,
+    pub stored_velocity: Option<Vec2>,
 }
 
 impl StuckTo {
@@ -59,7 +59,7 @@ impl StuckTo {
     pub fn new(target: Entity) -> Self {
         Self {
             target,
-            offset: Vector2::zero(),
+            offset: Vec2::ZERO,
             follow_x: true,
             follow_y: true,
             stored_velocity: None,
@@ -70,7 +70,7 @@ impl StuckTo {
     pub fn follow_x_only(target: Entity) -> Self {
         Self {
             target,
-            offset: Vector2::zero(),
+            offset: Vec2::ZERO,
             follow_x: true,
             follow_y: false,
             stored_velocity: None,
@@ -81,7 +81,7 @@ impl StuckTo {
     pub fn follow_y_only(target: Entity) -> Self {
         Self {
             target,
-            offset: Vector2::zero(),
+            offset: Vec2::ZERO,
             follow_x: false,
             follow_y: true,
             stored_velocity: None,
@@ -89,13 +89,13 @@ impl StuckTo {
     }
 
     /// Set the offset from the target's position.
-    pub fn with_offset(mut self, offset: Vector2) -> Self {
+    pub fn with_offset(mut self, offset: Vec2) -> Self {
         self.offset = offset;
         self
     }
 
     /// Store a velocity to restore when the component is removed.
-    pub fn with_stored_velocity(mut self, velocity: Vector2) -> Self {
+    pub fn with_stored_velocity(mut self, velocity: Vec2) -> Self {
         self.stored_velocity = Some(velocity);
         self
     }
@@ -135,14 +135,14 @@ mod tests {
 
     #[test]
     fn test_with_offset() {
-        let st = StuckTo::new(dummy_entity()).with_offset(Vector2 { x: 5.0, y: -10.0 });
+        let st = StuckTo::new(dummy_entity()).with_offset(Vec2 { x: 5.0, y: -10.0 });
         assert_eq!(st.offset.x, 5.0);
         assert_eq!(st.offset.y, -10.0);
     }
 
     #[test]
     fn test_with_stored_velocity() {
-        let st = StuckTo::new(dummy_entity()).with_stored_velocity(Vector2 {
+        let st = StuckTo::new(dummy_entity()).with_stored_velocity(Vec2 {
             x: 100.0,
             y: -200.0,
         });
@@ -154,8 +154,8 @@ mod tests {
     #[test]
     fn test_builder_chaining() {
         let st = StuckTo::follow_x_only(dummy_entity())
-            .with_offset(Vector2 { x: 1.0, y: 2.0 })
-            .with_stored_velocity(Vector2 { x: 3.0, y: 4.0 });
+            .with_offset(Vec2 { x: 1.0, y: 2.0 })
+            .with_stored_velocity(Vec2 { x: 3.0, y: 4.0 });
         assert!(st.follow_x);
         assert!(!st.follow_y);
         assert_eq!(st.offset.x, 1.0);

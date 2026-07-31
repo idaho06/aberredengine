@@ -17,7 +17,6 @@
 //! they're the topmost hit.
 
 use bevy_ecs::prelude::*;
-use raylib::math::Vector2;
 
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
 use crate::components::screenposition::ScreenPosition;
@@ -27,7 +26,7 @@ use crate::math::{Rect, Vec2};
 use crate::resources::guiinputstate::GuiInputState;
 use crate::resources::input::InputState;
 
-fn contains_point(pos: Vector2, size: Vector2, point: Vector2) -> bool {
+fn contains_point(pos: Vec2, size: Vec2, point: Vec2) -> bool {
     Rect::new(pos.x, pos.y, size.x, size.y).contains_point(Vec2::new(point.x, point.y))
 }
 
@@ -43,7 +42,7 @@ pub fn gui_hit_test_system(
     crate::tracy::tracy_span!("gui_hit_test_system");
     gui_input.click_consumed_this_frame = false;
 
-    let cursor = Vector2::new(input.mouse_x, input.mouse_y);
+    let cursor = Vec2::new(input.mouse_x, input.mouse_y);
 
     // Highest-ZIndex hit under the cursor wins (Disabled widgets are still
     // eligible to win — a Disabled top widget blocks/consumes clicks for

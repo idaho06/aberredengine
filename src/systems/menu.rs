@@ -36,7 +36,7 @@ use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
 use log::error;
 use log::{debug, warn};
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// Z-index applied to menu elements (world-space or screen-space) so they render
 /// above other entities at the default z=0. World-space and screen-space menus
@@ -52,7 +52,7 @@ fn insert_menu_zindex(ecmd: &mut EntityCommands) {
 }
 
 /// Inserts [`ScreenPosition`] or [`MapPosition`] depending on `use_screen_space`.
-fn set_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool, pos: Vector2) {
+fn set_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool, pos: Vec2) {
     if use_screen_space {
         ecmd.insert(ScreenPosition::from_vec(pos));
     } else {
@@ -158,8 +158,8 @@ pub fn menu_spawn_system(
                     tex_key: Arc::from(key),
                     width: size.x,
                     height: size.y,
-                    offset: Vector2 { x: 0.0, y: 0.0 },
-                    origin: Vector2 { x: 0.0, y: 0.0 },
+                    offset: Vec2 { x: 0.0, y: 0.0 },
+                    origin: Vec2 { x: 0.0, y: 0.0 },
                     flip_h: false,
                     flip_v: false,
                 });
@@ -177,7 +177,7 @@ pub fn menu_spawn_system(
             if is_visible {
                 // Calculate position within visible viewport
                 let viewport_index = i - scroll_offset;
-                let pos = Vector2 {
+                let pos = Vec2 {
                     x: origin.x,
                     y: origin.y + (viewport_index as f32) * item_spacing,
                 };
@@ -209,7 +209,7 @@ pub fn menu_spawn_system(
             let top_indicator = top_cmd.id();
             // Position only if needed (scroll_offset > 0)
             if scroll_offset > 0 {
-                let pos = Vector2 {
+                let pos = Vec2 {
                     x: origin.x,
                     y: origin.y - item_spacing,
                 };
@@ -230,7 +230,7 @@ pub fn menu_spawn_system(
             let bottom_indicator = bottom_cmd.id();
             // Position only if needed (visible_end < items.len())
             if visible_end < menu.items.len() {
-                let pos = Vector2 {
+                let pos = Vec2 {
                     x: origin.x,
                     y: origin.y + (vc as f32) * item_spacing,
                 };
@@ -260,7 +260,7 @@ pub fn menu_spawn_system(
             );
             // Position cursor at selected item's viewport position
             let selected_viewport_index = menu.selected_index.saturating_sub(scroll_offset);
-            let cursor_position = Vector2 {
+            let cursor_position = Vec2 {
                 x: origin.x,
                 y: origin.y + (selected_viewport_index as f32) * item_spacing,
             };
@@ -455,7 +455,7 @@ pub fn menu_controller_observer(
             if let Some(cursor_entity) = menu.cursor_entity {
                 // Calculate cursor position based on visible viewport
                 let viewport_index = menu.selected_index.saturating_sub(menu.scroll_offset);
-                let cursor_position = Vector2 {
+                let cursor_position = Vec2 {
                     x: menu.origin.x,
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
@@ -491,7 +491,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
             if is_visible {
                 // Add/update position component
                 let viewport_index = i - menu.scroll_offset;
-                let new_pos = Vector2 {
+                let new_pos = Vec2 {
                     x: menu.origin.x,
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
@@ -509,7 +509,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
     if let Some(top_entity) = menu.top_indicator_entity {
         if show_top {
-            let pos = Vector2 {
+            let pos = Vec2 {
                 x: menu.origin.x,
                 y: menu.origin.y - menu.item_spacing,
             };
@@ -521,7 +521,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
     if let Some(bottom_entity) = menu.bottom_indicator_entity {
         if show_bottom {
-            let pos = Vector2 {
+            let pos = Vec2 {
                 x: menu.origin.x,
                 y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
             };
@@ -716,7 +716,7 @@ mod tests {
     use super::*;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
-    use raylib::prelude::Vector2;
+    use crate::math::Vec2;
 
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
 
@@ -739,7 +739,7 @@ mod tests {
         world.spawn(
             Menu::new(
                 &[("ok", "ok")],
-                Vector2::zero(),
+                Vec2::ZERO,
                 "test_font",
                 20.0,
                 4.0,
@@ -795,7 +795,7 @@ mod tests {
         world.spawn(
             Menu::new(
                 &[("ok", "ok")],
-                Vector2::zero(),
+                Vec2::ZERO,
                 "missing_font",
                 20.0,
                 4.0,

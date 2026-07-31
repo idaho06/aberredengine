@@ -50,7 +50,7 @@
 //! - [`crate::components::ttl::Ttl`] – time-to-live for automatic despawn
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// Shape of the emission area.
 #[derive(Debug, Clone, Default)]
@@ -110,7 +110,7 @@ pub struct ParticleEmitter {
     /// Emission area shape.
     pub shape: EmitterShape,
     /// Offset from owner's MapPosition.
-    pub offset: Vector2,
+    pub offset: Vec2,
     /// Number of particles spawned per emission event.
     pub particles_per_emission: u32,
     /// Emissions per second. If <= 0, no emissions occur.
@@ -135,7 +135,7 @@ impl Default for ParticleEmitter {
         Self {
             templates: Vec::new(),
             shape: EmitterShape::Point,
-            offset: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vec2 { x: 0.0, y: 0.0 },
             particles_per_emission: 1,
             emissions_per_second: 10.0,
             emissions_remaining: 100,

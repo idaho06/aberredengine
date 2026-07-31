@@ -205,7 +205,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_gui_image_hover_offset() requires with_gui_image() first",
                 ));
             };
-            img.offset_hover = Some(Vector2::new(offset_x, offset_y));
+            img.offset_hover = Some(Vec2::new(offset_x, offset_y));
             Ok(())
         }
     );
@@ -222,7 +222,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_gui_image_pressed_offset() requires with_gui_image() first",
                 ));
             };
-            img.offset_pressed = Some(Vector2::new(offset_x, offset_y));
+            img.offset_pressed = Some(Vec2::new(offset_x, offset_y));
             Ok(())
         }
     );
@@ -239,7 +239,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_gui_image_disabled_offset() requires with_gui_image() first",
                 ));
             };
-            img.offset_disabled = Some(Vector2::new(offset_x, offset_y));
+            img.offset_disabled = Some(Vec2::new(offset_x, offset_y));
             Ok(())
         }
     );

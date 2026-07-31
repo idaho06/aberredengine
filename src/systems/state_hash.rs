@@ -15,7 +15,7 @@
 //! caught by replay divergence tests.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
@@ -37,7 +37,7 @@ use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
-fn hash_vector2(h: &mut ReplayHasher, v: Vector2) {
+fn hash_vector2(h: &mut ReplayHasher, v: Vec2) {
     h.write_f32(v.x);
     h.write_f32(v.y);
 }

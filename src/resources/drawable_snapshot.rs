@@ -15,7 +15,8 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use raylib::prelude::{Camera2D, Vector2};
+use raylib::prelude::Camera2D;
+use crate::math::Vec2;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
@@ -78,7 +79,7 @@ pub struct MapSpriteEntry {
     /// `RigidBody.velocity`, when the entity has one -- feeds the
     /// `uVelocity` entity-shader uniform via this captured value rather than
     /// a live rigidbody query.
-    pub velocity: Option<Vector2>,
+    pub velocity: Option<Vec2>,
 }
 
 /// One world-space text entity, owned. Mirrors `MapTextQueryData`.
@@ -93,7 +94,7 @@ pub struct MapTextEntry {
     pub shadow: Option<Shadow>,
     pub global_transform: Option<GlobalTransform2D>,
     /// See [`MapSpriteEntry::velocity`].
-    pub velocity: Option<Vector2>,
+    pub velocity: Option<Vec2>,
 }
 
 /// One screen-space sprite, owned. Mirrors `ScreenSpriteQueryData`.
@@ -162,7 +163,7 @@ pub struct GuiProgressBarEntry {
 pub struct DebugColliderEntry {
     pub entity: Entity,
     pub collider: BoxCollider,
-    pub world_pos: Vector2,
+    pub world_pos: Vec2,
 }
 
 /// One positioned entity for the debug overlay (crosshair + optional
@@ -171,7 +172,7 @@ pub struct DebugColliderEntry {
 #[derive(Clone, Debug)]
 pub struct DebugPositionEntry {
     pub entity: Entity,
-    pub world_pos: Vector2,
+    pub world_pos: Vec2,
     /// `None` when the entity has no `Signals` component, and also when
     /// `DebugOverlayConfig.show_entity_signals` is off (the clone is skipped
     /// since nothing would display it).
@@ -681,14 +682,14 @@ mod tests {
     use crate::components::guiprogressbar::ProgressBarDirection;
     use crate::math::Color;
     use bevy_ecs::system::RunSystemOnce;
-    use raylib::prelude::Vector2;
+    use crate::math::Vec2;
     use std::sync::Arc;
 
     fn new_test_world() -> World {
         let mut world = World::new();
         world.insert_resource(Camera2DRes(Camera2D {
-            offset: Vector2::new(0.0, 0.0),
-            target: Vector2::new(1.0, 2.0),
+            offset: raylib::prelude::Vector2::new(0.0, 0.0),
+            target: raylib::prelude::Vector2::new(1.0, 2.0),
             rotation: 0.0,
             zoom: 1.0,
         }));
@@ -716,15 +717,15 @@ mod tests {
                     tex_key: Arc::from("player"),
                     width: 16.0,
                     height: 16.0,
-                    offset: Vector2::new(0.0, 0.0),
-                    origin: Vector2::new(0.0, 0.0),
+                    offset: Vec2::new(0.0, 0.0),
+                    origin: Vec2::new(0.0, 0.0),
                     flip_h: false,
                     flip_v: false,
                 },
                 MapPosition::new(3.0, 4.0),
                 ZIndex(2.0),
                 Scale {
-                    scale: Vector2::new(1.0, 1.0),
+                    scale: Vec2::new(1.0, 1.0),
                 },
                 Tint {
                     color: Color::WHITE,
@@ -739,7 +740,7 @@ mod tests {
         let entry = &snapshot.map_sprites[0];
         assert_eq!(entry.entity, entity);
         assert_eq!(entry.sprite.tex_key.as_ref(), "player");
-        assert_eq!(entry.position.pos, Vector2::new(3.0, 4.0));
+        assert_eq!(entry.position.pos, Vec2::new(3.0, 4.0));
         assert!(entry.scale.is_some());
         assert!(entry.tint.is_some());
         assert!(
@@ -754,14 +755,14 @@ mod tests {
         let mut world = new_test_world();
         world.spawn((
             GuiButton {
-                size: Vector2::new(100.0, 30.0),
+                size: Vec2::new(100.0, 30.0),
                 caption: "Play".to_string(),
                 callback_name: "on_play".into(),
                 disabled: false,
                 theme_key: Arc::from("default"),
             },
             GuiInteractable {
-                size: Vector2::new(100.0, 30.0),
+                size: Vec2::new(100.0, 30.0),
                 state: GuiWidgetState::Hovered,
                 on_click_callback: Some("on_play".to_string()),
                 on_rust_callback: None,
@@ -777,7 +778,7 @@ mod tests {
         let entry = &snapshot.gui_buttons[0];
         assert_eq!(entry.button.caption, "Play");
         assert_eq!(entry.interactable.state, GuiWidgetState::Hovered);
-        assert_eq!(entry.position.pos, Vector2::new(10.0, 20.0));
+        assert_eq!(entry.position.pos, Vec2::new(10.0, 20.0));
     }
 
     #[test]
@@ -785,7 +786,7 @@ mod tests {
         let mut world = new_test_world();
         world.spawn((
             GuiProgressBar {
-                size: Vector2::new(50.0, 8.0),
+                size: Vec2::new(50.0, 8.0),
                 value: 3.0,
                 max: 10.0,
                 direction: ProgressBarDirection::Horizontal,
@@ -825,7 +826,10 @@ mod tests {
         assert_eq!(snapshot.game_config.target_fps, 72);
         assert_eq!(snapshot.game_config.window_title, "phase4");
         assert_eq!(snapshot.game_config, *world.resource::<GameConfig>());
-        assert_eq!(snapshot.camera.target, Vector2::new(1.0, 2.0));
+        assert_eq!(
+            snapshot.camera.target,
+            raylib::prelude::Vector2::new(1.0, 2.0)
+        );
     }
 
     #[test]
@@ -914,9 +918,9 @@ mod tests {
             .spawn((
                 MapPosition::new(5.0, 5.0),
                 GlobalTransform2D {
-                    position: Vector2::new(100.0, 200.0),
+                    position: Vec2::new(100.0, 200.0),
                     rotation_degrees: 0.0,
-                    scale: Vector2::new(1.0, 1.0),
+                    scale: Vec2::new(1.0, 1.0),
                 },
                 {
                     let mut signals = Signals::default();
@@ -936,7 +940,7 @@ mod tests {
 
         assert_eq!(debug.colliders.len(), 1);
         assert_eq!(debug.colliders[0].entity, plain);
-        assert_eq!(debug.colliders[0].world_pos, Vector2::new(1.0, 2.0));
+        assert_eq!(debug.colliders[0].world_pos, Vec2::new(1.0, 2.0));
 
         assert_eq!(debug.positions.len(), 2);
         let child_entry = debug
@@ -946,7 +950,7 @@ mod tests {
             .expect("child entry present");
         assert_eq!(
             child_entry.world_pos,
-            Vector2::new(100.0, 200.0),
+            Vec2::new(100.0, 200.0),
             "GlobalTransform2D overrides MapPosition"
         );
         assert!(
@@ -980,8 +984,8 @@ mod tests {
                     tex_key: Arc::from("temp"),
                     width: 8.0,
                     height: 8.0,
-                    offset: Vector2::new(0.0, 0.0),
-                    origin: Vector2::new(0.0, 0.0),
+                    offset: Vec2::new(0.0, 0.0),
+                    origin: Vec2::new(0.0, 0.0),
                     flip_h: false,
                     flip_v: false,
                 },

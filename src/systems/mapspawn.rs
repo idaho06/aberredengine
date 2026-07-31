@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::*;
+use crate::math::Vec2;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
@@ -82,7 +82,7 @@ pub fn spawn_map(
     for entry in &map.animations {
         let anim = AnimationResource {
             tex_key: Arc::from(entry.texture_key.as_str()),
-            position: Vector2 {
+            position: Vec2 {
                 x: entry.position[0],
                 y: entry.position[1],
             },
@@ -129,11 +129,11 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
             tex_key: Arc::from(s.texture_key.as_str()),
             width: s.width,
             height: s.height,
-            offset: Vector2 {
+            offset: Vec2 {
                 x: s.offset.map(|o| o[0]).unwrap_or(0.0),
                 y: s.offset.map(|o| o[1]).unwrap_or(0.0),
             },
-            origin: Vector2 {
+            origin: Vec2 {
                 x: s.origin.map(|o| o[0]).unwrap_or(0.0),
                 y: s.origin.map(|o| o[1]).unwrap_or(0.0),
             },
@@ -160,8 +160,8 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
         );
         ec.insert(
             BoxCollider::new(collider.size[0], collider.size[1])
-                .with_offset(Vector2::new(offset_x, offset_y))
-                .with_origin(Vector2::new(origin_x, origin_y)),
+                .with_offset(Vec2::new(offset_x, offset_y))
+                .with_origin(Vec2::new(origin_x, origin_y)),
         );
         if def.position.is_none() {
             log::warn!(
@@ -276,7 +276,7 @@ fn insert_particle_emitter(
     entity_commands.insert(ParticleEmitter {
         templates,
         shape,
-        offset: raylib::math::Vector2 { x, y },
+        offset: Vec2 { x, y },
         particles_per_emission: entry.particles_per_emission,
         emissions_per_second: entry.emissions_per_second,
         emissions_remaining: entry.emissions_remaining,

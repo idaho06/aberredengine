@@ -15,7 +15,7 @@
 
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 use rustc_hash::FxHashMap;
 
 /// raylib's default `textLineSpacing` (`rtext.c`'s static global, default
@@ -120,9 +120,9 @@ impl FontMetrics {
     /// Faithful port of raylib's `MeasureTextEx` (`rtext.c`). `spacing` is
     /// the extra pixels inserted between glyphs (same argument raylib
     /// takes).
-    pub fn measure_text(&self, text: &str, font_size: f32, spacing: f32) -> Vector2 {
+    pub fn measure_text(&self, text: &str, font_size: f32, spacing: f32) -> Vec2 {
         if text.is_empty() || self.base_size == 0 {
-            return Vector2::new(0.0, 0.0);
+            return Vec2::new(0.0, 0.0);
         }
 
         let scale_factor = font_size / self.base_size as f32;
@@ -162,7 +162,7 @@ impl FontMetrics {
         }
 
         let width = temp_text_width * scale_factor + (max_char_count - 1).max(0) as f32 * spacing;
-        Vector2::new(width, text_height)
+        Vec2::new(width, text_height)
     }
 }
 

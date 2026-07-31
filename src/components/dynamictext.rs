@@ -40,7 +40,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 
 use crate::math::Color;
 
@@ -64,7 +64,7 @@ pub struct DynamicText {
     /// Original configured color. Set on creation/update; never modified at runtime.
     pub initial_color: Color,
     /// Size of the text bounding box
-    size: Vector2,
+    size: Vec2,
 }
 
 impl DynamicText {
@@ -82,18 +82,18 @@ impl DynamicText {
             font: Arc::from(font.into()),
             font_size,
             color,
-            size: Vector2::zero(),
+            size: Vec2::ZERO,
         }
     }
 
     /// Returns the cached text bounding box size.
-    pub fn size(&self) -> Vector2 {
+    pub fn size(&self) -> Vec2 {
         self.size
     }
 
     /// Sets the cached text bounding box size.
     /// Used by [`dynamictext_size_system`](crate::systems::dynamictext_size_system).
-    pub(crate) fn set_size(&mut self, size: Vector2) {
+    pub(crate) fn set_size(&mut self, size: Vec2) {
         self.size = size;
     }
     /// Updates the text content only if changed.
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn test_set_size() {
         let mut dt = DynamicText::new("test", "font", 12.0, Color::RED);
-        dt.set_size(Vector2 { x: 100.0, y: 20.0 });
+        dt.set_size(Vec2 { x: 100.0, y: 20.0 });
         assert_eq!(dt.size().x, 100.0);
         assert_eq!(dt.size().y, 20.0);
     }

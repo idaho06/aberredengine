@@ -10,7 +10,7 @@
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
 
 use bevy_ecs::prelude::{Component, Entity};
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 use rustc_hash::FxHashMap;
 
 use crate::math::Color;
@@ -73,7 +73,7 @@ pub struct Menu {
     /// Optional sound to play on selection change.
     pub selection_change_sound: Option<String>,
     /// Origin position of the menu.
-    pub origin: Vector2,
+    pub origin: Vec2,
     /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
     /// Optional Lua callback invoked when any item is selected.
@@ -94,7 +94,7 @@ pub struct Menu {
 impl Menu {
     pub fn new(
         labels: &[(&str, &str)], // (id, label)
-        origin: Vector2,
+        origin: Vec2,
         font: impl Into<String>,
         font_size: f32,
         item_spacing: f32,
@@ -213,7 +213,7 @@ mod tests {
     fn test_menu_new_items_count() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -226,7 +226,7 @@ mod tests {
     fn test_menu_new_item_fields() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -242,7 +242,7 @@ mod tests {
     fn test_menu_new_defaults() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2 { x: 10.0, y: 20.0 },
+            Vec2 { x: 10.0, y: 20.0 },
             "future",
             24.0,
             30.0,
@@ -266,7 +266,7 @@ mod tests {
     fn test_menu_with_colors() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -281,7 +281,7 @@ mod tests {
     fn test_menu_with_dynamic_text_false() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -296,7 +296,7 @@ mod tests {
     fn test_menu_with_selection_sound() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -310,7 +310,7 @@ mod tests {
     fn test_menu_with_on_select_callback() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -324,7 +324,7 @@ mod tests {
     fn test_menu_with_visible_count() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -363,7 +363,7 @@ mod tests {
         fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::GameCtx<'_, '_>) {}
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
@@ -377,7 +377,7 @@ mod tests {
     fn test_menu_rust_callback_none_by_default() {
         let menu = Menu::new(
             &sample_labels(),
-            Vector2::zero(),
+            Vec2::ZERO,
             "arcade",
             16.0,
             20.0,

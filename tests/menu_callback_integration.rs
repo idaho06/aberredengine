@@ -52,7 +52,7 @@ fn spawn_menu(world: &mut World, labels: &[(&str, &str)]) -> Entity {
     world
         .spawn(Menu::new(
             labels,
-            raylib::prelude::Vector2::zero(),
+            aberredengine::math::Vec2::ZERO,
             "test_font",
             16.0,
             20.0,
@@ -88,7 +88,7 @@ fn rust_callback_invoked_with_correct_args() {
         .spawn(
             Menu::new(
                 &[("play", "Play"), ("options", "Options"), ("quit", "Quit")],
-                raylib::prelude::Vector2::zero(),
+                aberredengine::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -180,7 +180,7 @@ fn rust_callback_takes_priority_over_menu_actions() {
         .spawn(
             Menu::new(
                 &[("start", "Start")],
-                raylib::prelude::Vector2::zero(),
+                aberredengine::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -269,7 +269,7 @@ fn callback_receives_correct_indices() {
         .spawn(
             Menu::new(
                 &[("a", "A"), ("b", "B"), ("c", "C")],
-                raylib::prelude::Vector2::zero(),
+                aberredengine::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -324,7 +324,7 @@ fn unknown_item_id_defaults_to_index_zero() {
         .spawn(
             Menu::new(
                 &[("a", "A"), ("b", "B")],
-                raylib::prelude::Vector2::zero(),
+                aberredengine::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -380,7 +380,7 @@ fn lua_callback_takes_priority_over_rust_callback() {
         .spawn(
             Menu::new(
                 &[("play", "Play")],
-                raylib::prelude::Vector2::zero(),
+                aberredengine::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,

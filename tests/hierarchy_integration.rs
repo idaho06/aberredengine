@@ -14,7 +14,7 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
 use bevy_ecs::system::SystemState;
-use raylib::math::Vector2;
+use aberredengine::math::Vec2;
 
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
 use aberredengine::components::mapposition::MapPosition;
@@ -728,9 +728,9 @@ fn spawn_cmd_with_parent_applies_childof() {
         .spawn((
             MapPosition::new(100.0, 50.0),
             GlobalTransform2D {
-                position: Vector2 { x: 100.0, y: 50.0 },
+                position: Vec2 { x: 100.0, y: 50.0 },
                 rotation_degrees: 0.0,
-                scale: Vector2 { x: 1.0, y: 1.0 },
+                scale: Vec2 { x: 1.0, y: 1.0 },
             },
         ))
         .id();
@@ -877,9 +877,9 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
         .spawn((
             MapPosition::new(100.0, 50.0),
             GlobalTransform2D {
-                position: Vector2 { x: 100.0, y: 50.0 },
+                position: Vec2 { x: 100.0, y: 50.0 },
                 rotation_degrees: 0.0,
-                scale: Vector2 { x: 1.0, y: 1.0 },
+                scale: Vec2 { x: 1.0, y: 1.0 },
             },
         ))
         .id();
@@ -1033,8 +1033,8 @@ fn render_query_includes_global_transform() {
                 tex_key: Arc::from("test"),
                 width: 32.0,
                 height: 32.0,
-                offset: Vector2 { x: 0.0, y: 0.0 },
-                origin: Vector2 { x: 0.0, y: 0.0 },
+                offset: Vec2 { x: 0.0, y: 0.0 },
+                origin: Vec2 { x: 0.0, y: 0.0 },
                 flip_h: false,
                 flip_v: false,
             },
@@ -1080,8 +1080,8 @@ fn render_query_works_without_global_transform() {
                 tex_key: Arc::from("test"),
                 width: 32.0,
                 height: 32.0,
-                offset: Vector2 { x: 0.0, y: 0.0 },
-                origin: Vector2 { x: 0.0, y: 0.0 },
+                offset: Vec2 { x: 0.0, y: 0.0 },
+                origin: Vec2 { x: 0.0, y: 0.0 },
                 flip_h: false,
                 flip_v: false,
             },
@@ -1512,9 +1512,9 @@ fn cleanup_removes_gt_from_entity_with_no_children_and_no_childof() {
         .spawn((
             MapPosition::new(10.0, 20.0),
             GlobalTransform2D {
-                position: Vector2 { x: 999.0, y: 999.0 },
+                position: Vec2 { x: 999.0, y: 999.0 },
                 rotation_degrees: 0.0,
-                scale: Vector2 { x: 1.0, y: 1.0 },
+                scale: Vec2 { x: 1.0, y: 1.0 },
             },
         ))
         .id();
@@ -1609,12 +1609,12 @@ fn cleanup_removes_all_orphaned_gt_entities() {
                 .spawn((
                     MapPosition::new(i as f32 * 10.0, 0.0),
                     GlobalTransform2D {
-                        position: Vector2 {
+                        position: Vec2 {
                             x: 999.0 + i as f32,
                             y: 999.0,
                         },
                         rotation_degrees: 0.0,
-                        scale: Vector2 { x: 1.0, y: 1.0 },
+                        scale: Vec2 { x: 1.0, y: 1.0 },
                     },
                 ))
                 .id()
@@ -1776,14 +1776,14 @@ fn collision_uses_live_map_position_after_child_despawn() {
     tick_propagate_and_cleanup(&mut world);
 
     // Move player far away to (500, 500) — no overlap with origin
-    world.get_mut::<MapPosition>(player).unwrap().pos = Vector2 { x: 500.0, y: 500.0 };
+    world.get_mut::<MapPosition>(player).unwrap().pos = Vec2 { x: 500.0, y: 500.0 };
     tick_propagate_and_cleanup(&mut world); // GT updated to (500, 500)
 
     // Despawn hitbox → Children removed from player; GT is now stale at (500, 500)
     world.despawn(hitbox);
 
     // Move player back to origin (0, 0)
-    world.get_mut::<MapPosition>(player).unwrap().pos = Vector2 { x: 0.0, y: 0.0 };
+    world.get_mut::<MapPosition>(player).unwrap().pos = Vec2 { x: 0.0, y: 0.0 };
 
     // Spawn a sensor at origin — should collide with player if position is correct
     let sensor = world

@@ -134,7 +134,7 @@ mod tests {
     use crate::components::rotation::Rotation;
     use crate::components::scale::Scale;
     use crate::components::screenposition::ScreenPosition;
-    use raylib::prelude::Vector2;
+    use crate::math::Vec2;
 
     const EPSILON: f32 = 1e-6;
 
@@ -478,10 +478,10 @@ mod tests {
     #[test]
     fn test_tween_system_updates_map_position() {
         let (target, tween) = run_tween_once(
-            MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
             Tween::new(
-                MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-                MapPosition::from_vec(Vector2 { x: 10.0, y: 20.0 }),
+                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                MapPosition::from_vec(Vec2 { x: 10.0, y: 20.0 }),
                 1.0,
             ),
             0.5,
@@ -496,10 +496,10 @@ mod tests {
     #[test]
     fn test_tween_system_updates_screen_position() {
         let (target, tween) = run_tween_once(
-            ScreenPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
+            ScreenPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
             Tween::new(
-                ScreenPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-                ScreenPosition::from_vec(Vector2 { x: 10.0, y: 20.0 }),
+                ScreenPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                ScreenPosition::from_vec(Vec2 { x: 10.0, y: 20.0 }),
                 1.0,
             ),
             0.5,

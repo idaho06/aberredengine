@@ -16,7 +16,7 @@
 
 use crate::components::shadow::Shadow;
 use crate::components::tint::Tint;
-use crate::math::{Color, Rect};
+use crate::math::{Color, Rect, Vec2};
 use crate::systems::scene_dispatch::WorldDraw;
 
 /// Adapts any raylib draw handle to the core-owned [`WorldDraw`] trait.
@@ -29,33 +29,43 @@ use crate::systems::scene_dispatch::WorldDraw;
 pub(super) struct RaylibWorldDraw<'a, T: raylib::prelude::RaylibDraw>(pub &'a mut T);
 
 impl<T: raylib::prelude::RaylibDraw> WorldDraw for RaylibWorldDraw<'_, T> {
-    fn draw_line_v(&mut self, start: raylib::prelude::Vector2, end: raylib::prelude::Vector2, color: Color) {
+    fn draw_line_v(&mut self, start: Vec2, end: Vec2, color: Color) {
         let color: raylib::prelude::Color = color.into();
-        raylib::prelude::RaylibDraw::draw_line_v(self.0, start, end, color);
+        raylib::prelude::RaylibDraw::draw_line_v(
+            self.0,
+            vec2_to_raylib(start),
+            vec2_to_raylib(end),
+            color,
+        );
     }
 
-    fn draw_line_ex(
-        &mut self,
-        start_pos: raylib::prelude::Vector2,
-        end_pos: raylib::prelude::Vector2,
-        thick: f32,
-        color: Color,
-    ) {
+    fn draw_line_ex(&mut self, start_pos: Vec2, end_pos: Vec2, thick: f32, color: Color) {
         let color: raylib::prelude::Color = color.into();
-        raylib::prelude::RaylibDraw::draw_line_ex(self.0, start_pos, end_pos, thick, color);
+        raylib::prelude::RaylibDraw::draw_line_ex(
+            self.0,
+            vec2_to_raylib(start_pos),
+            vec2_to_raylib(end_pos),
+            thick,
+            color,
+        );
     }
 
     fn draw_line_dashed(
         &mut self,
-        start_pos: raylib::prelude::Vector2,
-        end_pos: raylib::prelude::Vector2,
+        start_pos: Vec2,
+        end_pos: Vec2,
         dash_size: i32,
         space_size: i32,
         color: Color,
     ) {
         let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_dashed(
-            self.0, start_pos, end_pos, dash_size, space_size, color,
+            self.0,
+            vec2_to_raylib(start_pos),
+            vec2_to_raylib(end_pos),
+            dash_size,
+            space_size,
+            color,
         );
     }
 
@@ -107,6 +117,19 @@ impl From<raylib::prelude::Rectangle> for Rect {
     fn from(r: raylib::prelude::Rectangle) -> Self {
         Rect::new(r.x, r.y, r.width, r.height)
     }
+}
+
+// `Vec2` is a bare `pub use glam::Vec2;` re-export (Phase 1 decision), not a
+// local newtype like `Color`/`Rect` — so unlike those, `impl From<Vec2> for
+// raylib::prelude::Vector2` would violate the orphan rule (neither `Vec2`
+// nor `Vector2` nor `From` are local to this crate). Plain conversion
+// functions instead.
+pub(super) fn vec2_to_raylib(v: Vec2) -> raylib::prelude::Vector2 {
+    raylib::prelude::Vector2::new(v.x, v.y)
+}
+
+pub(super) fn vec2_from_raylib(v: raylib::prelude::Vector2) -> Vec2 {
+    Vec2::new(v.x, v.y)
 }
 
 #[cfg(test)]

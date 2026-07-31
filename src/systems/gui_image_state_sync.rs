@@ -10,7 +10,7 @@
 //! available for sprites the way `Panel` rendering has for buttons).
 
 use bevy_ecs::prelude::*;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 
 use crate::components::guiimage::GuiImage;
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
@@ -19,7 +19,7 @@ use crate::components::sprite::Sprite;
 /// Resolves the atlas offset for `image` at the given `state`, falling back
 /// to `image.offset` (the `Normal`/base offset) for any unset per-state
 /// offset — same "only normal required" convention as `GuiButtonSkin`.
-pub(crate) fn resolve_image_offset(image: &GuiImage, state: GuiWidgetState) -> Vector2 {
+pub(crate) fn resolve_image_offset(image: &GuiImage, state: GuiWidgetState) -> Vec2 {
     match state {
         GuiWidgetState::Normal => image.offset,
         GuiWidgetState::Hovered => image.offset_hover.unwrap_or(image.offset),
@@ -56,13 +56,13 @@ mod tests {
             .expect("system should run without error");
     }
 
-    fn test_sprite(offset: Vector2) -> Sprite {
+    fn test_sprite(offset: Vec2) -> Sprite {
         Sprite {
             tex_key: "item_sword".into(),
             width: 32.0,
             height: 32.0,
             offset,
-            origin: Vector2::new(0.0, 0.0),
+            origin: Vec2::new(0.0, 0.0),
             flip_h: false,
             flip_v: false,
         }
@@ -73,19 +73,19 @@ mod tests {
         let image = GuiImage::new(32.0, 32.0, "item_sword", 10.0, 20.0);
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Normal),
-            Vector2::new(10.0, 20.0)
+            Vec2::new(10.0, 20.0)
         );
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Hovered),
-            Vector2::new(10.0, 20.0)
+            Vec2::new(10.0, 20.0)
         );
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Pressed),
-            Vector2::new(10.0, 20.0)
+            Vec2::new(10.0, 20.0)
         );
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Disabled),
-            Vector2::new(10.0, 20.0)
+            Vec2::new(10.0, 20.0)
         );
     }
 
@@ -97,19 +97,19 @@ mod tests {
             .with_offset_disabled(120.0, 0.0);
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Normal),
-            Vector2::new(10.0, 20.0)
+            Vec2::new(10.0, 20.0)
         );
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Hovered),
-            Vector2::new(40.0, 0.0)
+            Vec2::new(40.0, 0.0)
         );
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Pressed),
-            Vector2::new(80.0, 0.0)
+            Vec2::new(80.0, 0.0)
         );
         assert_eq!(
             resolve_image_offset(&image, GuiWidgetState::Disabled),
-            Vector2::new(120.0, 0.0)
+            Vec2::new(120.0, 0.0)
         );
     }
 
@@ -122,7 +122,7 @@ mod tests {
         world.spawn((
             image,
             interactable,
-            test_sprite(Vector2::new(0.0, 0.0)),
+            test_sprite(Vec2::new(0.0, 0.0)),
             ScreenPosition::new(0.0, 0.0),
             ZIndex(0.0),
         ));
@@ -134,7 +134,7 @@ mod tests {
             .iter(&world)
             .next()
             .expect("entity with Sprite should exist");
-        assert_eq!(sprite.offset, Vector2::new(64.0, 0.0));
+        assert_eq!(sprite.offset, Vec2::new(64.0, 0.0));
     }
 
     #[test]
@@ -145,7 +145,7 @@ mod tests {
         world.spawn((
             image,
             interactable,
-            test_sprite(Vector2::new(5.0, 5.0)),
+            test_sprite(Vec2::new(5.0, 5.0)),
             ScreenPosition::new(0.0, 0.0),
             ZIndex(0.0),
         ));

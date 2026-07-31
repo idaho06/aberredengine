@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::Component;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 
 use crate::math::Color;
 
@@ -14,7 +14,7 @@ use crate::math::Color;
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct Shadow {
     /// World/screen-space displacement of the shadow from the entity position.
-    pub offset: Vector2,
+    pub offset: Vec2,
     /// Shadow color (typically semi-transparent black).
     pub color: Color,
 }
@@ -23,7 +23,7 @@ impl Shadow {
     /// Create a shadow with explicit offset and RGBA color (0–255 each).
     pub fn new(dx: f32, dy: f32, r: u8, g: u8, b: u8, a: u8) -> Self {
         Self {
-            offset: Vector2 { x: dx, y: dy },
+            offset: Vec2 { x: dx, y: dy },
             color: Color::new(r, g, b, a),
         }
     }

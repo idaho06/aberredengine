@@ -5,7 +5,7 @@
 
 use bevy_ecs::prelude::Resource;
 use crate::math::Rect;
-use raylib::prelude::*;
+use crate::math::Vec2;
 
 /// Current window size in pixels.
 ///
@@ -79,10 +79,10 @@ impl WindowSize {
     /// Position in game/render-target coordinates (0..game_width, 0..game_height)
     pub fn window_to_game_pos(
         &self,
-        window_pos: Vector2,
+        window_pos: Vec2,
         game_width: u32,
         game_height: u32,
-    ) -> Vector2 {
+    ) -> Vec2 {
         let letterbox = self.calculate_letterbox(game_width, game_height);
 
         // Transform from window space to game space
@@ -97,7 +97,7 @@ impl WindowSize {
         let scale_x = game_w / letterbox.width;
         let scale_y = game_h / letterbox.height;
 
-        Vector2 {
+        Vec2 {
             x: (relative_x * scale_x).clamp(0.0, game_w),
             y: (relative_y * scale_y).clamp(0.0, game_h),
         }

@@ -9,7 +9,7 @@
 //! ```ignore
 //! fn my_timer(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
 //!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
-//!         rb.velocity = Vector2::zero();
+//!         rb.velocity = Vec2::ZERO;
 //!     }
 //!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
 //!     ctx.world_signals.set_flag("timer_fired");

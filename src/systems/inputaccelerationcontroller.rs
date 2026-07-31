@@ -13,7 +13,7 @@
 //! Diagonal movement is normalized to maintain consistent acceleration magnitude.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::inputcontrolled::AccelerationControlled;
 use crate::components::rigidbody::RigidBody;
@@ -33,7 +33,7 @@ pub fn input_acceleration_controller(
 ) {
     for (accel_controlled, mut rigidbody) in query.iter_mut() {
         // Calculate acceleration from input
-        let mut acceleration = Vector2 { x: 0.0, y: 0.0 };
+        let mut acceleration = Vec2 { x: 0.0, y: 0.0 };
 
         if input_state.maindirection_up.active {
             acceleration += accel_controlled.up_acceleration;

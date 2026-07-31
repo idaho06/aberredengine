@@ -30,7 +30,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::gridlayout::{GridLayout, GridLayoutData, GridValue};
@@ -96,8 +96,8 @@ pub fn gridlayout_spawn_system(
                     tex_key: Arc::from(cell.texture_key.clone()),
                     width: layout_data.cell_width,
                     height: layout_data.cell_height,
-                    offset: Vector2::zero(),
-                    origin: Vector2 {
+                    offset: Vec2::ZERO,
+                    origin: Vec2 {
                         x: layout_data.cell_width * 0.5,
                         y: layout_data.cell_height * 0.5,
                     },
@@ -105,12 +105,12 @@ pub fn gridlayout_spawn_system(
                     flip_v: false,
                 },
                 BoxCollider {
-                    size: Vector2 {
+                    size: Vec2 {
                         x: layout_data.cell_width,
                         y: layout_data.cell_height,
                     },
-                    offset: Vector2::zero(),
-                    origin: Vector2 {
+                    offset: Vec2::ZERO,
+                    origin: Vec2 {
                         x: layout_data.cell_width * 0.5,
                         y: layout_data.cell_height * 0.5,
                     },

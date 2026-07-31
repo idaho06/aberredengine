@@ -65,7 +65,6 @@ impl Camera2DRes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use raylib::prelude::Vector2;
 
     fn make_camera(target: Vector2, offset: Vector2, zoom: f32) -> Camera2DRes {
         Camera2DRes(Camera2D {

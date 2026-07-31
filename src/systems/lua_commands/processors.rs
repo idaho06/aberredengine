@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
-use raylib::prelude::{Camera2D, Vector2};
+use raylib::prelude::Camera2D;
+use crate::math::Vec2;
 
 use crate::components::phase::Phase;
 use crate::components::shadow::Shadow;
@@ -145,11 +146,11 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
             zoom,
         } => {
             commands.insert_resource(Camera2DRes(Camera2D {
-                target: Vector2 {
+                target: raylib::prelude::Vector2 {
                     x: target_x,
                     y: target_y,
                 },
-                offset: Vector2 {
+                offset: raylib::prelude::Vector2 {
                     x: offset_x,
                     y: offset_y,
                 },
@@ -543,7 +544,7 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
             config.spring_damping = damping;
         }
         CameraFollowCmd::SetOffset { x, y } => {
-            config.offset = Vector2 { x, y };
+            config.offset = Vec2 { x, y };
         }
         CameraFollowCmd::SetBounds { x, y, w, h } => {
             config.bounds = Some(Rect {
@@ -557,7 +558,7 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
             config.bounds = None;
         }
         CameraFollowCmd::ResetVelocity => {
-            config.velocity = Vector2 { x: 0.0, y: 0.0 };
+            config.velocity = Vec2 { x: 0.0, y: 0.0 };
         }
         CameraFollowCmd::SetZoomSpeed { speed } => {
             config.zoom_lerp_speed = speed;
@@ -613,7 +614,7 @@ pub fn process_animation_command(anim_store: &mut AnimationStore, cmd: Animation
                 id.clone(),
                 AnimationResource {
                     tex_key: Arc::from(tex_key),
-                    position: Vector2 { x: pos_x, y: pos_y },
+                    position: Vec2 { x: pos_x, y: pos_y },
                     horizontal_displacement,
                     vertical_displacement,
                     frame_count,
@@ -634,7 +635,7 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::prelude::{MessageReader, MessageWriter, World};
     use bevy_ecs::system::SystemState;
-    use raylib::prelude::Vector2;
+    use crate::math::Vec2;
 
     use super::{
         process_animation_command, process_audio_command, process_render_command,
@@ -1051,7 +1052,7 @@ mod tests {
             .expect("animation should be registered in the store");
 
         assert_eq!(animation.tex_key.as_ref(), "player_walk");
-        assert_eq!(animation.position, Vector2 { x: 12.0, y: 24.0 });
+        assert_eq!(animation.position, Vec2 { x: 12.0, y: 24.0 });
         assert_eq!(animation.horizontal_displacement, 16.0);
         assert_eq!(animation.vertical_displacement, 32.0);
         assert_eq!(animation.frame_count, 6);

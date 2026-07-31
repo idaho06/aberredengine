@@ -10,7 +10,7 @@
 //! clamping keeps the viewport inside a defined rectangle.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::cameratarget::CameraTarget;
 use crate::components::globaltransform2d::GlobalTransform2D;
@@ -48,7 +48,7 @@ pub fn camera_follow_system(
 
     // --- 2. Resolve world position ---
     let target_pos = maybe_gt.map_or(pos.pos, |gt| gt.position);
-    let desired = Vector2 {
+    let desired = Vec2 {
         x: target_pos.x + config.offset.x,
         y: target_pos.y + config.offset.y,
     };
@@ -62,7 +62,7 @@ pub fn camera_follow_system(
 
         FollowMode::Lerp => {
             let alpha = lerp_alpha(config.easing, config.lerp_speed, dt);
-            Vector2 {
+            Vec2 {
                 x: crate::math::lerp(current.x, desired.x, alpha),
                 y: crate::math::lerp(current.y, desired.y, alpha),
             }
@@ -81,7 +81,7 @@ pub fn camera_follow_system(
             config.velocity.x *= damp;
             config.velocity.y *= damp;
 
-            Vector2 {
+            Vec2 {
                 x: current.x + config.velocity.x * dt,
                 y: current.y + config.velocity.y * dt,
             }
@@ -106,7 +106,7 @@ pub fn camera_follow_system(
                 current.y
             };
 
-            Vector2 {
+            Vec2 {
                 x: move_x,
                 y: move_y,
             }
@@ -119,7 +119,7 @@ pub fn camera_follow_system(
         let half_vw = (screensize.w as f32 / 2.0) / zoom;
         let half_vh = (screensize.h as f32 / 2.0) / zoom;
 
-        Vector2 {
+        Vec2 {
             x: clamp_axis_to_bounds(new_target.x, bounds.x, bounds.width, half_vw),
             y: clamp_axis_to_bounds(new_target.y, bounds.y, bounds.height, half_vh),
         }
@@ -128,7 +128,7 @@ pub fn camera_follow_system(
     };
 
     // --- 5. Commit ---
-    camera.0.target = clamped;
+    camera.0.target = raylib::prelude::Vector2::new(clamped.x, clamped.y);
 
     // --- 6. Apply zoom ---
     if (camera.0.zoom - ct.zoom).abs() > 1e-5 {

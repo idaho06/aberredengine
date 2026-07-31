@@ -6,7 +6,7 @@
 //! at any time.
 
 use bevy_ecs::prelude::Resource;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::math::Rect;
 
@@ -87,7 +87,7 @@ pub struct CameraFollowConfig {
     /// Higher values = faster zoom transition. Default is `5.0`.
     pub zoom_lerp_speed: f32,
     /// Fixed offset added to the target position (in world units).
-    pub offset: Vector2,
+    pub offset: Vec2,
     /// Optional world-space bounding rectangle. When set, the camera position
     /// is clamped so that the viewport stays inside these bounds.
     pub bounds: Option<Rect>,
@@ -95,7 +95,7 @@ pub struct CameraFollowConfig {
     // -- internal state (not intended for direct user modification) ----------
     /// Spring velocity for [`FollowMode::SmoothDamp`]. Reset to zero when
     /// switching targets or modes.
-    pub(crate) velocity: Vector2,
+    pub(crate) velocity: Vec2,
 }
 
 impl Default for CameraFollowConfig {
@@ -108,9 +108,9 @@ impl Default for CameraFollowConfig {
             spring_stiffness: 10.0,
             spring_damping: 5.0,
             zoom_lerp_speed: 5.0,
-            offset: Vector2 { x: 0.0, y: 0.0 },
+            offset: Vec2 { x: 0.0, y: 0.0 },
             bounds: None,
-            velocity: Vector2 { x: 0.0, y: 0.0 },
+            velocity: Vec2 { x: 0.0, y: 0.0 },
         }
     }
 }
@@ -119,7 +119,7 @@ impl CameraFollowConfig {
     /// Reset internal spring velocity. Call this when switching targets or
     /// modes to avoid a sudden jump.
     pub fn reset_velocity(&mut self) {
-        self.velocity = Vector2 { x: 0.0, y: 0.0 };
+        self.velocity = Vec2 { x: 0.0, y: 0.0 };
     }
 }
 
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn reset_velocity_zeroes() {
         let mut cfg = CameraFollowConfig {
-            velocity: Vector2 { x: 99.0, y: -42.0 },
+            velocity: Vec2 { x: 99.0, y: -42.0 },
             ..Default::default()
         };
         cfg.reset_velocity();

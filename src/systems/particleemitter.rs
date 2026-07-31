@@ -21,7 +21,7 @@
 
 use bevy_ecs::prelude::*;
 use fastrand::Rng;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::emittedparticle::EmittedParticle;
 use crate::components::globaltransform2d::GlobalTransform2D;
@@ -134,7 +134,7 @@ fn emit_particles(
             EmitterShape::Rect { width, height } => {
                 let dx = random_f32_range(rng, -width / 2.0, width / 2.0);
                 let dy = random_f32_range(rng, -height / 2.0, height / 2.0);
-                Vector2 {
+                Vec2 {
                     x: base_pos.x + dx,
                     y: base_pos.y + dy,
                 }
@@ -151,11 +151,11 @@ fn emit_particles(
 
         // Convert angle to direction vector (0° = up, Y+ is down)
         let theta = angle_deg.to_radians();
-        let dir = Vector2 {
+        let dir = Vec2 {
             x: theta.sin(),
             y: -theta.cos(),
         };
-        let velocity = Vector2 {
+        let velocity = Vec2 {
             x: dir.x * speed,
             y: dir.y * speed,
         };

@@ -7,7 +7,7 @@ use log::warn;
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::cameratarget::CameraTarget;
 use crate::components::entityshader::EntityShader;
@@ -196,7 +196,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.velocity = Vector2 { x: vx, y: vy };
+                rb.velocity = Vec2 { x: vx, y: vy };
             }
         }
         EntityCmd::SetSpeed { entity_id, speed } => {
@@ -256,7 +256,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.add_force_with_state(&name, Vector2 { x, y }, enabled);
+                rb.add_force_with_state(&name, Vec2 { x, y }, enabled);
             }
         }
         EntityCmd::RemoveForce { entity_id, name } => {
@@ -289,7 +289,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.set_force_value(&name, Vector2 { x, y });
+                rb.set_force_value(&name, Vec2 { x, y });
             }
         }
         _ => unreachable!(),
@@ -467,11 +467,11 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
         } => insert_tween(
             commands,
             entity_id,
-            MapPosition::from_vec(Vector2 {
+            MapPosition::from_vec(Vec2 {
                 x: from_x,
                 y: from_y,
             }),
-            MapPosition::from_vec(Vector2 { x: to_x, y: to_y }),
+            MapPosition::from_vec(Vec2 { x: to_x, y: to_y }),
             &config,
         ),
         EntityCmd::InsertTweenRotation {
@@ -512,11 +512,11 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             // guaranteed to already exist — its presence/absence is the GUI
             // visibility toggle, so a hidden entity has none. Insert it
             // (seeded at `from`) alongside the tween in the same batch.
-            let from = ScreenPosition::from_vec(Vector2 {
+            let from = ScreenPosition::from_vec(Vec2 {
                 x: from_x,
                 y: from_y,
             });
-            let to = ScreenPosition::from_vec(Vector2 { x: to_x, y: to_y });
+            let to = ScreenPosition::from_vec(Vec2 { x: to_x, y: to_y });
             let tween = super::build_tween(from, to, &config);
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_insert(from);
@@ -787,13 +787,13 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             with_entity_cmd(commands, entity_id, |ec| {
                 ec.try_insert(StuckTo {
                     target,
-                    offset: Vector2 {
+                    offset: Vec2 {
                         x: offset_x,
                         y: offset_y,
                     },
                     follow_x,
                     follow_y,
-                    stored_velocity: Some(Vector2 {
+                    stored_velocity: Some(Vec2 {
                         x: stored_vx,
                         y: stored_vy,
                     }),
@@ -1151,7 +1151,7 @@ mod tests {
         // show-tween finishes.
         let mut world = World::new();
         let entity = world
-            .spawn(ScreenPosition::from_vec(Vector2 { x: 10.0, y: 260.0 }))
+            .spawn(ScreenPosition::from_vec(Vec2 { x: 10.0, y: 260.0 }))
             .id();
 
         let mut hide_config = TweenConfig::new(1.0);
@@ -1197,7 +1197,7 @@ mod tests {
     fn insert_tween_screen_position_overwrites_existing_position() {
         let mut world = World::new();
         let entity = world
-            .spawn(ScreenPosition::from_vec(Vector2 { x: 10.0, y: 260.0 }))
+            .spawn(ScreenPosition::from_vec(Vec2 { x: 10.0, y: 260.0 }))
             .id();
 
         run_screen_position_cmd(
@@ -1222,7 +1222,7 @@ mod tests {
     fn remove_screen_position_removes_component() {
         let mut world = World::new();
         let entity = world
-            .spawn(ScreenPosition::from_vec(Vector2 { x: 1.0, y: 2.0 }))
+            .spawn(ScreenPosition::from_vec(Vec2 { x: 1.0, y: 2.0 }))
             .id();
 
         run_screen_position_cmd(

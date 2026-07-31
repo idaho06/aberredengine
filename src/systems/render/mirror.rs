@@ -17,6 +17,8 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use super::math::vec2_to_raylib;
+
 use crate::components::dynamictext::DynamicText;
 use crate::components::entityshader::EntityShader;
 use crate::components::globaltransform2d::GlobalTransform2D;
@@ -210,7 +212,7 @@ pub fn reconcile_map_sprites(world: &mut World, entries: &[MapSpriteEntry]) {
                 set_optional::<Tint>(entity_mut, entry.tint.as_ref());
                 set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
                 set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform.as_ref());
-                let velocity = entry.velocity.map(MirrorVelocity);
+                let velocity = entry.velocity.map(|v| MirrorVelocity(vec2_to_raylib(v)));
                 set_optional::<MirrorVelocity>(entity_mut, velocity.as_ref());
             },
         );
@@ -241,7 +243,7 @@ pub fn reconcile_map_texts(world: &mut World, entries: &[MapTextEntry]) {
                 set_optional::<Tint>(entity_mut, entry.tint.as_ref());
                 set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
                 set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform.as_ref());
-                let velocity = entry.velocity.map(MirrorVelocity);
+                let velocity = entry.velocity.map(|v| MirrorVelocity(vec2_to_raylib(v)));
                 set_optional::<MirrorVelocity>(entity_mut, velocity.as_ref());
             },
         );
@@ -499,7 +501,7 @@ pub struct MirrorQueries<'w, 's> {
 mod mirror_tests {
     use super::*;
     use crate::components::guiinteractable::GuiWidgetState;
-    use raylib::prelude::Vector2;
+    use crate::math::Vec2;
     use std::sync::Arc;
 
     fn new_test_world() -> World {
@@ -533,12 +535,12 @@ mod mirror_tests {
                 tex_key: "test".into(),
                 width: 16.0,
                 height: 16.0,
-                offset: Vector2::zero(),
-                origin: Vector2::zero(),
+                offset: Vec2::ZERO,
+                origin: Vec2::ZERO,
                 flip_h: false,
                 flip_v: false,
             },
-            position: MapPosition::from_vec(Vector2::new(1.0, 2.0)),
+            position: MapPosition::from_vec(Vec2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             scale: None,
             rotation: None,
@@ -677,7 +679,7 @@ mod mirror_tests {
         let mut with_tint = make_map_sprite_entry(sim_entity, 1.0);
         with_tint.tint = Some(Tint::default());
         with_tint.shadow = Some(Shadow {
-            offset: Vector2::new(1.0, 1.0),
+            offset: Vec2::new(1.0, 1.0),
             color: crate::math::Color::BLACK,
         });
         reconcile_map_sprites(&mut world, &[with_tint]);
@@ -759,7 +761,7 @@ mod mirror_tests {
         MapTextEntry {
             entity,
             text: DynamicText::new("hi", "font", 16.0, crate::math::Color::WHITE),
-            position: MapPosition::from_vec(Vector2::new(1.0, 2.0)),
+            position: MapPosition::from_vec(Vec2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             shader: None,
             tint: None,
@@ -872,8 +874,8 @@ mod mirror_tests {
                 tex_key: "test".into(),
                 width: 16.0,
                 height: 16.0,
-                offset: Vector2::zero(),
-                origin: Vector2::zero(),
+                offset: Vec2::ZERO,
+                origin: Vec2::ZERO,
                 flip_h: false,
                 flip_v: false,
             },
@@ -926,7 +928,7 @@ mod mirror_tests {
 
         let mut with_shadow = make_screen_sprite_entry(sim_entity, 1.0);
         with_shadow.shadow = Some(Shadow {
-            offset: Vector2::new(1.0, 1.0),
+            offset: Vec2::new(1.0, 1.0),
             color: crate::math::Color::BLACK,
         });
         reconcile_screen_sprites(&mut world, &[with_shadow]);
@@ -1204,7 +1206,7 @@ mod mirror_tests {
             entity,
             button: GuiButton::new(100.0, 30.0, "Play"),
             interactable: GuiInteractable {
-                size: Vector2::new(100.0, 30.0),
+                size: Vec2::new(100.0, 30.0),
                 state: GuiWidgetState::Normal,
                 on_click_callback: None,
                 on_rust_callback: None,

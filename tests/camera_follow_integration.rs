@@ -5,7 +5,8 @@
 //! offset, and bounds clamping.
 
 use bevy_ecs::prelude::*;
-use raylib::prelude::{Camera2D, Vector2};
+use raylib::prelude::Camera2D;
+use aberredengine::math::Vec2;
 
 use aberredengine::components::cameratarget::CameraTarget;
 use aberredengine::components::globaltransform2d::GlobalTransform2D;
@@ -29,11 +30,11 @@ fn approx_eq(a: f32, b: f32) -> bool {
 
 fn make_camera(target_x: f32, target_y: f32) -> Camera2DRes {
     Camera2DRes(Camera2D {
-        target: Vector2 {
+        target: raylib::prelude::Vector2 {
             x: target_x,
             y: target_y,
         },
-        offset: Vector2 { x: 160.0, y: 120.0 },
+        offset: raylib::prelude::Vector2 { x: 160.0, y: 120.0 },
         rotation: 0.0,
         zoom: 1.0,
     })
@@ -61,8 +62,9 @@ fn tick(world: &mut World) {
     schedule.run(world);
 }
 
-fn camera_target(world: &World) -> Vector2 {
-    world.resource::<Camera2DRes>().0.target
+fn camera_target(world: &World) -> Vec2 {
+    let t = world.resource::<Camera2DRes>().0.target;
+    Vec2::new(t.x, t.y)
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +120,7 @@ fn instant_with_offset() {
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
-        cfg.offset = Vector2 { x: 10.0, y: -20.0 };
+        cfg.offset = Vec2 { x: 10.0, y: -20.0 };
     }
     world.spawn((MapPosition::new(100.0, 100.0), CameraTarget::default()));
     world.flush();
@@ -209,9 +211,9 @@ fn prefers_global_transform_over_map_position() {
         MapPosition::new(0.0, 0.0),
         CameraTarget::default(),
         GlobalTransform2D {
-            position: Vector2 { x: 77.0, y: 88.0 },
+            position: Vec2 { x: 77.0, y: 88.0 },
             rotation_degrees: 0.0,
-            scale: Vector2 { x: 1.0, y: 1.0 },
+            scale: Vec2 { x: 1.0, y: 1.0 },
         },
     ));
     world.flush();
@@ -528,8 +530,8 @@ fn bounds_clamp_respects_zoom() {
     let mut world = setup_world();
     // Set zoom = 2.0 → half viewport in world units = 160/2=80, 120/2=60
     world.insert_resource(Camera2DRes(Camera2D {
-        target: Vector2 { x: 0.0, y: 0.0 },
-        offset: Vector2 { x: 160.0, y: 120.0 },
+        target: raylib::prelude::Vector2 { x: 0.0, y: 0.0 },
+        offset: raylib::prelude::Vector2 { x: 160.0, y: 120.0 },
         rotation: 0.0,
         zoom: 2.0,
     }));
@@ -636,8 +638,8 @@ fn zero_width_bounds_center_x() {
 fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
     let mut world = setup_world();
     world.insert_resource(Camera2DRes(Camera2D {
-        target: Vector2 { x: 0.0, y: 0.0 },
-        offset: Vector2 { x: 160.0, y: 120.0 },
+        target: raylib::prelude::Vector2 { x: 0.0, y: 0.0 },
+        offset: raylib::prelude::Vector2 { x: 160.0, y: 120.0 },
         rotation: 0.0,
         zoom: 0.1,
     }));

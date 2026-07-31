@@ -11,7 +11,7 @@
 use std::marker::PhantomData;
 
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 /// Marker trait for a 2D coordinate space.
 ///
@@ -44,7 +44,7 @@ impl PositionSpace for ScreenSpace {}
 #[component(clone_behavior = clone::<Self>())]
 pub struct Position2D<S: PositionSpace> {
     /// 2D coordinates.
-    pub pos: Vector2,
+    pub pos: Vec2,
     _marker: PhantomData<S>,
 }
 
@@ -69,7 +69,7 @@ impl<S: PositionSpace> PartialEq for Position2D<S> {
 impl<S: PositionSpace> Default for Position2D<S> {
     fn default() -> Self {
         Self {
-            pos: Vector2::default(),
+            pos: Vec2::default(),
             _marker: PhantomData,
         }
     }
@@ -79,21 +79,21 @@ impl<S: PositionSpace> Position2D<S> {
     /// Create a position from x and y.
     pub fn new(x: f32, y: f32) -> Self {
         Self {
-            pos: Vector2 { x, y },
+            pos: Vec2 { x, y },
             _marker: PhantomData,
         }
     }
 
-    /// Create a position from an existing Vector2.
-    pub fn from_vec(pos: Vector2) -> Self {
+    /// Create a position from an existing Vec2.
+    pub fn from_vec(pos: Vec2) -> Self {
         Self {
             pos,
             _marker: PhantomData,
         }
     }
 
-    /// Get the underlying Vector2.
-    pub fn pos(&self) -> Vector2 {
+    /// Get the underlying Vec2.
+    pub fn pos(&self) -> Vec2 {
         self.pos
     }
 
@@ -108,7 +108,7 @@ impl<S: PositionSpace> Position2D<S> {
     }
 
     /// Set the entire position.
-    pub fn set_pos(&mut self, pos: Vector2) {
+    pub fn set_pos(&mut self, pos: Vec2) {
         self.pos = pos;
     }
 
@@ -176,7 +176,7 @@ pub(crate) mod test_helpers {
         assert!(approx_eq(pos.pos.y, 0.0));
 
         // from_vec
-        let vec = Vector2 { x: 15.0, y: 25.0 };
+        let vec = Vec2 { x: 15.0, y: 25.0 };
         let pos = Position2D::<S>::from_vec(vec);
         assert!(approx_eq(pos.pos.x, 15.0));
         assert!(approx_eq(pos.pos.y, 25.0));
@@ -194,7 +194,7 @@ pub(crate) mod test_helpers {
 
         // set_pos
         let mut pos = Position2D::<S>::new(0.0, 0.0);
-        pos.set_pos(Vector2 { x: 100.0, y: 200.0 });
+        pos.set_pos(Vec2 { x: 100.0, y: 200.0 });
         assert!(approx_eq(pos.pos.x, 100.0));
         assert!(approx_eq(pos.pos.y, 200.0));
 

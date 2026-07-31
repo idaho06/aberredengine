@@ -15,12 +15,12 @@
 //! execution so a multi-level subtree resolves in one pass rather than one
 //! extra frame per nesting level.
 //!
-//! GUI child layout is translate-only, so this is plain `Vector2` addition
+//! GUI child layout is translate-only, so this is plain `Vec2` addition
 //! rather than `transform_compose`'s scale/rotate/translate composition.
 
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 
 use crate::components::guioffset::GuiOffset;
 use crate::components::screenposition::ScreenPosition;
@@ -58,7 +58,7 @@ pub fn gui_layout_system(
 }
 
 fn layout_children(
-    parent_pos: Option<Vector2>,
+    parent_pos: Option<Vec2>,
     children: &Children,
     gui_children: &GuiChildrenQuery,
     screen_positions: &mut Query<&mut ScreenPosition, With<GuiOffset>>,

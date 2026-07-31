@@ -19,7 +19,10 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
 
+use super::math::{vec2_from_raylib, vec2_to_raylib};
 use crate::components::dynamictext::DynamicText;
+#[cfg(test)]
+use crate::math::Vec2;
 use crate::components::entityshader::EntityShader;
 use crate::components::guibutton::GuiButton;
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
@@ -624,7 +627,7 @@ pub fn render_system(
                             text: text.clone(),
                             z_index: *z_index,
                             resolved_pos,
-                            text_size,
+                            text_size: vec2_to_raylib(text_size),
                             maybe_shader: shader.cloned(),
                             maybe_tint: tint.copied(),
                             maybe_shadow: shadow.copied(),
@@ -647,6 +650,7 @@ pub fn render_system(
                 for item in text_buffer.iter() {
                     if let Some(font) = fonts.get(&item.text.font) {
                         let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
+                        let draw_pos = vec2_to_raylib(item.resolved_pos.pos);
 
                         if let Some(shadow) = item.maybe_shadow {
                             let shadow_pos = Vector2 {
@@ -702,7 +706,7 @@ pub fn render_system(
                                     d_shader.draw_text_ex(
                                         font,
                                         &item.text.text,
-                                        item.resolved_pos.pos,
+                                        draw_pos,
                                         item.text.font_size,
                                         1.0,
                                         final_color,
@@ -715,7 +719,7 @@ pub fn render_system(
                                     d2.draw_text_ex(
                                         font,
                                         &item.text.text,
-                                        item.resolved_pos.pos,
+                                        draw_pos,
                                         item.text.font_size,
                                         1.0,
                                         final_color,
@@ -729,7 +733,7 @@ pub fn render_system(
                                 d2.draw_text_ex(
                                     font,
                                     &item.text.text,
-                                    item.resolved_pos.pos,
+                                    draw_pos,
                                     item.text.font_size,
                                     1.0,
                                     final_color,
@@ -739,7 +743,7 @@ pub fn render_system(
                             d2.draw_text_ex(
                                 font,
                                 &item.text.text,
-                                item.resolved_pos.pos,
+                                draw_pos,
                                 item.text.font_size,
                                 1.0,
                                 final_color,
@@ -877,7 +881,7 @@ pub fn render_system(
                     font: Arc::clone(&text.font),
                     font_size: text.font_size,
                     color: text.color,
-                    size: text.size(),
+                    size: vec2_to_raylib(text.size()),
                     z_index: *z_index,
                     pos: *pos,
                     maybe_tint: tint.copied(),
@@ -939,11 +943,11 @@ pub fn render_system(
         ) = if let Some(debug_snapshot) = &debug_res.debug_snapshot.0 {
             let fps = rl.get_fps();
             let window_mouse_pos = rl.get_mouse_position();
-            let game_mouse_pos = window_size.window_to_game_pos(
-                window_mouse_pos,
+            let game_mouse_pos = vec2_to_raylib(window_size.window_to_game_pos(
+                vec2_from_raylib(window_mouse_pos),
                 screensize.w as u32,
                 screensize.h as u32,
-            );
+            ));
             let mouse_world = rl.get_screen_to_world2D(game_mouse_pos, res.camera.0);
             // Query::count() (not .iter().count()) takes the optimized path for
             // archetypal queries -- table/archetype-count arithmetic instead of
@@ -1409,8 +1413,8 @@ mod screen_draw_buffer_tests {
                 tex_key: std::sync::Arc::from("tex"),
                 width: 1.0,
                 height: 1.0,
-                offset: Vector2::zero(),
-                origin: Vector2::zero(),
+                offset: Vec2::ZERO,
+                origin: Vec2::ZERO,
                 flip_h: false,
                 flip_v: false,
             },

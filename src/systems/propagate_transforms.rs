@@ -11,7 +11,7 @@
 
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
-use raylib::math::Vector2;
+use crate::math::Vec2;
 
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
@@ -48,9 +48,9 @@ type ChildrenQuery<'w, 's> = Query<
 /// child's local position, rotation, and scale.
 fn compose_child_transform(
     parent_gt: &GlobalTransform2D,
-    local_pos: Vector2,
+    local_pos: Vec2,
     local_rot: f32,
-    local_scale: Vector2,
+    local_scale: Vec2,
 ) -> GlobalTransform2D {
     let result = compose_transform(
         Transform2D {
@@ -91,7 +91,7 @@ pub fn propagate_transforms(
         let root_gt = GlobalTransform2D {
             position: pos.pos,
             rotation_degrees: rot.map(|r| r.degrees).unwrap_or(0.0),
-            scale: scale.map(|s| s.scale).unwrap_or(Vector2 { x: 1.0, y: 1.0 }),
+            scale: scale.map(|s| s.scale).unwrap_or(Vec2 { x: 1.0, y: 1.0 }),
         };
 
         // Update or insert root's GlobalTransform2D
@@ -125,7 +125,7 @@ fn propagate_children(
         };
 
         let local_rot = rot.map(|r| r.degrees).unwrap_or(0.0);
-        let local_scale = scale.map(|s| s.scale).unwrap_or(Vector2 { x: 1.0, y: 1.0 });
+        let local_scale = scale.map(|s| s.scale).unwrap_or(Vec2 { x: 1.0, y: 1.0 });
 
         let child_gt = compose_child_transform(parent_gt, pos.pos, local_rot, local_scale);
 
@@ -194,12 +194,12 @@ impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
         let pos = entity
             .get::<MapPosition>()
             .map(|p| p.pos)
-            .unwrap_or(Vector2 { x: 0.0, y: 0.0 });
+            .unwrap_or(Vec2 { x: 0.0, y: 0.0 });
         let local_rot = entity.get::<Rotation>().map(|r| r.degrees).unwrap_or(0.0);
         let local_scale = entity
             .get::<Scale>()
             .map(|s| s.scale)
-            .unwrap_or(Vector2 { x: 1.0, y: 1.0 });
+            .unwrap_or(Vec2 { x: 1.0, y: 1.0 });
 
         // Read the parent's world transform. world_scope gives temporary &mut
         // World access; reading a *different* entity is safe.
@@ -225,7 +225,7 @@ impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
                     let parent_scale = world
                         .get::<Scale>(parent_entity)
                         .map(|s| s.scale)
-                        .unwrap_or(Vector2 { x: 1.0, y: 1.0 });
+                        .unwrap_or(Vec2 { x: 1.0, y: 1.0 });
 
                     Some(GlobalTransform2D {
                         position: parent_pos,

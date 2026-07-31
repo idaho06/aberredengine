@@ -13,7 +13,7 @@ use std::fmt::Debug;
 
 use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::Component;
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
@@ -95,7 +95,7 @@ impl Lerp for f32 {
     }
 }
 
-impl Lerp for Vector2 {
+impl Lerp for Vec2 {
     fn lerp(a: Self, b: Self, t: f32) -> Self {
         a.lerp(b, t)
     }
@@ -195,16 +195,16 @@ mod tests {
         (a - b).abs() < EPSILON
     }
 
-    fn vec_approx_eq(a: Vector2, b: Vector2) -> bool {
+    fn vec_approx_eq(a: Vec2, b: Vec2) -> bool {
         approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
     }
 
     fn map_position(x: f32, y: f32) -> MapPosition {
-        MapPosition::from_vec(Vector2 { x, y })
+        MapPosition::from_vec(Vec2 { x, y })
     }
 
     fn screen_position(x: f32, y: f32) -> ScreenPosition {
-        ScreenPosition::from_vec(Vector2 { x, y })
+        ScreenPosition::from_vec(Vec2 { x, y })
     }
 
     fn scale(x: f32, y: f32) -> Scale {
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn test_map_position_interpolation() {
         let mid = MapPosition::interpolate(&map_position(0.0, 0.0), &map_position(10.0, 20.0), 0.5);
-        assert!(vec_approx_eq(mid.pos, Vector2 { x: 5.0, y: 10.0 }));
+        assert!(vec_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
     }
 
     #[test]
@@ -381,7 +381,7 @@ mod tests {
             &screen_position(10.0, 20.0),
             0.5,
         );
-        assert!(vec_approx_eq(mid.pos, Vector2 { x: 5.0, y: 10.0 }));
+        assert!(vec_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn test_scale_interpolation() {
         let mid = Scale::interpolate(&scale(1.0, 2.0), &scale(3.0, 6.0), 0.5);
-        assert!(vec_approx_eq(mid.scale, Vector2 { x: 2.0, y: 4.0 }));
+        assert!(vec_approx_eq(mid.scale, Vec2 { x: 2.0, y: 4.0 }));
     }
 
     // ==================== EASING ENUM TESTS ====================

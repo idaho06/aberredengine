@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use log::{error, warn};
-use raylib::prelude::Vector2;
+use crate::math::Vec2;
 
 use crate::components::dynamictext::DynamicText;
 use crate::components::guibutton::GuiButton;
@@ -70,7 +70,7 @@ fn spawn_themed_caption(
         return;
     }
 
-    const CAPTION_PADDING: Vector2 = Vector2 { x: 8.0, y: 4.0 };
+    const CAPTION_PADDING: Vec2 = Vec2 { x: 8.0, y: 4.0 };
 
     let default_theme;
     let theme = match gui_theme_store.get(theme_key) {
@@ -188,7 +188,7 @@ pub fn gui_image_spawn_system(
                 width: image.size.x,
                 height: image.size.y,
                 offset: image.offset,
-                origin: Vector2::new(0.0, 0.0),
+                origin: Vec2::new(0.0, 0.0),
                 flip_h: false,
                 flip_v: false,
             },
@@ -707,8 +707,8 @@ mod tests {
                 tex_key: Arc::from("custom_override"),
                 width: 32.0,
                 height: 32.0,
-                offset: Vector2::new(0.0, 0.0),
-                origin: Vector2::new(0.0, 0.0),
+                offset: Vec2::new(0.0, 0.0),
+                origin: Vec2::new(0.0, 0.0),
                 flip_h: false,
                 flip_v: false,
             },

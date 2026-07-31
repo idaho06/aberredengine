@@ -46,7 +46,7 @@ pub(crate) fn build_entity_context(
         .ok()
         .map(|rb| RigidBodySnapshot {
             velocity: (rb.velocity.x, rb.velocity.y),
-            speed_sq: rb.velocity.length_sqr(),
+            speed_sq: rb.velocity.length_squared(),
             frozen: rb.frozen,
         });
 

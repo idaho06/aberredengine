@@ -20,7 +20,7 @@ use bevy_ecs::prelude::*;
 
 use log::debug;
 
-use raylib::math::Vector2;
+use crate::math::Vec2;
 use raylib::prelude::Camera2D;
 
 use crate::events::input::{InputAction, InputEvent};
@@ -53,8 +53,10 @@ fn apply_deadzone(v: f32, deadzone: f32) -> f32 {
 /// inverse, rcore.c); it reads no window/GL state and is safe to call
 /// without `InitWindow`, which is what lets the logic side compute the
 /// world-space mouse without a `RaylibHandle`.
-pub fn screen_to_world2d(position: Vector2, camera: &Camera2D) -> Vector2 {
-    unsafe { raylib::ffi::GetScreenToWorld2D(position.into(), (*camera).into()).into() }
+pub fn screen_to_world2d(position: Vec2, camera: &Camera2D) -> Vec2 {
+    let raylib_pos = raylib::prelude::Vector2::new(position.x, position.y);
+    let world = unsafe { raylib::ffi::GetScreenToWorld2D(raylib_pos.into(), (*camera).into()) };
+    Vec2::new(world.x, world.y)
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +234,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         input.gamepad_connected = newest.gamepads[0].connected;
         input.gamepad_axes = newest.gamepads[0].axes;
         let game_mouse_pos = window_size.window_to_game_pos(
-            Vector2 {
+            Vec2 {
                 x: newest.mouse_x,
                 y: newest.mouse_y,
             },
@@ -272,7 +274,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
             input.mouse_left_button.force_inactive();
         } else {
             let world_mouse_pos = screen_to_world2d(
-                Vector2 {
+                Vec2 {
                     x: input.mouse_x,
                     y: input.mouse_y,
                 },
@@ -358,11 +360,11 @@ mod tests {
 
     fn test_camera(target: (f32, f32), offset: (f32, f32), zoom: f32, rotation: f32) -> Camera2D {
         Camera2D {
-            target: Vector2 {
+            target: raylib::prelude::Vector2 {
                 x: target.0,
                 y: target.1,
             },
-            offset: Vector2 {
+            offset: raylib::prelude::Vector2 {
                 x: offset.0,
                 y: offset.1,
             },
@@ -374,7 +376,7 @@ mod tests {
     #[test]
     fn screen_to_world2d_identity_camera() {
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0);
-        let world = screen_to_world2d(Vector2 { x: 42.0, y: -7.0 }, &cam);
+        let world = screen_to_world2d(Vec2 { x: 42.0, y: -7.0 }, &cam);
         assert!((world.x - 42.0).abs() < 1e-4);
         assert!((world.y - -7.0).abs() < 1e-4);
     }
@@ -384,10 +386,10 @@ mod tests {
         // screen = (world - target) * zoom + offset  (rotation 0)
         // => world = (screen - offset) / zoom + target
         let cam = test_camera((100.0, 50.0), (400.0, 300.0), 2.0, 0.0);
-        let center = screen_to_world2d(Vector2 { x: 400.0, y: 300.0 }, &cam);
+        let center = screen_to_world2d(Vec2 { x: 400.0, y: 300.0 }, &cam);
         assert!((center.x - 100.0).abs() < 1e-3);
         assert!((center.y - 50.0).abs() < 1e-3);
-        let right = screen_to_world2d(Vector2 { x: 500.0, y: 300.0 }, &cam);
+        let right = screen_to_world2d(Vec2 { x: 500.0, y: 300.0 }, &cam);
         assert!((right.x - 150.0).abs() < 1e-3);
         assert!((right.y - 50.0).abs() < 1e-3);
     }
@@ -397,7 +399,7 @@ mod tests {
         // rotation 90°, zoom 1: world = R(-90°) * (screen - offset) + target
         // screen (10, 0) relative to offset maps to world (0, -10) + target.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 90.0);
-        let world = screen_to_world2d(Vector2 { x: 10.0, y: 0.0 }, &cam);
+        let world = screen_to_world2d(Vec2 { x: 10.0, y: 0.0 }, &cam);
         assert!(world.x.abs() < 1e-3, "x = {}", world.x);
         assert!((world.y - -10.0).abs() < 1e-3, "y = {}", world.y);
     }

@@ -132,7 +132,7 @@ pub fn lua_collision_observer(
         .map(|rb| {
             (
                 Some((rb.velocity.x, rb.velocity.y)),
-                rb.velocity.length_sqr(),
+                rb.velocity.length_squared(),
             )
         })
         .unwrap_or((None, 0.0));
@@ -144,7 +144,7 @@ pub fn lua_collision_observer(
         .map(|rb| {
             (
                 Some((rb.velocity.x, rb.velocity.y)),
-                rb.velocity.length_sqr(),
+                rb.velocity.length_squared(),
             )
         })
         .unwrap_or((None, 0.0));
