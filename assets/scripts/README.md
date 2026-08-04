@@ -71,9 +71,21 @@ assets/scripts/
     │   └── level01.lua       # Asteroids example
     ├── arkanoid/
     │   └── level01.lua       # Arkanoid example
-    └── birthday/
-        ├── intro.lua         # Birthday Card intro scene
-        └── card.lua          # Birthday Card main scene
+    ├── birthday/
+    │   ├── intro.lua         # Birthday Card intro scene
+    │   └── card.lua          # Birthday Card main scene
+    ├── bunnymark/
+    │   ├── common.lua        # Shared bunny-spawn/update logic
+    │   ├── map_loop.lua      # World-space bunnies, looping variant
+    │   ├── map_phase.lua     # World-space bunnies, phase-driven variant
+    │   ├── menu.lua          # Bunnymark variant selector
+    │   ├── screen_loop.lua   # Screen-space bunnies, looping variant
+    │   └── screen_phase.lua  # Screen-space bunnies, phase-driven variant
+    ├── gui_demo.lua          # GUI widget showcase (themes, buttons, labels, progress bars)
+    ├── kraken/
+    │   └── intro.lua         # Kraken intro scene
+    └── sidescroller/
+        └── level01.lua       # Sidescroller platformer example (camera parallax, collision flags)
 ```
 
 **LSP Support:** The `engine.lua` file provides EmmyLua type annotations for IDE autocompletion. It is auto-generated from the engine's runtime metadata. To regenerate after code changes:
@@ -241,6 +253,10 @@ Each example prefixes its asset keys to avoid conflicts:
 - Asteroids: `asteroids-ship_sheet`, `asteroids-explosion01`, etc.
 - Arkanoid: `arkanoid-ball`, `arkanoid-brick_red`, etc.
 - Birthday: `birthday-love`, `birthday-spin_hearts-sheet`, etc.
+- Kraken: `kraken-mouth`, `kraken-tentacle`, etc.
+- Sidescroller: `sidescroller-char_red_1_sheet`, etc.
+- Bunnymark: `bunnymark-raybunny`, etc.
+- GUI Demo: `gui-bluewindow`, `gui-button-atlas`, etc.
 
 Shared assets (fonts, cursor, shaders) are loaded without prefix in `load_common()`.
 
@@ -276,7 +292,7 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Tilemap → Camera → Render → GameConfig → CameraFollow → InputBinding |
+| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
 | Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
 | `on_animation_end` callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
@@ -445,6 +461,8 @@ input = {
         -- Function keys
         debug      = { pressed = bool, just_pressed = bool, just_released = bool },  -- F11
         fullscreen = { pressed = bool, just_pressed = bool, just_released = bool },  -- F10
+        -- Raw left mouse button (not routed through rebinding — GUI hit-testing reacts to the literal button)
+        mouse_left = { pressed = bool, just_pressed = bool, just_released = bool },
     },
     analog = {
         scroll_y      = number,  -- Mouse wheel delta: positive = up, negative = down, 0 = no scroll
@@ -452,9 +470,19 @@ input = {
         mouse_y       = number,  -- Cursor Y in game-space (0..render_height, letterbox-corrected)
         mouse_world_x = number,  -- Cursor X in world-space (after camera transform)
         mouse_world_y = number,  -- Cursor Y in world-space (after camera transform)
+        -- Gamepad (pad 0 only)
+        gamepad_connected = bool,    -- whether pad 0 is connected this tick
+        pad_left_x        = number,  -- left stick X axis, -1.0..1.0, raw (never deadzoned)
+        pad_left_y        = number,  -- left stick Y axis, -1.0..1.0, raw (never deadzoned)
+        pad_right_x       = number,  -- right stick X axis, -1.0..1.0, raw (never deadzoned)
+        pad_right_y       = number,  -- right stick Y axis, -1.0..1.0, raw (never deadzoned)
+        pad_lt             = number,  -- left trigger pressure, -1.0..1.0, raw (never deadzoned)
+        pad_rt             = number,  -- right trigger pressure, -1.0..1.0, raw (never deadzoned)
     }
 }
 ```
+
+A disconnected pad reads as all-zero (`gamepad_connected = false`, every `pad_*` axis `0.0`) rather than a stale last-known value — the raw snapshot is rebuilt fresh every render frame with no carry-forward.
 
 ### Digital Input States
 
@@ -474,11 +502,15 @@ Each digital button has three boolean properties:
 | `down` | S **or** Down Arrow |
 | `left` | A **or** Left Arrow |
 | `right` | D **or** Right Arrow |
-| `action_1` | Space **or** Left Mouse Button |
-| `action_2` | Enter **or** Right Mouse Button |
-| `action_3` | Middle Mouse Button |
-| `back` | Escape |
+| `action_1` | Space **or** Left Mouse Button **or** pad-0 face-down button |
+| `action_2` | Enter **or** Right Mouse Button **or** pad-0 face-right button |
+| `action_3` | Middle Mouse Button **or** pad-0 face-left button |
+| `back` | Escape **or** pad-0 start button |
 | `special` | F12 |
+
+Pad 0's d-pad and left stick additively map to **both** `up`/`down`/`left`/`right` and their raw
+`main_*`/`secondary_*` counterparts below — a gamepad has one directional input, unlike keyboard's
+two independent key sets.
 
 **Raw fields** (individual key sets — use when you need to distinguish which physical keys were pressed):
 
@@ -494,6 +526,7 @@ Each digital button has three boolean properties:
 | `secondary_right` | Right Arrow |
 | `debug` | F11 |
 | `fullscreen` | F10 |
+| `mouse_left` | Left Mouse Button (raw — not routed through rebinding; GUI hit-testing reacts to the literal button, not the `action_1` binding) |
 
 **Analog fields:**
 
@@ -504,6 +537,10 @@ Each digital button has three boolean properties:
 | `mouse_y` | number | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
 | `mouse_world_x` | number | Cursor X in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
 | `mouse_world_y` | number | Cursor Y in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
+| `gamepad_connected` | boolean | Whether pad 0 is connected this tick. |
+| `pad_left_x` / `pad_left_y` | number | Pad 0 left stick axes, `-1.0..1.0`, raw — never deadzoned (deadzone only affects `InputBinding::GamepadAxis` digital-threshold resolution, see [Input Rebinding](#input-rebinding)). |
+| `pad_right_x` / `pad_right_y` | number | Pad 0 right stick axes, `-1.0..1.0`, raw. |
+| `pad_lt` / `pad_rt` | number | Pad 0 trigger pressure, `-1.0..1.0`, raw. |
 
 ### Usage Examples
 
@@ -601,12 +638,45 @@ The engine supports runtime key rebinding from Lua. This lets players customize 
 | Modifiers | `lshift` (alias: `shift`), `rshift`, `lctrl` (alias: `ctrl`), `rctrl`, `lalt` (alias: `alt`), `ralt` |
 | Function keys | `f1` – `f12` |
 | Mouse buttons | `mouse_left`, `mouse_right`, `mouse_middle` |
+| Gamepad | `"padN:<button>"` / `"padN:axis_<name><+\|->"` — see [Gamepad bindings](#gamepad-bindings) below |
 
 > **Aliases:** `engine.get_binding()` always returns the canonical form (e.g. `"enter"`, not `"return"`), but both are accepted as input to `rebind_action`/`add_binding`.
 
-> **Bindings accept both keyboard keys and mouse buttons.** Pass any name from the table above (e.g. `"mouse_left"`) wherever a key name is expected.
+> **Bindings accept keyboard keys, mouse buttons, and gamepad buttons/axes.** Pass any name from the table above (e.g. `"mouse_left"`, `"pad0:face_down"`) wherever a key name is expected.
 
 > **Unknown values:** Passing an unknown action or binding name logs a warning and is silently ignored — no panic, no state change.
+
+#### Gamepad bindings
+
+Gamepad binding strings target a specific pad by index (`N`, must be `< 4`) and a button or axis name:
+
+- **Buttons**: `"padN:<button>"`, e.g. `"pad0:face_down"`, `"pad0:dpad_up"`, `"pad0:start"`.
+  Button names are positional, not Xbox-style `a`/`b`/`x`/`y` (which implies a specific controller
+  layout): `dpad_up`/`dpad_right`/`dpad_down`/`dpad_left`, `face_up`/`face_right`/`face_down`/
+  `face_left`, `lb`/`lt`/`rb`/`rt`, `select`/`guide`/`start`, `left_thumb`/`right_thumb`.
+- **Axes**: `"padN:axis_<name><+|->"`, e.g. `"pad0:axis_lx+"`, `"pad0:axis_ry-"` — drives a digital
+  action when the axis crosses a fixed threshold (0.5) in the given direction. Axis names:
+  `axis_lx`/`axis_ly`/`axis_rx`/`axis_ry`/`axis_lt`/`axis_rt`. There is no per-binding threshold —
+  the crossing point is a single engine-wide constant, not configurable per binding.
+
+Parse failures (bad pad index, unknown button/axis name, malformed string) warn and no-op, same as
+an unrecognized keyboard/mouse key name.
+
+**Default gamepad bindings** (additive — keyboard/mouse defaults are untouched): pad 0's d-pad and
+left stick drive **both** `main_*` and `secondary_*` direction actions (a gamepad has one
+directional input, unlike keyboard's two independent key sets); the right-face buttons drive
+`action_1`/`action_2`/`action_3` (`face_down`/`face_right`/`face_left`); `start` drives `back`.
+
+```lua
+-- Rebind jump to the gamepad's south face button
+engine.rebind_action("action_1", "pad0:face_down")
+
+-- Add a second-pad binding for the same action, on top of the pad-0 default
+engine.add_binding("action_1", "pad1:face_down")
+
+-- Bind a custom action to the right stick's Y axis, negative direction
+engine.add_binding("special", "pad0:axis_ry-")
+```
 
 #### `engine.rebind_action(action, key)`
 
@@ -771,16 +841,15 @@ engine.register_animation("char_run", "char_sheet", 0, 0, 56, 56, 12, 10, true)
 
 ## Map Loading
 
-`engine.load_map(path)` reads a `MapData` JSON file (as saved by the editor) and spawns all of
-its assets and entities in the engine. It can be called from `M.spawn()`, `on_enter_play()`, or
-any per-frame callback — anywhere that runs during the **Playing state**.
-
-**It cannot be called from `on_setup()`**, which runs in the Setup state before the map-processing
-system is active.
+`engine.load_map(path)` queues a request to read a `MapData` JSON file (as saved by the editor)
+and spawn all of its assets and entities in the engine. It can be called from `on_setup()`,
+`M.spawn()`, `on_enter_play()`, or any per-tick callback — it works everywhere, including during
+the Setup state, since the request sits in a queue that survives until the sim schedule starts
+draining it (see "What it does" below).
 
 ### `engine.load_map(path)`
 
-Load a map JSON file and spawn all its assets and entities.
+Queue a map JSON file to be read and spawned.
 
 ```lua
 function M.spawn()
@@ -790,12 +859,22 @@ end
 
 **What it does:**
 
-1. Reads and deserialises the JSON file synchronously (file I/O happens in the same frame).
-2. Queues a `SpawnMapRequested` event, which the engine processes immediately to load textures,
-   fonts, and animations from the map's asset lists, then spawns all entities as ECS components.
-3. Entities with a `registered_as` name in the map file are accessible via `engine.get_entity(key)`
-   starting from the **next frame**.
-4. Entities with a `group` name are visible via the group-tracking system.
+1. Queues a `MapLuaCmd::LoadMap` request — this call itself does no file I/O and doesn't spawn
+   anything synchronously.
+2. The queue is drained by a system on the sim schedule, once per sim tick, after that tick's
+   scene/phase logic has run. Draining reads and deserializes the JSON file **at drain time**, not
+   at the time `engine.load_map()` was called — so there's always at least one sim tick of delay
+   between queuing and the file actually being read.
+3. Once read, the drain triggers a `SpawnMapRequested` event synchronously within that same system
+   call, which loads textures/fonts/animations from the map's asset lists and spawns all entities
+   as ECS components — all within that one sim tick's drain, not spread across further ticks.
+4. Entities with a `registered_as` name in the map file are accessible via `engine.get_entity(key)`
+   starting from the **next** sim tick after the drain.
+5. Entities with a `group` name are visible via the group-tracking system from the same point.
+
+Calling `engine.load_map()` from `on_setup()` queues the request before the sim schedule has ticked
+at all, so it's drained on the engine's first sim tick rather than immediately — otherwise it
+behaves identically to queuing it from any other callback.
 
 **Supported `EntityDef` fields** (all optional):
 
@@ -832,10 +911,12 @@ end
 }
 ```
 
-**Error handling:** if the file cannot be read or parsed, an error is logged and nothing is spawned.
+**Error handling:** if the file cannot be read or parsed (checked at drain time, not at the
+`engine.load_map()` call itself), an error is logged and nothing is spawned.
 
 **Calling from `M.spawn()`** (the typical pattern) is equivalent to calling it from inside
-`on_switch_scene()` — the entities are ready in the first `on_update_<scene>` frame.
+`on_switch_scene()` — the request is queued during that same sim tick and drained on a later one,
+so entities are ready by the first `on_update_<scene>` tick that runs after the drain.
 
 ---
 
@@ -1405,7 +1486,11 @@ Define scene switch action (requires `:with_menu()`).
 
 #### `:with_menu_action_show_submenu(item_id, submenu)`
 
-Define submenu action (requires `:with_menu()`).
+Requires `:with_menu()`. **Not yet fully implemented**: selecting this item sets the
+`"show_submenu"` world signal to `submenu`'s value, but no system currently consumes that
+signal — no submenu is actually displayed. Read the signal yourself
+(`engine.get_string("show_submenu")`) and implement the display logic in your own scene code if
+you need this today.
 
 ```lua
 :with_menu_action_show_submenu("options", "options_menu")
@@ -1425,7 +1510,7 @@ Set a Lua callback function for menu selection (requires `:with_menu()`).
 
 When a callback is set, it handles **all** menu selections and `MenuActions` (`:with_menu_action_*`) are ignored. This provides full flexibility for custom menu behavior.
 
-The callback receives a context table with:
+The callback receives **a single context table argument** with:
 
 - `menu_id` (u64) - Entity ID of the menu
 - `item_id` (string) - ID of the selected item (e.g., "start_game")
@@ -1444,13 +1529,13 @@ engine.spawn()
     :with_menu_callback("on_main_menu_select")
     :build()
 
--- Callback function (global)
-function on_main_menu_select(menu_id, item_id, item_index)
-    engine.log_info("Selected: " .. item_id .. " (index " .. item_index .. ")")
+-- Callback function (global) — takes one ctx table, not three positional args
+function on_main_menu_select(ctx)
+    engine.log_info("Selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
 
-    if item_id == "start_game" then
+    if ctx.item_id == "start_game" then
         engine.change_scene("level01")
-    elseif item_id == "exit" then
+    elseif ctx.item_id == "exit" then
         engine.quit()
     end
 end
@@ -1729,6 +1814,14 @@ ctx = {
 }
 ```
 
+> **`ctx` is pooled and reused across callbacks.** Never store a reference to `ctx` or any of its
+> subtables beyond the current callback call — the same underlying Lua table gets reused for the
+> next entity's callback. Just as importantly, **never write to `ctx` or its subtables** either
+> (e.g. `ctx.pos.x = 100` for convenience). The engine tracks which optional fields are populated
+> per callback with an internal occupancy mask to skip redundant writes on sparse entities; a
+> script-side write desyncs that mask and can leak a stale value into a later, unrelated entity's
+> `ctx`. Treat every field of `ctx` as read-only, and only for the duration of the current call.
+
 **Phase Callback Signatures:**
 
 ```lua
@@ -1766,8 +1859,15 @@ end
 
 -- Called when exiting a phase
 -- Does NOT support return value (transition already decided)
+-- IMPORTANT: on_exit fires AFTER the phase has already swapped — ctx.phase
+-- here is the NEW phase, not the one being exited. The callback itself is
+-- still looked up by the OLD phase's name (the phase this function is
+-- attached to), only ctx.phase's value has already moved on.
 function player_idle_exit(ctx)
     -- ctx: EntityContext table (no input parameter)
+    -- ctx.phase is already "running" (or whatever phase was transitioned to),
+    -- NOT "idle" — this callback runs because "idle" is exiting, but by the
+    -- time it runs the entity's phase has already changed.
     engine.log_info("Player " .. ctx.id .. " exiting idle phase")
 end
 ```
@@ -1808,6 +1908,8 @@ There are two ways to trigger phase transitions:
 - Returning the current phase name is ignored (no transition)
 - Transitions happen on the next frame (not immediately)
 - `on_exit` does NOT support return values (transition already decided)
+- `on_exit` fires **after** the phase swap — `ctx.phase` inside `on_exit` already reads as the new
+  phase, not the one being exited (the callback itself is still resolved by the old phase's name)
 
 ---
 
@@ -2078,6 +2180,19 @@ Start the position tween from the end and play it in reverse (requires `:with_tw
 :with_tween_position_backwards()
 ```
 
+#### `:with_tween_position_on_finished(fn_name)`
+
+Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_position()`). Fires once for `"once"` mode (or an immediate zero-duration snap); never fires for `"loop"` or `"ping_pong"`. Callback signature: `fn(ctx, input)`.
+
+```lua
+:with_tween_position(0, -100, 0, 0, 2.0)
+:with_tween_position_on_finished("on_move_done")
+
+function on_move_done(ctx, input)
+    engine.log_info("Entity " .. ctx.id .. " finished moving")
+end
+```
+
 #### `:with_tween_rotation(from, to, duration)`
 
 Animate rotation over time.
@@ -2111,6 +2226,15 @@ Start the rotation tween from the end and play it in reverse (requires `:with_tw
 :with_tween_rotation_backwards()
 ```
 
+#### `:with_tween_rotation_on_finished(fn_name)`
+
+Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_rotation()`). Same semantics as `:with_tween_position_on_finished`. Callback signature: `fn(ctx, input)`.
+
+```lua
+:with_tween_rotation(0, 360, 3.0)
+:with_tween_rotation_on_finished("on_spin_done")
+```
+
 #### `:with_tween_scale(from_x, from_y, to_x, to_y, duration)`
 
 Animate scale over time.
@@ -2142,6 +2266,15 @@ Start scale tween from the end and play in reverse (requires `:with_tween_scale(
 ```lua
 :with_tween_scale(0.5, 0.5, 1.0, 1.0, 1.0)  -- Normally: 0.5 -> 1.0
 :with_tween_scale_backwards()  -- Now starts at 1.0, goes to 0.5
+```
+
+#### `:with_tween_scale_on_finished(fn_name)`
+
+Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_scale()`). Same semantics as `:with_tween_position_on_finished`. Callback signature: `fn(ctx, input)`.
+
+```lua
+:with_tween_scale(0, 0, 1, 1, 0.5)
+:with_tween_scale_on_finished("on_grow_done")
 ```
 
 ---
@@ -3033,7 +3166,7 @@ Insert TTL component on entity at runtime.
 engine.entity_insert_ttl(enemy_id, 30.0)
 ```
 
-### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)`
+### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
 
 Add or replace TweenPosition component at runtime to animate entity movement.
 
@@ -3046,6 +3179,7 @@ Add or replace TweenPosition component at runtime to animate entity movement.
 - `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
+- `on_finished` - Optional Lua function name, called once when the tween stops playing (`"once"` mode, or an immediate zero-duration snap); never fires for `"loop"`/`"ping_pong"`. Omit for no callback — existing 8-arg call sites keep working unchanged.
 
 **Example:**
 
@@ -3053,9 +3187,12 @@ Add or replace TweenPosition component at runtime to animate entity movement.
 -- Make entity slide from left to right with smooth easing
 local entity_id = engine.get_entity("player")
 engine.entity_insert_tween_position(entity_id, -100, 0, 100, 0, 2.0, "quad_out", "once", false)
+
+-- With a finish callback
+engine.entity_insert_tween_position(entity_id, -100, 0, 100, 0, 2.0, "quad_out", "once", false, "on_slide_done")
 ```
 
-### `engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards)`
+### `engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished?)`
 
 Add or replace TweenRotation component at runtime to animate entity rotation.
 
@@ -3068,6 +3205,7 @@ Add or replace TweenRotation component at runtime to animate entity rotation.
 - `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
+- `on_finished` - Optional Lua function name, called once when the tween stops playing. Same semantics as `entity_insert_tween_position`'s `on_finished`.
 
 **Example:**
 
@@ -3077,7 +3215,7 @@ local entity_id = engine.get_entity("spinner")
 engine.entity_insert_tween_rotation(entity_id, 0, 360, 3.0, "linear", "loop", false)
 ```
 
-### `engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)`
+### `engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
 
 Add or replace TweenScale component at runtime to animate entity scaling.
 
@@ -3090,6 +3228,7 @@ Add or replace TweenScale component at runtime to animate entity scaling.
 - `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
 - `backwards` - Start tween from end and play in reverse (boolean, default false)
+- `on_finished` - Optional Lua function name, called once when the tween stops playing. Same semantics as `entity_insert_tween_position`'s `on_finished`.
 
 **Example:**
 
@@ -3177,17 +3316,10 @@ function on_panel_hidden(ctx, input)
 end
 ```
 
-### `engine.entity_remove_tween_screen_position(entity_id)`
-
-Remove `TweenScreenPosition` component from an entity to stop the screen-space animation.
-
-**Parameters:**
-
-- `entity_id` - Entity to remove tween from
-
-```lua
-engine.entity_remove_tween_screen_position(panel_id)
-```
+There is currently no `engine.entity_remove_tween_screen_position(entity_id)` function — unlike
+`position`/`rotation`/`scale`, the screen-position tween family has no runtime remove counterpart
+yet. To stop a screen-position tween early, use its `on_finished` callback (see above) or drive
+the visual result you want via a second `entity_insert_tween_screen_position` call instead.
 
 ### `engine.entity_remove_screen_position(entity_id)`
 
@@ -3607,7 +3739,7 @@ local score = engine.get_integer("score") or 0
 engine.collision_set_integer("score", score + 100)
 ```
 
-#### `engine.collision_set_flag(flag)`
+#### `engine.collision_set_flag(key)`
 
 Set global flag during collision.
 
@@ -3615,7 +3747,7 @@ Set global flag during collision.
 engine.collision_set_flag("ball_hit_player")
 ```
 
-#### `engine.collision_clear_flag(flag)`
+#### `engine.collision_clear_flag(key)`
 
 Clear global flag during collision.
 
@@ -3623,7 +3755,7 @@ Clear global flag during collision.
 engine.collision_clear_flag("ball_hit_player")
 ```
 
-#### `engine.collision_toggle_flag(flag)`
+#### `engine.collision_toggle_flag(key)`
 
 Toggle global flag during collision.
 
@@ -4193,7 +4325,7 @@ function on_player_hit(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)`
+#### `engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
 
 Add or replace TweenPosition component during collision handling.
 
@@ -4206,6 +4338,7 @@ Add or replace TweenPosition component during collision handling.
 - `easing` - Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior: "once", "loop", "ping_pong"
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
+- `on_finished` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
 
 ```lua
 function on_player_bounce_pad(ctx)
@@ -4215,7 +4348,7 @@ function on_player_bounce_pad(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards)`
+#### `engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished?)`
 
 Add or replace TweenRotation component during collision handling.
 
@@ -4228,6 +4361,7 @@ Add or replace TweenRotation component during collision handling.
 - `easing` - Easing function
 - `loop_mode` - Loop behavior
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
+- `on_finished` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
 
 ```lua
 function on_player_spin_powerup(ctx)
@@ -4236,7 +4370,7 @@ function on_player_spin_powerup(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards)`
+#### `engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
 
 Add or replace TweenScale component during collision handling.
 
@@ -4249,6 +4383,7 @@ Add or replace TweenScale component during collision handling.
 - `easing` - Easing function
 - `loop_mode` - Loop behavior
 - `backwards` - Start tween from end and play in reverse (boolean, default false)
+- `on_finished` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
 
 ```lua
 function on_player_grow_powerup(ctx)
@@ -4435,9 +4570,9 @@ function on_player_warp_trigger(ctx)
 end
 ```
 
-#### `engine.collision_entity_remove_tween_screen_position(entity_id)`
-
-Remove `TweenScreenPosition` during collision handling.
+There is currently no `engine.collision_entity_remove_tween_screen_position(entity_id)` — same gap
+as the non-collision `engine.entity_remove_tween_screen_position` (see [Entity
+Commands](#entity-commands)). Use the `on_finished` callback or a second insert call instead.
 
 #### `engine.collision_entity_remove_screen_position(entity_id)`
 
@@ -4952,7 +5087,7 @@ engine.spawn()
     :build()
 ```
 
-Tilemaps no longer require a pre-loading step — just spawn the entity with `:with_tilemap()` in your scene's `M.spawn()` function.
+Tilemaps require no pre-loading step — just spawn the entity with `:with_tilemap()` in your scene's `M.spawn()` function.
 
 ---
 
@@ -4960,8 +5095,8 @@ Tilemaps no longer require a pre-loading step — just spawn the entity with `:w
 
 ```lua
 -- Register animations
-engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 16, 15, true)
-engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 6, 15, false)
+engine.register_animation("vaus_glowing", "vaus_sheet", 0, 0, 96, 0, 16, 15, true)
+engine.register_animation("vaus_hit", "vaus_sheet", 0, 24, 96, 0, 6, 15, false)
 
 -- Spawn player with phase system
 local player_y = 700
@@ -5863,7 +5998,7 @@ engine.set_target_fps(nil)  -- Reset to 60 FPS (default)
 
 #### `engine.set_render_size(width, height)`
 
-Set the internal render resolution. The render target is recreated at the new size and the screen size resource is updated accordingly. Values are clamped to a minimum of 320x200 and a maximum of 7680x4320.
+Set the internal render resolution. The render target is recreated at the new size and the screen size resource is updated accordingly. Width and height are each clamped independently to a minimum of 120 and a maximum of 7680 (width) / 4320 (height).
 
 **Parameters:**
 
