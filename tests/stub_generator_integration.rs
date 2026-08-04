@@ -121,10 +121,7 @@ fn generated_stubs_contain_representative_signatures() {
         content.contains("---@class InputSnapshot"),
         "Missing InputSnapshot type"
     );
-    assert!(
-        content.contains("---@class Vector2"),
-        "Missing Vector2 type"
-    );
+    assert!(content.contains("---@class Vec2"), "Missing Vec2 type");
 
     // Enums
     assert!(content.contains("---@alias Easing"), "Missing Easing enum");

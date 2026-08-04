@@ -5,6 +5,7 @@
 
 // Re-export engine dependencies so downstream crates need only list `aberredengine`.
 pub use bevy_ecs;
+pub use glam;
 pub use imgui;
 pub use raylib;
 

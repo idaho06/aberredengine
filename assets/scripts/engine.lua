@@ -11,7 +11,7 @@ engine = {}
 -- ==================== Types ====================
 
 ---2D vector / point
----@class Vector2
+---@class Vec2
 ---@field x number
 ---@field y number
 
@@ -51,13 +51,13 @@ engine = {}
 ---@class EntityContext
 ---@field id integer Entity ID
 ---@field group string|nil
----@field pos Vector2|nil
----@field screen_pos Vector2|nil
----@field vel Vector2|nil
+---@field pos Vec2|nil
+---@field screen_pos Vec2|nil
+---@field vel Vec2|nil
 ---@field speed_sq number|nil
 ---@field frozen boolean|nil
 ---@field rotation number|nil
----@field scale Vector2|nil
+---@field scale Vec2|nil
 ---@field rect Rect|nil
 ---@field sprite SpriteInfo|nil
 ---@field animation AnimationInfo|nil
@@ -66,17 +66,17 @@ engine = {}
 ---@field time_in_phase number|nil
 ---@field previous_phase string|nil Only in on_enter
 ---@field timer TimerInfo|nil
----@field world_pos Vector2|nil World position from hierarchy
+---@field world_pos Vec2|nil World position from hierarchy
 ---@field world_rotation number|nil World rotation from hierarchy
----@field world_scale Vector2|nil World scale from hierarchy
+---@field world_scale Vec2|nil World scale from hierarchy
 ---@field parent_id integer|nil Parent entity ID if in hierarchy
 
 ---Entity data in a collision context
 ---@class CollisionEntity
 ---@field id integer Entity ID
 ---@field group string
----@field pos Vector2
----@field vel Vector2
+---@field pos Vec2
+---@field vel Vec2
 ---@field speed_sq number
 ---@field rect Rect
 ---@field signals SignalSet

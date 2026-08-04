@@ -110,7 +110,7 @@ impl LuaRuntime {
 
         let type_defs: &[LuaTypeDef] = &[
             (
-                "Vector2",
+                "Vec2",
                 "2D vector / point",
                 &[("x", "number", false, None), ("y", "number", false, None)],
             ),
@@ -194,13 +194,13 @@ impl LuaRuntime {
                 &[
                     ("id", "integer", false, Some("Entity ID")),
                     ("group", "string", true, None),
-                    ("pos", "Vector2", true, None),
-                    ("screen_pos", "Vector2", true, None),
-                    ("vel", "Vector2", true, None),
+                    ("pos", "Vec2", true, None),
+                    ("screen_pos", "Vec2", true, None),
+                    ("vel", "Vec2", true, None),
                     ("speed_sq", "number", true, None),
                     ("frozen", "boolean", true, None),
                     ("rotation", "number", true, None),
-                    ("scale", "Vector2", true, None),
+                    ("scale", "Vec2", true, None),
                     ("rect", "Rect", true, None),
                     ("sprite", "SpriteInfo", true, None),
                     ("animation", "AnimationInfo", true, None),
@@ -211,7 +211,7 @@ impl LuaRuntime {
                     ("timer", "TimerInfo", true, None),
                     (
                         "world_pos",
-                        "Vector2",
+                        "Vec2",
                         true,
                         Some("World position from hierarchy"),
                     ),
@@ -223,7 +223,7 @@ impl LuaRuntime {
                     ),
                     (
                         "world_scale",
-                        "Vector2",
+                        "Vec2",
                         true,
                         Some("World scale from hierarchy"),
                     ),
@@ -241,8 +241,8 @@ impl LuaRuntime {
                 &[
                     ("id", "integer", false, Some("Entity ID")),
                     ("group", "string", false, None),
-                    ("pos", "Vector2", false, None),
-                    ("vel", "Vector2", false, None),
+                    ("pos", "Vec2", false, None),
+                    ("vel", "Vec2", false, None),
                     ("speed_sq", "number", false, None),
                     ("rect", "Rect", false, None),
                     ("signals", "SignalSet", false, None),

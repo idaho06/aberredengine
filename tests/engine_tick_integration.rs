@@ -1584,7 +1584,7 @@ fn meta_types_table_is_populated() {
         assert(types, "__meta.types missing")
 
         -- Key types must exist
-        local required = {"EntityContext", "CollisionContext", "InputSnapshot", "Vector2",
+        local required = {"EntityContext", "CollisionContext", "InputSnapshot", "Vec2",
                           "Rect", "SpriteInfo", "AnimationInfo", "TimerInfo", "SignalSet",
                           "CollisionEntity", "CollisionSides", "DigitalButtonState",
                           "DigitalInputs", "PhaseDefinition", "PhaseCallbacks",
@@ -1610,13 +1610,13 @@ fn meta_types_table_is_populated() {
         assert(ec_field_names.id.type == "integer", "EntityContext.id should be integer")
         assert(ec_field_names.id.optional == false, "EntityContext.id should not be optional")
         assert(ec_field_names.pos, "EntityContext missing pos field")
-        assert(ec_field_names.pos.type == "Vector2", "EntityContext.pos should be Vector2")
+        assert(ec_field_names.pos.type == "Vec2", "EntityContext.pos should be Vec2")
         assert(ec_field_names.signals, "EntityContext missing signals field")
         assert(ec_field_names.previous_phase, "EntityContext missing previous_phase")
 
-        -- Spot-check Vector2
-        local v2 = types.Vector2
-        assert(#v2.fields == 2, "Vector2 should have 2 fields")
+        -- Spot-check Vec2
+        local v2 = types.Vec2
+        assert(#v2.fields == 2, "Vec2 should have 2 fields")
     "#,
     )
     .exec()

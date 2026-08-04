@@ -289,7 +289,7 @@ fn extract_types(meta: &LuaTable) -> Result<Vec<TypeMeta>, LuaError> {
     }
     // Stable sort: context types first, then alphabetical
     let type_order = [
-        "Vector2",
+        "Vec2",
         "Rect",
         "SpriteInfo",
         "AnimationInfo",
