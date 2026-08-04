@@ -4,7 +4,7 @@ This guide explains how to build a 2D game in pure Rust using the Aberred Engine
 
 ## 1. What the Engine Provides
 
-Aberred Engine is a 2D game engine built on **Bevy ECS 0.19** and **sola-raylib 6.2**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
+Aberred Engine is a 2D game engine built on **Bevy ECS 0.19** and **sola-raylib 6.3**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
 
 Built-in systems:
 
@@ -85,6 +85,8 @@ EngineBuilder::new()
 width = 640                    ; Internal render resolution width
 height = 360                   ; Internal render resolution height
 background_color = 0,2,4       ; Background clear color (R,G,B 0-255)
+pixel_snap_camera = true       ; Snap camera target/view-rect to integer pixels (avoids atlas bleeding)
+render_target_filter = nearest ; Sampling filter for the render target: nearest|bilinear|trilinear|anisotropic_4x|anisotropic_8x|anisotropic_16x
 
 [window]
 width = 1280                   ; Window width in pixels
@@ -99,6 +101,9 @@ hz = 240                       ; Logic thread's sim tick rate (see Threading Mod
 
 [audio]
 hz = 100                       ; Audio thread's tick rate
+
+[input]
+gamepad_deadzone = 0.15        ; Analog-stick deadzone radius for InputBinding::GamepadAxis, clamped to 0.0-1.0
 ```
 
 ---
@@ -111,7 +116,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, `on_enter_play`, `on_update`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is the real elapsed time since the previous tick (not a fixed constant), and sim ticks keep running even during a render stall.
+- **Every hook and callback you write — `on_setup`, `on_enter_play`, `on_update`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why their signatures look different from everything else (read-only signal snapshots instead of live, mutable `WorldSignals` — see below).
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. Requesting one from a logic-side system panics when the engine initializes its schedule. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -162,7 +167,7 @@ use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::render::texturestore::TextureStore;
 use aberredengine::resources::worldsignals::SignalSnapshot;
 use aberredengine::resources::signal_intents::SignalIntents;
-use raylib::prelude::Camera2D;
+use aberredengine::resources::camera2d::Camera2D;
 
 // Called once when the scene becomes active (logic thread)
 fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -195,13 +200,15 @@ fn my_world_draw(
 ) { /* draw world overlays, read camera/screen/app state */ }
 ```
 
-To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each frame and triggers the transition.
+To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition. Use the `signal_keys` constants (`sk::SCENE`/`sk::SWITCH_SCENE`) instead of bare string literals — a typo in a hand-written key fails silently with no compiler error.
 
 ```rust
+use aberredengine::resources::signal_keys as sk;
+
 fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if some_condition() {
-        ctx.world_signals.set_string("scene", "level01".to_string());
-        ctx.world_signals.set_flag("switch_scene");
+        ctx.world_signals.set_string(sk::SCENE, "level01".to_string());
+        ctx.world_signals.set_flag(sk::SWITCH_SCENE);
     }
 }
 ```
@@ -305,7 +312,8 @@ use aberredengine::resources::appstate::AppState;
 use aberredengine::resources::screensize::ScreenSize;
 use aberredengine::resources::worldsignals::SignalSnapshot;
 use aberredengine::systems::scene_dispatch::WorldDraw;
-use raylib::prelude::{Camera2D, Color, Vector2};
+use aberredengine::resources::camera2d::Camera2D;
+use aberredengine::math::{Color, Vec2};
 
 fn editor_world_draw(
     draw: &mut dyn WorldDraw,
@@ -315,8 +323,8 @@ fn editor_world_draw(
     _signals: &SignalSnapshot,
 ) {
     draw.draw_line_v(
-        Vector2::new(-32.0, 0.0),
-        Vector2::new(32.0, 0.0),
+        Vec2::new(-32.0, 0.0),
+        Vec2::new(32.0, 0.0),
         Color::GREEN,
     );
     draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
@@ -403,6 +411,9 @@ Setup ──→ Playing ──→ Quitting
 | `.add_system(system)` | Add an extra per-sim-tick system. Same auto-constraints as `.on_update()` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
+| `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#determinism-and-replay) below. |
+| `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
+| `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
 | `.try_run()` | Start the engine and return `Result<(), aberredengine::EngineError>` on startup failure. Recommended for Rust `main`. |
 | `.run()` | Convenience wrapper around `.try_run()` that logs the error, prints it to stderr, and exits the process with status 1 on startup failure. |
 
@@ -432,7 +443,7 @@ The system signature is a standard Bevy ECS system. Since it runs on the logic t
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::events::render_assets::RenderAssetCmd;
+use aberredengine::protocol::render_assets::RenderAssetCmd;
 use aberredengine::resources::worldsignals::WorldSignals;
 use aberredengine::resources::texturefilter::TextureFilter;
 
@@ -536,7 +547,7 @@ fn my_enter(ctx: &mut GameCtx) {
 }
 ```
 
-> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, `AudioCmd`, etc.
+> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
 
 #### Scene-scoped (transient) observers
 
@@ -558,6 +569,43 @@ fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
 
 This is the standard pattern for scene-scoped behaviour in the engine — no special API needed.
 
+### Determinism and replay
+
+By default, simulation randomness is seeded from entropy and every run of your game plays out differently. Call `.deterministic(seed)` to pin `SimRng` (the one RNG resource `GameCtx`/systems should draw from for anything that must reproduce — using `rand::thread_rng()` or any other RNG source instead breaks determinism even with `.deterministic()` set) to a known seed. Combined with the engine's fixed-`dt` sim tick and single-threaded schedule executor, this makes a run fully reproducible from its seed and input stream alone.
+
+```rust
+EngineBuilder::new()
+    .config("config.ini")
+    .deterministic(42)
+    // …
+    .try_run()
+    .expect("engine startup failed");
+```
+
+Once deterministic mode is on, you can record or replay the input stream that drove a session:
+
+```rust
+// Record this session's input to a file:
+EngineBuilder::new()
+    .deterministic(42)
+    .record_replay("session01.replay", env!("CARGO_PKG_VERSION"))
+    // …
+    .try_run()
+    .expect("engine startup failed");
+
+// Later, replay it deterministically instead of reading live input:
+EngineBuilder::new()
+    .play_replay("session01.replay")
+    // seed comes from the file's header — do not also call .deterministic()
+    // …
+    .try_run()
+    .expect("engine startup failed");
+```
+
+`.record_replay()` requires `.deterministic(seed)` to already be set, and is mutually exclusive with `.play_replay()`. `.play_replay()` reads its seed from the replay file's header, so it must **not** be combined with `.deterministic()`. Both `.deterministic()` and its replay variants are mutually exclusive with `.with_lua()` — Lua scripting sits outside the deterministic envelope. Violating any of these rules is reported as a startup error from `.try_run()`/`.run()`, not a panic.
+
+This is useful for automated testing (replay a fixed input script, assert on the resulting state), bug reports (a player-submitted replay reproduces the exact conditions that triggered a bug), and any gameplay mode that depends on reproducible simulation.
+
 ---
 
 ## 4. Loading Assets
@@ -567,10 +615,9 @@ The setup hook is a standard Bevy ECS system running on the **logic thread** (se
 Instead, texture/font/shader loading is **queued** from the logic thread and **performed** on the render thread: take `MessageWriter<RenderAssetCmd>` and write a `RenderAssetCmd` variant. The render thread's `process_render_asset_cmds` system drains the queue, does the actual GL load, and reports back — so the load itself is asynchronous relative to the tick that requested it.
 
 ```rust
-use aberredengine::events::render_assets::RenderAssetCmd;
+use aberredengine::protocol::render_assets::RenderAssetCmd;
 use aberredengine::resources::animationstore::{AnimationStore, AnimationResource};
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::raylib::prelude::*;
 use aberredengine::protocol::audio::AudioCmd;
 use std::sync::Arc;
 
@@ -600,7 +647,7 @@ Audio loading uses the same message-queue pattern (`MessageWriter<AudioCmd>`) �
 Queue a load with `RenderAssetCmd::Texture`, passing the desired `TextureFilter` (use `TextureFilter::Nearest` for pixel art, `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly scaled/rotated sprites):
 
 ```rust
-use aberredengine::events::render_assets::RenderAssetCmd;
+use aberredengine::protocol::render_assets::RenderAssetCmd;
 use aberredengine::resources::texturefilter::TextureFilter;
 
 asset_cmds.write(RenderAssetCmd::Texture {
@@ -624,7 +671,7 @@ use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
-use aberredengine::raylib::prelude::Vector2;
+use aberredengine::math::Vec2;
 use aberredengine::resources::texturedims::TextureDimsStore;
 use aberredengine::resources::worldsignals::WorldSignals;
 use std::sync::Arc;
@@ -650,8 +697,8 @@ fn spawn_player_once_texture_ready(
             tex_key: Arc::from("player"),
             width: width as f32,
             height: height as f32,
-            offset: Vector2::zero(),
-            origin: Vector2 { x: width as f32 * 0.5, y: height as f32 * 0.5 },
+            offset: Vec2::ZERO,
+            origin: Vec2::new(width as f32 * 0.5, height as f32 * 0.5),
             flip_h: false,
             flip_v: false,
         },
@@ -760,12 +807,14 @@ Same `None`-per-stage convention as `RenderAssetCmd::Shader`, and the same "no s
 
 ### Animations
 
-Animations are pure data — no Raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
+Animations are pure data — no raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
 
 ```rust
+use aberredengine::math::Vec2;
+
 anim_store.animations.insert("player_idle".to_string(), AnimationResource {
     tex_key: Arc::from("player"),              // must match a TextureStore key
-    position: Vector2 { x: 0.0, y: 0.0},      // base offset in spritesheet
+    position: Vec2::new(0.0, 0.0),            // base offset in spritesheet
     horizontal_displacement: 32.0,             // per-frame X step (= frame width)
     vertical_displacement: 0.0,                // non-zero enables row-wrapping
     frame_count: 4,                            // number of frames
@@ -775,7 +824,7 @@ anim_store.animations.insert("player_idle".to_string(), AnimationResource {
 
 anim_store.animations.insert("player_run".to_string(), AnimationResource {
     tex_key: Arc::from("player"),
-    position: Vector2 { x: 0.0, y: 64.0 },    // second row of spritesheet
+    position: Vec2::new(0.0, 64.0),           // second row of spritesheet
     horizontal_displacement: 32.0,
     vertical_displacement: 0.0,
     frame_count: 6,
@@ -829,22 +878,21 @@ engine.spawn()
 
 The texture is stored in `TextureStore` keyed by path stem and deduplicated — two `TileMap` entities pointing to the same directory share one GPU texture. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative). Use `Group("tiles")` in collision rules to match tile entities.
 
-> **Note:** `load_tilemap` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
+> **Note:** `load_tilemap_data` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
 ### Camera
 
 `Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
+use aberredengine::resources::camera2d::Camera2D;
 use aberredengine::resources::screensize::ScreenSize;
+use aberredengine::math::Vec2;
 
 fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
     camera.0 = Camera2D {
-        target: Vector2 { x: 0.0, y: 0.0 },
-        offset: Vector2 {
-            x: screen.w as f32 * 0.5,
-            y: screen.h as f32 * 0.5,
-        },
+        target: Vec2::new(0.0, 0.0),
+        offset: Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5),
         rotation: 0.0,
         zoom: 1.0,
     };
@@ -891,7 +939,7 @@ fn setup(
     // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
     anim_store.animations.insert("player_idle".into(), AnimationResource {
         tex_key: Arc::from("player"),
-        position: Vector2 { x: 0.0, y: 0.0 },
+        position: Vec2::new(0.0, 0.0),
         horizontal_displacement: 32.0,
         vertical_displacement: 0.0,
         frame_count: 4,
@@ -921,7 +969,7 @@ use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::sprite::Sprite;
 use aberredengine::components::zindex::ZIndex;
 use aberredengine::components::group::Group;
-use aberredengine::raylib::prelude::*;
+use aberredengine::math::Vec2;
 use std::sync::Arc;
 
 ctx.commands.spawn((
@@ -930,8 +978,8 @@ ctx.commands.spawn((
         tex_key: Arc::from("player"),
         width: 32.0,
         height: 32.0,
-        offset: Vector2::zero(),
-        origin: Vector2 { x: 16.0, y: 16.0 }, // center pivot
+        offset: Vec2::ZERO,
+        origin: Vec2::new(16.0, 16.0), // center pivot
         flip_h: false,
         flip_v: false,
     },
@@ -948,6 +996,7 @@ Add `RigidBody`, `BoxCollider`, and `AccelerationControlled` for a player charac
 use aberredengine::components::rigidbody::RigidBody;
 use aberredengine::components::boxcollider::BoxCollider;
 use aberredengine::components::inputcontrolled::AccelerationControlled;
+use aberredengine::math::Vec2;
 
 ctx.commands.spawn((
     MapPosition::new(100.0, 200.0),
@@ -955,8 +1004,8 @@ ctx.commands.spawn((
         tex_key: Arc::from("player"),
         width: 32.0,
         height: 32.0,
-        offset: Vector2::zero(),
-        origin: Vector2 { x: 16.0, y: 16.0 },
+        offset: Vec2::ZERO,
+        origin: Vec2::new(16.0, 16.0),
         flip_h: false,
         flip_v: false,
     },
@@ -964,8 +1013,8 @@ ctx.commands.spawn((
     Group::new("player"),
     RigidBody::with_physics(5.0, Some(300.0)),  // friction=5.0, max_speed=300
     BoxCollider::new(28.0, 30.0)
-        .with_origin(Vector2 { x: 16.0, y: 16.0 })
-        .with_offset(Vector2 { x: 2.0, y: 2.0 }),
+        .with_origin(Vec2::new(16.0, 16.0))
+        .with_offset(Vec2::new(2.0, 2.0)),
     AccelerationControlled::symmetric(800.0),    // 800 units/s² in all directions
 ));
 ```
@@ -978,6 +1027,7 @@ Screen-space text that auto-updates from `WorldSignals`:
 use aberredengine::components::screenposition::ScreenPosition;
 use aberredengine::components::dynamictext::DynamicText;
 use aberredengine::components::signalbinding::SignalBinding;
+use aberredengine::math::Color;
 
 ctx.commands.spawn((
     ScreenPosition::new(10.0, 10.0),
@@ -1028,7 +1078,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see §7.7 |
 | `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.6 |
-| `GuiOffset` | `GuiOffset(Vector2::new(x, y))` — position relative to a `ChildOf` parent |
+| `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
 
 ### Tween components in Rust
 
@@ -1048,13 +1098,13 @@ Use the target component type as `T`:
 ```rust
 use aberredengine::components::mapposition::MapPosition;
 use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use aberredengine::raylib::prelude::Vector2;
+use aberredengine::math::Vec2;
 
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
     Tween::new(
-        MapPosition::from_vec(Vector2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vector2 { x: 200.0, y: 120.0 }),
+        MapPosition::from_vec(Vec2::new(0.0, 0.0)),
+        MapPosition::from_vec(Vec2::new(200.0, 120.0)),
         1.5,
     )
     .with_easing(Easing::CubicOut)
@@ -1111,7 +1161,7 @@ ctx.commands.spawn((
 ));
 ```
 
-> **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vector2>`. The tween systems query concrete ECS component types, not raw value types.
+> **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vec2>`. The tween systems query concrete ECS component types, not raw value types.
 
 ### Spawning context: GameCtx vs. raw hooks
 
@@ -1160,13 +1210,15 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 
 **1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu system calls `commands.run_system()` internally via `dispatch_menu_action`.
 
-**2. Flag-based from scene callbacks:** Set the target scene name and the `"switch_scene"` flag on `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition:
+**2. Flag-based from scene callbacks:** Set the target scene name and the `"switch_scene"` flag on `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition. Use the `signal_keys` constants (`sk::SCENE`/`sk::SWITCH_SCENE`) instead of bare string literals — a typo in a hand-written key fails silently with no compiler error:
 
 ```rust
+use aberredengine::resources::signal_keys as sk;
+
 fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if player_reached_exit(ctx) {
-        ctx.world_signals.set_string("scene", "level02".to_string());
-        ctx.world_signals.set_flag("switch_scene");
+        ctx.world_signals.set_string(sk::SCENE, "level02".to_string());
+        ctx.world_signals.set_flag(sk::SWITCH_SCENE);
     }
 }
 ```
@@ -1182,6 +1234,8 @@ Typical uses:
 - **Global state entities** — entities carrying `Signals` or custom components that hold cross-scene state
 
 ```rust
+use aberredengine::math::Color;
+
 ctx.commands.spawn((
     ScreenPosition::new(10.0, 10.0),
     DynamicText::new("0", "arcade", 16.0, Color::WHITE),
@@ -1223,7 +1277,7 @@ fn enter(ctx: &mut GameCtx) {
 Key behaviors:
 
 - `TrackedGroups::add_group("enemies")` registers a group for counting
-- The engine publishes `"group_count:enemies"` to `WorldSignals` each frame
+- The engine publishes `"group_count:enemies"` to `WorldSignals` each sim tick
 - **Cleared on scene switch** — group tracking is wiped by `scene_switch_system`. Re-register groups in your scene's `on_enter` callback
 - Bind a `SignalBinding::new("group_count:enemies")` to auto-display the count in UI text
 
@@ -1233,21 +1287,21 @@ The `scene_update_system` runs once per sim tick while a scene is active — not
 
 ```rust
 fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) {
-    // dt = world_time.delta (real elapsed time since the last sim tick, in seconds)
+    // dt = world_time.delta (the fixed sim period, 1.0 / hz, scaled by time_scale)
     // input = current keyboard state (just_pressed, active, just_released)
     // Use ctx to read/write ECS state once per sim tick
 }
 ```
 
-The `dt` parameter is `WorldTime.delta` — the real time elapsed since the last sim tick, in seconds (not a render-frame time, and not a fixed constant). Use it for frame-rate-independent logic (e.g., `speed * dt`).
+The `dt` parameter is `WorldTime.delta` — always the fixed constant `1.0 / hz` (`[simulation] hz` in `config.ini`), scaled only by `WorldTime.time_scale`. It is never a measured, render-frame-dependent value — a render stall dilates game time instead of spiking `dt`. Use it for frame-rate-independent logic (e.g., `speed * dt`) exactly as you would a measured delta; the fixed-constant behavior only matters if you're reasoning about stalls or determinism.
 
 ---
 
 ## 7. Gameplay Systems
 
-The engine provides four major gameplay systems: **timers**, **phase state machines**, **collision rules**, and **menus**. Each follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
+The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Each of the first four follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, and `input_bindings`. `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
+All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
 
 ### 7.1 Timers
 
@@ -1305,7 +1359,7 @@ fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
 
 `Phase` is a per-entity state machine. Each entity has a current phase (a string label) and a map of phase names to callback function pointers.
 
-`on_update` runs once per sim tick (configurable `[simulation] hz` in `config.ini`, default 240 — see [Threading Model](#threading-model-what-your-code-can-access)), with `dt` as the real elapsed time since the last tick, and keeps ticking through render stalls. This can mean more updates than rendered frames if `hz` exceeds your display's refresh rate — treat one-shot effects (playing a sound on enter, etc.) as guarded by `on_enter`/edge conditions, not by assuming one call per visible frame.
+`on_update` runs once per sim tick (configurable `[simulation] hz` in `config.ini`, default 240 — see [Threading Model](#threading-model-what-your-code-can-access)), with `dt` as the fixed sim period (`1.0 / hz`, scaled by `time_scale`), and keeps ticking through render stalls. This can mean more updates than rendered frames if `hz` exceeds your display's refresh rate — treat one-shot effects (playing a sound on enter, etc.) as guarded by `on_enter`/edge conditions, not by assuming one call per visible frame.
 
 **Callback signatures:**
 
@@ -1444,7 +1498,7 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 **Detection pipeline:**
 
 1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
-2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `check_collision_recs()`
+2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
 3. On overlap, triggers a `CollisionEvent`
 4. `rust_collision_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and calls the callback
 
@@ -1501,12 +1555,12 @@ fn ball_brick_collision(
 **Constructor:**
 
 ```rust
-use aberredengine::raylib::prelude::*;
+use aberredengine::math::Vec2;
 use aberredengine::components::menu::{Menu, MenuActions, MenuAction};
 
 let menu = Menu::new(
     &[("start", "Start Game"), ("options", "Options"), ("quit", "Quit")],
-    Vector2 { x: 100.0, y: 80.0 }, // origin position
+    Vec2::new(100.0, 80.0), // origin position
     "arcade",                        // font key
     24.0,                            // font size
     30.0,                            // item spacing (pixels)
@@ -1551,15 +1605,16 @@ ctx.commands.spawn((menu, actions));
 ```rust
 use aberredengine::components::menu::MenuRustCallback;
 use aberredengine::systems::GameCtx;
+use aberredengine::resources::signal_keys as sk;
 
 fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
     match item_id {
         "start" => {
-            ctx.world_signals.set_string("scene", "level01".to_string());
-            ctx.world_signals.set_flag("switch_scene");
+            ctx.world_signals.set_string(sk::SCENE, "level01".to_string());
+            ctx.world_signals.set_flag(sk::SWITCH_SCENE);
         }
         "quit" => {
-            ctx.world_signals.set_flag("quit_game");
+            ctx.world_signals.set_flag(sk::QUIT_GAME);
         }
         _ => {}
     }
@@ -1583,10 +1638,12 @@ The first match wins; later options are skipped.
 **Complete menu example:**
 
 ```rust
+use aberredengine::math::{Color, Vec2};
+
 fn enter(ctx: &mut GameCtx) {
     let menu = Menu::new(
         &[("play", "Play"), ("quit", "Quit")],
-        Vector2 { x: 200.0, y: 150.0 },
+        Vec2::new(200.0, 150.0),
         "arcade",
         32.0,
         40.0,
@@ -1605,7 +1662,7 @@ fn enter(ctx: &mut GameCtx) {
 
 ### 7.5 Animation Finished Event
 
-**Source:** `src/events/animation.rs`, `src/systems/lua_animation_finished.rs`
+**Source:** `src/events/animation.rs`, `src/systems/animation.rs` (fires the event)
 
 `AnimationFinishedEvent` is triggered **once** by the animation system on the frame a non-looped animation first reaches its final frame. Looped animations never trigger it. It is not re-triggered on subsequent frames even though the entity stays on the last frame.
 
@@ -1706,7 +1763,7 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)` for `WorldSignals` auto-update | No spawn system — rendered directly. Requires `ScreenPosition` + `ZIndex`. `value` clamped to `[0, max]`. `direction` variants: `Horizontal` (default, left→right), `HorizontalReversed`, `Vertical` (bottom→top), `VerticalReversed`. |
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` (50% transparent black) | Pre-pass shadow drawn at entity position + offset before the main sprite/text draw. Bypasses entity shaders. Works for both world-space and screen-space entities (`Sprite` and `DynamicText`). |
 | `GuiInteractable` | `GuiInteractable::rust(w, h, callback)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). Use the `::rust()` coercion constructor — mirrors `CollisionRule::rust`/`Timer::rust` — for a Rust fn-pointer callback: `GuiRustCallback = fn(Entity, &mut GameCtx)`. |
-| `GuiOffset` | `GuiOffset(Vector2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every sim tick; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
+| `GuiOffset` | `GuiOffset(Vec2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every sim tick; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
 
 > **Important:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they
 > add — they will not overwrite one you pre-spawned. **To get a Rust callback, you must spawn
@@ -1714,11 +1771,11 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 > `GuiButton`/`GuiImage` alone, the inserted default `GuiInteractable` has no Rust callback wired — only the
 > Lua `callback_name`-based dispatch path, which no-ops with no matching Lua function present.
 
-**Theming:** Themes are stored in `GuiThemeStore` — a `HashMap<Arc<str>, GuiTheme>` pre-inserted by the engine. Each widget carries a `theme_key: Arc<str>` (default `"default"`) that is resolved against `GuiThemeStore` at render time. Set up themes in your setup system before spawning any widgets:
+**Theming:** Themes are stored in `GuiThemeStore` — a `FxHashMap<Arc<str>, GuiTheme>` pre-inserted by the engine. Each widget carries a `theme_key: Arc<str>` (default `"default"`) that is resolved against `GuiThemeStore` at render time. Set up themes in your setup system before spawning any widgets:
 
 ```rust
 use aberredengine::bevy_ecs::prelude::ResMut;
-use aberredengine::raylib::prelude::{Color, Rectangle};
+use aberredengine::math::{Color, Rect};
 use aberredengine::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
 use std::sync::Arc;
 
@@ -1726,7 +1783,7 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
     let theme = theme_store.themes.entry(Arc::from("default")).or_default();
     theme.panel = GuiNinePatch {
         tex_key: "gui_panel".into(),
-        source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+        source: Rect::new(0.0, 0.0, 64.0, 64.0),
         left: 6,
         top: 6,
         right: 6,
@@ -1735,7 +1792,7 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
     theme.button = Some(GuiButtonSkin {
         normal: GuiNinePatch {
             tex_key: "gui_button".into(),
-            source: Rectangle::new(0.0, 0.0, 32.0, 32.0),
+            source: Rect::new(0.0, 0.0, 32.0, 32.0),
             left: 4,
             top: 4,
             right: 4,
@@ -1788,7 +1845,7 @@ A missing/unregistered `theme_key` skips the themed background (caption/sprite s
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::raylib::prelude::Vector2;
+use aberredengine::math::Vec2;
 use aberredengine::components::guibutton::GuiButton;
 use aberredengine::components::guiinteractable::GuiInteractable;
 use aberredengine::components::guioffset::GuiOffset;
@@ -1815,13 +1872,13 @@ fn spawn_menu_panel(ctx: &mut GameCtx) {
         GuiButton::new(120.0, 32.0, "Start"),
         GuiInteractable::rust(120.0, 32.0, on_start_clicked),
         ChildOf(panel),
-        GuiOffset(Vector2::new(40.0, 34.0)),
+        GuiOffset(Vec2::new(40.0, 34.0)),
         ZIndex(10.0),
     ));
 }
 ```
 
-The button entity needs no `ScreenPosition` set directly — `gui_layout_system` supplies it each frame from
+The button entity needs no `ScreenPosition` set directly — `gui_layout_system` supplies it each sim tick from
 the parent's `ScreenPosition` plus `GuiOffset`.
 
 **Click events:** clicks dispatch primarily through the per-widget `GuiInteractable.on_rust_callback` /
@@ -1843,7 +1900,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 | Resource | Access | Purpose |
 |----------|--------|---------|
-| `WorldTime` | `Res` | `elapsed`, `delta` (real elapsed time since the last **sim tick**, not a render frame), `time_scale`, `frame_count` |
+| `WorldTime` | `Res` | `elapsed`, `delta` (the fixed sim period, `1.0 / hz`, scaled by `time_scale` — never a measured value), `time_scale`, `frame_count` |
 | `WorldSignals` | `ResMut` | Global cross-system communication (scalars, integers, strings, flags, entities) |
 | `AppState` | `ResMut` | Rust-only typed state store keyed by Rust type; useful for GUI/editor snapshots and view-models |
 | `TrackedGroups` | `ResMut` | Group names to count — engine publishes counts to `WorldSignals` each sim tick |
@@ -1881,12 +1938,15 @@ These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSe
 
 ### Render-thread-only resources used by `gui_callback`/`world_draw_callback`
 
-Since those two callbacks are the one exception that runs render-side (see [Threading Model](#threading-model-what-your-code-can-access) and [Section 3](#imgui-gui-callback-rust-only)), they're handed these instead of the live `WorldSignals`:
+Since those two callbacks are the one exception that runs render-side (see [Threading Model](#threading-model-what-your-code-can-access) and [Section 3](#imgui-gui-callback-rust-only)), they're handed these directly as function parameters instead of fetched as `Res<T>`/`ResMut<T>` — and instead of the live `WorldSignals`:
 
 | Resource | Purpose |
 |----------|---------|
 | `SignalSnapshot` | Read-only, one-tick-stale copy of `WorldSignals`. **No getter methods** — read fields directly: `signals.scalars.get(key)`, `signals.flags.contains(key)`, `signals.integers`/`.strings`/`.entities`/`.group_counts` the same way. |
 | `SignalIntents` | Queue of pending `WorldSignals` writes. Setter methods mirror `WorldSignals`' own: `.set_flag(key)`, `.set_scalar(key, v)`, `.set_integer(key, v)`, `.set_string(key, v)`, `.clear_flag(key)`. Applied to the live `WorldSignals` at the start of the logic thread's next sim tick. |
+| `TextureStore` | Read-only access to loaded textures by key, e.g. for previews. |
+| `FontStore` | Read-only access to loaded fonts by key, e.g. for text measurement. |
+| `AppState` | The same read-only, generation-gated snapshot copy described in the AppState API section below — write typed Rust state from a logic-thread system/observer instead. |
 
 ### Developer-inserted resources
 
@@ -1939,6 +1999,8 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 | `set_entity` | `(&mut self, key: impl Into<String>, entity: Entity)` |
 | `get_entity` | `(&self, key: &str) -> Option<&Entity>` |
 | `remove_entity` | `(&mut self, key: &str) -> Option<Entity>` |
+| `remove_entity_registrations_for` | `(&mut self, entity: Entity)` — removes every entity-keyed registration pointing at `entity`, regardless of key. Called automatically when an `EntityCmd::Despawn` is processed, so a stale registration can never resolve to a dead entity. |
+| `clear_non_persistent_entities` | `(&mut self, persistent_entities: &FxHashSet<Entity>)` — drops every registered entity not present in `persistent_entities`. Called automatically by `scene_switch_system` on every scene transition; call it yourself only if you build custom scene-transition logic outside `.add_scene()`. |
 
 **Group counts** (stored as integers with `"group_count:"` prefix):
 
@@ -1949,6 +2011,8 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 | `clear_group_counts` | `(&mut self)` |
 
 `WorldSignals` intentionally stays limited to those primitive/value-like channels. For richer Rust-only typed data, use `AppState` instead.
+
+The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"`, and others) are exposed as constants in `aberredengine::resources::signal_keys` — conventionally imported as `use aberredengine::resources::signal_keys as sk;`. Prefer `sk::SCENE`/`sk::SWITCH_SCENE`/etc. over hand-typing the string literals: a typo in a bare string key fails silently, with no compiler error.
 
 ### AppState API
 
@@ -2028,7 +2092,7 @@ Each digital field is a `BoolState { active, just_pressed, just_released }`. Har
 
 | Field | Description |
 |-------|-------------|
-| `scroll_y` | Mouse wheel delta this frame. Positive = up, negative = down. |
+| `scroll_y` | Mouse wheel delta this sim tick. Positive = up, negative = down. |
 | `mouse_x` | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). |
 | `mouse_y` | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
 | `mouse_world_x` | Cursor X in world-space (after camera transform, matches `MapPosition`). |
@@ -2042,9 +2106,13 @@ Each digital field is a `BoolState { active, just_pressed, just_released }`. Har
 use aberredengine::resources::input_bindings::{InputBindings, InputBinding, InputAction};
 
 // InputBinding variants:
-InputBinding::Keyboard(KeyboardKey)       // a keyboard key
-InputBinding::MouseButton(MouseButton)    // a mouse button
+InputBinding::Keyboard(Key)                                              // a keyboard key
+InputBinding::MouseButton(MouseButton)                                   // a mouse button
+InputBinding::GamepadButton { pad: u8, button: GamepadButton }           // a gamepad button, on pad index `pad`
+InputBinding::GamepadAxis { pad: u8, axis: GamepadAxis, direction: AxisDirection } // an analog axis crossing a digital threshold
 ```
+
+`InputBindings::default()` binds every action to its keyboard/mouse default (below) **and** additively binds the equivalent pad-0 gamepad button/axis/d-pad input to the same action — a game gets working gamepad input with zero configuration.
 
 Key binding strings accepted by the Lua API (also useful as reference): `a`–`z`, `0`–`9`, `space`, `enter`/`return`, `escape`/`esc`, `up`/`down`/`left`/`right`, `lshift`/`rshift`/`lctrl`/`rctrl`/`lalt`/`ralt`, `f1`–`f12`, `mouse_left`, `mouse_right`, `mouse_middle`.
 
@@ -2090,6 +2158,12 @@ Section 2 showed the basics. This is the complete reference.
 |-----|------|---------|-------------|
 | `hz` | `f64` | `100` | Audio thread's tick rate. Read once at startup; same clamp range as `[simulation] hz`. |
 
+**`[input]` section:**
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `gamepad_deadzone` | `f32` | `0.15` | Analog-stick deadzone radius used when resolving an `InputBinding::GamepadAxis` binding to a digital press/release edge. Clamped to `[0.0, 1.0]`, out-of-range values warn and clamp rather than error. Raw `InputState`/`InputSnapshot` gamepad axis values are never deadzoned regardless of this setting — the deadzone only affects binding resolution. |
+
 ### Parsing behavior
 
 - **`config_str()`** — alternative to a file: pass INI content as a `&'static str`. The file path is ignored when this is set.
@@ -2116,7 +2190,7 @@ fn my_system(mut config: ResMut<GameConfig>) {
 
 The engine detects changes and applies them — render size changes recreate the framebuffer, vsync/fps changes apply immediately. Call `config.save_to_file()` to persist runtime changes back to disk.
 
-> **Note:** `save_to_file()` currently persists only the `[render]`/`[window]` sections — changes to `[simulation]`/`[audio]` keys are read once at startup and are not written back to disk by this call.
+> **Note:** `save_to_file()` currently persists only the `[render]`/`[window]` sections — changes to `[simulation]`/`[audio]`/`[input]` keys are read once at startup and are not written back to disk by this call.
 
 ---
 
@@ -2169,6 +2243,8 @@ Working directory matters — `config.ini` and `assets/` are loaded relative to 
 | Flag | Default | Effect |
 |------|---------|--------|
 | `lua` | on | Lua scripting support (mlua + LuaJIT) |
+| `tracy` | off | Profiling via the Tracy client. Never enable in a normal build — build with `--profile release-tracy` instead when profiling. |
+| `test-support` | off | Enables the headless `TestWorld`/`TestWorldBuilder` harness (a real logic-thread `World` with no window/GL/audio thread), for `cargo test --features test-support` in your own game's test suite. Never in default. |
 
 ```toml
 # Disable Lua (pure Rust)
