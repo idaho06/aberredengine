@@ -4,14 +4,14 @@
 
 A compact 2D game engine built in Rust with optional Lua scripting.
 
-Aberred Engine currently ships as a multi-scene showcase containing a menu plus several example games and demos, including Asteroids, Arkanoid, a sidescroller, a birthday card, Kraken, and multiple Bunnymark variants.
+Aberred Engine currently ships as a multi-scene showcase containing a menu plus several example games and demos, including Asteroids, Arkanoid, a sidescroller, a birthday card, Kraken, a GUI widget demo, and multiple Bunnymark variants.
 
 Built with:
 
 - **Rust** (edition 2024)
-- **bevy_ecs** (0.18) for ECS
-- **raylib** (6.0.0) for windowing, rendering, input, and audio integration
-- **mlua** (0.11, LuaJIT) for optional Lua scripting
+- **bevy_ecs** (0.19) for ECS
+- **sola-raylib** (6.3) for windowing, rendering, input, and audio integration
+- **mlua** (0.12, LuaJIT) for optional Lua scripting
 
 ## What it includes
 
@@ -60,21 +60,24 @@ See `RUST-GAME-GUIDE.md` for the Rust path.
 
 ```plaintext
 src/
-├── main.rs                   # CLI entry point
-├── lib.rs                    # Library crate exports
-├── engine_app.rs             # EngineBuilder, world setup, schedule, main loop
-├── components/               # ECS components
-├── resources/                # ECS resources + lua_runtime/
-├── systems/                  # Systems and observers
-└── events/                   # Event and message types
+├── main.rs          # CLI entry point
+├── lib.rs           # Library crate exports
+├── engine_app/      # EngineBuilder, world setup, schedule, main loop
+├── components/      # ECS components (+ audio/, render/ thread-exclusive subdirs)
+├── resources/       # ECS resources (+ audio/, render/, lua_runtime/ subdirs)
+├── systems/         # Systems and observers (+ audio/, render/, lua_commands/ subdirs)
+├── events/          # Event and message types (+ render/ subdir)
+└── protocol/        # Cross-thread wire/message types
 assets/
-├── scripts/                  # Lua entrypoint, setup, scenes, generated stubs
-├── textures/                 # Art assets grouped by showcase
-├── audio/                    # Audio assets grouped by showcase
-├── shaders/                  # Fragment shaders
-└── fonts/                    # Font assets
-tests/                        # Integration tests
-config.ini                    # Runtime configuration
+├── scripts/         # Lua entrypoint, setup, scenes, generated stubs
+├── textures/        # Art assets grouped by showcase
+├── audio/           # Audio assets grouped by showcase
+├── shaders/         # Fragment shaders
+├── fonts/           # Font assets
+├── tilemaps/        # Tilesetter-format tilemap exports
+└── levels/          # Saved MapData JSON files
+tests/                # Integration tests
+config.ini            # Runtime configuration
 ```
 
 ## Build and run
@@ -122,4 +125,5 @@ sudo apt install -y \
 
 - The default build enables Lua support.
 - The generated Lua stubs should not be edited by hand.
-- `engine_app.rs` is the main source of truth for engine startup and schedule ordering.
+- `src/engine_app/` is the main source of truth for engine startup and schedule ordering.
+- Two additional opt-in feature flags exist beyond `lua`: `tracy` (profiling, build with `--profile release-tracy`) and `test-support` (headless logic-world test harness). See `RUST-GAME-GUIDE.md` for details.
