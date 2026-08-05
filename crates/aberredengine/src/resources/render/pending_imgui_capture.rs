@@ -8,7 +8,7 @@
 
 use bevy_ecs::prelude::Resource;
 
-use super::imgui_bridge::ImguiCaptureState;
+use crate::protocol::raw_input::ImguiCaptureState;
 
 /// Imgui capture state captured after the last render pass, awaiting
 /// send on the next frame's `InputSample`.

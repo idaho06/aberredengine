@@ -12,7 +12,24 @@
 //! plus the imgui capture state that rides alongside it, one render-frame
 //! stale.
 
-use crate::resources::render::imgui_bridge::ImguiCaptureState;
+/// Whether the debug imgui overlay currently wants to capture mouse/keyboard
+/// input this frame. Read from the render thread after `ImguiBridge::render`
+/// runs, carried one frame across the thread boundary via
+/// `InputSample::capture` (same latency class as `SignalIntents`, riding the
+/// dedicated bounded input channel), and used by `resolve_input_backlog` to
+/// mask gameplay input while the debug panel has focus. Scoped to the F11
+/// debug overlay only -- the in-house `GuiButton`/`GuiWindow` system does its
+/// own hit-testing and isn't imgui.
+///
+/// Lives here (a plain POD wire type, `protocol/`) rather than under
+/// `resources::render` -- it names no imgui type and crosses the
+/// logic/render thread boundary every frame, matching every other
+/// cross-thread bridge/protocol type's home.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ImguiCaptureState {
+    pub mouse: bool,
+    pub keyboard: bool,
+}
 
 /// Number of `u64` words in the keyboard bitset. `8 * 64 = 512` bits,
 /// comfortably covering every raylib keycode (`KEY_KB_MENU = 348` is the

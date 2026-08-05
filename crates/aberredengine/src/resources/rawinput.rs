@@ -17,9 +17,9 @@ use crate::protocol::raw_input::RawDeviceSnapshot;
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct PrevRawSnapshot(pub RawDeviceSnapshot);
 
-/// Logic-side mirror of the render thread's [`crate::resources::render::imgui_bridge::ImguiCaptureState`].
+/// Logic-side mirror of the render thread's [`crate::protocol::raw_input::ImguiCaptureState`].
 /// Updated from the newest queued `InputSample::capture` each tick, and read
 /// by `resolve_input_backlog` to mask gameplay input while the debug overlay
 /// has focus.
 #[derive(Resource, Debug, Clone, Copy, Default)]
-pub struct ImguiCaptureMirror(pub crate::resources::render::imgui_bridge::ImguiCaptureState);
+pub struct ImguiCaptureMirror(pub crate::protocol::raw_input::ImguiCaptureState);

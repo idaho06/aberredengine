@@ -95,7 +95,7 @@ pub struct CameraFollowConfig {
     // -- internal state (not intended for direct user modification) ----------
     /// Spring velocity for [`FollowMode::SmoothDamp`]. Reset to zero when
     /// switching targets or modes.
-    pub(crate) velocity: Vec2,
+    pub velocity: Vec2,
 }
 
 impl Default for CameraFollowConfig {

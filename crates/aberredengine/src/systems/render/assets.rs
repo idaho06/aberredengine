@@ -14,12 +14,58 @@ use log::{debug, error, warn};
 use crate::protocol::endpoints::LogicTx;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::render_logic::LogicMsg;
-use crate::resources::fontmetrics::FontMetrics;
+use crate::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::render::RaylibAccess;
+use raylib::ffi;
 use raylib::prelude::Image;
+use rustc_hash::FxHashMap;
+
+/// Extract CPU-side [`FontMetrics`] from a loaded `ffi::Font`. Must be called
+/// while the owning [`raylib::prelude::Font`] wrapper (or its `ffi::Font`
+/// resource) is still alive — `recs`/`glyphs` are raw pointers that
+/// `UnloadFont` frees on drop.
+///
+/// Lives here (render) rather than on `FontMetrics` itself (core) because
+/// `ffi::Font` is a raylib type — `aberred-core` cannot depend on raylib.
+/// `FontMetrics` the struct and `measure_text` stay core-side as a
+/// pure-Rust port of raylib's `MeasureTextEx`/`GetGlyphIndex`.
+pub(crate) fn extract_font_metrics(font: &ffi::Font) -> FontMetrics {
+    let glyph_count = font.glyphCount.max(0) as usize;
+    // SAFETY: `font.glyphs`/`font.recs` are raylib-owned arrays of
+    // `glyphCount` entries, valid as long as the font hasn't been
+    // unloaded (guaranteed by the caller while extracting immediately
+    // after load).
+    let (glyph_infos, recs) = unsafe {
+        (
+            std::slice::from_raw_parts(font.glyphs, glyph_count),
+            std::slice::from_raw_parts(font.recs, glyph_count),
+        )
+    };
+
+    let mut glyphs = FxHashMap::default();
+    let mut first_glyph = None;
+
+    for (i, glyph) in glyph_infos.iter().enumerate() {
+        let metrics = GlyphMetrics {
+            advance_x: glyph.advanceX,
+            offset_x: glyph.offsetX,
+            rec_width: recs[i].width,
+        };
+        if i == 0 {
+            first_glyph = Some(metrics);
+        }
+        glyphs.insert(glyph.value, metrics);
+    }
+
+    FontMetrics {
+        base_size: font.baseSize,
+        glyphs,
+        first_glyph,
+    }
+}
 
 /// Drains queued [`RenderAssetCmd`]s and performs the corresponding GL
 /// load/upload. The only system that touches `RaylibAccess`/`FontStore`/
@@ -130,7 +176,7 @@ pub(crate) fn apply_render_asset_cmd(
             match load_font_with_mipmaps(rl, th, &path, size) {
                 Ok(font) => {
                     debug!("Loaded font '{}' from '{}'", id, path);
-                    let metrics = FontMetrics::extract(&font);
+                    let metrics = extract_font_metrics(&font);
                     fonts.add(&id, font);
                     notifications.push(LogicMsg::FontLoaded { key: id, metrics });
                 }
@@ -283,4 +329,61 @@ fn load_font_with_mipmaps(
         );
     }
     Ok(font)
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Windowed parity check: `extract_font_metrics(...).measure_text(...)`
+    /// must match raylib's real `ffi::MeasureTextEx` for a real loaded font.
+    /// Opens an actual window (needs a GL context), so this does NOT run in
+    /// CI — run manually (`cargo test --features lua -- --ignored
+    /// font_metrics_matches_raylib_measure_text_ex`) before landing any
+    /// change to `measure_text`/`extract_font_metrics`.
+    #[test]
+    #[ignore]
+    fn font_metrics_matches_raylib_measure_text_ex() {
+        let (mut rl, thread) = raylib::init()
+            .size(64, 64)
+            .title("fontmetrics parity test")
+            .build();
+
+        let font = rl
+            .load_font_ex(&thread, "assets/fonts/Arcade_Cabinet.ttf", 32, None)
+            .expect("failed to load test font");
+
+        let metrics = extract_font_metrics(&font);
+
+        let corpus = [
+            "Hello, world!",
+            "The quick brown fox jumps over the lazy dog.",
+            "multi\nline\ntext",
+            "",
+            "caf\u{e9} r\u{e9}sum\u{e9}", // café résumé — accented multibyte UTF-8
+            "1234567890",
+        ];
+
+        for text in corpus {
+            let text_c = std::ffi::CString::new(text).unwrap();
+            for font_size in [16.0_f32, 32.0, 48.0] {
+                for spacing in [0.0_f32, 1.0, 2.5] {
+                    let expected = unsafe {
+                        raylib::ffi::MeasureTextEx(*font, text_c.as_ptr(), font_size, spacing)
+                    };
+                    let actual = metrics.measure_text(text, font_size, spacing);
+                    assert!(
+                        (actual.x - expected.x).abs() < 0.01
+                            && (actual.y - expected.y).abs() < 0.01,
+                        "mismatch for {text:?} @ font_size={font_size} spacing={spacing}: \
+                         got {actual:?}, raylib says {expected:?}"
+                    );
+                }
+            }
+        }
+    }
 }

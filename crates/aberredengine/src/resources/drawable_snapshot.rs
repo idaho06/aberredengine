@@ -298,7 +298,7 @@ impl DrawableSnapshot {
     /// this to the struct definition. A field added to `DrawableSnapshot`
     /// later and forgotten here doesn't fail to compile, it silently reverts
     /// to whatever stale value `dst` already held for that field.
-    pub(crate) fn clone_into_buffer(&self, dst: &mut Self) {
+    pub fn clone_into_buffer(&self, dst: &mut Self) {
         dst.map_sprites.clone_from(&self.map_sprites);
         dst.map_texts.clone_from(&self.map_texts);
         dst.screen_sprites.clone_from(&self.screen_sprites);

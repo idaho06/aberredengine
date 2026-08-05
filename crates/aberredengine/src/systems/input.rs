@@ -365,7 +365,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::render::imgui_bridge::ImguiCaptureState;
+    use crate::protocol::raw_input::ImguiCaptureState;
     use crate::resources::input_bindings::{GamepadAxis, GamepadButton, Key};
 
     fn test_camera(target: (f32, f32), offset: (f32, f32), zoom: f32, rotation: f32) -> Camera2D {

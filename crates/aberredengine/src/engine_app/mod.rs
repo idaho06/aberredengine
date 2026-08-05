@@ -40,7 +40,7 @@
 //! **Multiple per-frame systems and custom observers:**
 //! ```rust,no_run,ignore
 //! use aberredengine::engine_app::EngineBuilder;
-//! use aberredengine::systems::scene_dispatch::SceneDescriptor;
+//! use aberredengine::engine_app::SceneDescriptor;
 //! use aberredengine::EngineError;
 //!
 //! fn main() -> Result<(), EngineError> {
@@ -110,6 +110,7 @@ mod render_world;
 mod replay;
 mod run;
 mod schedule;
+mod scene;
 #[cfg(test)]
 mod tests;
 mod validate;
@@ -117,6 +118,7 @@ mod validate;
 // External API surface — keeps `crate::engine_app::EngineBuilder` unchanged
 // for src/main.rs, doc examples, and downstream games.
 pub use builder::EngineBuilder;
+pub use scene::SceneDescriptor;
 pub use schedule::SimSet;
 
 // Crate-internal surface — exactly what src/test_support.rs imports today.

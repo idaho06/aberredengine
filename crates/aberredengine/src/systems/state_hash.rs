@@ -152,7 +152,7 @@ fn hash_sorted_set<'a>(h: &mut ReplayHasher, set: impl Iterator<Item = &'a Strin
 /// fixed order. Every f32 is hashed via `.to_bits()` — never
 /// epsilon-compared, matching the bit-exact scope of the whole determinism
 /// roadmap (same build, same arch).
-pub(crate) fn hash_world_state(world: &World) -> u64 {
+pub fn hash_world_state(world: &World) -> u64 {
     let mut h = ReplayHasher::new();
 
     // Collect the EntityRefs themselves (Copy) rather than just Entity ids

@@ -15,7 +15,7 @@ use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::gameconfig::default_render_fps;
 use crate::resources::render::mirrors::RenderGameConfig;
 use crate::resources::render::quit_requested::QuitRequested;
-use crate::resources::render::scene_table::RenderSceneTable;
+use crate::resources::render::scene_table::{RenderSceneTable, SceneRender};
 use crate::resources::render::thread_stats::RenderStats;
 
 impl EngineBuilder {
@@ -135,7 +135,15 @@ impl EngineBuilder {
             RenderSceneTable(
                 self.scenes
                     .iter()
-                    .map(|(name, desc)| (name.clone(), desc.clone()))
+                    .map(|(name, desc)| {
+                        (
+                            name.clone(),
+                            SceneRender {
+                                gui_callback: desc.gui_callback,
+                                world_draw_callback: desc.world_draw_callback,
+                            },
+                        )
+                    })
                     .collect(),
             )
         });

@@ -40,6 +40,7 @@ use crate::resources::input_bindings::InputBindings;
 use crate::resources::postprocessshader::PostProcessShader;
 use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
 use crate::resources::scenemanager::SceneManager;
+use crate::systems::scene_dispatch::SceneLogic;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_intents::SignalIntents;
 use crate::resources::sim_rng::SimRng;
@@ -259,7 +260,14 @@ impl EngineBuilder {
             let mut scene_manager = SceneManager::new();
             scene_manager.initial_scene = init.initial_scene.take();
             for (name, descriptor) in init.scenes.drain(..) {
-                scene_manager.insert(name, descriptor);
+                scene_manager.insert(
+                    name,
+                    SceneLogic {
+                        on_enter: descriptor.on_enter,
+                        on_update: descriptor.on_update,
+                        on_exit: descriptor.on_exit,
+                    },
+                );
             }
             world.insert_resource(scene_manager);
 

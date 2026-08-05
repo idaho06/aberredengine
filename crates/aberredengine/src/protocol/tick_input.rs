@@ -7,8 +7,7 @@
 //! a tick an explicit, recorded value instead of a thread-scheduling
 //! accident.
 
-use crate::protocol::raw_input::RawDeviceSnapshot;
-use crate::resources::render::imgui_bridge::ImguiCaptureState;
+use crate::protocol::raw_input::{ImguiCaptureState, RawDeviceSnapshot};
 use crate::resources::signal_intents::SignalIntent;
 
 /// Everything the sim consumes for exactly one tick, in canonical form.

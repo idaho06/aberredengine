@@ -194,7 +194,7 @@ fn clamp_gamepad_deadzone(deadzone: f32, field: &str) -> f32 {
 /// back to a flat 60 if `target_fps` is unset/zero. Used by
 /// `render_main_loop` to seed its `StatsWindow` at the same implicit rate
 /// the render thread already falls back to.
-pub(crate) fn default_render_fps(target_fps: u32) -> f64 {
+pub fn default_render_fps(target_fps: u32) -> f64 {
     if target_fps > 0 {
         target_fps as f64
     } else {

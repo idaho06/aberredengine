@@ -23,7 +23,7 @@ use crate::components::phase::Phase;
 /// events. Returning `Some(next_phase)` from `call_enter` or `call_update`
 /// requests an immediate transition to `next_phase`; returning `None` leaves the
 /// entity in its current phase.
-pub(crate) trait PhaseRunner<C> {
+pub trait PhaseRunner<C> {
     /// Run the current phase's enter callback.
     ///
     /// Returning `Some(phase_name)` requests that the entity transition to that
@@ -60,7 +60,7 @@ pub(crate) trait PhaseRunner<C> {
 /// `entity_scratch` pre-collects entity IDs before the mutation-heavy loop so the
 /// query is not iterated while individual entities are being re-fetched and
 /// mutated.
-pub(crate) fn run_phase_callbacks<C, R>(
+pub fn run_phase_callbacks<C, R>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     delta: f32,
     callback_transitions: &mut Vec<(Entity, String)>,
@@ -166,7 +166,7 @@ pub(crate) fn run_phase_callbacks<C, R>(
 /// Callback returns are not applied inline inside [`run_phase_callbacks`]; they are
 /// queued first so the current entity-loop pass finishes before the transition is
 /// picked up by the next phase-processing step.
-pub(crate) fn queue_phase_transition<C>(
+pub fn queue_phase_transition<C>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     entity: Entity,
     next_phase: String,
@@ -183,7 +183,7 @@ pub(crate) fn queue_phase_transition<C>(
 /// Deferring this step avoids mutating phase state in the middle of
 /// [`run_phase_callbacks`], which would otherwise make callback-triggered
 /// transitions re-enter the lifecycle flow during the same pass.
-pub(crate) fn apply_callback_transitions<C>(
+pub fn apply_callback_transitions<C>(
     phase_query: &mut Query<(Entity, &mut Phase<C>)>,
     callback_transitions: &mut Vec<(Entity, String)>,
 ) where

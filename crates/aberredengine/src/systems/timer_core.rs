@@ -19,7 +19,7 @@ use crate::components::timer::Timer;
 /// [`on_fire`](Self::on_fire) is called once for each timer that elapses and is
 /// responsible for invoking or scheduling callback dispatch in whatever way that
 /// backend requires.
-pub(crate) trait TimerRunner<C> {
+pub trait TimerRunner<C> {
     /// Dispatch the callback for a timer that has just elapsed.
     fn on_fire(&mut self, entity: Entity, callback: &C);
 }
@@ -29,7 +29,7 @@ pub(crate) trait TimerRunner<C> {
 /// The shared loop is responsible only for time accumulation and expiry detection.
 /// Whenever a timer reaches its duration, `runner` is called exactly once for that
 /// fired timer to perform the backend-specific callback dispatch.
-pub(crate) fn run_timer_update<C, R>(
+pub fn run_timer_update<C, R>(
     delta: f32,
     query: &mut Query<(Entity, &mut Timer<C>)>,
     runner: &mut R,

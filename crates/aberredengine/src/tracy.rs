@@ -2,6 +2,7 @@
 ///
 /// Usage: `tracy_span!("my_system");`  — place at the top of the function.
 /// Expands to nothing when `feature = "tracy"` is not active.
+#[macro_export]
 macro_rules! tracy_span {
     ($name:literal) => {
         #[cfg(feature = "tracy")]
@@ -13,6 +14,7 @@ macro_rules! tracy_span {
 ///
 /// Call once per iteration of the main loop, after all systems have run.
 /// Expands to nothing when `feature = "tracy"` is not active.
+#[macro_export]
 macro_rules! tracy_frame_mark {
     () => {
         #[cfg(feature = "tracy")]
@@ -20,5 +22,5 @@ macro_rules! tracy_frame_mark {
     };
 }
 
-pub(crate) use tracy_frame_mark;
-pub(crate) use tracy_span;
+pub use tracy_frame_mark;
+pub use tracy_span;

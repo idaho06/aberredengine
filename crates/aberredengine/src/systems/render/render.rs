@@ -56,7 +56,7 @@ use crate::resources::render::texturestore::TextureStore;
 use crate::resources::render::thread_stats::RenderStats;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::windowsize::WindowSize;
-use crate::systems::scene_dispatch::GuiCallback;
+use crate::resources::render::scene_table::GuiCallback;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};

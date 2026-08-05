@@ -3,7 +3,10 @@
 //! This module provides systems and types for the [`SceneManager`](crate::resources::scenemanager::SceneManager)
 //! pattern — an optional higher-level alternative to the raw `.on_switch_scene()` hook.
 //!
-//! - [`SceneDescriptor`] — per-scene callbacks (`on_enter`, `on_update`, `on_exit`)
+//! - [`SceneLogic`] — per-scene logic callbacks (`on_enter`, `on_update`, `on_exit`);
+//!   the render-side half (`gui_callback`/`world_draw_callback`) lives in
+//!   `aberred-render`'s `SceneRender`, joined by scene name in the facade's
+//!   combined `SceneDescriptor`.
 //! - [`scene_switch_system`] — engine-owned scene transition: despawn → on_exit → on_enter
 //! - [`scene_update_system`] — per-frame dispatch to the active scene's `on_update`
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
@@ -24,7 +27,6 @@
 //! - [`crate::resources::scenemanager::SceneManager`] — the registry resource
 //! - [`crate::engine_app::EngineBuilder::add_scene`] — builder method for registration
 
-use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
 use rustc_hash::FxHashSet;
@@ -35,11 +37,8 @@ use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
 use crate::resources::group::TrackedGroups;
 use crate::resources::input::InputState;
-use crate::resources::render::fontstore::FontStore;
-use crate::resources::render::texturestore::TextureStore;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
-use crate::resources::signal_intents::SignalIntents;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
@@ -60,38 +59,6 @@ pub type SceneUpdateFn = for<'w, 's> fn(&mut GameCtx<'w, 's>, f32, &InputState);
 /// Called when leaving a scene (cleanup before despawn).
 pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
-/// Called every frame to draw the scene's ImGui GUI.
-///
-/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a read-only
-/// [`SignalSnapshot`] for reading current signal state, a mutable
-/// [`SignalIntents`] buffer for queuing writes back to game logic, read-only
-/// access to the [`TextureStore`] for displaying texture previews, read-only
-/// access to the [`FontStore`] for displaying font previews, and read-only
-/// access to [`AppState`] for typed Rust objects published by ECS observers.
-///
-/// # Contract
-/// - Called from inside the render system's ImGui frame — after the game world
-///   is drawn, at window resolution (not render-target resolution).
-/// - Called whether or not debug mode (F11) is active.
-/// - Interaction results must be communicated via [`SignalIntents`] (action flags,
-///   pending edit values); queued intents are applied to `WorldSignals` at the top
-///   of the next sim tick by `apply_signal_intents` (`SimSet::ApplyIntents`) —
-///   one tick of latency, since this callback holds no live `&mut WorldSignals`.
-///   `AppState` is read-only from the GUI's perspective — it's a snapshot clone,
-///   not the live resource.
-/// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.
-///
-/// # Example
-/// ```rust,ignore
-/// fn my_gui(ui: &ImguiUi, signals: &SignalSnapshot, intents: &mut SignalIntents, _textures: &TextureStore, _fonts: &FontStore, app_state: &AppState) {
-///     if let Some(snap) = app_state.get::<MySnapshot>() {
-///         ui.text(format!("value: {}", snap.value));
-///     }
-///     if ui.button("Save") {
-///         intents.set_flag("gui:action:file:save");
-///     }
-/// }
-/// ```
 /// Minimal world-space drawing interface for `WorldDrawCallback`.
 /// Uses concrete types only so the callback stays object-safe.
 pub trait WorldDraw {
@@ -114,48 +81,30 @@ pub trait WorldDraw {
 // nor `RaylibDraw` once core/render split into separate crates (the orphan
 // rule blocks a blanket impl at that point — see docs/plans, §5.2).
 
-pub type GuiCallback =
-    fn(&ImguiUi, &SignalSnapshot, &mut SignalIntents, &TextureStore, &FontStore, &AppState);
+// `GuiCallback` (the ImGui-drawing callback type) lives in
+// `aberred-render`'s `resources::render::scene_table` alongside
+// `SceneRender` — core cannot name `ImguiUi`/`TextureStore`/`FontStore`.
 
 /// Called every frame inside `begin_mode2D` in camera-transformed world space.
 ///
-/// The [`SignalSnapshot`] param is read-only, mirroring [`GuiCallback`], which likewise takes
-/// no live `&WorldSignals`.
+/// The [`SignalSnapshot`] param is read-only, mirroring the render-side
+/// `GuiCallback`, which likewise takes no live `&WorldSignals`.
 pub type WorldDrawCallback = fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
 
 // ---------------------------------------------------------------------------
-// SceneDescriptor
+// SceneLogic
 // ---------------------------------------------------------------------------
 
-/// Describes the callbacks for a single scene.
-///
-/// Register one per scene name via [`EngineBuilder::add_scene`](crate::engine_app::EngineBuilder::add_scene).
-///
-/// # Example
-///
-/// ```ignore
-/// SceneDescriptor {
-///     on_enter:     menu::setup,
-///     on_update:    Some(menu::update),
-///     on_exit:      None,
-///     gui_callback: None,
-///     world_draw_callback: None,
-/// }
-/// ```
+/// Logic-side callbacks for a single scene (core-only half of the combined
+/// `SceneDescriptor` the facade exposes via `EngineBuilder::add_scene`).
 #[derive(Clone)]
-pub struct SceneDescriptor {
+pub struct SceneLogic {
     /// Called once when the scene becomes active.
     pub on_enter: SceneEnterFn,
     /// Called every frame while the scene is active (optional).
     pub on_update: Option<SceneUpdateFn>,
     /// Called once when leaving the scene (optional).
     pub on_exit: Option<SceneExitFn>,
-    /// Called every frame to draw ImGui GUI widgets (optional). Rust-only.
-    ///
-    /// See [`GuiCallback`] for the full contract.
-    pub gui_callback: Option<GuiCallback>,
-    /// Called every frame inside `begin_mode2D` to draw world-space overlays.
-    pub world_draw_callback: Option<WorldDrawCallback>,
 }
 
 // ---------------------------------------------------------------------------
@@ -306,116 +255,44 @@ mod tests {
     use crate::systems::GameCtx;
 
     #[test]
-    fn scene_descriptor_default_optionals() {
+    fn scene_logic_default_optionals() {
         fn dummy_enter(_ctx: &mut GameCtx) {}
-        let desc = SceneDescriptor {
+        let logic = SceneLogic {
             on_enter: dummy_enter,
             on_update: None,
             on_exit: None,
-            gui_callback: None,
-            world_draw_callback: None,
         };
-        assert!(desc.on_update.is_none());
-        assert!(desc.on_exit.is_none());
-        assert!(desc.world_draw_callback.is_none());
+        assert!(logic.on_update.is_none());
+        assert!(logic.on_exit.is_none());
     }
 
     #[test]
-    fn scene_descriptor_with_all_callbacks() {
+    fn scene_logic_with_all_callbacks() {
         fn enter(_ctx: &mut GameCtx) {}
         fn update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
         fn exit(_ctx: &mut GameCtx) {}
-        let desc = SceneDescriptor {
+        let logic = SceneLogic {
             on_enter: enter,
             on_update: Some(update),
             on_exit: Some(exit),
-            gui_callback: None,
-            world_draw_callback: None,
         };
-        assert!(desc.on_update.is_some());
-        assert!(desc.on_exit.is_some());
+        assert!(logic.on_update.is_some());
+        assert!(logic.on_exit.is_some());
     }
 
     #[test]
-    fn scene_descriptor_clone() {
+    fn scene_logic_clone() {
         fn enter(_ctx: &mut GameCtx) {}
-        let desc = SceneDescriptor {
+        let logic = SceneLogic {
             on_enter: enter,
             on_update: None,
             on_exit: None,
-            gui_callback: None,
-            world_draw_callback: None,
         };
-        let cloned = desc.clone();
+        let cloned = logic.clone();
         // fn pointers are Copy — both point to the same function
         assert_eq!(
-            desc.on_enter as *const () as usize,
+            logic.on_enter as *const () as usize,
             cloned.on_enter as *const () as usize
-        );
-    }
-
-    #[test]
-    fn gui_callback_none_by_default_intent() {
-        fn enter(_ctx: &mut GameCtx) {}
-        let desc = SceneDescriptor {
-            on_enter: enter,
-            on_update: None,
-            on_exit: None,
-            gui_callback: None,
-            world_draw_callback: None,
-        };
-        assert!(desc.gui_callback.is_none());
-    }
-
-    #[test]
-    fn gui_callback_some_stores_fn_pointer() {
-        fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(
-            _ui: &ImguiUi,
-            _signals: &SignalSnapshot,
-            _intents: &mut SignalIntents,
-            _textures: &TextureStore,
-            _fonts: &FontStore,
-            _app_state: &AppState,
-        ) {
-        }
-        let desc = SceneDescriptor {
-            on_enter: enter,
-            on_update: None,
-            on_exit: None,
-            gui_callback: Some(my_gui),
-            world_draw_callback: None,
-        };
-        assert!(desc.gui_callback.is_some());
-        assert_eq!(
-            desc.gui_callback.unwrap() as *const () as usize,
-            my_gui as *const () as usize
-        );
-    }
-
-    #[test]
-    fn gui_callback_clone_preserves_fn_pointer() {
-        fn enter(_ctx: &mut GameCtx) {}
-        fn my_gui(
-            _ui: &ImguiUi,
-            _signals: &SignalSnapshot,
-            _intents: &mut SignalIntents,
-            _textures: &TextureStore,
-            _fonts: &FontStore,
-            _app_state: &AppState,
-        ) {
-        }
-        let desc = SceneDescriptor {
-            on_enter: enter,
-            on_update: None,
-            on_exit: None,
-            gui_callback: Some(my_gui),
-            world_draw_callback: None,
-        };
-        let cloned = desc.clone();
-        assert_eq!(
-            desc.gui_callback.unwrap() as *const () as usize,
-            cloned.gui_callback.unwrap() as *const () as usize
         );
     }
 }

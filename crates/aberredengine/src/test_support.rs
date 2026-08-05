@@ -57,7 +57,7 @@ use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::systems::input::resolve_input_backlog;
-use crate::systems::scene_dispatch::SceneDescriptor;
+use crate::engine_app::SceneDescriptor;
 use crate::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.

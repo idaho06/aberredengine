@@ -9,7 +9,7 @@ use super::schedule::SimSet;
 use crate::components::persistent::Persistent;
 use crate::resources::systemsstore as hook_keys;
 use crate::systems::gamestate::state_is_playing;
-use crate::systems::scene_dispatch::SceneDescriptor;
+use super::scene::SceneDescriptor;
 
 /// Builder for bootstrapping the engine.
 ///

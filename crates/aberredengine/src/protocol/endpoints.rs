@@ -155,7 +155,7 @@ fn insert_audio_bridge_resources(
 /// whole lifetime -- `forward_audio_cmds` swallows send errors, so a dropped
 /// receiver won't panic, it'll just silently break the inspection contract.
 #[cfg(any(test, feature = "test-support"))]
-pub(crate) fn setup_audio_stub(world: &mut World) -> (Receiver<AudioCmd>, Sender<AudioMessage>) {
+pub fn setup_audio_stub(world: &mut World) -> (Receiver<AudioCmd>, Sender<AudioMessage>) {
     let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
     let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
 

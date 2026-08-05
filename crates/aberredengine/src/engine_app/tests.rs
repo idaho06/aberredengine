@@ -17,7 +17,7 @@ use crate::protocol::snapshot::SnapshotPublisher;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::InputState;
-use crate::resources::render::imgui_bridge::ImguiCaptureState;
+use crate::protocol::raw_input::ImguiCaptureState;
 use crate::resources::systemsstore::SystemsStore;
 use crate::systems::animation::animation_controller;
 use crate::systems::phase::phase_system;
@@ -574,7 +574,7 @@ fn test_default_trait() {
 // --- SceneManager builder tests ---
 
 use crate::systems::GameCtx;
-use crate::systems::scene_dispatch::SceneDescriptor;
+use super::scene::SceneDescriptor;
 
 fn dummy_scene_enter(_ctx: &mut GameCtx) {}
 fn dummy_scene_update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}

@@ -14,7 +14,7 @@
 use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 
-use crate::systems::scene_dispatch::SceneDescriptor;
+use crate::systems::scene_dispatch::SceneLogic;
 
 /// Registry of named scenes and active-scene tracking.
 ///
@@ -22,7 +22,7 @@ use crate::systems::scene_dispatch::SceneDescriptor;
 /// read/write this to look up callbacks and track which scene is active.
 #[derive(Resource)]
 pub struct SceneManager {
-    scenes: FxHashMap<String, SceneDescriptor>,
+    scenes: FxHashMap<String, SceneLogic>,
     /// Currently active scene name (set by `scene_switch_system`).
     pub active_scene: Option<String>,
     /// Initial scene name (set by `EngineBuilder`).
@@ -40,12 +40,12 @@ impl SceneManager {
     }
 
     /// Register a scene under the given name.
-    pub fn insert(&mut self, name: impl Into<String>, descriptor: SceneDescriptor) {
-        self.scenes.insert(name.into(), descriptor);
+    pub fn insert(&mut self, name: impl Into<String>, logic: SceneLogic) {
+        self.scenes.insert(name.into(), logic);
     }
 
-    /// Look up a scene descriptor by name.
-    pub fn get(&self, name: &str) -> Option<&SceneDescriptor> {
+    /// Look up a scene's logic callbacks by name.
+    pub fn get(&self, name: &str) -> Option<&SceneLogic> {
         self.scenes.get(name)
     }
 
@@ -81,17 +81,13 @@ impl Default for SceneManager {
 mod tests {
     use super::*;
     use crate::systems::GameCtx;
-    use crate::systems::scene_dispatch::SceneDescriptor;
-
     fn dummy_enter(_ctx: &mut GameCtx) {}
 
-    fn make_descriptor() -> SceneDescriptor {
-        SceneDescriptor {
+    fn make_descriptor() -> SceneLogic {
+        SceneLogic {
             on_enter: dummy_enter,
             on_update: None,
             on_exit: None,
-            gui_callback: None,
-            world_draw_callback: None,
         }
     }
 
@@ -130,12 +126,10 @@ mod tests {
         sm.insert("menu", make_descriptor());
         sm.insert(
             "menu",
-            SceneDescriptor {
+            SceneLogic {
                 on_enter: other_enter,
                 on_update: None,
                 on_exit: None,
-                gui_callback: None,
-                world_draw_callback: None,
             },
         );
         assert_eq!(sm.len(), 1);

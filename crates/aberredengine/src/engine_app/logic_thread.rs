@@ -32,7 +32,7 @@ use crate::resources::thread_stats::SimStats;
 use crate::resources::windowsize::WindowSize;
 use crate::resources::worldtime::WorldTime;
 use crate::systems::input::resolve_input_backlog;
-use crate::systems::scene_dispatch::SceneDescriptor;
+use super::scene::SceneDescriptor;
 use crate::systems::signal_intents::apply_signal_intents;
 use crate::systems::state_hash::hash_world_state;
 use crate::systems::time::update_world_time;
