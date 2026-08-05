@@ -6,7 +6,7 @@
 use super::commands::*;
 use super::runtime::{LuaAppData, LuaRuntime, action_to_str};
 use super::spawn_data::*;
-use crate::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::worldsignals::SignalSnapshot;
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -57,9 +57,9 @@ impl LuaRuntime {
     /// Updates the cached input bindings snapshot that Lua can read via `engine.get_binding()`.
     pub fn update_bindings_cache(
         &self,
-        bindings: &crate::resources::input_bindings::InputBindings,
+        bindings: &aberred_core::resources::input_bindings::InputBindings,
     ) {
-        use crate::resources::input_bindings::binding_to_str;
+        use aberred_core::resources::input_bindings::binding_to_str;
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             let mut snap = data.bindings_snapshot.borrow_mut();
             snap.clear();
@@ -101,8 +101,8 @@ impl LuaRuntime {
     /// are queued and applied in `process_lua_map_commands`, which runs after `lua_plugin::update`.
     pub fn update_camera_cache(
         &self,
-        camera: &crate::resources::camera2d::Camera2DRes,
-        screen: &crate::resources::screensize::ScreenSize,
+        camera: &aberred_core::resources::camera2d::Camera2DRes,
+        screen: &aberred_core::resources::screensize::ScreenSize,
         pixel_snap: bool,
     ) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
@@ -134,7 +134,7 @@ impl LuaRuntime {
     }
 
     /// Updates the cached game configuration snapshot that Lua can read.
-    pub fn update_gameconfig_cache(&self, config: &crate::resources::gameconfig::GameConfig) {
+    pub fn update_gameconfig_cache(&self, config: &aberred_core::resources::gameconfig::GameConfig) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             let mut snapshot = data.gameconfig_snapshot.borrow_mut();
             snapshot.fullscreen = config.fullscreen;

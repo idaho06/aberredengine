@@ -2,15 +2,15 @@
 //!
 //! This module provides the Lua-specific collision handling:
 //!
-//! - [`lua_collision_observer`] – receives [`CollisionEvent`](crate::events::collision::CollisionEvent)s
+//! - [`lua_collision_observer`] – receives [`CollisionEvent`](aberred_core::events::collision::CollisionEvent)s
 //!   and dispatches to [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule) callbacks
 //!
 //! # Collision Flow
 //!
-//! 1. [`collision_detector`](crate::systems::collision_detector::collision_detector) detects overlaps
+//! 1. [`collision_detector`](aberred_core::systems::collision_detector::collision_detector) detects overlaps
 //!    and emits `CollisionEvent`s
 //! 2. `lua_collision_observer` looks up matching Lua collision rules by
-//!    [`Group`](crate::components::group::Group) names
+//!    [`Group`](aberred_core::components::group::Group) names
 //! 3. For each match, calls [`call_lua_collision_callback`] with pooled context tables
 //!
 //! # Lua Collision Callbacks
@@ -33,28 +33,28 @@
 //!
 //! - [`crate::systems::collision_detector`] – pure Rust collision detection
 //! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
-//! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
+//! - [`aberred_core::components::boxcollider::BoxCollider`] – axis-aligned collider
+//! - [`aberred_core::events::collision::CollisionEvent`] – emitted on each collision
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::boxcollider::BoxCollider;
-use crate::components::group::Group;
+use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
-use crate::components::signals::Signals;
-use crate::events::collision::CollisionEvent;
-use crate::protocol::audio::AudioCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::collision_rule_index::CollisionRuleIndex;
+use aberred_core::components::signals::Signals;
+use aberred_core::events::collision::CollisionEvent;
+use aberred_core::protocol::audio::AudioCmd;
+use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use crate::resources::lua_runtime::{
     CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
     populate_entity_signals, set_opt,
 };
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
-use crate::systems::collision::{
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::systems::collision::{
     compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups, resolve_world_pos,
 };
 use crate::systems::lua_commands::{
@@ -224,12 +224,12 @@ pub fn lua_collision_observer(
 }
 
 /// Convert BoxSide to string representation.
-fn box_side_to_str(side: &crate::components::collision::BoxSide) -> &'static str {
+fn box_side_to_str(side: &aberred_core::components::collision::BoxSide) -> &'static str {
     match side {
-        crate::components::collision::BoxSide::Left => "left",
-        crate::components::collision::BoxSide::Right => "right",
-        crate::components::collision::BoxSide::Top => "top",
-        crate::components::collision::BoxSide::Bottom => "bottom",
+        aberred_core::components::collision::BoxSide::Left => "left",
+        aberred_core::components::collision::BoxSide::Right => "right",
+        aberred_core::components::collision::BoxSide::Top => "top",
+        aberred_core::components::collision::BoxSide::Bottom => "bottom",
     }
 }
 
@@ -327,8 +327,8 @@ fn call_lua_collision_callback(
     speed_sq_b: f32,
     rect_a: Option<(f32, f32, f32, f32)>,
     rect_b: Option<(f32, f32, f32, f32)>,
-    sides_a: &[crate::components::collision::BoxSide],
-    sides_b: &[crate::components::collision::BoxSide],
+    sides_a: &[aberred_core::components::collision::BoxSide],
+    sides_b: &[aberred_core::components::collision::BoxSide],
     signals_a: Option<&Signals>,
     signals_b: Option<&Signals>,
     group_a: Option<&str>,
@@ -395,7 +395,7 @@ fn call_lua_collision_callback(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::collision::BoxSide;
+    use aberred_core::components::collision::BoxSide;
 
     #[test]
     fn test_box_side_to_str_left() {

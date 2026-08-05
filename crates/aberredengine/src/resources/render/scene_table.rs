@@ -4,12 +4,12 @@ use ::imgui::Ui as ImguiUi;
 use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 
-use crate::resources::appstate::AppState;
+use aberred_core::resources::appstate::AppState;
 use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::texturestore::TextureStore;
-use crate::resources::signal_intents::SignalIntents;
-use crate::resources::worldsignals::SignalSnapshot;
-use crate::systems::scene_dispatch::WorldDrawCallback;
+use aberred_core::resources::signal_intents::SignalIntents;
+use aberred_core::resources::worldsignals::SignalSnapshot;
+use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 
 /// Called every frame to draw the scene's ImGui GUI.
 ///
@@ -50,7 +50,7 @@ pub struct SceneRender {
 /// `render_system` resolves the active scene's `gui_callback`/
 /// `world_draw_callback` against this table using
 /// `DrawableSnapshot.active_scene`, since the live
-/// [`SceneManager`](crate::resources::scenemanager::SceneManager) (with its
+/// [`SceneManager`](aberred_core::resources::scenemanager::SceneManager) (with its
 /// mutable `active_scene` tracking) is logic-world-only. `SceneRender` is
 /// all fn pointers, so the clone is cheap and the table is immutable after
 /// startup. Only inserted when the game uses `.add_scene()` — mirror of
@@ -72,9 +72,9 @@ impl RenderSceneTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::appstate::AppState;
-    use crate::resources::signal_intents::SignalIntents;
-    use crate::resources::worldsignals::SignalSnapshot;
+    use aberred_core::resources::appstate::AppState;
+    use aberred_core::resources::signal_intents::SignalIntents;
+    use aberred_core::resources::worldsignals::SignalSnapshot;
 
     fn my_gui(
         _ui: &ImguiUi,

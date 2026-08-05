@@ -14,29 +14,29 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "lua")]
 use bevy_ecs::system::SystemState;
-use aberredengine::math::Vec2;
+use aberredengine::core::math::Vec2;
 
-use aberredengine::components::globaltransform2d::GlobalTransform2D;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::rotation::Rotation;
-use aberredengine::components::scale::Scale;
-use aberredengine::components::stuckto::StuckTo;
+use aberredengine::core::components::globaltransform2d::GlobalTransform2D;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::rotation::Rotation;
+use aberredengine::core::components::scale::Scale;
+use aberredengine::core::components::stuckto::StuckTo;
 #[cfg(feature = "lua")]
-use aberredengine::resources::animationstore::AnimationStore;
+use aberredengine::core::resources::animationstore::AnimationStore;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
 #[cfg(feature = "lua")]
-use aberredengine::resources::systemsstore::SystemsStore;
+use aberredengine::core::resources::systemsstore::SystemsStore;
 #[cfg(feature = "lua")]
-use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::worldsignals::WorldSignals;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::EntityCmdQueries;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
-use aberredengine::systems::propagate_transforms::{
+use aberredengine::core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
-use aberredengine::systems::stuckto::stuck_to_entity_system;
+use aberredengine::core::systems::stuckto::stuck_to_entity_system;
 
 const EPSILON: f32 = 1e-4;
 
@@ -1019,8 +1019,8 @@ fn stuckto_still_works_without_childof() {
 // PHASE 5: Render system integration (query smoke tests)
 // =============================================================================
 
-use aberredengine::components::sprite::Sprite;
-use aberredengine::components::zindex::ZIndex;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::zindex::ZIndex;
 
 #[test]
 fn render_query_includes_global_transform() {
@@ -1117,9 +1117,9 @@ fn render_query_works_without_global_transform() {
 // PHASE 6: Collision system integration
 // =============================================================================
 
-use aberredengine::components::boxcollider::BoxCollider;
-use aberredengine::events::collision::CollisionEvent;
-use aberredengine::systems::collision_detector::collision_detector;
+use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::events::collision::CollisionEvent;
+use aberredengine::core::systems::collision_detector::collision_detector;
 
 /// Resource to collect collision events via observer.
 #[derive(Resource, Default)]
@@ -1446,7 +1446,7 @@ fn meta_entity_context_includes_world_fields() {
 #[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_screen_position_updates_screen_position() {
-    use aberredengine::components::screenposition::ScreenPosition;
+    use aberredengine::core::components::screenposition::ScreenPosition;
 
     let mut world = World::new();
     let entity = world.spawn(ScreenPosition::new(0.0, 0.0)).id();
@@ -1649,7 +1649,7 @@ fn cleanup_removes_all_orphaned_gt_entities() {
 ///    not the stale GT (200, 0).
 #[test]
 fn stale_gt_removed_after_child_despawn() {
-    use aberredengine::systems::collision::resolve_world_pos;
+    use aberredengine::core::systems::collision::resolve_world_pos;
     use bevy_ecs::system::SystemState;
 
     let mut world = World::new();

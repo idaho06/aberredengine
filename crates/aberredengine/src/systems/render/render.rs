@@ -9,7 +9,7 @@
 //!
 //! When the active scene descriptor provides a [`GuiCallback`], an ImGui frame
 //! is opened every render pass and the callback is invoked. This path is
-//! independent of [`DebugMode`](crate::resources::debugmode::DebugMode) and is
+//! independent of [`DebugMode`](aberred_core::resources::debugmode::DebugMode) and is
 //! intended for persistent game-developer UI
 //! (HUDs, in-game editors, tool windows).
 
@@ -19,30 +19,30 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
 
-use super::math::{vec2_from_raylib, vec2_to_raylib};
-use crate::components::dynamictext::DynamicText;
+use super::math::{camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, vec2_from_raylib, vec2_to_raylib};
+use aberred_core::components::dynamictext::DynamicText;
 #[cfg(test)]
-use crate::math::Vec2;
-use crate::components::entityshader::EntityShader;
-use crate::components::guibutton::GuiButton;
-use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
-use crate::components::guilabel::GuiLabel;
-use crate::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
-use crate::components::guiwindow::GuiWindow;
-use crate::components::mapposition::MapPosition;
+use aberred_core::math::Vec2;
+use aberred_core::components::entityshader::EntityShader;
+use aberred_core::components::guibutton::GuiButton;
+use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState};
+use aberred_core::components::guilabel::GuiLabel;
+use aberred_core::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
+use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::mapposition::MapPosition;
 use crate::components::render::mirror::SimMirror;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::shadow::Shadow;
-use crate::components::sprite::Sprite;
-use crate::components::tint::Tint;
-use crate::components::zindex::ZIndex;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::components::sprite::Sprite;
+use aberred_core::components::tint::Tint;
+use aberred_core::components::zindex::ZIndex;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
 use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::imgui_bridge::ImguiBridge;
-use crate::resources::signal_intents::SignalIntents;
+use aberred_core::resources::signal_intents::SignalIntents;
 
 use super::mirror::MirrorQueries;
 use crate::resources::render::mirrors::{
@@ -54,8 +54,8 @@ use crate::resources::render::scene_table::RenderSceneTable;
 use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::texturestore::TextureStore;
 use crate::resources::render::thread_stats::RenderStats;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::windowsize::WindowSize;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::windowsize::WindowSize;
 use crate::resources::render::scene_table::GuiCallback;
 use log::warn;
 
@@ -130,7 +130,7 @@ pub(super) struct ScreenTextBufferItem {
     pub(super) text: Arc<str>,
     pub(super) font: Arc<str>,
     pub(super) font_size: f32,
-    pub(super) color: crate::math::Color,
+    pub(super) color: aberred_core::math::Color,
     pub(super) size: Vector2,
     pub(super) z_index: ZIndex,
     pub(super) pos: ScreenPosition,
@@ -337,7 +337,7 @@ pub fn render_system(
     // render-world DrawableSnapshot resource.
     mirrors: MirrorQueries,
 ) {
-    crate::tracy::tracy_span!("render_system");
+    aberred_core::tracy::tracy_span!("render_system");
     let (rl, th) = (&mut *raylib.rl, &*raylib.th);
     let fonts = &res.fonts;
     let RenderLocals {
@@ -360,18 +360,21 @@ pub fn render_system(
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
-        crate::tracy::tracy_span!("render/to_texture");
+        aberred_core::tracy::tracy_span!("render/to_texture");
         let mut d = rl.begin_texture_mode(th, &mut render_target.texture);
-        let bg_color: Color = res.game_config.0.background_color.into();
+        let bg_color: Color = color_to_raylib(res.game_config.0.background_color);
         d.clear_background(bg_color);
 
         {
             // Draw in world coordinates using Camera2D.
-            crate::tracy::tracy_span!("render/world_space");
+            aberred_core::tracy::tracy_span!("render/world_space");
             let render_cam = if res.game_config.0.pixel_snap_camera {
-                crate::resources::camera2d::Camera2DRes(res.camera.0.into())
-                    .pixel_snapped()
-                    .into()
+                camera2d_to_raylib(
+                    aberred_core::resources::camera2d::Camera2DRes(camera2d_from_raylib(
+                        res.camera.0,
+                    ))
+                    .pixel_snapped(),
+                )
             } else {
                 res.camera.0
             };
@@ -380,7 +383,8 @@ pub fn render_system(
             // `render_cam` converted to core once above and reused here across
             // all 4 corners -- `compute_view_bounds` calls this closure once
             // per corner with the same camera every time.
-            let render_cam_core: crate::resources::camera2d::Camera2D = render_cam.into();
+            let render_cam_core: aberred_core::resources::camera2d::Camera2D =
+                camera2d_from_raylib(render_cam);
             let (view_min, view_max) = compute_view_bounds(
                 screensize.w as f32,
                 screensize.h as f32,
@@ -389,7 +393,7 @@ pub fn render_system(
             );
 
             {
-                crate::tracy::tracy_span!("render/build_sprite_buffer");
+                aberred_core::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
                 sprite_buffer.extend(mirrors.map_sprites.iter().filter_map(
                     |(
@@ -454,7 +458,7 @@ pub fn render_system(
                 });
             } // build_sprite_buffer
             {
-                crate::tracy::tracy_span!("render/draw_world_sprites");
+                aberred_core::tracy::tracy_span!("render/draw_world_sprites");
                 for item in sprite_buffer.iter() {
                     if let Some(tex) = textures.get(&item.sprite.tex_key) {
                         let mut src = Rectangle {
@@ -599,7 +603,7 @@ pub fn render_system(
             } // draw_world_sprites
 
             {
-                crate::tracy::tracy_span!("render/build_text_buffer");
+                aberred_core::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
                 text_buffer.extend(mirrors.map_texts.iter().filter_map(
                     |(
@@ -651,7 +655,7 @@ pub fn render_system(
                 });
             } // build_text_buffer
             {
-                crate::tracy::tracy_span!("render/draw_world_texts");
+                aberred_core::tracy::tracy_span!("render/draw_world_texts");
                 for item in text_buffer.iter() {
                     if let Some(font) = fonts.get(&item.text.font) {
                         let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
@@ -847,7 +851,8 @@ pub fn render_system(
                 .and_then(|(table, name)| table.get(name))
                 .and_then(|desc| desc.world_draw_callback)
             {
-                let core_camera: crate::resources::camera2d::Camera2D = res.camera.0.into();
+                let core_camera: aberred_core::resources::camera2d::Camera2D =
+                    camera2d_from_raylib(res.camera.0);
                 cb(
                     &mut crate::systems::render::math::RaylibWorldDraw(&mut d2),
                     &core_camera,
@@ -862,7 +867,7 @@ pub fn render_system(
         let debug_sprites = debug_active && debug_res.overlay_config.show_sprite_bounds;
         let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
         {
-            crate::tracy::tracy_span!("render/screen_space");
+            aberred_core::tracy::tracy_span!("render/screen_space");
             // All 8 screen-space categories source from
             // retained mirror entities. Built into their own scratch
             // buffers (not directly into screen_draw_buffer) so
@@ -919,7 +924,7 @@ pub fn render_system(
     }
 
     // ========== PHASE 2: Multi-pass post-processing and final blit ==========
-    crate::tracy::tracy_span!("render/postprocess");
+    aberred_core::tracy::tracy_span!("render/postprocess");
 
     // Extract gui_callback from the active scene (fn pointer is Copy — no borrow held).
     // Must be done before taking mutable borrows of other debug_res fields below.
@@ -954,8 +959,10 @@ pub fn render_system(
                 screensize.w as u32,
                 screensize.h as u32,
             ));
-            let mouse_world =
-                super::math::screen_to_world2d_raylib(game_mouse_pos, &res.camera.0.into());
+            let mouse_world = super::math::screen_to_world2d_raylib(
+                game_mouse_pos,
+                &camera2d_from_raylib(res.camera.0),
+            );
             // Query::count() (not .iter().count()) takes the optimized path for
             // archetypal queries -- table/archetype-count arithmetic instead of
             // walking every matched entity, closer to the old Vec::len() cost.
@@ -1407,7 +1414,7 @@ mod needs_imgui_tests {
 #[cfg(test)]
 mod screen_draw_buffer_tests {
     use super::*;
-    use crate::components::screenposition::ScreenPosition;
+    use aberred_core::components::screenposition::ScreenPosition;
 
     fn sprite_item(z: f32) -> ScreenDrawItem {
         sprite_item_with_entity(z, Entity::from_raw_u32(0).unwrap())
@@ -1442,7 +1449,7 @@ mod screen_draw_buffer_tests {
             text: Arc::from("hi"),
             font: Arc::from("font"),
             font_size: 12.0,
-            color: crate::math::Color::WHITE,
+            color: aberred_core::math::Color::WHITE,
             size: Vector2::zero(),
             z_index: ZIndex(z),
             pos: ScreenPosition::new(0.0, 0.0),

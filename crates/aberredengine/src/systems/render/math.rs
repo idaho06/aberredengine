@@ -1,29 +1,30 @@
 //! `crate::math` <-> raylib scalar-type conversions, render-thread-only.
 //!
-//! `crate::math::Color`/`Rect` are layout-identical to raylib's own
+//! `aberred_core::math::Color`/`Rect` are layout-identical to raylib's own
 //! `Color`/`Rectangle` (asserted in `crate::math`'s own tests), so these are
-//! plain field copies, not real conversions. `crate::resources::camera2d::Camera2D`
+//! plain field copies, not real conversions. `aberred_core::resources::camera2d::Camera2D`
 //! is not layout-identical to raylib's `Camera2D` (its `target`/`offset`
-//! fields are `Vec2`, not raylib's `Vector2`), so its `From` impls delegate
-//! to `vec2_to_raylib`/`vec2_from_raylib` below for those two fields. They
-//! live here — not in `crate::math`/`crate::resources::camera2d` themselves —
-//! because those modules must stay raylib-free; only the render tree is
-//! allowed to know raylib exists.
+//! fields are `Vec2`, not raylib's `Vector2`), so its conversion functions
+//! delegate to `vec2_to_raylib`/`vec2_from_raylib` below for those two
+//! fields. They live here — not in `crate::math`/`crate::resources::camera2d`
+//! themselves — because those modules must stay raylib-free; only the
+//! render tree is allowed to know raylib exists.
 //!
-//! NOTE: once the workspace split (`docs/plans/workspaces-implementation.md`)
-//! makes `aberred-render` and `raylib` genuinely separate crates, `aberred-render`
-//! will own neither `crate::math::Color`/`Rect` nor `raylib::prelude::Color`/
-//! `Rectangle`, and these `impl From` blocks will hit Rust's orphan rule.
-//! `RaylibWorldDraw` below already sidesteps the equivalent problem for
-//! `WorldDraw`/`RaylibDraw` via a newtype instead of a blanket impl — the
-//! same fix would apply here too if these `impl From` blocks ever need it.
+//! Plain functions, not `impl From`: `aberred-core` and `raylib` are
+//! genuinely separate crates from this (facade/render) crate's point of
+//! view, so `impl From<Color> for raylib::prelude::Color` would name two
+//! foreign types and violate the orphan rule. `RaylibWorldDraw` below
+//! sidesteps the equivalent problem for `WorldDraw`/`RaylibDraw` via a
+//! newtype instead; `vec2_to_raylib`/`vec2_from_raylib` already used plain
+//! functions for the same reason even before the crate split, since `Vec2`
+//! is a bare `glam` re-export, not a local newtype.
 
-use crate::components::shadow::Shadow;
-use crate::components::tint::Tint;
-use crate::math::{Color, Rect, Vec2};
-use crate::resources::camera2d::Camera2D;
-use crate::resources::texturefilter::TextureFilter;
-use crate::systems::scene_dispatch::WorldDraw;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::components::tint::Tint;
+use aberred_core::math::{Color, Rect, Vec2};
+use aberred_core::resources::camera2d::Camera2D;
+use aberred_core::resources::texturefilter::TextureFilter;
+use aberred_core::systems::scene_dispatch::WorldDraw;
 
 /// Adapts any raylib draw handle to the core-owned [`WorldDraw`] trait.
 ///
@@ -36,23 +37,21 @@ pub(super) struct RaylibWorldDraw<'a, T: raylib::prelude::RaylibDraw>(pub &'a mu
 
 impl<T: raylib::prelude::RaylibDraw> WorldDraw for RaylibWorldDraw<'_, T> {
     fn draw_line_v(&mut self, start: Vec2, end: Vec2, color: Color) {
-        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_v(
             self.0,
             vec2_to_raylib(start),
             vec2_to_raylib(end),
-            color,
+            color_to_raylib(color),
         );
     }
 
     fn draw_line_ex(&mut self, start_pos: Vec2, end_pos: Vec2, thick: f32, color: Color) {
-        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_ex(
             self.0,
             vec2_to_raylib(start_pos),
             vec2_to_raylib(end_pos),
             thick,
-            color,
+            color_to_raylib(color),
         );
     }
 
@@ -64,20 +63,18 @@ impl<T: raylib::prelude::RaylibDraw> WorldDraw for RaylibWorldDraw<'_, T> {
         space_size: i32,
         color: Color,
     ) {
-        let color: raylib::prelude::Color = color.into();
         raylib::prelude::RaylibDraw::draw_line_dashed(
             self.0,
             vec2_to_raylib(start_pos),
             vec2_to_raylib(end_pos),
             dash_size,
             space_size,
-            color,
+            color_to_raylib(color),
         );
     }
 
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
-        let color: raylib::prelude::Color = color.into();
-        raylib::prelude::RaylibDraw::draw_line(self.0, x1, y1, x2, y2, color);
+        raylib::prelude::RaylibDraw::draw_line(self.0, x1, y1, x2, y2, color_to_raylib(color));
     }
 }
 
@@ -85,7 +82,7 @@ impl<T: raylib::prelude::RaylibDraw> WorldDraw for RaylibWorldDraw<'_, T> {
 /// `Color::WHITE` (see [`Tint`]'s own doc comment), converted to raylib's
 /// `Color` at this one call site instead of at every sprite draw path.
 pub(super) fn resolve_sprite_tint(maybe_tint: Option<Tint>) -> raylib::prelude::Color {
-    maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE).into()
+    color_to_raylib(maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE))
 }
 
 /// Resolves a text item's color for a draw call: an optional [`Tint`]
@@ -93,65 +90,40 @@ pub(super) fn resolve_sprite_tint(maybe_tint: Option<Tint>) -> raylib::prelude::
 /// converted to raylib's `Color` at this one call site instead of at every
 /// text draw path.
 pub(super) fn resolve_text_tint(maybe_tint: Option<Tint>, base: Color) -> raylib::prelude::Color {
-    maybe_tint.map(|t| t.multiply(base)).unwrap_or(base).into()
+    color_to_raylib(maybe_tint.map(|t| t.multiply(base)).unwrap_or(base))
 }
 
 /// Resolves a [`Shadow`]'s color for a draw call.
 pub(super) fn shadow_color(shadow: Shadow) -> raylib::prelude::Color {
-    shadow.color.into()
+    color_to_raylib(shadow.color)
 }
 
-impl From<Color> for raylib::prelude::Color {
-    fn from(c: Color) -> Self {
-        raylib::prelude::Color::new(c.r, c.g, c.b, c.a)
+pub(super) fn color_to_raylib(c: Color) -> raylib::prelude::Color {
+    raylib::prelude::Color::new(c.r, c.g, c.b, c.a)
+}
+
+pub(super) fn rect_to_raylib(r: Rect) -> raylib::prelude::Rectangle {
+    raylib::prelude::Rectangle::new(r.x, r.y, r.width, r.height)
+}
+
+pub(super) fn camera2d_to_raylib(c: Camera2D) -> raylib::prelude::Camera2D {
+    raylib::prelude::Camera2D {
+        target: vec2_to_raylib(c.target),
+        offset: vec2_to_raylib(c.offset),
+        rotation: c.rotation,
+        zoom: c.zoom,
     }
 }
 
-impl From<raylib::prelude::Color> for Color {
-    fn from(c: raylib::prelude::Color) -> Self {
-        Color::new(c.r, c.g, c.b, c.a)
+pub(super) fn camera2d_from_raylib(c: raylib::prelude::Camera2D) -> Camera2D {
+    Camera2D {
+        target: vec2_from_raylib(c.target),
+        offset: vec2_from_raylib(c.offset),
+        rotation: c.rotation,
+        zoom: c.zoom,
     }
 }
 
-impl From<Rect> for raylib::prelude::Rectangle {
-    fn from(r: Rect) -> Self {
-        raylib::prelude::Rectangle::new(r.x, r.y, r.width, r.height)
-    }
-}
-
-impl From<raylib::prelude::Rectangle> for Rect {
-    fn from(r: raylib::prelude::Rectangle) -> Self {
-        Rect::new(r.x, r.y, r.width, r.height)
-    }
-}
-
-impl From<Camera2D> for raylib::prelude::Camera2D {
-    fn from(c: Camera2D) -> Self {
-        raylib::prelude::Camera2D {
-            target: vec2_to_raylib(c.target),
-            offset: vec2_to_raylib(c.offset),
-            rotation: c.rotation,
-            zoom: c.zoom,
-        }
-    }
-}
-
-impl From<raylib::prelude::Camera2D> for Camera2D {
-    fn from(c: raylib::prelude::Camera2D) -> Self {
-        Camera2D {
-            target: vec2_from_raylib(c.target),
-            offset: vec2_from_raylib(c.offset),
-            rotation: c.rotation,
-            zoom: c.zoom,
-        }
-    }
-}
-
-// `Vec2` is a bare `pub use glam::Vec2;` re-export (Phase 1 decision), not a
-// local newtype like `Color`/`Rect` — so unlike those, `impl From<Vec2> for
-// raylib::prelude::Vector2` would violate the orphan rule (neither `Vec2`
-// nor `Vector2` nor `From` are local to this crate). Plain conversion
-// functions instead.
 pub(super) fn vec2_to_raylib(v: Vec2) -> raylib::prelude::Vector2 {
     raylib::prelude::Vector2::new(v.x, v.y)
 }
@@ -161,7 +133,7 @@ pub(super) fn vec2_from_raylib(v: raylib::prelude::Vector2) -> Vec2 {
 }
 
 /// Projects a raylib-space point through an already-core-typed camera,
-/// delegating to the pure-Rust `crate::systems::input::screen_to_world2d`.
+/// delegating to the pure-Rust `aberred_core::systems::input::screen_to_world2d`.
 ///
 /// Takes `camera` pre-converted (rather than raylib's `Camera2D`) so a
 /// caller projecting several points against the same camera in a loop
@@ -171,7 +143,7 @@ pub(super) fn screen_to_world2d_raylib(
     pos: raylib::prelude::Vector2,
     camera: &Camera2D,
 ) -> raylib::prelude::Vector2 {
-    vec2_to_raylib(crate::systems::input::screen_to_world2d(
+    vec2_to_raylib(aberred_core::systems::input::screen_to_world2d(
         vec2_from_raylib(pos),
         camera,
     ))
@@ -200,22 +172,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn color_round_trips_through_raylib() {
-        let c = Color::new(10, 20, 30, 40);
-        let rc: raylib::prelude::Color = c.into();
-        let back: Color = rc.into();
-        assert_eq!(c, back);
-    }
-
-    #[test]
-    fn rect_round_trips_through_raylib() {
-        let r = Rect::new(1.0, 2.0, 3.0, 4.0);
-        let rr: raylib::prelude::Rectangle = r.into();
-        let back: Rect = rr.into();
-        assert_eq!(r, back);
-    }
-
-    #[test]
     fn camera2d_round_trips_through_raylib() {
         let c = Camera2D {
             target: Vec2::new(1.0, 2.0),
@@ -223,8 +179,8 @@ mod tests {
             rotation: 45.0,
             zoom: 2.0,
         };
-        let rc: raylib::prelude::Camera2D = c.into();
-        let back: Camera2D = rc.into();
+        let rc = camera2d_to_raylib(c);
+        let back = camera2d_from_raylib(rc);
         assert_eq!(c, back);
     }
 

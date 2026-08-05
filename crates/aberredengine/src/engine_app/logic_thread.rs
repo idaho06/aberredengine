@@ -8,34 +8,34 @@ use crossbeam_channel::{Receiver, Sender};
 use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
 use super::replay::{ReplayPlayer, ReplayRecorder};
-use crate::error::EngineError;
-use crate::pacing::{Pacer, StatsWindow, TickCountdown};
+use aberred_core::error::EngineError;
+use aberred_core::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
-use crate::protocol::audio::{AudioCmd, AudioMessage};
-use crate::protocol::endpoints::RenderTx;
-use crate::protocol::endpoints::shutdown_audio;
-use crate::protocol::raw_input::InputSample;
-use crate::protocol::render_logic::{LogicMsg, RenderMsg, ReplayControl};
-use crate::protocol::snapshot::SnapshotPublisher;
-use crate::protocol::tick_input::TickInput;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::determinism_taint::DeterminismTaint;
-use crate::resources::fontmetrics::FontMetricsStore;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::gamestate::{GameState, GameStates};
-use crate::resources::input::InputState;
-use crate::resources::rawinput::ImguiCaptureMirror;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::signal_intents::SignalIntents;
-use crate::resources::texturedims::TextureDimsStore;
-use crate::resources::thread_stats::SimStats;
-use crate::resources::windowsize::WindowSize;
-use crate::resources::worldtime::WorldTime;
-use crate::systems::input::resolve_input_backlog;
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::endpoints::RenderTx;
+use aberred_core::protocol::endpoints::shutdown_audio;
+use aberred_core::protocol::raw_input::InputSample;
+use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg, ReplayControl};
+use aberred_core::protocol::snapshot::SnapshotPublisher;
+use aberred_core::protocol::tick_input::TickInput;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::determinism_taint::DeterminismTaint;
+use aberred_core::resources::fontmetrics::FontMetricsStore;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::gamestate::{GameState, GameStates};
+use aberred_core::resources::input::InputState;
+use aberred_core::resources::rawinput::ImguiCaptureMirror;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::signal_intents::SignalIntents;
+use aberred_core::resources::texturedims::TextureDimsStore;
+use aberred_core::resources::thread_stats::SimStats;
+use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::systems::input::resolve_input_backlog;
 use super::scene::SceneDescriptor;
-use crate::systems::signal_intents::apply_signal_intents;
-use crate::systems::state_hash::hash_world_state;
-use crate::systems::time::update_world_time;
+use aberred_core::systems::signal_intents::apply_signal_intents;
+use aberred_core::systems::state_hash::hash_world_state;
+use aberred_core::systems::time::update_world_time;
 
 /// Runtime state a running replay-playback session's
 /// `LogicMsg::ReplayControl` messages mutate. A `World` resource (inserted
@@ -100,7 +100,7 @@ pub(crate) struct LogicInit {
     /// `Some` when `.record_replay(path, ..)` was used.
     pub(crate) replay_recorder: Option<ReplayRecorder>,
     /// Test-harness-only: when `true`, [`EngineBuilder::setup_logic_world`]
-    /// inserts a stub [`AudioBridge`](crate::protocol::endpoints::AudioBridge)
+    /// inserts a stub [`AudioBridge`](aberred_core::protocol::endpoints::AudioBridge)
     /// (no real audio thread) via `setup_audio_stub` instead of `setup_audio`,
     /// stashing the stub's far ends into `audio_stub_ends` for the caller to
     /// retrieve. Always `false` in production (`try_run` never sets it).
@@ -129,7 +129,7 @@ pub(super) fn logic_thread(init: LogicInit) {
 /// from `logic_thread_main` so this property stays independently testable
 /// without a real `Pacer`/`Instant` drive.
 pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
-    crate::tracy::tracy_span!("sim_schedule_run");
+    aberred_core::tracy::tracy_span!("sim_schedule_run");
     sim.run(world);
     world.resource_mut::<InputState>().clear_edges();
 }
@@ -410,7 +410,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     let want_checkpoints = recorder.is_some() || matches!(source, TickInputSource::Replay(_));
 
     'main: loop {
-        if !crate::protocol::shutdown::running() {
+        if !aberred_core::protocol::shutdown::running() {
             break 'main;
         }
         let replay_state = world.resource::<ReplayRuntimeState>();
@@ -433,7 +433,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             if shutdown_requested {
                 break 'main;
             }
-            if crate::pacing::channel_disconnected(&rx_logic) {
+            if aberred_core::pacing::channel_disconnected(&rx_logic) {
                 break 'main;
             }
             world.clear_trackers();
@@ -493,7 +493,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             break 'main;
         }
 
-        if crate::pacing::channel_disconnected(&rx_logic) {
+        if aberred_core::pacing::channel_disconnected(&rx_logic) {
             break 'main;
         }
 
@@ -568,7 +568,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // dt is captured into the snapshot for render-side use (shader time
         // uniforms, perf panel), even on ticks that don't publish.
         if present_countdown.due() {
-            crate::tracy::tracy_span!("present_schedule_run");
+            aberred_core::tracy::tracy_span!("present_schedule_run");
             present.run(&mut world);
         }
 
@@ -610,11 +610,11 @@ mod tests {
 
     use tempfile::NamedTempFile;
 
-    use crate::components::mapposition::MapPosition;
-    use crate::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader};
-    use crate::resources::signal_intents::SignalIntent;
-    use crate::resources::sim_rng::SimRng;
-    use crate::resources::worldsignals::WorldSignals;
+    use aberred_core::components::mapposition::MapPosition;
+    use aberred_core::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader};
+    use aberred_core::resources::signal_intents::SignalIntent;
+    use aberred_core::resources::sim_rng::SimRng;
+    use aberred_core::resources::worldsignals::WorldSignals;
 
     fn test_replay_header() -> ReplayHeader {
         ReplayHeader {

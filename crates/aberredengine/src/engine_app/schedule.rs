@@ -3,54 +3,54 @@ use bevy_ecs::schedule::SingleThreadedExecutor;
 
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
-use crate::components::mapposition::MapPosition;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::error::EngineError;
-use crate::resources::drawable_snapshot::build_drawable_snapshot;
-use crate::systems::animation::animation;
-use crate::systems::animation::animation_controller;
-use crate::systems::audio_bridge::{
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::error::EngineError;
+use aberred_core::resources::drawable_snapshot::build_drawable_snapshot;
+use aberred_core::systems::animation::animation;
+use aberred_core::systems::animation::animation_controller;
+use aberred_core::systems::audio_bridge::{
     forward_audio_cmds, land_audio_stats, poll_audio_messages, update_bevy_audio_cmds,
     update_bevy_audio_messages,
 };
-use crate::systems::camera_follow::camera_follow_system;
-use crate::systems::collision_detector::collision_detector;
+use aberred_core::systems::camera_follow::camera_follow_system;
+use aberred_core::systems::collision_detector::collision_detector;
 use crate::systems::collision_rule_index::rebuild_collision_rule_index;
-use crate::systems::dynamictext_size::dynamictext_size_system;
-use crate::systems::gamestate::{check_pending_state, state_is_playing};
-use crate::systems::gridlayout::gridlayout_spawn_system;
-use crate::systems::group::update_group_counts_system;
-use crate::systems::gui_hit_test::gui_hit_test_system;
-use crate::systems::gui_image_state_sync::gui_image_state_sync_system;
-use crate::systems::gui_layout::gui_layout_system;
-use crate::systems::gui_progressbar_signal_update::gui_progressbar_signal_update_system;
-use crate::systems::gui_spawn::{
+use aberred_core::systems::dynamictext_size::dynamictext_size_system;
+use aberred_core::systems::gamestate::{check_pending_state, state_is_playing};
+use aberred_core::systems::gridlayout::gridlayout_spawn_system;
+use aberred_core::systems::group::update_group_counts_system;
+use aberred_core::systems::gui_hit_test::gui_hit_test_system;
+use aberred_core::systems::gui_image_state_sync::gui_image_state_sync_system;
+use aberred_core::systems::gui_layout::gui_layout_system;
+use aberred_core::systems::gui_progressbar_signal_update::gui_progressbar_signal_update_system;
+use aberred_core::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
 };
-use crate::systems::inputaccelerationcontroller::input_acceleration_controller;
-use crate::systems::inputsimplecontroller::input_simple_controller;
-use crate::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
+use aberred_core::systems::inputaccelerationcontroller::input_acceleration_controller;
+use aberred_core::systems::inputsimplecontroller::input_simple_controller;
+use aberred_core::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
 use crate::systems::menu::menu_spawn_system;
-use crate::systems::mousecontroller::mouse_controller;
-use crate::systems::movement::movement;
-use crate::systems::particleemitter::particle_emitter_system;
-use crate::systems::phase::phase_system;
-use crate::systems::propagate_transforms::{
+use aberred_core::systems::mousecontroller::mouse_controller;
+use aberred_core::systems::movement::movement;
+use aberred_core::systems::particleemitter::particle_emitter_system;
+use aberred_core::systems::phase::phase_system;
+use aberred_core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use crate::systems::render::render_system;
-use crate::systems::render_assets::update_bevy_render_asset_cmds;
-use crate::systems::scene_dispatch::{scene_switch_poll, scene_update_system};
-use crate::systems::signal_intents::apply_signal_intents;
-use crate::systems::signalbinding::update_world_signals_binding_system;
-use crate::systems::stuckto::stuck_to_entity_system;
-use crate::systems::tilemap::tilemap_spawn_system;
-use crate::systems::timer::update_timers;
-use crate::systems::ttl::ttl_system;
-use crate::systems::tween::tween_system;
-use crate::systems::window::detect_window_resize;
+use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
+use aberred_core::systems::scene_dispatch::{scene_switch_poll, scene_update_system};
+use aberred_core::systems::signal_intents::apply_signal_intents;
+use aberred_core::systems::signalbinding::update_world_signals_binding_system;
+use aberred_core::systems::stuckto::stuck_to_entity_system;
+use aberred_core::systems::tilemap::tilemap_spawn_system;
+use aberred_core::systems::timer::update_timers;
+use aberred_core::systems::ttl::ttl_system;
+use aberred_core::systems::tween::tween_system;
+use aberred_core::systems::window::detect_window_resize;
 
 #[cfg(feature = "lua")]
 use crate::systems::lua_setup_entity::lua_setup_entity_system;

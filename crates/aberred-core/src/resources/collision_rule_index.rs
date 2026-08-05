@@ -36,7 +36,7 @@ pub(crate) fn normalize_pair(a: &str, b: &str) -> (String, String) {
 /// [`CollisionRuleIndex`] hold two instances without hand-duplicating
 /// `is_empty`/`bucket` for each.
 #[derive(Default)]
-pub(crate) struct RuleBuckets(FxHashMap<(String, String), SmallVec<[Entity; 2]>>);
+pub struct RuleBuckets(FxHashMap<(String, String), SmallVec<[Entity; 2]>>);
 
 impl RuleBuckets {
     fn is_empty(&self) -> bool {
@@ -49,7 +49,12 @@ impl RuleBuckets {
 
     /// Clears and refills from `rules`, sorting each resulting sub-bucket by
     /// `Entity` so "first match wins" is deterministic.
-    pub(crate) fn rebuild<'a>(
+    ///
+    /// `pub`, not `pub(crate)`: the facade's Lua-aware
+    /// `aberredengine::systems::collision_rule_index::rebuild_collision_rule_index`
+    /// calls this directly on `CollisionRuleIndex::lua`, since that variant
+    /// (indexing `LuaCollisionRule`) cannot live in `aberred-core`.
+    pub fn rebuild<'a>(
         &mut self,
         rules: impl Iterator<Item = (Entity, &'a String, &'a String)>,
     ) {
@@ -72,9 +77,12 @@ impl RuleBuckets {
 /// `#[cfg(feature = "lua")]`.
 #[derive(Resource, Default)]
 pub struct CollisionRuleIndex {
+    /// `pub`, not `pub(crate)`: the facade's Lua-aware `rebuild_collision_rule_index`
+    /// (which cannot live in `aberred-core` -- it names `LuaCollisionRule`)
+    /// writes this field directly.
     #[cfg(feature = "lua")]
-    pub(crate) lua: RuleBuckets,
-    pub(crate) rust: RuleBuckets,
+    pub lua: RuleBuckets,
+    pub rust: RuleBuckets,
 }
 
 impl CollisionRuleIndex {

@@ -2,15 +2,15 @@ use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 
 use super::builder::EngineBuilder;
-use crate::components::persistent::Persistent;
-use crate::error::EngineError;
+use aberred_core::components::persistent::Persistent;
+use aberred_core::error::EngineError;
 use crate::events::render::switchfullscreen::switch_fullscreen_observer;
-use crate::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bridge};
-use crate::protocol::render_assets::RenderAssetCmd;
-use crate::protocol::snapshot::SnapshotConsumer;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::GuiThemeWarnCache;
+use aberred_core::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bridge};
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::protocol::snapshot::SnapshotConsumer;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::guitheme::GuiThemeWarnCache;
 use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::imgui_bridge::ImguiBridge;
 use crate::resources::render::mirrors::{
@@ -25,9 +25,9 @@ use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::sim_id_map::SimIdMap;
 use crate::resources::render::texturestore::TextureStore;
 use crate::resources::render::thread_stats::RenderStats;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::signal_intents::SignalIntents;
-use crate::resources::windowsize::WindowSize;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::signal_intents::SignalIntents;
+use aberred_core::resources::windowsize::WindowSize;
 use crate::systems::render::apply_gameconfig_changes;
 use crate::systems::render::input::sample_and_send_input;
 use crate::systems::render::messages::pump_render_msgs;
@@ -36,7 +36,7 @@ use crate::systems::render::process_render_asset_cmds;
 use crate::systems::render::render_system;
 use crate::systems::render::snapshot::receive_snapshot;
 use crate::systems::render::window::refresh_window_size;
-use crate::systems::render_assets::update_bevy_render_asset_cmds;
+use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 
 impl EngineBuilder {
     /// Build the render (main-thread) `World`: raylib window +

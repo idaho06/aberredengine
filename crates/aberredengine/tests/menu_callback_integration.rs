@@ -3,22 +3,22 @@
 //! Validates that menu selection correctly follows the priority chain:
 //! Lua callback → Rust callback → `MenuActions`.
 
-use aberredengine::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
-use aberredengine::events::menu::MenuSelectionEvent;
-use aberredengine::protocol::audio::AudioCmd;
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::resources::gameconfig::GameConfig;
-use aberredengine::resources::gamestate::{GameState, NextGameState};
-use aberredengine::resources::input_bindings::InputBindings;
+use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
+use aberredengine::core::events::menu::MenuSelectionEvent;
+use aberredengine::core::protocol::audio::AudioCmd;
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::core::resources::camerafollowconfig::CameraFollowConfig;
+use aberredengine::core::resources::gameconfig::GameConfig;
+use aberredengine::core::resources::gamestate::{GameState, NextGameState};
+use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
-use aberredengine::resources::postprocessshader::PostProcessShader;
+use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::render::texturestore::TextureStore;
-use aberredengine::resources::systemsstore::SystemsStore;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::GameCtx;
+use aberredengine::core::resources::systemsstore::SystemsStore;
+use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::worldtime::WorldTime;
+use aberredengine::core::systems::GameCtx;
 use aberredengine::systems::menu::menu_selection_observer;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
@@ -52,7 +52,7 @@ fn spawn_menu(world: &mut World, labels: &[(&str, &str)]) -> Entity {
     world
         .spawn(Menu::new(
             labels,
-            aberredengine::math::Vec2::ZERO,
+            aberredengine::core::math::Vec2::ZERO,
             "test_font",
             16.0,
             20.0,
@@ -88,7 +88,7 @@ fn rust_callback_invoked_with_correct_args() {
         .spawn(
             Menu::new(
                 &[("play", "Play"), ("options", "Options"), ("quit", "Quit")],
-                aberredengine::math::Vec2::ZERO,
+                aberredengine::core::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -180,7 +180,7 @@ fn rust_callback_takes_priority_over_menu_actions() {
         .spawn(
             Menu::new(
                 &[("start", "Start")],
-                aberredengine::math::Vec2::ZERO,
+                aberredengine::core::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -269,7 +269,7 @@ fn callback_receives_correct_indices() {
         .spawn(
             Menu::new(
                 &[("a", "A"), ("b", "B"), ("c", "C")],
-                aberredengine::math::Vec2::ZERO,
+                aberredengine::core::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -324,7 +324,7 @@ fn unknown_item_id_defaults_to_index_zero() {
         .spawn(
             Menu::new(
                 &[("a", "A"), ("b", "B")],
-                aberredengine::math::Vec2::ZERO,
+                aberredengine::core::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,
@@ -380,7 +380,7 @@ fn lua_callback_takes_priority_over_rust_callback() {
         .spawn(
             Menu::new(
                 &[("play", "Play")],
-                aberredengine::math::Vec2::ZERO,
+                aberredengine::core::math::Vec2::ZERO,
                 "test_font",
                 16.0,
                 20.0,

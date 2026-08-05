@@ -74,9 +74,12 @@ pub enum EngineError {
     #[error("Failed to initialize imgui bridge: {message}")]
     Imgui { message: String },
 
-    #[cfg(feature = "lua")]
+    /// Carries `mlua::Error`'s `Display` output as a plain `String` --
+    /// `aberred-core` cannot depend on `mlua` (Lua is facade-only), so the
+    /// Lua-side caller converts via `.map_err(|e| EngineError::Lua(e.to_string()))`
+    /// instead of `#[from]`.
     #[error("Failed to create Lua runtime: {0}")]
-    Lua(#[from] mlua::Error),
+    Lua(String),
 
     #[error("Failed to initialize {which} schedule: {source}")]
     ScheduleInit {

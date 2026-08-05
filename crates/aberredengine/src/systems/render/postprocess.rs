@@ -4,17 +4,18 @@ use raylib::ffi;
 use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 
-use crate::components::mapposition::MapPosition;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::resources::postprocessshader::PostProcessShader;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::resources::postprocessshader::PostProcessShader;
 use crate::resources::render::rendertarget::RenderTarget;
 use crate::resources::render::shaderstore::ShaderStore;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::uniformvalue::UniformValue;
-use crate::resources::windowsize::WindowSize;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::uniformvalue::UniformValue;
+use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::worldtime::WorldTime;
 
+use super::math::rect_to_raylib;
 use super::render::SourceBuffer;
 
 /// Apply post-processing shader passes and blit the final image to the window.
@@ -41,9 +42,9 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
     let src = render_target.source_rect();
 
     // Destination rectangle (letterboxed to fit window)
-    let dest: Rectangle = window_size
-        .calculate_letterbox(render_target.game_width, render_target.game_height)
-        .into();
+    let dest: Rectangle = rect_to_raylib(
+        window_size.calculate_letterbox(render_target.game_width, render_target.game_height),
+    );
 
     // Full-screen destination for intermediate passes (no letterboxing)
     let full_dest = Rectangle {
@@ -145,7 +146,7 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                 // Draw to window
                 let mut d = rl.begin_drawing(th);
                 {
-                    crate::tracy::tracy_span!("render/draw_commands");
+                    aberred_core::tracy::tracy_span!("render/draw_commands");
                     d.clear_background(Color::BLACK);
 
                     if let Some(entry) = shader_store.get_mut(shader_key.as_ref()) {
@@ -165,7 +166,7 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                 }
                 {
                     // Drop the drawing handle here: EndDrawing() → SwapBuffers → vsync wait.
-                    crate::tracy::tracy_span!("render/present_vsync");
+                    aberred_core::tracy::tracy_span!("render/present_vsync");
                     drop(d);
                 }
                 final_blit_done = true;
@@ -263,7 +264,7 @@ pub(super) fn blit_to_window<F: FnOnce(&RaylibDrawHandle<'_>)>(
 ) {
     let mut d = rl.begin_drawing(th);
     {
-        crate::tracy::tracy_span!("render/draw_commands");
+        aberred_core::tracy::tracy_span!("render/draw_commands");
         d.clear_background(Color::BLACK);
         d.draw_texture_pro(
             tex,
@@ -279,7 +280,7 @@ pub(super) fn blit_to_window<F: FnOnce(&RaylibDrawHandle<'_>)>(
     }
     {
         // Drop the drawing handle here: EndDrawing() → SwapBuffers → vsync wait.
-        crate::tracy::tracy_span!("render/present_vsync");
+        aberred_core::tracy::tracy_span!("render/present_vsync");
         drop(d);
     }
 }

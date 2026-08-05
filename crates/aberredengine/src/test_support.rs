@@ -5,7 +5,7 @@
 //! `logic_thread_main` calls (`setup_logic_world` -> `register_logic_systems`
 //! -> `spawn_observers` -> `build_logic_schedules`) -- no raylib window, no
 //! GL, no real audio thread (a stub `AudioBridge` is inserted instead, see
-//! [`crate::protocol::endpoints::setup_audio_stub`]), and Lua only if
+//! [`aberred_core::protocol::endpoints::setup_audio_stub`]), and Lua only if
 //! [`TestWorldBuilder::with_lua`] is used. This is deliberately NOT a
 //! from-scratch minimal `World` (see `tests/engine_tick_integration.rs`'s
 //! `make_world` for what that looks like at scale) -- if this harness ever
@@ -24,7 +24,7 @@
 //!   `AudioMessage` replies injected.
 //! - `sent_to_render`: a plain `RenderMsg` channel the harness owns instead
 //!   of a real render thread.
-//! - `send_input`/[`resolve_input_backlog`](crate::systems::input::resolve_input_backlog):
+//! - `send_input`/[`resolve_input_backlog`](aberred_core::systems::input::resolve_input_backlog):
 //!   the harness calls this function DIRECTLY rather than routing a sample
 //!   through the real bounded `InputSample` channel -- that channel only
 //!   exists because [`LogicInit`] requires an `rx_input` field, and is never
@@ -40,25 +40,25 @@ use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 #[cfg(feature = "lua")]
 use std::path::PathBuf;
 
-use crate::components::persistent::Persistent;
+use aberred_core::components::persistent::Persistent;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     hook_registrar, run_sim_tick,
 };
-use crate::protocol::audio::{AudioCmd, AudioMessage};
-use crate::protocol::raw_input::RawDeviceSnapshot;
-use crate::protocol::render_logic::{LogicMsg, RenderMsg};
-use crate::protocol::snapshot::SnapshotPublisher;
-use crate::protocol::tick_input::TickInput;
-use crate::resources::drawable_snapshot::DrawableSnapshot;
-use crate::resources::fontmetrics::{FontMetrics, FontMetricsStore};
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::gamestate::{GameState, GameStates, NextGameState};
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::texturedims::TextureDimsStore;
-use crate::systems::input::resolve_input_backlog;
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::raw_input::RawDeviceSnapshot;
+use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
+use aberred_core::protocol::snapshot::SnapshotPublisher;
+use aberred_core::protocol::tick_input::TickInput;
+use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::resources::fontmetrics::{FontMetrics, FontMetricsStore};
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::resources::texturedims::TextureDimsStore;
+use aberred_core::systems::input::resolve_input_backlog;
 use crate::engine_app::SceneDescriptor;
-use crate::systems::time::update_world_time;
+use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
 ///
@@ -180,7 +180,7 @@ impl TestWorldBuilder {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 system
-                    .run_if(crate::systems::gamestate::state_is_playing)
+                    .run_if(aberred_core::systems::gamestate::state_is_playing)
                     .in_set(crate::engine_app::SimSet::ScriptUpdate),
             );
         }));
@@ -195,7 +195,7 @@ impl TestWorldBuilder {
             .push(Box::new(move |schedule: &mut Schedule| {
                 schedule.add_systems(
                     system
-                        .run_if(crate::systems::gamestate::state_is_playing)
+                        .run_if(aberred_core::systems::gamestate::state_is_playing)
                         .in_set(crate::engine_app::SimSet::ScriptUpdate),
                 );
             }));
@@ -255,7 +255,7 @@ impl TestWorldBuilder {
         self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
             schedule.add_systems(
                 lua_plugin::update
-                    .run_if(crate::systems::gamestate::state_is_playing)
+                    .run_if(aberred_core::systems::gamestate::state_is_playing)
                     .in_set(crate::engine_app::SimSet::Bookkeeping),
             );
         }));
@@ -269,7 +269,7 @@ impl TestWorldBuilder {
     /// Build the [`TestWorld`], calling the same four production
     /// `EngineBuilder` functions `logic_thread_main` calls, in the same
     /// order.
-    pub fn build(mut self) -> Result<TestWorld, crate::error::EngineError> {
+    pub fn build(mut self) -> Result<TestWorld, aberred_core::error::EngineError> {
         let use_scene_manager = !self.scenes.is_empty();
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
@@ -453,14 +453,14 @@ impl Default for TestWorld {
 
 /// Full-world deterministic state hash -- see `crate::systems::state_hash`.
 pub fn hash_world_state(world: &World) -> u64 {
-    crate::systems::state_hash::hash_world_state(world)
+    aberred_core::systems::state_hash::hash_world_state(world)
 }
 
 /// Write `ticks` (one entry per tick, in order, no checkpoints) to a replay
 /// file at `path`.
 pub fn write_tick_inputs_to_replay(
     path: &std::path::Path,
-    header: crate::protocol::replay::ReplayHeader,
+    header: aberred_core::protocol::replay::ReplayHeader,
     ticks: &[TickInput],
 ) -> std::io::Result<()> {
     let mut rec = crate::engine_app::ReplayRecorder::create(path, &header)?;
@@ -477,7 +477,7 @@ pub fn write_tick_inputs_to_replay(
 pub fn read_tick_inputs_from_replay(
     path: &std::path::Path,
     n: usize,
-) -> (crate::protocol::replay::ReplayHeader, Vec<TickInput>) {
+) -> (aberred_core::protocol::replay::ReplayHeader, Vec<TickInput>) {
     let (header, mut player) = crate::engine_app::ReplayPlayer::open_header(path)
         .expect("read_tick_inputs_from_replay: failed to open replay file");
     let mut out = Vec::with_capacity(n);
@@ -492,9 +492,9 @@ pub fn read_tick_inputs_from_replay(
 /// Validate a replay header against a `GameConfig`, mirroring
 /// `EngineBuilder::try_run`'s own check.
 pub fn validate_replay_header(
-    header: &crate::protocol::replay::ReplayHeader,
+    header: &aberred_core::protocol::replay::ReplayHeader,
     config: &GameConfig,
-) -> Result<(), crate::error::EngineError> {
+) -> Result<(), aberred_core::error::EngineError> {
     crate::engine_app::validate_replay_header(header, config)
 }
 

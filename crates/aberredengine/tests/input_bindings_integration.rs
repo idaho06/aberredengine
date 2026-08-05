@@ -9,8 +9,8 @@
 //! - `key_from_str` / `key_to_str` round-trips for all documented keys.
 //! - Unknown action/key strings in commands are silently ignored, not panicked.
 
-use aberredengine::events::input::InputAction;
-use aberredengine::resources::input_bindings::{
+use aberredengine::core::events::input::InputAction;
+use aberredengine::core::resources::input_bindings::{
     GamepadButton, InputBinding, InputBindings, Key, MouseButton, binding_from_str, key_from_str,
     key_to_str,
 };
@@ -402,7 +402,7 @@ fn test_input_bindings_mutation_via_ecs_system_state() {
 /// `Default` before the refactor).
 #[test]
 fn test_bool_state_derives_default_without_key_binding() {
-    use aberredengine::resources::input::BoolState;
+    use aberredengine::core::resources::input::BoolState;
     let state: BoolState = BoolState::default();
     // All sub-fields should be false/zero
     assert!(!state.active);

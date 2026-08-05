@@ -2,7 +2,7 @@
 //!
 //! Attach this component (one per tweened type `T`) to any entity whose
 //! `Tween<T>` should invoke a Lua function when it stops playing after
-//! reaching its end — see [`TweenFinishedEvent`](crate::events::tween::TweenFinishedEvent).
+//! reaching its end — see [`TweenFinishedEvent`](aberred_core::events::tween::TweenFinishedEvent).
 //!
 //! # Lua callback signature
 //!
@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
 
-use crate::components::tween::TweenValue;
+use aberred_core::components::tween::TweenValue;
 
 /// Attaches a Lua callback to be called when the entity's `Tween<T>` finishes.
 #[derive(Component, Clone, Debug)]

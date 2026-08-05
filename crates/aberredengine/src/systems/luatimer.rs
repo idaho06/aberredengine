@@ -34,10 +34,10 @@ use bevy_ecs::prelude::*;
 
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use crate::events::luatimer::LuaTimerEvent;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 
-use super::timer_core::{TimerRunner, run_timer_update};
+use aberred_core::systems::timer_core::{TimerRunner, run_timer_update};
 
 struct LuaTimerRunner<'a, 'w, 's> {
     commands: &'a mut Commands<'w, 's>,

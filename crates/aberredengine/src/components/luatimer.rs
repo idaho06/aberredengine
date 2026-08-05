@@ -52,7 +52,7 @@
 //! - [`crate::systems::luatimer::lua_timer_observer`] – observer that executes Lua callbacks
 //! - [`crate::events::luatimer::LuaTimerEvent`] – event emitted when timer expires
 
-use super::timer::Timer;
+use aberred_core::components::timer::Timer;
 
 /// Lua callback function name for a timer.
 ///
@@ -68,7 +68,7 @@ pub struct LuaTimerCallback {
 ///
 /// Type alias over the generic [`Timer`] using [`LuaTimerCallback`] as the
 /// callback payload. The timer accumulates time from
-/// [`WorldTime`](crate::resources::worldtime::WorldTime) and emits a
+/// [`WorldTime`](aberred_core::resources::worldtime::WorldTime) and emits a
 /// [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when
 /// `elapsed >= duration`.
 pub type LuaTimer = Timer<LuaTimerCallback>;

@@ -12,9 +12,10 @@
 //! [`crate::systems::audio_bridge`], not here.
 //!
 //! Notes
-//! - The audio thread must be created once via
-//!   [`crate::protocol::endpoints::setup_audio`] and joined/terminated via
-//!   [`crate::protocol::endpoints::shutdown_audio`].
+//! - The audio thread must be created once via [`setup_audio`] (this
+//!   module, not core -- spawning [`audio_thread`] needs Raylib, which
+//!   `aberred-core` cannot depend on) and joined/terminated via
+//!   [`aberred_core::protocol::endpoints::shutdown_audio`].
 //! - All file I/O (load) and control (play/stop/pause/volume) happen on the
 //!   audio thread in response to commands.
 //! - Music streaming requires periodic `update_stream()` calls; the audio
@@ -26,9 +27,35 @@
 //!   Accepted tradeoff: constant wakeups at `audio_hz` instead of blocking
 //!   while idle (negligible at the default 100Hz with `spin_sleep`).
 //!
-//! See also: [`crate::protocol::audio`] and [`crate::protocol::endpoints`].
+//! See also: [`aberred_core::protocol::audio`] and [`aberred_core::protocol::endpoints`].
 
 mod systems;
 mod world;
 
 pub use world::audio_thread;
+
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::endpoints::insert_audio_bridge_resources;
+use bevy_ecs::world::World;
+use crossbeam_channel::unbounded;
+
+/// Spawn the audio thread and register bridge resources.
+///
+/// This function:
+/// - Creates command/event channels.
+/// - Spawns the background thread running [`audio_thread`], paced at
+///   `audio_hz`, read once here at spawn time -- a runtime change to
+///   `GameConfig::audio_hz` afterward has no effect.
+/// - Inserts `AudioBridge` and initializes `Messages<AudioMessage>` so that
+///   systems can send commands and poll for events.
+///
+/// Lives in the facade, not `aberred-core`, because [`audio_thread`] owns a
+/// Raylib audio device -- `aberred-core` cannot depend on Raylib.
+pub fn setup_audio(world: &mut World, audio_hz: f64) {
+    let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
+    let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
+
+    let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_msg, audio_hz));
+
+    insert_audio_bridge_resources(world, tx_cmd, rx_msg, handle);
+}

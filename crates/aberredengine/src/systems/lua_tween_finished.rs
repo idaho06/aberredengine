@@ -20,8 +20,8 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
-use crate::components::tween::TweenValue;
-use crate::events::tween::TweenFinishedEvent;
+use aberred_core::components::tween::TweenValue;
+use aberred_core::events::tween::TweenFinishedEvent;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 
 pub fn lua_tween_finished_observer<T: TweenValue>(

@@ -3,9 +3,9 @@
 use bevy_ecs::prelude::*;
 
 use crate::events::render::switchfullscreen::SwitchFullScreenEvent;
-use crate::protocol::endpoints::LogicBridge;
-use crate::protocol::render_assets::RenderAssetCmd;
-use crate::protocol::render_logic::RenderMsg;
+use aberred_core::protocol::endpoints::LogicBridge;
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::protocol::render_logic::RenderMsg;
 use crate::resources::render::quit_requested::QuitRequested;
 
 /// Drains logic->render messages once per frame: re-queues asset commands

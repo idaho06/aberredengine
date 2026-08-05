@@ -7,28 +7,28 @@ use log::warn;
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use crate::math::Vec2;
+use aberred_core::math::Vec2;
 
-use crate::components::cameratarget::CameraTarget;
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::guiinteractable::GuiWidgetState;
+use aberred_core::components::cameratarget::CameraTarget;
+use aberred_core::components::entityshader::EntityShader;
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::guiinteractable::GuiWidgetState;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
-use crate::components::mapposition::MapPosition;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::shadow::Shadow;
-use crate::components::stuckto::StuckTo;
-use crate::components::tint::Tint;
-use crate::components::ttl::Ttl;
-use crate::components::tween::{Tween, TweenValue};
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::tint::Tint;
+use aberred_core::components::ttl::Ttl;
+use aberred_core::components::tween::{Tween, TweenValue};
 
-use crate::resources::animationstore::AnimationStore;
+use aberred_core::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{EntityCmd, TweenConfig, UniformValue};
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
+use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::worldsignals::WorldSignals;
 
 use super::EntityCmdQueries;
 
@@ -798,7 +798,7 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                         y: stored_vy,
                     }),
                 })
-                .try_remove::<crate::components::rigidbody::RigidBody>();
+                .try_remove::<aberred_core::components::rigidbody::RigidBody>();
             });
         }
         EntityCmd::ReleaseStuckTo { entity_id } => {
@@ -812,7 +812,7 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                 .and_then(|stuckto| stuckto.stored_velocity);
             with_entity_cmds(commands, entity, |ec| {
                 if let Some(velocity) = stored_velocity {
-                    let mut rb = crate::components::rigidbody::RigidBody::new();
+                    let mut rb = aberred_core::components::rigidbody::RigidBody::new();
                     rb.velocity = velocity;
                     ec.try_insert(rb);
                 }
@@ -877,7 +877,7 @@ fn process_lifecycle_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::guiinteractable::GuiInteractable;
+    use aberred_core::components::guiinteractable::GuiInteractable;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 
     #[test]

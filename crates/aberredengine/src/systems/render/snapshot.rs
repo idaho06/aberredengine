@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 
-use crate::protocol::snapshot::SnapshotConsumer;
+use aberred_core::protocol::snapshot::SnapshotConsumer;
 use crate::resources::render::mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
 
+use super::math::camera2d_to_raylib;
 use super::mirror::{
     reconcile_gui_buttons, reconcile_gui_labels, reconcile_gui_progress_bars,
     reconcile_gui_windows, reconcile_map_sprites, reconcile_map_texts, reconcile_screen_sprites,
@@ -65,7 +66,7 @@ pub fn receive_snapshot(world: &mut World) {
         reconcile_gui_labels(world, &snap.gui_labels);
         reconcile_gui_progress_bars(world, &snap.gui_progress_bars);
 
-        world.resource_mut::<RenderCamera>().0 = snap.camera.into();
+        world.resource_mut::<RenderCamera>().0 = camera2d_to_raylib(snap.camera);
         world
             .resource_mut::<RenderGameConfig>()
             .0

@@ -2,7 +2,7 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::resources::windowsize::WindowSize;
+use aberred_core::resources::windowsize::WindowSize;
 
 /// Refreshes `WindowSize` from the OS before input sampling -- first step
 /// of the render schedule, since `sample_and_send_input` needs the

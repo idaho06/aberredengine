@@ -3,13 +3,13 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::protocol::endpoints::LogicBridge;
-use crate::protocol::render_logic::LogicMsg;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::protocol::endpoints::LogicBridge;
+use aberred_core::protocol::render_logic::LogicMsg;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::render::imgui_bridge::ImguiBridge;
 use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::signal_intents::SignalIntents;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::signal_intents::SignalIntents;
 
 /// Diffs the render-owned mirrors (`ScreenSize`, `DebugOverlayConfig`)
 /// against their previous-frame values and sends `LogicMsg`s on change;

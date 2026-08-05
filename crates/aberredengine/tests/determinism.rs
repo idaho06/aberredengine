@@ -21,18 +21,18 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::components::boxcollider::BoxCollider;
-use aberredengine::components::collision::{BoxSides, CollisionRule};
-use aberredengine::components::group::Group;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::protocol::raw_input::RawDeviceSnapshot;
-use aberredengine::protocol::tick_input::TickInput;
+use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::collision::{BoxSides, CollisionRule};
+use aberredengine::core::components::group::Group;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
+use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::raylib::ffi::KeyboardKey;
-use aberredengine::resources::input::InputState;
-use aberredengine::resources::screensize::ScreenSize;
-use aberredengine::resources::signal_intents::SignalIntent;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::systems::game_ctx::GameCtx;
+use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::core::resources::signal_intents::SignalIntent;
+use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::systems::GameCtx;
 use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 
 mod common;
@@ -347,11 +347,11 @@ fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
 
 // --- determinism-05-replays.md: state hash + replay recorder/player -------
 
-use aberredengine::EngineError;
-use aberredengine::protocol::replay::{
+use aberredengine::core::EngineError;
+use aberredengine::core::protocol::replay::{
     REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest,
 };
-use aberredengine::resources::gameconfig::GameConfig;
+use aberredengine::core::resources::gameconfig::GameConfig;
 use aberredengine::test_support::{
     hash_world_state, read_tick_inputs_from_replay, validate_replay_header,
     write_tick_inputs_to_replay,

@@ -9,7 +9,7 @@
 #![allow(dead_code)]
 
 use aberredengine::bevy_ecs::prelude::World;
-use aberredengine::resources::sim_rng::SimRng;
+use aberredengine::core::resources::sim_rng::SimRng;
 
 /// Fixed per-tick `dt` used by `TestWorld::tick`/`tick_to_play` calls across
 /// the integration test suite (60Hz-equivalent).

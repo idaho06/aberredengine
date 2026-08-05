@@ -1,10 +1,10 @@
 use raylib::prelude::*;
 
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::mapposition::MapPosition;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::sprite::Sprite;
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::sprite::Sprite;
 
 /// Computed geometry for a sprite draw call via Raylib's `draw_texture_pro`.
 ///
@@ -275,7 +275,7 @@ pub(super) fn draw_rotated_rect_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::Vec2;
+    use aberred_core::math::Vec2;
     use std::sync::Arc;
 
     const EPSILON: f32 = 1e-6;

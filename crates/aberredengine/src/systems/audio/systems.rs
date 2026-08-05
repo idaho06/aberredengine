@@ -15,7 +15,7 @@ use raylib::ffi;
 use crate::components::audio::handles::{FfiHandle, MusicHandle};
 use crate::components::audio::music_track::MusicTrack;
 use crate::components::audio::playing_fx::PlayingFx;
-use crate::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::audio::store::AudioStore;
 

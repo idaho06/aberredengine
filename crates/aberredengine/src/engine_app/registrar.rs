@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::*;
 
 use super::logic_world::register_persistent_system;
-use crate::resources::systemsstore::SystemsStore;
+use aberred_core::resources::systemsstore::SystemsStore;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.

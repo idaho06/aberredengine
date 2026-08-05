@@ -7,31 +7,31 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
-use crate::math::Vec2;
-use crate::resources::camera2d::Camera2D;
+use aberred_core::math::Vec2;
+use aberred_core::resources::camera2d::Camera2D;
 
-use crate::components::phase::Phase;
-use crate::components::shadow::Shadow;
-use crate::math::{Color, Rect};
-use crate::protocol::audio::AudioCmd;
-use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::animationstore::{AnimationResource, AnimationStore};
-use crate::resources::camera2d::Camera2DRes;
-use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::group::TrackedGroups;
-use crate::resources::guitheme::{
+use aberred_core::components::phase::Phase;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::math::{Color, Rect};
+use aberred_core::protocol::audio::AudioCmd;
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::resources::animationstore::{AnimationResource, AnimationStore};
+use aberred_core::resources::camera2d::Camera2DRes;
+use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::group::TrackedGroups;
+use aberred_core::resources::guitheme::{
     GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore,
 };
-use crate::resources::input_bindings::{InputBindings, binding_from_str};
+use aberred_core::resources::input_bindings::{InputBindings, binding_from_str};
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd, GameConfigCmd, GroupCmd,
     InputCmd, PhaseCmd, RenderCmd, SignalCmd,
 };
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::texturefilter::TextureFilter;
-use crate::resources::worldsignals::WorldSignals;
-use crate::systems::phase_core::queue_phase_transition;
+use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::texturefilter::TextureFilter;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::systems::phase_core::queue_phase_transition;
 
 /// Process a single audio command from Lua and write to the audio command channel.
 pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd: AudioLuaCmd) {
@@ -635,23 +635,23 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::prelude::{MessageReader, MessageWriter, World};
     use bevy_ecs::system::SystemState;
-    use crate::math::Vec2;
+    use aberred_core::math::Vec2;
 
     use super::{
         process_animation_command, process_audio_command, process_render_command,
         process_signal_command, translate_asset_command,
     };
-    use crate::math::Color;
-    use crate::protocol::audio::AudioCmd;
-    use crate::protocol::render_assets::RenderAssetCmd;
-    use crate::resources::animationstore::AnimationStore;
-    use crate::resources::guitheme::GuiThemeStore;
+    use aberred_core::math::Color;
+    use aberred_core::protocol::audio::AudioCmd;
+    use aberred_core::protocol::render_assets::RenderAssetCmd;
+    use aberred_core::resources::animationstore::AnimationStore;
+    use aberred_core::resources::guitheme::GuiThemeStore;
     use crate::resources::lua_runtime::{
         AnimationCmd, AssetCmd, AudioLuaCmd, RenderCmd, SignalCmd,
     };
-    use crate::resources::postprocessshader::PostProcessShader;
-    use crate::resources::texturefilter::TextureFilter;
-    use crate::resources::worldsignals::WorldSignals;
+    use aberred_core::resources::postprocessshader::PostProcessShader;
+    use aberred_core::resources::texturefilter::TextureFilter;
+    use aberred_core::resources::worldsignals::WorldSignals;
 
     /// Bundled writers for both message types `translate_asset_command`
     /// can produce, plus a helper to read back what was written.

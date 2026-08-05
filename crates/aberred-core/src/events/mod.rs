@@ -1,0 +1,30 @@
+//! Event types and observers used by the engine.
+//!
+//! This module groups the domain events exchanged across systems and the
+//! corresponding observers that react to them. Events provide a decoupled
+//! way for systems to communicate without tight coupling or direct
+//! dependencies.
+//!
+//! Submodules:
+//! - [`collision`] – collision notifications emitted by the physics/collision system
+//! - [`gamestate`] – state transition notifications for the high-level game flow
+//! - [`gui_interactable`] – GUI interactable (button/image) click events
+//! - [`input`] – input action events (key press/release)
+//! - [`menu`] – menu selection events
+//! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
+//! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
+//! - [`render`] – events/observers used only by the render (main) thread (F10 fullscreen toggle)
+//!
+//! See each submodule for concrete event data, semantics, and example usage.
+
+pub mod animation;
+pub mod collision;
+pub mod gamestate;
+pub mod gui_interactable;
+pub mod input;
+pub mod menu;
+pub mod spawnmap;
+pub mod switchdebug;
+pub mod timer;
+pub mod tween;
+pub mod window;

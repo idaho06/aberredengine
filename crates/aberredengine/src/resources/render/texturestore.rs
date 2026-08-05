@@ -3,7 +3,7 @@
 //! A thin wrapper around a hash map that stores `raylib::prelude::Texture2D`
 //! objects keyed by string IDs. Insert textures during setup and read them in
 //! render systems.
-use crate::resources::texturefilter::TextureFilter;
+use aberred_core::resources::texturefilter::TextureFilter;
 use crate::systems::render::math::texture_filter_to_ffi;
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;

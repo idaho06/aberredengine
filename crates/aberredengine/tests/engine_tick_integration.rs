@@ -4,67 +4,67 @@
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemState;
-use aberredengine::math::Vec2;
+use aberredengine::core::math::Vec2;
 
-use aberredengine::components::animation::{Animation, AnimationController, Condition};
-use aberredengine::components::boxcollider::BoxCollider;
-use aberredengine::components::collision::{BoxSides, CollisionCallback, CollisionRule};
-use aberredengine::components::group::Group;
+use aberredengine::core::components::animation::{Animation, AnimationController, Condition};
+use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::collision::{BoxSides, CollisionCallback, CollisionRule};
+use aberredengine::core::components::group::Group;
 #[cfg(feature = "lua")]
 use aberredengine::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
 #[cfg(feature = "lua")]
 use aberredengine::components::luaphase::{LuaPhase, PhaseCallbacks};
 #[cfg(feature = "lua")]
 use aberredengine::components::luatimer::{LuaTimer, LuaTimerCallback};
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::rigidbody::RigidBody;
-use aberredengine::components::rotation::Rotation;
-use aberredengine::components::scale::Scale;
-use aberredengine::components::signals::Signals;
-use aberredengine::components::sprite::Sprite;
-use aberredengine::components::stuckto::StuckTo;
-use aberredengine::components::timer::{Timer, TimerCallback};
-use aberredengine::components::ttl::Ttl;
-use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use aberredengine::events::collision::CollisionEvent;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::rotation::Rotation;
+use aberredengine::core::components::scale::Scale;
+use aberredengine::core::components::signals::Signals;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::stuckto::StuckTo;
+use aberredengine::core::components::timer::{Timer, TimerCallback};
+use aberredengine::core::components::ttl::Ttl;
+use aberredengine::core::components::tween::{Easing, LoopMode, Tween};
+use aberredengine::core::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
 use aberredengine::events::luatimer::LuaTimerEvent;
-use aberredengine::events::timer::TimerEvent;
-use aberredengine::protocol::audio::AudioCmd;
-use aberredengine::resources::animationstore::{AnimationResource, AnimationStore};
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::resources::gameconfig::GameConfig;
-use aberredengine::resources::group::TrackedGroups;
-use aberredengine::resources::input::InputState;
-use aberredengine::resources::input_bindings::InputBindings;
+use aberredengine::core::events::timer::TimerEvent;
+use aberredengine::core::protocol::audio::AudioCmd;
+use aberredengine::core::resources::animationstore::{AnimationResource, AnimationStore};
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::core::resources::camerafollowconfig::CameraFollowConfig;
+use aberredengine::core::resources::gameconfig::GameConfig;
+use aberredengine::core::resources::group::TrackedGroups;
+use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
-use aberredengine::resources::postprocessshader::PostProcessShader;
+use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::render::texturestore::TextureStore;
-use aberredengine::resources::screensize::ScreenSize;
-use aberredengine::resources::systemsstore::SystemsStore;
-use aberredengine::resources::texturedims::TextureDimsStore;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::animation::{animation, animation_controller};
-use aberredengine::resources::collision_rule_index::CollisionRuleIndex;
-use aberredengine::systems::collision_detector::collision_detector;
+use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::core::resources::systemsstore::SystemsStore;
+use aberredengine::core::resources::texturedims::TextureDimsStore;
+use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::worldtime::WorldTime;
+use aberredengine::core::systems::animation::{animation, animation_controller};
+use aberredengine::core::resources::collision_rule_index::CollisionRuleIndex;
+use aberredengine::core::systems::collision_detector::collision_detector;
 use aberredengine::systems::collision_rule_index::rebuild_collision_rule_index;
-use aberredengine::systems::group::update_group_counts_system;
+use aberredengine::core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use aberredengine::systems::luatimer::{lua_timer_observer, update_lua_timers};
-use aberredengine::systems::movement::movement;
-use aberredengine::systems::rust_collision::rust_collision_observer;
-use aberredengine::systems::stuckto::stuck_to_entity_system;
-use aberredengine::systems::time::update_world_time;
-use aberredengine::systems::timer::{timer_observer, update_timers};
-use aberredengine::systems::ttl::ttl_system;
-use aberredengine::systems::tween::tween_system;
+use aberredengine::core::systems::movement::movement;
+use aberredengine::core::systems::rust_collision::rust_collision_observer;
+use aberredengine::core::systems::stuckto::stuck_to_entity_system;
+use aberredengine::core::systems::time::update_world_time;
+use aberredengine::core::systems::timer::{timer_observer, update_timers};
+use aberredengine::core::systems::ttl::ttl_system;
+use aberredengine::core::systems::tween::tween_system;
 
 mod common;
 
@@ -1877,9 +1877,9 @@ fn meta_builder_methods_have_schema_refs() {
 // D7 – check_pending_state triggers GameStateChangedEvent when pending
 // ---------------------------------------------------------------------------
 
-use aberredengine::events::gamestate::GameStateChangedEvent;
-use aberredengine::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
-use aberredengine::systems::gamestate::check_pending_state;
+use aberredengine::core::events::gamestate::GameStateChangedEvent;
+use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
+use aberredengine::core::systems::gamestate::check_pending_state;
 
 /// Helper: run `check_pending_state` once in a schedule.
 fn tick_check_pending_state(world: &mut World) {
@@ -2108,11 +2108,11 @@ fn context_builder_nil_when_no_snapshots() {
 // Rust Phase System Tests
 // =============================================================================
 
-use aberredengine::components::phase::{
+use aberredengine::core::components::phase::{
     Phase, PhaseCallbackFns, PhaseEnterFn, PhaseExitFn, PhaseUpdateFn,
 };
-use aberredengine::systems::GameCtx;
-use aberredengine::systems::phase::phase_system;
+use aberredengine::core::systems::GameCtx;
+use aberredengine::core::systems::phase::phase_system;
 
 fn tick_phases(world: &mut World) {
     let mut schedule = Schedule::default();
@@ -2847,7 +2847,7 @@ fn collision_rule_sides_passed_to_callback() {
         sides_b: &BoxSides,
         ctx: &mut GameCtx,
     ) {
-        use aberredengine::components::collision::BoxSide;
+        use aberredengine::core::components::collision::BoxSide;
         let has_right_a = sides_a.iter().any(|s| matches!(s, BoxSide::Right));
         let has_left_b = sides_b.iter().any(|s| matches!(s, BoxSide::Left));
         if has_right_a

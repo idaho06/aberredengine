@@ -1,6 +1,6 @@
 //! Lua callback component fired when a non-looped animation finishes.
 //!
-//! Attach this component to any entity whose non-looped [`Animation`](crate::components::animation::Animation)
+//! Attach this component to any entity whose non-looped [`Animation`](aberred_core::components::animation::Animation)
 //! should invoke a Lua function when it first reaches its last frame.
 //!
 //! # Lua callback signature

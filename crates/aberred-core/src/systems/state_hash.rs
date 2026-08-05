@@ -258,37 +258,49 @@ pub fn hash_world_state(world: &World) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::TestWorld;
+
+    /// Minimal `World` carrying just the resources `hash_world_state` reads
+    /// unconditionally (`WorldSignals`/`WorldTime`/`SimRng`) -- not the full
+    /// `TestWorld` harness, which lives in the facade crate
+    /// (`aberredengine::test_support`) and cannot be a dependency of
+    /// `aberred-core`.
+    fn minimal_world(seed: u64) -> World {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+        world.insert_resource(WorldTime::default());
+        world.insert_resource(SimRng::from_seed(seed));
+        world
+    }
 
     #[test]
     fn hash_changes_when_map_position_moves() {
-        let mut tw = TestWorld::builder().deterministic(1).build().unwrap();
-        let entity = tw.world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let h1 = hash_world_state(&tw.world);
-        tw.world
+        let mut world = minimal_world(1);
+        let entity = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let h1 = hash_world_state(&world);
+        world
             .entity_mut(entity)
             .get_mut::<MapPosition>()
             .unwrap()
             .pos
             .x = 5.0;
-        let h2 = hash_world_state(&tw.world);
+        let h2 = hash_world_state(&world);
         assert_ne!(h1, h2);
     }
 
     #[test]
     fn hash_is_stable_for_unchanged_world() {
-        let tw = TestWorld::builder().deterministic(1).build().unwrap();
-        let h1 = hash_world_state(&tw.world);
-        let h2 = hash_world_state(&tw.world);
+        let world = minimal_world(1);
+        let h1 = hash_world_state(&world);
+        let h2 = hash_world_state(&world);
         assert_eq!(h1, h2);
     }
 
     #[test]
     fn hash_changes_when_sim_rng_advances() {
-        let mut tw = TestWorld::builder().deterministic(1).build().unwrap();
-        let h1 = hash_world_state(&tw.world);
-        tw.world.resource_mut::<SimRng>().0.f32();
-        let h2 = hash_world_state(&tw.world);
+        let mut world = minimal_world(1);
+        let h1 = hash_world_state(&world);
+        world.resource_mut::<SimRng>().0.f32();
+        let h2 = hash_world_state(&world);
         assert_ne!(h1, h2);
     }
 }

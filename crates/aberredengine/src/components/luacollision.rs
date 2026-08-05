@@ -21,13 +21,13 @@
 //!
 //! # Related
 //!
-//! - [`crate::components::collision::CollisionRule`] – Rust-based collision rules
+//! - [`aberred_core::components::collision::CollisionRule`] – Rust-based collision rules
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::systems::lua_collision`] – Lua collision observer
 
 use std::sync::Arc;
 
-use crate::components::collision::CollisionRule;
+use aberred_core::components::collision::CollisionRule;
 
 /// Lua callback function name for a collision rule.
 ///

@@ -90,7 +90,7 @@ pub fn shutdown_logic_bridge(bridge: LogicBridge) {
 // thread and free audio resources.
 
 use crate::protocol::audio::{AudioCmd, AudioMessage};
-use crate::systems::audio::audio_thread;
+#[cfg(any(test, feature = "test-support"))]
 use crossbeam_channel::unbounded;
 
 /// Shared bridge between the ECS world and the audio thread.
@@ -107,30 +107,12 @@ pub struct AudioBridge {
     pub handle: std::thread::JoinHandle<()>,
 }
 
-/// Spawn the audio thread and register bridge resources.
-///
-/// This function:
-/// - Creates command/event channels.
-/// - Spawns the background thread running [`audio_thread`], paced at
-///   `audio_hz`, read once here at spawn time -- a runtime change to
-///   `GameConfig::audio_hz` afterward has no effect.
-/// - Inserts [`AudioBridge`] and initializes `Messages<AudioMessage>` so that
-///   systems can send commands and poll for events.
-pub fn setup_audio(world: &mut World, audio_hz: f64) {
-    let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
-    let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
-
-    let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_msg, audio_hz));
-
-    insert_audio_bridge_resources(world, tx_cmd, rx_msg, handle);
-}
-
-/// Shared by [`setup_audio`] and [`setup_audio_stub`]: insert the
+/// Shared by the facade's `setup_audio` and [`setup_audio_stub`]: insert the
 /// [`AudioBridge`] resource plus the `Messages<AudioCmd>`/
 /// `Messages<AudioMessage>` queues it drains. The two callers differ only in
 /// how `handle`/the channel far ends are produced (a real audio thread vs.
 /// a no-op stub thread).
-fn insert_audio_bridge_resources(
+pub fn insert_audio_bridge_resources(
     world: &mut World,
     tx_cmd: Sender<AudioCmd>,
     rx_msg: Receiver<AudioMessage>,
@@ -154,6 +136,12 @@ fn insert_audio_bridge_resources(
 /// fake [`AudioMessage`] replies. The caller MUST hold both for the World's
 /// whole lifetime -- `forward_audio_cmds` swallows send errors, so a dropped
 /// receiver won't panic, it'll just silently break the inspection contract.
+// `test` covers this crate's own `#[cfg(test)]` unit test below;
+// `feature = "test-support"` covers the facade's `cargo test`, which does
+// NOT imply `cfg(test)` in this (dependency) crate -- the facade's
+// `[dev-dependencies]` entry unconditionally requests
+// `aberred-core/test-support` so its own `#[cfg(any(test, feature =
+// "test-support"))]` call site stays reachable under plain `cargo test`.
 #[cfg(any(test, feature = "test-support"))]
 pub fn setup_audio_stub(world: &mut World) -> (Receiver<AudioCmd>, Sender<AudioMessage>) {
     let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();

@@ -19,27 +19,27 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::math::vec2_to_raylib;
 
-use crate::components::dynamictext::DynamicText;
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::guibutton::GuiButton;
-use crate::components::guiinteractable::GuiInteractable;
-use crate::components::guilabel::GuiLabel;
-use crate::components::guiprogressbar::GuiProgressBar;
-use crate::components::guiwindow::GuiWindow;
-use crate::components::mapposition::MapPosition;
+use aberred_core::components::dynamictext::DynamicText;
+use aberred_core::components::entityshader::EntityShader;
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::guibutton::GuiButton;
+use aberred_core::components::guiinteractable::GuiInteractable;
+use aberred_core::components::guilabel::GuiLabel;
+use aberred_core::components::guiprogressbar::GuiProgressBar;
+use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::mapposition::MapPosition;
 use crate::components::render::mirror::{
     MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapSprite,
     MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
 };
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::shadow::Shadow;
-use crate::components::sprite::Sprite;
-use crate::components::tint::Tint;
-use crate::components::zindex::ZIndex;
-use crate::resources::drawable_snapshot::{
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::components::sprite::Sprite;
+use aberred_core::components::tint::Tint;
+use aberred_core::components::zindex::ZIndex;
+use aberred_core::resources::drawable_snapshot::{
     GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
     MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
 };
@@ -500,8 +500,8 @@ pub struct MirrorQueries<'w, 's> {
 #[cfg(test)]
 mod mirror_tests {
     use super::*;
-    use crate::components::guiinteractable::GuiWidgetState;
-    use crate::math::Vec2;
+    use aberred_core::components::guiinteractable::GuiWidgetState;
+    use aberred_core::math::Vec2;
     use std::sync::Arc;
 
     fn new_test_world() -> World {
@@ -680,7 +680,7 @@ mod mirror_tests {
         with_tint.tint = Some(Tint::default());
         with_tint.shadow = Some(Shadow {
             offset: Vec2::new(1.0, 1.0),
-            color: crate::math::Color::BLACK,
+            color: aberred_core::math::Color::BLACK,
         });
         reconcile_map_sprites(&mut world, &[with_tint]);
 
@@ -760,7 +760,7 @@ mod mirror_tests {
     fn make_map_text_entry(entity: Entity, z_index: f32) -> MapTextEntry {
         MapTextEntry {
             entity,
-            text: DynamicText::new("hi", "font", 16.0, crate::math::Color::WHITE),
+            text: DynamicText::new("hi", "font", 16.0, aberred_core::math::Color::WHITE),
             position: MapPosition::from_vec(Vec2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             shader: None,
@@ -929,7 +929,7 @@ mod mirror_tests {
         let mut with_shadow = make_screen_sprite_entry(sim_entity, 1.0);
         with_shadow.shadow = Some(Shadow {
             offset: Vec2::new(1.0, 1.0),
-            color: crate::math::Color::BLACK,
+            color: aberred_core::math::Color::BLACK,
         });
         reconcile_screen_sprites(&mut world, &[with_shadow]);
         let mirror_entity = *world
@@ -986,7 +986,7 @@ mod mirror_tests {
     fn make_screen_text_entry(entity: Entity, z_index: f32) -> ScreenTextEntry {
         ScreenTextEntry {
             entity,
-            text: DynamicText::new("hi", "font", 16.0, crate::math::Color::WHITE),
+            text: DynamicText::new("hi", "font", 16.0, aberred_core::math::Color::WHITE),
             position: ScreenPosition::new(1.0, 2.0),
             z_index: ZIndex(z_index),
             tint: None,

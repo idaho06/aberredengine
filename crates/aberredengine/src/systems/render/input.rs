@@ -2,11 +2,11 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::protocol::endpoints::LogicBridge;
-use crate::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
+use aberred_core::protocol::endpoints::LogicBridge;
+use aberred_core::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
 use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
 use crate::resources::render::quit_requested::QuitRequested;
-use crate::resources::windowsize::WindowSize;
+use aberred_core::resources::windowsize::WindowSize;
 
 /// Highest raylib keyboard key code in use today (`KEY_KB_MENU`).
 const MAX_KEY_CODE: u32 = 348;
@@ -126,7 +126,7 @@ pub fn sample_and_send_input(
         }
     }
 
-    let result = crate::pacing::send_or_drop_oldest(
+    let result = aberred_core::pacing::send_or_drop_oldest(
         &bridge.tx_input,
         &bridge.rx_input,
         InputSample {
@@ -134,7 +134,7 @@ pub fn sample_and_send_input(
             capture: capture.0,
         },
     );
-    if crate::pacing::send_channel_disconnected(&result) {
+    if aberred_core::pacing::send_channel_disconnected(&result) {
         log::error!("Logic thread disconnected; shutting down");
         quit.0 = true;
     }

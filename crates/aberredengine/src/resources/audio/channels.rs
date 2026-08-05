@@ -3,7 +3,7 @@
 use bevy_ecs::prelude::Resource;
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 
 #[derive(Resource)]
 pub struct CmdReceiver(pub Receiver<AudioCmd>);

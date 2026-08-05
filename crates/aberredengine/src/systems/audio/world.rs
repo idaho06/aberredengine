@@ -10,8 +10,8 @@ use raylib::core::audio::RaylibAudio;
 use raylib::ffi;
 use rustc_hash::FxHashMap;
 
-use crate::pacing::{Pacer, StatsWindow};
-use crate::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::pacing::{Pacer, StatsWindow};
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 
 use crate::components::audio::music_track::MusicTrack;
 use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
@@ -80,7 +80,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
     let mut stats_window = StatsWindow::new(audio_hz);
 
     'run: loop {
-        if !crate::protocol::shutdown::running() {
+        if !aberred_core::protocol::shutdown::running() {
             break 'run;
         }
         pacer.tick();
@@ -98,7 +98,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
         if world.resource::<ShouldExit>().0 {
             break 'run;
         }
-        if crate::pacing::channel_disconnected(&rx_cmd) {
+        if aberred_core::pacing::channel_disconnected(&rx_cmd) {
             break 'run;
         }
         world.clear_trackers();

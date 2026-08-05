@@ -1,33 +1,11 @@
-//! Event types and observers used by the engine.
+//! Render/Lua-only event re-exports.
 //!
-//! This module groups the domain events exchanged across systems and the
-//! corresponding observers that react to them. Events provide a decoupled
-//! way for systems to communicate without tight coupling or direct
-//! dependencies.
-//!
-//! Submodules:
-//! - [`collision`] – collision notifications emitted by the physics/collision system
-//! - [`gamestate`] – state transition notifications for the high-level game flow
-//! - [`gui_interactable`] – GUI interactable (button/image) click events
-//! - [`input`] – input action events (key press/release)
-//! - [`menu`] – menu selection events
-//! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
-//! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
-//! - [`render`] – events/observers used only by the render (main) thread (F10 fullscreen toggle)
-//!
-//! See each submodule for concrete event data, semantics, and example usage.
+//! The bulk of the engine's events now live in `aberred_core::events`
+//! (re-exported as `aberredengine::core::events`). This module holds only
+//! the thread-exclusive subset that can't live in core: events used by the
+//! render (main) thread, and Lua timer callback events
+//! (`#[cfg(feature = "lua")]`).
 
-pub mod animation;
-pub mod collision;
-pub mod gamestate;
-pub mod gui_interactable;
-pub mod input;
 #[cfg(feature = "lua")]
 pub mod luatimer;
-pub mod menu;
 pub mod render;
-pub mod spawnmap;
-pub mod switchdebug;
-pub mod timer;
-pub mod tween;
-pub mod window;

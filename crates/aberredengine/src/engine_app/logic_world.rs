@@ -5,60 +5,61 @@ use super::builder::EngineBuilder;
 use super::logic_thread::LogicInit;
 use super::registrar::ObserverRegistrar;
 #[cfg(feature = "lua")]
-use crate::components::mapposition::MapPosition;
-use crate::components::persistent::Persistent;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::persistent::Persistent;
 #[cfg(feature = "lua")]
-use crate::components::rotation::Rotation;
+use aberred_core::components::rotation::Rotation;
 #[cfg(feature = "lua")]
-use crate::components::scale::Scale;
+use aberred_core::components::scale::Scale;
 #[cfg(feature = "lua")]
-use crate::components::screenposition::ScreenPosition;
-use crate::error::EngineError;
-use crate::events::gamestate::GameStateChangedEvent;
-use crate::events::gamestate::observe_gamestate_change_event;
-use crate::events::switchdebug::switch_debug_observer;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::error::EngineError;
+use aberred_core::events::gamestate::GameStateChangedEvent;
+use aberred_core::events::gamestate::observe_gamestate_change_event;
+use aberred_core::events::switchdebug::switch_debug_observer;
 #[cfg(any(test, feature = "test-support"))]
-use crate::protocol::endpoints::setup_audio_stub;
-use crate::protocol::endpoints::{RenderTx, setup_audio};
-use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::appstate::AppState;
-use crate::resources::camera2d::{Camera2D, Camera2DRes};
-use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::collision_rule_index::CollisionRuleIndex;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::determinism_taint::DeterminismTaint;
-use crate::resources::drawable_snapshot::DrawableSnapshot;
-use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
-use crate::resources::gameconfig::GameConfigDefaults;
-use crate::resources::gamestate::{GameState, GameStates, NextGameState};
-use crate::resources::group::TrackedGroups;
-use crate::resources::guiinputstate::GuiInputState;
-use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
-use crate::resources::input::InputState;
-use crate::resources::input_bindings::InputBindings;
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
-use crate::resources::scenemanager::SceneManager;
-use crate::systems::scene_dispatch::SceneLogic;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::signal_intents::SignalIntents;
-use crate::resources::sim_rng::SimRng;
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::texturedims::TextureDimsStore;
-use crate::resources::thread_stats::{AudioStats, SimStats};
-use crate::resources::windowsize::WindowSize;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
-use crate::systems::gamestate::{clean_all_entities, quit_game};
+use aberred_core::protocol::endpoints::setup_audio_stub;
+use aberred_core::protocol::endpoints::RenderTx;
+use crate::systems::audio::setup_audio;
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::appstate::AppState;
+use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::determinism_taint::DeterminismTaint;
+use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
+use aberred_core::resources::gameconfig::GameConfigDefaults;
+use aberred_core::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberred_core::resources::group::TrackedGroups;
+use aberred_core::resources::guiinputstate::GuiInputState;
+use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
+use aberred_core::resources::input::InputState;
+use aberred_core::resources::input_bindings::InputBindings;
+use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
+use aberred_core::resources::scenemanager::SceneManager;
+use aberred_core::systems::scene_dispatch::SceneLogic;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::signal_intents::SignalIntents;
+use aberred_core::resources::sim_rng::SimRng;
+use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::texturedims::TextureDimsStore;
+use aberred_core::resources::thread_stats::{AudioStats, SimStats};
+use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
 use crate::systems::gui_interactable_click::gui_interactable_click_observer;
 use crate::systems::mapspawn::spawn_map_observer;
 use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_selection_observer};
-use crate::systems::rust_collision::rust_collision_observer;
-use crate::systems::scene_dispatch::{scene_enter_play, scene_switch_system};
-use crate::math::Vec2;
-use crate::systems::timer::timer_observer;
+use aberred_core::systems::rust_collision::rust_collision_observer;
+use aberred_core::systems::scene_dispatch::{scene_enter_play, scene_switch_system};
+use aberred_core::math::Vec2;
+use aberred_core::systems::timer::timer_observer;
 
 #[cfg(feature = "lua")]
 use crate::resources::lua_runtime::LuaRuntime;
@@ -186,7 +187,8 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = init.lua_script {
-            let lua_runtime = LuaRuntime::new()?;
+            let lua_runtime =
+                LuaRuntime::new().map_err(|e| EngineError::Lua(e.to_string()))?;
             let path_display = script_path.to_string_lossy();
             if let Err(e) = lua_runtime.run_script(&path_display) {
                 log::error!("Failed to load Lua script '{path_display}': {e}");
@@ -334,7 +336,7 @@ impl EngineBuilder {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
             world.spawn((Observer::new(lua_animation_finished_observer), Persistent));
 
-            fn spawn_tween_finished_observer<T: crate::components::tween::TweenValue>(
+            fn spawn_tween_finished_observer<T: aberred_core::components::tween::TweenValue>(
                 world: &mut World,
             ) {
                 world.spawn((Observer::new(lua_tween_finished_observer::<T>), Persistent));

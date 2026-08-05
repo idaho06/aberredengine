@@ -7,8 +7,8 @@ use super::commands::*;
 use super::input_snapshot::InputSnapshot;
 use super::input_snapshot::for_each_digital_button;
 use super::spawn_data::*;
-use crate::resources::input::InputState;
-use crate::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::input::InputState;
+use aberred_core::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -219,8 +219,8 @@ pub struct LuaRuntime {
 ///
 /// These strings are what Lua passes to `engine.rebind_action()` and
 /// `engine.get_binding()`.
-pub(super) fn action_to_str(action: crate::events::input::InputAction) -> &'static str {
-    use crate::events::input::InputAction;
+pub(super) fn action_to_str(action: aberred_core::events::input::InputAction) -> &'static str {
+    use aberred_core::events::input::InputAction;
     match action {
         InputAction::MainDirectionUp => "main_up",
         InputAction::MainDirectionDown => "main_down",
@@ -241,8 +241,8 @@ pub(super) fn action_to_str(action: crate::events::input::InputAction) -> &'stat
 }
 
 /// Converts a canonical Lua action name string to an [`InputAction`].
-pub fn action_from_str(s: &str) -> Option<crate::events::input::InputAction> {
-    use crate::events::input::InputAction;
+pub fn action_from_str(s: &str) -> Option<aberred_core::events::input::InputAction> {
+    use aberred_core::events::input::InputAction;
     match s {
         "up" | "main_up" => Some(InputAction::MainDirectionUp),
         "down" | "main_down" => Some(InputAction::MainDirectionDown),

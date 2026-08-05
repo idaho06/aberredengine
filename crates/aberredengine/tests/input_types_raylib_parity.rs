@@ -16,7 +16,7 @@
 //! single transcription typo (most likely among the low, easy-to-swap values
 //! like `KEY_BACK`/`KEY_MENU`/`KEY_VOLUME_UP`/`KEY_VOLUME_DOWN`) must fail here.
 
-use aberredengine::resources::input_bindings::{GamepadAxis, GamepadButton, Key, MouseButton};
+use aberredengine::core::resources::input_bindings::{GamepadAxis, GamepadButton, Key, MouseButton};
 use raylib::ffi;
 
 #[test]

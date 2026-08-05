@@ -11,14 +11,15 @@
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
 
-use crate::protocol::endpoints::LogicTx;
-use crate::protocol::render_assets::RenderAssetCmd;
-use crate::protocol::render_logic::LogicMsg;
-use crate::resources::fontmetrics::{FontMetrics, GlyphMetrics};
+use aberred_core::protocol::endpoints::LogicTx;
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::protocol::render_logic::LogicMsg;
+use aberred_core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::shaderstore::ShaderStore;
 use crate::resources::render::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::render::RaylibAccess;
+use crate::systems::render::math::color_to_raylib;
 use raylib::ffi;
 use raylib::prelude::Image;
 use rustc_hash::FxHashMap;
@@ -232,13 +233,13 @@ pub(crate) fn apply_render_asset_cmd(
                 );
                 return;
             };
-            match load_texture_from_text(rl, th, font, &text, font_size, spacing, color.into()) {
+            match load_texture_from_text(rl, th, font, &text, font_size, spacing, color_to_raylib(color)) {
                 Some(tex) => {
                     let (width, height) = (tex.width, tex.height);
                     tex_store.insert(
                         &key,
                         tex,
-                        crate::resources::texturefilter::TextureFilter::Nearest,
+                        aberred_core::resources::texturefilter::TextureFilter::Nearest,
                         None,
                     );
                     notifications.push(LogicMsg::TextureLoaded { key, width, height });
@@ -259,7 +260,7 @@ pub(crate) fn apply_render_asset_cmd(
                     tex_store.insert(
                         &key,
                         tex,
-                        crate::resources::texturefilter::TextureFilter::Nearest,
+                        aberred_core::resources::texturefilter::TextureFilter::Nearest,
                         Some(png_path),
                     );
                     notifications.push(LogicMsg::TextureLoaded { key, width, height });

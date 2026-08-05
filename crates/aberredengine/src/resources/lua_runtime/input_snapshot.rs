@@ -17,7 +17,7 @@
 //! input.analog.mouse_world_x
 //! ```
 
-use crate::resources::input::InputState;
+use aberred_core::resources::input::InputState;
 
 /// State of a single digital input button.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -32,7 +32,7 @@ pub struct DigitalButtonState {
 
 impl DigitalButtonState {
     /// Create from a BoolState.
-    pub fn from_bool_state(state: &crate::resources::input::BoolState) -> Self {
+    pub fn from_bool_state(state: &aberred_core::resources::input::BoolState) -> Self {
         Self {
             pressed: state.active,
             just_pressed: state.just_pressed,
@@ -186,8 +186,8 @@ impl InputSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::input::BoolState;
-    use crate::resources::input_bindings::Key;
+    use aberred_core::resources::input::BoolState;
+    use aberred_core::resources::input_bindings::Key;
 
     fn default_input() -> InputState {
         InputState::default()

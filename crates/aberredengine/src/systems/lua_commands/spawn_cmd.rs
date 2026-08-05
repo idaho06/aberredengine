@@ -7,34 +7,34 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use crate::math::Vec2;
+use aberred_core::math::Vec2;
 
-use crate::components::animation::{Animation, AnimationController};
-use crate::components::boxcollider::BoxCollider;
-use crate::components::cameratarget::CameraTarget;
-use crate::components::dynamictext::DynamicText;
-use crate::components::entityshader::EntityShader;
-use crate::components::group::Group;
-use crate::components::guioffset::GuiOffset;
-use crate::math::Color;
+use aberred_core::components::animation::{Animation, AnimationController};
+use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::cameratarget::CameraTarget;
+use aberred_core::components::dynamictext::DynamicText;
+use aberred_core::components::entityshader::EntityShader;
+use aberred_core::components::group::Group;
+use aberred_core::components::guioffset::GuiOffset;
+use aberred_core::math::Color;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
 use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
-use crate::components::mapposition::MapPosition;
-use crate::components::persistent::Persistent;
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::shadow::Shadow;
-use crate::components::signalbinding::SignalBinding;
-use crate::components::signals::Signals;
-use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
-use crate::components::tilemap::TileMap;
-use crate::components::tint::Tint;
-use crate::components::ttl::Ttl;
-use crate::components::zindex::ZIndex;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::persistent::Persistent;
+use aberred_core::components::rigidbody::RigidBody;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::components::signalbinding::SignalBinding;
+use aberred_core::components::signals::Signals;
+use aberred_core::components::sprite::Sprite;
+use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::tilemap::TileMap;
+use aberred_core::components::tint::Tint;
+use aberred_core::components::ttl::Ttl;
+use aberred_core::components::zindex::ZIndex;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
@@ -42,8 +42,8 @@ use crate::resources::lua_runtime::{
     SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData, TweenRotationData,
     TweenScaleData, TweenScreenPositionData,
 };
-use crate::resources::worldsignals::WorldSignals;
-use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
 use super::parse::convert_animation_condition;
 
@@ -468,7 +468,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         ));
     }
     if let Some(rule_data) = lua_collision_rule {
-        use crate::components::collision::CollisionRule;
+        use aberred_core::components::collision::CollisionRule;
         use crate::components::luacollision::LuaCollisionCallback;
         entity_commands.insert(CollisionRule::new(
             rule_data.group_a,
@@ -504,7 +504,7 @@ fn apply_ui_components(
         ));
     }
     if let Some(menu_data) = menu {
-        use crate::components::menu::{Menu, MenuAction, MenuActions};
+        use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
         let labels: Vec<(&str, &str)> = menu_data
             .items
             .iter()
@@ -561,11 +561,11 @@ fn apply_ui_components(
         entity_commands.insert((menu_component, actions));
     }
     if let Some((path, group, zindex)) = grid_layout {
-        use crate::components::gridlayout::GridLayout;
+        use aberred_core::components::gridlayout::GridLayout;
         entity_commands.insert(GridLayout::new(path, group, zindex));
     }
     if let Some((follow_x, follow_y)) = mouse_controlled {
-        use crate::components::inputcontrolled::MouseControlled;
+        use aberred_core::components::inputcontrolled::MouseControlled;
         entity_commands.insert(MouseControlled { follow_x, follow_y });
     }
 }
@@ -579,7 +579,7 @@ fn apply_particle_emitter(
         return;
     };
 
-    use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+    use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
     use crate::resources::lua_runtime::{ParticleEmitterShapeData, ParticleTtlData};
 
     // Resolve template keys to Entity IDs

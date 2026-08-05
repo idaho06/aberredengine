@@ -10,12 +10,12 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-use crate::error::EngineError;
-use crate::protocol::replay::{
+use aberred_core::error::EngineError;
+use aberred_core::protocol::replay::{
     REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader, config_digest,
 };
-use crate::protocol::tick_input::TickInput;
-use crate::resources::gameconfig::GameConfig;
+use aberred_core::protocol::tick_input::TickInput;
+use aberred_core::resources::gameconfig::GameConfig;
 
 fn postcard_io_err(e: postcard::Error) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e)
@@ -160,7 +160,7 @@ impl ReplayRecorder {
     /// Must run on every `logic_thread_main` exit path or the file is left
     /// without one, which playback can only report as a read error.
     /// `tainted` is the recording session's
-    /// [`DeterminismTaint`](crate::resources::determinism_taint::DeterminismTaint).
+    /// [`DeterminismTaint`](aberred_core::resources::determinism_taint::DeterminismTaint).
     pub(crate) fn finish(mut self, final_hash: u64, tainted: bool) -> io::Result<()> {
         self.flush_pending_empty_run()?;
         self.write_entry(&ReplayEntry::End {
@@ -394,7 +394,7 @@ impl ReplayPlayer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::raw_input::RawDeviceSnapshot;
+    use aberred_core::protocol::raw_input::RawDeviceSnapshot;
     use tempfile::NamedTempFile;
 
     fn test_header() -> ReplayHeader {

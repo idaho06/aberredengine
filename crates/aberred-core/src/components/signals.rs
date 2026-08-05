@@ -29,7 +29,7 @@
 //! # Example
 //!
 //! ```rust
-//! use aberredengine::components::signals::Signals;
+//! use aberred_core::components::signals::Signals;
 //!
 //! let mut s = Signals::default();
 //! s.set_scalar("hp", 100.0);

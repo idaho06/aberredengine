@@ -1,9 +1,9 @@
 use raylib::prelude::*;
 
-use super::math::shadow_color;
+use super::math::{rect_to_raylib, shadow_color};
 use super::render::{ScreenPanelBufferItem, ScreenProgressBarBufferItem};
-use crate::components::shadow::Shadow;
-use crate::resources::guitheme::GuiNinePatch;
+use aberred_core::components::shadow::Shadow;
+use aberred_core::resources::guitheme::GuiNinePatch;
 use crate::resources::render::texturestore::TextureStore;
 
 /// Draw one already-resolved screen-space GUI panel item (window background).
@@ -74,7 +74,7 @@ fn draw_nine_patch_tinted(
         d.draw_texture_n_patch(
             tex,
             NPatchInfo {
-                source: patch.source.into(),
+                source: rect_to_raylib(patch.source),
                 left: patch.left,
                 top: patch.top,
                 right: patch.right,

@@ -3,27 +3,29 @@ use std::path::PathBuf;
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
-use crate::math::Vec2;
+use aberred_core::math::Vec2;
 
 use super::builder::EngineBuilder;
 use super::logic_thread::run_sim_tick;
 use super::logic_world::register_persistent_system;
-use crate::components::mapposition::MapPosition;
-use crate::components::persistent::Persistent;
-use crate::protocol::raw_input::InputSample;
-use crate::protocol::raw_input::RawDeviceSnapshot;
-use crate::protocol::render_logic::{LogicMsg, RenderMsg};
-use crate::protocol::snapshot::SnapshotPublisher;
-use crate::resources::drawable_snapshot::DrawableSnapshot;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::input::InputState;
-use crate::protocol::raw_input::ImguiCaptureState;
-use crate::resources::systemsstore::SystemsStore;
-use crate::systems::animation::animation_controller;
-use crate::systems::phase::phase_system;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::persistent::Persistent;
+use aberred_core::protocol::raw_input::InputSample;
+use aberred_core::protocol::raw_input::RawDeviceSnapshot;
+use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
+use aberred_core::protocol::snapshot::SnapshotPublisher;
+use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::input::InputState;
+use aberred_core::protocol::raw_input::ImguiCaptureState;
+use aberred_core::resources::systemsstore::SystemsStore;
 
 #[cfg(feature = "lua")]
-use crate::systems::group::update_group_counts_system;
+use aberred_core::systems::animation::animation_controller;
+#[cfg(feature = "lua")]
+use aberred_core::systems::phase::phase_system;
+#[cfg(feature = "lua")]
+use aberred_core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use crate::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
@@ -324,9 +326,9 @@ fn snapshot_triple_buffer_round_trips_across_a_thread() {
 
 #[test]
 fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
-    use crate::components::sprite::Sprite;
-    use crate::components::zindex::ZIndex;
-    use crate::resources::drawable_snapshot::MapSpriteEntry;
+    use aberred_core::components::sprite::Sprite;
+    use aberred_core::components::zindex::ZIndex;
+    use aberred_core::resources::drawable_snapshot::MapSpriteEntry;
     use std::sync::Arc;
 
     fn sprite_entry(id: u32) -> MapSpriteEntry {
@@ -573,7 +575,7 @@ fn test_default_trait() {
 
 // --- SceneManager builder tests ---
 
-use crate::systems::GameCtx;
+use aberred_core::systems::GameCtx;
 use super::scene::SceneDescriptor;
 
 fn dummy_scene_enter(_ctx: &mut GameCtx) {}

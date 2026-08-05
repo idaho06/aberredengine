@@ -3,12 +3,12 @@
 //! These structs hold component data that Lua scripts specify when spawning entities.
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
-use crate::components::guibutton::GuiButton;
-use crate::components::guiimage::GuiImage;
-use crate::components::guilabel::GuiLabel;
-use crate::components::guiprogressbar::GuiProgressBar;
-use crate::components::guiwindow::GuiWindow;
-use crate::resources::uniformvalue::UniformValue;
+use aberred_core::components::guibutton::GuiButton;
+use aberred_core::components::guiimage::GuiImage;
+use aberred_core::components::guilabel::GuiLabel;
+use aberred_core::components::guiprogressbar::GuiProgressBar;
+use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::resources::uniformvalue::UniformValue;
 
 /// Sprite component data for spawning.
 #[derive(Debug, Clone, Default)]

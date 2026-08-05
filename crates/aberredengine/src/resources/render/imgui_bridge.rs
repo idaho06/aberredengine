@@ -14,7 +14,7 @@ use ::imgui::{
 use log::warn;
 use raylib::ffi;
 
-use crate::protocol::raw_input::ImguiCaptureState;
+use aberred_core::protocol::raw_input::ImguiCaptureState;
 
 const RL_TRIANGLES: i32 = 0x0004;
 
@@ -176,7 +176,7 @@ impl ClipboardBackend for RaylibClipboardBackend {
     }
 }
 
-// `ImguiCaptureState` lives in `crate::protocol::raw_input` — a plain POD
+// `ImguiCaptureState` lives in `aberred_core::protocol::raw_input` — a plain POD
 // wire type that crosses the logic/render thread boundary every frame,
 // matching every other cross-thread bridge/protocol type's home.
 

@@ -1,17 +1,17 @@
 use raylib::prelude::{Camera2D, Vector2};
 
-use crate::protocol::stats::ThreadStats;
-use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::input::InputState;
+use aberred_core::protocol::stats::ThreadStats;
+use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::input::InputState;
 use crate::resources::render::fontstore::FontStore;
 use crate::resources::render::texturestore::TextureStore;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::thread_stats::SimStats;
-use crate::resources::windowsize::WindowSize;
-use crate::resources::worldsignals::SignalSnapshot;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::thread_stats::SimStats;
+use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::worldtime::WorldTime;
 use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 
 /// Per-thread tick stats bundled for [`draw_performance_panel`] -- built
@@ -272,7 +272,7 @@ pub(super) fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
     ui.window("Input")
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
-            let inputs: &[(&str, &crate::resources::input::BoolState)] = &[
+            let inputs: &[(&str, &aberred_core::resources::input::BoolState)] = &[
                 ("Up (WASD)", &input_state.maindirection_up),
                 ("Left (WASD)", &input_state.maindirection_left),
                 ("Down (WASD)", &input_state.maindirection_down),

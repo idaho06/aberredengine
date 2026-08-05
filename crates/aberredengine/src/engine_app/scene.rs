@@ -8,7 +8,7 @@
 //! registration time, joined again by scene name.
 
 use crate::resources::render::scene_table::GuiCallback;
-use crate::systems::scene_dispatch::{SceneEnterFn, SceneExitFn, SceneUpdateFn, WorldDrawCallback};
+use aberred_core::systems::scene_dispatch::{SceneEnterFn, SceneExitFn, SceneUpdateFn, WorldDrawCallback};
 
 /// Describes the callbacks for a single scene.
 ///
@@ -48,12 +48,12 @@ pub struct SceneDescriptor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::appstate::AppState;
-    use crate::resources::signal_intents::SignalIntents;
-    use crate::resources::worldsignals::SignalSnapshot;
+    use aberred_core::resources::appstate::AppState;
+    use aberred_core::resources::signal_intents::SignalIntents;
+    use aberred_core::resources::worldsignals::SignalSnapshot;
     use crate::resources::render::fontstore::FontStore;
     use crate::resources::render::texturestore::TextureStore;
-    use crate::systems::GameCtx;
+    use aberred_core::systems::GameCtx;
 
     #[test]
     fn scene_descriptor_default_optionals() {

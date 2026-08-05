@@ -38,18 +38,18 @@ use bevy_ecs::system::Local;
 use mlua::prelude::*;
 
 use crate::components::luaphase::LuaPhase;
-use crate::protocol::audio::AudioCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::input::InputState;
+use aberred_core::protocol::audio::AudioCmd;
+use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::input::InputState;
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
     drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
-use crate::systems::phase_core::{PhaseRunner, apply_callback_transitions, run_phase_callbacks};
+use aberred_core::systems::phase_core::{PhaseRunner, apply_callback_transitions, run_phase_callbacks};
 use log::{error, warn};
 
 fn build_phase_context(
@@ -257,7 +257,7 @@ pub fn lua_phase_system(
     mut phase_buf: Local<Vec<PhaseCmd>>,
     mut effect_bufs: Local<EffectCmdBufs>,
 ) {
-    crate::tracy::tracy_span!("lua_phase");
+    aberred_core::tracy::tracy_span!("lua_phase");
     // Clear previous frame's transitions (reuses allocated capacity)
     callback_transitions.clear();
     phase_entities.clear();

@@ -18,13 +18,13 @@ use bevy_ecs::system::SystemParam;
 use log::error;
 
 use crate::components::luaphase::LuaPhase;
-use crate::protocol::audio::AudioCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::input::InputState;
+use aberred_core::protocol::audio::AudioCmd;
+use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::input::InputState;
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::worldtime::WorldTime;
 
 use super::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,

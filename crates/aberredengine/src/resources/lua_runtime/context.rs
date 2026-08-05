@@ -33,7 +33,7 @@
 //! desyncs that mask, and the stale value can leak into a later callback's ctx.
 
 use super::runtime::{EntityCtxTables, SignalsCtxTables};
-use crate::components::signals::Signals;
+use aberred_core::components::signals::Signals;
 use mlua::{Lua, Result as LuaResult, Table as LuaTable};
 
 /// Accumulates one `build_entity_context_pooled`/`populate_collision_entity` call's

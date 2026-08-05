@@ -19,14 +19,14 @@ use std::sync::Arc;
 use bevy_ecs::prelude::Resource;
 use raylib::prelude::Camera2D;
 
-use crate::resources::appstate::AppState;
-use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::drawable_snapshot::DebugSnapshot;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::GuiThemeStore;
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::worldsignals::SignalSnapshot;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::appstate::AppState;
+use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+use aberred_core::resources::drawable_snapshot::DebugSnapshot;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::guitheme::GuiThemeStore;
+use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::worldtime::WorldTime;
 
 /// Mirrors `DrawableSnapshot.camera`.
 #[derive(Resource, Clone, Debug, Default)]

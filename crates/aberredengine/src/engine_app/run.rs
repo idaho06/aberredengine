@@ -4,15 +4,15 @@ use crossbeam_channel::{bounded, unbounded};
 use super::builder::EngineBuilder;
 use super::logic_thread::{LogicInit, logic_thread};
 use super::replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};
-use crate::error::EngineError;
-use crate::pacing::StatsWindow;
-use crate::protocol::endpoints::{LogicBridge, shutdown_logic};
-use crate::protocol::raw_input::InputSample;
-use crate::protocol::render_logic::{LogicMsg, RenderMsg};
-use crate::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest};
-use crate::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
-use crate::resources::drawable_snapshot::DrawableSnapshot;
-use crate::resources::gameconfig::default_render_fps;
+use aberred_core::error::EngineError;
+use aberred_core::pacing::StatsWindow;
+use aberred_core::protocol::endpoints::{LogicBridge, shutdown_logic};
+use aberred_core::protocol::raw_input::InputSample;
+use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
+use aberred_core::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest};
+use aberred_core::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
+use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::resources::gameconfig::default_render_fps;
 use crate::resources::render::mirrors::RenderGameConfig;
 use crate::resources::render::quit_requested::QuitRequested;
 use crate::resources::render::scene_table::{RenderSceneTable, SceneRender};
@@ -50,7 +50,7 @@ impl EngineBuilder {
     /// startup errors are logged from that thread and surface as an
     /// immediate `RenderMsg::Quit`, not as an `Err` here.
     pub fn try_run(mut self) -> Result<(), EngineError> {
-        crate::protocol::shutdown::install_panic_hook();
+        aberred_core::protocol::shutdown::install_panic_hook();
         log::info!("Hello, world! This is the Aberred Engine!");
 
         let use_scene_manager = !self.scenes.is_empty();
@@ -228,10 +228,10 @@ impl EngineBuilder {
             .non_send::<raylib::RaylibHandle>()
             .window_should_close()
             && !world.resource::<QuitRequested>().0
-            && crate::protocol::shutdown::running()
+            && aberred_core::protocol::shutdown::running()
         {
             {
-                crate::tracy::tracy_span!("render_schedule_run");
+                aberred_core::tracy::tracy_span!("render_schedule_run");
                 let tick_start = std::time::Instant::now();
                 schedule.run(world);
                 let tick_work = tick_start.elapsed();
@@ -240,7 +240,7 @@ impl EngineBuilder {
                 }
             }
             world.clear_trackers();
-            crate::tracy::tracy_frame_mark!();
+            aberred_core::tracy::tracy_frame_mark!();
         }
 
         // Shutdown: stop the logic thread first (it owns the audio bridge and

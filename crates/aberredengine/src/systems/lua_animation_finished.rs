@@ -17,7 +17,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
-use crate::events::animation::AnimationFinishedEvent;
+use aberred_core::events::animation::AnimationFinishedEvent;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 
 pub fn lua_animation_finished_observer(

@@ -4,7 +4,7 @@
 
 use bevy_ecs::prelude::Resource;
 
-use crate::protocol::stats::ThreadStats;
+use aberred_core::protocol::stats::ThreadStats;
 
 /// Render thread's per-frame timing, measured around the render schedule's
 /// `schedule.run(world)` call -- includes the vsync wait (raylib paces the

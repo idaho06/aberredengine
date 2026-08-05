@@ -5,17 +5,17 @@
 //! offset, and bounds clamping.
 
 use bevy_ecs::prelude::*;
-use aberredengine::math::Vec2;
+use aberredengine::core::math::Vec2;
 
-use aberredengine::components::cameratarget::CameraTarget;
-use aberredengine::components::globaltransform2d::GlobalTransform2D;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::math::Rect;
-use aberredengine::resources::camera2d::{Camera2D, Camera2DRes};
-use aberredengine::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use aberredengine::resources::screensize::ScreenSize;
-use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::camera_follow::camera_follow_system;
+use aberredengine::core::components::cameratarget::CameraTarget;
+use aberredengine::core::components::globaltransform2d::GlobalTransform2D;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::math::Rect;
+use aberredengine::core::resources::camera2d::{Camera2D, Camera2DRes};
+use aberredengine::core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
+use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::core::resources::worldtime::WorldTime;
+use aberredengine::core::systems::camera_follow::camera_follow_system;
 
 const EPSILON: f32 = 1e-4;
 

@@ -1,5 +1,5 @@
 use super::builder::EngineBuilder;
-use crate::error::EngineError;
+use aberred_core::error::EngineError;
 
 impl EngineBuilder {
     pub(super) fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {

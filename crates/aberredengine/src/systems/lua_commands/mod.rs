@@ -44,33 +44,33 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
-use crate::components::cameratarget::CameraTarget;
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::guiinteractable::GuiInteractable;
-use crate::components::guiprogressbar::GuiProgressBar;
+use aberred_core::components::animation::Animation;
+use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::cameratarget::CameraTarget;
+use aberred_core::components::entityshader::EntityShader;
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::guiinteractable::GuiInteractable;
+use aberred_core::components::guiprogressbar::GuiProgressBar;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::components::luaphase::LuaPhase;
 use crate::components::luatimer::LuaTimer;
-use crate::components::mapposition::MapPosition;
-use crate::components::rigidbody::RigidBody;
-use crate::components::rotation::Rotation;
-use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
-use crate::components::signals::Signals;
-use crate::components::sprite::Sprite;
-use crate::components::stuckto::StuckTo;
-use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
-use crate::protocol::audio::AudioCmd;
-use crate::resources::animationstore::AnimationStore;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::rigidbody::RigidBody;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::signals::Signals;
+use aberred_core::components::sprite::Sprite;
+use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::tween::{Easing, LoopMode, Tween, TweenValue};
+use aberred_core::protocol::audio::AudioCmd;
+use aberred_core::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
     TweenConfig,
 };
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::WorldSignals;
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::worldsignals::WorldSignals;
 
 /// Persistent per-frame buffers for the 6 effect command queues drained by
 /// [`drain_and_process_effect_commands`].
@@ -237,7 +237,7 @@ pub struct EntityCmdQueries<'w, 's> {
 /// that also hold mutable command-processing queries.
 #[derive(SystemParam)]
 pub struct ContextQueries<'w, 's> {
-    pub groups: Query<'w, 's, &'static crate::components::group::Group>,
+    pub groups: Query<'w, 's, &'static aberred_core::components::group::Group>,
     pub rotations: Query<'w, 's, &'static Rotation>,
     pub scales: Query<'w, 's, &'static Scale>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,

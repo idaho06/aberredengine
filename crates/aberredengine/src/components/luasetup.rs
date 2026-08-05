@@ -52,7 +52,7 @@ use std::sync::Arc;
 ///
 /// The named function is called once when the component is first detected via
 /// `Added<LuaSetup>`. Survives scene transitions only when combined with
-/// [`crate::components::persistent::Persistent`].
+/// [`aberred_core::components::persistent::Persistent`].
 #[derive(Component, Clone, Debug)]
 pub struct LuaSetup {
     /// Name of the Lua function to call.

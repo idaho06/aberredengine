@@ -1,8 +1,8 @@
 use raylib::ffi::TraceLogLevel;
 
 use super::builder::EngineBuilder;
-use crate::error::EngineError;
-use crate::resources::gameconfig::GameConfig;
+use aberred_core::error::EngineError;
+use aberred_core::resources::gameconfig::GameConfig;
 use crate::resources::render::rendertarget::RenderTarget;
 
 impl EngineBuilder {

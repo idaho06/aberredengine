@@ -45,7 +45,7 @@
 #[cfg(test)]
 use rustc_hash::FxHashMap;
 
-use super::phase::Phase;
+use aberred_core::components::phase::Phase;
 
 /// Callback function names for a single phase.
 #[derive(Clone, Debug, Default)]

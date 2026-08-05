@@ -8,24 +8,24 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::components::boxcollider::BoxCollider;
-use aberredengine::components::collision::{BoxSides, CollisionRule};
-use aberredengine::components::dynamictext::DynamicText;
-use aberredengine::components::group::Group;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::sprite::Sprite;
-use aberredengine::components::zindex::ZIndex;
+use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::collision::{BoxSides, CollisionRule};
+use aberredengine::core::components::dynamictext::DynamicText;
+use aberredengine::core::components::group::Group;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::engine_app::SimSet;
-use aberredengine::math::Color;
-use aberredengine::protocol::raw_input::RawDeviceSnapshot;
-use aberredengine::protocol::render_assets::RenderAssetCmd;
-use aberredengine::protocol::render_logic::RenderMsg;
+use aberredengine::core::math::Color;
+use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
+use aberredengine::core::protocol::render_assets::RenderAssetCmd;
+use aberredengine::core::protocol::render_logic::RenderMsg;
 use aberredengine::raylib::ffi::KeyboardKey;
-use aberredengine::resources::fontmetrics::{FontMetrics, GlyphMetrics};
-use aberredengine::resources::gamestate::{GameState, GameStates, NextGameState};
-use aberredengine::resources::input::InputState;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::systems::game_ctx::GameCtx;
+use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
+use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::systems::GameCtx;
 use aberredengine::test_support::TestWorld;
 use rustc_hash::FxHashMap;
 

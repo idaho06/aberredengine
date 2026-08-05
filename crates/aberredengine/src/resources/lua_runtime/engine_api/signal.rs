@@ -1,5 +1,5 @@
 use super::*;
-use crate::resources::signal_keys as sk;
+use aberred_core::resources::signal_keys as sk;
 
 impl LuaRuntime {
     pub(in crate::resources::lua_runtime) fn register_signal_api(&self) -> LuaResult<()> {
@@ -197,7 +197,7 @@ mod tests {
     use rustc_hash::{FxHashMap, FxHashSet};
     use std::sync::Arc;
 
-    fn set_snapshot(runtime: &LuaRuntime, snapshot: crate::resources::worldsignals::SignalSnapshot) {
+    fn set_snapshot(runtime: &LuaRuntime, snapshot: aberred_core::resources::worldsignals::SignalSnapshot) {
         if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
             *data.signal_snapshot.borrow_mut() = Arc::new(snapshot);
         }
@@ -210,7 +210,7 @@ mod tests {
         scalars.insert("hp".to_string(), 42.0f32);
         set_snapshot(
             &runtime,
-            crate::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::worldsignals::SignalSnapshot {
                 scalars: Arc::new(scalars),
                 ..Default::default()
             },
@@ -238,7 +238,7 @@ mod tests {
         integers.insert("score".to_string(), 7);
         set_snapshot(
             &runtime,
-            crate::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::worldsignals::SignalSnapshot {
                 integers: Arc::new(integers),
                 ..Default::default()
             },
@@ -266,7 +266,7 @@ mod tests {
         strings.insert("name".to_string(), "Aberred".to_string());
         set_snapshot(
             &runtime,
-            crate::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::worldsignals::SignalSnapshot {
                 strings: Arc::new(strings),
                 ..Default::default()
             },
@@ -294,7 +294,7 @@ mod tests {
         flags.insert("paused".to_string());
         set_snapshot(
             &runtime,
-            crate::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::worldsignals::SignalSnapshot {
                 flags: Arc::new(flags),
                 ..Default::default()
             },
@@ -322,7 +322,7 @@ mod tests {
         group_counts.insert("enemies".to_string(), 3u32);
         set_snapshot(
             &runtime,
-            crate::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::worldsignals::SignalSnapshot {
                 group_counts: Arc::new(group_counts),
                 ..Default::default()
             },
@@ -350,7 +350,7 @@ mod tests {
         entities.insert("player".to_string(), 99u64);
         set_snapshot(
             &runtime,
-            crate::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::worldsignals::SignalSnapshot {
                 entities: Arc::new(entities),
                 ..Default::default()
             },

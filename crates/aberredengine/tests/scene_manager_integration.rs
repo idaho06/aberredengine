@@ -4,23 +4,23 @@
 //! `on_update`, and `on_exit` callbacks, and that conflict checks in
 //! `EngineBuilder` fire as expected.
 
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::resources::gameconfig::GameConfig;
-use aberredengine::resources::group::TrackedGroups;
-use aberredengine::resources::input::InputState;
-use aberredengine::resources::input_bindings::InputBindings;
-use aberredengine::resources::postprocessshader::PostProcessShader;
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::core::resources::camerafollowconfig::CameraFollowConfig;
+use aberredengine::core::resources::gameconfig::GameConfig;
+use aberredengine::core::resources::group::TrackedGroups;
+use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::input_bindings::InputBindings;
+use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::resources::render::fontstore::FontStore;
 use aberredengine::resources::render::texturestore::TextureStore;
-use aberredengine::resources::scenemanager::SceneManager;
-use aberredengine::resources::signal_intents::SignalIntents;
-use aberredengine::resources::systemsstore::SystemsStore;
-use aberredengine::resources::worldsignals::{SignalSnapshot, WorldSignals};
-use aberredengine::resources::worldtime::WorldTime;
-use aberredengine::systems::GameCtx;
+use aberredengine::core::resources::scenemanager::SceneManager;
+use aberredengine::core::resources::signal_intents::SignalIntents;
+use aberredengine::core::resources::systemsstore::SystemsStore;
+use aberredengine::core::resources::worldsignals::{SignalSnapshot, WorldSignals};
+use aberredengine::core::resources::worldtime::WorldTime;
+use aberredengine::core::systems::GameCtx;
 use aberredengine::resources::render::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
-use aberredengine::systems::scene_dispatch::{
+use aberredengine::core::systems::scene_dispatch::{
     SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
 };
 use bevy_ecs::message::MessageReader;
@@ -28,9 +28,9 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::system::SystemState;
 
-use aberredengine::components::persistent::Persistent;
-use aberredengine::protocol::audio::AudioCmd;
-use aberredengine::resources::gamestate::{GameState, NextGameState};
+use aberredengine::core::components::persistent::Persistent;
+use aberredengine::core::protocol::audio::AudioCmd;
+use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 
 mod common;
 

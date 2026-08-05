@@ -6,9 +6,9 @@ use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};
 use super::schedule::SimSet;
-use crate::components::persistent::Persistent;
-use crate::resources::systemsstore as hook_keys;
-use crate::systems::gamestate::state_is_playing;
+use aberred_core::components::persistent::Persistent;
+use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::systems::gamestate::state_is_playing;
 use super::scene::SceneDescriptor;
 
 /// Builder for bootstrapping the engine.
@@ -103,7 +103,7 @@ impl EngineBuilder {
 
     /// Register the `setup` hook (called during the `Setup` game state).
     ///
-    /// The system is registered into [`SystemsStore`](crate::resources::systemsstore::SystemsStore)
+    /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
     /// under the key `"setup"`.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
@@ -113,7 +113,7 @@ impl EngineBuilder {
 
     /// Register the `enter_play` hook (called when transitioning to `Playing`).
     ///
-    /// The system is registered into [`SystemsStore`](crate::resources::systemsstore::SystemsStore)
+    /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
     /// under the key `"enter_play"`.
     pub fn on_enter_play<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, system));
@@ -139,7 +139,7 @@ impl EngineBuilder {
 
     /// Register the `switch_scene` hook (called when a scene transition is requested).
     ///
-    /// The system is registered into [`SystemsStore`](crate::resources::systemsstore::SystemsStore)
+    /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
     /// under the key `"switch_scene"`.
     pub fn on_switch_scene<M>(
         mut self,
@@ -197,8 +197,8 @@ impl EngineBuilder {
     /// points onto the sim schedule; use this one when you need ordering
     /// relative to the engine's own pipeline via [`SimSet`], e.g. a
     /// game-specific movement modifier that must run alongside
-    /// [`movement`](crate::systems::movement::movement) and before
-    /// [`collision_detector`](crate::systems::collision_detector::collision_detector).
+    /// [`movement`](aberred_core::systems::movement::movement) and before
+    /// [`collision_detector`](aberred_core::systems::collision_detector::collision_detector).
     ///
     /// ```rust,ignore
     /// .configure_schedule(|schedule| {
@@ -249,10 +249,10 @@ impl EngineBuilder {
         self
     }
 
-    /// Register a named scene for [`SceneManager`](crate::resources::scenemanager::SceneManager)-based games.
+    /// Register a named scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.
     ///
     /// Scenes are stored and later inserted into a
-    /// [`SceneManager`](crate::resources::scenemanager::SceneManager) resource
+    /// [`SceneManager`](aberred_core::resources::scenemanager::SceneManager) resource
     /// at `.run()` time. Use with [`.initial_scene()`](Self::initial_scene) to
     /// specify which scene starts first.
     ///
@@ -263,14 +263,14 @@ impl EngineBuilder {
     /// - If `.add_scene()` is used without `.initial_scene()`, or `.initial_scene()`
     ///   names a scene that was never registered
     ///
-    /// `.try_run()` returns these as an [`EngineError`](crate::error::EngineError);
+    /// `.try_run()` returns these as an [`EngineError`](aberred_core::error::EngineError);
     /// `.run()` prints the error to stderr and exits with a nonzero status. Neither panics.
     pub fn add_scene(mut self, name: impl Into<String>, descriptor: SceneDescriptor) -> Self {
         self.scenes.push((name.into(), descriptor));
         self
     }
 
-    /// Set the initial scene for [`SceneManager`](crate::resources::scenemanager::SceneManager)-based games.
+    /// Set the initial scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.
     ///
     /// This scene's `on_enter` callback will be the first called when the
     /// game transitions to the `Playing` state.
@@ -322,7 +322,7 @@ impl EngineBuilder {
     /// Mutually exclusive with [`.with_lua()`](Self::with_lua) -- Lua is
     /// outside the deterministic envelope, so combining both is rejected at
     /// `.run()`/`.try_run()` time as
-    /// [`EngineError::LuaConflictsWithDeterministic`](crate::error::EngineError::LuaConflictsWithDeterministic).
+    /// [`EngineError::LuaConflictsWithDeterministic`](aberred_core::error::EngineError::LuaConflictsWithDeterministic).
     pub fn deterministic(mut self, seed: u64) -> Self {
         self.deterministic_seed = Some(seed);
         self

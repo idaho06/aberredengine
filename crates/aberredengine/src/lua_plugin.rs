@@ -14,30 +14,30 @@
 //! - [`EntityProcessing`] – entity command queries + LuaPhase query
 
 use crate::components::luaphase::LuaPhase;
-use crate::components::persistent::{CleanableEntity, Persistent};
-use crate::protocol::audio::AudioCmd;
-use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::animationstore::AnimationStore;
-use crate::resources::camera2d::Camera2DRes;
-use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::gamestate::{GameStates, NextGameState};
-use crate::resources::group::TrackedGroups;
-use crate::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
-use crate::resources::input::InputState;
-use crate::resources::input_bindings::InputBindings;
+use aberred_core::components::persistent::{CleanableEntity, Persistent};
+use aberred_core::protocol::audio::AudioCmd;
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::camera2d::Camera2DRes;
+use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::gamestate::{GameStates, NextGameState};
+use aberred_core::resources::group::TrackedGroups;
+use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
+use aberred_core::resources::input::InputState;
+use aberred_core::resources::input_bindings::InputBindings;
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
     PhaseCmd, RenderCmd,
 };
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::screensize::ScreenSize;
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::systemsstore::SystemsStore;
+use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::resources::systemsstore::SystemsStore;
 
-use crate::resources::signal_keys as sk;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
+use aberred_core::resources::signal_keys as sk;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, asset_cmd_to_audio_cmd,
     asset_cmd_to_render_asset_cmd, drain_and_process_effect_commands,
@@ -49,8 +49,8 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
 use mlua::prelude::LuaTable;
-use crate::math::Vec2;
-use crate::resources::camera2d::Camera2D;
+use aberred_core::math::Vec2;
+use aberred_core::resources::camera2d::Camera2D;
 use rustc_hash::FxHashSet;
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
@@ -165,7 +165,7 @@ pub fn setup(
     info!("Game setup() done, next state set to Playing");
 }
 
-pub use crate::systems::gamestate::quit_game;
+pub use aberred_core::systems::gamestate::quit_game;
 
 // Create initial state of the game and observers
 pub fn enter_play(
@@ -401,7 +401,7 @@ pub fn update(
     gui_theme_store: Res<GuiThemeStore>,
     mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
 ) {
-    crate::tracy::tracy_span!("lua_update");
+    aberred_core::tracy::tracy_span!("lua_update");
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
 
@@ -468,7 +468,7 @@ pub fn update(
     }
 }
 
-pub use crate::systems::gamestate::clean_all_entities;
+pub use aberred_core::systems::gamestate::clean_all_entities;
 /// Processes scene switching: despawns old entities, calls Lua callbacks,
 /// and processes all queued commands for the new scene.
 #[allow(clippy::too_many_arguments, private_interfaces)]
@@ -557,7 +557,7 @@ pub fn switch_scene(
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    mut render_asset_cmd_writer: MessageWriter<crate::protocol::render_assets::RenderAssetCmd>,
+    mut render_asset_cmd_writer: MessageWriter<aberred_core::protocol::render_assets::RenderAssetCmd>,
     mut buf: Local<Vec<AssetCmd>>,
 ) {
     lua_runtime.drain_asset_commands_into(&mut buf);
@@ -572,8 +572,8 @@ pub fn process_lua_asset_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::animation::Animation;
-    use crate::components::sprite::Sprite;
+    use aberred_core::components::animation::Animation;
+    use aberred_core::components::sprite::Sprite;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
     use std::sync::Arc;
@@ -854,7 +854,7 @@ mod tests {
             .set_string(sk::SCENE, "level1");
 
         let player = world
-            .spawn(crate::components::signals::Signals::default())
+            .spawn(aberred_core::components::signals::Signals::default())
             .id();
 
         {
@@ -887,7 +887,7 @@ mod tests {
         );
 
         let signals = world
-            .get::<crate::components::signals::Signals>(player)
+            .get::<aberred_core::components::signals::Signals>(player)
             .expect("Signals component should exist after SignalSetFlag drains");
         assert!(
             signals.flags.contains("on_ground"),
@@ -969,7 +969,7 @@ mod tests {
         // tests/engine_tick_integration.rs).
         let mut world = new_drain_test_world();
         world
-            .insert_resource(Messages::<crate::protocol::render_assets::RenderAssetCmd>::default());
+            .insert_resource(Messages::<aberred_core::protocol::render_assets::RenderAssetCmd>::default());
 
         {
             let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
@@ -983,12 +983,12 @@ mod tests {
         world.run_system_once(process_lua_asset_commands).unwrap();
 
         let cmds: Vec<_> = world
-            .resource_mut::<Messages<crate::protocol::render_assets::RenderAssetCmd>>()
+            .resource_mut::<Messages<aberred_core::protocol::render_assets::RenderAssetCmd>>()
             .drain()
             .collect();
         assert_eq!(cmds.len(), 1, "expected exactly one RenderAssetCmd");
         match &cmds[0] {
-            crate::protocol::render_assets::RenderAssetCmd::Texture { id, path, .. } => {
+            aberred_core::protocol::render_assets::RenderAssetCmd::Texture { id, path, .. } => {
                 assert_eq!(id, "boss");
                 assert_eq!(path, "assets/boss.png");
             }

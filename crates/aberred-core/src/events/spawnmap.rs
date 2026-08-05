@@ -10,8 +10,8 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! # use aberredengine::resources::mapdata::load_map;
-//! # use aberredengine::events::spawnmap::SpawnMapRequested;
+//! # use aberred_core::resources::mapdata::load_map;
+//! # use aberred_core::events::spawnmap::SpawnMapRequested;
 //! # use bevy_ecs::prelude::Commands;
 //! # fn example(mut commands: Commands) {
 //! let map = load_map("assets/levels/level01.json").unwrap();

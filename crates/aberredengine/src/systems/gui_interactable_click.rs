@@ -1,19 +1,23 @@
-//! GUI interactable click dispatch.
+//! Lua-priority GUI interactable click dispatch.
 //!
-//! [`gui_interactable_click_observer`] reacts to [`GuiInteractableClickEvent`]
-//! (triggered by `gui_hit_test_system`) and resolves the callback chain on
-//! the clicked entity's `GuiInteractable`: Lua name first, Rust fn-pointer
-//! second — mirroring
-//! [`menu_selection_observer`](crate::systems::menu::menu_selection_observer)'s
-//! existing priority chain. This same observer dispatches clicks for
-//! `GuiButton`, `GuiImage`, and any other widget carrying
-//! `GuiInteractable`.
+//! Shadows [`aberred_core::systems::gui_interactable_click::gui_interactable_click_observer`]
+//! with a variant that checks the entity's named Lua callback first, falling
+//! back to its Rust fn-pointer callback -- mirrors
+//! `aberred_core::systems::menu::menu_selection_observer`'s existing
+//! priority chain. Under `#[cfg(not(feature = "lua"))]` the re-export below
+//! resolves to core's Rust-only variant instead.
 
+#[cfg(not(feature = "lua"))]
+pub use aberred_core::systems::gui_interactable_click::gui_interactable_click_observer;
+
+#[cfg(feature = "lua")]
+use aberred_core::events::gui_interactable::GuiInteractableClickEvent;
+#[cfg(feature = "lua")]
+use aberred_core::systems::GameCtx;
+#[cfg(feature = "lua")]
 use bevy_ecs::prelude::*;
+#[cfg(feature = "lua")]
 use log::warn;
-
-use crate::events::gui_interactable::GuiInteractableClickEvent;
-use crate::systems::GameCtx;
 
 /// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's named
 /// Lua callback first, falling back to its Rust fn-pointer callback.
@@ -54,57 +58,33 @@ pub fn gui_interactable_click_observer(
     }
 }
 
-/// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's Rust
-/// fn-pointer callback (no Lua feature, so no Lua-name lookup).
-#[cfg(not(feature = "lua"))]
-pub fn gui_interactable_click_observer(trigger: On<GuiInteractableClickEvent>, mut ctx: GameCtx) {
-    let event = trigger.event();
-    let Ok(interactable) = ctx.gui_interactables.get(event.entity) else {
-        warn!(
-            "gui_interactable_click_observer: entity {:?} not found",
-            event.entity
-        );
-        return;
-    };
-    let on_rust_callback = interactable.on_rust_callback;
-
-    if let Some(cb) = on_rust_callback {
-        cb(event.entity, &mut ctx);
-    }
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "lua"))]
 mod tests {
     use super::*;
-    use crate::components::guiimage::GuiImage;
-    use crate::components::guiinteractable::GuiInteractable;
-    use crate::resources::appstate::AppState;
-    use crate::resources::camerafollowconfig::CameraFollowConfig;
-    use crate::resources::gameconfig::GameConfig;
-    use crate::resources::input_bindings::InputBindings;
-    use crate::resources::postprocessshader::PostProcessShader;
-    use crate::resources::render::texturestore::TextureStore;
-    use crate::resources::sim_rng::SimRng;
-    use crate::resources::worldsignals::WorldSignals;
-    use crate::resources::worldtime::WorldTime;
+    use aberred_core::components::guiinteractable::GuiInteractable;
+    use aberred_core::resources::appstate::AppState;
+    use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+    use aberred_core::resources::gameconfig::GameConfig;
+    use aberred_core::resources::input_bindings::InputBindings;
+    use aberred_core::resources::postprocessshader::PostProcessShader;
+    use aberred_core::resources::sim_rng::SimRng;
+    use aberred_core::resources::worldsignals::WorldSignals;
+    use aberred_core::resources::worldtime::WorldTime;
     use bevy_ecs::message::Messages;
+    use crate::resources::lua_runtime::LuaRuntime;
 
     fn setup_world() -> World {
         let mut world = World::new();
         world.insert_resource(WorldSignals::default());
         world.insert_resource(AppState::default());
         world.insert_resource(WorldTime::default());
-        world.insert_resource(TextureStore::new());
         world.insert_resource(GameConfig::default());
         world.insert_resource(PostProcessShader::default());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(InputBindings::default());
         world.insert_resource(SimRng::from_seed(0));
-        world.insert_resource(Messages::<crate::protocol::audio::AudioCmd>::default());
-        #[cfg(feature = "lua")]
-        world.insert_non_send(
-            crate::resources::lua_runtime::LuaRuntime::new().expect("LuaRuntime::new"),
-        );
+        world.insert_resource(Messages::<aberred_core::protocol::audio::AudioCmd>::default());
+        world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world
     }
 
@@ -119,28 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn rust_callback_fires_when_no_lua_callback_set() {
-        let mut world = setup_world();
-        let button = world
-            .spawn(GuiInteractable::rust(80.0, 24.0, dummy_callback))
-            .id();
-
-        tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: button });
-        world.flush();
-
-        assert!(
-            world
-                .resource::<WorldSignals>()
-                .has_flag("rust_callback_fired")
-        );
-    }
-
-    #[cfg(feature = "lua")]
-    #[test]
     fn lua_callback_takes_priority_over_rust_callback() {
-        use crate::resources::lua_runtime::LuaRuntime;
-
         let mut world = setup_world();
         {
             let lua_rt = world.non_send::<LuaRuntime>();
@@ -167,38 +126,6 @@ mod tests {
                 .resource::<WorldSignals>()
                 .has_flag("rust_callback_fired"),
             "Rust callback should be skipped when a Lua callback is set"
-        );
-    }
-
-    #[test]
-    fn missing_button_entity_does_not_panic() {
-        let mut world = setup_world();
-        let bogus = world.spawn_empty().id();
-        world.despawn(bogus);
-
-        tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: bogus });
-        world.flush();
-    }
-
-    #[test]
-    fn gui_image_click_dispatches_through_same_observer() {
-        let mut world = setup_world();
-        let image = world
-            .spawn((
-                GuiImage::new(40.0, 40.0, "item_sword", 0.0, 0.0),
-                GuiInteractable::rust(40.0, 40.0, dummy_callback),
-            ))
-            .id();
-
-        tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: image });
-        world.flush();
-
-        assert!(
-            world
-                .resource::<WorldSignals>()
-                .has_flag("rust_callback_fired")
         );
     }
 }

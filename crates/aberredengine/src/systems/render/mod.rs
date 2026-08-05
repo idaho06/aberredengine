@@ -5,7 +5,7 @@
 //!   debug overlays, and basic diagnostics each frame
 //! - [`mirror`] – retained render-world mirror-entity reconciliation
 //! - [`geometry`] – sprite/text geometry and view-bounds helpers
-//! - [`math`] – `crate::math::Color`/`Rect` <-> raylib `Color`/`Rectangle` conversions
+//! - [`math`] – `aberred_core::math::Color`/`Rect` <-> raylib `Color`/`Rectangle` conversions
 //! - [`window`] – refreshes `WindowSize` from the OS each render frame
 //! - [`input`] – samples raw device input each render frame
 //! - [`messages`] – drains logic->render messages once per render frame

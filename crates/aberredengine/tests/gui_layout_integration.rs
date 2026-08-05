@@ -10,13 +10,13 @@
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use aberredengine::math::Vec2;
+use aberredengine::core::math::Vec2;
 
-use aberredengine::components::globaltransform2d::GlobalTransform2D;
-use aberredengine::components::guioffset::GuiOffset;
-use aberredengine::components::screenposition::ScreenPosition;
-use aberredengine::systems::gui_layout::gui_layout_system;
-use aberredengine::systems::propagate_transforms::propagate_transforms;
+use aberredengine::core::components::globaltransform2d::GlobalTransform2D;
+use aberredengine::core::components::guioffset::GuiOffset;
+use aberredengine::core::components::screenposition::ScreenPosition;
+use aberredengine::core::systems::gui_layout::gui_layout_system;
+use aberredengine::core::systems::propagate_transforms::propagate_transforms;
 
 const EPSILON: f32 = 1e-4;
 
