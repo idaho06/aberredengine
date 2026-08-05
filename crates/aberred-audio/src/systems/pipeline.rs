@@ -4,20 +4,18 @@
 //! spawn/despawn plus `NonSendMut<AudioStore>` access, which is awkward to
 //! express through ordinary system params.
 
-// Test to use
-
 use std::ffi::CString;
 
 use bevy_ecs::prelude::{Component, Entity, World};
 use log::{debug, error, info};
 use raylib::ffi;
 
-use crate::components::audio::handles::{FfiHandle, MusicHandle};
-use crate::components::audio::music_track::MusicTrack;
-use crate::components::audio::playing_fx::PlayingFx;
+use crate::components::handles::{FfiHandle, MusicHandle};
+use crate::components::music_track::MusicTrack;
+use crate::components::playing_fx::PlayingFx;
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
-use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
-use crate::resources::audio::store::AudioStore;
+use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
+use crate::resources::store::AudioStore;
 
 /// Drain all pending [`AudioCmd`]s non-blockingly and apply them to the
 /// audio world.

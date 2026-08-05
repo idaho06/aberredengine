@@ -13,11 +13,11 @@ use rustc_hash::FxHashMap;
 use aberred_core::pacing::{Pacer, StatsWindow};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 
-use crate::components::audio::music_track::MusicTrack;
-use crate::resources::audio::channels::{CmdReceiver, MsgSender, ShouldExit};
-use crate::resources::audio::store::AudioStore;
+use crate::components::music_track::MusicTrack;
+use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
+use crate::resources::store::AudioStore;
 
-use super::systems::{despawn_all, drain_cmds, pump_fx, pump_music, unload_all_fx_aliases};
+use super::pipeline::{despawn_all, drain_cmds, pump_fx, pump_music, unload_all_fx_aliases};
 
 /// Entry point of the dedicated audio thread.
 ///

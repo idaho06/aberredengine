@@ -12,7 +12,6 @@
 //! version of each of those four functions unconditionally, since it cannot
 //! name `LuaRuntime`/Lua-only component types at all.
 
-pub mod audio;
 pub mod collision_rule_index;
 pub mod gui_interactable_click;
 #[cfg(feature = "lua")]

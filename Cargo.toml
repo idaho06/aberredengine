@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aberred-core", "crates/aberredengine"]
+members = ["crates/aberred-core", "crates/aberred-audio", "crates/aberredengine"]
 
 [workspace.package]
 edition = "2024"
@@ -30,6 +30,7 @@ glam = { version = "0.33", features = ["libm"] }
 libm = "0.2"
 tempfile = "3.27.0"
 embed-resource = "3"
+raylib = { package = "sola-raylib", version = "6.3" }
 
 [profile.release]
 opt-level = 3

@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 aberred-core = { path = "../aberred-core" }
+aberred-audio = { path = "../aberred-audio" }
 bevy_ecs.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
@@ -29,10 +30,10 @@ glam.workspace = true
 libm.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-raylib = { package = "sola-raylib", version = "6.3", features = ["wayland", "noscreenshot"] }
+raylib = { workspace = true, features = ["wayland", "noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-raylib = { package = "sola-raylib", version = "6.3", features = ["noscreenshot"] }
+raylib = { workspace = true, features = ["noscreenshot"] }
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 embed-resource.workspace = true
@@ -56,5 +57,5 @@ aberred-core = { path = "../aberred-core", features = ["test-support"] }
 [features]
 default = ["lua"]
 lua   = ["dep:mlua", "aberred-core/lua"]
-tracy = ["dep:tracy-client", "aberred-core/tracy"]  # profiling — never in default
+tracy = ["dep:tracy-client", "aberred-core/tracy", "aberred-audio/tracy"]  # profiling — never in default
 test-support = ["aberred-core/test-support"]  # headless TestWorld harness — never in default

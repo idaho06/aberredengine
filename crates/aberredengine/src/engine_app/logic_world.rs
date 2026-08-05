@@ -20,7 +20,7 @@ use aberred_core::events::switchdebug::switch_debug_observer;
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::endpoints::setup_audio_stub;
 use aberred_core::protocol::endpoints::RenderTx;
-use crate::systems::audio::setup_audio;
+use aberred_audio::systems::setup_audio;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::appstate::AppState;

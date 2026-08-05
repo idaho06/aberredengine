@@ -1,0 +1,21 @@
+[package]
+name = "aberred-audio"
+version = "0.2.0"
+edition.workspace = true
+
+[dependencies]
+aberred-core = { path = "../aberred-core" }
+bevy_ecs.workspace = true
+crossbeam-channel.workspace = true
+rustc-hash.workspace = true
+log.workspace = true
+tracy-client = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+raylib = { workspace = true, features = ["wayland", "noscreenshot"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+raylib = { workspace = true, features = ["noscreenshot"] }
+
+[features]
+tracy = ["dep:tracy-client"]

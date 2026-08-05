@@ -1,20 +1,16 @@
-//! Audio thread implementation backed by a dedicated thread and Raylib.
-//!
-//! This module hosts the background audio thread and its own `bevy_ecs::World`:
-//! [`audio_thread`] runs on its own OS thread, owns the Raylib
-//! audio device, and processes [`AudioCmd`] messages, emitting [`AudioMessage`]
-//! responses.
+//! [`audio_thread`] runs on its own OS thread, owns the Raylib audio
+//! device, and processes [`AudioCmd`] messages, emitting [`AudioMessage`]
+//! responses (see the crate root docs for how this fits into the engine).
 //!
 //! The bridge functions that run on the LOGIC (sim) thread to shuttle
 //! [`AudioCmd`]/[`AudioMessage`] across the channel -- and never touch
 //! `AudioStore`/`PlayingFx`/`MusicTrack`, which are internal to this module's
 //! `World` and never cross into the sim world -- live in
-//! [`crate::systems::audio_bridge`], not here.
+//! `aberred_core::systems::audio_bridge`, not here.
 //!
 //! Notes
-//! - The audio thread must be created once via [`setup_audio`] (this
-//!   module, not core -- spawning [`audio_thread`] needs Raylib, which
-//!   `aberred-core` cannot depend on) and joined/terminated via
+//! - The audio thread must be created once via [`setup_audio`] and
+//!   joined/terminated via
 //!   [`aberred_core::protocol::endpoints::shutdown_audio`].
 //! - All file I/O (load) and control (play/stop/pause/volume) happen on the
 //!   audio thread in response to commands.
@@ -29,7 +25,7 @@
 //!
 //! See also: [`aberred_core::protocol::audio`] and [`aberred_core::protocol::endpoints`].
 
-mod systems;
+mod pipeline;
 mod world;
 
 pub use world::audio_thread;
@@ -49,8 +45,8 @@ use crossbeam_channel::unbounded;
 /// - Inserts `AudioBridge` and initializes `Messages<AudioMessage>` so that
 ///   systems can send commands and poll for events.
 ///
-/// Lives in the facade, not `aberred-core`, because [`audio_thread`] owns a
-/// Raylib audio device -- `aberred-core` cannot depend on Raylib.
+/// Lives in `aberred-audio`, not `aberred-core`, because [`audio_thread`]
+/// owns a Raylib audio device -- `aberred-core` cannot depend on Raylib.
 pub fn setup_audio(world: &mut World, audio_hz: f64) {
     let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
     let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
