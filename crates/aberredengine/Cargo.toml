@@ -1,0 +1,51 @@
+[package]
+name = "aberredengine"
+version = "0.2.0"
+edition.workspace = true
+
+[dependencies]
+bevy_ecs.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+crossbeam-channel.workspace = true
+mlua = { workspace = true, optional = true }
+tracy-client = { workspace = true, optional = true }
+arrayvec.workspace = true
+smallvec.workspace = true
+configparser.workspace = true
+fastrand.workspace = true
+log.workspace = true
+env_logger.workspace = true
+clap.workspace = true
+imgui.workspace = true
+paste.workspace = true
+spin_sleep.workspace = true
+triple_buffer.workspace = true
+thiserror.workspace = true
+postcard.workspace = true
+glam.workspace = true
+libm.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+raylib = { package = "sola-raylib", version = "6.3", features = ["wayland", "noscreenshot"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+raylib = { package = "sola-raylib", version = "6.3", features = ["noscreenshot"] }
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+# "debug" resolves system names in bevy_ecs's schedule-build warnings (e.g.
+# ambiguity_detection); scoped to dev-dependencies so it applies to `cargo
+# test` builds only, not `cargo build`/`cargo run` (edition-2024 resolver
+# unifies dev-dependency features per-target, not into the main binary).
+bevy_ecs = { workspace = true, features = ["debug"] }
+tempfile.workspace = true
+
+[features]
+default = ["lua"]
+lua   = ["dep:mlua"]
+tracy = ["dep:tracy-client"]  # profiling — never in default
+test-support = []             # headless TestWorld harness — never in default
