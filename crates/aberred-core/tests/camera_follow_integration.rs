@@ -5,17 +5,17 @@
 //! offset, and bounds clamping.
 
 use bevy_ecs::prelude::*;
-use aberredengine::core::math::Vec2;
+use aberred_core::math::Vec2;
 
-use aberredengine::core::components::cameratarget::CameraTarget;
-use aberredengine::core::components::globaltransform2d::GlobalTransform2D;
-use aberredengine::core::components::mapposition::MapPosition;
-use aberredengine::core::math::Rect;
-use aberredengine::core::resources::camera2d::{Camera2D, Camera2DRes};
-use aberredengine::core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use aberredengine::core::resources::screensize::ScreenSize;
-use aberredengine::core::resources::worldtime::WorldTime;
-use aberredengine::core::systems::camera_follow::camera_follow_system;
+use aberred_core::components::cameratarget::CameraTarget;
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::math::Rect;
+use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::systems::camera_follow::camera_follow_system;
 
 const EPSILON: f32 = 1e-4;
 
@@ -49,9 +49,10 @@ fn setup_world() -> World {
         let mut wt = world.resource_mut::<WorldTime>();
         wt.delta = 1.0 / 60.0;
     }
-    let mut cfg = CameraFollowConfig::default();
-    cfg.enabled = true;
-    world.insert_resource(cfg);
+    world.insert_resource(CameraFollowConfig {
+        enabled: true,
+        ..Default::default()
+    });
     world
 }
 

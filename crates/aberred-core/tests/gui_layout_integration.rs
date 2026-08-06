@@ -1,6 +1,6 @@
 //! Integration tests for the GUI child layout system (`gui_layout_system`).
 //!
-//! Mirrors the harness pattern in `tests/hierarchy_integration.rs`.
+//! Mirrors the harness pattern in `aberred-lua/tests/hierarchy_integration.rs`.
 //!
 //! # Usage
 //!
@@ -10,13 +10,13 @@
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use aberredengine::core::math::Vec2;
+use aberred_core::math::Vec2;
 
-use aberredengine::core::components::globaltransform2d::GlobalTransform2D;
-use aberredengine::core::components::guioffset::GuiOffset;
-use aberredengine::core::components::screenposition::ScreenPosition;
-use aberredengine::core::systems::gui_layout::gui_layout_system;
-use aberredengine::core::systems::propagate_transforms::propagate_transforms;
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::guioffset::GuiOffset;
+use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::systems::gui_layout::gui_layout_system;
+use aberred_core::systems::propagate_transforms::propagate_transforms;
 
 const EPSILON: f32 = 1e-4;
 
