@@ -14,7 +14,7 @@ use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::resources::lua_runtime::LuaRuntime;
 use aberredengine::core::resources::postprocessshader::PostProcessShader;
-use aberredengine::resources::render::texturestore::TextureStore;
+use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::resources::worldtime::WorldTime;

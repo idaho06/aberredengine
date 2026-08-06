@@ -40,7 +40,7 @@ use aberred_core::systems::phase::phase_system;
 use aberred_core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
-use crate::systems::render::render_system;
+use aberred_render::systems::render_system;
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 use aberred_core::systems::scene_dispatch::{scene_switch_poll, scene_update_system};
 use aberred_core::systems::signal_intents::apply_signal_intents;

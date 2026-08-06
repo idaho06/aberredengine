@@ -11,15 +11,15 @@ use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::InputBindings;
 use aberredengine::core::resources::postprocessshader::PostProcessShader;
-use aberredengine::resources::render::fontstore::FontStore;
-use aberredengine::resources::render::texturestore::TextureStore;
+use aberredengine::render::resources::fontstore::FontStore;
+use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::signal_intents::SignalIntents;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::GameCtx;
-use aberredengine::resources::render::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
+use aberredengine::render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use aberredengine::core::systems::scene_dispatch::{
     SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
 };

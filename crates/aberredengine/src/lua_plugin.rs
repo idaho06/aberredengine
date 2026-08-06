@@ -548,7 +548,7 @@ pub fn switch_scene(
 /// Drains `asset_commands` queued from gameplay (`on_update_*`, `on_switch_scene`, phase/timer/
 /// collision callbacks) and translates them into `RenderAssetCmd`/`AudioCmd` messages — no GL
 /// calls happen here; actual GL loading happens in
-/// [`crate::systems::render::process_render_asset_cmds`] on the render thread.
+/// [`aberred_render::systems::process_render_asset_cmds`] on the render thread.
 ///
 /// `setup()` drains this same queue once for `on_setup`-time loads, using its own local buffer;
 /// this system is the reachable drain site for any `engine.load_*` call made after setup.

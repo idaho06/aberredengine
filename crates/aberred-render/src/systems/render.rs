@@ -30,7 +30,7 @@ use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use aberred_core::components::guiwindow::GuiWindow;
 use aberred_core::components::mapposition::MapPosition;
-use crate::components::render::mirror::SimMirror;
+use crate::components::mirror::SimMirror;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
@@ -40,23 +40,23 @@ use aberred_core::components::tint::Tint;
 use aberred_core::components::zindex::ZIndex;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
-use crate::resources::render::fontstore::FontStore;
-use crate::resources::render::imgui_bridge::ImguiBridge;
+use crate::resources::fontstore::FontStore;
+use crate::resources::imgui_bridge::ImguiBridge;
 use aberred_core::resources::signal_intents::SignalIntents;
 
 use super::mirror::MirrorQueries;
-use crate::resources::render::mirrors::{
+use crate::resources::mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
-use crate::resources::render::rendertarget::RenderTarget;
-use crate::resources::render::scene_table::RenderSceneTable;
-use crate::resources::render::shaderstore::ShaderStore;
-use crate::resources::render::texturestore::TextureStore;
-use crate::resources::render::thread_stats::RenderStats;
+use crate::resources::rendertarget::RenderTarget;
+use crate::resources::scene_table::RenderSceneTable;
+use crate::resources::shaderstore::ShaderStore;
+use crate::resources::texturestore::TextureStore;
+use crate::resources::thread_stats::RenderStats;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::windowsize::WindowSize;
-use crate::resources::render::scene_table::GuiCallback;
+use crate::resources::scene_table::GuiCallback;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
@@ -257,7 +257,7 @@ pub struct RenderResources<'w> {
     pub fonts: NonSend<'w, FontStore>,
     pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
     // Mirrors of DrawableSnapshot's global fields, fanned out by
-    // receive_snapshot (src/engine_app.rs) -- see src/resources/render_mirrors.rs.
+    // receive_snapshot (systems/snapshot.rs) -- see resources/mirrors.rs.
     // These are render-world-only snapshot copies, not the live sim resources
     // of the same underlying type.
     pub camera: Res<'w, RenderCamera>,
@@ -271,7 +271,7 @@ pub struct RenderResources<'w> {
 
 /// Extra resources needed for the imgui debug panels.
 #[derive(SystemParam)]
-pub(crate) struct DebugResources<'w> {
+pub struct DebugResources<'w> {
     /// Buffered writes queued by `GuiCallback` -- applied to `WorldSignals`
     /// logic-side by `apply_signal_intents` at the top of the next sim tick.
     /// `GuiCallback`/`WorldDrawCallback` reads come from `RenderResources`
@@ -854,7 +854,7 @@ pub fn render_system(
                 let core_camera: aberred_core::resources::camera2d::Camera2D =
                     camera2d_from_raylib(res.camera.0);
                 cb(
-                    &mut crate::systems::render::math::RaylibWorldDraw(&mut d2),
+                    &mut crate::systems::math::RaylibWorldDraw(&mut d2),
                     &core_camera,
                     &res.screensize,
                     &res.app_state.0,

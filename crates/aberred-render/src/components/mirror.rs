@@ -2,7 +2,7 @@
 //! entity per drawable-list item, keyed by the sim entity's
 //! `Entity::to_bits()`, reconciled every time a new `DrawableSnapshot`
 //! arrives instead of rebuilt from a `Vec` every frame. The reconciliation
-//! logic itself lives in `crate::systems::render::mirror`.
+//! logic itself lives in `crate::systems::mirror`.
 
 use bevy_ecs::prelude::*;
 use raylib::prelude::Vector2;

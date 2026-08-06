@@ -1,5 +1,5 @@
 //! Sim-entity-id -> mirror-entity lookup backing mirror-entity reconciliation
-//! (`crate::systems::render::mirror`).
+//! (`crate::systems::mirror`).
 
 use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::{FxHashMap, FxHashSet};

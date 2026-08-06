@@ -18,6 +18,13 @@ pub use raylib;
 pub use aberred_core as core;
 pub use core::EngineError;
 
+// Module-style re-export of the render crate: `aberredengine::render::resources::...`,
+// etc. Mirrors the `core` re-export above (docs/plans/workspaces-implementation.md's
+// Phase 3 decision record) -- downstream code using the old
+// `aberredengine::resources::render::...`/`aberredengine::systems::render::...` paths
+// must migrate to `aberredengine::render::...`.
+pub use aberred_render as render;
+
 pub mod components;
 pub mod engine_app;
 pub mod events;

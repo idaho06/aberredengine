@@ -2,7 +2,7 @@ use raylib::prelude::*;
 
 use super::math::{resolve_text_tint, shadow_color, vec2_to_raylib};
 use super::render::ScreenTextBufferItem;
-use crate::resources::render::fontstore::FontStore;
+use crate::resources::fontstore::FontStore;
 
 /// Draw one already-resolved screen-space text item (UI layer).
 pub(super) fn draw_screen_text_item(

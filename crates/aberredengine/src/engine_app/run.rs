@@ -1,6 +1,8 @@
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 
+use aberred_render::bootstrap::{build_render_schedule, setup_render_world, setup_window};
+
 use super::builder::EngineBuilder;
 use super::logic_thread::{LogicInit, logic_thread};
 use super::replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};
@@ -13,10 +15,10 @@ use aberred_core::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, Replay
 use aberred_core::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::gameconfig::default_render_fps;
-use crate::resources::render::mirrors::RenderGameConfig;
-use crate::resources::render::quit_requested::QuitRequested;
-use crate::resources::render::scene_table::{RenderSceneTable, SceneRender};
-use crate::resources::render::thread_stats::RenderStats;
+use aberred_render::resources::mirrors::RenderGameConfig;
+use aberred_render::resources::quit_requested::QuitRequested;
+use aberred_render::resources::scene_table::{RenderSceneTable, SceneRender};
+use aberred_render::resources::thread_stats::RenderStats;
 
 impl EngineBuilder {
     /// Build the engine and run the main loop.
@@ -101,7 +103,7 @@ impl EngineBuilder {
             None => None,
         };
 
-        let (rl, thread, render_target) = Self::setup_window(&config)?;
+        let (rl, thread, render_target) = setup_window(&config)?;
 
         let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
@@ -179,7 +181,7 @@ impl EngineBuilder {
             .spawn(move || logic_thread(init))
             .map_err(|source| EngineError::ThreadSpawn { source })?;
 
-        let mut render_world = Self::setup_render_world(
+        let mut render_world = setup_render_world(
             config,
             rl,
             thread,
@@ -194,7 +196,7 @@ impl EngineBuilder {
                 handle,
             },
         )?;
-        let mut render_schedule = Self::build_render_schedule(&mut render_world)?;
+        let mut render_schedule = build_render_schedule(&mut render_world)?;
         Self::render_main_loop(&mut render_world, &mut render_schedule);
 
         Ok(())

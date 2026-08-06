@@ -6,7 +6,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::*;
 
 use aberred_core::protocol::snapshot::SnapshotConsumer;
-use crate::resources::render::mirrors::{
+use crate::resources::mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
@@ -28,7 +28,7 @@ use super::mirror::{
 /// this frame's asset loads and this frame's snapshot are visible together.
 ///
 /// The snapshot's 8 `Vec<...Entry>` drawable-list fields feed the 8
-/// `reconcile_*` calls below (`src/systems/render/mirror.rs`), which write
+/// `reconcile_*` calls below (`src/systems/mirror.rs`), which write
 /// their results into retained mirror entities rather than a resource --
 /// read by reference, never cloned. Only the 10 "global" fields below are
 /// actually kept, and each of those is copied/cloned into a

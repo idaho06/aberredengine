@@ -11,7 +11,7 @@
 //! render tree is allowed to know raylib exists.
 //!
 //! Plain functions, not `impl From`: `aberred-core` and `raylib` are
-//! genuinely separate crates from this (facade/render) crate's point of
+//! genuinely separate crates from this (`aberred-render`) crate's point of
 //! view, so `impl From<Color> for raylib::prelude::Color` would name two
 //! foreign types and violate the orphan rule. `RaylibWorldDraw` below
 //! sidesteps the equivalent problem for `WorldDraw`/`RaylibDraw` via a

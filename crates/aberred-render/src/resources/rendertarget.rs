@@ -5,7 +5,7 @@
 //! rendering with proper aspect ratio preservation.
 
 use aberred_core::resources::texturefilter::TextureFilter;
-use crate::systems::render::math::texture_filter_to_ffi;
+use crate::systems::math::texture_filter_to_ffi;
 use raylib::ffi;
 use raylib::prelude::*;
 

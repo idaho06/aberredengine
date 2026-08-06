@@ -4,8 +4,8 @@ use bevy_ecs::prelude::*;
 
 use aberred_core::protocol::endpoints::LogicBridge;
 use aberred_core::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
-use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
-use crate::resources::render::quit_requested::QuitRequested;
+use crate::resources::pending_imgui_capture::PendingImguiCapture;
+use crate::resources::quit_requested::QuitRequested;
 use aberred_core::resources::windowsize::WindowSize;
 
 /// Highest raylib keyboard key code in use today (`KEY_KB_MENU`).

@@ -28,7 +28,7 @@ use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::guiwindow::GuiWindow;
 use aberred_core::components::mapposition::MapPosition;
-use crate::components::render::mirror::{
+use crate::components::mirror::{
     MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapSprite,
     MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
 };
@@ -43,7 +43,7 @@ use aberred_core::resources::drawable_snapshot::{
     GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
     MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
 };
-use crate::resources::render::sim_id_map::SimIdMap;
+use crate::resources::sim_id_map::SimIdMap;
 
 /// Implemented by every `DrawableSnapshot` entry type [`reconcile`] accepts,
 /// so the shared loop can extract the originating sim `Entity` without a
@@ -481,7 +481,7 @@ type MirrorGuiProgressBarQueryData = (
 /// Bundled mirror-entity draw-prep queries for `render_system`, mirroring
 /// `DrawableSnapshotQueries`' bundling convention
 /// (`src/resources/drawable_snapshot.rs`) and `RenderResources`/
-/// `DebugResources`' (`src/systems/render/mod.rs`) -- named query-data type
+/// `DebugResources`' (`src/systems/render.rs`) -- named query-data type
 /// aliases plus one `#[derive(SystemParam)]` struct, rather than 4 raw
 /// `Query<...>` parameters directly on `render_system`'s already-long
 /// signature.

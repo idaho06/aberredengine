@@ -59,15 +59,15 @@ fn test_builder_title() {
 #[test]
 fn test_raylib_log_level_from_rust_log_defaults_to_info() {
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log(""),
+        aberred_render::logging::raylib_log_level_from_rust_log(""),
         TraceLogLevel::LOG_INFO
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("mycrate=debug"),
+        aberred_render::logging::raylib_log_level_from_rust_log("mycrate=debug"),
         TraceLogLevel::LOG_INFO
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("nope"),
+        aberred_render::logging::raylib_log_level_from_rust_log("nope"),
         TraceLogLevel::LOG_INFO
     );
 }
@@ -75,27 +75,27 @@ fn test_raylib_log_level_from_rust_log_defaults_to_info() {
 #[test]
 fn test_raylib_log_level_from_rust_log_maps_supported_levels() {
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("trace"),
+        aberred_render::logging::raylib_log_level_from_rust_log("trace"),
         TraceLogLevel::LOG_TRACE
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("debug"),
+        aberred_render::logging::raylib_log_level_from_rust_log("debug"),
         TraceLogLevel::LOG_DEBUG
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("info"),
+        aberred_render::logging::raylib_log_level_from_rust_log("info"),
         TraceLogLevel::LOG_INFO
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("warning"),
+        aberred_render::logging::raylib_log_level_from_rust_log("warning"),
         TraceLogLevel::LOG_WARNING
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("error"),
+        aberred_render::logging::raylib_log_level_from_rust_log("error"),
         TraceLogLevel::LOG_ERROR
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("off"),
+        aberred_render::logging::raylib_log_level_from_rust_log("off"),
         TraceLogLevel::LOG_NONE
     );
 }
@@ -103,15 +103,15 @@ fn test_raylib_log_level_from_rust_log_maps_supported_levels() {
 #[test]
 fn test_raylib_log_level_from_rust_log_uses_global_directive_only() {
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("warn,mycrate=debug"),
+        aberred_render::logging::raylib_log_level_from_rust_log("warn,mycrate=debug"),
         TraceLogLevel::LOG_WARNING
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("mycrate=debug,trace"),
+        aberred_render::logging::raylib_log_level_from_rust_log("mycrate=debug,trace"),
         TraceLogLevel::LOG_TRACE
     );
     assert_eq!(
-        EngineBuilder::raylib_log_level_from_rust_log("info/foo,mycrate=debug"),
+        aberred_render::logging::raylib_log_level_from_rust_log("info/foo,mycrate=debug"),
         TraceLogLevel::LOG_INFO
     );
 }

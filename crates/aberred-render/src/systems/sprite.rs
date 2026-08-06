@@ -7,7 +7,7 @@ use super::render::ScreenSpriteBufferItem;
 pub(super) fn draw_screen_sprite_item(
     d: &mut impl RaylibDraw,
     item: &ScreenSpriteBufferItem,
-    textures: &crate::resources::render::texturestore::TextureStore,
+    textures: &crate::resources::texturestore::TextureStore,
     debug: bool,
 ) {
     let sprite = &item.sprite;

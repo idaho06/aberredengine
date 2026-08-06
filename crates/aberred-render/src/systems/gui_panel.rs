@@ -4,7 +4,7 @@ use super::math::{rect_to_raylib, shadow_color};
 use super::render::{ScreenPanelBufferItem, ScreenProgressBarBufferItem};
 use aberred_core::components::shadow::Shadow;
 use aberred_core::resources::guitheme::GuiNinePatch;
-use crate::resources::render::texturestore::TextureStore;
+use crate::resources::texturestore::TextureStore;
 
 /// Draw one already-resolved screen-space GUI panel item (window background).
 pub(super) fn draw_screen_panel_item(

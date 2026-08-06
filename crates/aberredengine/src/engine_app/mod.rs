@@ -106,7 +106,6 @@ mod config;
 mod logic_thread;
 mod logic_world;
 mod registrar;
-mod render_world;
 mod replay;
 mod run;
 mod schedule;

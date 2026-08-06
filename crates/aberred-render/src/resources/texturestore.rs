@@ -4,7 +4,7 @@
 //! objects keyed by string IDs. Insert textures during setup and read them in
 //! render systems.
 use aberred_core::resources::texturefilter::TextureFilter;
-use crate::systems::render::math::texture_filter_to_ffi;
+use crate::systems::math::texture_filter_to_ffi;
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;
 use raylib::prelude::Texture2D;
@@ -27,7 +27,7 @@ use std::ffi::CString;
 ///
 /// **GPU-handle store, render-world-only.** [`Texture2D`] wraps a live GL
 /// texture handle; the only writer that *loads new* textures is
-/// `process_render_asset_cmds` (`crate::systems::render::assets`). `insert`/
+/// `process_render_asset_cmds` (`crate::systems::assets`). `insert`/
 /// `set_filter` call `ffi::SetTextureFilter` directly and must only run from
 /// render-thread code. `remove` is pure `FxHashMap` bookkeeping (no GL call
 /// of its own) but is likewise only ever invoked from `process_render_asset_cmds`
@@ -100,7 +100,7 @@ impl TextureStore {
         self.map.remove(key.as_ref())
     }
     /// Rename an already-loaded texture in place: no reload, just a key
-    /// move (mirrors [`FontStore::rename`](crate::resources::render::fontstore::FontStore::rename)),
+    /// move (mirrors [`FontStore::rename`](crate::resources::fontstore::FontStore::rename)),
     /// preserving the GPU handle, filter, and path metadata.
     ///
     /// Returns `false` (no-op) if `old_key` is not loaded.

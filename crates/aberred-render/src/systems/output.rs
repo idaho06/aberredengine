@@ -6,8 +6,8 @@ use bevy_ecs::prelude::*;
 use aberred_core::protocol::endpoints::LogicBridge;
 use aberred_core::protocol::render_logic::LogicMsg;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::render::imgui_bridge::ImguiBridge;
-use crate::resources::render::pending_imgui_capture::PendingImguiCapture;
+use crate::resources::imgui_bridge::ImguiBridge;
+use crate::resources::pending_imgui_capture::PendingImguiCapture;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 

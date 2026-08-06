@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aberred-core", "crates/aberred-audio", "crates/aberredengine"]
+members = ["crates/aberred-core", "crates/aberred-audio", "crates/aberred-render", "crates/aberredengine"]
 
 [workspace.package]
 edition = "2024"

@@ -7,7 +7,7 @@
 //! into its two halves at [`EngineBuilder::add_scene`](super::EngineBuilder::add_scene)
 //! registration time, joined again by scene name.
 
-use crate::resources::render::scene_table::GuiCallback;
+use aberred_render::resources::scene_table::GuiCallback;
 use aberred_core::systems::scene_dispatch::{SceneEnterFn, SceneExitFn, SceneUpdateFn, WorldDrawCallback};
 
 /// Describes the callbacks for a single scene.
@@ -51,8 +51,8 @@ mod tests {
     use aberred_core::resources::appstate::AppState;
     use aberred_core::resources::signal_intents::SignalIntents;
     use aberred_core::resources::worldsignals::SignalSnapshot;
-    use crate::resources::render::fontstore::FontStore;
-    use crate::resources::render::texturestore::TextureStore;
+    use aberred_render::resources::fontstore::FontStore;
+    use aberred_render::resources::texturestore::TextureStore;
     use aberred_core::systems::GameCtx;
 
     #[test]

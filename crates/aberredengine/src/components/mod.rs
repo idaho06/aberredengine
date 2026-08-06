@@ -1,11 +1,11 @@
-//! Render/Lua-only component re-exports.
+//! Lua-only component re-exports.
 //!
 //! The bulk of the engine's components now live in `aberred_core::components`
 //! (re-exported as `aberredengine::core::components`). This module holds only
-//! the thread-exclusive subset that can't live in core: components used by
-//! the render (main) thread and Lua-callback components
-//! (`#[cfg(feature = "lua")]`). Audio-thread-only components live in the
-//! `aberred-audio` crate.
+//! Lua-callback components (`#[cfg(feature = "lua")]`) that can't live in
+//! core. Audio-thread-only components live in the `aberred-audio` crate;
+//! render-thread-only components live in the `aberred-render` crate
+//! (re-exported as `aberredengine::render::components`).
 
 #[cfg(feature = "lua")]
 pub mod lua_on_animation_end;
@@ -19,4 +19,3 @@ pub mod luaphase;
 pub mod luasetup;
 #[cfg(feature = "lua")]
 pub mod luatimer;
-pub mod render;
