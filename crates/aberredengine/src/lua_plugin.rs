@@ -83,7 +83,7 @@ pub struct EntityProcessing<'w, 's> {
 /// Hold one of these in a `Local<CommonCmdBufs>` on each Bevy system that calls
 /// `drain_common_commands`. The Vecs retain heap capacity across frames.
 #[derive(Default)]
-pub(crate) struct CommonCmdBufs {
+pub struct CommonCmdBufs {
     phase: Vec<PhaseCmd>,
     effects: EffectCmdBufs,
     render: Vec<RenderCmd>,

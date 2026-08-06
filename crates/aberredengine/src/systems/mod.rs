@@ -21,7 +21,15 @@ pub mod lua_animation_finished;
 #[cfg(feature = "lua")]
 pub mod lua_collision;
 #[cfg(feature = "lua")]
+pub mod lua_collision_rule_index;
+#[cfg(feature = "lua")]
 pub mod lua_commands;
+#[cfg(feature = "lua")]
+pub mod lua_gui_interactable_click;
+#[cfg(feature = "lua")]
+pub mod lua_mapspawn;
+#[cfg(feature = "lua")]
+pub mod lua_menu;
 #[cfg(feature = "lua")]
 pub mod lua_setup_entity;
 #[cfg(feature = "lua")]
