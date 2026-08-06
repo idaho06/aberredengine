@@ -9,9 +9,6 @@ affected by `Camera2D`) and composited over the game world in the same render pa
 **In scope:** themed panels, buttons, image slots, text labels, signal-driven dynamic labels,
 nine-patch skins, per-state atlas offsets, show/hide via tween, runtime enable/disable.
 
-**Out of scope:** world-space widgets, automatic layout/flexbox, text input, drag-and-drop,
-keyboard/gamepad focus traversal, tooltips. See [Roadmap](#roadmap--pending) for planned additions.
-
 ---
 
 ## Architecture at a Glance
@@ -65,7 +62,7 @@ GuiTheme
 
 GuiNinePatch
   tex_key:   Arc<str>
-  source:    Rectangle                — pixel region within the texture
+  source:    Rect                — pixel region within the texture
   left/top/right/bottom: i32          — border widths in pixels (maps 1:1 to raylib NPatchInfo)
 
 GuiButtonSkin
@@ -83,9 +80,13 @@ GuiProgressBarSkin
   fill:  GuiNinePatch                 — required; skin is dropped if fill is unset
 ```
 
-The default theme key is `"default"`. Widgets that never call `:with_gui_theme_key()` use it.
-A missing or unregistered theme key causes the widget's themed background to be skipped silently
-(caption/sprite still render); a warning is logged once per widget via `GuiThemeWarnCache`.
+The default theme key is `"default"`. Widgets that never call `:with_gui_theme_key()` (Lua) or
+`.with_theme_key(key)` (Rust) use it. `GuiWindow`, `GuiButton`, `GuiLabel`, and `GuiProgressBar`
+all implement the shared `Themed` trait, so `.with_theme_key(...)` works identically on all four —
+`GuiImage` has no theming and implements no such method (its atlas offsets are configured directly,
+see [GuiImage](#guiimage)). A missing or unregistered theme key causes the widget's themed
+background to be skipped silently (caption/sprite still render); a warning is logged once per
+widget via `GuiThemeWarnCache`.
 
 ### Registering themes in Lua
 
@@ -143,27 +144,27 @@ system registered via `EngineBuilder::on_setup`:
 ```rust
 use std::sync::Arc;
 use bevy_ecs::prelude::ResMut;
-use raylib::prelude::{Color, Rectangle, Vector2};
-use aberredengine::components::shadow::Shadow;
-use aberredengine::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
+use aberredengine::core::math::{Color, Rect, Vec2};
+use aberredengine::core::components::shadow::Shadow;
+use aberredengine::core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
 
 fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
-    let panel_shadow = Some(Shadow { offset: Vector2::new(2.0, 2.0), color: Color::new(0, 0, 0, 120) });
+    let panel_shadow = Some(Shadow { offset: Vec2::new(2.0, 2.0), color: Color::new(0, 0, 0, 120) });
     let theme = GuiTheme {
         panel: GuiNinePatch {
             tex_key: Arc::from("gui-window"),
-            source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+            source: Rect::new(0.0, 0.0, 64.0, 64.0),
             left: 6, top: 6, right: 6, bottom: 6,
         },
         button: Some(GuiButtonSkin {
             normal: GuiNinePatch {
                 tex_key: Arc::from("gui-buttons"),
-                source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+                source: Rect::new(0.0, 0.0, 64.0, 64.0),
                 left: 8, top: 8, right: 8, bottom: 8,
             },
             hover: None, pressed: None, disabled: None, // all fall back to normal
             shadow: panel_shadow.clone(),
-            pressed_shadow: Some(Shadow { offset: Vector2::new(0.0, 0.0), color: Color::new(0, 0, 0, 0) }), // collapse on press
+            pressed_shadow: Some(Shadow { offset: Vec2::new(0.0, 0.0), color: Color::new(0, 0, 0, 0) }), // collapse on press
             hover_shadow: None, disabled_shadow: None,
         }),
         label: None,
@@ -192,7 +193,7 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
 Renders a nine-patch panel using the `panel` field of its theme.
 
 ```
-GuiWindow { size: Vector2, theme_key: Arc<str> }
+GuiWindow { size: Vec2, theme_key: Arc<str> }
 ```
 
 - Requires `ScreenPosition` to be visible; visibility is controlled by the presence or absence of
@@ -212,11 +213,12 @@ engine.spawn()
 
 **Rust:**
 ```rust
-use aberredengine::components::{guiwindow::GuiWindow, screenposition::ScreenPosition, zindex::ZIndex};
+use aberredengine::core::components::{guiwindow::GuiWindow, screenposition::ScreenPosition, zindex::ZIndex};
+use aberredengine::core::math::Vec2;
 
 ctx.commands.spawn((
     GuiWindow::new(200.0, 150.0),
-    ScreenPosition { pos: Vector2::new(10.0, 80.0) },
+    ScreenPosition { pos: Vec2::new(10.0, 80.0) },
     ZIndex(0.0),
 ));
 ```
@@ -228,7 +230,7 @@ ctx.commands.spawn((
 Themed, clickable button. Carries its own caption, callback name, and disabled state.
 
 ```
-GuiButton { size: Vector2, caption: String, callback_name: Arc<str>, disabled: bool, theme_key: Arc<str> }
+GuiButton { size: Vec2, caption: String, callback_name: Arc<str>, disabled: bool, theme_key: Arc<str> }
 ```
 
 `gui_button_spawn_system` reacts on `Added<GuiButton>` and, **one frame later**:
@@ -254,7 +256,7 @@ engine.spawn()
 ```rust
 ctx.commands.spawn((
     GuiButton::new(100.0, 24.0, "Start Game"),
-    ScreenPosition { pos: Vector2::new(16.0, 50.0) },
+    ScreenPosition { pos: Vec2::new(16.0, 50.0) },
     ZIndex(2.0),
 ));
 ```
@@ -273,7 +275,7 @@ fn on_start_clicked(entity: Entity, ctx: &mut GameCtx) {
 ctx.commands.spawn((
     GuiButton::new(100.0, 24.0, "Start Game"),
     GuiInteractable::rust(100.0, 24.0, on_start_clicked),
-    ScreenPosition { pos: Vector2::new(16.0, 50.0) },
+    ScreenPosition { pos: Vec2::new(16.0, 50.0) },
     ZIndex(2.0),
 ));
 ```
@@ -285,7 +287,7 @@ ctx.commands.spawn((
 Static or signal-driven label. Never hit-tested.
 
 ```
-GuiLabel { size: Vector2, caption: String, theme_key: Arc<str>,
+GuiLabel { size: Vec2, caption: String, theme_key: Arc<str>,
            signal_binding: Option<(String, Option<String>)> }
 ```
 
@@ -328,7 +330,7 @@ ctx.commands.spawn((
     GuiLabel::new(160.0, 24.0, "0")
         .with_signal_binding("score")
         .with_signal_binding_format("Score: {}"),
-    ScreenPosition { pos: Vector2::new(16.0, 44.0) },
+    ScreenPosition { pos: Vec2::new(16.0, 44.0) },
     ZIndex(2.0),
 ));
 ```
@@ -340,9 +342,9 @@ ctx.commands.spawn((
 Clickable image slot for icon-style buttons (inventory, skill icons, etc.). No theming.
 
 ```
-GuiImage { size: Vector2, tex_key: String, offset: Vector2,
-           offset_hover: Option<Vector2>, offset_pressed: Option<Vector2>,
-           offset_disabled: Option<Vector2>, callback_name: Arc<str> }
+GuiImage { size: Vec2, tex_key: String, offset: Vec2,
+           offset_hover: Option<Vec2>, offset_pressed: Option<Vec2>,
+           offset_disabled: Option<Vec2>, callback_name: Arc<str> }
 ```
 
 `gui_image_spawn_system` reacts on `Added<GuiImage>` and, **one frame later**, inserts a
@@ -376,7 +378,7 @@ ctx.commands.spawn((
         .with_offset_pressed(0.0, 32.0)
         .with_offset_disabled(32.0, 32.0),
     GuiInteractable::rust(32.0, 32.0, on_sword_clicked),
-    ScreenPosition { pos: Vector2::new(8.0, 36.0) },
+    ScreenPosition { pos: Vec2::new(8.0, 36.0) },
     ZIndex(2.0),
 ));
 ```
@@ -389,7 +391,7 @@ Themed nine-patch fill bar for life bars, XP meters, cooldowns, etc. No interact
 spawn system; rendered directly by `render_system`.
 
 ```
-GuiProgressBar { size: Vector2, value: f32, max: f32,
+GuiProgressBar { size: Vec2, value: f32, max: f32,
                  direction: ProgressBarDirection, theme_key: Arc<str>,
                  signal_binding: Option<String> }
 
@@ -466,10 +468,24 @@ engine.entity_set_gui_progress_max(bar_id, 200)  -- change max (value re-clamped
 
 #### Rust spawn
 
+`GuiProgressBar::new(width, height, value, max)` defaults to `Horizontal`; `.with_direction(dir)`
+and `.with_signal_binding(key)` mirror the Lua builder's direction/reversed variants and
+`:with_gui_progress_bar_signal_binding()`:
+
 ```rust
 world.spawn((
     GuiProgressBar::new(200.0, 16.0, 75.0, 100.0),
-    ScreenPosition { pos: Vector2::new(10.0, 10.0) },
+    ScreenPosition { pos: Vec2::new(10.0, 10.0) },
+    ZIndex(1.0),
+));
+
+// Vertical, signal-bound, non-default theme
+world.spawn((
+    GuiProgressBar::new(16.0, 200.0, 60.0, 100.0)
+        .with_direction(ProgressBarDirection::Vertical)
+        .with_signal_binding("player_hp")
+        .with_theme_key("compact"),
+    ScreenPosition { pos: Vec2::new(220.0, 10.0) },
     ZIndex(1.0),
 ));
 ```
@@ -485,7 +501,7 @@ current one (avoids spurious change detection).
 
 ## Layout System
 
-`GuiOffset(Vector2)` stores a child widget's position relative to its `ChildOf` parent.
+`GuiOffset(Vec2)` stores a child widget's position relative to its `ChildOf` parent.
 
 `gui_layout_system` runs every frame (after `tween_system::<ScreenPosition>`, before
 `render_system`) and resolves each child's `ScreenPosition`:
@@ -597,7 +613,7 @@ colors. Removing `ScreenPosition` is separate from and not implied by `Tint`.
 `GuiInteractable` is the shared hit-test and click runtime for all clickable widgets.
 
 ```
-GuiInteractable { size: Vector2, state: GuiWidgetState,
+GuiInteractable { size: Vec2, state: GuiWidgetState,
                   on_click_callback: Option<String>,
                   on_rust_callback:  Option<GuiRustCallback> }
 
@@ -606,28 +622,45 @@ GuiWidgetState: Normal | Hovered | Pressed | Disabled
 
 `gui_button_spawn_system` and `gui_image_spawn_system` insert `GuiInteractable` automatically (via
 `insert_if_new`). For Rust fn-pointer callbacks, pre-spawn your own `GuiInteractable::rust(...)`
-alongside the widget component — the spawn system will leave it intact.
+alongside the widget component — the spawn system will leave it intact. `.with_on_click_callback(name)`
+sets a Lua function name from Rust-only code (the Rust equivalent of `GuiButton`/`GuiImage`'s
+`callback_name` constructor argument, for a hand-built `GuiInteractable`), and `.with_disabled()`
+starts the widget in `Disabled` state at spawn time — the same role as `GuiButton::with_disabled()`
+for widgets not built through `GuiButton`/`GuiImage`.
 
 ### Hit-test algorithm (`gui_hit_test_system`)
 
 1. For every `GuiInteractable` that has a `ScreenPosition`, test the cursor against the AABB
    `[pos, pos + size)`.
-2. Among all hits, the one with the highest `ZIndex` wins.
-3. Set winner's state to `Pressed` (if mouse button down) or `Hovered`; set all others to
-   `Normal`. `Disabled` state is never overwritten.
-4. On press-then-release-inside: fire `GuiInteractableClickEvent { entity }` and set
-   `GuiInputState.click_consumed_this_frame = true` to prevent the click from hitting anything
-   else this frame.
+2. Among all hits, the highest `ZIndex` wins; an exact `ZIndex` tie is broken by lowest `Entity`
+   id, so the winner is deterministic regardless of Bevy's (unstable) query iteration order.
+3. If the winner is `Disabled`, it still consumes the click (sets
+   `GuiInputState.click_consumed_this_frame = true`, blocking anything beneath it in the Z stack)
+   but its state is never touched, and `GuiInteractableClickEvent` never fires for it. Otherwise,
+   set the winner's state to `Pressed` (mouse button down) or `Hovered` (up); every non-winner,
+   non-`Disabled` interactable resets to `Normal`.
+4. For a non-`Disabled` winner, on press-then-release-inside: fire
+   `GuiInteractableClickEvent { entity }` and set `GuiInputState.click_consumed_this_frame = true`
+   to prevent the click from hitting anything else this frame.
 
-`Disabled` widgets participate in hit-testing (they block clicks below them in the Z stack) but
-their `GuiWidgetState` is never promoted to `Hovered` or `Pressed`.
+`Disabled` widgets participate in hit-testing (they block clicks below them in the Z stack), but
+neither promote past `Disabled` nor ever cause `GuiInteractableClickEvent` to fire — the "disabled
+buttons don't click" behavior is enforced here, in the hit-test step, not in the click observer
+described below.
 
 ### Click callbacks
 
-`gui_interactable_click_observer` handles `GuiInteractableClickEvent`:
-1. Check `on_click_callback` (Lua function name) — call it if found.
-2. Check `on_rust_callback` (fn-pointer) — call it if found.
-3. Skip if `state == Disabled`.
+`gui_interactable_click_observer` reacts to `GuiInteractableClickEvent` (which, per above, never
+fires for a `Disabled` widget) and resolves a callback chain on the clicked entity's
+`GuiInteractable`. There are **two implementations**, selected by the facade's feature-gated
+shadow module (`crates/aberredengine/src/systems/gui_interactable_click.rs`):
+
+- Under `feature = "lua"` (the default), the Lua-priority variant (`aberred-lua`) checks
+  `on_click_callback` (a Lua function name) first, falling back to `on_rust_callback` (fn-pointer)
+  if unset or unresolvable.
+- Under `--no-default-features` (no Lua), the Rust-only variant (`aberred-core`) checks only
+  `on_rust_callback` — `aberred-core` cannot name `LuaRuntime` at all, so there is no Lua branch
+  to fall through.
 
 **Lua click callback:** receives a table with `evt.entity_id` (u64 entity ID).
 
@@ -637,8 +670,6 @@ local function on_button_clicked(evt)
     engine.entity_set_gui_disabled(id, true)
 end
 ```
-
-> **Breaking rename:** `evt.entity_id` replaced the old `evt.button_id` field.
 
 **Rust fn-pointer callback:** use `GuiInteractable::rust(...)` — the typed parameter forces
 coercion from function-item to `fn(...)` pointer, which `Query<&GuiInteractable>` requires.
@@ -862,20 +893,22 @@ Equivalent setup in a Rust-only game (no Lua).
 ```rust
 use std::sync::Arc;
 use bevy_ecs::prelude::*;
-use raylib::prelude::{Color, Rectangle, Vector2};
-use aberredengine::{
+use aberredengine::engine_app::{EngineBuilder, SceneDescriptor};
+use aberredengine::core::{
+    math::{Color, Rect, Vec2},
     components::{
         guibutton::GuiButton,
         guilabel::GuiLabel,
         guiinteractable::GuiInteractable,
         guiwindow::GuiWindow,
+        guioffset::GuiOffset,
         screenposition::ScreenPosition,
-        shadow::Shadow,
         zindex::ZIndex,
     },
     resources::guitheme::*,
-    systems::{scene_dispatch::SceneDescriptor, GameCtx},
+    systems::GameCtx,
 };
+use bevy_ecs::hierarchy::ChildOf;
 
 // ── Theme setup (runs once at startup) ──────────────────────────────────────
 
@@ -883,13 +916,13 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
     theme_store.themes.insert(Arc::from("default"), GuiTheme {
         panel: GuiNinePatch {
             tex_key: Arc::from("gui-window"),
-            source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+            source: Rect::new(0.0, 0.0, 64.0, 64.0),
             left: 6, top: 6, right: 6, bottom: 6,
         },
         button: Some(GuiButtonSkin {
             normal: GuiNinePatch {
                 tex_key: Arc::from("gui-buttons"),
-                source: Rectangle::new(0.0, 0.0, 64.0, 64.0),
+                source: Rect::new(0.0, 0.0, 64.0, 64.0),
                 left: 8, top: 8, right: 8, bottom: 8,
             },
             hover: None, pressed: None, disabled: None,
@@ -911,7 +944,7 @@ fn scene_enter(ctx: &mut GameCtx) {
     // Window
     let window = ctx.commands.spawn((
         GuiWindow::new(200.0, 130.0),
-        ScreenPosition { pos: Vector2::new(10.0, 80.0) },
+        ScreenPosition { pos: Vec2::new(10.0, 80.0) },
         ZIndex(0.0),
     )).id();
 
@@ -921,7 +954,7 @@ fn scene_enter(ctx: &mut GameCtx) {
             .with_signal_binding("player_hp")
             .with_signal_binding_format("HP: {}"),
         ChildOf(window),
-        GuiOffset(Vector2::new(16.0, 16.0)),
+        GuiOffset(Vec2::new(16.0, 16.0)),
         ZIndex(2.0),
     ));
 
@@ -930,7 +963,7 @@ fn scene_enter(ctx: &mut GameCtx) {
         GuiButton::new(100.0, 24.0, "Retreat"),
         GuiInteractable::rust(100.0, 24.0, on_retreat_clicked),
         ChildOf(window),
-        GuiOffset(Vector2::new(16.0, 50.0)),
+        GuiOffset(Vec2::new(16.0, 50.0)),
         ZIndex(2.0),
     ));
 }
@@ -962,10 +995,18 @@ fn main() {
 - All GUI widgets are rendered in screen space, unaffected by `Camera2D`.
 - `ZIndex` is required for all widgets. Lower values render first (behind); higher values render
   in front. Children should have a higher `ZIndex` than their parent window.
-- Within the same `ZIndex`, draw order is: **Panel < Sprite < Text**. Nine-patch backgrounds
-  always render behind sprites, which render behind captions.
+- Within the same `ZIndex`, draw order is: **Panel and ProgressBar (tied) < Sprite < Text**. A
+  unified `ScreenDrawItem` enum merges GUI panels, progress bars, screen sprites, and screen texts
+  into one sorted buffer (`aberred-render`'s `render_system`); ties within a rank fall back to
+  ascending `Entity` id for determinism. Nine-patch backgrounds and progress bars render behind
+  sprites, which render behind captions.
 - `GuiWindow.size` is the nine-patch draw size. `GuiInteractable.size` is the click/hover
   hit-test AABB. Both are set from the widget's constructor.
+- GUI components hold no render-thread-only data: the render world reconciles retained mirror
+  entities (`MirrorGuiWindow`/`MirrorGuiButton`/`MirrorGuiLabel`/`MirrorGuiProgressBar` marker
+  components in `aberred-render`) from the logic thread's published `DrawableSnapshot` each frame,
+  the same mechanism every other drawable category uses — there is no live `GuiWindow`/`GuiButton`/
+  etc. resource on the render side, only these reconciled mirror copies.
 
 ---
 
@@ -973,8 +1014,11 @@ fn main() {
 
 The GUI systems and components are **always compiled** regardless of the `lua` feature flag:
 - `gui_button_spawn_system`, `gui_label_spawn_system`, `gui_image_spawn_system`
-- `gui_layout_system`, `gui_hit_test_system`, `gui_image_state_sync_system`
-- `gui_interactable_click_observer`
+- `gui_layout_system`, `gui_hit_test_system`, `gui_image_state_sync_system`,
+  `gui_progressbar_signal_update_system`
+- `gui_interactable_click_observer` — always compiled, but as **two separate implementations**
+  (see [Click callbacks](#click-callbacks)): the facade picks the Rust-only `aberred-core` variant
+  under `--no-default-features`, or the Lua-priority `aberred-lua` variant otherwise.
 - All component types (`GuiWindow`, `GuiButton`, `GuiLabel`, `GuiImage`, `GuiInteractable`,
   `GuiOffset`, `GuiWidgetState`)
 - `GuiThemeStore`, `GuiTheme`, `GuiInputState`
@@ -984,28 +1028,7 @@ The following are gated on `feature = "lua"`:
 - `engine.set_gui_theme_*` / `engine.entity_set_gui_disabled` Lua API calls
 - The `gui_theme_commands` queue in `LuaAppData`
 - `GuiButton::with_lua_callback`, `GuiImage::with_lua_callback` constructors
+- The Lua-priority half of `gui_interactable_click_observer` itself (`aberred-lua`)
 
 Rust-only games (built with `default-features = false`) get the full component and system stack
 and configure everything via `ResMut<GuiThemeStore>` and direct component spawning.
-
----
-
-## Roadmap / Pending
-
-Genuinely open items (not yet implemented):
-
-- **Text input widget** — single-line editable field
-- **Keyboard/gamepad navigation** — focus traversal between interactable widgets
-- **Drag-and-drop** — item dragging between `GuiImage` slots
-- **Tooltips** — hover-triggered popup labels
-- **Screen-space post-process shaders** — per-widget shader effects
-- **Theme hot-reload** — update `GuiThemeStore` at runtime without restart
-
-**Known architectural notes** (acknowledged, not blocking):
-
-- Widget size is expressed in three places: the widget component (e.g. `GuiButton.size`),
-  `GuiInteractable.size` (hit-test), and `DynamicText` child size (caption layout). They are
-  seeded from the same value at spawn time but diverge if mutated independently post-spawn.
-- Two-pass hit-test: `gui_hit_test_system` iterates all `GuiInteractable` components to find
-  the highest-ZIndex hit, which is O(n) per frame over all interactable widgets. Acceptable
-  for typical in-game UI counts.
