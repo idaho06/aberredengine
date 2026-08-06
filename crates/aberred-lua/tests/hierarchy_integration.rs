@@ -12,31 +12,24 @@ use std::sync::Arc;
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-#[cfg(feature = "lua")]
 use bevy_ecs::system::SystemState;
-use aberredengine::core::math::Vec2;
+use aberred_core::math::Vec2;
 
-use aberredengine::core::components::globaltransform2d::GlobalTransform2D;
-use aberredengine::core::components::mapposition::MapPosition;
-use aberredengine::core::components::rotation::Rotation;
-use aberredengine::core::components::scale::Scale;
-use aberredengine::core::components::stuckto::StuckTo;
-#[cfg(feature = "lua")]
-use aberredengine::core::resources::animationstore::AnimationStore;
-#[cfg(feature = "lua")]
-use aberredengine::resources::lua_runtime::{EntityCmd, SpawnCmd};
-#[cfg(feature = "lua")]
-use aberredengine::core::resources::systemsstore::SystemsStore;
-#[cfg(feature = "lua")]
-use aberredengine::core::resources::worldsignals::WorldSignals;
-#[cfg(feature = "lua")]
-use aberredengine::systems::lua_commands::EntityCmdQueries;
-#[cfg(feature = "lua")]
-use aberredengine::systems::lua_commands::{process_entity_commands, process_spawn_command};
-use aberredengine::core::systems::propagate_transforms::{
+use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
+use aberred_core::components::stuckto::StuckTo;
+use aberred_core::resources::animationstore::AnimationStore;
+use aberred_lua::resources::lua_runtime::{EntityCmd, SpawnCmd};
+use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_lua::systems::lua_commands::EntityCmdQueries;
+use aberred_lua::systems::lua_commands::{process_entity_commands, process_spawn_command};
+use aberred_core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
-use aberredengine::core::systems::stuckto::stuck_to_entity_system;
+use aberred_core::systems::stuckto::stuck_to_entity_system;
 
 const EPSILON: f32 = 1e-4;
 
@@ -458,7 +451,6 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
 // =============================================================================
 
 /// Helper to run process_entity_commands using SystemState.
-#[cfg(feature = "lua")]
 fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(SystemsStore::new());
     world.insert_resource(AnimationStore {
@@ -491,7 +483,6 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     state.apply(world);
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_parent_inserts_childof() {
     let mut world = World::new();
@@ -526,7 +517,6 @@ fn entity_cmd_set_parent_inserts_childof() {
     );
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_remove_parent_snaps_to_world_position() {
     let mut world = World::new();
@@ -620,7 +610,6 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
 
 /// P0-1: an EntityCmd with invalid entity bits (the EntityIndex niche value)
 /// must be skipped with a warn, not panic during processing.
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_invalid_entity_id_does_not_panic() {
     let mut world = World::new();
@@ -643,7 +632,6 @@ fn entity_cmd_invalid_entity_id_does_not_panic() {
 
 /// P0-2: Despawn followed by an insert-based command on the same entity in
 /// the same drained batch must not panic at command-apply time.
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_despawn_then_set_rotation_same_batch_does_not_panic() {
     let mut world = World::new();
@@ -669,7 +657,6 @@ fn entity_cmd_despawn_then_set_rotation_same_batch_does_not_panic() {
     assert!(world.get::<Rotation>(e).is_none());
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_parent_multiple_children() {
     let mut world = World::new();
@@ -716,7 +703,6 @@ fn entity_cmd_set_parent_multiple_children() {
 /// has existed for at least one frame), the child should receive the correct
 /// world-space GlobalTransform2D immediately on the same frame it is spawned,
 /// with no propagation ticks required.
-#[cfg(feature = "lua")]
 #[test]
 fn spawn_cmd_with_parent_applies_childof() {
     let mut world = World::new();
@@ -803,7 +789,6 @@ fn spawn_cmd_with_parent_applies_childof() {
 
 /// When a standalone parent has no GlobalTransform2D yet, the initial child
 /// world transform can still be synthesized from the parent's local transform.
-#[cfg(feature = "lua")]
 #[test]
 fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
     let mut world = World::new();
@@ -867,7 +852,6 @@ fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
 
 /// When the parent is itself a child and lacks GlobalTransform2D, the initial
 /// child world transform remains unresolved until propagation runs.
-#[cfg(feature = "lua")]
 #[test]
 fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
     let mut world = World::new();
@@ -1019,8 +1003,8 @@ fn stuckto_still_works_without_childof() {
 // PHASE 5: Render system integration (query smoke tests)
 // =============================================================================
 
-use aberredengine::core::components::sprite::Sprite;
-use aberredengine::core::components::zindex::ZIndex;
+use aberred_core::components::sprite::Sprite;
+use aberred_core::components::zindex::ZIndex;
 
 #[test]
 fn render_query_includes_global_transform() {
@@ -1117,9 +1101,9 @@ fn render_query_works_without_global_transform() {
 // PHASE 6: Collision system integration
 // =============================================================================
 
-use aberredengine::core::components::boxcollider::BoxCollider;
-use aberredengine::core::events::collision::CollisionEvent;
-use aberredengine::core::systems::collision_detector::collision_detector;
+use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::events::collision::CollisionEvent;
+use aberred_core::systems::collision_detector::collision_detector;
 
 /// Resource to collect collision events via observer.
 #[derive(Resource, Default)]
@@ -1232,12 +1216,10 @@ fn collision_no_false_positive_from_local_position() {
 // PHASE 7: Entity context + Particle emitter
 // =============================================================================
 
-#[cfg(feature = "lua")]
-use aberredengine::resources::lua_runtime::{
+use aberred_lua::resources::lua_runtime::{
     EntitySnapshot, LuaRuntime, build_entity_context_pooled,
 };
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_context_includes_world_transform_fields() {
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
@@ -1284,7 +1266,6 @@ fn entity_context_includes_world_transform_fields() {
     .expect("Lua world transform assertions");
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_context_nil_world_fields_without_hierarchy() {
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
@@ -1369,7 +1350,6 @@ fn cascade_despawn_removes_children() {
 // PHASE 8: Metadata, stubs, and documentation
 // =============================================================================
 
-#[cfg(feature = "lua")]
 #[test]
 fn meta_entity_cmds_include_parent_commands() {
     let rt = LuaRuntime::new().unwrap();
@@ -1390,7 +1370,6 @@ fn meta_entity_cmds_include_parent_commands() {
     .expect("Lua meta parent commands assertions");
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn meta_builder_includes_with_parent() {
     let rt = LuaRuntime::new().unwrap();
@@ -1412,7 +1391,6 @@ fn meta_builder_includes_with_parent() {
     "#).exec().expect("Lua meta builder with_parent assertions");
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn meta_entity_context_includes_world_fields() {
     let rt = LuaRuntime::new().unwrap();
@@ -1443,10 +1421,9 @@ fn meta_entity_context_includes_world_fields() {
     .expect("Lua meta EntityContext world fields assertions");
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_screen_position_updates_screen_position() {
-    use aberredengine::core::components::screenposition::ScreenPosition;
+    use aberred_core::components::screenposition::ScreenPosition;
 
     let mut world = World::new();
     let entity = world.spawn(ScreenPosition::new(0.0, 0.0)).id();
@@ -1465,7 +1442,6 @@ fn entity_cmd_set_screen_position_updates_screen_position() {
     assert!((pos.pos.y - 77.0).abs() < EPSILON);
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn entity_cmd_set_screen_position_no_op_on_map_entity() {
     // Entity has MapPosition only — SetScreenPosition should silently do nothing.
@@ -1649,7 +1625,7 @@ fn cleanup_removes_all_orphaned_gt_entities() {
 ///    not the stale GT (200, 0).
 #[test]
 fn stale_gt_removed_after_child_despawn() {
-    use aberredengine::core::systems::collision::resolve_world_pos;
+    use aberred_core::systems::collision::resolve_world_pos;
     use bevy_ecs::system::SystemState;
 
     let mut world = World::new();

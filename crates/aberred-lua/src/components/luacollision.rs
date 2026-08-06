@@ -22,7 +22,7 @@
 //! # Related
 //!
 //! - [`aberred_core::components::collision::CollisionRule`] – Rust-based collision rules
-//! - [`crate::systems::collision_detector`] – collision detection system
+//! - [`aberred_core::systems::collision_detector`] – collision detection system
 //! - [`crate::systems::lua_collision`] – Lua collision observer
 
 use std::sync::Arc;

@@ -9,17 +9,15 @@
 //! - `key_from_str` / `key_to_str` round-trips for all documented keys.
 //! - Unknown action/key strings in commands are silently ignored, not panicked.
 
-use aberredengine::core::events::input::InputAction;
-use aberredengine::core::resources::input_bindings::{
+use aberred_core::events::input::InputAction;
+use aberred_core::resources::input_bindings::{
     GamepadButton, InputBinding, InputBindings, Key, MouseButton, binding_from_str, key_from_str,
     key_to_str,
 };
 use bevy_ecs::prelude::*;
 
-#[cfg(feature = "lua")]
-use aberredengine::resources::lua_runtime::{InputCmd, action_from_str};
-#[cfg(feature = "lua")]
-use aberredengine::systems::lua_commands::process_input_command;
+use aberred_lua::resources::lua_runtime::{InputCmd, action_from_str};
+use aberred_lua::systems::lua_commands::process_input_command;
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -218,7 +216,6 @@ fn test_key_from_str_unknown_returns_none() {
 // action_from_str (Lua bridge helper)
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_action_from_str_all_valid_names() {
     let pairs: &[(&str, InputAction)] = &[
@@ -252,7 +249,6 @@ fn test_action_from_str_all_valid_names() {
     }
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_action_from_str_unknown_returns_none() {
     assert!(action_from_str("not_an_action").is_none());
@@ -263,7 +259,6 @@ fn test_action_from_str_unknown_returns_none() {
 // process_input_command – Rebind
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_process_input_cmd_rebind_updates_binding() {
     let mut bindings = InputBindings::default();
@@ -281,7 +276,6 @@ fn test_process_input_cmd_rebind_updates_binding() {
     assert_eq!(keys[0], InputBinding::Keyboard(Key::KEY_Z));
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_process_input_cmd_add_binding_appends() {
     let mut bindings = InputBindings::default();
@@ -305,7 +299,6 @@ fn test_process_input_cmd_add_binding_appends() {
 // process_input_command – unknown action / key are silently dropped
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_process_input_cmd_unknown_action_does_not_panic() {
     let mut bindings = InputBindings::default();
@@ -323,7 +316,6 @@ fn test_process_input_cmd_unknown_action_does_not_panic() {
     assert_eq!(bindings.map, snapshot, "bindings must be unchanged");
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_process_input_cmd_unknown_key_does_not_panic() {
     let mut bindings = InputBindings::default();
@@ -402,7 +394,7 @@ fn test_input_bindings_mutation_via_ecs_system_state() {
 /// `Default` before the refactor).
 #[test]
 fn test_bool_state_derives_default_without_key_binding() {
-    use aberredengine::core::resources::input::BoolState;
+    use aberred_core::resources::input::BoolState;
     let state: BoolState = BoolState::default();
     // All sub-fields should be false/zero
     assert!(!state.active);
@@ -447,7 +439,6 @@ fn test_action2_default_includes_mouse_right() {
     assert!(bl.contains(&InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_RIGHT)));
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_process_input_cmd_rebind_to_mouse_button() {
     let mut bindings = InputBindings::default();
@@ -468,7 +459,6 @@ fn test_process_input_cmd_rebind_to_mouse_button() {
     );
 }
 
-#[cfg(feature = "lua")]
 #[test]
 fn test_process_input_cmd_add_mouse_binding() {
     let mut bindings = InputBindings::default();

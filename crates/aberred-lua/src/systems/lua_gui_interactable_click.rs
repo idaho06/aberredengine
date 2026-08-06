@@ -5,7 +5,7 @@
 //! back to its Rust fn-pointer callback -- mirrors
 //! `aberred_core::systems::menu::menu_selection_observer`'s existing
 //! priority chain. Re-exported by
-//! [`crate::systems::gui_interactable_click`] under `#[cfg(feature = "lua")]`.
+//! the facade's `systems::gui_interactable_click` under `#[cfg(feature = "lua")]`.
 
 use aberred_core::events::gui_interactable::GuiInteractableClickEvent;
 use aberred_core::systems::GameCtx;

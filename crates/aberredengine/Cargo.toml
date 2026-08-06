@@ -7,12 +7,10 @@ edition.workspace = true
 aberred-core = { path = "../aberred-core" }
 aberred-audio = { path = "../aberred-audio" }
 aberred-render = { path = "../aberred-render" }
+aberred-lua = { path = "../aberred-lua", optional = true }
 bevy_ecs.workspace = true
 rustc-hash.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 crossbeam-channel.workspace = true
-mlua = { workspace = true, optional = true }
 tracy-client = { workspace = true, optional = true }
 arrayvec.workspace = true
 smallvec.workspace = true
@@ -22,7 +20,6 @@ log.workspace = true
 env_logger.workspace = true
 clap.workspace = true
 imgui.workspace = true
-paste.workspace = true
 spin_sleep.workspace = true
 triple_buffer.workspace = true
 thiserror.workspace = true
@@ -57,6 +54,6 @@ aberred-core = { path = "../aberred-core", features = ["test-support"] }
 
 [features]
 default = ["lua"]
-lua   = ["dep:mlua", "aberred-core/lua"]
-tracy = ["dep:tracy-client", "aberred-core/tracy", "aberred-audio/tracy", "aberred-render/tracy"]  # profiling — never in default
+lua   = ["dep:aberred-lua", "aberred-core/lua"]
+tracy = ["dep:tracy-client", "aberred-core/tracy", "aberred-audio/tracy", "aberred-render/tracy", "aberred-lua?/tracy"]  # profiling — never in default
 test-support = ["aberred-core/test-support"]  # headless TestWorld harness — never in default

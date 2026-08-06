@@ -53,11 +53,11 @@ use aberred_core::systems::tween::tween_system;
 use aberred_core::systems::window::detect_window_resize;
 
 #[cfg(feature = "lua")]
-use crate::systems::lua_setup_entity::lua_setup_entity_system;
+use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 #[cfg(feature = "lua")]
-use crate::systems::luaphase::lua_phase_system;
+use aberred_lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
-use crate::systems::luatimer::update_lua_timers;
+use aberred_lua::systems::luatimer::update_lua_timers;
 #[cfg(feature = "lua")]
 use crate::systems::mapspawn::process_lua_map_commands;
 
@@ -436,14 +436,14 @@ impl EngineBuilder {
             // SimSet::Bookkeeping, so this ordering needs an explicit edge).
             sim.add_systems(
                 process_lua_map_commands
-                    .after(crate::lua_plugin::update)
+                    .after(aberred_lua::lua_plugin::update)
                     .before(update_bevy_render_asset_cmds)
                     .in_set(SimSet::Bookkeeping),
             );
             sim.add_systems(
-                crate::lua_plugin::process_lua_asset_commands
+                aberred_lua::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
-                    .after(crate::lua_plugin::update)
+                    .after(aberred_lua::lua_plugin::update)
                     .before(update_bevy_render_asset_cmds)
                     .in_set(SimSet::Bookkeeping),
             );
@@ -564,7 +564,7 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         {
             drawable_snapshot_config = drawable_snapshot_config
-                .after(crate::lua_plugin::update)
+                .after(aberred_lua::lua_plugin::update)
                 .after(process_lua_map_commands);
         }
         present.add_systems(drawable_snapshot_config);

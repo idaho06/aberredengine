@@ -62,15 +62,15 @@ use aberred_core::math::Vec2;
 use aberred_core::systems::timer::timer_observer;
 
 #[cfg(feature = "lua")]
-use crate::resources::lua_runtime::LuaRuntime;
+use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
-use crate::systems::lua_animation_finished::lua_animation_finished_observer;
+use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 #[cfg(feature = "lua")]
-use crate::systems::lua_collision::lua_collision_observer;
+use aberred_lua::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
-use crate::systems::lua_tween_finished::lua_tween_finished_observer;
+use aberred_lua::systems::lua_tween_finished::lua_tween_finished_observer;
 #[cfg(feature = "lua")]
-use crate::systems::luatimer::lua_timer_observer;
+use aberred_lua::systems::luatimer::lua_timer_observer;
 
 /// Helper: register a system into the world, mark it [`Persistent`], and insert
 /// its ID into [`SystemsStore`].

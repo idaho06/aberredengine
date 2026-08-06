@@ -1,0 +1,20 @@
+[package]
+name = "aberred-lua"
+version = "0.2.0"
+edition.workspace = true
+
+[dependencies]
+aberred-core = { path = "../aberred-core", features = ["lua"] }
+mlua.workspace = true
+paste.workspace = true
+bevy_ecs.workspace = true
+rustc-hash.workspace = true
+log.workspace = true
+serde_json.workspace = true
+tracy-client = { workspace = true, optional = true }
+
+[dev-dependencies]
+bevy_ecs = { workspace = true, features = ["debug"] }
+
+[features]
+tracy = ["dep:tracy-client"]

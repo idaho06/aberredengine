@@ -11,11 +11,11 @@ use aberredengine::core::components::boxcollider::BoxCollider;
 use aberredengine::core::components::collision::{BoxSides, CollisionCallback, CollisionRule};
 use aberredengine::core::components::group::Group;
 #[cfg(feature = "lua")]
-use aberredengine::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
+use aberredengine::lua::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
 #[cfg(feature = "lua")]
-use aberredengine::components::luaphase::{LuaPhase, PhaseCallbacks};
+use aberredengine::lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 #[cfg(feature = "lua")]
-use aberredengine::components::luatimer::{LuaTimer, LuaTimerCallback};
+use aberredengine::lua::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::rigidbody::RigidBody;
 use aberredengine::core::components::rotation::Rotation;
@@ -28,7 +28,7 @@ use aberredengine::core::components::ttl::Ttl;
 use aberredengine::core::components::tween::{Easing, LoopMode, Tween};
 use aberredengine::core::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
-use aberredengine::events::luatimer::LuaTimerEvent;
+use aberredengine::lua::events::luatimer::LuaTimerEvent;
 use aberredengine::core::events::timer::TimerEvent;
 use aberredengine::core::protocol::audio::AudioCmd;
 use aberredengine::core::resources::animationstore::{AnimationResource, AnimationStore};
@@ -39,7 +39,7 @@ use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
-use aberredengine::resources::lua_runtime::LuaRuntime;
+use aberredengine::lua::resources::lua_runtime::LuaRuntime;
 use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::screensize::ScreenSize;
@@ -53,11 +53,11 @@ use aberredengine::core::systems::collision_detector::collision_detector;
 use aberredengine::systems::collision_rule_index::rebuild_collision_rule_index;
 use aberredengine::core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
-use aberredengine::systems::lua_collision::lua_collision_observer;
+use aberredengine::lua::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
-use aberredengine::systems::luaphase::lua_phase_system;
+use aberredengine::lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
-use aberredengine::systems::luatimer::{lua_timer_observer, update_lua_timers};
+use aberredengine::lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use aberredengine::core::systems::movement::movement;
 use aberredengine::core::systems::rust_collision::rust_collision_observer;
 use aberredengine::core::systems::stuckto::stuck_to_entity_system;
@@ -1987,7 +1987,7 @@ fn update_world_time_zero_dt() {
 #[cfg(feature = "lua")]
 #[test]
 fn context_builder_passes_snapshot_strings_to_lua() {
-    use aberredengine::resources::lua_runtime::{
+    use aberredengine::lua::resources::lua_runtime::{
         AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, SpriteSnapshot,
         build_entity_context_pooled,
     };
@@ -2062,7 +2062,7 @@ fn context_builder_passes_snapshot_strings_to_lua() {
 #[cfg(feature = "lua")]
 #[test]
 fn context_builder_nil_when_no_snapshots() {
-    use aberredengine::resources::lua_runtime::{EntitySnapshot, build_entity_context_pooled};
+    use aberredengine::lua::resources::lua_runtime::{EntitySnapshot, build_entity_context_pooled};
 
     let runtime = LuaRuntime::new().expect("LuaRuntime init");
     let tables = runtime.get_entity_ctx_pool();

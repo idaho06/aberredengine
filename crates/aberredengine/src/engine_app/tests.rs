@@ -27,9 +27,9 @@ use aberred_core::systems::phase::phase_system;
 #[cfg(feature = "lua")]
 use aberred_core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
-use crate::systems::luaphase::lua_phase_system;
+use aberred_lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
-use crate::systems::luatimer::update_lua_timers;
+use aberred_lua::systems::luatimer::update_lua_timers;
 
 #[test]
 fn test_builder_default() {
@@ -528,7 +528,7 @@ fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
     // update_group_counts_system/lua_phase_system; `present` contains only
     // build_drawable_snapshot/send_drawable_snapshot
     // (forward_render_asset_cmds lives on sim).
-    let lua_update_type = IntoSystem::into_system(crate::lua_plugin::update).system_type();
+    let lua_update_type = IntoSystem::into_system(aberred_lua::lua_plugin::update).system_type();
     assert!(
         sim_type_ids.contains(&lua_update_type),
         "lua_plugin::update should be present in the sim schedule"

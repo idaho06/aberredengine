@@ -31,7 +31,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::collision_detector`] – pure Rust collision detection
+//! - [`aberred_core::systems::collision_detector`] – pure Rust collision detection
 //! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
 //! - [`aberred_core::components::boxcollider::BoxCollider`] – axis-aligned collider
 //! - [`aberred_core::events::collision::CollisionEvent`] – emitted on each collision

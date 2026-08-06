@@ -4,7 +4,7 @@
 //! variant that checks the menu's `on_select_callback` (Lua) first, falling
 //! back to its Rust fn-pointer callback, then `MenuActions` --
 //! `aberred-core` cannot name `LuaRuntime`. Re-exported by
-//! [`crate::systems::menu`] under `#[cfg(feature = "lua")]`.
+//! the facade's `systems::menu` under `#[cfg(feature = "lua")]`.
 
 use aberred_core::components::menu::{Menu, MenuActions};
 use aberred_core::events::menu::MenuSelectionEvent;

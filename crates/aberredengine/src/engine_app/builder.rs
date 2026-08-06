@@ -285,7 +285,7 @@ impl EngineBuilder {
     /// Lua runtime with the given script path.
     #[cfg(feature = "lua")]
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
-        use crate::lua_plugin;
+        use aberred_lua::lua_plugin;
 
         self.lua_script = Some(script_path.into());
 

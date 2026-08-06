@@ -68,7 +68,7 @@
 //!
 //! # Module layout
 //!
-//! This module mirrors the shape of [`crate::resources::lua_runtime`]: one
+//! This module mirrors the shape of [`aberred_lua::resources::lua_runtime`]: one
 //! directory module with a single struct ([`EngineBuilder`]) whose `impl`
 //! block is split across sibling files by concern, plus a runtime-support
 //! file ([`logic_thread`]) and the test suite.
@@ -94,7 +94,7 @@
 //! - [`logic_thread`] — `LogicInit`, the logic thread's entry point, and its
 //!   `Pacer`-driven main loop.
 //!
-//! Unlike [`crate::resources::lua_runtime`]'s single flat re-export tier,
+//! Unlike [`aberred_lua::resources::lua_runtime`]'s single flat re-export tier,
 //! this module's public surface is intentionally two-tiered: a real `pub`
 //! external API ([`EngineBuilder`], [`SimSet`]) plus a `pub(crate)`,
 //! test-support-gated internal tier ([`LogicInit`], `run_sim_tick`, the

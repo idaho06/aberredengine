@@ -25,16 +25,18 @@ pub use core::EngineError;
 // must migrate to `aberredengine::render::...`.
 pub use aberred_render as render;
 
-pub mod components;
+// Module-style re-export of the Lua crate: `aberredengine::lua::resources::...`,
+// etc. Mirrors the `core`/`render` re-exports above
+// (docs/plans/workspaces-implementation.md's Phase 5 decision record) --
+// downstream code using the old `aberredengine::resources::lua_runtime::...`/
+// `aberredengine::systems::lua_commands::...`/`aberredengine::lua_plugin`/etc.
+// paths must migrate to `aberredengine::lua::...`. The four Lua-priority
+// shadow systems (`systems::{menu,gui_interactable_click,collision_rule_index,
+// mapspawn}`) are unaffected -- those paths never moved.
+#[cfg(feature = "lua")]
+pub use aberred_lua as lua;
+
 pub mod engine_app;
-pub mod events;
-#[cfg(feature = "lua")]
-pub mod lua_plugin;
-#[cfg(feature = "lua")]
-pub mod luarc_generator;
-pub mod resources;
-#[cfg(feature = "lua")]
-pub mod stub_generator;
 pub mod systems;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

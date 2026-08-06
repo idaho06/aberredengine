@@ -3,7 +3,7 @@
 //!
 //! Shadows `aberred_core::systems::collision_rule_index::rebuild_collision_rule_index`
 //! with a variant that also indexes `LuaCollisionRule`. Re-exported by
-//! [`crate::systems::collision_rule_index`] under `#[cfg(feature = "lua")]`.
+//! the facade's `systems::collision_rule_index` under `#[cfg(feature = "lua")]`.
 //! The Rust-bucket half is not duplicated here -- it calls core's
 //! `rebuild_rust_bucket` (the same shared-tail pattern
 //! `aberred_core::systems::menu::dispatch_menu_action` already uses).

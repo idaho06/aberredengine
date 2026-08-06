@@ -5,7 +5,7 @@
 //! Lua-only and `aberred-core` cannot name them. This module's
 //! `spawn_map_observer` wraps core's `spawn_map`, zipping its returned
 //! entities against `MapData::entities` to attach them. Re-exported by
-//! [`crate::systems::mapspawn`] under `#[cfg(feature = "lua")]`.
+//! the facade's `systems::mapspawn` under `#[cfg(feature = "lua")]`.
 //! `process_lua_map_commands` -- draining `engine.load_map()` queue entries
 //! into `SpawnMapRequested` triggers -- lives here entirely, since it needs
 //! `LuaRuntime`.
@@ -59,7 +59,7 @@ pub fn spawn_map_observer(
 /// `SpawnMapRequested` for each, letting `spawn_map_observer` handle the
 /// Raylib-dependent asset loading and entity spawning.
 ///
-/// Registered by [`crate::engine_app::EngineBuilder::with_lua`]. Runs on the
+/// Registered by the facade's `EngineBuilder::with_lua`. Runs on the
 /// sim schedule's `SimSet::Bookkeeping`, so a map load queued from
 /// `on_update_<scene>`/phase/timer/collision callbacks is picked up the same
 /// tick it's queued.

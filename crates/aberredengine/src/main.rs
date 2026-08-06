@@ -51,8 +51,8 @@ fn main() {
     // Early-exit: generate Lua stubs and quit (no window/audio needed)
     #[cfg(feature = "lua")]
     if let Some(maybe_path) = _cli.create_lua_stubs {
-        use aberredengine::resources::lua_runtime::LuaRuntime;
-        use aberredengine::stub_generator;
+        use aberredengine::lua::resources::lua_runtime::LuaRuntime;
+        use aberredengine::lua::stub_generator;
 
         let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/engine.lua"));
         let runtime = LuaRuntime::new().expect("Failed to create Lua runtime for stub generation");
@@ -75,8 +75,8 @@ fn main() {
     // Early-exit: generate .luarc.json and quit (no window/audio needed)
     #[cfg(feature = "lua")]
     if let Some(maybe_path) = _cli.create_luarc {
-        use aberredengine::luarc_generator;
-        use aberredengine::resources::lua_runtime::LuaRuntime;
+        use aberredengine::lua::luarc_generator;
+        use aberredengine::lua::resources::lua_runtime::LuaRuntime;
 
         let path = maybe_path.unwrap_or_else(|| PathBuf::from("assets/scripts/.luarc.json"));
         let runtime =

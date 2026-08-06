@@ -1,7 +1,6 @@
-#![cfg(feature = "lua")]
 
-use aberredengine::resources::lua_runtime::LuaRuntime;
-use aberredengine::stub_generator;
+use aberred_lua::resources::lua_runtime::LuaRuntime;
+use aberred_lua::stub_generator;
 
 #[test]
 fn generate_stubs_produces_valid_output() {

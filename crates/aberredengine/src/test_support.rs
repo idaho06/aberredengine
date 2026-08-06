@@ -244,7 +244,7 @@ impl TestWorldBuilder {
     #[cfg(feature = "lua")]
     /// Configure the harness for a Lua game, mirroring `EngineBuilder::with_lua`.
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
-        use crate::lua_plugin;
+        use aberred_lua::lua_plugin;
 
         self.lua_script = Some(script_path.into());
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));

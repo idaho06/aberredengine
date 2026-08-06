@@ -12,7 +12,7 @@ use aberredengine::core::resources::gameconfig::GameConfig;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
-use aberredengine::resources::lua_runtime::LuaRuntime;
+use aberredengine::lua::resources::lua_runtime::LuaRuntime;
 use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::systemsstore::SystemsStore;
