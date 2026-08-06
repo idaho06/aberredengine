@@ -164,15 +164,13 @@ impl RigidBody {
 
     /// Calculate the total acceleration from all enabled forces.
     ///
-    /// Determinism audit (determinism-02-deterministic-schedule.md §3):
     /// `forces` is an unseeded `FxHashMap`, so this summation's iteration
     /// (and therefore f32 rounding) order is a deterministic function of
     /// `forces`' insert/remove history, not random -- safe within this
     /// engine's same-build/same-arch determinism scope once sim execution
     /// order is pinned (single-threaded schedule executor). Left as
     /// `FxHashMap` rather than restructured to a `Vec`/sorted-key summation:
-    /// the only genuinely order-sensitive site surveyed in that audit, but
-    /// reproducible as-is.
+    /// order-sensitive, but reproducible as-is.
     pub fn total_acceleration(&self) -> Vec2 {
         let mut total = Vec2 { x: 0.0, y: 0.0 };
         for force in self.forces.values() {

@@ -1,14 +1,15 @@
-//! Determinism audit: no stray RNG usage outside `SimRng`
-//! (determinism-03-seeded-rng.md).
+//! Determinism audit: no stray RNG usage outside `SimRng`.
 //!
-//! Mirrors phase 02's `ambiguity_audit` precedent (`src/engine_app/schedule.rs`)
-//! -- a real, in-code test rather than a doc checklist. Two rules over every
+//! Mirrors the `ambiguity_audit` precedent (`crates/aberredengine/src/
+//! engine_app/schedule.rs`) -- a real, in-code test rather than a doc
+//! checklist. Two rules over every
 //! workspace member's `src/` tree:
 //!
 //! 1. No `Local<...Rng>` anywhere -- every sim-schedule system must draw from
 //!    the shared `ResMut<SimRng>` (or `GameCtx::sim_rng`), never a private
-//!    per-system stream (which would reintroduce the exact nondeterminism
-//!    this phase removes).
+//!    per-system stream (which would reintroduce cross-run nondeterminism:
+//!    a `Local` RNG's internal state depends on how many times its owning
+//!    system happened to run, not on `SimRng`'s single seeded stream).
 //! 2. `fastrand::Rng::new()` (the entropy-seeding constructor) is confined to
 //!    its one legitimate call site, `setup_logic_world`'s non-deterministic-
 //!    mode branch (`crates/aberredengine/src/engine_app/logic_world.rs`) --
@@ -26,9 +27,8 @@
 //! computed from `CARGO_MANIFEST_DIR` (a compile-time absolute path to this
 //! crate's own manifest directory) rather than a CWD-relative `"src"`, so
 //! this audit is correct regardless of the test binary's runtime CWD --
-//! unlike `assets`/`config.ini`, which needed relative symlinks to cope with
-//! `cargo test` running with CWD set to the package root (see Phase 1's
-//! writeup in `docs/plans/workspaces-implementation.md`), this file sidesteps
+//! unlike `assets`/`config.ini`, which need relative symlinks to cope with
+//! `cargo test` running with CWD set to the package root, this file sidesteps
 //! that pitfall entirely by never depending on CWD in the first place.
 
 use std::path::{Path, PathBuf};

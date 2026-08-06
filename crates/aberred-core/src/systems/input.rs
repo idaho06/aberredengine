@@ -415,8 +415,7 @@ mod tests {
     }
 
     /// Permanent regression table for the pure-Rust `screen_to_world2d`
-    /// port (Phase 5 of `docs/plans/remove-raylib-from-aberred-core.md`).
-    /// Every expected value here is the closed form
+    /// implementation. Every expected value here is the closed form
     /// `world = target + R(-rotation) * (screen - offset) / zoom` worked out
     /// by hand -- the same relationship `screen_to_world2d_identity_camera`,
     /// `_target_offset_zoom`, and `_rotation` above already validated against

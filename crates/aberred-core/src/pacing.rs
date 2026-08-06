@@ -104,8 +104,8 @@ impl Pacer {
     /// to catch up.
     ///
     /// Returns nothing: callers in fixed-timestep mode must integrate a
-    /// constant, config-derived period (`1.0 / hz`), never a measured value
-    /// -- see `determinism-01-fixed-timestep.md`. This is the sleeping
+    /// constant, config-derived period (`1.0 / hz`), never a measured value.
+    /// This is the sleeping
     /// counterpart to the pre-`f02581c` `Pacer::due()` (deleted when PRESENT
     /// decimation moved to the wall-clock-agnostic
     /// [`TickCountdown`](TickCountdown)); `due()`'s deadline-carry + snap
@@ -121,10 +121,9 @@ impl Pacer {
     }
 
     /// Advance the deadline to now without sleeping. Used by replay
-    /// fast-forward (determinism-05-replays.md): the sim still integrates
-    /// the same fixed `dt` every tick (`period_secs_f32`), just without
-    /// waiting for wall-clock time to pass between ticks. Never called from
-    /// the live/non-replay path.
+    /// fast-forward: the sim still integrates the same fixed `dt` every tick
+    /// (`period_secs_f32`), just without waiting for wall-clock time to pass
+    /// between ticks. Never called from the live/non-replay path.
     pub fn skip_to_now(&mut self) {
         self.last = Instant::now();
     }

@@ -126,7 +126,7 @@ Register named scenes with enter/update/exit callbacks plus optional GUI and wor
 
 ```rust
 use aberredengine::engine_app::EngineBuilder;
-use aberredengine::systems::scene_dispatch::SceneDescriptor;
+use aberredengine::engine_app::SceneDescriptor;
 
 mod scenes;
 
@@ -158,16 +158,16 @@ fn main() -> Result<(), aberredengine::EngineError> {
 Scene callback signatures:
 
 ```rust
-use aberredengine::systems::GameCtx;
-use aberredengine::systems::scene_dispatch::WorldDraw;
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::render::fontstore::FontStore;
-use aberredengine::resources::input::InputState;
-use aberredengine::resources::screensize::ScreenSize;
-use aberredengine::resources::render::texturestore::TextureStore;
-use aberredengine::resources::worldsignals::SignalSnapshot;
-use aberredengine::resources::signal_intents::SignalIntents;
-use aberredengine::resources::camera2d::Camera2D;
+use aberredengine::core::systems::GameCtx;
+use aberredengine::core::systems::scene_dispatch::WorldDraw;
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::render::resources::fontstore::FontStore;
+use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::render::resources::texturestore::TextureStore;
+use aberredengine::core::resources::worldsignals::SignalSnapshot;
+use aberredengine::core::resources::signal_intents::SignalIntents;
+use aberredengine::core::resources::camera2d::Camera2D;
 
 // Called once when the scene becomes active (logic thread)
 fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -203,7 +203,7 @@ fn my_world_draw(
 To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition. Use the `signal_keys` constants (`sk::SCENE`/`sk::SWITCH_SCENE`) instead of bare string literals — a typo in a hand-written key fails silently with no compiler error.
 
 ```rust
-use aberredengine::resources::signal_keys as sk;
+use aberredengine::core::resources::signal_keys as sk;
 
 fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if some_condition() {
@@ -232,11 +232,11 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 ```rust
 use aberredengine::imgui;
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::render::fontstore::FontStore;
-use aberredengine::resources::render::texturestore::TextureStore;
-use aberredengine::resources::worldsignals::SignalSnapshot;
-use aberredengine::resources::signal_intents::SignalIntents;
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::render::resources::fontstore::FontStore;
+use aberredengine::render::resources::texturestore::TextureStore;
+use aberredengine::core::resources::worldsignals::SignalSnapshot;
+use aberredengine::core::resources::signal_intents::SignalIntents;
 
 #[derive(Clone)]
 struct EditorPanelState {
@@ -308,12 +308,12 @@ The callback receives:
 - `&SignalSnapshot` for read-only signal access (direct field access — `signals.flags.contains("key")` — no getter methods; there's no write side here, `world_draw_callback` only draws)
 
 ```rust
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::screensize::ScreenSize;
-use aberredengine::resources::worldsignals::SignalSnapshot;
-use aberredengine::systems::scene_dispatch::WorldDraw;
-use aberredengine::resources::camera2d::Camera2D;
-use aberredengine::math::{Color, Vec2};
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::core::resources::worldsignals::SignalSnapshot;
+use aberredengine::core::systems::scene_dispatch::WorldDraw;
+use aberredengine::core::resources::camera2d::Camera2D;
+use aberredengine::core::math::{Color, Vec2};
 
 fn editor_world_draw(
     draw: &mut dyn WorldDraw,
@@ -372,8 +372,8 @@ Each hook is a standard Bevy ECS system — it receives queries and resources as
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::resources::input::InputState;
+use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::input::InputState;
 
 fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
     if input.action_1.just_pressed {
@@ -443,9 +443,9 @@ The system signature is a standard Bevy ECS system. Since it runs on the logic t
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::protocol::render_assets::RenderAssetCmd;
-use aberredengine::resources::worldsignals::WorldSignals;
-use aberredengine::resources::texturefilter::TextureFilter;
+use aberredengine::core::protocol::render_assets::RenderAssetCmd;
+use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::texturefilter::TextureFilter;
 
 fn tilemap_load_system(
     mut world_signals: ResMut<WorldSignals>,
@@ -470,8 +470,8 @@ fn tilemap_load_system(
 For systems that need custom ordering relative to engine systems, or that must run outside the `Playing` state, pass a closure receiving `&mut Schedule`. This targets the exact same schedule as `.add_system()` — all logic-thread, once per sim tick:
 
 ```rust
-use aberredengine::systems::movement::movement;
-use aberredengine::systems::camera_follow::camera_follow_system;
+use aberredengine::core::systems::movement::movement;
+use aberredengine::core::systems::camera_follow::camera_follow_system;
 
 EngineBuilder::new()
     .configure_schedule(|schedule| {
@@ -487,7 +487,7 @@ EngineBuilder::new()
     .expect("engine startup failed");
 ```
 
-Engine system functions are `pub` and importable from `aberredengine::systems::*`. Use them directly as `.after()` / `.before()` arguments — but only systems that live on this same logic-thread schedule; render-thread systems like `render_system` are never reachable from here, ordering relative to them is not expressible. No automatic `run_if` or `after` constraints are applied — you control everything.
+Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments — but only systems that live on this same logic-thread schedule; render-thread systems like `render_system` are never reachable from here, ordering relative to them is not expressible. No automatic `run_if` or `after` constraints are applied — you control everything.
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
@@ -615,10 +615,10 @@ The setup hook is a standard Bevy ECS system running on the **logic thread** (se
 Instead, texture/font/shader loading is **queued** from the logic thread and **performed** on the render thread: take `MessageWriter<RenderAssetCmd>` and write a `RenderAssetCmd` variant. The render thread's `process_render_asset_cmds` system drains the queue, does the actual GL load, and reports back — so the load itself is asynchronous relative to the tick that requested it.
 
 ```rust
-use aberredengine::protocol::render_assets::RenderAssetCmd;
-use aberredengine::resources::animationstore::{AnimationStore, AnimationResource};
+use aberredengine::core::protocol::render_assets::RenderAssetCmd;
+use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource};
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::protocol::audio::AudioCmd;
+use aberredengine::core::protocol::audio::AudioCmd;
 use std::sync::Arc;
 
 fn setup(
@@ -647,8 +647,8 @@ Audio loading uses the same message-queue pattern (`MessageWriter<AudioCmd>`) �
 Queue a load with `RenderAssetCmd::Texture`, passing the desired `TextureFilter` (use `TextureFilter::Nearest` for pixel art, `Bilinear`/`Trilinear`/`Anisotropic*` for smoothly scaled/rotated sprites):
 
 ```rust
-use aberredengine::protocol::render_assets::RenderAssetCmd;
-use aberredengine::resources::texturefilter::TextureFilter;
+use aberredengine::core::protocol::render_assets::RenderAssetCmd;
+use aberredengine::core::resources::texturefilter::TextureFilter;
 
 asset_cmds.write(RenderAssetCmd::Texture {
     id: "player".to_string(),
@@ -668,12 +668,12 @@ Keys (`id`) are arbitrary strings you'll reference later in `Sprite` components 
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::sprite::Sprite;
-use aberredengine::components::zindex::ZIndex;
-use aberredengine::math::Vec2;
-use aberredengine::resources::texturedims::TextureDimsStore;
-use aberredengine::resources::worldsignals::WorldSignals;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::zindex::ZIndex;
+use aberredengine::core::math::Vec2;
+use aberredengine::core::resources::texturedims::TextureDimsStore;
+use aberredengine::core::resources::worldsignals::WorldSignals;
 use std::sync::Arc;
 
 fn spawn_player_once_texture_ready(
@@ -745,7 +745,7 @@ asset_cmds.write(RenderAssetCmd::Font {
 To measure text (e.g. to size UI elements) without touching the render-world `FontStore`, read `FontMetricsStore` — populated asynchronously the same way `TextureDimsStore` is, so tolerate a missing key the first tick or two after queuing the load:
 
 ```rust
-use aberredengine::resources::fontmetrics::FontMetricsStore;
+use aberredengine::core::resources::fontmetrics::FontMetricsStore;
 
 fn measure_label(fonts: Res<FontMetricsStore>) {
     if let Some(metrics) = fonts.0.get("arcade") {
@@ -810,7 +810,7 @@ Same `None`-per-stage convention as `RenderAssetCmd::Shader`, and the same "no s
 Animations are pure data — no raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
 
 ```rust
-use aberredengine::math::Vec2;
+use aberredengine::core::math::Vec2;
 
 anim_store.animations.insert("player_idle".to_string(), AnimationResource {
     tex_key: Arc::from("player"),              // must match a TextureStore key
@@ -846,9 +846,9 @@ assets/tilemaps/level01/
 Spawn a tilemap by attaching the `TileMap` component to any entity. `tilemap_spawn_system` reacts to `Added<TileMap>`, loads the PNG + JSON from disk, and spawns all tile entities as `ChildOf` children of the root entity. The entire tilemap then moves, scales, and rotates as one unit:
 
 ```rust
-use aberredengine::components::tilemap::TileMap;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::scale::Scale;
+use aberredengine::core::components::tilemap::TileMap;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::scale::Scale;
 
 // Minimal — tiles appear at world origin (default MapPosition inserted automatically)
 commands.spawn(TileMap::new("assets/tilemaps/level01"));
@@ -885,9 +885,9 @@ The texture is stored in `TextureStore` keyed by path stem and deduplicated — 
 `Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
-use aberredengine::resources::camera2d::Camera2D;
-use aberredengine::resources::screensize::ScreenSize;
-use aberredengine::math::Vec2;
+use aberredengine::core::resources::camera2d::Camera2D;
+use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::core::math::Vec2;
 
 fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
     camera.0 = Camera2D {
@@ -965,11 +965,11 @@ Entities are spawned with `commands.spawn((component_tuple))` — the standard B
 A minimal visible entity needs a position, a sprite, a draw order, and optionally a group:
 
 ```rust
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::sprite::Sprite;
-use aberredengine::components::zindex::ZIndex;
-use aberredengine::components::group::Group;
-use aberredengine::math::Vec2;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::zindex::ZIndex;
+use aberredengine::core::components::group::Group;
+use aberredengine::core::math::Vec2;
 use std::sync::Arc;
 
 ctx.commands.spawn((
@@ -993,10 +993,10 @@ ctx.commands.spawn((
 Add `RigidBody`, `BoxCollider`, and `AccelerationControlled` for a player character with momentum-based movement:
 
 ```rust
-use aberredengine::components::rigidbody::RigidBody;
-use aberredengine::components::boxcollider::BoxCollider;
-use aberredengine::components::inputcontrolled::AccelerationControlled;
-use aberredengine::math::Vec2;
+use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::inputcontrolled::AccelerationControlled;
+use aberredengine::core::math::Vec2;
 
 ctx.commands.spawn((
     MapPosition::new(100.0, 200.0),
@@ -1024,10 +1024,10 @@ ctx.commands.spawn((
 Screen-space text that auto-updates from `WorldSignals`:
 
 ```rust
-use aberredengine::components::screenposition::ScreenPosition;
-use aberredengine::components::dynamictext::DynamicText;
-use aberredengine::components::signalbinding::SignalBinding;
-use aberredengine::math::Color;
+use aberredengine::core::components::screenposition::ScreenPosition;
+use aberredengine::core::components::dynamictext::DynamicText;
+use aberredengine::core::components::signalbinding::SignalBinding;
+use aberredengine::core::math::Color;
 
 ctx.commands.spawn((
     ScreenPosition::new(10.0, 10.0),
@@ -1096,9 +1096,9 @@ Use the target component type as `T`:
 **Position tween example:**
 
 ```rust
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::components::tween::{Easing, LoopMode, Tween};
-use aberredengine::math::Vec2;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::tween::{Easing, LoopMode, Tween};
+use aberredengine::core::math::Vec2;
 
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
@@ -1115,8 +1115,8 @@ ctx.commands.spawn((
 **Rotation tween example:**
 
 ```rust
-use aberredengine::components::rotation::Rotation;
-use aberredengine::components::tween::Tween;
+use aberredengine::core::components::rotation::Rotation;
+use aberredengine::core::components::tween::Tween;
 
 ctx.commands.spawn((
     Rotation { degrees: 0.0 },
@@ -1131,8 +1131,8 @@ ctx.commands.spawn((
 **Scale tween example:**
 
 ```rust
-use aberredengine::components::scale::Scale;
-use aberredengine::components::tween::Tween;
+use aberredengine::core::components::scale::Scale;
+use aberredengine::core::components::tween::Tween;
 
 ctx.commands.spawn((
     Scale::new(1.0, 1.0),
@@ -1148,8 +1148,8 @@ ctx.commands.spawn((
 **Screen-position tween example (UI):**
 
 ```rust
-use aberredengine::components::screenposition::ScreenPosition;
-use aberredengine::components::tween::Tween;
+use aberredengine::core::components::screenposition::ScreenPosition;
+use aberredengine::core::components::tween::Tween;
 
 ctx.commands.spawn((
     ScreenPosition::new(-200.0, 50.0),
@@ -1213,7 +1213,7 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 **2. Flag-based from scene callbacks:** Set the target scene name and the `"switch_scene"` flag on `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition. Use the `signal_keys` constants (`sk::SCENE`/`sk::SWITCH_SCENE`) instead of bare string literals — a typo in a hand-written key fails silently with no compiler error:
 
 ```rust
-use aberredengine::resources::signal_keys as sk;
+use aberredengine::core::resources::signal_keys as sk;
 
 fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if player_reached_exit(ctx) {
@@ -1225,7 +1225,7 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 ### 6.3 Persistent entities
 
-The `Persistent` tag component (`src/components/persistent.rs`) marks entities that survive scene switches. During a transition, `scene_switch_system` despawns everything *without* `Persistent`.
+The `Persistent` tag component (`aberred-core/src/components/persistent.rs`) marks entities that survive scene switches. During a transition, `scene_switch_system` despawns everything *without* `Persistent`.
 
 Typical uses:
 
@@ -1234,7 +1234,7 @@ Typical uses:
 - **Global state entities** — entities carrying `Signals` or custom components that hold cross-scene state
 
 ```rust
-use aberredengine::math::Color;
+use aberredengine::core::math::Color;
 
 ctx.commands.spawn((
     ScreenPosition::new(10.0, 10.0),
@@ -1249,11 +1249,11 @@ ctx.commands.spawn((
 > component. If you write a custom system (via `.add_system()` or `.configure_schedule()`) that scans for
 > "all entities without `Persistent`" — e.g. your own cleanup/reset logic — a bare
 > `Query<Entity, Without<Persistent>>` will also match these internal resource entities and despawn them.
-> Use `aberredengine::components::persistent::CleanableEntity` instead, the same query filter the engine's
+> Use `aberredengine::core::components::persistent::CleanableEntity` instead, the same query filter the engine's
 > own scene-switch cleanup uses internally:
 >
 > ```rust
-> use aberredengine::components::persistent::CleanableEntity;
+> use aberredengine::core::components::persistent::CleanableEntity;
 >
 > fn my_cleanup(query: Query<Entity, CleanableEntity>, mut commands: Commands) {
 >     for entity in &query {
@@ -1264,7 +1264,7 @@ ctx.commands.spawn((
 
 ### 6.4 Group tracking across scenes
 
-`TrackedGroups` (`src/resources/group.rs`) is a resource holding a set of group names to count. The engine's `update_group_counts_system` publishes entity counts for each tracked group to `WorldSignals` every sim tick.
+`TrackedGroups` (`aberred-core/src/resources/group.rs`) is a resource holding a set of group names to count. The engine's `update_group_counts_system` publishes entity counts for each tracked group to `WorldSignals` every sim tick.
 
 ```rust
 // In your scene's on_enter callback:
@@ -1301,19 +1301,19 @@ The `dt` parameter is `WorldTime.delta` — always the fixed constant `1.0 / hz`
 
 The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Each of the first four follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
+All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
 
 ### 7.1 Timers
 
-**Source:** `src/components/timer.rs`, `src/systems/timer.rs`
+**Source:** `aberred-core/src/components/timer.rs`, `aberred-core/src/systems/timer.rs`
 
 `Timer` is a repeating countdown component. When `elapsed >= duration`, it fires a `TimerEvent` and resets by subtracting `duration` (not zeroing) for timing accuracy.
 
 **Callback signature:**
 
 ```rust
-use aberredengine::systems::GameCtx;
-use aberredengine::resources::input::InputState;
+use aberredengine::core::systems::GameCtx;
+use aberredengine::core::resources::input::InputState;
 
 type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
 ```
@@ -1321,7 +1321,7 @@ type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
 **Creating a timer:**
 
 ```rust
-use aberredengine::components::timer::Timer;
+use aberredengine::core::components::timer::Timer;
 
 // Spawn an entity with a 2-second repeating timer
 ctx.commands.spawn((
@@ -1355,7 +1355,7 @@ fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
 
 ### 7.2 Phase State Machines
 
-**Source:** `src/components/phase.rs`, `src/systems/phase.rs`
+**Source:** `aberred-core/src/components/phase.rs`, `aberred-core/src/systems/phase.rs`
 
 `Phase` is a per-entity state machine. Each entity has a current phase (a string label) and a map of phase names to callback function pointers.
 
@@ -1364,7 +1364,7 @@ fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
 **Callback signatures:**
 
 ```rust
-use aberredengine::systems::GameCtx;
+use aberredengine::core::systems::GameCtx;
 
 // Called when entering a phase. Return Some("phase") to immediately chain-transition.
 type PhaseEnterFn = fn(Entity, &mut GameCtx, &InputState) -> Option<String>;
@@ -1379,7 +1379,7 @@ type PhaseExitFn = fn(Entity, &mut GameCtx);
 **Creating a phase state machine:**
 
 ```rust
-use aberredengine::components::phase::{Phase, PhaseCallbackFns};
+use aberredengine::core::components::phase::{Phase, PhaseCallbackFns};
 use rustc_hash::FxHashMap;
 
 let mut phases = FxHashMap::default();
@@ -1479,14 +1479,14 @@ fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f
 
 ### 7.3 Collision Rules
 
-**Source:** `src/components/collision.rs`, `src/systems/rust_collision.rs`, `src/systems/collision_detector.rs`
+**Source:** `aberred-core/src/components/collision.rs`, `aberred-core/src/systems/rust_collision.rs`, `aberred-core/src/systems/collision_detector.rs`
 
 `CollisionRule` defines how collisions between two entity groups are handled. Rules are spawned as their own entities.
 
 **Callback signature:**
 
 ```rust
-use aberredengine::systems::GameCtx;
+use aberredengine::core::systems::GameCtx;
 
 type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 ```
@@ -1507,8 +1507,8 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 **Creating a collision rule:**
 
 ```rust
-use aberredengine::components::collision::{CollisionRule, BoxSide};
-use aberredengine::components::persistent::Persistent;
+use aberredengine::core::components::collision::{CollisionRule, BoxSide};
+use aberredengine::core::components::persistent::Persistent;
 
 ctx.commands.spawn((
     CollisionRule::rust("ball", "brick", ball_brick_collision),
@@ -1548,15 +1548,15 @@ fn ball_brick_collision(
 
 ### 7.4 Menus
 
-**Source:** `src/components/menu.rs`, `src/systems/menu.rs`
+**Source:** `aberred-core/src/components/menu.rs`, `aberred-core/src/systems/menu.rs`
 
 `Menu` is a component that creates an interactive, navigable menu. Spawn it on an entity and the engine handles rendering, input, scrolling, and selection dispatch.
 
 **Constructor:**
 
 ```rust
-use aberredengine::math::Vec2;
-use aberredengine::components::menu::{Menu, MenuActions, MenuAction};
+use aberredengine::core::math::Vec2;
+use aberredengine::core::components::menu::{Menu, MenuActions, MenuAction};
 
 let menu = Menu::new(
     &[("start", "Start Game"), ("options", "Options"), ("quit", "Quit")],
@@ -1603,9 +1603,9 @@ ctx.commands.spawn((menu, actions));
 **2. Rust callback:** For custom logic, use `.with_on_rust_callback()`:
 
 ```rust
-use aberredengine::components::menu::MenuRustCallback;
-use aberredengine::systems::GameCtx;
-use aberredengine::resources::signal_keys as sk;
+use aberredengine::core::components::menu::MenuRustCallback;
+use aberredengine::core::systems::GameCtx;
+use aberredengine::core::resources::signal_keys as sk;
 
 fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
     match item_id {
@@ -1638,7 +1638,7 @@ The first match wins; later options are skipped.
 **Complete menu example:**
 
 ```rust
-use aberredengine::math::{Color, Vec2};
+use aberredengine::core::math::{Color, Vec2};
 
 fn enter(ctx: &mut GameCtx) {
     let menu = Menu::new(
@@ -1662,7 +1662,7 @@ fn enter(ctx: &mut GameCtx) {
 
 ### 7.5 Animation Finished Event
 
-**Source:** `src/events/animation.rs`, `src/systems/animation.rs` (fires the event)
+**Source:** `aberred-core/src/events/animation.rs`, `aberred-core/src/systems/animation.rs` (fires the event)
 
 `AnimationFinishedEvent` is triggered **once** by the animation system on the frame a non-looped animation first reaches its final frame. Looped animations never trigger it. It is not re-triggered on subsequent frames even though the entity stays on the last frame.
 
@@ -1679,7 +1679,7 @@ pub struct AnimationFinishedEvent {
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::bevy_ecs::observer::On;
-use aberredengine::events::animation::AnimationFinishedEvent;
+use aberredengine::core::events::animation::AnimationFinishedEvent;
 
 fn on_anim_done(
     trigger: On<AnimationFinishedEvent>,
@@ -1699,7 +1699,7 @@ EngineBuilder::new()
 
 ### 7.6 Tween Finished Event
 
-**Source:** `src/events/tween.rs`, `src/systems/tween.rs`
+**Source:** `aberred-core/src/events/tween.rs`, `aberred-core/src/systems/tween.rs`
 
 `TweenFinishedEvent<T>` is triggered **once** by the tween system for a given `Tween<T>` the frame it stops playing — either a `LoopMode::Once` tween reaching its end, or a zero-duration tween snapping immediately. `LoopMode::Loop` and `LoopMode::PingPong` tweens never trigger it, since they never stop playing on their own.
 
@@ -1716,8 +1716,8 @@ pub struct TweenFinishedEvent<T: TweenValue> {
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::bevy_ecs::observer::On;
-use aberredengine::components::mapposition::MapPosition;
-use aberredengine::events::tween::TweenFinishedEvent;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::events::tween::TweenFinishedEvent;
 
 fn on_move_tween_done(
     trigger: On<TweenFinishedEvent<MapPosition>>,
@@ -1739,7 +1739,7 @@ callback signature is `fn(ctx, input)` — the same as the animation-finished an
 
 ### 7.7 GUI Widgets
 
-**Source:** `src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `src/resources/guitheme.rs`, `src/systems/{gui_spawn,gui_layout,gui_hit_test,gui_interactable_click}.rs`, `src/events/gui_interactable.rs`
+**Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/guitheme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test,gui_interactable_click}.rs`, `aberred-core/src/events/gui_interactable.rs`
 
 The engine provides a themed, nine-patch-skinned in-game GUI widget system — panels, buttons, labels, and
 clickable images. It is plain ECS components and systems, fully usable from pure Rust; all of its systems
@@ -1775,8 +1775,8 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 
 ```rust
 use aberredengine::bevy_ecs::prelude::ResMut;
-use aberredengine::math::{Color, Rect};
-use aberredengine::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
+use aberredengine::core::math::{Color, Rect};
+use aberredengine::core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
 use std::sync::Arc;
 
 fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
@@ -1845,14 +1845,14 @@ A missing/unregistered `theme_key` skips the themed background (caption/sprite s
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::math::Vec2;
-use aberredengine::components::guibutton::GuiButton;
-use aberredengine::components::guiinteractable::GuiInteractable;
-use aberredengine::components::guioffset::GuiOffset;
-use aberredengine::components::guiwindow::GuiWindow;
-use aberredengine::components::screenposition::ScreenPosition;
-use aberredengine::components::zindex::ZIndex;
-use aberredengine::systems::GameCtx;
+use aberredengine::core::math::Vec2;
+use aberredengine::core::components::guibutton::GuiButton;
+use aberredengine::core::components::guiinteractable::GuiInteractable;
+use aberredengine::core::components::guioffset::GuiOffset;
+use aberredengine::core::components::guiwindow::GuiWindow;
+use aberredengine::core::components::screenposition::ScreenPosition;
+use aberredengine::core::components::zindex::ZIndex;
+use aberredengine::core::systems::GameCtx;
 
 fn on_start_clicked(_entity: Entity, ctx: &mut GameCtx) {
     ctx.world_signals.set_flag("start_pressed");
@@ -1884,7 +1884,7 @@ the parent's `ScreenPosition` plus `GuiOffset`.
 **Click events:** clicks dispatch primarily through the per-widget `GuiInteractable.on_rust_callback` /
 `on_click_callback` (Lua name) shown above. For cross-cutting logic that doesn't belong to one specific
 widget (analytics, a UI click sound), you can additionally observe `GuiInteractableClickEvent { entity }`
-(`src/events/gui_interactable.rs`) the same way as `AnimationFinishedEvent`/`TweenFinishedEvent<T>` above —
+(`aberred-core/src/events/gui_interactable.rs`) the same way as `AnimationFinishedEvent`/`TweenFinishedEvent<T>` above —
 register it once with `EngineBuilder::add_observer`; it fires for any `GuiInteractable`-carrying widget
 (`GuiButton` or `GuiImage`) on a press-then-release-inside.
 
@@ -2012,7 +2012,7 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 
 `WorldSignals` intentionally stays limited to those primitive/value-like channels. For richer Rust-only typed data, use `AppState` instead.
 
-The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"`, and others) are exposed as constants in `aberredengine::resources::signal_keys` — conventionally imported as `use aberredengine::resources::signal_keys as sk;`. Prefer `sk::SCENE`/`sk::SWITCH_SCENE`/etc. over hand-typing the string literals: a typo in a bare string key fails silently, with no compiler error.
+The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"`, and others) are exposed as constants in `aberredengine::core::resources::signal_keys` — conventionally imported as `use aberredengine::core::resources::signal_keys as sk;`. Prefer `sk::SCENE`/`sk::SWITCH_SCENE`/etc. over hand-typing the string literals: a typo in a bare string key fails silently, with no compiler error.
 
 ### AppState API
 
@@ -2030,11 +2030,11 @@ Use `AppState` for richer GUI/editor snapshots and view-models that do not belon
 
 ```rust
 use aberredengine::imgui;
-use aberredengine::resources::appstate::AppState;
-use aberredengine::resources::render::fontstore::FontStore;
-use aberredengine::resources::render::texturestore::TextureStore;
-use aberredengine::resources::worldsignals::SignalSnapshot;
-use aberredengine::resources::signal_intents::SignalIntents;
+use aberredengine::core::resources::appstate::AppState;
+use aberredengine::render::resources::fontstore::FontStore;
+use aberredengine::render::resources::texturestore::TextureStore;
+use aberredengine::core::resources::worldsignals::SignalSnapshot;
+use aberredengine::core::resources::signal_intents::SignalIntents;
 use aberredengine::bevy_ecs::prelude::ResMut;
 
 #[derive(Clone)]
@@ -2100,10 +2100,10 @@ Each digital field is a `BoolState { active, just_pressed, just_released }`. Har
 
 ### InputBindings resource
 
-`InputBindings` (`src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. W and Up arrow both trigger `main_up`).
+`InputBindings` (`aberred-core/src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. W and Up arrow both trigger `main_up`).
 
 ```rust
-use aberredengine::resources::input_bindings::{InputBindings, InputBinding, InputAction};
+use aberredengine::core::resources::input_bindings::{InputBindings, InputBinding, InputAction};
 
 // InputBinding variants:
 InputBinding::Keyboard(Key)                                              // a keyboard key

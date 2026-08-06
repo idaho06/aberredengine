@@ -371,7 +371,8 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // Computed once and reused every tick -- derived from the Pacer's own
     // period rather than re-deriving `1.0 / sim_hz` independently, so
     // there's a single source of truth for the period (must be
-    // bit-identical everywhere it's used, determinism-01-fixed-timestep.md).
+    // bit-identical everywhere it's used, since dt is always this fixed
+    // constant, never a measured value).
     let sim_period_f32 = pacer.period_secs_f32();
     // Decimates `present`/snapshot publishing independently of the sim's
     // own pacing above: a countdown of sim ticks rather than a second

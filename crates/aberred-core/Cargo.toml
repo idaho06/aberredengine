@@ -28,10 +28,9 @@ tempfile.workspace = true
 
 [features]
 # No mlua dependency here -- this feature exists only so `#[cfg(feature =
-# "lua")]` items that are inert in core (name no Lua-only type; see
-# CLAUDE.md/docs/plans/workspaces-implementation.md's Phase 2 record) don't
-# trip `unexpected_cfgs`, and so the facade can forward its own `lua`
-# feature down for bucket-tracking consistency.
+# "lua")]` items that are inert in core (name no Lua-only type) don't trip
+# `unexpected_cfgs`, and so the facade can forward its own `lua` feature
+# down for bucket-tracking consistency.
 lua = []
 tracy = ["dep:tracy-client"]
 test-support = []

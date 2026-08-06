@@ -1,9 +1,10 @@
 //! Regression test: engine-owned `Key`/`MouseButton`/`GamepadButton`/
-//! `GamepadAxis` numeric codes (`src/resources/input_bindings.rs`) must stay
-//! identical to raylib's own codes. These newtypes replaced direct
-//! `raylib::ffi::{KeyboardKey,MouseButton,GamepadButton,GamepadAxis}` usage in
-//! core (`docs/plans/remove-raylib-from-aberred-core.md`, Phase 3) so core no
-//! longer imports raylib types -- but the numeric values still have to match,
+//! `GamepadAxis` numeric codes (`crates/aberred-core/src/resources/
+//! input_bindings.rs`) must stay identical to raylib's own codes. Core names
+//! these engine-owned newtypes instead of `raylib::ffi::{KeyboardKey,
+//! MouseButton,GamepadButton,GamepadAxis}` directly, so core has no
+//! dependency on the `raylib` crate at all -- but the numeric values still
+//! have to match,
 //! since `RawDeviceSnapshot`'s bitset (fed by raylib key/button/axis codes on
 //! the render thread) is diffed against these consts on the logic thread.
 //!

@@ -1,8 +1,7 @@
-//! Determinism regression guard (determinism-02-deterministic-schedule.md),
-//! plus the phase 05 (replays) verification harness
-//! (determinism-05-replays.md): state hash double-run/divergence tests, the
-//! replay recorder/player round trip, codec bit-exactness, empty-tick RLE,
-//! header validation, and a golden hash regression test.
+//! Determinism regression guard, plus the replay verification harness:
+//! state hash double-run/divergence tests, the replay recorder/player round
+//! trip, codec bit-exactness, empty-tick RLE, header validation, and a
+//! golden hash regression test.
 //!
 //! Runs an identical scripted scenario -- entity spawns AND despawns
 //! interleaved across multiple ticks, plus a collision -- against two fresh
@@ -189,7 +188,7 @@ fn identical_scenario_allocates_identical_entity_ids_across_runs() {
     );
 }
 
-// --- determinism-04-tick-input.md: TickInput round-trip / empty-tick tests ---
+// --- TickInput round-trip / empty-tick tests ---
 
 /// Observable state after driving a `TestWorld` through the scripted
 /// `TickInput` sequence below -- the "ground truth" `round_trip_tick_input_*`
@@ -203,9 +202,9 @@ struct TickInputScenarioResult {
 
 /// Drives a fresh, independently-seeded `TestWorld` through an identical
 /// scripted `TickInput` sequence -- this sequence itself stands in for a
-/// "recorded log" (05 adds an actual Recorder/serialization; the `TickInput`
-/// values are already the loss-free record per determinism-04-tick-input.md
-/// §3). Exercises all four `TickInput` fields relevant to `apply_tick_input`:
+/// "recorded log" (the replay recorder/player below adds an actual
+/// Recorder/serialization; the `TickInput` values are already the loss-free
+/// record). Exercises all four `TickInput` fields relevant to `apply_tick_input`:
 /// raw samples (held key), an empty tick, queued `SignalIntent`s, and a
 /// `ScreenSize` change.
 fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
@@ -291,9 +290,9 @@ fn round_trip_tick_input_sequence_produces_identical_state_across_two_runs() {
         run1, run2,
         "driving two independent TestWorlds through the identical scripted \
          TickInput sequence must produce bit-identical observable state -- \
-         this is the round-trip guarantee determinism-04-tick-input.md exists \
-         to provide (a real Recorder/replay format is 05's job; the TickInput \
-         values themselves are already the loss-free record)"
+         this is the round-trip guarantee `TickInput` exists to provide (the \
+         replay recorder/player format below is a separate concern; the \
+         TickInput values themselves are already the loss-free record)"
     );
 }
 
@@ -345,7 +344,7 @@ fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
     );
 }
 
-// --- determinism-05-replays.md: state hash + replay recorder/player -------
+// --- state hash + replay recorder/player -----------------------------
 
 use aberredengine::core::EngineError;
 use aberredengine::core::protocol::replay::{
@@ -631,18 +630,19 @@ fn golden_scenario_final_hash(seed: u64) -> u64 {
 #[test]
 fn golden_replay_rust_scene_matches_checked_in_trail() {
     // Golden value pinned against current sim/hash behavior -- this is the
-    // CI regression net determinism-05-replays.md asks for: any change to
-    // the hashed component/resource list, or any sim-behavior change that
+    // CI regression net: any change to the hashed component/resource list,
+    // or any sim-behavior change that
     // affects a hashed field, changes this value. That's the point -- it
     // forces a conscious decision (update GOLDEN_HASH, and consider
     // bumping REPLAY_FORMAT_VERSION if old replay files would now diverge)
     // instead of a silent regression.
     //
-    // Bumped for lua-refactor phase 04: registering
-    // `rebuild_collision_rule_index` in the sim schedule's `SimSet::Collision`
-    // (`.before(collision_detector)`) changes the deterministic
-    // single-threaded executor's per-tick system sequence, even though this
-    // scenario spawns no `CollisionRule` entity for the new system to act on.
+    // This value is sensitive to the sim schedule's exact system sequence:
+    // `rebuild_collision_rule_index` runs in `SimSet::Collision`
+    // (`.before(collision_detector)`), so registering or reordering any
+    // system in the deterministic single-threaded executor's per-tick
+    // sequence changes this hash, even for a scenario (like this one) that
+    // spawns no `CollisionRule` entity for that system to act on.
     const GOLDEN_HASH: u64 = 0x9f71_4dc6_36ff_e0a3;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(

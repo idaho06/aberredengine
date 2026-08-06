@@ -12,8 +12,9 @@
 //! exclusively through `aberred_core::protocol`'s wire types. This is also
 //! the only crate in the workspace allowed to use macro-based codegen
 //! (`resources::lua_runtime::queue_registry`'s `lua_queues!`,
-//! `resources::lua_runtime::entity_builder`'s `builder_method!`) -- see
-//! `docs/plans/workspaces-implementation.md`'s Phase 5 decision record.
+//! `resources::lua_runtime::entity_builder`'s `builder_method!`). Project
+//! direction confines macro-based codegen to this crate; core, render, and
+//! audio use generic functions instead.
 //!
 //! The facade crate (`aberredengine`) keeps four small Lua-priority "shadow"
 //! systems of its own (`systems::{menu, gui_interactable_click,

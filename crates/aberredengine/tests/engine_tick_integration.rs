@@ -2886,9 +2886,8 @@ fn collision_rule_sides_passed_to_callback() {
     assert!(signals.has_flag("sides_correct"));
 }
 
-/// Deliberate behavior change (lua-refactor phase 04): when multiple rules
-/// cover the same group pair, first-match is now deterministic (lowest
-/// `Entity` wins), not query-iteration order. Per
+/// When multiple rules cover the same group pair, first-match is
+/// deterministic (lowest `Entity` wins), not query-iteration order. Per
 /// `.claude/context/system-order.md`, `Entity`'s `Ord` does NOT correlate
 /// with spawn order (its niche encoding stores `!index`), so this test
 /// determines which of the two rules has the lower id *after* spawning

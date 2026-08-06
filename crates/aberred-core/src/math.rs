@@ -1,11 +1,11 @@
 //! Engine-owned, raylib-free scalar math types.
 //!
-//! Part of the raylib-removal effort (`docs/plans/remove-raylib-from-aberred-core.md`,
-//! Phase 1): `Vec2` re-exports `glam::Vec2` so core never depends on raylib's
-//! own vector type; `Color`/`Rect` are hand-written, layout-identical
+//! `Vec2` re-exports `glam::Vec2` so core never depends on raylib's own
+//! vector type; `Color`/`Rect` are hand-written, layout-identical
 //! replacements for raylib's `Color`/`Rectangle` so the render tree's
-//! conversions (`src/systems/render/math.rs`) are free. This module must stay
-//! free of any `raylib` reference — that split is the entire point.
+//! conversions (`crates/aberred-render/src/systems/math.rs`) are free. This
+//! module must stay free of any `raylib` reference — that split is the
+//! entire point of `aberred-core` existing as a separate crate.
 
 pub use glam::Vec2;
 

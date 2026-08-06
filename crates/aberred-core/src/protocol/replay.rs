@@ -21,12 +21,13 @@ pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
 /// a different field set, so replaying it would fail as a *config* mismatch
 /// — a misleading error for what is a format change.
 ///
-/// `4`: `screen_to_world2d` (`src/systems/input.rs`) was ported from
+/// `4`: `screen_to_world2d` (`crates/aberred-core/src/systems/input.rs`) is
+/// a pure-Rust `glam::Mat3` implementation rather than a binding to
 /// `raylib::ffi::GetScreenToWorld2D` (C, SSE-accelerated `MatrixMultiply`,
-/// system `libm` `sinf`/`cosf`) to a pure-Rust `glam::Mat3` implementation
-/// (remove-raylib-from-aberred-core plan, Phase 5). Not bit-identical to
-/// the old path — different accumulation order, `libm` crate vs system
-/// `libm` — so `InputState.mouse_world_x/y`, which is sim-visible and
+/// system `libm` `sinf`/`cosf`) — required for core to have no `raylib`
+/// dependency. Not bit-identical to the FFI path — different accumulation
+/// order, `libm` crate vs system `libm` — so `InputState.mouse_world_x/y`,
+/// which is sim-visible and
 /// `state_hash`-reachable, changes. A v3 replay's recorded ticks would
 /// diverge on first mouse-world read, so it's refused rather than
 /// best-effort replayed.

@@ -186,8 +186,8 @@ impl EngineBuilder {
         let mut sim = Schedule::default();
         // Pinned unconditionally (not gated behind a deterministic-mode
         // flag): removes cross-run interleaving nondeterminism in Commands
-        // application / entity allocation order (determinism-02). Mirrors
-        // the audio thread's own schedule (src/systems/audio/world.rs).
+        // application / entity allocation order. Mirrors the audio thread's
+        // own schedule (crates/aberred-audio/src/systems/world.rs).
         // Only affects which systems can interleave -- auto_insert_apply_
         // deferred (Commands-flush ordering) is executor-independent, so
         // command-visibility timing is unchanged.
@@ -583,8 +583,7 @@ impl EngineBuilder {
 
 #[cfg(test)]
 mod ambiguity_audit {
-    //! Regression gate (determinism-02-deterministic-schedule.md §2):
-    //! builds the real `sim` schedule (via the engine's own
+    //! Regression gate: builds the real `sim` schedule (via the engine's own
     //! `configure_sim_sets`/`add_engine_sim_systems`, not a hand-listed
     //! system set) with `ambiguity_detection: LogLevel::Warn` and asserts
     //! zero ambiguities remain. Every ambiguity bevy 0.19 reports here is

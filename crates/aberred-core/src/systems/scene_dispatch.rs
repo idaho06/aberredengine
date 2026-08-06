@@ -76,14 +76,15 @@ pub trait WorldDraw {
 }
 
 // The `WorldDraw` impl over raylib draw handles lives in
-// `crate::systems::render::math` as `RaylibWorldDraw` — a newtype wrapper,
-// not a blanket impl, since `aberred-render` will own neither `WorldDraw`
-// nor `RaylibDraw` once core/render split into separate crates (the orphan
-// rule blocks a blanket impl at that point — see docs/plans, §5.2).
+// `aberred-render`'s `systems::math` as `RaylibWorldDraw` — a newtype
+// wrapper, not a blanket impl, since `aberred-render` owns neither
+// `WorldDraw` (defined here, in core) nor `RaylibDraw` (defined in the
+// `raylib` crate) — the orphan rule blocks a blanket impl across two
+// foreign types.
 
 // `GuiCallback` (the ImGui-drawing callback type) lives in
-// `aberred-render`'s `resources::render::scene_table` alongside
-// `SceneRender` — core cannot name `ImguiUi`/`TextureStore`/`FontStore`.
+// `aberred-render`'s `resources::scene_table` alongside `SceneRender` —
+// core cannot name `ImguiUi`/`TextureStore`/`FontStore`.
 
 /// Called every frame inside `begin_mode2D` in camera-transformed world space.
 ///

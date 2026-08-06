@@ -1,4 +1,4 @@
-//! Seeded-RNG regression guard (determinism-03-seeded-rng.md).
+//! Seeded-RNG regression guard.
 //!
 //! Runs an identical scripted particle-emission scenario against two
 //! independent `TestWorld`s built via `TestWorldBuilder::deterministic(seed)`
