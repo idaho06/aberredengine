@@ -366,7 +366,7 @@ fn main() -> Result<(), aberredengine::EngineError> {
 
 Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and missing required built-in system registrations.
 
-`EngineBuilder::run()` is still available as a convenience wrapper, but it only logs startup failures internally and does not return them to your `main` function.
+`EngineBuilder::run()` is still available as a convenience wrapper around `.try_run()`, but on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
 
 Each hook is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
 
@@ -1066,7 +1066,6 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Timer` | `Timer::rust(duration_secs, callback)` — use `::rust()` for Rust callbacks; see §7.1 |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
-| `LuaOnAnimationEnd` | `LuaOnAnimationEnd::new("fn_name")` — `[feature=lua]`; fires once when non-looped animation finishes; Rust counterpart is `AnimationFinishedEvent` |
 | `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
 | `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
 | `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
@@ -2020,7 +2019,7 @@ The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"
 
 | Method | Signature |
 |--------|-----------|
-| `insert` | `(&mut self, value: T) where T: Any + Send + Sync + 'static` |
+| `insert` | `(&mut self, value: T) where T: Any + Send + Sync + Clone` |
 | `get::<T>` | `(&self) -> Option<&T>` |
 | `get_mut::<T>` | `(&mut self) -> Option<&mut T>` |
 | `remove::<T>` | `(&mut self) -> Option<T>` |
@@ -2170,7 +2169,7 @@ Section 2 showed the basics. This is the complete reference.
 - **Missing file** -> startup error from `EngineBuilder::try_run()`
 - **Unreadable or malformed INI** -> startup error from `EngineBuilder::try_run()`
 - **Missing key** -> default for that key
-- **Invalid value** -> silently ignored, default used for that key
+- **Invalid value** -> numeric fields (`simulation.hz`, `audio.hz`, `simulation.snapshot_skip`, `input.gamepad_deadzone`) warn and clamp to the nearest valid bound; `render_target_filter` warns and falls back to its default (`nearest`)
 - **Booleans** — case-insensitive: `true`/`false`, `yes`/`no`, `on`/`off`
 - **`background_color`** — comma-separated `R,G,B` integers (e.g., `80,80,80`)
 
