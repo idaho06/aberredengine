@@ -20,6 +20,7 @@ use crate::resources::store::AudioStore;
 /// Drain all pending [`AudioCmd`]s non-blockingly and apply them to the
 /// audio world.
 pub fn drain_cmds(world: &mut World) {
+    aberred_core::tracy::tracy_span!("audio_drain_cmds");
     let cmds: Vec<AudioCmd> = world.resource::<CmdReceiver>().0.try_iter().collect();
     for cmd in cmds {
         handle_cmd(world, cmd);
@@ -336,6 +337,7 @@ fn handle_cmd(world: &mut World, cmd: AudioCmd) {
 /// this hot path -- it runs every audio tick regardless of commands -- never
 /// needs to touch `AudioStore`.
 pub fn pump_music(world: &mut World) {
+    aberred_core::tracy::tracy_span!("pump_music");
     let mut ended: Vec<(Entity, String, bool)> = Vec::new();
     for (entity, id, music, looped, paused) in music_tracks(world) {
         if paused {
@@ -376,6 +378,7 @@ pub fn pump_music(world: &mut World) {
 /// is silent by design, and the protocol (`AudioMessage`) intentionally has
 /// no `FxFinished` variant.
 pub fn pump_fx(world: &mut World) {
+    aberred_core::tracy::tracy_span!("pump_fx");
     for (entity, alias) in playing_fx_entities(world) {
         if !unsafe { ffi::IsSoundPlaying(alias) } {
             unsafe { ffi::UnloadSoundAlias(alias) };
