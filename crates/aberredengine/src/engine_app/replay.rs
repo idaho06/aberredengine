@@ -366,9 +366,14 @@ impl ReplayPlayer {
                 None
             }
             Ok(Some(other)) => {
+                // Mirrors `collect`'s unexpected-Checkpoint arm: the entry is
+                // already consumed, so continuing would shift every later
+                // `collect` by one entry.
                 log::error!(
-                    "replay: expected a Checkpoint entry, found {other:?} -- file may be corrupt"
+                    "replay: expected a Checkpoint entry, found {other:?} -- file may be \
+                     corrupt; ending playback"
                 );
+                self.finished = true;
                 None
             }
             Ok(None) => {
@@ -377,7 +382,8 @@ impl ReplayPlayer {
                 None
             }
             Err(e) => {
-                log::error!("replay: failed to read checkpoint entry: {e}");
+                log::error!("replay: failed to read checkpoint entry: {e}; ending playback");
+                self.finished = true;
                 None
             }
         }
@@ -576,6 +582,29 @@ mod tests {
         // ...and once finished, further checkpoint ticks must not keep
         // re-reading (and re-warning about) the exhausted file.
         assert_eq!(player.verify_checkpoint(1, 7), None);
+    }
+
+    /// A non-Checkpoint entry where a checkpoint was expected has already
+    /// been consumed, so playback must end rather than continue one entry
+    /// out of step.
+    #[test]
+    fn verify_checkpoint_ends_playback_on_unexpected_entry() {
+        let file = NamedTempFile::new().unwrap();
+        let mut rec = ReplayRecorder::create(file.path(), &test_header()).unwrap();
+        let mut ti = TickInput::default();
+        ti.samples.push(RawDeviceSnapshot::default());
+        rec.record_tick(&ti);
+        rec.record_tick(&ti);
+        rec.finish(0, false).unwrap();
+
+        let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
+        let mut out = TickInput::default();
+        player.collect(&mut out, 0);
+        assert!(!player.is_finished());
+        assert_eq!(player.verify_checkpoint(0, 7), None);
+        assert!(player.is_finished());
+        player.collect(&mut out, 1);
+        assert!(out.is_empty());
     }
 
     #[test]
