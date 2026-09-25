@@ -20,13 +20,10 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 /// Normalizes an unordered group-name pair so `(a, b)` and `(b, a)` produce
-/// the same key.
-pub(crate) fn normalize_pair(a: &str, b: &str) -> (String, String) {
-    if a <= b {
-        (a.to_string(), b.to_string())
-    } else {
-        (b.to_string(), a.to_string())
-    }
+/// the same key. Borrows rather than allocates, so a per-`CollisionEvent`
+/// lookup costs no heap allocation.
+pub(crate) fn normalize_pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 /// Rule entities bucketed by normalized group pair, for one rule kind
@@ -35,8 +32,12 @@ pub(crate) fn normalize_pair(a: &str, b: &str) -> (String, String) {
 /// small type (rather than a bare `FxHashMap` field) is what lets
 /// [`CollisionRuleIndex`] hold two instances without hand-duplicating
 /// `is_empty`/`bucket` for each.
+///
+/// Nested (lesser group -> greater group -> rules) rather than keyed by a
+/// `(String, String)` tuple: std's `HashMap` can't look a tuple of `String`s
+/// up by a tuple of `&str`s, but each level alone looks up by `&str`.
 #[derive(Default)]
-pub struct RuleBuckets(FxHashMap<(String, String), SmallVec<[Entity; 2]>>);
+pub struct RuleBuckets(FxHashMap<String, FxHashMap<String, SmallVec<[Entity; 2]>>>);
 
 impl RuleBuckets {
     fn is_empty(&self) -> bool {
@@ -44,7 +45,8 @@ impl RuleBuckets {
     }
 
     fn bucket(&self, ga: &str, gb: &str) -> Option<&SmallVec<[Entity; 2]>> {
-        self.0.get(&normalize_pair(ga, gb))
+        let (lo, hi) = normalize_pair(ga, gb);
+        self.0.get(lo)?.get(hi)
     }
 
     /// Clears and refills from `rules`, sorting each resulting sub-bucket by
@@ -60,12 +62,15 @@ impl RuleBuckets {
     ) {
         self.0.clear();
         for (entity, group_a, group_b) in rules {
+            let (lo, hi) = normalize_pair(group_a, group_b);
             self.0
-                .entry(normalize_pair(group_a, group_b))
+                .entry(lo.to_owned())
+                .or_default()
+                .entry(hi.to_owned())
                 .or_default()
                 .push(entity);
         }
-        for entities in self.0.values_mut() {
+        for entities in self.0.values_mut().flat_map(|inner| inner.values_mut()) {
             entities.sort_unstable();
         }
     }
@@ -141,10 +146,8 @@ mod tests {
     fn rust_bucket_found_regardless_of_query_order() {
         let mut index = CollisionRuleIndex::default();
         let e = Entity::from_bits(1);
-        index
-            .rust
-            .0
-            .insert(normalize_pair("a", "b"), SmallVec::from_slice(&[e]));
+        let (a, b) = ("a".to_string(), "b".to_string());
+        index.rust.rebuild(std::iter::once((e, &a, &b)));
         assert!(!index.is_empty());
         assert_eq!(index.rust_bucket("a", "b").unwrap().as_slice(), &[e]);
         assert_eq!(index.rust_bucket("b", "a").unwrap().as_slice(), &[e]);
