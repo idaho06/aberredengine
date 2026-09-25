@@ -30,7 +30,10 @@ use raylib::ffi;
 /// `GameConfig.fullscreen`, so an ungated `config.fullscreen !=
 /// fullscreen.is_some()` comparison would re-trigger the fullscreen toggle
 /// every frame after F10, fighting the user. With the value diff, a config
-/// that hasn't changed since last application is never re-examined.
+/// that hasn't changed since last application is never re-examined -- and
+/// fullscreen specifically is only re-synced when `config.fullscreen` itself
+/// changed (or on first run), so an unrelated field change (title, pixel
+/// snap, ...) after F10 doesn't force the window back out of fullscreen.
 ///
 /// # Resource Dependencies
 /// - `RenderGameConfig` (read) - source of the config to apply
@@ -79,9 +82,14 @@ pub fn apply_gameconfig_changes(
             render_target.set_filter(config.render_target_filter);
         }
 
-        // Synchronize fullscreen state between config and window
+        // Synchronize fullscreen state between config and window, but only
+        // when `config.fullscreen` itself changed (or on first run) -- F10
+        // toggles the window without writing config, so re-checking on every
+        // unrelated config change would undo it.
         let is_fullscreen = fullscreen.is_some();
-        if config.fullscreen != is_fullscreen {
+        let fullscreen_changed =
+            last_applied.as_ref().map(|c| c.fullscreen) != Some(config.fullscreen);
+        if fullscreen_changed && config.fullscreen != is_fullscreen {
             // Config and window state don't match - fire event to toggle
             debug!(
                 "Fullscreen mismatch: config={}, window={} - triggering toggle",
