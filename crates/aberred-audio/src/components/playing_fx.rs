@@ -10,4 +10,8 @@ use super::handles::SoundHandle;
 #[derive(Component)]
 pub struct PlayingFx {
     pub alias: SoundHandle,
+    /// `AudioStore::fx` id of the source sound this alias shares sample data
+    /// with. Lets `LoadFx` over a live id unload exactly that sound's aliases
+    /// before unloading the source (an alias must never outlive its source).
+    pub source_id: String,
 }

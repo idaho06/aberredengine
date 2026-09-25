@@ -96,7 +96,7 @@ pub(crate) fn despawn_all<T: Component>(world: &mut World) {
 /// Load a sound, spawn its alias, and start it playing -- shared by
 /// `PlayFx`/`PlayFxPitched`, which differ only in whether a pitch override
 /// is applied before playback starts.
-fn spawn_fx_alias(world: &mut World, sound: ffi::Sound, pitch: Option<f32>) {
+fn spawn_fx_alias(world: &mut World, sound: ffi::Sound, source_id: String, pitch: Option<f32>) {
     let alias = unsafe { ffi::LoadSoundAlias(sound) };
     if let Some(pitch) = pitch {
         unsafe { ffi::SetSoundPitch(alias, pitch) };
@@ -104,6 +104,7 @@ fn spawn_fx_alias(world: &mut World, sound: ffi::Sound, pitch: Option<f32>) {
     unsafe { ffi::PlaySound(alias) };
     world.spawn(PlayingFx {
         alias: FfiHandle(alias),
+        source_id,
     });
 }
 
@@ -118,6 +119,26 @@ pub(crate) fn unload_all_fx_aliases(world: &mut World, stop_first: bool) {
             unsafe { ffi::StopSound(alias) };
         }
         unsafe { ffi::UnloadSoundAlias(alias) };
+        world.despawn(entity);
+    }
+}
+
+/// Stop and unload every live alias of the FX loaded under `id`, despawning
+/// its `PlayingFx` entity. Must run before the source sound itself is
+/// unloaded, since aliases share its sample data.
+fn unload_fx_aliases_of(world: &mut World, id: &str) {
+    let aliases: Vec<(Entity, ffi::Sound)> = {
+        let mut q = world.query::<(Entity, &PlayingFx)>();
+        q.iter(world)
+            .filter(|(_, f)| f.source_id == id)
+            .map(|(e, f)| (e, f.alias.0))
+            .collect()
+    };
+    for (entity, alias) in aliases {
+        unsafe {
+            ffi::StopSound(alias);
+            ffi::UnloadSoundAlias(alias);
+        }
         world.despawn(entity);
     }
 }
@@ -284,17 +305,25 @@ fn handle_cmd(world: &mut World, cmd: AudioCmd) {
                 );
             } else {
                 debug!(target: "audio", "fx loaded id='{}' path='{}'", id, path);
-                world
+                let previous = world
                     .non_send_mut::<AudioStore>()
                     .fx
                     .insert(id.clone(), sound);
+                if let Some(old) = previous {
+                    // Reload over a live id: raw FFI handles don't unload on
+                    // drop. Drop the old sound's aliases first -- they share
+                    // its sample data.
+                    debug!(target: "audio", "unloading previous fx id='{}'", id);
+                    unload_fx_aliases_of(world, &id);
+                    unsafe { ffi::UnloadSound(old) };
+                }
                 send(world, AudioMessage::FxLoaded { id });
             }
         }
         AudioCmd::PlayFx { id } => {
             if let Some(sound) = fx_handle(world, &id) {
                 debug!(target: "audio", "fx play id='{}'", id);
-                spawn_fx_alias(world, sound, None);
+                spawn_fx_alias(world, sound, id, None);
             } else {
                 error!(target: "audio", "fx play failed id='{}' reason='not loaded'", id);
             }
@@ -302,7 +331,7 @@ fn handle_cmd(world: &mut World, cmd: AudioCmd) {
         AudioCmd::PlayFxPitched { id, pitch } => {
             if let Some(sound) = fx_handle(world, &id) {
                 debug!(target: "audio", "fx play pitched id='{}' pitch={}", id, pitch);
-                spawn_fx_alias(world, sound, Some(pitch));
+                spawn_fx_alias(world, sound, id, Some(pitch));
             } else {
                 error!(
                     target: "audio", "fx play pitched failed id='{}' reason='not loaded'",
