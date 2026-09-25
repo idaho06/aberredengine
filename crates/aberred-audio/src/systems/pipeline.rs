@@ -157,10 +157,20 @@ fn handle_cmd(world: &mut World, cmd: AudioCmd) {
                 );
             } else {
                 debug!(target: "audio", "loaded id='{}' path='{}'", id, path);
-                world
+                let previous = world
                     .non_send_mut::<AudioStore>()
                     .music
                     .insert(id.clone(), music);
+                if let Some(old) = previous {
+                    // Reload over a live id: raw FFI handles don't unload on
+                    // drop. Stop + despawn the track (which caches `old`)
+                    // before unloading, so `pump_music` never touches a
+                    // freed stream.
+                    debug!(target: "audio", "unloading previous stream id='{}'", id);
+                    unsafe { ffi::StopMusicStream(old) };
+                    despawn_music_track(world, &id);
+                    unsafe { ffi::UnloadMusicStream(old) };
+                }
                 send(world, AudioMessage::MusicLoaded { id });
             }
         }
