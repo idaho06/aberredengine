@@ -39,7 +39,10 @@ pub fn rebuild_rust_bucket(
     mut removed_rust: RemovedComponents<CollisionRule>,
     all_rust: Query<(Entity, &CollisionRule)>,
 ) {
-    let rust_dirty = !changed_rust.is_empty() || removed_rust.read().count() > 0;
+    // Read removals first: `||` would skip draining the reader whenever
+    // `changed_rust` is non-empty, replaying those removals next tick.
+    let any_removed = removed_rust.read().count() > 0;
+    let rust_dirty = any_removed || !changed_rust.is_empty();
 
     if rust_dirty {
         index

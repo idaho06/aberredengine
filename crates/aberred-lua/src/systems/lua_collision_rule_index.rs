@@ -25,7 +25,10 @@ pub fn rebuild_collision_rule_index(
 ) {
     // RemovedComponents readers must be drained every call regardless of the
     // dirty check outcome, or the reader cursor falls behind.
-    let lua_dirty = !changed_lua.is_empty() || removed_lua.read().count() > 0;
+    // Read removals first, not as the right side of `||`, which would skip
+    // the drain whenever `changed_lua` is non-empty.
+    let any_removed = removed_lua.read().count() > 0;
+    let lua_dirty = any_removed || !changed_lua.is_empty();
 
     if lua_dirty {
         index
