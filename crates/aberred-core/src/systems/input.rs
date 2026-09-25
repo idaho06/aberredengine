@@ -195,6 +195,10 @@ fn resolve_sample_into(
 /// function free of channel sends.
 pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
     if samples.is_empty() {
+        // `scroll_y` is a per-tick delta, not held state: a tick with no
+        // new samples saw no wheel movement. Without this, one notch would
+        // repeat on every sample-less tick until the next sample arrives.
+        world.resource_mut::<InputState>().scroll_y = 0.0;
         return;
     }
 
@@ -529,6 +533,19 @@ mod tests {
         assert!(input.action_1.just_pressed);
         assert!((input.mouse_world_x - 150.0).abs() < 1e-3);
         assert!((input.mouse_world_y - 50.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn scroll_resets_on_tick_with_no_samples() {
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        let mut sample = raw();
+        sample.scroll_y = 1.0;
+
+        resolve_input_backlog(&mut world, &[sample]);
+        assert_eq!(world.resource::<InputState>().scroll_y, 1.0);
+
+        resolve_input_backlog(&mut world, &[]);
+        assert_eq!(world.resource::<InputState>().scroll_y, 0.0);
     }
 
     #[test]
