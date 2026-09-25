@@ -12,6 +12,7 @@ bevy_ecs.workspace = true
 rustc-hash.workspace = true
 crossbeam-channel.workspace = true
 tracy-client = { workspace = true, optional = true }
+tracy-client-sys = { workspace = true, optional = true }  # version pin only, see workspace Cargo.toml
 arrayvec.workspace = true
 smallvec.workspace = true
 configparser.workspace = true
@@ -55,5 +56,5 @@ aberred-core = { path = "../aberred-core", features = ["test-support"] }
 [features]
 default = ["lua"]
 lua   = ["dep:aberred-lua", "aberred-core/lua"]
-tracy = ["dep:tracy-client", "aberred-core/tracy", "aberred-audio/tracy", "aberred-render/tracy", "aberred-lua?/tracy"]  # profiling — never in default
+tracy = ["dep:tracy-client", "dep:tracy-client-sys", "aberred-core/tracy", "aberred-audio/tracy", "aberred-render/tracy", "aberred-lua?/tracy"]  # profiling — never in default
 test-support = ["aberred-core/test-support"]  # headless TestWorld harness — never in default
