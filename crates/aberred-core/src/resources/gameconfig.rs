@@ -174,8 +174,13 @@ fn clamp_and_warn<T: PartialOrd + Copy + std::fmt::Display>(
 }
 
 /// Clamp a parsed `[simulation] hz` / `[audio] hz` value to
-/// `MIN_TICK_HZ..=MAX_TICK_HZ`.
-fn clamp_tick_hz(hz: f64, field: &str) -> f64 {
+/// `MIN_TICK_HZ..=MAX_TICK_HZ`. NaN (which `clamp_and_warn`'s comparisons
+/// can't catch, and which would panic `Pacer::new`) keeps `current`.
+fn clamp_tick_hz(hz: f64, current: f64, field: &str) -> f64 {
+    if hz.is_nan() {
+        warn!("{field} = NaN is not a number; keeping {current}");
+        return current;
+    }
     clamp_and_warn(hz, MIN_TICK_HZ, MAX_TICK_HZ, field)
 }
 
@@ -185,8 +190,13 @@ fn clamp_snapshot_skip(skip: i64, field: &str) -> u32 {
     clamp_and_warn(skip, 0, 1000, field) as u32
 }
 
-/// Clamp a parsed `[input] gamepad_deadzone` value to `0.0..=1.0`.
-fn clamp_gamepad_deadzone(deadzone: f32, field: &str) -> f32 {
+/// Clamp a parsed `[input] gamepad_deadzone` value to `0.0..=1.0`. NaN
+/// keeps `current`, same as [`clamp_tick_hz`].
+fn clamp_gamepad_deadzone(deadzone: f32, current: f32, field: &str) -> f32 {
+    if deadzone.is_nan() {
+        warn!("{field} = NaN is not a number; keeping {current}");
+        return current;
+    }
     clamp_and_warn(deadzone, 0.0, 1.0, field)
 }
 
@@ -319,10 +329,10 @@ impl GameConfig {
             self.window_title = title;
         }
         if let Some(hz) = config.getfloat("simulation", "hz").ok().flatten() {
-            self.sim_hz = clamp_tick_hz(hz, "simulation.hz");
+            self.sim_hz = clamp_tick_hz(hz, self.sim_hz, "simulation.hz");
         }
         if let Some(hz) = config.getfloat("audio", "hz").ok().flatten() {
-            self.audio_hz = clamp_tick_hz(hz, "audio.hz");
+            self.audio_hz = clamp_tick_hz(hz, self.audio_hz, "audio.hz");
         }
         // snapshot_skip: an explicit key wins; otherwise re-resolve the
         // sim_hz/target_fps-tracking default every load (this field's
@@ -338,7 +348,7 @@ impl GameConfig {
             .unwrap_or_else(|| default_snapshot_skip(self.sim_hz, self.target_fps) as i64);
         self.snapshot_skip = clamp_snapshot_skip(snapshot_skip, "simulation.snapshot_skip");
         if let Some(dz) = config.getfloat("input", "gamepad_deadzone").ok().flatten() {
-            self.gamepad_deadzone = clamp_gamepad_deadzone(dz as f32, "input.gamepad_deadzone");
+            self.gamepad_deadzone = clamp_gamepad_deadzone(dz as f32, self.gamepad_deadzone, "input.gamepad_deadzone");
         }
         info!(
             "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_skip={}",
@@ -568,6 +578,10 @@ mod tests {
         let mut config = GameConfig::new();
         config.load_from_str("[simulation]\nhz = 5000\n").unwrap();
         assert_eq!(config.sim_hz, MAX_TICK_HZ);
+
+        let mut config = GameConfig::new();
+        config.load_from_str("[simulation]\nhz = nan\n").unwrap();
+        assert_eq!(config.sim_hz, DEFAULT_SIM_HZ);
     }
 
     #[test]
@@ -579,6 +593,10 @@ mod tests {
         let mut config = GameConfig::new();
         config.load_from_str("[audio]\nhz = 100000\n").unwrap();
         assert_eq!(config.audio_hz, MAX_TICK_HZ);
+
+        let mut config = GameConfig::new();
+        config.load_from_str("[audio]\nhz = NaN\n").unwrap();
+        assert_eq!(config.audio_hz, DEFAULT_AUDIO_HZ);
     }
 
     #[test]
@@ -796,6 +814,12 @@ mod tests {
             .load_from_str("[input]\ngamepad_deadzone = 1.5\n")
             .unwrap();
         assert_eq!(config.gamepad_deadzone, 1.0);
+
+        let mut config = GameConfig::new();
+        config
+            .load_from_str("[input]\ngamepad_deadzone = nan\n")
+            .unwrap();
+        assert_eq!(config.gamepad_deadzone, DEFAULT_GAMEPAD_DEADZONE);
     }
 
     #[test]
