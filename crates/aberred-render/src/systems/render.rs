@@ -227,9 +227,12 @@ impl ScreenDrawItem {
     /// `sort_key` as tie-breaks. Shared by `draw_screen_space` and its tests
     /// so the two can't drift apart.
     fn cmp_draw_order(a: &Self, b: &Self) -> std::cmp::Ordering {
+        // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: a NaN z-index
+        // would otherwise break the comparator's total order, which
+        // `sort_unstable_by` may panic on.
         a.z_index()
-            .partial_cmp(&b.z_index())
-            .unwrap_or(std::cmp::Ordering::Equal)
+            .0
+            .total_cmp(&b.z_index().0)
             .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
             .then_with(|| a.sort_key().cmp(&b.sort_key()))
     }
@@ -452,8 +455,8 @@ pub fn render_system(
                 // iteration order, a minor observable ordering change.
                 sprite_buffer.sort_unstable_by(|a, b| {
                     a.z_index
-                        .partial_cmp(&b.z_index)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .0
+                        .total_cmp(&b.z_index.0)
                         .then_with(|| a.entity.cmp(&b.entity))
                 });
             } // build_sprite_buffer
@@ -649,8 +652,8 @@ pub fn render_system(
                 // ordering guarantee.
                 text_buffer.sort_unstable_by(|a, b| {
                     a.z_index
-                        .partial_cmp(&b.z_index)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .0
+                        .total_cmp(&b.z_index.0)
                         .then_with(|| a.entity.cmp(&b.entity))
                 });
             } // build_text_buffer
@@ -1483,6 +1486,21 @@ mod screen_draw_buffer_tests {
     fn sort(mut buffer: Vec<ScreenDrawItem>) -> Vec<ScreenDrawItem> {
         buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
         buffer
+    }
+
+    /// A NaN z-index must not break the comparator's total order (which
+    /// `sort_unstable_by` may panic on); it sorts after every finite value.
+    #[test]
+    fn nan_z_index_sorts_last_without_panicking() {
+        let mut buffer: Vec<ScreenDrawItem> = (0..40)
+            .map(|i| sprite_item(if i % 3 == 0 { f32::NAN } else { (40 - i) as f32 }))
+            .collect();
+        buffer.push(text_item(0.0));
+        let sorted = sort(buffer);
+        let zs: Vec<f32> = sorted.iter().map(|item| item.z_index().0).collect();
+        let first_nan = zs.iter().position(|z| z.is_nan()).unwrap();
+        assert!(zs[first_nan..].iter().all(|z| z.is_nan()));
+        assert!(zs[..first_nan].windows(2).all(|w| w[0] <= w[1]));
     }
 
     /// All 4 `ScreenDrawItem` variants are mirror-sourced (GUI
