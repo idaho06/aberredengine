@@ -656,7 +656,8 @@ fn render_elements(
         ffi::rlSetTexture(texture_gl_id);
     }
 
-    for chunk in index_buffer[index_start..index_start + count].chunks_exact(3) {
+    let (triangles, _) = index_buffer[index_start..index_start + count].as_chunks::<3>();
+    for &[a, b, c] in triangles {
         unsafe {
             if ffi::rlCheckRenderBatchLimit(3) {
                 ffi::rlBegin(RL_TRIANGLES);
@@ -664,9 +665,9 @@ fn render_elements(
             }
         }
 
-        render_vertex(vertex_buffer[chunk[0] as usize]);
-        render_vertex(vertex_buffer[chunk[1] as usize]);
-        render_vertex(vertex_buffer[chunk[2] as usize]);
+        render_vertex(vertex_buffer[a as usize]);
+        render_vertex(vertex_buffer[b as usize]);
+        render_vertex(vertex_buffer[c as usize]);
     }
 
     unsafe {
