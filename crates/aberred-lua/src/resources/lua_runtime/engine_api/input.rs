@@ -109,4 +109,52 @@ mod tests {
             .unwrap();
         assert_eq!(result, None);
     }
+
+    /// Runs `script`, then applies every queued input command to `bindings`.
+    fn apply_input_script(
+        script: &str,
+        bindings: &mut aberred_core::resources::input_bindings::InputBindings,
+    ) {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        let mut cmds = Vec::new();
+        runtime.drain_input_commands_into(&mut cmds);
+        for cmd in cmds {
+            crate::systems::lua_commands::process_input_command(cmd, bindings);
+        }
+    }
+
+    #[test]
+    fn rebind_replaces_and_add_binding_appends() {
+        use aberred_core::events::input::InputAction;
+        use aberred_core::resources::input_bindings::{InputBindings, binding_from_str};
+        let mut bindings = InputBindings::default();
+
+        apply_input_script("engine.rebind_action('action_1', 'z')", &mut bindings);
+        assert_eq!(
+            bindings.get_bindings(InputAction::Action1),
+            [binding_from_str("z").unwrap()],
+            "rebind leaves exactly one binding"
+        );
+
+        apply_input_script("engine.add_binding('action_1', 'x')", &mut bindings);
+        assert_eq!(
+            bindings.get_bindings(InputAction::Action1),
+            [binding_from_str("z").unwrap(), binding_from_str("x").unwrap()]
+        );
+    }
+
+    #[test]
+    fn unknown_action_or_key_leaves_bindings_unchanged() {
+        use aberred_core::resources::input_bindings::InputBindings;
+        let mut bindings = InputBindings::default();
+        let before = format!("{:?}", bindings.iter().collect::<Vec<_>>());
+
+        apply_input_script(
+            "engine.rebind_action('jump', 'z') engine.rebind_action('action_1', 'no_such_key') \
+             engine.add_binding('jump', 'z') engine.add_binding('action_1', 'no_such_key')",
+            &mut bindings,
+        );
+        assert_eq!(format!("{:?}", bindings.iter().collect::<Vec<_>>()), before);
+    }
 }
