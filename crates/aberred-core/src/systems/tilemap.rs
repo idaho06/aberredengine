@@ -49,6 +49,8 @@ pub struct Tilemap {
 
 /// Returns the last `/`-separated segment of `path` (the directory stem).
 fn path_stem(path: &str) -> &str {
+    // Trailing slashes ("maps/x/") would otherwise yield an empty stem.
+    let path = path.trim_end_matches('/');
     path.split('/').next_back().unwrap_or(path)
 }
 
@@ -88,6 +90,7 @@ fn read_png_dimensions(mut reader: impl Read, path: &str) -> Result<(i32, i32), 
 /// the computed `png_path` (so callers building a
 /// `RenderAssetCmd::TilemapTexture` don't need to recompute it).
 pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), String> {
+    let path = path.trim_end_matches('/');
     let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
@@ -435,6 +438,23 @@ mod tests {
         assert!(in_group(&mut world, TILES_GROUP).is_empty());
         assert!(in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty());
         assert!(world.get::<MapPosition>(root).is_none(), "root left untouched");
+    }
+
+    #[test]
+    fn trailing_slash_in_tilemap_path_is_ignored() {
+        let with_slash = format!("{FIXTURE_DIR}/");
+        let (_, w, h, png_path) = load_tilemap_data(&with_slash).expect("trailing slash loads");
+        assert_eq!((w, h), (192, 120));
+        assert_eq!(png_path, format!("{FIXTURE_DIR}/sidescroller_test01.png"));
+
+        let mut world = World::new();
+        world.spawn(TileMap::new(format!("{FIXTURE_DIR}//")));
+        let cmds = run_system(&mut world);
+        assert!(matches!(
+            cmds.as_slice(),
+            [RenderAssetCmd::TilemapTexture { key, .. }] if key == "sidescroller_test01"
+        ));
+        assert!(!in_group(&mut world, TILES_GROUP).is_empty());
     }
 
     #[test]
