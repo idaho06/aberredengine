@@ -710,6 +710,8 @@ mod tests {
     use bevy_ecs::system::SystemState;
 
     use super::*;
+    use crate::resources::lua_runtime::{AnimationConditionData, AnimationRuleData};
+    use aberred_core::components::animation::{CmpOp, Condition};
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -912,5 +914,55 @@ mod tests {
         }
         system_state.apply(&mut world);
         assert_eq!(world.entities().count_spawned(), before);
+    }
+
+    #[test]
+    fn spawn_with_animation_controller_inserts_converted_rules_in_order() {
+        let mut world = World::new();
+        let mut world_signals = WorldSignals::default();
+        let mut system_state = SystemState::<Commands>::new(&mut world);
+        {
+            let mut commands = system_state.get_mut(&mut world).unwrap();
+            process_spawn_command(
+                &mut commands,
+                Box::new(SpawnCmd {
+                    animation_controller: Some(AnimationControllerData {
+                        fallback_key: "idle".to_string(),
+                        rules: vec![
+                            AnimationRuleData {
+                                condition: AnimationConditionData::HasFlag {
+                                    key: "jumping".into(),
+                                },
+                                set_key: "jump".to_string(),
+                            },
+                            AnimationRuleData {
+                                condition: AnimationConditionData::ScalarCmp {
+                                    key: "speed".into(),
+                                    op: "gt".into(),
+                                    value: 1.0,
+                                },
+                                set_key: "run".to_string(),
+                            },
+                        ],
+                    }),
+                    ..SpawnCmd::default()
+                }),
+                &mut world_signals,
+            );
+        }
+        system_state.apply(&mut world);
+
+        let controller = world
+            .query::<&AnimationController>()
+            .single(&world)
+            .expect("one controller spawned");
+        assert_eq!(controller.fallback_key, "idle");
+        let keys: Vec<&str> = controller.rules.iter().map(|r| r.set_key.as_str()).collect();
+        assert_eq!(keys, ["jump", "run"], "rule order is first-match-wins order");
+        assert!(matches!(&controller.rules[0].when, Condition::HasFlag { key } if key == "jumping"));
+        assert!(matches!(
+            &controller.rules[1].when,
+            Condition::ScalarCmp { op: CmpOp::Gt, .. }
+        ));
     }
 }
