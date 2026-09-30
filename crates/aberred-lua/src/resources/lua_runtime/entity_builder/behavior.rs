@@ -324,3 +324,201 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         }
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::spawn_data::{
+        ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData,
+    };
+    use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
+
+    fn built(chain: &str) -> super::super::SpawnCmd {
+        built_spawn_cmd(&format!("engine.spawn(){chain}:build()"))
+    }
+
+    fn emitter(table_lua: &str) -> ParticleEmitterData {
+        built(&format!(":with_particle_emitter({table_lua})"))
+            .particle_emitter
+            .unwrap()
+    }
+
+    #[test]
+    fn signals_accumulate_in_call_order() {
+        let cmd = built(
+            ":with_signals()\
+             :with_signal_scalar('speed', 1.5):with_signal_scalar('drag', 0.25)\
+             :with_signal_integer('hp', 3)\
+             :with_signal_flag('alive'):with_signal_flag('armed')\
+             :with_signal_string('name', 'bob')",
+        );
+        assert!(cmd.has_signals);
+        assert_eq!(
+            cmd.signal_scalars,
+            [("speed".to_string(), 1.5), ("drag".to_string(), 0.25)]
+        );
+        assert_eq!(cmd.signal_integers, [("hp".to_string(), 3)]);
+        assert_eq!(cmd.signal_flags, ["alive", "armed"]);
+        assert_eq!(cmd.signal_strings, [("name".to_string(), "bob".to_string())]);
+    }
+
+    #[test]
+    fn signal_binding_format_requires_binding_and_is_stored() {
+        assert_runtime_error(
+            "engine.spawn():with_signal_binding_format('{}')",
+            "with_signal_binding_format() requires with_signal_binding() first",
+        );
+        let cmd = built(":with_signal_binding('score')");
+        assert_eq!(cmd.signal_binding, Some(("score".to_string(), None)));
+        let cmd = built(":with_signal_binding('score'):with_signal_binding_format('Score: {}')");
+        assert_eq!(
+            cmd.signal_binding,
+            Some(("score".to_string(), Some("Score: {}".to_string())))
+        );
+    }
+
+    #[test]
+    fn with_phase_reads_initial_and_optional_callbacks() {
+        let phase = built(
+            ":with_phase({ initial = 'idle', phases = { \
+                idle = { on_enter = 'idle_enter', on_update = 'idle_update', on_exit = 'idle_exit' }, \
+                moving = { on_enter = 'moving_enter' } } })",
+        )
+        .phase_data
+        .unwrap();
+        assert_eq!(phase.initial, "idle");
+        assert_eq!(phase.phases.len(), 2);
+        let idle = &phase.phases["idle"];
+        assert_eq!(idle.on_enter.as_deref(), Some("idle_enter"));
+        assert_eq!(idle.on_update.as_deref(), Some("idle_update"));
+        assert_eq!(idle.on_exit.as_deref(), Some("idle_exit"));
+        let moving = &phase.phases["moving"];
+        assert_eq!(moving.on_enter.as_deref(), Some("moving_enter"));
+        assert!(moving.on_update.is_none() && moving.on_exit.is_none());
+    }
+
+    #[test]
+    fn with_phase_requires_initial_and_tolerates_missing_phases() {
+        assert_runtime_error("engine.spawn():with_phase({ phases = {} })", "in method 'with_phase'");
+        let phase = built(":with_phase({ initial = 'idle' })").phase_data.unwrap();
+        assert_eq!(phase.initial, "idle");
+        assert!(phase.phases.is_empty());
+    }
+
+    #[test]
+    fn scalar_behaviors_store_their_arguments() {
+        let cmd = built(
+            ":with_lua_timer(0.5, 'on_tick')\
+             :with_ttl(2)\
+             :with_grid_layout('levels/l1.json', 'bricks', 3)\
+             :with_lua_collision_rule('player', 'enemy', 'on_hit')\
+             :with_tilemap('maps/overworld')\
+             :with_lua_setup('setup_player')",
+        );
+        assert_eq!(cmd.lua_timer, Some((0.5, "on_tick".to_string())));
+        assert_eq!(cmd.ttl, Some(2.0));
+        assert_eq!(
+            cmd.grid_layout,
+            Some(("levels/l1.json".to_string(), "bricks".to_string(), 3.0))
+        );
+        let rule = cmd.lua_collision_rule.unwrap();
+        assert_eq!(
+            (rule.group_a.as_str(), rule.group_b.as_str(), rule.callback.as_str()),
+            ("player", "enemy", "on_hit")
+        );
+        assert_eq!(cmd.tilemap_path.as_deref(), Some("maps/overworld"));
+        assert_eq!(cmd.lua_setup.as_deref(), Some("setup_player"));
+    }
+
+    #[test]
+    fn with_camera_target_defaults_priority_zero_and_zoom_unset() {
+        let cmd = built(":with_camera_target()");
+        assert_eq!((cmd.camera_target, cmd.camera_target_zoom), (Some(0), None));
+        let cmd = built(":with_camera_target(5, 2.0)");
+        assert_eq!((cmd.camera_target, cmd.camera_target_zoom), (Some(5), Some(2.0)));
+        let cmd = built(":with_camera_target(nil, 0.5)");
+        assert_eq!((cmd.camera_target, cmd.camera_target_zoom), (Some(0), Some(0.5)));
+        assert_runtime_error("engine.spawn():with_camera_target(256)", "with_camera_target");
+    }
+
+    #[test]
+    fn particle_emitter_empty_table_uses_defaults() {
+        let e = emitter("{}");
+        assert!(e.template_keys.is_empty());
+        assert!(matches!(e.shape, ParticleEmitterShapeData::Point));
+        assert_eq!((e.offset_x, e.offset_y), (0.0, 0.0));
+        assert_eq!(e.particles_per_emission, 1);
+        assert_eq!(e.emissions_per_second, 10.0);
+        assert_eq!(e.emissions_remaining, 100);
+        assert_eq!((e.arc_min_deg, e.arc_max_deg), (0.0, 360.0));
+        assert_eq!((e.speed_min, e.speed_max), (50.0, 100.0));
+        assert!(matches!(e.ttl, ParticleTtlData::None));
+    }
+
+    #[test]
+    fn particle_emitter_reads_all_fields() {
+        let e = emitter(
+            "{ templates = {'spark', 'smoke'}, shape = {kind='rect', width=8, height=4}, \
+               offset = {x=1, y=-2}, particles_per_emission = 3, emissions_per_second = 20, \
+               emissions_remaining = 5, arc = {30, 60}, speed = {10, 20}, ttl = 1.5 }",
+        );
+        assert_eq!(e.template_keys, ["spark", "smoke"]);
+        assert!(matches!(
+            e.shape,
+            ParticleEmitterShapeData::Rect { width: 8.0, height: 4.0 }
+        ));
+        assert_eq!((e.offset_x, e.offset_y), (1.0, -2.0));
+        assert_eq!(
+            (e.particles_per_emission, e.emissions_per_second, e.emissions_remaining),
+            (3, 20.0, 5)
+        );
+        assert_eq!((e.arc_min_deg, e.arc_max_deg), (30.0, 60.0));
+        assert_eq!((e.speed_min, e.speed_max), (10.0, 20.0));
+        assert!(matches!(e.ttl, ParticleTtlData::Fixed(t) if t == 1.5));
+    }
+
+    #[test]
+    fn particle_emitter_shape_accepts_type_alias_and_point_string() {
+        let e = emitter("{ shape = {type='rect', width=2, height=3} }");
+        assert!(matches!(
+            e.shape,
+            ParticleEmitterShapeData::Rect { width: 2.0, height: 3.0 }
+        ));
+        let e = emitter("{ shape = 'point' }");
+        assert!(matches!(e.shape, ParticleEmitterShapeData::Point));
+        // Unknown shapes keep the Point default rather than erroring.
+        let e = emitter("{ shape = {kind='circle', radius=4} }");
+        assert!(matches!(e.shape, ParticleEmitterShapeData::Point));
+    }
+
+    #[test]
+    fn particle_emitter_swaps_reversed_ranges_and_fills_missing_ends() {
+        let e = emitter("{ arc = {90, 10}, speed = {200, 100}, ttl = {min=3, max=1} }");
+        assert_eq!((e.arc_min_deg, e.arc_max_deg), (10.0, 90.0));
+        assert_eq!((e.speed_min, e.speed_max), (100.0, 200.0));
+        assert!(matches!(e.ttl, ParticleTtlData::Range { min, max } if min == 1.0 && max == 3.0));
+
+        let e = emitter("{ arc = {45}, speed = {75} }");
+        assert_eq!((e.arc_min_deg, e.arc_max_deg), (45.0, 360.0));
+        assert_eq!((e.speed_min, e.speed_max), (75.0, 100.0));
+    }
+
+    #[test]
+    fn particle_emitter_ttl_variants_clamp_negative_to_zero() {
+        assert!(matches!(emitter("{ ttl = 'none' }").ttl, ParticleTtlData::None));
+        assert!(matches!(emitter("{ ttl = 2 }").ttl, ParticleTtlData::Fixed(t) if t == 2.0));
+        // Integral and fractional numbers reach different LuaValue arms; clamp both.
+        assert!(matches!(emitter("{ ttl = -1 }").ttl, ParticleTtlData::Fixed(t) if t == 0.0));
+        assert!(matches!(emitter("{ ttl = -0.5 }").ttl, ParticleTtlData::Fixed(t) if t == 0.0));
+        assert!(matches!(
+            emitter("{ ttl = {min=-2, max=1} }").ttl,
+            ParticleTtlData::Range { min, max } if min == 0.0 && max == 1.0
+        ));
+    }
+
+    #[test]
+    fn particle_emitter_ignores_out_of_range_counts() {
+        // A negative count fails the u32 conversion and silently keeps the default.
+        let e = emitter("{ particles_per_emission = -1, emissions_remaining = -5 }");
+        assert_eq!((e.particles_per_emission, e.emissions_remaining), (1, 100));
+    }
+}
