@@ -11,15 +11,14 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
-use crate::math::Color;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -28,6 +27,7 @@ use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::SpawnMapRequested;
+use crate::math::Color;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
 use crate::resources::mapdata::{
@@ -317,11 +317,8 @@ pub fn spawn_map_observer(
 mod tests {
     use super::*;
     use crate::resources::mapdata::BoxColliderEntry;
+    use crate::testing::approx_eq_eps;
     use bevy_ecs::world::CommandQueue;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < f32::EPSILON
-    }
 
     #[test]
     fn spawn_entity_inserts_box_collider_from_mapdata() {
@@ -343,12 +340,12 @@ mod tests {
         queue.apply(&mut world);
 
         let collider = world.get::<BoxCollider>(entity).unwrap();
-        assert!(approx_eq(collider.size.x, 32.0));
-        assert!(approx_eq(collider.size.y, 48.0));
-        assert!(approx_eq(collider.offset.x, 3.0));
-        assert!(approx_eq(collider.offset.y, 4.0));
-        assert!(approx_eq(collider.origin.x, 5.0));
-        assert!(approx_eq(collider.origin.y, 6.0));
+        assert!(approx_eq_eps(collider.size.x, 32.0, f32::EPSILON));
+        assert!(approx_eq_eps(collider.size.y, 48.0, f32::EPSILON));
+        assert!(approx_eq_eps(collider.offset.x, 3.0, f32::EPSILON));
+        assert!(approx_eq_eps(collider.offset.y, 4.0, f32::EPSILON));
+        assert!(approx_eq_eps(collider.origin.x, 5.0, f32::EPSILON));
+        assert!(approx_eq_eps(collider.origin.y, 6.0, f32::EPSILON));
     }
 
     #[test]

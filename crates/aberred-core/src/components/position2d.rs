@@ -144,12 +144,7 @@ impl<S: PositionSpace> Position2D<S> {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use super::*;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < EPSILON
-    }
+    use crate::testing::approx_eq;
 
     /// Exercises the full `Position2D` API for the given coordinate space.
     /// Called once per space (`WorldSpace`, `ScreenSpace`) from

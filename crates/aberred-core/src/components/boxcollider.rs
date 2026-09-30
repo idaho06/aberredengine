@@ -98,16 +98,7 @@ impl BoxCollider {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < EPSILON
-    }
-
-    fn vec_approx_eq(a: Vec2, b: Vec2) -> bool {
-        approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
-    }
+    use crate::testing::{approx_eq, vec2_approx_eq};
 
     // ==================== AABB TESTS ====================
 
@@ -116,8 +107,8 @@ mod tests {
         let col = BoxCollider::new(10.0, 10.0);
         let pos = Vec2::new(0.0, 0.0);
         let (min, max) = col.aabb(pos);
-        assert!(vec_approx_eq(min, Vec2::new(0.0, 0.0)));
-        assert!(vec_approx_eq(max, Vec2::new(10.0, 10.0)));
+        assert!(vec2_approx_eq(min, Vec2::new(0.0, 0.0)));
+        assert!(vec2_approx_eq(max, Vec2::new(10.0, 10.0)));
     }
 
     #[test]
@@ -125,8 +116,8 @@ mod tests {
         let col = BoxCollider::new(10.0, 10.0);
         let pos = Vec2::new(100.0, 50.0);
         let (min, max) = col.aabb(pos);
-        assert!(vec_approx_eq(min, Vec2::new(100.0, 50.0)));
-        assert!(vec_approx_eq(max, Vec2::new(110.0, 60.0)));
+        assert!(vec2_approx_eq(min, Vec2::new(100.0, 50.0)));
+        assert!(vec2_approx_eq(max, Vec2::new(110.0, 60.0)));
     }
 
     #[test]
@@ -134,8 +125,8 @@ mod tests {
         let col = BoxCollider::new(10.0, 10.0).with_offset(Vec2::new(5.0, 5.0));
         let pos = Vec2::new(0.0, 0.0);
         let (min, max) = col.aabb(pos);
-        assert!(vec_approx_eq(min, Vec2::new(5.0, 5.0)));
-        assert!(vec_approx_eq(max, Vec2::new(15.0, 15.0)));
+        assert!(vec2_approx_eq(min, Vec2::new(5.0, 5.0)));
+        assert!(vec2_approx_eq(max, Vec2::new(15.0, 15.0)));
     }
 
     #[test]
@@ -145,8 +136,8 @@ mod tests {
         let pos = Vec2::new(0.0, 0.0);
         let (min, max) = col.aabb(pos);
         // position - origin = (0,0) - (5,5) = (-5,-5)
-        assert!(vec_approx_eq(min, Vec2::new(-5.0, -5.0)));
-        assert!(vec_approx_eq(max, Vec2::new(5.0, 5.0)));
+        assert!(vec2_approx_eq(min, Vec2::new(-5.0, -5.0)));
+        assert!(vec2_approx_eq(max, Vec2::new(5.0, 5.0)));
     }
 
     #[test]
@@ -157,8 +148,8 @@ mod tests {
         let pos = Vec2::new(0.0, 0.0);
         let (min, max) = col.aabb(pos);
         // position - origin + offset = (0,0) - (5,5) + (3,3) = (-2,-2)
-        assert!(vec_approx_eq(min, Vec2::new(-2.0, -2.0)));
-        assert!(vec_approx_eq(max, Vec2::new(8.0, 8.0)));
+        assert!(vec2_approx_eq(min, Vec2::new(-2.0, -2.0)));
+        assert!(vec2_approx_eq(max, Vec2::new(8.0, 8.0)));
     }
 
     #[test]
@@ -169,8 +160,8 @@ mod tests {
         let pos = Vec2::new(10.0, 10.0);
         let (min, max) = col.aabb(pos);
         // p0 = (10, 10), p1 = (0, 0), normalized: min=(0,0), max=(10,10)
-        assert!(vec_approx_eq(min, Vec2::new(0.0, 0.0)));
-        assert!(vec_approx_eq(max, Vec2::new(10.0, 10.0)));
+        assert!(vec2_approx_eq(min, Vec2::new(0.0, 0.0)));
+        assert!(vec2_approx_eq(max, Vec2::new(10.0, 10.0)));
     }
 
     // ==================== GET_AABB TESTS ====================

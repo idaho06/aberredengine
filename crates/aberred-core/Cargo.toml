@@ -25,6 +25,10 @@ tracy-client = { workspace = true, optional = true }
 [dev-dependencies]
 bevy_ecs = { workspace = true, features = ["debug"] }
 tempfile.workspace = true
+# Self dev-dependency: this crate's own `tests/*.rs` link it as a normal
+# dependency (no `cfg(test)`), so `test-support` is what makes
+# `aberred_core::testing` visible to them.
+aberred-core = { path = ".", features = ["test-support"] }
 
 [features]
 # No mlua dependency here -- this feature exists only so `#[cfg(feature =

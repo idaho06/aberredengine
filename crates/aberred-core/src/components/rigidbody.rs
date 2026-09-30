@@ -9,8 +9,8 @@
 //! useful when an entity's position is controlled externally (e.g., ball stuck
 //! to paddle).
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 use rustc_hash::FxHashMap;
 
 /// A named acceleration force that can be toggled on/off.
@@ -227,12 +227,7 @@ impl RigidBody {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn vec_approx_eq(a: Vec2, b: Vec2) -> bool {
-        (a - b).abs().max_element() < EPSILON
-    }
+    use crate::testing::vec2_approx_eq;
 
     #[test]
     fn add_force_is_enabled_and_overwrites_same_name() {
@@ -267,7 +262,10 @@ mod tests {
         rb.add_force("gravity", Vec2::new(0.0, 10.0));
         rb.add_force("wind", Vec2::new(5.0, 0.0));
         rb.add_force_with_state("boost", Vec2::new(100.0, 100.0), false);
-        assert!(vec_approx_eq(rb.total_acceleration(), Vec2::new(5.0, 10.0)));
+        assert!(vec2_approx_eq(
+            rb.total_acceleration(),
+            Vec2::new(5.0, 10.0)
+        ));
 
         rb.set_force_enabled("gravity", false);
         rb.set_force_enabled("wind", false);
@@ -279,7 +277,7 @@ mod tests {
         let mut rb = RigidBody::new();
         rb.velocity = Vec2::new(1.0, 2.0);
         rb.translate(3.0, -4.0);
-        assert!(vec_approx_eq(rb.velocity, Vec2::new(4.0, -2.0)));
+        assert!(vec2_approx_eq(rb.velocity, Vec2::new(4.0, -2.0)));
     }
 
     #[test]
@@ -292,7 +290,10 @@ mod tests {
             let mut rb = RigidBody::new();
             rb.velocity = start;
             rb.set_speed(speed);
-            assert!(vec_approx_eq(rb.velocity, expected), "{start:?} -> {speed}");
+            assert!(
+                vec2_approx_eq(rb.velocity, expected),
+                "{start:?} -> {speed}"
+            );
         }
     }
 

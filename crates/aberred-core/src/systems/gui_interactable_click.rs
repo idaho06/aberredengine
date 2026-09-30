@@ -43,27 +43,12 @@ mod tests {
     use super::*;
     use crate::components::guiimage::GuiImage;
     use crate::components::guiinteractable::GuiInteractable;
-    use crate::resources::appstate::AppState;
-    use crate::resources::camerafollowconfig::CameraFollowConfig;
-    use crate::resources::gameconfig::GameConfig;
-    use crate::resources::input_bindings::InputBindings;
-    use crate::resources::postprocessshader::PostProcessShader;
-    use crate::resources::sim_rng::SimRng;
     use crate::resources::worldsignals::WorldSignals;
-    use crate::resources::worldtime::WorldTime;
-    use bevy_ecs::message::Messages;
+    use crate::testing::insert_game_ctx_resources;
 
     fn setup_world() -> World {
         let mut world = World::new();
-        world.insert_resource(WorldSignals::default());
-        world.insert_resource(AppState::default());
-        world.insert_resource(WorldTime::default());
-        world.insert_resource(GameConfig::default());
-        world.insert_resource(PostProcessShader::default());
-        world.insert_resource(CameraFollowConfig::default());
-        world.insert_resource(InputBindings::default());
-        world.insert_resource(SimRng::from_seed(0));
-        world.insert_resource(Messages::<crate::protocol::audio::AudioCmd>::default());
+        insert_game_ctx_resources(&mut world);
         world
     }
 

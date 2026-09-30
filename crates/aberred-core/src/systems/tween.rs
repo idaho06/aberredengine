@@ -129,18 +129,13 @@ pub fn tween_system<T: TweenValue>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{EPSILON, approx_eq};
 
     use crate::components::mapposition::MapPosition;
     use crate::components::rotation::Rotation;
     use crate::components::scale::Scale;
     use crate::components::screenposition::ScreenPosition;
     use crate::math::Vec2;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < EPSILON
-    }
 
     // ==================== EASING FUNCTION TESTS ====================
 

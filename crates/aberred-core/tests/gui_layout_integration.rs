@@ -8,21 +8,18 @@
 //! cargo test --test gui_layout_integration
 //! ```
 
+use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use aberred_core::math::Vec2;
 
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guioffset::GuiOffset;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::systems::gui_layout::gui_layout_system;
 use aberred_core::systems::propagate_transforms::propagate_transforms;
+use aberred_core::testing::approx_eq_eps;
 
 const EPSILON: f32 = 1e-4;
-
-fn approx_eq(a: f32, b: f32) -> bool {
-    (a - b).abs() < EPSILON
-}
 
 fn tick_gui_layout(world: &mut World) {
     let mut schedule = Schedule::default();
@@ -57,8 +54,8 @@ fn single_child_resolves_parent_plus_offset() {
     world.flush();
 
     let pos = world.get::<ScreenPosition>(child).unwrap().pos();
-    assert!(approx_eq(pos.x, 120.0));
-    assert!(approx_eq(pos.y, 140.0));
+    assert!(approx_eq_eps(pos.x, 120.0, EPSILON));
+    assert!(approx_eq_eps(pos.y, 140.0, EPSILON));
 }
 
 #[test]
@@ -75,12 +72,12 @@ fn nested_grandchild_cascades_additively() {
     world.flush();
 
     let button_pos = world.get::<ScreenPosition>(button).unwrap().pos();
-    assert!(approx_eq(button_pos.x, 120.0));
-    assert!(approx_eq(button_pos.y, 140.0));
+    assert!(approx_eq_eps(button_pos.x, 120.0, EPSILON));
+    assert!(approx_eq_eps(button_pos.y, 140.0, EPSILON));
 
     let label_pos = world.get::<ScreenPosition>(label).unwrap().pos();
-    assert!(approx_eq(label_pos.x, 125.0));
-    assert!(approx_eq(label_pos.y, 145.0));
+    assert!(approx_eq_eps(label_pos.x, 125.0, EPSILON));
+    assert!(approx_eq_eps(label_pos.y, 145.0, EPSILON));
 }
 
 #[test]
@@ -137,8 +134,8 @@ fn re_showing_parent_restores_descendant_screen_position() {
     world.flush();
 
     let pos = world.get::<ScreenPosition>(button).unwrap().pos();
-    assert!(approx_eq(pos.x, 220.0));
-    assert!(approx_eq(pos.y, 90.0));
+    assert!(approx_eq_eps(pos.x, 220.0, EPSILON));
+    assert!(approx_eq_eps(pos.y, 90.0, EPSILON));
 }
 
 #[test]
@@ -157,8 +154,14 @@ fn child_of_without_gui_offset_is_left_untouched() {
     world.flush();
 
     let pos = world.get::<ScreenPosition>(other_child).unwrap().pos();
-    assert!(approx_eq(pos.x, 5.0), "non-GUI child must be left alone");
-    assert!(approx_eq(pos.y, 5.0), "non-GUI child must be left alone");
+    assert!(
+        approx_eq_eps(pos.x, 5.0, EPSILON),
+        "non-GUI child must be left alone"
+    );
+    assert!(
+        approx_eq_eps(pos.y, 5.0, EPSILON),
+        "non-GUI child must be left alone"
+    );
 }
 
 #[test]

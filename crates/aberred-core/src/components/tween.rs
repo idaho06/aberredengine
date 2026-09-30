@@ -11,9 +11,9 @@
 
 use std::fmt::Debug;
 
+use crate::math::Vec2;
 use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::Component;
-use crate::math::Vec2;
 
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
@@ -188,16 +188,7 @@ mod tests {
     use super::*;
     use crate::components::mapposition::MapPosition;
     use crate::components::screenposition::ScreenPosition;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < EPSILON
-    }
-
-    fn vec_approx_eq(a: Vec2, b: Vec2) -> bool {
-        approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
-    }
+    use crate::testing::{approx_eq, vec2_approx_eq};
 
     fn map_position(x: f32, y: f32) -> MapPosition {
         MapPosition::from_vec(Vec2 { x, y })
@@ -213,7 +204,8 @@ mod tests {
 
     #[test]
     fn new_starts_playing_forward_linear_once() {
-        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(1.0, 1.0), 2.0);
+        let tw: Tween<MapPosition> =
+            Tween::new(map_position(0.0, 0.0), map_position(1.0, 1.0), 2.0);
         assert!(tw.playing && tw.forward);
         assert_eq!(tw.time, 0.0);
         assert!(matches!(tw.easing, Easing::Linear));
@@ -231,7 +223,7 @@ mod tests {
     #[test]
     fn map_position_interpolation() {
         let mid = MapPosition::interpolate(&map_position(0.0, 0.0), &map_position(10.0, 20.0), 0.5);
-        assert!(vec_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
+        assert!(vec2_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
     }
 
     #[test]
@@ -241,7 +233,7 @@ mod tests {
             &screen_position(10.0, 20.0),
             0.5,
         );
-        assert!(vec_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
+        assert!(vec2_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
     }
 
     #[test]
@@ -257,7 +249,7 @@ mod tests {
     #[test]
     fn scale_interpolation() {
         let mid = Scale::interpolate(&scale(1.0, 2.0), &scale(3.0, 6.0), 0.5);
-        assert!(vec_approx_eq(mid.scale, Vec2 { x: 2.0, y: 4.0 }));
+        assert!(vec2_approx_eq(mid.scale, Vec2 { x: 2.0, y: 4.0 }));
     }
 
     // Lua passes these strings (`engine.lua` stubs); unknown values fall back

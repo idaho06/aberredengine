@@ -474,12 +474,7 @@ impl WorldSignals {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < EPSILON
-    }
+    use crate::testing::approx_eq;
 
     // --- Scalars ---
 
