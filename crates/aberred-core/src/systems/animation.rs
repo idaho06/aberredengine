@@ -237,6 +237,7 @@ fn evaluate_condition(signals: &Signals, condition: &Condition) -> bool {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+    use bevy_ecs::system::RunSystemOnce;
 
     fn empty_signals() -> Signals {
         Signals::default()
@@ -1027,9 +1028,9 @@ mod tests {
             ))
             .id();
 
-        let mut schedule = Schedule::default();
-        schedule.add_systems(animation);
-        schedule.run(&mut world);
+        world
+            .run_system_once(animation)
+            .expect("animation should run");
 
         let b_frame = world
             .entity(entity_b)

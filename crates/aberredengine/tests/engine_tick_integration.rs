@@ -3,6 +3,7 @@
 #![allow(dead_code, unused_imports)]
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::system::SystemState;
 use aberredengine::core::math::Vec2;
 
@@ -90,15 +91,15 @@ fn make_world(delta: f32) -> World {
 }
 
 fn tick_movement(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(movement);
-    schedule.run(world);
+    world
+        .run_system_once(movement)
+        .expect("movement should run");
 }
 
 fn tick_ttl(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(ttl_system);
-    schedule.run(world);
+    world
+        .run_system_once(ttl_system)
+        .expect("ttl_system should run");
 }
 
 fn tick_collision_detector(world: &mut World) {
@@ -352,9 +353,9 @@ fn collision_callback_error_still_drains_queued_commands() {
 // =============================================================================
 
 fn tick_stuckto(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(stuck_to_entity_system);
-    schedule.run(world);
+    world
+        .run_system_once(stuck_to_entity_system)
+        .expect("stuck_to_entity_system should run");
 }
 
 #[test]
@@ -446,9 +447,9 @@ fn stuckto_does_not_move_if_target_missing() {
 // =============================================================================
 
 fn tick_group_counts(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(update_group_counts_system);
-    schedule.run(world);
+    world
+        .run_system_once(update_group_counts_system)
+        .expect("update_group_counts_system should run");
 }
 
 #[test]
@@ -551,9 +552,9 @@ fn group_counts_ignores_untracked_groups() {
 // =============================================================================
 
 fn tick_animation_controller(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(animation_controller);
-    schedule.run(world);
+    world
+        .run_system_once(animation_controller)
+        .expect("animation_controller should run");
 }
 
 #[test]
@@ -798,21 +799,21 @@ fn animation_controller_skips_tex_key_when_animation_not_in_store() {
 // =============================================================================
 
 fn tick_tween_position(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(tween_system::<MapPosition>);
-    schedule.run(world);
+    world
+        .run_system_once(tween_system::<MapPosition>)
+        .expect("tween_system should run");
 }
 
 fn tick_tween_rotation(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(tween_system::<Rotation>);
-    schedule.run(world);
+    world
+        .run_system_once(tween_system::<Rotation>)
+        .expect("tween_system should run");
 }
 
 fn tick_tween_scale(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(tween_system::<Scale>);
-    schedule.run(world);
+    world
+        .run_system_once(tween_system::<Scale>)
+        .expect("tween_system should run");
 }
 
 #[test]
@@ -950,16 +951,16 @@ fn tween_position_with_quad_in_easing() {
 
 #[cfg(feature = "lua")]
 fn tick_lua_timers(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(update_lua_timers);
-    schedule.run(world);
+    world
+        .run_system_once(update_lua_timers)
+        .expect("update_lua_timers should run");
 }
 
 #[cfg(feature = "lua")]
 fn tick_lua_phases(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(lua_phase_system);
-    schedule.run(world);
+    world
+        .run_system_once(lua_phase_system)
+        .expect("lua_phase_system should run");
 }
 
 #[cfg(feature = "lua")]
@@ -1190,9 +1191,9 @@ fn lua_timer_fires_across_multiple_ticks() {
 // =============================================================================
 
 fn tick_timers(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(update_timers);
-    schedule.run(world);
+    world
+        .run_system_once(update_timers)
+        .expect("update_timers should run");
 }
 
 #[test]
@@ -1871,11 +1872,11 @@ use aberredengine::core::events::gamestate::GameStateChangedEvent;
 use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use aberredengine::core::systems::gamestate::check_pending_state;
 
-/// Helper: run `check_pending_state` once in a schedule.
+/// Helper: run `check_pending_state` once.
 fn tick_check_pending_state(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(check_pending_state);
-    schedule.run(world);
+    world
+        .run_system_once(check_pending_state)
+        .expect("check_pending_state should run");
 }
 
 #[test]
@@ -2105,9 +2106,9 @@ use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::phase::phase_system;
 
 fn tick_phases(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(phase_system);
-    schedule.run(world);
+    world
+        .run_system_once(phase_system)
+        .expect("phase_system should run");
 }
 
 fn make_phase_world(delta: f32) -> World {
@@ -3089,9 +3090,9 @@ fn make_sprite(tex_key: &str) -> Sprite {
 }
 
 fn tick_animation(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(animation);
-    schedule.run(world);
+    world
+        .run_system_once(animation)
+        .expect("animation should run");
 }
 
 /// Helper: advance the animation system N ticks, each tick advances delta time.
@@ -3467,15 +3468,15 @@ fn make_lua_callback_world(delta: f32) -> World {
     world
 }
 
-/// Tick the lua timer update pass AND the observer in the same schedule so
-/// the LuaTimerEvent is both emitted and handled within one `run`.
+/// Register the lua timer observer, then run the update pass once, so the
+/// LuaTimerEvent is both emitted and handled within one call.
 #[cfg(feature = "lua")]
 fn tick_lua_timers_with_observer(world: &mut World) {
     world.add_observer(lua_timer_observer);
     world.flush();
-    let mut schedule = Schedule::default();
-    schedule.add_systems(update_lua_timers);
-    schedule.run(world);
+    world
+        .run_system_once(update_lua_timers)
+        .expect("update_lua_timers should run");
 }
 
 /// Test 1 — Regular path: spawn before clone (timer callback)

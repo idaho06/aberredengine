@@ -8,6 +8,7 @@
 //! cargo test --test hierarchy_integration
 //! ```
 
+use bevy_ecs::system::RunSystemOnce;
 use std::sync::Arc;
 
 use bevy_ecs::hierarchy::ChildOf;
@@ -34,9 +35,9 @@ use aberred_core::systems::stuckto::stuck_to_entity_system;
 const EPSILON: f32 = 1e-4;
 
 fn tick_propagate(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(propagate_transforms);
-    schedule.run(world);
+    world
+        .run_system_once(propagate_transforms)
+        .expect("propagate_transforms should run");
 }
 
 // =============================================================================
@@ -927,9 +928,9 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
 // =============================================================================
 
 fn tick_stuckto(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(stuck_to_entity_system);
-    schedule.run(world);
+    world
+        .run_system_once(stuck_to_entity_system)
+        .expect("stuck_to_entity_system should run");
 }
 
 #[test]
@@ -1118,9 +1119,9 @@ fn setup_collision_world(world: &mut World) {
 }
 
 fn tick_collision(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(collision_detector);
-    schedule.run(world);
+    world
+        .run_system_once(collision_detector)
+        .expect("collision_detector should run");
 }
 
 #[test]
@@ -1493,9 +1494,9 @@ fn cleanup_removes_gt_from_entity_with_no_children_and_no_childof() {
         .id();
 
     // Run cleanup only (no hierarchy, so propagate_transforms does nothing)
-    let mut schedule = Schedule::default();
-    schedule.add_systems(cleanup_orphaned_global_transforms);
-    schedule.run(&mut world);
+    world
+        .run_system_once(cleanup_orphaned_global_transforms)
+        .expect("cleanup_orphaned_global_transforms should run");
 
     assert!(
         world.get::<GlobalTransform2D>(entity).is_none(),
@@ -1519,9 +1520,9 @@ fn cleanup_preserves_gt_on_current_hierarchy_root() {
         "Parent should have Children after flush"
     );
 
-    let mut schedule = Schedule::default();
-    schedule.add_systems(cleanup_orphaned_global_transforms);
-    schedule.run(&mut world);
+    world
+        .run_system_once(cleanup_orphaned_global_transforms)
+        .expect("cleanup_orphaned_global_transforms should run");
 
     assert!(
         world.get::<GlobalTransform2D>(parent).is_some(),
@@ -1544,9 +1545,9 @@ fn cleanup_preserves_gt_on_child_entity() {
         .id();
     world.flush();
 
-    let mut schedule = Schedule::default();
-    schedule.add_systems(cleanup_orphaned_global_transforms);
-    schedule.run(&mut world);
+    world
+        .run_system_once(cleanup_orphaned_global_transforms)
+        .expect("cleanup_orphaned_global_transforms should run");
 
     assert!(
         world.get::<GlobalTransform2D>(child).is_some(),
@@ -1561,9 +1562,9 @@ fn cleanup_does_not_affect_entity_without_gt() {
     // Standalone entity with no GT — cleanup should leave it untouched
     let entity = world.spawn(MapPosition::new(5.0, 5.0)).id();
 
-    let mut schedule = Schedule::default();
-    schedule.add_systems(cleanup_orphaned_global_transforms);
-    schedule.run(&mut world);
+    world
+        .run_system_once(cleanup_orphaned_global_transforms)
+        .expect("cleanup_orphaned_global_transforms should run");
 
     // MapPosition should still be there, and no GT should have appeared
     assert!(world.get::<GlobalTransform2D>(entity).is_none());
@@ -1594,9 +1595,9 @@ fn cleanup_removes_all_orphaned_gt_entities() {
         })
         .collect();
 
-    let mut schedule = Schedule::default();
-    schedule.add_systems(cleanup_orphaned_global_transforms);
-    schedule.run(&mut world);
+    world
+        .run_system_once(cleanup_orphaned_global_transforms)
+        .expect("cleanup_orphaned_global_transforms should run");
 
     for entity in &entities {
         assert!(
@@ -1677,11 +1678,9 @@ fn stale_gt_removed_after_child_despawn() {
 
     // 6. Run propagate without cleanup to confirm the bug exists:
     //    GT is NOT updated (player not in RootsQuery)
-    {
-        let mut schedule = Schedule::default();
-        schedule.add_systems(propagate_transforms);
-        schedule.run(&mut world);
-    }
+    world
+        .run_system_once(propagate_transforms)
+        .expect("propagate_transforms should run");
 
     {
         let gt = world.get::<GlobalTransform2D>(player).unwrap();
@@ -1693,11 +1692,9 @@ fn stale_gt_removed_after_child_despawn() {
     }
 
     // 7. Now run the cleanup — it must remove the stale GT
-    {
-        let mut schedule = Schedule::default();
-        schedule.add_systems(cleanup_orphaned_global_transforms);
-        schedule.run(&mut world);
-    }
+    world
+        .run_system_once(cleanup_orphaned_global_transforms)
+        .expect("cleanup_orphaned_global_transforms should run");
 
     assert!(
         world.get::<GlobalTransform2D>(player).is_none(),

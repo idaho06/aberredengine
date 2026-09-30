@@ -130,6 +130,7 @@ pub fn tween_system<T: TweenValue>(
 mod tests {
     use super::*;
     use crate::testing::{EPSILON, approx_eq};
+    use bevy_ecs::system::RunSystemOnce;
 
     use crate::components::mapposition::MapPosition;
     use crate::components::rotation::Rotation;
@@ -461,9 +462,9 @@ mod tests {
         });
         let entity = world.spawn((target, tween)).id();
 
-        let mut schedule = Schedule::default();
-        schedule.add_systems(tween_system::<T>);
-        schedule.run(&mut world);
+        world
+            .run_system_once(tween_system::<T>)
+            .expect("tween_system should run");
 
         let updated_target = world.entity(entity).get::<T>().unwrap().clone();
         let updated_tween = world.entity(entity).get::<Tween<T>>().unwrap().clone();
@@ -619,9 +620,9 @@ mod tests {
             Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 0.0),
         ));
 
-        let mut schedule = Schedule::default();
-        schedule.add_systems(tween_system::<Rotation>);
-        schedule.run(&mut world);
+        world
+            .run_system_once(tween_system::<Rotation>)
+            .expect("tween_system should run");
 
         assert_eq!(world.resource::<FinishedCount>().0, 1);
     }
