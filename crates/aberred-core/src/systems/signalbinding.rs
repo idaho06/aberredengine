@@ -128,3 +128,132 @@ fn get_entity_signal_as_str<'a>(signals: &'a Signals, signal_key: &str) -> Optio
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::math::Color;
+    use bevy_ecs::system::RunSystemOnce;
+
+    fn text_entity(world: &mut World, binding: SignalBinding) -> Entity {
+        world
+            .spawn((DynamicText::new("placeholder", "font", 12.0, Color::WHITE), binding))
+            .id()
+    }
+
+    fn run(world: &mut World) {
+        world.run_system_once(update_world_signals_binding_system).unwrap();
+    }
+
+    fn text(world: &World, e: Entity) -> String {
+        world.get::<DynamicText>(e).unwrap().text.to_string()
+    }
+
+    fn world_with(signals: WorldSignals) -> World {
+        let mut world = World::new();
+        world.insert_resource(signals);
+        world
+    }
+
+    #[test]
+    fn displays_each_world_signal_type() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("lives", 3);
+        ws.set_scalar("speed", 2.5);
+        ws.set_string("name", "bob");
+        ws.set_flag("paused");
+        let mut world = world_with(ws);
+        let e = ["lives", "speed", "name", "paused"]
+            .map(|k| text_entity(&mut world, SignalBinding::new(k)));
+        run(&mut world);
+        assert_eq!(e.map(|e| text(&world, e)), ["3", "2.5", "bob", "true"]);
+    }
+
+    #[test]
+    fn same_key_prefers_integer_then_scalar_then_string_then_flag() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("k", 1);
+        ws.set_scalar("k", 2.5);
+        ws.set_string("k", "s");
+        ws.set_flag("k");
+        let mut world = world_with(ws);
+        let e = text_entity(&mut world, SignalBinding::new("k"));
+        run(&mut world);
+        assert_eq!(text(&world, e), "1");
+
+        world.resource_mut::<WorldSignals>().clear_integer("k");
+        run(&mut world);
+        assert_eq!(text(&world, e), "2.5");
+        world.resource_mut::<WorldSignals>().clear_scalar("k");
+        run(&mut world);
+        assert_eq!(text(&world, e), "s");
+        world.resource_mut::<WorldSignals>().remove_string("k");
+        run(&mut world);
+        assert_eq!(text(&world, e), "true");
+    }
+
+    #[test]
+    fn format_replaces_every_placeholder() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("score", 42);
+        let mut world = world_with(ws);
+        let e = text_entity(&mut world, SignalBinding::new("score").with_format("Score: {} ({})"));
+        run(&mut world);
+        assert_eq!(text(&world, e), "Score: 42 (42)");
+    }
+
+    #[test]
+    fn missing_key_leaves_text_unchanged() {
+        let mut world = world_with(WorldSignals::default());
+        let e = text_entity(&mut world, SignalBinding::new("absent").with_format("X: {}"));
+        run(&mut world);
+        assert_eq!(text(&world, e), "placeholder");
+    }
+
+    #[test]
+    fn entity_source_reads_that_entitys_signals_only() {
+        let mut ws = WorldSignals::default();
+        ws.set_integer("hp", 99);
+        let mut world = world_with(ws);
+        let mut signals = Signals::default();
+        signals.set_integer("hp", 7);
+        let owner = world.spawn(signals).id();
+        let no_signals = world.spawn_empty().id();
+        let despawned = world.spawn(Signals::default()).id();
+        world.despawn(despawned);
+
+        let bound = text_entity(&mut world, SignalBinding::new("hp").with_source_entity(owner));
+        let bare = text_entity(&mut world, SignalBinding::new("hp").with_source_entity(no_signals));
+        let dead = text_entity(&mut world, SignalBinding::new("hp").with_source_entity(despawned));
+        run(&mut world);
+        assert_eq!(text(&world, bound), "7", "entity value, not the world's 99");
+        assert_eq!(text(&world, bare), "placeholder");
+        assert_eq!(text(&world, dead), "placeholder");
+    }
+
+    #[test]
+    fn marks_text_changed_only_when_content_differs() {
+        #[derive(Resource, Default)]
+        struct ChangedCount(usize);
+        fn count_changed(q: Query<(), Changed<DynamicText>>, mut n: ResMut<ChangedCount>) {
+            n.0 += q.iter().count();
+        }
+
+        let mut ws = WorldSignals::default();
+        ws.set_integer("score", 1);
+        let mut world = world_with(ws);
+        world.init_resource::<ChangedCount>();
+        text_entity(&mut world, SignalBinding::new("score"));
+        let mut schedule = Schedule::default();
+        schedule.add_systems((update_world_signals_binding_system, count_changed).chain());
+
+        schedule.run(&mut world); // spawn counts as changed; text also changes to "1"
+        let after_first = world.resource::<ChangedCount>().0;
+        schedule.run(&mut world); // same value: must not re-mark
+        assert_eq!(world.resource::<ChangedCount>().0, after_first);
+        world.resource_mut::<WorldSignals>().set_integer("score", 2);
+        schedule.run(&mut world);
+        assert_eq!(world.resource::<ChangedCount>().0, after_first + 1);
+    }
+
+}
