@@ -1663,4 +1663,54 @@ mod resolve_button_patch_tests {
             "normal"
         );
     }
+
+    /// A shadow whose x offset tags where it came from.
+    fn shadow(tag: f32) -> Shadow {
+        Shadow::new(tag, 0.0, 0, 0, 0, 255)
+    }
+
+    fn shadow_tag(
+        skin: &GuiButtonSkin,
+        state: GuiWidgetState,
+        theme_shadow: Option<Shadow>,
+    ) -> Option<f32> {
+        resolve_button_shadow(skin, state, theme_shadow).map(|s| s.offset.x)
+    }
+
+    const STATES: [GuiWidgetState; 4] = [
+        GuiWidgetState::Normal,
+        GuiWidgetState::Hovered,
+        GuiWidgetState::Pressed,
+        GuiWidgetState::Disabled,
+    ];
+
+    #[test]
+    fn button_shadow_uses_the_states_own_shadow_first() {
+        let skin = GuiButtonSkin {
+            shadow: Some(shadow(1.0)),
+            hover_shadow: Some(shadow(2.0)),
+            pressed_shadow: Some(shadow(3.0)),
+            disabled_shadow: Some(shadow(4.0)),
+            ..skin()
+        };
+        let tags: Vec<_> = STATES
+            .iter()
+            .map(|s| shadow_tag(&skin, *s, Some(shadow(9.0))))
+            .collect();
+        assert_eq!(tags, [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]);
+    }
+
+    #[test]
+    fn button_shadow_falls_back_to_the_skin_then_the_theme_shadow() {
+        let with_skin_shadow = GuiButtonSkin {
+            shadow: Some(shadow(1.0)),
+            ..skin()
+        };
+        let without = skin();
+        for state in STATES {
+            assert_eq!(shadow_tag(&with_skin_shadow, state, Some(shadow(9.0))), Some(1.0));
+            assert_eq!(shadow_tag(&without, state, Some(shadow(9.0))), Some(9.0));
+            assert_eq!(shadow_tag(&without, state, None), None);
+        }
+    }
 }

@@ -88,3 +88,23 @@ fn draw_nine_patch_tinted(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shadow_offset_rect_moves_the_rect_by_the_offset_and_keeps_its_size() {
+        let rect = Rectangle {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 40.0,
+        };
+        let moved = shadow_offset_rect(rect, Shadow::new(2.0, -3.0, 0, 0, 0, 128));
+        assert_eq!(
+            (moved.x, moved.y, moved.width, moved.height),
+            (12.0, 17.0, 30.0, 40.0)
+        );
+    }
+}
