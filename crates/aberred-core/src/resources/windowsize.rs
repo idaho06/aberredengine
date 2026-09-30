@@ -103,3 +103,73 @@ impl WindowSize {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(w: i32, h: i32) -> WindowSize {
+        WindowSize { w, h }
+    }
+
+    fn xywh(r: Rect) -> (f32, f32, f32, f32) {
+        (r.x, r.y, r.width, r.height)
+    }
+
+    #[test]
+    fn letterbox_fills_a_window_of_the_same_aspect() {
+        assert_eq!(
+            xywh(window(1280, 720).calculate_letterbox(640, 360)),
+            (0.0, 0.0, 1280.0, 720.0)
+        );
+    }
+
+    #[test]
+    fn a_wider_window_is_pillarboxed_and_a_taller_one_letterboxed() {
+        assert_eq!(
+            xywh(window(1000, 360).calculate_letterbox(640, 360)),
+            (180.0, 0.0, 640.0, 360.0),
+            "bars left and right"
+        );
+        assert_eq!(
+            xywh(window(640, 600).calculate_letterbox(640, 360)),
+            (0.0, 120.0, 640.0, 360.0),
+            "bars top and bottom"
+        );
+    }
+
+    #[test]
+    fn window_to_game_pos_undoes_the_letterbox_scale_and_offset() {
+        let scaled = window(1280, 720);
+        assert_eq!(
+            scaled.window_to_game_pos(Vec2::new(640.0, 360.0), 640, 360),
+            Vec2::new(320.0, 180.0)
+        );
+
+        let pillarboxed = window(1000, 360);
+        assert_eq!(pillarboxed.window_to_game_pos(Vec2::new(180.0, 0.0), 640, 360), Vec2::ZERO);
+        assert_eq!(
+            pillarboxed.window_to_game_pos(Vec2::new(500.0, 100.0), 640, 360),
+            Vec2::new(320.0, 100.0)
+        );
+
+        let letterboxed = window(640, 600);
+        assert_eq!(
+            letterboxed.window_to_game_pos(Vec2::new(320.0, 300.0), 640, 360),
+            Vec2::new(320.0, 180.0)
+        );
+    }
+
+    #[test]
+    fn window_to_game_pos_clamps_positions_in_the_bars_to_the_game_edge() {
+        let pillarboxed = window(1000, 360);
+        assert_eq!(
+            pillarboxed.window_to_game_pos(Vec2::new(10.0, 50.0), 640, 360),
+            Vec2::new(0.0, 50.0)
+        );
+        assert_eq!(
+            pillarboxed.window_to_game_pos(Vec2::new(990.0, 400.0), 640, 360),
+            Vec2::new(640.0, 360.0)
+        );
+    }
+}
