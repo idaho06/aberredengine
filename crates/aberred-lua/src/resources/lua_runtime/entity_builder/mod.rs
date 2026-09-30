@@ -320,11 +320,15 @@ impl LuaUserData for LuaEntityBuilder {
     }
 }
 
+/// Helpers shared by the `with_*` tests in this module and its per-category files.
 #[cfg(test)]
-mod tests {
+mod test_helpers {
+    use super::super::runtime::LuaAppData;
+    use super::SpawnCmd;
     use crate::resources::lua_runtime::LuaRuntime;
 
-    fn assert_runtime_error(script: &str, expected_msg: &str) {
+    /// Runs `script` and asserts it raises a Lua error containing `expected_msg`.
+    pub(super) fn assert_runtime_error(script: &str, expected_msg: &str) {
         let runtime = LuaRuntime::new().unwrap();
         let err = runtime
             .lua()
@@ -337,6 +341,22 @@ mod tests {
             "expected error containing {expected_msg:?}, got {message:?}"
         );
     }
+
+    /// Runs `script` (which must `:build()` exactly one spawn) and returns the queued command.
+    pub(super) fn built_spawn_cmd(script: &str) -> SpawnCmd {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        let app_data = runtime.lua().app_data_ref::<LuaAppData>().unwrap();
+        let mut queued = app_data.spawn_commands.borrow_mut();
+        assert_eq!(queued.len(), 1, "expected exactly one queued spawn command");
+        *queued.pop().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_helpers::{assert_runtime_error, built_spawn_cmd};
+    use crate::resources::lua_runtime::LuaRuntime;
 
     #[test]
     fn with_sprite_offset_requires_with_sprite() {
@@ -412,30 +432,18 @@ mod tests {
 
     #[test]
     fn long_chain_builds_expected_spawn_cmd() {
-        use super::super::runtime::LuaAppData;
-
-        let runtime = LuaRuntime::new().unwrap();
-        runtime
-            .lua()
-            .load(
-                "engine.spawn() \
-                    :with_group('asteroids') \
-                    :with_position(10, 20) \
-                    :with_sprite('rock', 64, 64, 32, 32) \
-                    :with_rotation(45) \
-                    :with_velocity(1, 2) \
-                    :with_zindex(5) \
-                    :with_collider(40, 40, 20, 20) \
-                    :with_signal_integer('hp', 3) \
-                    :build()",
-            )
-            .exec()
-            .unwrap();
-
-        let app_data = runtime.lua().app_data_ref::<LuaAppData>().unwrap();
-        let queued = app_data.spawn_commands.borrow();
-        assert_eq!(queued.len(), 1, "expected exactly one queued spawn command");
-        let cmd = &queued[0];
+        let cmd = built_spawn_cmd(
+            "engine.spawn() \
+                :with_group('asteroids') \
+                :with_position(10, 20) \
+                :with_sprite('rock', 64, 64, 32, 32) \
+                :with_rotation(45) \
+                :with_velocity(1, 2) \
+                :with_zindex(5) \
+                :with_collider(40, 40, 20, 20) \
+                :with_signal_integer('hp', 3) \
+                :build()",
+        );
         assert_eq!(cmd.group.as_deref(), Some("asteroids"));
         assert_eq!(cmd.position, Some((10.0, 20.0)));
         assert!(cmd.sprite.is_some());
