@@ -1,4 +1,4 @@
-//! Generic typed state store passed to [`GuiCallback`](crate::systems::scene_dispatch::GuiCallback).
+//! Generic typed state store passed to `GuiCallback` (`aberred_render::resources::scene_table`).
 //!
 //! Stores one value per Rust type, keyed by [`TypeId`]. Access is type-safe at call sites:
 //! [`insert`](AppState::insert)`(value: T)` and [`get`](AppState::get)`::<T>()` infer the

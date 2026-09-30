@@ -64,10 +64,8 @@ const DEFAULT_GAMEPAD_DEADZONE: f32 = 0.15;
 /// Game configuration resource.
 ///
 /// Stores render resolution, window settings, and other configurable options.
-/// On first insertion into the ECS world, the [`apply_gameconfig_changes`]
-/// system will attempt to load values from the configuration file.
-///
-/// [`apply_gameconfig_changes`]: crate::systems::render::apply_gameconfig_changes
+/// On first insertion into the ECS world, the `apply_gameconfig_changes`
+/// system (`aberred-render`) will attempt to load values from the configuration file.
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub struct GameConfig {
     /// Internal render width in pixels.

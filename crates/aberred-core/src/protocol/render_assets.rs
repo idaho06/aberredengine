@@ -3,7 +3,7 @@
 //! `crate::systems::render_assets`).
 //!
 //! Deliberately a *separate* enum from
-//! [`AssetCmd`](crate::resources::lua_runtime::AssetCmd): `AssetCmd` is the
+//! `AssetCmd` (`aberred_lua::resources::lua_runtime`): `AssetCmd` is the
 //! raw Lua-facing queue type and includes `Music`/`Sound`, which must keep
 //! routing to `MessageWriter<AudioCmd>` and never pass through this seam.
 //! `RenderAssetCmd` additionally carries requests that never existed as

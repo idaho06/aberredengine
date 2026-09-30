@@ -1,6 +1,6 @@
 //! Deferred `WorldSignals` writes produced by render-side scene callbacks.
 //!
-//! [`GuiCallback`](crate::systems::scene_dispatch::GuiCallback) runs inside `render_system`,
+//! `GuiCallback` (`aberred_render::resources::scene_table`) runs inside `render_system`,
 //! which holds no live `&mut WorldSignals` — reads come from the snapshot's `SignalSnapshot`,
 //! and writes are buffered here instead, applied logic-side by `apply_signal_intents` at the
 //! top of the next sim tick.

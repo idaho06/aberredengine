@@ -1,7 +1,7 @@
 //! Index of collision rules by unordered group pair.
 //!
 //! Both collision observers ([`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer),
-//! [`lua_collision_observer`](crate::systems::lua_collision::lua_collision_observer))
+//! `lua_collision_observer` in `aberred-lua`)
 //! used to linearly scan every rule entity for every `CollisionEvent`. This
 //! resource pre-filters that scan down to the (small) bucket of rules
 //! actually covering the colliding pair's groups, keyed by an unordered pair

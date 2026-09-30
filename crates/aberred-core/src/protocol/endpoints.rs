@@ -95,7 +95,7 @@ use crossbeam_channel::unbounded;
 
 /// Shared bridge between the ECS world and the audio thread.
 ///
-/// This resource is created by [`setup_audio`]. Systems can send commands via
+/// This resource is created by `aberred_audio::setup_audio`. Systems can send commands via
 /// [`AudioBridge::tx_cmd`] and poll for events via [`AudioBridge::rx_msg`].
 #[derive(Resource)]
 pub struct AudioBridge {
@@ -107,7 +107,7 @@ pub struct AudioBridge {
     pub handle: std::thread::JoinHandle<()>,
 }
 
-/// Shared by the facade's `setup_audio` and [`setup_audio_stub`]: insert the
+/// Shared by `aberred_audio::setup_audio` and `setup_audio_stub` (test support): insert the
 /// [`AudioBridge`] resource plus the `Messages<AudioCmd>`/
 /// `Messages<AudioMessage>` queues it drains. The two callers differ only in
 /// how `handle`/the channel far ends are produced (a real audio thread vs.

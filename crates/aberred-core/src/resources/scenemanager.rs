@@ -1,15 +1,15 @@
 //! Scene registry resource for Rust-native scene management.
 //!
-//! [`SceneManager`] holds a registry of [`SceneDescriptor`]s keyed by scene
+//! [`SceneManager`] holds a registry of [`SceneLogic`](crate::systems::scene_dispatch::SceneLogic)s keyed by scene
 //! name, plus the name of the currently active scene and the initial scene.
 //!
-//! This resource is inserted automatically by [`EngineBuilder`](crate::engine_app::EngineBuilder)
+//! This resource is inserted automatically by `aberredengine::EngineBuilder`
 //! when the developer uses `.add_scene()`.
 //!
 //! # Related
 //!
 //! - [`crate::systems::scene_dispatch`] — the systems that read this resource
-//! - [`crate::engine_app::EngineBuilder::add_scene`] — builder registration
+//! - `aberredengine::EngineBuilder::add_scene` — builder registration
 
 use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;

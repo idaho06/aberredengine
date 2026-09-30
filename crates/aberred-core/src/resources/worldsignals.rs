@@ -15,8 +15,8 @@
 //!
 //! # Integration with Other Systems
 //!
-//! - [`Phase`](crate::components::phase::Phase) callbacks receive `WorldSignals` via [`PhaseContext`](crate::components::phase::PhaseContext)
-//! - [`CollisionRule`](crate::components::collision::CollisionRule) callbacks access it via [`CollisionContext`](crate::components::collision::CollisionContext)
+//! - [`Phase`](crate::components::phase::Phase) callbacks receive `WorldSignals` via [`GameCtx`](crate::systems::GameCtx)
+//! - [`CollisionRule`](crate::components::collision::CollisionRule) callbacks access it via [`GameCtx`](crate::systems::GameCtx)
 //! - [`SignalBinding`](crate::components::signalbinding::SignalBinding) binds UI text to world signal values
 //! - [`TrackedGroups`](crate::resources::group::TrackedGroups) + group system publish entity counts here
 //!

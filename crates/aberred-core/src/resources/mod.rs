@@ -8,7 +8,6 @@
 //! Overview
 //! - [`animationstore`] – definitions for sprite animations reused across entities
 //! - [`appstate`] – typed state store passed to `GuiCallback`; one slot per Rust type
-//! - [`audio`] – resources used only by the audio thread's own `bevy_ecs::World`
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
 //! - [`collision_rule_index`] – pre-filters collision rule entities by group pair, avoiding a per-event linear scan
@@ -22,7 +21,6 @@
 //! - [`guiinputstate`] – per-frame scratch state for GUI click consumption
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
-//! - [`render`] – resources used only by the render (main) thread's `bevy_ecs::World`
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks

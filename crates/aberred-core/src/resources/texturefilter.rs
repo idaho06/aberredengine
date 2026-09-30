@@ -1,5 +1,5 @@
-//! Texture filtering mode shared by [`crate::resources::render::texturestore::TextureStore`]
-//! and [`crate::resources::render::rendertarget::RenderTarget`].
+//! Texture filtering mode shared by `aberred_render::resources::texturestore::TextureStore`
+//! and `aberred_render::resources::rendertarget::RenderTarget`.
 
 /// Texture sampling filter mode.
 ///

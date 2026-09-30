@@ -1,7 +1,7 @@
 //! Runtime-configurable input binding resource.
 //!
 //! [`InputBindings`] decouples the *hardware key* triggering an action from the
-//! *current frame state* of that action (which remains in [`InputState`]).
+//! *current frame state* of that action (which remains in [`InputState`](crate::resources::input::InputState)).
 //! Each logical [`InputAction`] maps to one or more [`InputBinding`] values,
 //! allowing runtime rebinding from Rust or Lua.
 //!

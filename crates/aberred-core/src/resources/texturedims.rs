@@ -1,7 +1,7 @@
 //! CPU-side texture dimension mirror for the logic thread.
 //!
-//! The logic world has no [`TextureStore`] (GPU handles live only in the
-//! render world), but `animation` still needs the atlas width for multi-row
+//! The logic world has no `TextureStore` (`aberred-render`; GPU handles live
+//! only in the render world), but `animation` still needs the atlas width for multi-row
 //! frame wrap (`vertical_displacement > 0`). The render side sends a
 //! `LogicMsg::TextureLoaded { key, width, height }` after every texture
 //! load/upload (`Texture`, `TilemapTexture`, `RasterizeText` arms of
@@ -9,8 +9,6 @@
 //! it here — the same one-owner mirror pattern as `FontMetricsStore`, just in
 //! the opposite direction of ownership: render extracts-and-sends, logic owns
 //! the store.
-//!
-//! [`TextureStore`]: crate::resources::render::texturestore::TextureStore
 
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashMap;

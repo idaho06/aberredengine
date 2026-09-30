@@ -54,7 +54,7 @@ pub struct MapData {
     pub entities: Vec<EntityDef>,
 }
 
-/// A texture asset to load into [`crate::resources::render::texturestore::TextureStore`].
+/// A texture asset to load into `aberred_render::resources::texturestore::TextureStore`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TextureEntry {
     /// Key used to look up the texture in `TextureStore`.
@@ -68,7 +68,7 @@ pub struct TextureEntry {
     pub filter: Option<String>,
 }
 
-/// A font asset to load into [`crate::resources::render::fontstore::FontStore`].
+/// A font asset to load into `aberred_render::resources::fontstore::FontStore`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FontEntry {
     pub key: String,
@@ -133,11 +133,11 @@ pub struct EntityDef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<[u8; 4]>,
     /// *(feature = "lua")* Lua function to call once when this entity is first seen by the engine
-    /// (maps to [`crate::components::luasetup::LuaSetup`]).
+    /// (maps to `aberred_lua::components::luasetup::LuaSetup`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lua_setup: Option<String>,
     /// *(feature = "lua")* Lua function to call once when the entity's non-looped animation first finishes
-    /// (maps to [`crate::components::lua_on_animation_end::LuaOnAnimationEnd`]).
+    /// (maps to `aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_animation_end: Option<String>,
     /// Text rendering data (maps to [`crate::components::dynamictext::DynamicText`]).

@@ -45,7 +45,7 @@
 //!
 //! For the concrete bridge and polling systems, see
 //! - [`crate::protocol::endpoints`]: channel resources made available to systems
-//! - [`crate::systems::audio`]: audio thread implementation and event polling
+//! - `aberred-audio`: audio thread implementation; `crate::systems::audio_bridge`: event polling
 use bevy_ecs::message::Message;
 
 /// Commands sent *to* the audio thread

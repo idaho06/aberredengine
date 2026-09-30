@@ -2,7 +2,7 @@
 //!
 //! [`FontMetricsStore`] holds per-glyph measurement data extracted from each
 //! loaded font at load time, keyed by the same string ID used by
-//! [`FontStore`](crate::resources::render::fontstore::FontStore). This lets
+//! `FontStore` (`aberred-render`). This lets
 //! logic-side systems (e.g. `dynamictext_size_system`) measure text without
 //! touching the GL-bound `FontStore`/`NonSend<RaylibHandle>` — a requirement
 //! for splitting simulation logic onto its own thread, separate from the
@@ -60,9 +60,9 @@ impl FontMetrics {
     /// Construct metrics directly from a glyph map, with no
     /// `'?'`-then-first-glyph fallback beyond an explicit `'?'` entry (if
     /// any) in `glyphs` -- there is no GL font to derive a "first glyph in
-    /// array order" fallback from outside [`extract`](Self::extract). For
-    /// synthetic/test data (e.g. a headless [`TestWorld`](crate::test_support::TestWorld)
-    /// fixture); real font loads always go through `extract`.
+    /// array order" fallback from outside `aberred-render`'s `extract_font_metrics`. For
+    /// synthetic/test data (e.g. a headless `aberredengine::test_support::TestWorld`
+    /// fixture); real font loads always go through `extract_font_metrics`.
     pub fn new(base_size: i32, glyphs: FxHashMap<i32, GlyphMetrics>) -> Self {
         Self {
             base_size,
