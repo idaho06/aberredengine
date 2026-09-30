@@ -11,9 +11,10 @@
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
-//! - [`luatimer`] – *(feature = "lua")* Lua timer callback events
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
-//! - [`render`] – events/observers used only by the render (main) thread (F10 fullscreen toggle)
+//!
+//! Lua timer events live in `aberred-lua`; the render thread's F10
+//! `SwitchFullScreenEvent` in `aberred-render`.
 //!
 //! See each submodule for concrete event data, semantics, and example usage.
 

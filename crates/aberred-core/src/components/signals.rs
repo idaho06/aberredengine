@@ -23,8 +23,8 @@
 //! # Integration with Other Components
 //!
 //! - [`AnimationController`](super::animation::AnimationController) – reads signals for animation rule conditions
-//! - [`Phase`](super::phase::Phase) – callbacks can read/write signals via [`PhaseContext`](super::phase::PhaseContext)
-//! - [`CollisionRule`](super::collision::CollisionRule) – callbacks access signals via [`CollisionContext`](super::collision::CollisionContext)
+//! - [`Phase`](super::phase::Phase) – callbacks can read/write signals via [`GameCtx`](crate::systems::GameCtx)
+//! - [`CollisionRule`](super::collision::CollisionRule) – callbacks access signals via [`GameCtx`](crate::systems::GameCtx)
 //!
 //! # Example
 //!

@@ -3,7 +3,7 @@
 //! [`Phase`] is the shared generic phase-state storage used by both the
 //! Rust callback path and the Lua callback path. The default
 //! `Phase<PhaseCallbackFns>` form is the Rust-facing component, while
-//! [`LuaPhase`](super::luaphase::LuaPhase) is a type alias over the same
+//! `LuaPhase` (`aberred_lua::components::luaphase`) is a type alias over the same
 //! storage with Lua callback names.
 //!
 //! # How It Works
@@ -56,7 +56,7 @@
 //!
 //! - [`crate::systems::phase::phase_system`] – system that processes phase transitions and callbacks
 //! - [`crate::systems::GameCtx`] – bundled ECS access passed to phase callbacks
-//! - [`crate::components::luaphase::LuaPhase`] – Lua equivalent
+//! - `aberred_lua::components::luaphase::LuaPhase` – Lua equivalent
 
 use bevy_ecs::prelude::{Component, Entity};
 use rustc_hash::FxHashMap;
@@ -103,7 +103,7 @@ impl std::fmt::Debug for PhaseCallbackFns {
 /// The default `Phase` type stores Rust function pointers via
 /// [`PhaseCallbackFns`] and is processed by
 /// [`phase_system`](crate::systems::phase::phase_system). The Lua-facing
-/// [`LuaPhase`](super::luaphase::LuaPhase) alias reuses this same storage with
+/// `LuaPhase` (`aberred_lua::components::luaphase`) alias reuses this same storage with
 /// a different callback payload type.
 #[derive(Clone, Component)]
 pub struct Phase<C = PhaseCallbackFns> {

@@ -40,9 +40,9 @@ pub enum InputAction {
     Action3,
     /// Special function (default: F12).
     Special,
-    /// Toggle debug overlays (default: F11). Still triggers [`SwitchDebugEvent`] internally.
+    /// Toggle debug overlays (default: F11). Still triggers [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent) internally.
     ToggleDebug,
-    /// Toggle fullscreen mode (default: F10). Still triggers [`SwitchFullScreenEvent`] internally.
+    /// Toggle fullscreen mode (default: F10). Still triggers `SwitchFullScreenEvent` (render world, `aberred-render`) internally.
     ToggleFullscreen,
 }
 

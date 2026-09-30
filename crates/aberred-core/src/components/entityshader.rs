@@ -1,7 +1,7 @@
 //! Per-entity shader component.
 //!
 //! Allows individual entities (sprites and text) to render with custom shaders.
-//! Reuses the existing [`ShaderStore`](crate::resources::render::shaderstore::ShaderStore)
+//! Reuses the existing `ShaderStore` (`aberred_render::resources::shaderstore`)
 //! and uniform infrastructure.
 
 use bevy_ecs::prelude::Component;

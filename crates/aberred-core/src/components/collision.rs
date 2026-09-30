@@ -43,7 +43,7 @@
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::systems::rust_collision`] – Rust collision observer
-//! - [`crate::systems::lua_collision`] – Lua collision observer
+//! - `aberred_lua::systems::lua_collision` – Lua collision observer
 //! - [`crate::events::collision::CollisionEvent`] – event emitted on collisions
 //! - [`super::group::Group`] – group tag used for rule matching
 
@@ -66,8 +66,8 @@ pub type CollisionCallback =
 /// The default `CollisionRule` stores a Rust function pointer via
 /// [`CollisionCallback`] and is processed by
 /// [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer).
-/// The Lua-facing [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule)
-/// alias reuses this same storage with a [`LuaCollisionCallback`](crate::components::luacollision::LuaCollisionCallback)
+/// The Lua-facing `LuaCollisionRule` (`aberred_lua::components::luacollision`)
+/// alias reuses this same storage with a `LuaCollisionCallback`
 /// payload.
 ///
 /// When a collision is detected between entities with groups matching
@@ -80,7 +80,7 @@ pub struct CollisionRule<C = CollisionCallback> {
     /// Second group name to match.
     pub group_b: String,
     /// Callback payload — a Rust fn pointer for `CollisionRule`, or a
-    /// [`LuaCollisionCallback`](crate::components::luacollision::LuaCollisionCallback)
+    /// `LuaCollisionCallback`
     /// for `LuaCollisionRule`.
     pub callback: C,
 }

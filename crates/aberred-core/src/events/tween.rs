@@ -6,7 +6,7 @@
 //! never trigger it, since they never stop playing.
 //!
 //! Rust consumers can observe it via `EngineBuilder::add_observer`.
-//! Lua consumers attach a [`LuaOnTweenFinished`](crate::components::lua_on_tween_finished::LuaOnTweenFinished)
+//! Lua consumers attach a `LuaOnTweenFinished` (`aberred_lua::components::lua_on_tween_finished`)
 //! component to the entity (feature = "lua").
 
 use std::marker::PhantomData;

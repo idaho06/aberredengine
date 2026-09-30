@@ -6,7 +6,6 @@
 //!
 //! Submodules overview:
 //! - [`animation`] – playback state and a rule-based controller for sprite animations
-//! - [`audio`] – components used only by the audio thread's own `bevy_ecs::World`
 //! - [`boxcollider`] – axis-aligned rectangular collider for collision detection
 //! - [`cameratarget`] – marks an entity as a candidate for camera following
 //! - [`collision`] – collision callback rules and context for collision observers
@@ -26,8 +25,6 @@
 //! - [`mapposition`] – world-space position (pivot) for an entity
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
-//! - [`luaphase`] – *(feature = "lua")* Lua-based state machine with enter/update/exit callbacks
-//! - [`luasetup`] – *(feature = "lua")* one-shot entity setup callback fired on `Added<LuaSetup>`
 //! - [`phase`] – Rust-based state machine with enter/update/exit function-pointer callbacks
 //! - [`position2d`] – generic 2D position component shared by [`mapposition`] and [`screenposition`]
 //! - [`rigidbody`] – simple kinematic body storing velocity
@@ -40,9 +37,11 @@
 //! - [`stuckto`] – attaches an entity's position to another entity
 //! - [`tilemap`] – tilemap root entity; spawns tile children from a directory path
 //! - [`tint`] – color tint for rendering sprites and text
-//! - [`luatimer`] – *(feature = "lua")* Lua callback timer for delayed actions
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`zindex`] – rendering order hint for 2D drawing
+//!
+//! Audio-thread components live in `aberred-audio`; Lua-only ones (`LuaPhase`,
+//! `LuaSetup`, `LuaTimer`, ...) in `aberred-lua`.
 
 pub mod animation;
 pub mod boxcollider;

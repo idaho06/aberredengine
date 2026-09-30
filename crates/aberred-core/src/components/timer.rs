@@ -44,7 +44,7 @@
 //! - [`crate::systems::timer::update_timers`] – system that updates and triggers timers
 //! - [`crate::systems::timer::timer_observer`] – observer that executes Rust callbacks
 //! - [`crate::events::timer::TimerEvent`] – event emitted when timer expires
-//! - [`crate::components::luatimer::LuaTimer`] – Lua equivalent
+//! - `aberred_lua::components::luatimer::LuaTimer` – Lua equivalent
 
 use bevy_ecs::prelude::{Component, Entity};
 
@@ -61,8 +61,8 @@ pub type TimerCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputStat
 ///
 /// The default `Timer` type stores a Rust function pointer via [`TimerCallback`]
 /// and is processed by [`update_timers`](crate::systems::timer::update_timers).
-/// The Lua-facing [`LuaTimer`](crate::components::luatimer::LuaTimer) alias
-/// reuses this same storage with a [`LuaTimerCallback`](crate::components::luatimer::LuaTimerCallback)
+/// The Lua-facing `LuaTimer` (`aberred_lua::components::luatimer`) alias
+/// reuses this same storage with a `LuaTimerCallback`
 /// payload.
 ///
 /// `elapsed` is reset by subtracting `duration` (not zeroed) for timing accuracy.
@@ -73,7 +73,7 @@ pub struct Timer<C = TimerCallback> {
     /// Elapsed time since last reset.
     pub elapsed: f32,
     /// Callback payload — a Rust fn pointer for `Timer`, or a
-    /// [`LuaTimerCallback`](crate::components::luatimer::LuaTimerCallback) for `LuaTimer`.
+    /// `LuaTimerCallback` for `LuaTimer`.
     pub callback: C,
 }
 

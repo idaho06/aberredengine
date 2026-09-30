@@ -35,7 +35,7 @@
 //! # Related
 //!
 //! - [`crate::components::signalbinding::SignalBinding`] – binds text to signal values
-//! - [`crate::resources::render::fontstore::FontStore`] – font registry
+//! - `aberred_render::resources::fontstore::FontStore` – font registry
 
 use std::sync::Arc;
 
@@ -47,7 +47,7 @@ use crate::math::Color;
 /// Dynamic text component for rendering variable strings in the world or screen.
 ///
 /// Unlike static sprite-based text, this component's content can be modified
-/// at runtime via [`set_content`](DynamicText::set_content).
+/// at runtime via [`set_text`](DynamicText::set_text).
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct DynamicText {
     /// The text content to render.
@@ -71,7 +71,7 @@ impl DynamicText {
     /// Creates a new DynamicText component.
     ///
     /// The `size` field is initialized to zero and will be calculated
-    /// by [`dynamictext_size_system`](crate::systems::dynamictext_size_system)
+    /// by [`dynamictext_size_system`](crate::systems::dynamictext_size::dynamictext_size_system)
     /// on the first frame.
     pub fn new(content: impl Into<String>, font: impl Into<String>, font_size: f32, color: Color) -> Self {
         let text: Arc<str> = Arc::from(content.into());
@@ -92,7 +92,7 @@ impl DynamicText {
     }
 
     /// Sets the cached text bounding box size.
-    /// Used by [`dynamictext_size_system`](crate::systems::dynamictext_size_system).
+    /// Used by [`dynamictext_size_system`](crate::systems::dynamictext_size::dynamictext_size_system).
     pub(crate) fn set_size(&mut self, size: Vec2) {
         self.size = size;
     }

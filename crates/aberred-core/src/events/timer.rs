@@ -17,7 +17,7 @@
 //! - [`crate::components::timer::Timer`] – the timer component
 //! - [`crate::systems::timer::update_timers`] – system that emits these events
 //! - [`crate::systems::timer::timer_observer`] – observer that handles these events
-//! - [`crate::events::luatimer::LuaTimerEvent`] – Lua equivalent
+//! - `aberred_lua::events::luatimer::LuaTimerEvent` – Lua equivalent
 
 use bevy_ecs::prelude::*;
 

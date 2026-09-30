@@ -2,23 +2,23 @@
 //!
 //! The collision system emits [`CollisionEvent`] whenever two entities with
 //! compatible colliders overlap. This event is primarily consumed by the
-//! [`lua_collision_observer`](crate::systems::lua_collision::lua_collision_observer), which
-//! looks up matching [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule)
+//! `lua_collision_observer` (`aberred_lua::systems::lua_collision`), which
+//! looks up matching `LuaCollisionRule`
 //! components and invokes their Lua callbacks.
 //!
 //! # Flow
 //!
 //! 1. [`collision_detector`](crate::systems::collision_detector::collision_detector) detects overlaps
 //! 2. Emits `CollisionEvent` for each collision
-//! 3. [`lua_collision_observer`](crate::systems::lua_collision::lua_collision_observer) receives the event
+//! 3. `lua_collision_observer` (`aberred_lua::systems::lua_collision`) receives the event
 //! 4. Finds matching `LuaCollisionRule` by group names
 //! 5. Invokes the rule's Lua callback with both entities
 //!
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
-//! - [`crate::systems::lua_collision`] – Lua collision observer
-//! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
+//! - `aberred_lua::systems::lua_collision` – Lua collision observer
+//! - `aberred_lua::components::luacollision::LuaCollisionRule` – defines Lua collision handlers
 //! - [`crate::components::boxcollider::BoxCollider`] – the collider component
 
 use bevy_ecs::prelude::*;

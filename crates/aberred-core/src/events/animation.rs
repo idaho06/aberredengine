@@ -3,8 +3,8 @@
 //! [`AnimationFinishedEvent`] is triggered once by the [`animation`](crate::systems::animation)
 //! system on the frame a non-looped animation first reaches its last frame.
 //!
-//! Rust consumers can observe it via [`EngineBuilder::add_observer`].
-//! Lua consumers attach a [`LuaOnAnimationEnd`](crate::components::lua_on_animation_end::LuaOnAnimationEnd)
+//! Rust consumers can observe it via `aberredengine::EngineBuilder::add_observer`.
+//! Lua consumers attach a `LuaOnAnimationEnd` (`aberred_lua::components::lua_on_animation_end`)
 //! component to the entity (feature = "lua").
 
 use bevy_ecs::prelude::*;
