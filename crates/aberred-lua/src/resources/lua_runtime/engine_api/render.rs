@@ -544,6 +544,18 @@ mod tests {
     }
 
     #[test]
+    fn post_process_shader_chain_follows_index_order_not_insertion_order() {
+        // Filling from the top puts the keys in the table's hash part, where pairs()
+        // order is unspecified; the chain must still follow indices 1..n.
+        let (post, _) = apply_script(
+            "local t = {} t[4] = 'd' t[3] = 'c' t[2] = 'b' t[1] = 'a' \
+             engine.post_process_shader(t)",
+        );
+        let keys: Vec<&str> = post.keys.iter().map(|k| &**k).collect();
+        assert_eq!(keys, ["a", "b", "c", "d"]);
+    }
+
+    #[test]
     fn post_process_shader_rejects_empty_table_and_non_table() {
         let runtime = LuaRuntime::new().unwrap();
         for (script, msg) in [
