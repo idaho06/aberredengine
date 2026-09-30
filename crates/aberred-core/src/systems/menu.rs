@@ -620,11 +620,15 @@ pub fn dispatch_menu_action(
                 scene_name
             );
             ctx.world_signals.set_string(sk::SCENE, scene_name.clone());
-            ctx.commands.run_system(
-                *systems_store
-                    .get(hook_keys::SWITCH_SCENE)
-                    .expect("switch_scene system not found"),
-            );
+            // Startup validation only requires a switch_scene hook for Lua / scene-manager /
+            // custom-hook games, so a Rust-only game can reach this without one: log, don't panic.
+            match systems_store.get(hook_keys::SWITCH_SCENE) {
+                Some(switch_scene) => ctx.commands.run_system(*switch_scene),
+                None => log::error!(
+                    "menu action SetScene('{scene_name}'): no switch_scene system is registered \
+                     (use Lua, the scene manager, or EngineBuilder::on_switch_scene); ignoring"
+                ),
+            }
         }
         MenuAction::ShowSubMenu(submenu_name) => {
             ctx.world_signals
@@ -974,6 +978,25 @@ mod tests {
         let ws = world.resource::<WorldSignals>();
         assert!(ws.get_string(sk::SCENE).is_none() && !ws.has_flag("switch_hook_ran"));
         assert_eq!(world.resource::<NextGameState>().get(), &NextGameStates::Unchanged);
+    }
+
+    #[test]
+    fn set_scene_without_a_switch_scene_hook_logs_instead_of_panicking() {
+        // A Rust-only game with no Lua, no scene manager and no custom switch hook.
+        let mut world = World::new();
+        crate::testing::insert_game_ctx_resources(&mut world);
+        world.init_resource::<NextGameState>();
+        world.insert_resource(SystemsStore::default());
+        world.add_observer(menu_selection_observer);
+        let menu = world.spawn((three_items(), actions())).id();
+
+        select(&mut world, menu, "play");
+
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string(sk::SCENE).map(String::as_str),
+            Some("level01"),
+            "the requested scene is still recorded"
+        );
     }
 
     #[test]
