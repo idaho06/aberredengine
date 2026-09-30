@@ -966,8 +966,8 @@ mod tests {
         // engine.load_texture() call queued immediately before the system
         // runs is still translated into a RenderAssetCmd::Texture correctly.
         // It does NOT exercise the schedule-membership/ordering itself
-        // (that's covered by the full schedule build in
-        // tests/engine_tick_integration.rs).
+        // (that's covered by `TestWorld`, which builds the real sim
+        // schedule -- crates/aberredengine/tests/logic_world.rs).
         let mut world = new_drain_test_world();
         world
             .insert_resource(Messages::<aberred_core::protocol::render_assets::RenderAssetCmd>::default());

@@ -7,8 +7,8 @@
 //! GL, no real audio thread (a stub `AudioBridge` is inserted instead, see
 //! [`aberred_core::protocol::endpoints::setup_audio_stub`]), and Lua only if
 //! [`TestWorldBuilder::with_lua`] is used. This is deliberately NOT a
-//! from-scratch minimal `World` (see `tests/engine_tick_integration.rs`'s
-//! `make_world` for what that looks like at scale) -- if this harness ever
+//! from-scratch minimal `World` like the ones per-system unit tests build
+//! -- if this harness ever
 //! forks the production construction path instead of calling into it, its
 //! green tests become lies about what the real engine does.
 //!

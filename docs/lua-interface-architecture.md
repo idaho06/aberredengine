@@ -1133,8 +1133,9 @@ Current callbacks: `on_setup`, `on_enter_play`, `on_switch_scene`, `on_update_<s
 
 ### Drift Protection
 
-Tests in `crates/aberredengine/tests/engine_tick_integration.rs` verify the meta schema stays in sync with the implementation:
+Tests in `crates/aberred-lua/tests/stub_generator_integration.rs` verify the meta schema stays in sync with the implementation:
 
+- `meta_table_has_functions_and_classes` — `__meta.functions`/`__meta.classes` exist and every function has `description`/`category`/`params`
 - `meta_types_table_is_populated` — all type entries have `description` + `fields` with `name`/`type`/`optional`
 - `meta_enums_table_is_populated` — hard-coded expected values for `Easing`, `LoopMode`, `BoxSide`, `Category`
 - `meta_callbacks_table_is_populated` — all callback entries have `params` with correct shapes
