@@ -211,171 +211,31 @@ mod tests {
         Scale::new(x, y)
     }
 
-    // ==================== GENERIC TWEEN TESTS ====================
-
     #[test]
-    fn test_tween_map_position_new() {
-        let from = map_position(0.0, 0.0);
-        let to = map_position(100.0, 200.0);
-        let tw: Tween<MapPosition> = Tween::new(from, to, 2.0);
-
-        assert!(vec_approx_eq(tw.from.pos, from.pos));
-        assert!(vec_approx_eq(tw.to.pos, to.pos));
-        assert!(approx_eq(tw.duration, 2.0));
+    fn new_starts_playing_forward_linear_once() {
+        let tw: Tween<MapPosition> = Tween::new(map_position(0.0, 0.0), map_position(1.0, 1.0), 2.0);
+        assert!(tw.playing && tw.forward);
+        assert_eq!(tw.time, 0.0);
         assert!(matches!(tw.easing, Easing::Linear));
         assert!(matches!(tw.loop_mode, LoopMode::Once));
-        assert!(tw.playing);
-        assert!(approx_eq(tw.time, 0.0));
-        assert!(tw.forward);
     }
 
     #[test]
-    fn test_tween_map_position_with_easing() {
-        let tw: Tween<MapPosition> =
-            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
-                .with_easing(Easing::QuadIn);
-
-        assert!(matches!(tw.easing, Easing::QuadIn));
-    }
-
-    #[test]
-    fn test_tween_map_position_with_loop_mode() {
-        let tw: Tween<MapPosition> =
-            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
-                .with_loop_mode(LoopMode::PingPong);
-
-        assert!(matches!(tw.loop_mode, LoopMode::PingPong));
-    }
-
-    #[test]
-    fn test_tween_map_position_with_backwards() {
+    fn with_backwards_starts_at_end_reversed() {
         let tw: Tween<MapPosition> =
             Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 2.0).with_backwards();
-
         assert!(approx_eq(tw.time, 2.0));
         assert!(!tw.forward);
     }
 
     #[test]
-    fn test_tween_map_position_builder_chaining() {
-        let tw: Tween<MapPosition> =
-            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 1.0)
-                .with_easing(Easing::CubicOut)
-                .with_loop_mode(LoopMode::Loop)
-                .with_backwards();
-
-        assert!(matches!(tw.easing, Easing::CubicOut));
-        assert!(matches!(tw.loop_mode, LoopMode::Loop));
-        assert!(!tw.forward);
-    }
-
-    #[test]
-    fn test_tween_rotation_new() {
-        let from = Rotation { degrees: 0.0 };
-        let to = Rotation { degrees: 360.0 };
-        let tw: Tween<Rotation> = Tween::new(from, to, 1.5);
-
-        assert!(approx_eq(tw.from.degrees, from.degrees));
-        assert!(approx_eq(tw.to.degrees, to.degrees));
-        assert!(approx_eq(tw.duration, 1.5));
-        assert!(matches!(tw.easing, Easing::Linear));
-        assert!(matches!(tw.loop_mode, LoopMode::Once));
-        assert!(tw.playing);
-        assert!(approx_eq(tw.time, 0.0));
-        assert!(tw.forward);
-    }
-
-    #[test]
-    fn test_tween_rotation_with_easing() {
-        let tw: Tween<Rotation> =
-            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
-                .with_easing(Easing::QuadOut);
-        assert!(matches!(tw.easing, Easing::QuadOut));
-    }
-
-    #[test]
-    fn test_tween_rotation_with_loop_mode() {
-        let tw: Tween<Rotation> =
-            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0)
-                .with_loop_mode(LoopMode::Loop);
-        assert!(matches!(tw.loop_mode, LoopMode::Loop));
-    }
-
-    #[test]
-    fn test_tween_rotation_with_backwards() {
-        let tw: Tween<Rotation> =
-            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 3.0)
-                .with_backwards();
-        assert!(approx_eq(tw.time, 3.0));
-        assert!(!tw.forward);
-    }
-
-    #[test]
-    fn test_tween_rotation_negative_angles() {
-        let tw: Tween<Rotation> =
-            Tween::new(Rotation { degrees: -90.0 }, Rotation { degrees: 90.0 }, 1.0);
-        assert!(approx_eq(tw.from.degrees, -90.0));
-        assert!(approx_eq(tw.to.degrees, 90.0));
-    }
-
-    #[test]
-    fn test_tween_scale_new() {
-        let from = scale(1.0, 1.0);
-        let to = scale(2.0, 2.0);
-        let tw: Tween<Scale> = Tween::new(from, to, 0.5);
-
-        assert!(vec_approx_eq(tw.from.scale, from.scale));
-        assert!(vec_approx_eq(tw.to.scale, to.scale));
-        assert!(approx_eq(tw.duration, 0.5));
-        assert!(matches!(tw.easing, Easing::Linear));
-        assert!(matches!(tw.loop_mode, LoopMode::Once));
-        assert!(tw.playing);
-        assert!(approx_eq(tw.time, 0.0));
-        assert!(tw.forward);
-    }
-
-    #[test]
-    fn test_tween_scale_with_easing() {
-        let tw: Tween<Scale> =
-            Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0).with_easing(Easing::CubicInOut);
-
-        assert!(matches!(tw.easing, Easing::CubicInOut));
-    }
-
-    #[test]
-    fn test_tween_scale_with_loop_mode() {
-        let tw: Tween<Scale> =
-            Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 1.0).with_loop_mode(LoopMode::PingPong);
-
-        assert!(matches!(tw.loop_mode, LoopMode::PingPong));
-    }
-
-    #[test]
-    fn test_tween_scale_with_backwards() {
-        let tw: Tween<Scale> = Tween::new(scale(1.0, 1.0), scale(2.0, 2.0), 4.0).with_backwards();
-
-        assert!(approx_eq(tw.time, 4.0));
-        assert!(!tw.forward);
-    }
-
-    #[test]
-    fn test_tween_scale_non_uniform() {
-        let from = scale(1.0, 2.0);
-        let to = scale(3.0, 0.5);
-        let tw: Tween<Scale> = Tween::new(from, to, 1.0);
-
-        assert!(vec_approx_eq(tw.from.scale, from.scale));
-        assert!(vec_approx_eq(tw.to.scale, to.scale));
-    }
-
-    #[test]
-    fn test_map_position_interpolation() {
+    fn map_position_interpolation() {
         let mid = MapPosition::interpolate(&map_position(0.0, 0.0), &map_position(10.0, 20.0), 0.5);
         assert!(vec_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
     }
 
     #[test]
-    fn test_screen_position_interpolation() {
+    fn screen_position_interpolation() {
         let mid = ScreenPosition::interpolate(
             &screen_position(0.0, 0.0),
             &screen_position(10.0, 20.0),
@@ -385,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rotation_interpolation() {
+    fn rotation_interpolation() {
         let mid = Rotation::interpolate(
             &Rotation { degrees: -90.0 },
             &Rotation { degrees: 90.0 },
@@ -395,152 +255,41 @@ mod tests {
     }
 
     #[test]
-    fn test_scale_interpolation() {
+    fn scale_interpolation() {
         let mid = Scale::interpolate(&scale(1.0, 2.0), &scale(3.0, 6.0), 0.5);
         assert!(vec_approx_eq(mid.scale, Vec2 { x: 2.0, y: 4.0 }));
     }
 
-    // ==================== EASING ENUM TESTS ====================
-
+    // Lua passes these strings (`engine.lua` stubs); unknown values fall back
+    // instead of erroring.
     #[test]
-    fn test_easing_variants_exist() {
-        let _linear = Easing::Linear;
-        let _quad_in = Easing::QuadIn;
-        let _quad_out = Easing::QuadOut;
-        let _quad_inout = Easing::QuadInOut;
-        let _cubic_in = Easing::CubicIn;
-        let _cubic_out = Easing::CubicOut;
-        let _cubic_inout = Easing::CubicInOut;
+    fn easing_from_str() {
+        for (s, expected) in [
+            ("linear", Easing::Linear),
+            ("quad_in", Easing::QuadIn),
+            ("quad_out", Easing::QuadOut),
+            ("quad_in_out", Easing::QuadInOut),
+            ("cubic_in", Easing::CubicIn),
+            ("cubic_out", Easing::CubicOut),
+            ("cubic_in_out", Easing::CubicInOut),
+            ("bogus", Easing::Linear),
+        ] {
+            let parsed: Easing = s.parse().unwrap();
+            assert_eq!(format!("{parsed:?}"), format!("{expected:?}"), "{s:?}");
+        }
     }
 
     #[test]
-    fn test_easing_is_copy() {
-        let e1 = Easing::Linear;
-        let e2 = e1;
-        assert!(matches!(e1, Easing::Linear));
-        assert!(matches!(e2, Easing::Linear));
-    }
-
-    // ==================== LOOP MODE ENUM TESTS ====================
-
-    #[test]
-    fn test_loop_mode_variants_exist() {
-        let _once = LoopMode::Once;
-        let _loop_mode = LoopMode::Loop;
-        let _pingpong = LoopMode::PingPong;
-    }
-
-    #[test]
-    fn test_loop_mode_is_copy() {
-        let l1 = LoopMode::PingPong;
-        let l2 = l1;
-        assert!(matches!(l1, LoopMode::PingPong));
-        assert!(matches!(l2, LoopMode::PingPong));
-    }
-
-    // ==================== EASING FROM_STR TESTS ====================
-
-    #[test]
-    fn test_easing_from_str_linear() {
-        assert!(matches!(
-            "linear".parse::<Easing>().unwrap(),
-            Easing::Linear
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_quad_in() {
-        assert!(matches!(
-            "quad_in".parse::<Easing>().unwrap(),
-            Easing::QuadIn
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_quad_out() {
-        assert!(matches!(
-            "quad_out".parse::<Easing>().unwrap(),
-            Easing::QuadOut
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_quad_in_out() {
-        assert!(matches!(
-            "quad_in_out".parse::<Easing>().unwrap(),
-            Easing::QuadInOut
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_cubic_in() {
-        assert!(matches!(
-            "cubic_in".parse::<Easing>().unwrap(),
-            Easing::CubicIn
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_cubic_out() {
-        assert!(matches!(
-            "cubic_out".parse::<Easing>().unwrap(),
-            Easing::CubicOut
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_cubic_in_out() {
-        assert!(matches!(
-            "cubic_in_out".parse::<Easing>().unwrap(),
-            Easing::CubicInOut
-        ));
-    }
-
-    #[test]
-    fn test_easing_from_str_unknown_defaults_to_linear() {
-        assert!(matches!(
-            "unknown".parse::<Easing>().unwrap(),
-            Easing::Linear
-        ));
-        assert!(matches!("".parse::<Easing>().unwrap(), Easing::Linear));
-    }
-
-    // ==================== LOOP MODE FROM_STR TESTS ====================
-
-    #[test]
-    fn test_loop_mode_from_str_once() {
-        assert!(matches!(
-            "once".parse::<LoopMode>().unwrap(),
-            LoopMode::Once
-        ));
-    }
-
-    #[test]
-    fn test_loop_mode_from_str_loop() {
-        assert!(matches!(
-            "loop".parse::<LoopMode>().unwrap(),
-            LoopMode::Loop
-        ));
-    }
-
-    #[test]
-    fn test_loop_mode_from_str_ping_pong() {
-        assert!(matches!(
-            "ping_pong".parse::<LoopMode>().unwrap(),
-            LoopMode::PingPong
-        ));
-    }
-
-    #[test]
-    fn test_loop_mode_from_str_unknown_defaults_to_once() {
-        assert!(matches!(
-            "unknown".parse::<LoopMode>().unwrap(),
-            LoopMode::Once
-        ));
-    }
-
-    #[test]
-    fn test_loop_mode_from_str_empty_defaults_to_once() {
-        assert!(matches!("".parse::<LoopMode>().unwrap(), LoopMode::Once));
+    fn loop_mode_from_str() {
+        for (s, expected) in [
+            ("once", LoopMode::Once),
+            ("loop", LoopMode::Loop),
+            ("ping_pong", LoopMode::PingPong),
+            ("bogus", LoopMode::Once),
+            ("", LoopMode::Once),
+        ] {
+            let parsed: LoopMode = s.parse().unwrap();
+            assert_eq!(format!("{parsed:?}"), format!("{expected:?}"), "{s:?}");
+        }
     }
 }

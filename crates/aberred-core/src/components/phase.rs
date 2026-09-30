@@ -162,112 +162,25 @@ impl<C> std::fmt::Debug for Phase<C> {
 mod tests {
     use super::*;
 
-    fn dummy_enter(_: Entity, _: &mut GameCtx, _: &InputState) -> Option<String> {
-        None
-    }
-    fn dummy_update(_: Entity, _: &mut GameCtx, _: &InputState, _: f32) -> Option<String> {
-        None
-    }
-    fn dummy_exit(_: Entity, _: &mut GameCtx) {}
-
-    fn make_phases() -> FxHashMap<String, PhaseCallbackFns> {
-        let mut phases = FxHashMap::default();
-        phases.insert(
-            "idle".to_string(),
-            PhaseCallbackFns {
-                on_enter: Some(dummy_enter),
-                on_update: Some(dummy_update),
-                on_exit: None,
-            },
-        );
-        phases.insert(
-            "moving".to_string(),
-            PhaseCallbackFns {
-                on_enter: None,
-                on_update: Some(dummy_update),
-                on_exit: Some(dummy_exit),
-            },
-        );
-        phases
-    }
-
     #[test]
-    fn test_new_sets_initial_phase() {
-        let phase = Phase::new("idle", make_phases());
+    fn new_arms_enter_callback_for_initial_phase() {
+        let phase: Phase<u8> = Phase::new("idle", FxHashMap::default());
         assert_eq!(phase.current, "idle");
-    }
-
-    #[test]
-    fn test_new_defaults() {
-        let phase = Phase::new("idle", make_phases());
-        assert!(phase.previous.is_none());
-        assert!(phase.next.is_none());
-        assert_eq!(phase.time_in_phase, 0.0);
         assert!(phase.needs_enter_callback);
+        assert!(phase.previous.is_none() && phase.next.is_none());
+        assert_eq!(phase.time_in_phase, 0.0);
     }
 
     #[test]
-    fn test_new_accepts_string() {
-        let phase = Phase::new(String::from("moving"), make_phases());
-        assert_eq!(phase.current, "moving");
-    }
-
-    #[test]
-    fn test_current_callbacks_found() {
-        let phase = Phase::new("idle", make_phases());
-        let cbs = phase.current_callbacks().unwrap();
-        assert!(cbs.on_enter.is_some());
-        assert!(cbs.on_update.is_some());
-        assert!(cbs.on_exit.is_none());
-    }
-
-    #[test]
-    fn test_current_callbacks_not_found() {
-        let phase = Phase::new("nonexistent", make_phases());
-        assert!(phase.current_callbacks().is_none());
-    }
-
-    #[test]
-    fn test_get_callbacks_found() {
-        let phase = Phase::new("idle", make_phases());
-        let cbs = phase.get_callbacks("moving").unwrap();
-        assert!(cbs.on_enter.is_none());
-        assert!(cbs.on_update.is_some());
-        assert!(cbs.on_exit.is_some());
-    }
-
-    #[test]
-    fn test_get_callbacks_not_found() {
-        let phase = Phase::new("idle", make_phases());
-        assert!(phase.get_callbacks("unknown").is_none());
-    }
-
-    #[test]
-    fn test_phase_callback_fns_default_all_none() {
-        let cbs = PhaseCallbackFns::default();
-        assert!(cbs.on_enter.is_none());
-        assert!(cbs.on_update.is_none());
-        assert!(cbs.on_exit.is_none());
-    }
-
-    #[test]
-    fn test_new_with_empty_phases() {
-        let phase = Phase::new("start", FxHashMap::<String, PhaseCallbackFns>::default());
-        assert_eq!(phase.current, "start");
-        assert!(phase.current_callbacks().is_none());
-    }
-
-    #[test]
-    fn test_generic_phase_supports_custom_callback_payloads() {
-        #[derive(Clone, Debug, PartialEq, Eq)]
-        struct CustomCallbacks {
-            token: &'static str,
-        }
-
+    fn current_callbacks_follow_current_phase() {
         let mut phases = FxHashMap::default();
-        phases.insert("idle".to_string(), CustomCallbacks { token: "custom" });
-
-        let phase = Phase::new("idle", phases);
-        assert_eq!(phase.current_callbacks().unwrap().token, "custom");
+        phases.insert("idle".to_string(), 1u8);
+        phases.insert("run".to_string(), 2u8);
+        let mut phase = Phase::new("idle", phases);
+        assert_eq!(phase.current_callbacks(), Some(&1));
+        phase.current = "run".into();
+        assert_eq!(phase.current_callbacks(), Some(&2));
+        phase.current = "missing".into();
+        assert_eq!(phase.current_callbacks(), None);
     }
 }

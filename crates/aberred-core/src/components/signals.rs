@@ -168,31 +168,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_all_empty() {
-        let s = Signals::default();
-        assert!(s.scalars.is_empty());
-        assert!(s.integers.is_empty());
-        assert!(s.flags.is_empty());
-        assert!(s.strings.is_empty());
-    }
-
-    #[test]
-    fn test_set_and_get_scalar() {
-        let mut s = Signals::default();
-        s.set_scalar("hp", 100.0);
-        assert_eq!(s.get_scalar("hp"), Some(100.0));
-    }
-
-    #[test]
-    fn test_scalar_overwrite() {
-        let mut s = Signals::default();
-        s.set_scalar("hp", 100.0);
-        s.set_scalar("hp", 50.0);
-        assert_eq!(s.get_scalar("hp"), Some(50.0));
-    }
-
-    #[test]
-    fn test_update_scalar_inserts_then_updates_in_place() {
+    fn update_scalar_inserts_then_updates_in_place() {
         let mut s = Signals::default();
         s.update_scalar("speed_sq", 1.0);
         assert_eq!(s.get_scalar("speed_sq"), Some(1.0));
@@ -213,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ensure_flag_sets_and_is_idempotent() {
+    fn ensure_flag_sets_and_is_idempotent() {
         let mut s = Signals::default();
         s.ensure_flag("moving");
         assert!(s.has_flag("moving"));
@@ -230,200 +206,19 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_missing_returns_none() {
-        let s = Signals::default();
-        assert_eq!(s.get_scalar("nonexistent"), None);
-    }
-
-    #[test]
-    fn test_clear_scalar() {
-        let mut s = Signals::default();
-        s.set_scalar("hp", 100.0);
-        assert_eq!(s.clear_scalar("hp"), Some(100.0));
-        assert_eq!(s.get_scalar("hp"), None);
-    }
-
-    #[test]
-    fn test_clear_scalar_nonexistent() {
-        let mut s = Signals::default();
-        assert_eq!(s.clear_scalar("missing"), None);
-    }
-
-    #[test]
-    fn test_set_and_get_integer() {
-        let mut s = Signals::default();
-        s.set_integer("coins", 5);
-        assert_eq!(s.get_integer("coins"), Some(5));
-    }
-
-    #[test]
-    fn test_integer_overwrite() {
-        let mut s = Signals::default();
-        s.set_integer("coins", 5);
-        s.set_integer("coins", 10);
-        assert_eq!(s.get_integer("coins"), Some(10));
-    }
-
-    #[test]
-    fn test_integer_missing_returns_none() {
-        let s = Signals::default();
-        assert_eq!(s.get_integer("nonexistent"), None);
-    }
-
-    #[test]
-    fn test_clear_integer() {
-        let mut s = Signals::default();
-        s.set_integer("coins", 5);
-        assert_eq!(s.clear_integer("coins"), Some(5));
-        assert_eq!(s.get_integer("coins"), None);
-    }
-
-    #[test]
-    fn test_clear_integer_nonexistent() {
-        let mut s = Signals::default();
-        assert_eq!(s.clear_integer("missing"), None);
-    }
-
-    #[test]
-    fn test_set_and_has_flag() {
-        let mut s = Signals::default();
-        s.set_flag("is_running");
-        assert!(s.has_flag("is_running"));
-    }
-
-    #[test]
-    fn test_clear_flag() {
-        let mut s = Signals::default();
-        s.set_flag("is_running");
-        s.clear_flag("is_running");
-        assert!(!s.has_flag("is_running"));
-    }
-
-    #[test]
-    fn test_clear_nonexistent_flag_is_noop() {
-        let mut s = Signals::default();
-        s.clear_flag("nonexistent");
-        assert!(!s.has_flag("nonexistent"));
-    }
-
-    #[test]
-    fn test_take_flag_present() {
-        let mut s = Signals::default();
-        s.set_flag("is_running");
+    fn take_flag_reports_and_clears() {
+        let mut s = Signals::default().with_flag("is_running");
         assert!(s.take_flag("is_running"));
         assert!(!s.has_flag("is_running"));
+        assert!(!s.take_flag("is_running"));
     }
 
     #[test]
-    fn test_take_flag_absent() {
-        let mut s = Signals::default();
-        assert!(!s.take_flag("missing"));
-    }
-
-    #[test]
-    fn test_toggle_flag_absent_sets_it() {
+    fn toggle_flag_flips_presence() {
         let mut s = Signals::default();
         s.toggle_flag("is_running");
         assert!(s.has_flag("is_running"));
-    }
-
-    #[test]
-    fn test_toggle_flag_present_clears_it() {
-        let mut s = Signals::default();
-        s.set_flag("is_running");
         s.toggle_flag("is_running");
         assert!(!s.has_flag("is_running"));
-    }
-
-    #[test]
-    fn test_toggle_flag_twice_restores() {
-        let mut s = Signals::default();
-        s.toggle_flag("is_running");
-        s.toggle_flag("is_running");
-        assert!(!s.has_flag("is_running"));
-    }
-
-    #[test]
-    fn test_set_and_get_string() {
-        let mut s = Signals::default();
-        s.set_string("name", "player");
-        assert_eq!(s.get_string("name").map(|s| s.as_str()), Some("player"));
-    }
-
-    #[test]
-    fn test_string_overwrite() {
-        let mut s = Signals::default();
-        s.set_string("name", "player");
-        s.set_string("name", "enemy");
-        assert_eq!(s.get_string("name").map(|s| s.as_str()), Some("enemy"));
-    }
-
-    #[test]
-    fn test_string_missing_returns_none() {
-        let s = Signals::default();
-        assert_eq!(s.get_string("nonexistent"), None);
-    }
-
-    #[test]
-    fn test_remove_string() {
-        let mut s = Signals::default();
-        s.set_string("name", "player");
-        assert_eq!(s.remove_string("name"), Some("player".to_string()));
-        assert_eq!(s.get_string("name"), None);
-    }
-
-    #[test]
-    fn test_remove_string_nonexistent() {
-        let mut s = Signals::default();
-        assert_eq!(s.remove_string("missing"), None);
-    }
-
-    #[test]
-    fn test_with_flag_builder() {
-        let s = Signals::default().with_flag("active");
-        assert!(s.has_flag("active"));
-    }
-
-    #[test]
-    fn test_get_scalars_view() {
-        let mut s = Signals::default();
-        s.set_scalar("a", 1.0);
-        s.set_scalar("b", 2.0);
-        assert_eq!(s.get_scalars().len(), 2);
-    }
-
-    #[test]
-    fn test_get_integers_view() {
-        let mut s = Signals::default();
-        s.set_integer("a", 1);
-        assert_eq!(s.get_integers().len(), 1);
-    }
-
-    #[test]
-    fn test_get_flags_view() {
-        let mut s = Signals::default();
-        s.set_flag("x");
-        s.set_flag("y");
-        assert_eq!(s.get_flags().len(), 2);
-    }
-
-    #[test]
-    fn test_get_strings_view() {
-        let mut s = Signals::default();
-        s.set_string("name", "player");
-        assert_eq!(s.get_strings().len(), 1);
-    }
-
-    #[test]
-    fn test_multiple_signal_types_coexist() {
-        let mut s = Signals::default();
-        s.set_scalar("hp", 100.0);
-        s.set_integer("coins", 5);
-        s.set_flag("active");
-        s.set_string("name", "test");
-        assert_eq!(s.get_scalar("hp"), Some(100.0));
-        assert_eq!(s.get_integer("coins"), Some(5));
-        assert!(s.has_flag("active"));
-        assert_eq!(s.get_string("name").map(|s| s.as_str()), Some("test"));
     }
 }

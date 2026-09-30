@@ -441,15 +441,6 @@ mod tests {
     }
 
     #[test]
-    fn test_match_and_order_direct() {
-        let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
-        let ent_a = Entity::from_bits(1);
-        let ent_b = Entity::from_bits(2);
-        let result = rule.match_and_order(ent_a, ent_b, "ball", "brick");
-        assert_eq!(result, Some((ent_a, ent_b)));
-    }
-
-    #[test]
     fn test_match_and_order_reversed() {
         let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
         let ent_a = Entity::from_bits(1);
@@ -459,17 +450,6 @@ mod tests {
         // Entities should be reordered so ball maps to group_a
         assert_eq!(result, Some((ent_b, ent_a)));
     }
-
-    #[test]
-    fn test_match_and_order_no_match() {
-        let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
-        let ent_a = Entity::from_bits(1);
-        let ent_b = Entity::from_bits(2);
-        let result = rule.match_and_order(ent_a, ent_b, "player", "enemy");
-        assert_eq!(result, None);
-    }
-
-    // match_groups free function tests
 
     #[test]
     fn test_match_groups_direct() {

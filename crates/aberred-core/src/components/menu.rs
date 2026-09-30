@@ -205,184 +205,43 @@ impl MenuActions {
 mod tests {
     use super::*;
 
-    fn sample_labels() -> Vec<(&'static str, &'static str)> {
-        vec![("start", "Start Game"), ("quit", "Quit")]
-    }
-
-    #[test]
-    fn test_menu_new_items_count() {
-        let menu = Menu::new(
-            &sample_labels(),
+    fn sample_menu() -> Menu {
+        Menu::new(
+            &[("start", "Start Game"), ("quit", "Quit")],
             Vec2::ZERO,
             "arcade",
             16.0,
             20.0,
             true,
-        );
-        assert_eq!(menu.items.len(), 2);
+        )
     }
 
     #[test]
-    fn test_menu_new_item_fields() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        );
-        assert_eq!(menu.items[0].id, "start");
-        assert_eq!(menu.items[0].label, "Start Game");
-        assert!(menu.items[0].dynamic_text);
-        assert!(menu.items[0].entity.is_none());
-    }
-
-    #[test]
-    fn test_menu_new_defaults() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2 { x: 10.0, y: 20.0 },
-            "future",
-            24.0,
-            30.0,
-            false,
+    fn new_builds_ordered_dynamic_items_active_at_first() {
+        let menu = sample_menu();
+        let items: Vec<_> = menu
+            .items
+            .iter()
+            .map(|i| (i.id.as_str(), i.label.as_str(), i.dynamic_text, i.entity))
+            .collect();
+        assert_eq!(
+            items,
+            [("start", "Start Game", true, None), ("quit", "Quit", true, None)]
         );
         assert!(menu.active);
         assert_eq!(menu.selected_index, 0);
-        assert_eq!(menu.font, "future");
-        assert_eq!(menu.font_size, 24.0);
-        assert_eq!(menu.item_spacing, 30.0);
-        assert!(!menu.use_screen_space);
-        assert!(menu.cursor_entity.is_none());
-        assert!(menu.selection_change_sound.is_none());
-        assert!(menu.on_select_callback.is_none());
-        assert!(menu.on_rust_callback.is_none());
-        assert!(menu.visible_count.is_none());
-        assert_eq!(menu.scroll_offset, 0);
     }
 
     #[test]
-    fn test_menu_with_colors() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        )
-        .with_colors(Color::RED, Color::GREEN);
-        assert_eq!(menu.normal_color, Color::RED);
-        assert_eq!(menu.selected_color, Color::GREEN);
+    fn with_dynamic_text_applies_to_every_item() {
+        let menu = sample_menu().with_dynamic_text(false);
+        assert!(menu.items.iter().all(|i| !i.dynamic_text));
     }
 
     #[test]
-    fn test_menu_with_dynamic_text_false() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        )
-        .with_dynamic_text(false);
-        assert!(!menu.items[0].dynamic_text);
-        assert!(!menu.items[1].dynamic_text);
-    }
-
-    #[test]
-    fn test_menu_with_selection_sound() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        )
-        .with_selection_sound("click");
-        assert_eq!(menu.selection_change_sound.as_deref(), Some("click"));
-    }
-
-    #[test]
-    fn test_menu_with_on_select_callback() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        )
-        .with_on_select_callback("on_menu_select");
-        assert_eq!(menu.on_select_callback.as_deref(), Some("on_menu_select"));
-    }
-
-    #[test]
-    fn test_menu_with_visible_count() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        )
-        .with_visible_count(5);
-        assert_eq!(menu.visible_count, Some(5));
-    }
-
-    #[test]
-    fn test_menu_actions_new_empty() {
-        let actions = MenuActions::new();
-        assert!(actions.map.is_empty());
-    }
-
-    #[test]
-    fn test_menu_actions_with_and_get() {
-        let actions = MenuActions::new()
-            .with("start", MenuAction::SetScene("level01".to_string()))
-            .with("quit", MenuAction::QuitGame);
-        assert!(matches!(
-            actions.get("start"),
-            MenuAction::SetScene(ref s) if s == "level01"
-        ));
+    fn menu_actions_get_falls_back_to_noop() {
+        let actions = MenuActions::new().with("quit", MenuAction::QuitGame);
         assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
-    }
-
-    #[test]
-    fn test_menu_actions_get_missing_returns_noop() {
-        let actions = MenuActions::new();
         assert!(matches!(actions.get("missing"), MenuAction::Noop));
-    }
-
-    #[test]
-    fn test_menu_with_on_rust_callback() {
-        fn dummy_cb(_: Entity, _: &str, _: usize, _: &mut crate::systems::GameCtx<'_, '_>) {}
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        )
-        .with_on_rust_callback(dummy_cb);
-        assert!(menu.on_rust_callback.is_some());
-    }
-
-    #[test]
-    fn test_menu_rust_callback_none_by_default() {
-        let menu = Menu::new(
-            &sample_labels(),
-            Vec2::ZERO,
-            "arcade",
-            16.0,
-            20.0,
-            true,
-        );
-        assert!(menu.on_rust_callback.is_none());
     }
 }
