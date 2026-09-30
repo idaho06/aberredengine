@@ -30,7 +30,8 @@ const GAMEPAD_AXIS_COUNT: i32 = 6;
 /// directly via raylib's FFI (`IsKeyDown`/`IsMouseButtonDown` take a bare
 /// `int`, not the `KeyboardKey`/`MouseButton` enum) rather than a
 /// hand-maintained key table -- ~355 cheap FFI calls/frame, negligible, and
-/// zero-maintenance if raylib ever adds keys.
+/// zero-maintenance if raylib ever adds keys. The polling loops live in
+/// [`fill_snapshot`]; [`RaylibDevice`] is the FFI side.
 ///
 /// Must run on the thread that owns the raylib window. Touches no ECS state.
 fn sample_raw_device_snapshot(
@@ -38,6 +39,56 @@ fn sample_raw_device_snapshot(
     window_w: i32,
     window_h: i32,
 ) -> RawDeviceSnapshot {
+    fill_snapshot(&RaylibDevice(rl), window_w, window_h)
+}
+
+/// The raw device queries [`fill_snapshot`] makes, so its polling loops can
+/// run against a fake device in tests.
+trait RawDevice {
+    fn key_down(&self, code: i32) -> bool;
+    fn mouse_button_down(&self, button: i32) -> bool;
+    fn mouse_wheel(&self) -> f32;
+    fn mouse_position(&self) -> (f32, f32);
+    fn gamepad_available(&self, pad: i32) -> bool;
+    fn gamepad_button_down(&self, pad: i32, button: i32) -> bool;
+    fn gamepad_axis(&self, pad: i32, axis: i32) -> f32;
+}
+
+/// raylib's live input state; one FFI/handle call per query.
+struct RaylibDevice<'a>(&'a raylib::RaylibHandle);
+
+// SAFETY (every FFI call below): these read raylib's in-memory key/mouse/
+// gamepad state arrays; no preconditions beyond an initialized window, which
+// holding a `RaylibHandle` on the render thread guarantees.
+impl RawDevice for RaylibDevice<'_> {
+    fn key_down(&self, code: i32) -> bool {
+        unsafe { raylib::ffi::IsKeyDown(code) }
+    }
+    fn mouse_button_down(&self, button: i32) -> bool {
+        unsafe { raylib::ffi::IsMouseButtonDown(button) }
+    }
+    fn mouse_wheel(&self) -> f32 {
+        self.0.get_mouse_wheel_move()
+    }
+    fn mouse_position(&self) -> (f32, f32) {
+        let pos = self.0.get_mouse_position();
+        (pos.x, pos.y)
+    }
+    fn gamepad_available(&self, pad: i32) -> bool {
+        unsafe { raylib::ffi::IsGamepadAvailable(pad) }
+    }
+    fn gamepad_button_down(&self, pad: i32, button: i32) -> bool {
+        unsafe { raylib::ffi::IsGamepadButtonDown(pad, button) }
+    }
+    fn gamepad_axis(&self, pad: i32, axis: i32) -> f32 {
+        unsafe { raylib::ffi::GetGamepadAxisMovement(pad, axis) }
+    }
+}
+
+/// Build one frame's [`RawDeviceSnapshot`] by polling every key code
+/// `0..=MAX_KEY_CODE`, mouse button `0..MOUSE_BUTTON_COUNT`, and, per
+/// connected pad, buttons `1..=MAX_GAMEPAD_BUTTON` plus every axis.
+fn fill_snapshot(device: &impl RawDevice, window_w: i32, window_h: i32) -> RawDeviceSnapshot {
     let mut raw = RawDeviceSnapshot {
         window_w,
         window_h,
@@ -45,30 +96,22 @@ fn sample_raw_device_snapshot(
     };
 
     for code in 0..=MAX_KEY_CODE {
-        // SAFETY: IsKeyDown reads raylib's in-memory key-state array; no
-        // preconditions beyond an initialized window, which the render
-        // thread guarantees.
-        if unsafe { raylib::ffi::IsKeyDown(code as i32) } {
+        if device.key_down(code as i32) {
             raw.set_key(code);
         }
     }
 
     for button in 0..MOUSE_BUTTON_COUNT {
-        // SAFETY: same as IsKeyDown above.
-        if unsafe { raylib::ffi::IsMouseButtonDown(button as i32) } {
+        if device.mouse_button_down(button as i32) {
             raw.set_mouse_button(button);
         }
     }
 
-    raw.scroll_y = rl.get_mouse_wheel_move();
-    let mouse_pos = rl.get_mouse_position();
-    raw.mouse_x = mouse_pos.x;
-    raw.mouse_y = mouse_pos.y;
+    raw.scroll_y = device.mouse_wheel();
+    (raw.mouse_x, raw.mouse_y) = device.mouse_position();
 
     for pad in 0..MAX_GAMEPADS as i32 {
-        // SAFETY: same as IsKeyDown above -- reads raylib's in-memory
-        // gamepad-state array, requires only an initialized window.
-        let connected = unsafe { raylib::ffi::IsGamepadAvailable(pad) };
+        let connected = device.gamepad_available(pad);
         let slot = &mut raw.gamepads[pad as usize];
         slot.connected = connected;
         if !connected {
@@ -78,14 +121,12 @@ fn sample_raw_device_snapshot(
             continue;
         }
         for button in 1..=MAX_GAMEPAD_BUTTON {
-            // SAFETY: same as IsGamepadAvailable above.
-            if unsafe { raylib::ffi::IsGamepadButtonDown(pad, button) } {
+            if device.gamepad_button_down(pad, button) {
                 slot.set_button(button as u32);
             }
         }
         for axis in 0..GAMEPAD_AXIS_COUNT {
-            // SAFETY: same as IsGamepadAvailable above.
-            slot.axes[axis as usize] = unsafe { raylib::ffi::GetGamepadAxisMovement(pad, axis) };
+            slot.axes[axis as usize] = device.gamepad_axis(pad, axis);
         }
     }
 
@@ -137,5 +178,103 @@ pub fn sample_and_send_input(
     if aberred_core::pacing::send_channel_disconnected(&result) {
         log::error!("Logic thread disconnected; shutting down");
         quit.0 = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aberred_core::protocol::raw_input::RawGamepad;
+    use rustc_hash::FxHashSet;
+
+    /// Device whose held keys/buttons include out-of-range codes too, so a
+    /// test can tell a skipped code from an unpolled one.
+    #[derive(Default)]
+    struct FakeDevice {
+        keys: FxHashSet<i32>,
+        mouse: FxHashSet<i32>,
+        connected: FxHashSet<i32>,
+        pad_buttons: FxHashSet<(i32, i32)>,
+    }
+
+    impl RawDevice for FakeDevice {
+        fn key_down(&self, code: i32) -> bool {
+            self.keys.contains(&code)
+        }
+        fn mouse_button_down(&self, button: i32) -> bool {
+            self.mouse.contains(&button)
+        }
+        fn mouse_wheel(&self) -> f32 {
+            -1.5
+        }
+        fn mouse_position(&self) -> (f32, f32) {
+            (12.0, 34.0)
+        }
+        fn gamepad_available(&self, pad: i32) -> bool {
+            self.connected.contains(&pad)
+        }
+        fn gamepad_button_down(&self, pad: i32, button: i32) -> bool {
+            self.pad_buttons.contains(&(pad, button))
+        }
+        fn gamepad_axis(&self, pad: i32, axis: i32) -> f32 {
+            (pad * 10 + axis) as f32 / 100.0
+        }
+    }
+
+    #[test]
+    fn keys_and_mouse_buttons_are_polled_over_the_full_raylib_range_only() {
+        let device = FakeDevice {
+            keys: [0, 63, 64, 348, 349].into_iter().collect(),
+            mouse: [0, 6, 7].into_iter().collect(),
+            ..Default::default()
+        };
+
+        let raw = fill_snapshot(&device, 800, 600);
+
+        for code in [0, 63, 64, 348] {
+            assert!(raw.is_key_down(code), "key {code}");
+        }
+        assert!(!raw.is_key_down(349), "beyond KEY_KB_MENU");
+        assert!(!raw.is_key_down(1));
+        assert!(raw.is_mouse_button_down(0) && raw.is_mouse_button_down(6));
+        assert!(!raw.is_mouse_button_down(7), "beyond MOUSE_BUTTON_BACK");
+        assert_eq!((raw.window_w, raw.window_h), (800, 600));
+        assert_eq!((raw.mouse_x, raw.mouse_y, raw.scroll_y), (12.0, 34.0, -1.5));
+    }
+
+    #[test]
+    fn connected_pads_report_buttons_1_to_17_and_all_axes_disconnected_read_zero() {
+        let device = FakeDevice {
+            connected: [0].into_iter().collect(),
+            pad_buttons: [(0, 0), (0, 1), (0, 17), (0, 18), (1, 1)].into_iter().collect(),
+            ..Default::default()
+        };
+
+        let raw = fill_snapshot(&device, 0, 0);
+
+        let pad = raw.gamepads[0];
+        assert!(pad.connected);
+        assert!(pad.is_button_down(1) && pad.is_button_down(17));
+        assert!(!pad.is_button_down(0), "GAMEPAD_BUTTON_UNKNOWN is skipped");
+        assert!(!pad.is_button_down(18), "beyond GAMEPAD_BUTTON_RIGHT_THUMB");
+        assert_eq!(pad.axes, [0.0, 0.01, 0.02, 0.03, 0.04, 0.05]);
+        for disconnected in &raw.gamepads[1..] {
+            assert_eq!(*disconnected, RawGamepad::default());
+        }
+    }
+
+    #[test]
+    fn polling_ranges_match_raylibs_enums() {
+        use raylib::ffi;
+        assert_eq!(MAX_KEY_CODE, ffi::KeyboardKey::KEY_KB_MENU as u32);
+        assert_eq!(MOUSE_BUTTON_COUNT, ffi::MouseButton::MOUSE_BUTTON_BACK as u8 + 1);
+        assert_eq!(
+            MAX_GAMEPAD_BUTTON,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB as i32
+        );
+        assert_eq!(
+            GAMEPAD_AXIS_COUNT,
+            ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER as i32 + 1
+        );
     }
 }
