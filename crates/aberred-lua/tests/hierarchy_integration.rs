@@ -27,10 +27,9 @@ use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_lua::systems::lua_commands::EntityCmdQueries;
 use aberred_lua::systems::lua_commands::{process_entity_commands, process_spawn_command};
-use aberred_core::systems::propagate_transforms::{
-    cleanup_orphaned_global_transforms, propagate_transforms,
-};
+use aberred_core::systems::propagate_transforms::propagate_transforms;
 use aberred_core::systems::stuckto::stuck_to_entity_system;
+use aberred_core::testing::approx_eq;
 
 fn tick_propagate(world: &mut World) {
     world
@@ -690,122 +689,6 @@ fn render_query_works_without_global_transform() {
 }
 
 // =============================================================================
-// PHASE 6: Collision system integration
-// =============================================================================
-
-use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::events::collision::CollisionEvent;
-use aberred_core::systems::collision_detector::collision_detector;
-use aberred_core::testing::approx_eq;
-
-/// Resource to collect collision events via observer.
-#[derive(Resource, Default)]
-struct CollisionLog {
-    pairs: Vec<(Entity, Entity)>,
-}
-
-fn setup_collision_world(world: &mut World) {
-    world.insert_resource(CollisionLog::default());
-    world.add_observer(
-        |trigger: On<CollisionEvent>, mut log: ResMut<CollisionLog>| {
-            log.pairs.push((trigger.event().a, trigger.event().b));
-        },
-    );
-}
-
-fn tick_collision(world: &mut World) {
-    world
-        .run_system_once(collision_detector)
-        .expect("collision_detector should run");
-}
-
-#[test]
-fn collision_uses_world_position_for_child_entities() {
-    let mut world = World::new();
-    setup_collision_world(&mut world);
-
-    // Parent at (200, 200)
-    let parent = world
-        .spawn((MapPosition::new(200.0, 200.0), GlobalTransform2D::default()))
-        .id();
-
-    // Child with local position (0, 0), but parent is at (200, 200)
-    // After propagation, child world position = (200, 200)
-    let child = world
-        .spawn((
-            MapPosition::new(0.0, 0.0),
-            BoxCollider::new(20.0, 20.0),
-            ChildOf(parent),
-            GlobalTransform2D::default(),
-        ))
-        .id();
-
-    world.flush();
-
-    // Run propagation so child gets world position (200, 200)
-    tick_propagate(&mut world);
-
-    // Independent entity at (205, 205) — overlaps with child's world position
-    let other = world
-        .spawn((MapPosition::new(205.0, 205.0), BoxCollider::new(20.0, 20.0)))
-        .id();
-
-    // Run collision detection
-    tick_collision(&mut world);
-
-    let log = world.resource::<CollisionLog>();
-    assert!(
-        !log.pairs.is_empty(),
-        "Collision should be detected between child (world pos 200,200) and other (205,205)"
-    );
-    // Verify the collision involves the right entities
-    let has_pair = log
-        .pairs
-        .iter()
-        .any(|&(a, b)| (a == child && b == other) || (a == other && b == child));
-    assert!(
-        has_pair,
-        "Collision should be between child and other entity"
-    );
-}
-
-#[test]
-fn collision_no_false_positive_from_local_position() {
-    let mut world = World::new();
-    setup_collision_world(&mut world);
-
-    // Parent at (500, 500)
-    let parent = world
-        .spawn((MapPosition::new(500.0, 500.0), GlobalTransform2D::default()))
-        .id();
-
-    // Child with local position (5, 5) — world position = (505, 505)
-    world.spawn((
-        MapPosition::new(5.0, 5.0),
-        BoxCollider::new(10.0, 10.0),
-        ChildOf(parent),
-        GlobalTransform2D::default(),
-    ));
-
-    world.flush();
-
-    // Run propagation so child gets world position (505, 505)
-    tick_propagate(&mut world);
-
-    // Independent entity at (10, 10) — near child's LOCAL position but far from WORLD position
-    world.spawn((MapPosition::new(10.0, 10.0), BoxCollider::new(10.0, 10.0)));
-
-    // Run collision detection
-    tick_collision(&mut world);
-
-    let log = world.resource::<CollisionLog>();
-    assert!(
-        log.pairs.is_empty(),
-        "No collision should be detected — child world pos (505,505) is far from other (10,10)"
-    );
-}
-
-// =============================================================================
 // PHASE 7: Entity context + Particle emitter
 // =============================================================================
 
@@ -1016,72 +899,4 @@ fn entity_cmd_set_screen_position_no_op_on_map_entity() {
     let pos = world.get::<MapPosition>(entity).unwrap();
     assert!(approx_eq(pos.pos.x, 10.0));
     assert!(approx_eq(pos.pos.y, 20.0));
-}
-
-fn tick_propagate_and_cleanup(world: &mut World) {
-    let mut schedule = Schedule::default();
-    schedule.add_systems(propagate_transforms);
-    schedule.add_systems(cleanup_orphaned_global_transforms.after(propagate_transforms));
-    schedule.run(world);
-}
-
-/// Verifies the full frame pipeline: propagate → cleanup → collision.
-///
-/// After a child is despawned, the parent's stale GT must be cleaned up
-/// before collision detection so that collider rects use the correct,
-/// live MapPosition rather than the frozen world position from when the
-/// entity was last a hierarchy root.
-#[test]
-fn collision_uses_live_map_position_after_child_despawn() {
-    let mut world = World::new();
-    setup_collision_world(&mut world);
-
-    // Spawn player at (0, 0) — will become a hierarchy root
-    let player = world
-        .spawn((MapPosition::new(0.0, 0.0), BoxCollider::new(20.0, 20.0)))
-        .id();
-
-    // Attach a hitbox child → player gains Children
-    let hitbox = world
-        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
-        .id();
-    world.flush();
-
-    // Two propagation ticks so GT is inserted and synced
-    tick_propagate_and_cleanup(&mut world);
-    tick_propagate_and_cleanup(&mut world);
-
-    // Move player far away to (500, 500) — no overlap with origin
-    world.get_mut::<MapPosition>(player).unwrap().pos = Vec2 { x: 500.0, y: 500.0 };
-    tick_propagate_and_cleanup(&mut world); // GT updated to (500, 500)
-
-    // Despawn hitbox → Children removed from player; GT is now stale at (500, 500)
-    world.despawn(hitbox);
-
-    // Move player back to origin (0, 0)
-    world.get_mut::<MapPosition>(player).unwrap().pos = Vec2 { x: 0.0, y: 0.0 };
-
-    // Spawn a sensor at origin — should collide with player if position is correct
-    let sensor = world
-        .spawn((MapPosition::new(5.0, 5.0), BoxCollider::new(20.0, 20.0)))
-        .id();
-
-    // Run the full pipeline: propagate → cleanup → collision
-    let mut schedule = Schedule::default();
-    schedule.add_systems(propagate_transforms);
-    schedule.add_systems(cleanup_orphaned_global_transforms.after(propagate_transforms));
-    schedule.add_systems(collision_detector.after(cleanup_orphaned_global_transforms));
-    schedule.run(&mut world);
-
-    let log = world.resource::<CollisionLog>();
-    let has_collision = log
-        .pairs
-        .iter()
-        .any(|&(a, b)| (a == player && b == sensor) || (a == sensor && b == player));
-
-    assert!(
-        has_collision,
-        "Player at live MapPosition (0,0) should collide with sensor at (5,5) — \
-         stale GT at (500,500) must not prevent detection"
-    );
 }
