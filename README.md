@@ -86,6 +86,10 @@ Prerequisites:
 
 - Rust stable (rustup recommended)
 - On Linux, the native Raylib dependency may need system packages; see the Wayland section below
+- [`just`](https://github.com/casey/just), the task runner for the test/lint gate (`cargo install just`, or your
+  package manager: `pacman -S just`, `apt install just`, `brew install just`, `winget install Casey.Just`)
+- Optional, for coverage reports: [`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov)
+  (`cargo install cargo-llvm-cov`)
 
 Quick start:
 
@@ -93,10 +97,22 @@ Quick start:
 cargo run
 ```
 
-Run tests:
+Run tests (recipes live in the workspace-root `justfile`):
+
+```bash
+just check      # full gate: tests with/without Lua and with the test-support harness, plus clippy
+just test-fast  # quick inner loop: cargo test --features test-support
+just cov        # line-coverage summary (needs cargo-llvm-cov); just cov-html for an HTML report
+```
+
+`just check` stops at the first failure. It runs, in order:
 
 ```bash
 cargo test
+cargo test --features test-support
+cargo test --no-default-features --features test-support
+cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets --no-default-features
 ```
 
 Build without Lua support:
