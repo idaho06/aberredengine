@@ -8,7 +8,6 @@ use crossbeam_channel::{Receiver, Sender};
 use log::info;
 use raylib::core::audio::RaylibAudio;
 use raylib::ffi;
-use rustc_hash::FxHashMap;
 
 use aberred_core::pacing::{Pacer, StatsWindow};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -41,6 +40,8 @@ use super::pipeline::{despawn_all, drain_cmds, pump_fx, pump_music, unload_all_f
 /// channel disconnects), at which point it unloads resources and exits
 /// cleanly.
 pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, audio_hz: f64) {
+    // Declared before `world` so it drops after it: raylib requires the
+    // device to outlive every Music/Sound handle in the world's AudioStore.
     let device = match RaylibAudio::init_audio_device() {
         Ok(device) => device,
         Err(e) => {
@@ -53,22 +54,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
         std::thread::current().id()
     );
 
-    let mut world = World::new();
-    world.insert_non_send(AudioStore {
-        device,
-        music: FxHashMap::default(),
-        fx: FxHashMap::default(),
-    });
-    world.insert_resource(CmdReceiver(rx_cmd));
-    world.insert_resource(MsgSender(tx_evt));
-    world.insert_resource(ShouldExit::default());
-
-    let mut schedule = Schedule::default();
-    schedule.set_executor(SingleThreadedExecutor::new());
-    schedule.add_systems((drain_cmds, pump_music, pump_fx).chain());
-    schedule
-        .initialize(&mut world)
-        .expect("audio schedule initialize");
+    let (mut world, mut schedule) = build_world(rx_cmd, tx_evt);
 
     let mut pacer = Pacer::new(audio_hz);
     // Rolls up schedule-run work time into a ThreadStats once per
@@ -104,10 +90,33 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
     );
 
     teardown(&mut world);
+    drop(world);
+    drop(device);
+}
+
+/// Build the audio world (empty NonSend [`AudioStore`], command/message
+/// channel resources, exit flag) and its initialized single-threaded
+/// `drain_cmds -> pump_music -> pump_fx` schedule. Opens no audio device --
+/// that is `audio_thread`'s job, which keeps the device alive for as long
+/// as this world exists.
+pub fn build_world(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>) -> (World, Schedule) {
+    let mut world = World::new();
+    world.insert_non_send(AudioStore::default());
+    world.insert_resource(CmdReceiver(rx_cmd));
+    world.insert_resource(MsgSender(tx_evt));
+    world.insert_resource(ShouldExit::default());
+
+    let mut schedule = Schedule::default();
+    schedule.set_executor(SingleThreadedExecutor::new());
+    schedule.add_systems((drain_cmds, pump_music, pump_fx).chain());
+    schedule
+        .initialize(&mut world)
+        .expect("audio schedule initialize");
+    (world, schedule)
 }
 
 /// Drain and unload every remaining `PlayingFx`/`MusicTrack` entity before
-/// the `AudioStore` (and its `device`) drops. A safety net, not the primary
+/// the `AudioStore` (and then the device) drops. A safety net, not the primary
 /// unload path -- `Shutdown`/`UnloadAllFx`/`UnloadAllMusic` already unload
 /// everything via `drain_cmds` in the common case. Reuses the same
 /// `systems.rs` helpers those command handlers use, rather than
@@ -126,6 +135,30 @@ fn teardown(world: &mut World) {
         unsafe { ffi::UnloadSound(sound) };
     }
 
-    // `AudioStore` (and its `device`) drops when `world` drops at the end of
-    // `audio_thread`, after every Music/Sound handle above has been unloaded.
+    // `world` (and its `AudioStore`) drops at the end of `audio_thread`,
+    // after every Music/Sound handle above has been unloaded and before the
+    // device.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The audio world and its schedule need no audio device -- only
+    /// `audio_thread` itself opens one.
+    #[test]
+    fn build_world_runs_headless_and_exits_on_disconnect() {
+        let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioCmd>();
+        let (tx_evt, _rx_evt) = crossbeam_channel::unbounded::<AudioMessage>();
+        let (mut world, mut schedule) = build_world(rx_cmd, tx_evt);
+
+        schedule.run(&mut world);
+        assert!(!world.resource::<ShouldExit>().0);
+
+        drop(tx_cmd);
+        schedule.run(&mut world);
+        assert!(world.resource::<ShouldExit>().0);
+        let store = world.non_send::<AudioStore>();
+        assert!(store.music.is_empty() && store.fx.is_empty());
+    }
 }
