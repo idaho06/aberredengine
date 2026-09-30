@@ -1093,17 +1093,6 @@ pub fn render_system(
     }
 }
 
-/// Collects screen-space sprites and texts into one merged buffer, sorts by
-/// [`ZIndex`], and dispatches draw calls in that order.
-///
-/// Uses the same in-place `sort_unstable_by` as the world-space buffers — the
-/// equal-z tie-break (text drawn on top of a same-z sprite, the sane default
-/// for UI captions over panel backgrounds) is encoded directly in the
-/// comparator via [`ScreenDrawItem::variant_rank`] instead of relying on
-/// `sort_by`'s stability and a fixed collection order. This keeps the merged,
-/// heterogeneous buffer on the cheaper allocation-free sort even though it
-/// holds two item types, which matters once this buffer holds tens of
-/// thousands of items (e.g. a screen-space bunnymark-style stress scene).
 /// Selects the nine-patch for a `GuiButton`'s current state from its skin,
 /// falling back to `normal` for any state whose patch was never set.
 fn resolve_button_patch(skin: &GuiButtonSkin, state: GuiWidgetState) -> &GuiNinePatch {
@@ -1214,6 +1203,18 @@ fn warn_missing_theme(
     }
 }
 
+/// Collects screen-space sprites, texts and GUI items (panels, progress
+/// bars) into one merged buffer, sorts by [`ZIndex`], and dispatches draw
+/// calls in that order.
+///
+/// Uses the same in-place `sort_unstable_by` as the world-space buffers — the
+/// equal-z tie-break (text drawn on top of a same-z sprite, the sane default
+/// for UI captions over panel backgrounds) is encoded directly in the
+/// comparator via [`ScreenDrawItem::variant_rank`] instead of relying on
+/// `sort_by`'s stability and a fixed collection order. This keeps the merged,
+/// heterogeneous buffer on the cheaper allocation-free sort even though it
+/// holds several item types, which matters once this buffer holds tens of
+/// thousands of items (e.g. a screen-space bunnymark-style stress scene).
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space<'m>(
     d: &mut impl RaylibDraw,
