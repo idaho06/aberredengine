@@ -687,4 +687,75 @@ mod tests {
             .unwrap();
         assert_sparse_ctx_shape(&ctx);
     }
+
+    #[test]
+    fn context_builder_passes_snapshot_strings_to_lua() {
+        use super::super::runtime::LuaRuntime;
+        use std::sync::Arc;
+
+        let runtime = LuaRuntime::new().expect("LuaRuntime init");
+        let tables = runtime.get_entity_ctx_pool();
+        let lua = runtime.lua();
+
+        // Source strings — simulate what the components hold
+        let tex_key: Arc<str> = Arc::from("spaceship");
+        let anim_key = String::from("propulsion");
+        let phase = String::from("idle");
+        let timer_cb = String::from("on_fire");
+
+        // Borrow instead of clone (the new API)
+        let sprite_snap = SpriteSnapshot {
+            tex_key: tex_key.as_ref(),
+            flip_h: false,
+            flip_v: false,
+        };
+        let anim_snap = AnimationSnapshot {
+            key: anim_key.as_str(),
+            frame_index: 1,
+            elapsed: 0.1,
+        };
+        let phase_snap = LuaPhaseSnapshot {
+            current: phase.as_str(),
+            time_in_phase: 2.5,
+        };
+        let timer_snap = LuaTimerSnapshot {
+            duration: 3.0,
+            elapsed: 1.0,
+            callback: timer_cb.as_str(),
+        };
+
+        let snapshot = EntitySnapshot {
+            entity_id: 99_u64,
+            group: None,
+            map_pos: None,
+            screen_pos: None,
+            rigid_body: None,
+            rotation: None,
+            scale: None,
+            rect: None,
+            sprite: Some(sprite_snap),
+            animation: Some(anim_snap),
+            signals: None,
+            lua_phase: Some(phase_snap),
+            lua_timer: Some(timer_snap),
+            previous_phase: None,
+            world_pos: None,
+            world_rotation: None,
+            world_scale: None,
+            parent_id: None,
+        };
+        let ctx = build_entity_context_pooled(lua, &tables, &snapshot)
+            .expect("build_entity_context_pooled");
+
+        lua.load(r#"
+            local ctx = ...
+            assert(ctx.sprite ~= nil,       "sprite is nil")
+            assert(ctx.animation ~= nil,    "animation is nil")
+            assert(ctx.timer ~= nil,        "timer is nil")
+            assert(ctx.sprite.tex_key    == "spaceship",   "wrong tex_key: "         .. tostring(ctx.sprite.tex_key))
+            assert(ctx.animation.key     == "propulsion",  "wrong animation.key: "   .. tostring(ctx.animation.key))
+            assert(ctx.phase             == "idle",         "wrong phase: "           .. tostring(ctx.phase))
+            assert(ctx.timer.callback    == "on_fire",     "wrong timer.callback: "  .. tostring(ctx.timer.callback))
+        "#).call::<()>(ctx).expect("Lua context string assertions");
+    }
 }
