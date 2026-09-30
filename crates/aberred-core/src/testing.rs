@@ -20,12 +20,24 @@ use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
-/// Default tolerance for [`approx_eq`] and [`vec2_approx_eq`].
+/// Absolute tolerance for [`approx_eq_eps`].
 pub const EPSILON: f32 = 1e-6;
 
-/// `|a - b| < EPSILON`.
+/// Allowed error, in float steps (`f32::EPSILON` scaled to the compared
+/// values' magnitude), for [`approx_eq`] and [`vec2_approx_eq`]. The worst
+/// error measured across the test suite (2026-09-30) is 7.3 steps.
+pub const ULPS: f32 = 16.0;
+
+/// `a` and `b` are within [`ULPS`] float steps of each other at their own
+/// magnitude: `|a - b| <= ULPS * f32::EPSILON * max(|a|, |b|, 1)`.
+///
+/// The scale never drops below 1, so a result expected to be 0 tolerates
+/// the same absolute error as one near 1. A zero computed from much larger
+/// inputs (e.g. a 1000-unit vector rotated 90 degrees) carries error
+/// proportional to those inputs and may need an explicit tolerance.
 pub fn approx_eq(a: f32, b: f32) -> bool {
-    approx_eq_eps(a, b, EPSILON)
+    let scale = a.abs().max(b.abs()).max(1.0);
+    (a - b).abs() <= ULPS * f32::EPSILON * scale
 }
 
 /// `|a - b| < eps` (strict).
@@ -33,9 +45,9 @@ pub fn approx_eq_eps(a: f32, b: f32, eps: f32) -> bool {
     (a - b).abs() < eps
 }
 
-/// Both axes within [`EPSILON`].
+/// [`approx_eq`] on both axes.
 pub fn vec2_approx_eq(a: Vec2, b: Vec2) -> bool {
-    vec2_approx_eq_eps(a, b, EPSILON)
+    approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
 }
 
 /// Both axes within `eps` (strict, unlike glam's `abs_diff_eq`).
@@ -69,15 +81,37 @@ mod tests {
         assert!(approx_eq_eps(0.0, 0.49, 0.5));
         assert!(approx_eq_eps(0.49, 0.0, 0.5));
         assert!(!approx_eq_eps(0.0, 0.5, 0.5));
-        assert!(approx_eq(1.0, 1.0 + EPSILON / 2.0));
-        assert!(!approx_eq(1.0, 1.0 + EPSILON * 2.0));
+        assert!(vec2_approx_eq_eps(Vec2::ZERO, Vec2::new(0.49, -0.49), 0.5));
+        assert!(!vec2_approx_eq_eps(Vec2::ZERO, Vec2::new(0.0, 0.5), 0.5));
+    }
+
+    #[test]
+    fn approx_eq_tolerance_scales_with_magnitude() {
+        // Same absolute error (2e-5): ~2 float steps at 100, ~168 at 1.
+        assert!(approx_eq(99.99998, 100.0));
+        assert!(!approx_eq(1.00002, 1.0));
+        // 1e-3 apart: inside the tolerance at 1000, far outside at 10.
+        assert!(approx_eq(1000.001, 1000.0));
+        assert!(!approx_eq(10.001, 10.0));
+    }
+
+    #[test]
+    fn approx_eq_floors_scale_at_one_near_zero() {
+        // cos(90°) residue on a 20-unit vector: ~7 float steps at scale 1.
+        assert!(approx_eq(-8.742278e-7, 0.0));
+        assert!(!approx_eq(1e-5, 0.0));
     }
 
     #[test]
     fn vec2_approx_eq_checks_both_axes() {
-        assert!(vec2_approx_eq_eps(Vec2::ZERO, Vec2::new(0.49, -0.49), 0.5));
-        assert!(!vec2_approx_eq_eps(Vec2::ZERO, Vec2::new(0.0, 0.5), 0.5));
-        assert!(!vec2_approx_eq(Vec2::ZERO, Vec2::new(EPSILON * 2.0, 0.0)));
+        assert!(vec2_approx_eq(
+            Vec2::new(99.99998, -99.99998),
+            Vec2::new(100.0, -100.0)
+        ));
+        assert!(!vec2_approx_eq(
+            Vec2::new(100.0, 1.00002),
+            Vec2::new(100.0, 1.0)
+        ));
     }
 
     #[test]
