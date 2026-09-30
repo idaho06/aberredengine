@@ -15,6 +15,7 @@ tracy-client = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy_ecs = { workspace = true, features = ["debug"] }
+aberred-core = { path = "../aberred-core", features = ["test-support"] }
 
 [features]
 tracy = ["dep:tracy-client"]

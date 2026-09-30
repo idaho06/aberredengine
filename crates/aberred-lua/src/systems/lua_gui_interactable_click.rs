@@ -54,28 +54,13 @@ pub fn gui_interactable_click_observer(
 mod tests {
     use super::*;
     use aberred_core::components::guiinteractable::GuiInteractable;
-    use aberred_core::resources::appstate::AppState;
-    use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
-    use aberred_core::resources::gameconfig::GameConfig;
-    use aberred_core::resources::input_bindings::InputBindings;
-    use aberred_core::resources::postprocessshader::PostProcessShader;
-    use aberred_core::resources::sim_rng::SimRng;
     use aberred_core::resources::worldsignals::WorldSignals;
-    use aberred_core::resources::worldtime::WorldTime;
-    use bevy_ecs::message::Messages;
+    use aberred_core::testing::insert_game_ctx_resources;
     use crate::resources::lua_runtime::LuaRuntime;
 
     fn setup_world() -> World {
         let mut world = World::new();
-        world.insert_resource(WorldSignals::default());
-        world.insert_resource(AppState::default());
-        world.insert_resource(WorldTime::default());
-        world.insert_resource(GameConfig::default());
-        world.insert_resource(PostProcessShader::default());
-        world.insert_resource(CameraFollowConfig::default());
-        world.insert_resource(InputBindings::default());
-        world.insert_resource(SimRng::from_seed(0));
-        world.insert_resource(Messages::<aberred_core::protocol::audio::AudioCmd>::default());
+        insert_game_ctx_resources(&mut world);
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world
     }
