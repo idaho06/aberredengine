@@ -1002,29 +1002,100 @@ mod tests {
     }
 
     #[test]
-    fn stop_all_sounds_maps_to_stop_all_fx() {
+    fn every_audio_lua_cmd_maps_to_its_audio_cmd() {
+        let s = |v: &str| v.to_string();
+        let cases = [
+            (AudioLuaCmd::PlayMusic { id: s("m"), looped: true }, r#"PlayMusic { id: "m", looped: true }"#),
+            (AudioLuaCmd::PlaySound { id: s("fx") }, r#"PlayFx { id: "fx" }"#),
+            (
+                AudioLuaCmd::PlaySoundPitched { id: s("fx"), pitch: 1.5 },
+                r#"PlayFxPitched { id: "fx", pitch: 1.5 }"#,
+            ),
+            (AudioLuaCmd::StopAllMusic, "StopAllMusic"),
+            (AudioLuaCmd::StopMusic { id: s("m") }, r#"StopMusic { id: "m" }"#),
+            (AudioLuaCmd::PauseMusic { id: s("m") }, r#"PauseMusic { id: "m" }"#),
+            (AudioLuaCmd::ResumeMusic { id: s("m") }, r#"ResumeMusic { id: "m" }"#),
+            (
+                AudioLuaCmd::SetMusicVolume { id: s("m"), vol: 0.25 },
+                r#"VolumeMusic { id: "m", vol: 0.25 }"#,
+            ),
+            (AudioLuaCmd::UnloadMusic { id: s("m") }, r#"UnloadMusic { id: "m" }"#),
+            (AudioLuaCmd::UnloadAllMusic, "UnloadAllMusic"),
+            // Stop keeps loaded FX; unload frees them (CLAUDE.md "Audio stop vs. unload").
+            (AudioLuaCmd::StopAllSounds, "StopAllFx"),
+            (AudioLuaCmd::UnloadSound { id: s("fx") }, r#"UnloadFx { id: "fx" }"#),
+            (AudioLuaCmd::UnloadAllSounds, "UnloadAllFx"),
+        ];
+        let expected: Vec<&str> = cases.iter().map(|(_, e)| *e).collect();
+
         let mut world = World::new();
         world.insert_resource(Messages::<AudioCmd>::default());
-
         let mut system_state = SystemState::<MessageWriter<AudioCmd>>::new(&mut world);
         {
-            let mut writer = system_state
-                .get_mut(&mut world)
-                .expect("Audio message writer should fetch");
-            process_audio_command(&mut writer, AudioLuaCmd::StopAllSounds);
+            let mut writer = system_state.get_mut(&mut world).unwrap();
+            for (cmd, _) in cases {
+                process_audio_command(&mut writer, cmd);
+            }
         }
         system_state.apply(&mut world);
-
         world.resource_mut::<Messages<AudioCmd>>().update();
-
         let mut reader_state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
-        let mut reader = reader_state
-            .get_mut(&mut world)
-            .expect("Audio message reader should fetch");
-        let cmds: Vec<_> = reader.read().collect();
+        let mut reader = reader_state.get_mut(&mut world).unwrap();
+        let written: Vec<String> = reader.read().map(|c| format!("{c:?}")).collect();
+        assert_eq!(written, expected, "one AudioCmd per Lua cmd, in order");
+    }
 
-        assert_eq!(cmds.len(), 1);
-        assert!(matches!(cmds[0], AudioCmd::StopAllFx));
+    #[test]
+    fn signal_cmds_update_world_signals() {
+        let mut ws = WorldSignals::default();
+        let mut world = World::new();
+        let player = world.spawn_empty().id();
+        let s = |v: &str| v.to_string();
+        for cmd in [
+            SignalCmd::SetScalar { key: s("speed"), value: 2.5 },
+            SignalCmd::SetScalar { key: s("gone_s"), value: 1.0 },
+            SignalCmd::ClearScalar { key: s("gone_s") },
+            SignalCmd::SetInteger { key: s("lives"), value: 3 },
+            SignalCmd::SetInteger { key: s("gone_i"), value: 1 },
+            SignalCmd::ClearInteger { key: s("gone_i") },
+            SignalCmd::SetFlag { key: s("kept") },
+            SignalCmd::SetFlag { key: s("gone_f") },
+            SignalCmd::ClearFlag { key: s("gone_f") },
+            SignalCmd::SetString { key: s("name"), value: s("bob") },
+            SignalCmd::SetString { key: s("gone_str"), value: s("x") },
+            SignalCmd::ClearString { key: s("gone_str") },
+            SignalCmd::SetEntity { key: s("player"), entity_id: player.to_bits() },
+            SignalCmd::SetEntity { key: s("bad"), entity_id: 0 },
+            SignalCmd::SetEntity { key: s("gone_e"), entity_id: player.to_bits() },
+            SignalCmd::RemoveEntity { key: s("gone_e") },
+        ] {
+            process_signal_command(&mut ws, cmd);
+        }
+        assert_eq!((ws.get_scalar("speed"), ws.get_scalar("gone_s")), (Some(2.5), None));
+        assert_eq!((ws.get_integer("lives"), ws.get_integer("gone_i")), (Some(3), None));
+        assert!(ws.has_flag("kept") && !ws.has_flag("gone_f"));
+        assert_eq!(ws.get_string("name").map(String::as_str), Some("bob"));
+        assert!(ws.get_string("gone_str").is_none());
+        assert_eq!(ws.get_entity("player").copied(), Some(player));
+        assert!(ws.get_entity("bad").is_none(), "invalid entity bits are ignored");
+        assert!(ws.get_entity("gone_e").is_none());
+    }
+
+    #[test]
+    fn group_cmds_track_untrack_and_clear() {
+        use super::process_group_command;
+        use crate::resources::lua_runtime::GroupCmd;
+        use aberred_core::resources::group::TrackedGroups;
+        let mut groups = TrackedGroups::default();
+        for name in ["enemy", "coin", "bullet"] {
+            process_group_command(&mut groups, GroupCmd::TrackGroup { name: name.to_string() });
+        }
+        process_group_command(&mut groups, GroupCmd::UntrackGroup { name: "coin".to_string() });
+        assert!(groups.has_group("enemy") && groups.has_group("bullet"));
+        assert!(!groups.has_group("coin"));
+
+        process_group_command(&mut groups, GroupCmd::ClearTrackedGroups);
+        assert_eq!(groups.iter().count(), 0);
     }
 
     #[test]
