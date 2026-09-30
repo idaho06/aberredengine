@@ -770,4 +770,147 @@ mod tests {
         let mut query = world.query::<&MapPosition>();
         assert_eq!(query.iter(&world).count(), 2);
     }
+
+    /// Runs one `CloneCmd` of the entity registered as `"tpl"` and returns the new entity.
+    fn clone_tpl(world: &mut World, world_signals: &mut WorldSignals, overrides: SpawnCmd) -> Entity {
+        let before: Vec<Entity> = world.query::<Entity>().iter(world).collect();
+        let mut system_state = SystemState::<Commands>::new(world);
+        {
+            let mut commands = system_state.get_mut(world).unwrap();
+            process_clone_command(
+                &mut commands,
+                CloneCmd {
+                    source_key: "tpl".to_string(),
+                    overrides: Box::new(overrides),
+                },
+                world_signals,
+            );
+        }
+        system_state.apply(world);
+        let spawned: Vec<Entity> = world
+            .query::<Entity>()
+            .iter(world)
+            .filter(|e| !before.contains(e))
+            .collect();
+        assert_eq!(spawned.len(), 1, "exactly one entity spawned");
+        spawned[0]
+    }
+
+    #[test]
+    fn clone_overrides_win_and_source_is_untouched() {
+        let mut world = World::new();
+        let source = world
+            .spawn((MapPosition::new(1.0, 2.0), Group::new("enemy"), ZIndex(3.0)))
+            .id();
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let clone = clone_tpl(
+            &mut world,
+            &mut world_signals,
+            SpawnCmd {
+                position: Some((10.0, 20.0)),
+                group: Some("boss".to_string()),
+                ..SpawnCmd::default()
+            },
+        );
+
+        assert_eq!(world.get::<MapPosition>(clone).unwrap().pos, Vec2::new(10.0, 20.0));
+        assert_eq!(world.get::<Group>(clone).unwrap().0, "boss");
+        assert_eq!(
+            world.get::<ZIndex>(clone).unwrap().0,
+            3.0,
+            "components without an override are cloned"
+        );
+        assert_eq!(world.get::<MapPosition>(source).unwrap().pos, Vec2::new(1.0, 2.0));
+        assert_eq!(world.get::<Group>(source).unwrap().0, "enemy");
+    }
+
+    #[test]
+    fn clone_resets_animation_to_frame_zero_without_touching_source() {
+        let mut world = World::new();
+        let mut running = Animation::new("walk");
+        running.frame_index = 3;
+        running.elapsed_time = 0.4;
+        running.finished = true;
+        let source = world.spawn(running).id();
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let clone = clone_tpl(&mut world, &mut world_signals, SpawnCmd::default());
+
+        let anim = world.get::<Animation>(clone).unwrap();
+        assert_eq!(anim.animation_key, "walk");
+        assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
+        let src = world.get::<Animation>(source).unwrap();
+        assert_eq!((src.frame_index, src.finished), (3, true));
+    }
+
+    #[test]
+    fn clone_with_animation_override_starts_the_override_fresh() {
+        let mut world = World::new();
+        let mut running = Animation::new("walk");
+        running.frame_index = 3;
+        let source = world.spawn(running).id();
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let clone = clone_tpl(
+            &mut world,
+            &mut world_signals,
+            SpawnCmd {
+                animation: Some(AnimationData {
+                    animation_key: "run".to_string(),
+                }),
+                ..SpawnCmd::default()
+            },
+        );
+
+        let anim = world.get::<Animation>(clone).unwrap();
+        assert_eq!((anim.animation_key.as_str(), anim.frame_index), ("run", 0));
+    }
+
+    #[test]
+    fn clone_register_as_stores_the_clone_not_the_source() {
+        let mut world = World::new();
+        let source = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let clone = clone_tpl(
+            &mut world,
+            &mut world_signals,
+            SpawnCmd {
+                register_as: Some("copy".to_string()),
+                ..SpawnCmd::default()
+            },
+        );
+
+        assert_ne!(clone, source);
+        assert_eq!(world_signals.get_entity("copy").copied(), Some(clone));
+        assert_eq!(world_signals.get_entity("tpl").copied(), Some(source));
+    }
+
+    #[test]
+    fn clone_of_unregistered_key_spawns_nothing() {
+        let mut world = World::new();
+        world.spawn(MapPosition::new(0.0, 0.0));
+        let mut world_signals = WorldSignals::default();
+        let before = world.entities().count_spawned();
+
+        let mut system_state = SystemState::<Commands>::new(&mut world);
+        {
+            let mut commands = system_state.get_mut(&mut world).unwrap();
+            process_clone_command(
+                &mut commands,
+                CloneCmd {
+                    source_key: "missing".to_string(),
+                    overrides: Box::new(SpawnCmd::default()),
+                },
+                &mut world_signals,
+            );
+        }
+        system_state.apply(&mut world);
+        assert_eq!(world.entities().count_spawned(), before);
+    }
 }
