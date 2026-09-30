@@ -107,12 +107,13 @@ pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), Stri
 /// Spawn tile entities from a loaded tilemap.
 ///
 /// Phase 1 — create one template entity per atlas cell (`Group("tiles-templates")` + `Sprite`).
-/// Templates are kept alive in the world (no `MapPosition`, so they are not rendered).
 ///
 /// Phase 2 — clone the matching template for each tile placement and insert
 /// `Group("tiles")`, `MapPosition`, and `ZIndex`. When `parent` is `Some`,
 /// each tile clone also gets `ChildOf(parent)` and `ComputeInitialGlobalTransform`
 /// is queued so children render at the correct world position on the first frame.
+///
+/// Phase 3 — despawn the templates; only the tiles remain.
 pub fn spawn_tiles(
     commands: &mut Commands,
     tilemap_tex_key: impl Into<String>,
@@ -182,6 +183,13 @@ pub fn spawn_tiles(
                     .queue(ComputeInitialGlobalTransform);
             }
         }
+    }
+
+    // Phase 3: templates exist only to be cloned. The despawns are queued after every
+    // clone above, so they apply once all tiles exist -- and nothing outlives the tiles
+    // (templates are not children of `parent`, so a root despawn would not reach them).
+    for template in templates {
+        commands.entity(template).despawn();
     }
 }
 
@@ -293,19 +301,22 @@ mod tests {
     }
 
     #[test]
-    fn spawn_tiles_creates_one_template_per_atlas_cell() {
+    fn each_tile_uses_the_atlas_cell_of_its_id() {
         let mut world = World::new();
-        // 64x32 atlas of 16px tiles -> 4 columns x 2 rows.
-        run_spawn_tiles(&mut world, (64, 32), &tilemap(16, &[]), None);
+        // 64x32 atlas of 16px tiles -> 4 columns x 2 rows; place one tile per id.
+        let positions: Vec<(u32, u32, u32)> = (0..8).map(|id| (id, 0, id)).collect();
+        run_spawn_tiles(&mut world, (64, 32), &tilemap(16, &[&positions]), None);
 
-        let mut offsets: Vec<Vec2> = in_group(&mut world, TILES_TEMPLATES_GROUP)
-            .into_iter()
-            .map(|(_, s)| s.offset)
+        let mut by_x: Vec<(f32, Vec2)> = world
+            .query::<(&MapPosition, &Sprite)>()
+            .iter(&world)
+            .map(|(p, s)| (p.pos.x, s.offset))
             .collect();
-        offsets.sort_by(|a, b| a.y.total_cmp(&b.y).then(a.x.total_cmp(&b.x)));
+        by_x.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let offsets: Vec<Vec2> = by_x.into_iter().map(|(_, o)| o).collect();
         assert_eq!(offsets.len(), 8);
+        assert_eq!(offsets[3], Vec2::new(48.0, 0.0), "id 3 = row 0, col 3");
         assert_eq!(offsets[5], Vec2::new(16.0, 16.0), "id 5 = row 1, col 1");
-        assert!(world.query::<&MapPosition>().iter(&world).next().is_none(), "templates have no position");
     }
 
     #[test]
@@ -345,17 +356,32 @@ mod tests {
     #[test]
     fn spawn_tiles_skips_ids_outside_the_atlas() {
         let mut world = World::new();
-        // 32x16 atlas -> 2 templates (ids 0..=1); id 2 is out of range.
+        // 32x16 atlas -> 2 cells (ids 0..=1); id 2 is out of range.
         run_spawn_tiles(&mut world, (32, 16), &tilemap(16, &[&[(0, 0, 1), (1, 0, 2)]]), None);
         assert_eq!(in_group(&mut world, TILES_GROUP).len(), 1);
     }
 
     #[test]
-    fn atlas_smaller_than_a_tile_still_yields_one_template() {
+    fn atlas_smaller_than_a_tile_still_yields_one_usable_cell() {
         let mut world = World::new();
-        run_spawn_tiles(&mut world, (8, 8), &tilemap(16, &[&[(0, 0, 0)]]), None);
-        assert_eq!(in_group(&mut world, TILES_TEMPLATES_GROUP).len(), 1);
+        run_spawn_tiles(&mut world, (8, 8), &tilemap(16, &[&[(0, 0, 0), (1, 0, 1)]]), None);
+        // Only id 0 exists in a sub-tile atlas; id 1 is out of range.
         assert_eq!(in_group(&mut world, TILES_GROUP).len(), 1);
+    }
+
+    #[test]
+    fn spawn_tiles_leaves_no_template_entities_behind() {
+        let mut world = World::new();
+        let root = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        run_spawn_tiles(&mut world, (64, 32), &tilemap(16, &[&[(0, 0, 0), (1, 0, 5)]]), Some(root));
+        assert!(in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty(), "templates despawned");
+        assert_eq!(in_group(&mut world, TILES_GROUP).len(), 2, "tiles survive their templates");
+
+        world.entity_mut(root).despawn();
+        assert!(
+            world.query::<&Sprite>().iter(&world).next().is_none(),
+            "despawning the root leaves no tile or template sprite behind"
+        );
     }
 
     fn run_system(world: &mut World) -> Vec<RenderAssetCmd> {
