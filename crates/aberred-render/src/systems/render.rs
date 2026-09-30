@@ -21,7 +21,6 @@ use raylib::prelude::*;
 
 use super::math::{camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, vec2_from_raylib, vec2_to_raylib};
 use aberred_core::components::dynamictext::DynamicText;
-#[cfg(test)]
 use aberred_core::math::Vec2;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::guibutton::GuiButton;
@@ -1141,6 +1140,64 @@ fn resolve_button_shadow(
     skin_shadow.or(theme_shadow)
 }
 
+/// Track and fill destination rects of a [`GuiProgressBar`] at `pos`. The
+/// track always covers the whole bar; the fill covers `value / max` of it
+/// (clamped to `[0, 1]`, empty when `max <= 0`), growing from the edge
+/// `direction` anchors it to.
+fn progress_bar_rects(
+    pos: Vec2,
+    size: Vec2,
+    value: f32,
+    max: f32,
+    direction: &ProgressBarDirection,
+) -> (Rectangle, Rectangle) {
+    let (x, y, w, h) = (pos.x, pos.y, size.x, size.y);
+    let ratio = if max > 0.0 {
+        (value / max).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let track = Rectangle {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+    let fill = match direction {
+        ProgressBarDirection::Horizontal => Rectangle {
+            x,
+            y,
+            width: w * ratio,
+            height: h,
+        },
+        ProgressBarDirection::HorizontalReversed => {
+            let fill_w = w * ratio;
+            Rectangle {
+                x: x + w - fill_w,
+                y,
+                width: fill_w,
+                height: h,
+            }
+        }
+        ProgressBarDirection::Vertical => {
+            let fill_h = h * ratio;
+            Rectangle {
+                x,
+                y: y + h - fill_h,
+                width: w,
+                height: fill_h,
+            }
+        }
+        ProgressBarDirection::VerticalReversed => Rectangle {
+            x,
+            y,
+            width: w,
+            height: h * ratio,
+        },
+    };
+    (track, fill)
+}
+
 fn screen_panel_item(
     entity: Entity,
     panel: GuiNinePatch,
@@ -1315,53 +1372,8 @@ fn draw_screen_space<'m>(
             );
             continue;
         };
-        let x = p.pos.x;
-        let y = p.pos.y;
-        let w = bar.size.x;
-        let h = bar.size.y;
-        let ratio = if bar.max > 0.0 {
-            (bar.value / bar.max).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        let track_dest = Rectangle {
-            x,
-            y,
-            width: w,
-            height: h,
-        };
-        let fill_dest = match bar.direction {
-            ProgressBarDirection::Horizontal => Rectangle {
-                x,
-                y,
-                width: w * ratio,
-                height: h,
-            },
-            ProgressBarDirection::HorizontalReversed => {
-                let fill_w = w * ratio;
-                Rectangle {
-                    x: x + w - fill_w,
-                    y,
-                    width: fill_w,
-                    height: h,
-                }
-            }
-            ProgressBarDirection::Vertical => {
-                let fill_h = h * ratio;
-                Rectangle {
-                    x,
-                    y: y + h - fill_h,
-                    width: w,
-                    height: fill_h,
-                }
-            }
-            ProgressBarDirection::VerticalReversed => Rectangle {
-                x,
-                y,
-                width: w,
-                height: h * ratio,
-            },
-        };
+        let (track_dest, fill_dest) =
+            progress_bar_rects(p.pos, bar.size, bar.value, bar.max, &bar.direction);
         buffer.push(ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
             entity: mirror.0,
             track: skin.track.clone(),
@@ -1712,5 +1724,56 @@ mod resolve_button_patch_tests {
             assert_eq!(shadow_tag(&without, state, Some(shadow(9.0))), Some(9.0));
             assert_eq!(shadow_tag(&without, state, None), None);
         }
+    }
+}
+
+#[cfg(test)]
+mod progress_bar_rects_tests {
+    use super::*;
+
+    fn xywh(r: Rectangle) -> (f32, f32, f32, f32) {
+        (r.x, r.y, r.width, r.height)
+    }
+
+    /// Fill rect of a 100x50 bar at (10, 20).
+    fn fill(value: f32, max: f32, direction: ProgressBarDirection) -> (f32, f32, f32, f32) {
+        let (_, fill) = progress_bar_rects(
+            Vec2::new(10.0, 20.0),
+            Vec2::new(100.0, 50.0),
+            value,
+            max,
+            &direction,
+        );
+        xywh(fill)
+    }
+
+    #[test]
+    fn track_always_covers_the_whole_bar() {
+        let (track, _) = progress_bar_rects(
+            Vec2::new(10.0, 20.0),
+            Vec2::new(100.0, 50.0),
+            0.0,
+            100.0,
+            &ProgressBarDirection::Vertical,
+        );
+        assert_eq!(xywh(track), (10.0, 20.0, 100.0, 50.0));
+    }
+
+    #[test]
+    fn fill_grows_from_the_directions_anchor_edge() {
+        use ProgressBarDirection::*;
+        assert_eq!(fill(25.0, 100.0, Horizontal), (10.0, 20.0, 25.0, 50.0));
+        assert_eq!(fill(25.0, 100.0, HorizontalReversed), (85.0, 20.0, 25.0, 50.0));
+        assert_eq!(fill(25.0, 100.0, Vertical), (10.0, 57.5, 100.0, 12.5));
+        assert_eq!(fill(25.0, 100.0, VerticalReversed), (10.0, 20.0, 100.0, 12.5));
+    }
+
+    #[test]
+    fn fill_ratio_is_clamped_and_empty_without_a_positive_max() {
+        use ProgressBarDirection::Horizontal;
+        assert_eq!(fill(150.0, 100.0, Horizontal), (10.0, 20.0, 100.0, 50.0));
+        assert_eq!(fill(-5.0, 100.0, Horizontal), (10.0, 20.0, 0.0, 50.0));
+        assert_eq!(fill(5.0, 0.0, Horizontal), (10.0, 20.0, 0.0, 50.0));
+        assert_eq!(fill(5.0, -1.0, Horizontal), (10.0, 20.0, 0.0, 50.0));
     }
 }
