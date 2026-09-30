@@ -1,5 +1,8 @@
 # Aberred Engine task runner. `just` (no args) runs the full gate.
 
+# just defaults to `sh` on every platform; use PowerShell on Windows so no Git Bash is needed.
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
 default: check
 
 # Full gate: every test feature combination plus clippy, stops on first failure.
