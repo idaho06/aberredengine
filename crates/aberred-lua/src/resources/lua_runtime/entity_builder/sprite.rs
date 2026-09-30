@@ -308,3 +308,201 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         }
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
+    use super::*;
+    use aberred_core::resources::uniformvalue::UniformValue;
+
+    fn built(chain: &str) -> super::super::SpawnCmd {
+        built_spawn_cmd(&format!("engine.spawn(){chain}:build()"))
+    }
+
+    fn sole_rule_condition(rule_lua: &str) -> AnimationConditionData {
+        let mut ctrl = built(&format!(
+            ":with_animation_controller('idle'):with_animation_rule({rule_lua}, 'run')"
+        ))
+        .animation_controller
+        .unwrap();
+        assert_eq!(ctrl.rules.len(), 1);
+        let rule = ctrl.rules.pop().unwrap();
+        assert_eq!(rule.set_key, "run");
+        rule.condition
+    }
+
+    #[test]
+    fn sprite_modifiers_require_their_base_method_first() {
+        for (call, msg) in [
+            ("with_sprite_flip(true, false)", "with_sprite_flip() requires with_sprite() first"),
+            (
+                "with_animation_rule({type='has_flag', key='k'}, 'run')",
+                "with_animation_rule() requires with_animation_controller() first",
+            ),
+        ] {
+            assert_runtime_error(&format!("engine.spawn():{call}"), msg);
+        }
+    }
+
+    #[test]
+    fn with_sprite_defaults_offset_and_flip_until_set() {
+        let s = built(":with_sprite('hero', 32, 48, 16, 24)").sprite.unwrap();
+        assert_eq!(s.tex_key, "hero");
+        assert_eq!((s.width, s.height, s.origin_x, s.origin_y), (32.0, 48.0, 16.0, 24.0));
+        assert_eq!((s.offset_x, s.offset_y, s.flip_h, s.flip_v), (0.0, 0.0, false, false));
+
+        let s = built(":with_sprite('hero', 32, 48, 16, 24):with_sprite_offset(64, 96):with_sprite_flip(false, true)")
+            .sprite
+            .unwrap();
+        assert_eq!((s.offset_x, s.offset_y), (64.0, 96.0));
+        assert_eq!((s.flip_h, s.flip_v), (false, true));
+    }
+
+    #[test]
+    fn with_text_tint_and_shadow_keep_argument_order() {
+        let cmd = built(
+            ":with_text('Score', 'arcade', 12, 1, 2, 3, 4)\
+             :with_tint(5, 6, 7, 8)\
+             :with_shadow(2, -3, 9, 10, 11, 12)",
+        );
+        let t = cmd.text.unwrap();
+        assert_eq!((t.content.as_str(), t.font.as_str(), t.font_size), ("Score", "arcade", 12.0));
+        assert_eq!((t.r, t.g, t.b, t.a), (1, 2, 3, 4));
+        assert_eq!(cmd.tint, Some((5, 6, 7, 8)));
+        assert_eq!(cmd.shadow, Some((2.0, -3.0, 9, 10, 11, 12)));
+    }
+
+    #[test]
+    fn color_channels_out_of_u8_range_are_rejected() {
+        assert_runtime_error("engine.spawn():with_tint(256, 0, 0, 255)", "with_tint");
+    }
+
+    #[test]
+    fn with_shader_without_uniforms_has_empty_list() {
+        let shader = built(":with_shader('wave')").shader.unwrap();
+        assert_eq!(shader.key, "wave");
+        assert!(shader.uniforms.is_empty());
+    }
+
+    #[test]
+    fn with_shader_parses_float_vec2_and_vec4_uniforms() {
+        let mut uniforms = built(
+            ":with_shader('wave', { amp = 2, speed = 0.5, dir = {1, 0}, tint = {1, 0.5, 0.25, 1} })",
+        )
+        .shader
+        .unwrap()
+        .uniforms;
+        uniforms.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            uniforms,
+            vec![
+                ("amp".to_string(), UniformValue::Float(2.0)),
+                ("dir".to_string(), UniformValue::Vec2 { x: 1.0, y: 0.0 }),
+                ("speed".to_string(), UniformValue::Float(0.5)),
+                (
+                    "tint".to_string(),
+                    UniformValue::Vec4 { x: 1.0, y: 0.5, z: 0.25, w: 1.0 }
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn with_shader_rejects_invalid_key_and_uniforms() {
+        assert_runtime_error("engine.spawn():with_shader()", "with_shader requires shader_key");
+        assert_runtime_error("engine.spawn():with_shader({})", "shader_key must be string");
+        assert_runtime_error(
+            "engine.spawn():with_shader('wave', { v = {1, 2, 3} })",
+            "Uniform table must be array of length 2 (vec2) or 4 (vec4)",
+        );
+        assert_runtime_error(
+            "engine.spawn():with_shader('wave', { v = true })",
+            "Uniform value must be number or array table",
+        );
+    }
+
+    #[test]
+    fn animation_rule_parses_leaf_conditions() {
+        assert!(matches!(
+            sole_rule_condition("{type='has_flag', key='moving'}"),
+            AnimationConditionData::HasFlag { key } if key == "moving"
+        ));
+        assert!(matches!(
+            sole_rule_condition("{type='lacks_flag', key='grounded'}"),
+            AnimationConditionData::LacksFlag { key } if key == "grounded"
+        ));
+        assert!(matches!(
+            sole_rule_condition("{type='scalar_cmp', key='vx', op='gt', value=1.5}"),
+            AnimationConditionData::ScalarCmp { key, op, value }
+                if key == "vx" && op == "gt" && value == 1.5
+        ));
+        assert!(matches!(
+            sole_rule_condition("{type='integer_cmp', key='hp', op='le', value=3}"),
+            AnimationConditionData::IntegerCmp { key, op, value }
+                if key == "hp" && op == "le" && value == 3
+        ));
+    }
+
+    #[test]
+    fn animation_rule_ranges_parse_bounds_and_inclusive() {
+        assert!(matches!(
+            sole_rule_condition("{type='scalar_range', key='vy', min=-1, max=1, inclusive=true}"),
+            AnimationConditionData::ScalarRange { min, max, inclusive: true, .. }
+                if min == -1.0 && max == 1.0
+        ));
+        assert!(matches!(
+            sole_rule_condition("{type='integer_range', key='hp', min=1, max=3, inclusive=false}"),
+            AnimationConditionData::IntegerRange { min: 1, max: 3, inclusive: false, .. }
+        ));
+    }
+
+    #[test]
+    fn animation_rule_parses_nested_all_any_not() {
+        let cond = sole_rule_condition(
+            "{type='all', conditions={ \
+                {type='has_flag', key='a'}, \
+                {type='any', conditions={ {type='lacks_flag', key='b'} }}, \
+                {type='not', condition={type='has_flag', key='c'}} }}",
+        );
+        let AnimationConditionData::All(children) = cond else {
+            panic!("expected All, got {cond:?}");
+        };
+        assert_eq!(children.len(), 3);
+        assert!(matches!(&children[0], AnimationConditionData::HasFlag { key } if key == "a"));
+        assert!(matches!(
+            &children[1],
+            AnimationConditionData::Any(inner)
+                if matches!(inner.as_slice(), [AnimationConditionData::LacksFlag { key }] if key == "b")
+        ));
+        assert!(matches!(
+            &children[2],
+            AnimationConditionData::Not(inner)
+                if matches!(inner.as_ref(), AnimationConditionData::HasFlag { key } if key == "c")
+        ));
+    }
+
+    #[test]
+    fn animation_rule_rejects_unknown_type_and_keeps_rule_order() {
+        assert_runtime_error(
+            "engine.spawn():with_animation_controller('idle'):with_animation_rule({type='sometimes'}, 'x')",
+            "Unknown condition type: sometimes",
+        );
+        let ctrl = built(
+            ":with_animation_controller('idle')\
+             :with_animation_rule({type='has_flag', key='jump'}, 'jump')\
+             :with_animation_rule({type='has_flag', key='run'}, 'run')",
+        )
+        .animation_controller
+        .unwrap();
+        assert_eq!(ctrl.fallback_key, "idle");
+        let keys: Vec<&str> = ctrl.rules.iter().map(|r| r.set_key.as_str()).collect();
+        assert_eq!(keys, ["jump", "run"], "first-match-wins relies on call order");
+    }
+
+    #[test]
+    fn with_animation_and_on_animation_end_store_keys() {
+        let cmd = built(":with_animation('walk'):with_on_animation_end('on_walk_done')");
+        assert_eq!(cmd.animation.unwrap().animation_key, "walk");
+        assert_eq!(cmd.lua_on_animation_end.as_deref(), Some("on_walk_done"));
+    }
+}
