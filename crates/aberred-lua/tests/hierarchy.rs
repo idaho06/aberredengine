@@ -1,32 +1,31 @@
-//! Integration tests for the parent-child entity transform hierarchy.
+//! Integration tests for the Lua-facing side of the entity hierarchy: parent
+//! commands, spawning with a parent, and the world-transform fields exposed in
+//! the Lua entity context.
 //!
-//! Tests are organized by implementation phase.
-//!
-//! # Usage
-//!
-//! ```sh
-//! cargo test --test hierarchy_integration
-//! ```
+//! Core transform propagation and orphan cleanup are tested in `aberred-core`
+//! (`systems/propagate_transforms.rs`, `tests/hierarchy.rs`).
 
 use bevy_ecs::system::RunSystemOnce;
 
+use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemState;
-use aberred_core::math::Vec2;
 
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::resources::animationstore::AnimationStore;
-use aberred_lua::resources::lua_runtime::{EntityCmd, SpawnCmd};
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_lua::systems::lua_commands::EntityCmdQueries;
-use aberred_lua::systems::lua_commands::{process_entity_commands, process_spawn_command};
 use aberred_core::systems::propagate_transforms::propagate_transforms;
 use aberred_core::testing::approx_eq;
+use aberred_lua::resources::lua_runtime::{
+    EntityCmd, EntitySnapshot, LuaRuntime, SpawnCmd, build_entity_context_pooled,
+};
+use aberred_lua::systems::lua_commands::EntityCmdQueries;
+use aberred_lua::systems::lua_commands::{process_entity_commands, process_spawn_command};
 
 fn tick_propagate(world: &mut World) {
     world
@@ -35,7 +34,7 @@ fn tick_propagate(world: &mut World) {
 }
 
 // =============================================================================
-// PHASE 2: EntityCmd SetParent/RemoveParent + Lua API
+// Parent commands (EntityCmd::SetParent / RemoveParent)
 // =============================================================================
 
 /// Helper to run process_entity_commands using SystemState.
@@ -196,7 +195,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     );
 }
 
-/// P0-1: an EntityCmd with invalid entity bits (the EntityIndex niche value)
+/// An EntityCmd with invalid entity bits (the EntityIndex niche value)
 /// must be skipped with a warn, not panic during processing.
 #[test]
 fn entity_cmd_invalid_entity_id_does_not_panic() {
@@ -218,7 +217,7 @@ fn entity_cmd_invalid_entity_id_does_not_panic() {
     );
 }
 
-/// P0-2: Despawn followed by an insert-based command on the same entity in
+/// Despawn followed by an insert-based command on the same entity in
 /// the same drained batch must not panic at command-apply time.
 #[test]
 fn entity_cmd_despawn_then_set_rotation_same_batch_does_not_panic() {
@@ -284,7 +283,12 @@ fn entity_cmd_set_parent_multiple_children() {
 }
 
 // =============================================================================
-// PHASE 3: Builder with_parent (SpawnCmd.parent field)
+// Spawning with a parent (SpawnCmd.parent, `:with_parent()`)
+//
+// `ComputeInitialGlobalTransform` gives the child its world transform on the
+// spawn frame when the parent has one, or when the parent is a standalone
+// root (synthesized from its local transform). Only a nested parent without
+// a GlobalTransform2D defers to the next propagation.
 // =============================================================================
 
 /// When the parent already has a GlobalTransform2D (the normal case — parent
@@ -515,12 +519,8 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
 }
 
 // =============================================================================
-// PHASE 7: Entity context + Particle emitter
+// Entity context: world-transform fields
 // =============================================================================
-
-use aberred_lua::resources::lua_runtime::{
-    EntitySnapshot, LuaRuntime, build_entity_context_pooled,
-};
 
 #[test]
 fn entity_context_includes_world_transform_fields() {
@@ -609,6 +609,10 @@ fn entity_context_nil_world_fields_without_hierarchy() {
     .call::<()>(ctx)
     .expect("Lua nil world transform assertions");
 }
+
+// =============================================================================
+// Screen-position command (EntityCmd::SetScreenPosition)
+// =============================================================================
 
 #[test]
 fn entity_cmd_set_screen_position_updates_screen_position() {
