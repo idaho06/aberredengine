@@ -730,12 +730,15 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             entity_id,
             parent_id,
         } => {
-            let Some(parent) = resolve_entity(parent_id) else {
+            let (Some(child), Some(parent)) = (resolve_entity(entity_id), resolve_entity(parent_id))
+            else {
                 return;
             };
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert((ChildOf(parent), GlobalTransform2D::default()));
-            });
+            // A dead child makes the whole command a no-op, parent included.
+            let Some(mut child_cmds) = get_entity_cmd(child, commands) else {
+                return;
+            };
+            child_cmds.try_insert((ChildOf(parent), GlobalTransform2D::default()));
             // Ensure parent also has GlobalTransform2D
             if queries.global_transforms.get(parent).is_err() {
                 with_entity_cmds(commands, parent, |ec| {
@@ -1164,6 +1167,35 @@ mod tests {
         assert!(
             world.get::<ChildOf>(child).is_none(),
             "a ChildOf to a dead parent must not stick"
+        );
+    }
+
+    #[test]
+    fn set_parent_from_dead_child_leaves_parent_untouched() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let child = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::Despawn {
+                entity_id: child.to_bits(),
+            },
+        );
+
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetParent {
+                entity_id: child.to_bits(),
+                parent_id: parent.to_bits(),
+            },
+        );
+
+        assert!(
+            world.get::<GlobalTransform2D>(parent).is_none(),
+            "SetParent on a dead child must not add GlobalTransform2D to the parent"
         );
     }
 
