@@ -18,13 +18,27 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```
+//! # use bevy_ecs::prelude::*;
+//! # use aberred_core::components::stuckto::StuckTo;
+//! # use aberred_core::components::timer::Timer;
+//! # use aberred_core::math::Vec2;
+//! # use aberred_core::resources::input::InputState;
+//! # use aberred_core::systems::GameCtx;
+//! // Timers repeat until removed, so the callback removes both components.
+//! fn release_ball(ball: Entity, ctx: &mut GameCtx, _input: &InputState) {
+//!     ctx.commands.entity(ball).remove::<(StuckTo, Timer)>();
+//! }
+//!
+//! # let mut world = World::new();
+//! # let player_entity = world.spawn_empty().id();
+//! # let ball = world.spawn_empty().id();
 //! // Attach ball to player, release after 2 seconds
-//! commands.entity(ball).insert((
+//! world.entity_mut(ball).insert((
 //!     StuckTo::follow_x_only(player_entity)
 //!         .with_offset(Vec2 { x: 0.0, y: -12.0 })
 //!         .with_stored_velocity(Vec2 { x: 300.0, y: -300.0 }),
-//!     Timer::new(2.0, "remove_stuck_to"),
+//!     Timer::rust(2.0, release_ball),
 //! ));
 //! ```
 //!

@@ -26,7 +26,7 @@
 //!
 //! ```ignore
 //! // Pseudocode outline – see `crate::protocol::endpoints` for the bridge wiring.
-//! use aberredengine::protocol::audio::{AudioCmd, AudioMessage};
+//! use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 //!
 //! // 1) Send commands to load and play a music track
 //! audio_tx.send(AudioCmd::LoadMusic { id: "bgm".into(), path: "assets/audio/mini1111.xm".into() })?;

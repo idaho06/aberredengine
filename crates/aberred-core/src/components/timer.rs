@@ -14,9 +14,15 @@
 //!    - Calls the Rust callback with `(entity, &mut GameCtx, &InputState)`
 //!    - The callback has full ECS access through [`GameCtx`](crate::systems::GameCtx)
 //!
-//! # Callback Signature
+//! # Callback Signature and Usage
 //!
-//! ```ignore
+//! ```
+//! # use bevy_ecs::prelude::*;
+//! # use aberred_core::components::timer::Timer;
+//! # use aberred_core::math::Vec2;
+//! # use aberred_core::protocol::audio::AudioCmd;
+//! # use aberred_core::resources::input::InputState;
+//! # use aberred_core::systems::GameCtx;
 //! fn my_timer_callback(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
 //!     // Full access to ECS queries and resources via ctx
 //!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
@@ -24,12 +30,13 @@
 //!         rb.velocity = Vec2::ZERO;
 //!     }
 //! }
-//! ```
 //!
-//! # Usage
-//!
-//! ```ignore
-//! commands.entity(my_entity).insert(Timer::new(2.5, my_timer_callback));
+//! // Use `Timer::rust` for Rust callbacks: it coerces the fn item to the
+//! // fn-pointer type `update_timers` queries for. `Timer::new` with a fn item
+//! // compiles but the timer never fires.
+//! let timer = Timer::rust(2.5, my_timer_callback);
+//! # let mut world = World::new();
+//! # world.spawn(timer);
 //! ```
 //!
 //! # Related

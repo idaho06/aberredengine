@@ -12,21 +12,31 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```
+//! # use bevy_ecs::prelude::*;
+//! use aberred_core::components::collision::{BoxSides, CollisionRule};
+//! use aberred_core::components::group::Group;
+//! use aberred_core::systems::GameCtx;
+//!
 //! fn ball_brick_callback(
 //!     ball: Entity,
 //!     brick: Entity,
 //!     sides_a: &BoxSides,
 //!     sides_b: &BoxSides,
-//!     ctx: &mut CollisionCtx,
+//!     ctx: &mut GameCtx,
 //! ) {
 //!     // Reflect ball, damage brick, play sound, etc.
 //! }
 //!
-//! commands.spawn((
-//!     CollisionRule::new("ball", "brick", ball_brick_callback),
+//! // `::rust` coerces the fn item to the fn-pointer type the collision
+//! // observer queries for; `CollisionRule::new` with a fn item would
+//! // silently never match.
+//! let bundle = (
+//!     CollisionRule::rust("ball", "brick", ball_brick_callback),
 //!     Group::new("collision_rules"),
-//! ));
+//! );
+//! # let mut world = World::new();
+//! # world.spawn(bundle);
 //! ```
 //!
 //! # Related
