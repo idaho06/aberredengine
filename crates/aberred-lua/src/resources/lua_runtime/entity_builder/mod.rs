@@ -390,30 +390,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn with_tween_position_easing_requires_with_tween_position() {
-        assert_runtime_error(
-            "engine.spawn():with_tween_position_easing('linear')",
-            "with_tween_position_easing() requires with_tween_position() first",
-        );
-    }
-
-    #[test]
-    fn with_tween_rotation_loop_requires_with_tween_rotation() {
-        assert_runtime_error(
-            "engine.spawn():with_tween_rotation_loop('loop')",
-            "with_tween_rotation_loop() requires with_tween_rotation() first",
-        );
-    }
-
-    #[test]
-    fn with_tween_scale_backwards_requires_with_tween_scale() {
-        assert_runtime_error(
-            "engine.spawn():with_tween_scale_backwards()",
-            "with_tween_scale_backwards() requires with_tween_scale() first",
-        );
-    }
-
     /// `with_*` chaining must return the *same* userdata handle (in-place mutation),
     /// not a clone, otherwise the O(n) chain cost regresses back to O(n^2).
     #[test]

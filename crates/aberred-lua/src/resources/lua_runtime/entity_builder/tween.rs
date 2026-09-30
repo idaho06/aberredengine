@@ -370,3 +370,103 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         }
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
+    use super::*;
+
+    const KINDS: [&str; 4] = ["position", "screen_position", "rotation", "scale"];
+
+    fn base_call(kind: &str) -> &'static str {
+        match kind {
+            "position" => "with_tween_position(1, 2, 3, 4, 0.5)",
+            "screen_position" => "with_tween_screen_position(5, 6, 7, 8, 1.5)",
+            "rotation" => "with_tween_rotation(0, 90, 2.5)",
+            "scale" => "with_tween_scale(1, 1, 2, 3, 3.5)",
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn tween_modifiers_require_their_own_tween_first() {
+        for kind in KINDS {
+            for (suffix, args) in [
+                ("easing", "'quad_in'"),
+                ("loop", "'loop'"),
+                ("backwards", ""),
+                ("on_finished", "'cb'"),
+            ] {
+                let method = format!("with_tween_{kind}_{suffix}");
+                let msg = format!("{method}() requires with_tween_{kind}() first");
+                assert_runtime_error(&format!("engine.spawn():{method}({args})"), &msg);
+                // A different tween kind being present does not satisfy the guard.
+                let other = KINDS.iter().find(|k| **k != kind).unwrap();
+                assert_runtime_error(
+                    &format!("engine.spawn():{}:{method}({args})", base_call(other)),
+                    &msg,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tween_bases_store_endpoints_and_default_config() {
+        let cmd = built_spawn_cmd(&format!(
+            "engine.spawn():{}:{}:{}:{}:build()",
+            base_call("position"),
+            base_call("screen_position"),
+            base_call("rotation"),
+            base_call("scale")
+        ));
+        let p = cmd.tween_position.unwrap();
+        assert_eq!((p.from_x, p.from_y, p.to_x, p.to_y), (1.0, 2.0, 3.0, 4.0));
+        let sp = cmd.tween_screen_position.unwrap();
+        assert_eq!((sp.from_x, sp.from_y, sp.to_x, sp.to_y), (5.0, 6.0, 7.0, 8.0));
+        let r = cmd.tween_rotation.unwrap();
+        assert_eq!((r.from, r.to), (0.0, 90.0));
+        let s = cmd.tween_scale.unwrap();
+        assert_eq!((s.from_x, s.from_y, s.to_x, s.to_y), (1.0, 1.0, 2.0, 3.0));
+
+        for (config, duration) in [
+            (&p.config, 0.5),
+            (&sp.config, 1.5),
+            (&r.config, 2.5),
+            (&s.config, 3.5),
+        ] {
+            assert_eq!(config.duration, duration);
+            assert_eq!(config.easing, "linear");
+            assert_eq!(config.loop_mode, "once");
+            assert!(!config.backwards);
+            assert!(config.callback.is_empty());
+        }
+    }
+
+    #[test]
+    fn tween_modifiers_only_touch_their_own_tween() {
+        // Every kind gets distinct modifier values; only `rotation` is set backwards.
+        let mut chain = String::from("engine.spawn()");
+        for kind in KINDS {
+            chain.push_str(&format!(
+                ":{}:with_tween_{kind}_easing('{kind}_ease'):with_tween_{kind}_loop('{kind}_loop')\
+                 :with_tween_{kind}_on_finished('{kind}_done')",
+                base_call(kind)
+            ));
+        }
+        chain.push_str(":with_tween_rotation_backwards():build()");
+        let cmd = built_spawn_cmd(&chain);
+
+        let configs: [(&str, &TweenConfig); 4] = [
+            ("position", &cmd.tween_position.as_ref().unwrap().config),
+            ("screen_position", &cmd.tween_screen_position.as_ref().unwrap().config),
+            ("rotation", &cmd.tween_rotation.as_ref().unwrap().config),
+            ("scale", &cmd.tween_scale.as_ref().unwrap().config),
+        ];
+        for (kind, config) in configs {
+            assert_eq!(config.easing, format!("{kind}_ease"));
+            assert_eq!(config.loop_mode, format!("{kind}_loop"));
+            assert_eq!(config.callback, format!("{kind}_done"));
+            assert_eq!(config.backwards, kind == "rotation", "{kind} backwards");
+        }
+    }
+}
