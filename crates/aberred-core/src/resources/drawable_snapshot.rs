@@ -750,6 +750,67 @@ mod tests {
     }
 
     #[test]
+    fn captures_global_transform_for_map_sprites_and_texts() {
+        use crate::components::dynamictext::DynamicText;
+        use crate::components::globaltransform2d::GlobalTransform2D;
+        let gt = GlobalTransform2D {
+            position: Vec2::new(30.0, 40.0),
+            rotation_degrees: 90.0,
+            scale: Vec2::new(2.0, 2.0),
+        };
+        let sprite = || Sprite {
+            tex_key: Arc::from("player"),
+            width: 16.0,
+            height: 16.0,
+            offset: Vec2::ZERO,
+            origin: Vec2::ZERO,
+            flip_h: false,
+            flip_v: false,
+        };
+        let mut world = new_test_world();
+        let child_sprite = world
+            .spawn((sprite(), MapPosition::new(3.0, 4.0), ZIndex(0.0), gt))
+            .id();
+        let root_sprite = world
+            .spawn((sprite(), MapPosition::new(0.0, 0.0), ZIndex(0.0)))
+            .id();
+        let child_text = world
+            .spawn((
+                DynamicText::new("hi", "font", 12.0, Color::WHITE),
+                MapPosition::new(1.0, 1.0),
+                ZIndex(0.0),
+                gt,
+            ))
+            .id();
+
+        world.run_system_once(build_drawable_snapshot).unwrap();
+
+        let snapshot = world.resource::<DrawableSnapshot>();
+        let sprite_gt = |e: Entity| {
+            snapshot
+                .map_sprites
+                .iter()
+                .find(|s| s.entity == e)
+                .expect("sprite captured")
+                .global_transform
+        };
+        let captured = sprite_gt(child_sprite).expect("GlobalTransform2D captured");
+        assert_eq!(
+            (captured.position, captured.rotation_degrees, captured.scale),
+            (gt.position, gt.rotation_degrees, gt.scale)
+        );
+        assert!(sprite_gt(root_sprite).is_none(), "no GlobalTransform2D stays None");
+
+        let text = snapshot
+            .map_texts
+            .iter()
+            .find(|t| t.entity == child_text)
+            .expect("text captured");
+        let captured = text.global_transform.expect("GlobalTransform2D captured on text");
+        assert_eq!(captured.position, gt.position);
+    }
+
+    #[test]
     fn captures_gui_button_with_interactable_state() {
         let mut world = new_test_world();
         world.spawn((
