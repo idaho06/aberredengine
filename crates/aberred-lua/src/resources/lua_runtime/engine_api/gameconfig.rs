@@ -202,3 +202,100 @@ impl LuaRuntime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::resources::lua_runtime::LuaRuntime;
+    use crate::systems::lua_commands::process_gameconfig_command;
+    use aberred_core::math::Color;
+    use aberred_core::resources::gameconfig::GameConfig;
+    use aberred_core::resources::texturefilter::TextureFilter;
+
+    /// Runs `script`, then applies every queued game-config command to `config`.
+    fn apply_script(script: &str, config: &mut GameConfig) {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        let mut cmds = Vec::new();
+        runtime.drain_gameconfig_commands_into(&mut cmds);
+        for cmd in cmds {
+            process_gameconfig_command(cmd, config);
+        }
+    }
+
+    #[test]
+    fn setters_update_game_config_through_the_processor() {
+        let mut config = GameConfig::default();
+        apply_script(
+            "engine.set_fullscreen(true) engine.set_vsync(false) engine.set_target_fps(144) \
+             engine.set_render_size(320, 180) engine.set_background_color(10, 20, 30) \
+             engine.set_pixel_snap_camera(false) engine.set_render_target_filter('bilinear')",
+            &mut config,
+        );
+        assert!(config.fullscreen && !config.vsync);
+        assert_eq!(config.target_fps, 144);
+        assert_eq!((config.render_width, config.render_height), (320, 180));
+        assert_eq!(config.background_color, Color::new(10, 20, 30, 255));
+        assert!(!config.pixel_snap_camera);
+        assert_eq!(config.render_target_filter, TextureFilter::Bilinear);
+    }
+
+    #[test]
+    fn set_target_fps_nil_resets_to_60_and_render_size_clamps() {
+        let mut config = GameConfig::default();
+        apply_script(
+            "engine.set_target_fps(30) engine.set_target_fps() engine.set_render_size(50, 99999)",
+            &mut config,
+        );
+        assert_eq!(config.target_fps, 60);
+        assert_eq!((config.render_width, config.render_height), (120, 4320));
+
+        apply_script("engine.set_render_size(99999, 50)", &mut config);
+        assert_eq!((config.render_width, config.render_height), (7680, 120));
+    }
+
+    #[test]
+    fn unknown_render_target_filter_falls_back_to_nearest() {
+        let mut config = GameConfig {
+            render_target_filter: TextureFilter::Bilinear,
+            ..GameConfig::default()
+        };
+        apply_script("engine.set_render_target_filter('blurry')", &mut config);
+        assert_eq!(config.render_target_filter, TextureFilter::Nearest);
+    }
+
+    #[test]
+    fn getters_read_the_cached_game_config() {
+        let runtime = LuaRuntime::new().unwrap();
+        let config = GameConfig {
+            fullscreen: true,
+            vsync: false,
+            target_fps: 75,
+            render_width: 400,
+            render_height: 300,
+            background_color: Color::new(1, 2, 3, 255),
+            pixel_snap_camera: false,
+            ..GameConfig::default()
+        };
+        runtime.update_gameconfig_cache(&config);
+
+        let (fullscreen, vsync, fps, snap): (bool, bool, u32, bool) = runtime
+            .lua()
+            .load(
+                "return engine.get_fullscreen(), engine.get_vsync(), engine.get_target_fps(), \
+                 engine.get_pixel_snap_camera()",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!((fullscreen, vsync, fps, snap), (true, false, 75, false));
+
+        let (w, h, r, g, b): (u32, u32, u8, u8, u8) = runtime
+            .lua()
+            .load(
+                "local s = engine.get_render_size() local c = engine.get_background_color() \
+                 return s.width, s.height, c.r, c.g, c.b",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!((w, h, r, g, b), (400, 300, 1, 2, 3));
+    }
+}
