@@ -3,5 +3,6 @@
 //! `AudioCmd`/`AudioMessage` contract is carried over the channels wrapped
 //! by `CmdReceiver`/`MsgSender` below.
 
+pub mod backend;
 pub mod channels;
 pub mod store;
