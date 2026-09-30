@@ -1,4 +1,4 @@
-//! Engine tick integration tests for movement, TTL, collision, and other systems.
+//! Engine tick integration tests for TTL, collision, and other systems.
 
 #![allow(dead_code, unused_imports)]
 
@@ -59,7 +59,6 @@ use aberredengine::lua::systems::lua_collision::lua_collision_observer;
 use aberredengine::lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use aberredengine::lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
-use aberredengine::core::systems::movement::movement;
 use aberredengine::core::systems::rust_collision::rust_collision_observer;
 use aberredengine::core::systems::stuckto::stuck_to_entity_system;
 use aberredengine::core::systems::time::update_world_time;
@@ -90,12 +89,6 @@ fn make_world(delta: f32) -> World {
     world
 }
 
-fn tick_movement(world: &mut World) {
-    world
-        .run_system_once(movement)
-        .expect("movement should run");
-}
-
 fn tick_ttl(world: &mut World) {
     world
         .run_system_once(ttl_system)
@@ -107,82 +100,6 @@ fn tick_collision_detector(world: &mut World) {
     schedule.add_systems(rebuild_collision_rule_index.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
-}
-
-#[test]
-fn movement_integrates_velocity_into_position() {
-    let mut world = make_world(0.0);
-    let mut rb = RigidBody::new();
-    rb.velocity = Vec2 { x: 10.0, y: 0.0 };
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
-
-    update_world_time(&mut world, 0.5);
-    tick_movement(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!(approx_eq(pos.pos.x, 5.0));
-    assert!(approx_eq(pos.pos.y, 0.0));
-}
-
-#[test]
-fn movement_applies_acceleration_forces() {
-    let mut world = make_world(0.0);
-    let mut rb = RigidBody::new();
-    rb.add_force("thrust", Vec2 { x: 2.0, y: 0.0 });
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
-
-    update_world_time(&mut world, 1.0);
-    tick_movement(&mut world);
-
-    let rb = world.get::<RigidBody>(entity).unwrap();
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!(approx_eq(rb.velocity.x, 2.0));
-    assert!(approx_eq(rb.velocity.y, 0.0));
-    assert!(approx_eq(pos.pos.x, 2.0));
-    assert!(approx_eq(pos.pos.y, 0.0));
-}
-
-#[test]
-fn movement_sets_signals_moving_and_speed_sq() {
-    let mut world = make_world(0.0);
-    let mut rb = RigidBody::new();
-    rb.velocity = Vec2 { x: 3.0, y: 4.0 };
-
-    let entity = world
-        .spawn((MapPosition::new(0.0, 0.0), rb, Signals::default()))
-        .id();
-
-    update_world_time(&mut world, 1.0);
-    tick_movement(&mut world);
-
-    let signals = world.get::<Signals>(entity).unwrap();
-    assert!(signals.has_flag("moving"));
-    assert!(approx_eq(signals.get_scalar("speed_sq").unwrap(), 25.0));
-}
-
-#[test]
-fn movement_skips_frozen_but_clears_signals() {
-    let mut world = make_world(0.0);
-    let mut rb = RigidBody::new();
-    rb.velocity = Vec2 { x: 5.0, y: 0.0 };
-    rb.freeze();
-
-    let mut signals = Signals::default().with_flag("moving");
-    signals.set_scalar("speed_sq", 123.0);
-
-    let entity = world.spawn((MapPosition::new(1.0, 1.0), rb, signals)).id();
-
-    update_world_time(&mut world, 1.0);
-    tick_movement(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    let signals = world.get::<Signals>(entity).unwrap();
-    assert!(approx_eq(pos.pos.x, 1.0));
-    assert!(approx_eq(pos.pos.y, 1.0));
-    assert!(!signals.has_flag("moving"));
-    assert!(approx_eq(signals.get_scalar("speed_sq").unwrap(), 0.0));
 }
 
 #[test]
@@ -1473,55 +1390,6 @@ fn rust_timer_callback_receives_correct_entity() {
             .has_flag("fired")
     );
     assert!(!world.get::<Signals>(bystander).unwrap().has_flag("fired"));
-}
-
-// =============================================================================
-// Time Scaling Tests
-// =============================================================================
-
-#[test]
-fn time_scale_zero_freezes_movement() {
-    let mut world = World::new();
-    let worldtime = WorldTime::default().with_time_scale(0.0);
-
-    world.insert_resource(worldtime);
-    world.insert_resource(ScreenSize { w: 800, h: 600 });
-    world.init_resource::<Messages<AudioCmd>>();
-
-    let mut rb = RigidBody::new();
-    rb.velocity = Vec2 { x: 100.0, y: 0.0 };
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
-
-    update_world_time(&mut world, 1.0); // Update WorldTime with delta=1.0 should apply time_scale
-    tick_movement(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!(approx_eq(pos.pos.x, 0.0)); // No movement
-    assert!(approx_eq(pos.pos.y, 0.0));
-}
-
-#[test]
-fn time_scale_doubles_effective_movement() {
-    let mut world = World::new();
-    // Simulating time_scale=2.0 with base delta of 0.5 => effective delta = 1.0
-
-    let worldtime = WorldTime::default().with_time_scale(2.0);
-
-    world.insert_resource(worldtime);
-    world.insert_resource(ScreenSize { w: 800, h: 600 });
-    world.init_resource::<Messages<AudioCmd>>();
-
-    let mut rb = RigidBody::new();
-    rb.velocity = Vec2 { x: 10.0, y: 0.0 };
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
-
-    update_world_time(&mut world, 0.5); // Update WorldTime with delta=0.5 should apply time_scale
-    tick_movement(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!(approx_eq(pos.pos.x, 10.0)); // vel * delta = 10 * 1.0
 }
 
 #[cfg(feature = "lua")]

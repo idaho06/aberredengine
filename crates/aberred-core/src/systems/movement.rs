@@ -97,3 +97,134 @@ pub fn movement(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::systems::time::update_world_time;
+    use crate::testing::approx_eq;
+    use bevy_ecs::system::RunSystemOnce;
+
+    /// Minimal world for `movement`: exactly the resources its params read.
+    fn world_with_time(time: WorldTime) -> World {
+        let mut world = World::new();
+        world.insert_resource(time);
+        world.insert_resource(ScreenSize { w: 800, h: 600 });
+        world.init_resource::<Messages<AudioCmd>>();
+        world
+    }
+
+    fn tick_movement(world: &mut World) {
+        world
+            .run_system_once(movement)
+            .expect("movement should run");
+    }
+
+    #[test]
+    fn movement_integrates_velocity_into_position() {
+        let mut world = world_with_time(WorldTime::default());
+        let mut rb = RigidBody::new();
+        rb.velocity = Vec2 { x: 10.0, y: 0.0 };
+
+        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+
+        update_world_time(&mut world, 0.5);
+        tick_movement(&mut world);
+
+        let pos = world.get::<MapPosition>(entity).unwrap();
+        assert!(approx_eq(pos.pos.x, 5.0));
+        assert!(approx_eq(pos.pos.y, 0.0));
+    }
+
+    #[test]
+    fn movement_applies_acceleration_forces() {
+        let mut world = world_with_time(WorldTime::default());
+        let mut rb = RigidBody::new();
+        rb.add_force("thrust", Vec2 { x: 2.0, y: 0.0 });
+
+        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+
+        update_world_time(&mut world, 1.0);
+        tick_movement(&mut world);
+
+        let rb = world.get::<RigidBody>(entity).unwrap();
+        let pos = world.get::<MapPosition>(entity).unwrap();
+        assert!(approx_eq(rb.velocity.x, 2.0));
+        assert!(approx_eq(rb.velocity.y, 0.0));
+        assert!(approx_eq(pos.pos.x, 2.0));
+        assert!(approx_eq(pos.pos.y, 0.0));
+    }
+
+    #[test]
+    fn movement_sets_signals_moving_and_speed_sq() {
+        let mut world = world_with_time(WorldTime::default());
+        let mut rb = RigidBody::new();
+        rb.velocity = Vec2 { x: 3.0, y: 4.0 };
+
+        let entity = world
+            .spawn((MapPosition::new(0.0, 0.0), rb, Signals::default()))
+            .id();
+
+        update_world_time(&mut world, 1.0);
+        tick_movement(&mut world);
+
+        let signals = world.get::<Signals>(entity).unwrap();
+        assert!(signals.has_flag(sk::MOVING));
+        assert!(approx_eq(signals.get_scalar(sk::SPEED_SQ).unwrap(), 25.0));
+    }
+
+    #[test]
+    fn movement_skips_frozen_but_clears_signals() {
+        let mut world = world_with_time(WorldTime::default());
+        let mut rb = RigidBody::new();
+        rb.velocity = Vec2 { x: 5.0, y: 0.0 };
+        rb.freeze();
+
+        let mut signals = Signals::default().with_flag(sk::MOVING);
+        signals.set_scalar(sk::SPEED_SQ, 123.0);
+
+        let entity = world.spawn((MapPosition::new(1.0, 1.0), rb, signals)).id();
+
+        update_world_time(&mut world, 1.0);
+        tick_movement(&mut world);
+
+        let pos = world.get::<MapPosition>(entity).unwrap();
+        let signals = world.get::<Signals>(entity).unwrap();
+        assert!(approx_eq(pos.pos.x, 1.0));
+        assert!(approx_eq(pos.pos.y, 1.0));
+        assert!(!signals.has_flag(sk::MOVING));
+        assert!(approx_eq(signals.get_scalar(sk::SPEED_SQ).unwrap(), 0.0));
+    }
+
+    #[test]
+    fn time_scale_zero_freezes_movement() {
+        let mut world = world_with_time(WorldTime::default().with_time_scale(0.0));
+        let mut rb = RigidBody::new();
+        rb.velocity = Vec2 { x: 100.0, y: 0.0 };
+
+        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+
+        update_world_time(&mut world, 1.0);
+        tick_movement(&mut world);
+
+        let pos = world.get::<MapPosition>(entity).unwrap();
+        assert!(approx_eq(pos.pos.x, 0.0));
+        assert!(approx_eq(pos.pos.y, 0.0));
+    }
+
+    #[test]
+    fn time_scale_doubles_effective_movement() {
+        // time_scale 2.0 with a base dt of 0.5 gives an effective delta of 1.0.
+        let mut world = world_with_time(WorldTime::default().with_time_scale(2.0));
+        let mut rb = RigidBody::new();
+        rb.velocity = Vec2 { x: 10.0, y: 0.0 };
+
+        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+
+        update_world_time(&mut world, 0.5);
+        tick_movement(&mut world);
+
+        let pos = world.get::<MapPosition>(entity).unwrap();
+        assert!(approx_eq(pos.pos.x, 10.0));
+    }
+}
