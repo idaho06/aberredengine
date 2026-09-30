@@ -44,3 +44,53 @@ pub fn ttl_system(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::approx_eq;
+    use bevy_ecs::system::RunSystemOnce;
+
+    fn world_with_delta(delta: f32) -> World {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta,
+            ..Default::default()
+        });
+        world
+    }
+
+    fn tick_ttl(world: &mut World) {
+        world
+            .run_system_once(ttl_system)
+            .expect("ttl_system should run");
+    }
+
+    #[test]
+    fn ttl_decrements_and_despawns() {
+        let mut world = world_with_delta(0.5);
+        let entity = world.spawn((Ttl::new(1.0),)).id();
+
+        tick_ttl(&mut world);
+
+        assert!(world.get_entity(entity).is_ok());
+        let ttl = world.get::<Ttl>(entity).unwrap();
+        assert!(approx_eq(ttl.remaining, 0.5));
+
+        tick_ttl(&mut world);
+
+        assert!(world.get_entity(entity).is_err());
+    }
+
+    #[test]
+    fn ttl_does_not_despawn_before_zero() {
+        let mut world = world_with_delta(0.25);
+        let entity = world.spawn((Ttl::new(0.3),)).id();
+
+        tick_ttl(&mut world);
+
+        assert!(world.get_entity(entity).is_ok());
+        let ttl = world.get::<Ttl>(entity).unwrap();
+        assert!(ttl.remaining > 0.0);
+    }
+}

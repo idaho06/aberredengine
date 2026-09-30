@@ -1,4 +1,4 @@
-//! Engine tick integration tests for TTL, collision, and other systems.
+//! Engine tick integration tests for collision, and other systems.
 
 #![allow(dead_code, unused_imports)]
 
@@ -63,7 +63,6 @@ use aberredengine::core::systems::rust_collision::rust_collision_observer;
 use aberredengine::core::systems::stuckto::stuck_to_entity_system;
 use aberredengine::core::systems::time::update_world_time;
 use aberredengine::core::systems::timer::{timer_observer, update_timers};
-use aberredengine::core::systems::ttl::ttl_system;
 use aberredengine::core::systems::tween::tween_system;
 
 use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
@@ -89,45 +88,11 @@ fn make_world(delta: f32) -> World {
     world
 }
 
-fn tick_ttl(world: &mut World) {
-    world
-        .run_system_once(ttl_system)
-        .expect("ttl_system should run");
-}
-
 fn tick_collision_detector(world: &mut World) {
     let mut schedule = Schedule::default();
     schedule.add_systems(rebuild_collision_rule_index.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
-}
-
-#[test]
-fn ttl_decrements_and_despawns() {
-    let mut world = make_world(0.5);
-    let entity = world.spawn((Ttl::new(1.0),)).id();
-
-    tick_ttl(&mut world);
-
-    assert!(world.get_entity(entity).is_ok());
-    let ttl = world.get::<Ttl>(entity).unwrap();
-    assert!(approx_eq(ttl.remaining, 0.5));
-
-    tick_ttl(&mut world);
-
-    assert!(world.get_entity(entity).is_err());
-}
-
-#[test]
-fn ttl_does_not_despawn_before_zero() {
-    let mut world = make_world(0.25);
-    let entity = world.spawn((Ttl::new(0.3),)).id();
-
-    tick_ttl(&mut world);
-
-    assert!(world.get_entity(entity).is_ok());
-    let ttl = world.get::<Ttl>(entity).unwrap();
-    assert!(ttl.remaining > 0.0);
 }
 
 #[cfg(feature = "lua")]
