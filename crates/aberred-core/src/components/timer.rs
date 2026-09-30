@@ -108,6 +108,7 @@ impl Timer<TimerCallback> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::approx_eq;
 
     fn dummy_callback(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) {}
 
@@ -123,7 +124,7 @@ mod tests {
         let mut timer = Timer::rust(1.0, dummy_callback);
         timer.elapsed = 1.3;
         timer.reset();
-        assert!((timer.elapsed - 0.3).abs() < f32::EPSILON);
+        assert!(approx_eq(timer.elapsed, 0.3));
     }
 
     #[test]

@@ -205,6 +205,7 @@ mod tests {
     use crate::math::Color;
     use crate::components::guiwindow::GuiWindow;
     use crate::components::screenposition::ScreenPosition;
+    use crate::testing::approx_eq;
 
     fn tick<M>(world: &mut World, system: impl IntoSystem<(), (), M>) {
         world
@@ -666,8 +667,8 @@ mod tests {
             .iter(&world)
             .next()
             .expect("image entity with GuiInteractable + Sprite should be spawned");
-        assert!((interactable.size.x - 32.0).abs() < f32::EPSILON);
-        assert!((interactable.size.y - 32.0).abs() < f32::EPSILON);
+        assert!(approx_eq(interactable.size.x, 32.0));
+        assert!(approx_eq(interactable.size.y, 32.0));
         assert_eq!(
             interactable.on_click_callback.as_deref(),
             Some("on_item_clicked")
@@ -740,7 +741,7 @@ mod tests {
             .iter(&world)
             .next()
             .expect("image entity with Sprite should be spawned");
-        assert!((sprite.offset.x - 64.0).abs() < f32::EPSILON);
-        assert!((sprite.offset.y - 32.0).abs() < f32::EPSILON);
+        assert!(approx_eq(sprite.offset.x, 64.0));
+        assert!(approx_eq(sprite.offset.y, 32.0));
     }
 }

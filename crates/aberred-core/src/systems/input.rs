@@ -371,6 +371,7 @@ mod tests {
     use super::*;
     use crate::protocol::raw_input::ImguiCaptureState;
     use crate::resources::input_bindings::{GamepadAxis, GamepadButton, Key};
+    use crate::testing::approx_eq;
 
     fn test_camera(target: (f32, f32), offset: (f32, f32), zoom: f32, rotation: f32) -> Camera2D {
         Camera2D {
@@ -391,8 +392,8 @@ mod tests {
     fn screen_to_world2d_identity_camera() {
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0);
         let world = screen_to_world2d(Vec2 { x: 42.0, y: -7.0 }, &cam);
-        assert!((world.x - 42.0).abs() < 1e-4);
-        assert!((world.y - -7.0).abs() < 1e-4);
+        assert!(approx_eq(world.x, 42.0));
+        assert!(approx_eq(world.y, -7.0));
     }
 
     #[test]
@@ -401,11 +402,11 @@ mod tests {
         // => world = (screen - offset) / zoom + target
         let cam = test_camera((100.0, 50.0), (400.0, 300.0), 2.0, 0.0);
         let center = screen_to_world2d(Vec2 { x: 400.0, y: 300.0 }, &cam);
-        assert!((center.x - 100.0).abs() < 1e-3);
-        assert!((center.y - 50.0).abs() < 1e-3);
+        assert!(approx_eq(center.x, 100.0));
+        assert!(approx_eq(center.y, 50.0));
         let right = screen_to_world2d(Vec2 { x: 500.0, y: 300.0 }, &cam);
-        assert!((right.x - 150.0).abs() < 1e-3);
-        assert!((right.y - 50.0).abs() < 1e-3);
+        assert!(approx_eq(right.x, 150.0));
+        assert!(approx_eq(right.y, 50.0));
     }
 
     #[test]
@@ -414,8 +415,8 @@ mod tests {
         // screen (10, 0) relative to offset maps to world (0, -10) + target.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 90.0);
         let world = screen_to_world2d(Vec2 { x: 10.0, y: 0.0 }, &cam);
-        assert!(world.x.abs() < 1e-3, "x = {}", world.x);
-        assert!((world.y - -10.0).abs() < 1e-3, "y = {}", world.y);
+        assert!(approx_eq(world.x, 0.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, -10.0), "y = {}", world.y);
     }
 
     /// Permanent regression table for the pure-Rust `screen_to_world2d`
@@ -432,38 +433,38 @@ mod tests {
         // Negative target, zero rotation/offset, zoom 1: world = target + screen.
         let cam = test_camera((-50.0, -30.0), (0.0, 0.0), 1.0, 0.0);
         let world = screen_to_world2d(Vec2 { x: 20.0, y: 10.0 }, &cam);
-        assert!((world.x - -30.0).abs() < 1e-3, "x = {}", world.x);
-        assert!((world.y - -20.0).abs() < 1e-3, "y = {}", world.y);
+        assert!(approx_eq(world.x, -30.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, -20.0), "y = {}", world.y);
 
         // Offset-only: world = screen - offset.
         let cam = test_camera((0.0, 0.0), (100.0, 50.0), 1.0, 0.0);
         let world = screen_to_world2d(Vec2 { x: 150.0, y: 80.0 }, &cam);
-        assert!((world.x - 50.0).abs() < 1e-3, "x = {}", world.x);
-        assert!((world.y - 30.0).abs() < 1e-3, "y = {}", world.y);
+        assert!(approx_eq(world.x, 50.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, 30.0), "y = {}", world.y);
 
         // Extreme small zoom: world = screen / zoom.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 0.01, 0.0);
         let world = screen_to_world2d(Vec2 { x: 1.0, y: 2.0 }, &cam);
-        assert!((world.x - 100.0).abs() < 1e-1, "x = {}", world.x);
-        assert!((world.y - 200.0).abs() < 1e-1, "y = {}", world.y);
+        assert!(approx_eq(world.x, 100.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, 200.0), "y = {}", world.y);
 
         // Extreme large zoom: world = screen / zoom.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1000.0, 0.0);
         let world = screen_to_world2d(Vec2 { x: 1000.0, y: 2000.0 }, &cam);
-        assert!((world.x - 1.0).abs() < 1e-3, "x = {}", world.x);
-        assert!((world.y - 2.0).abs() < 1e-3, "y = {}", world.y);
+        assert!(approx_eq(world.x, 1.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, 2.0), "y = {}", world.y);
 
         // 180° rotation, zoom 1: world = R(180°) * screen = -screen.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 180.0);
         let world = screen_to_world2d(Vec2 { x: 5.0, y: 3.0 }, &cam);
-        assert!((world.x - -5.0).abs() < 1e-3, "x = {}", world.x);
-        assert!((world.y - -3.0).abs() < 1e-3, "y = {}", world.y);
+        assert!(approx_eq(world.x, -5.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, -3.0), "y = {}", world.y);
 
         // Negative rotation (-90°): world = R(90°) * screen.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1.0, -90.0);
         let world = screen_to_world2d(Vec2 { x: 10.0, y: 0.0 }, &cam);
-        assert!(world.x.abs() < 1e-3, "x = {}", world.x);
-        assert!((world.y - 10.0).abs() < 1e-3, "y = {}", world.y);
+        assert!(approx_eq(world.x, 0.0), "x = {}", world.x);
+        assert!(approx_eq(world.y, 10.0), "y = {}", world.y);
     }
 
     #[derive(Resource, Default)]
@@ -531,8 +532,8 @@ mod tests {
         assert_eq!(input.scroll_y, 1.5);
         assert!(input.action_1.active);
         assert!(input.action_1.just_pressed);
-        assert!((input.mouse_world_x - 150.0).abs() < 1e-3);
-        assert!((input.mouse_world_y - 50.0).abs() < 1e-3);
+        assert!(approx_eq(input.mouse_world_x, 150.0));
+        assert!(approx_eq(input.mouse_world_y, 50.0));
     }
 
     #[test]

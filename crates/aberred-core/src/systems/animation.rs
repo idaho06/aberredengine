@@ -237,6 +237,7 @@ fn evaluate_condition(signals: &Signals, condition: &Condition) -> bool {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+    use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
     fn empty_signals() -> Signals {
@@ -630,8 +631,7 @@ mod tests {
 
     fn assert_offset(result: Vec2, expected_x: f32, expected_y: f32) {
         assert!(
-            (result.x - expected_x).abs() < f32::EPSILON
-                && (result.y - expected_y).abs() < f32::EPSILON,
+            approx_eq(result.x, expected_x) && approx_eq(result.y, expected_y),
             "expected ({}, {}), got ({}, {})",
             expected_x,
             expected_y,

@@ -317,7 +317,7 @@ pub fn spawn_map_observer(
 mod tests {
     use super::*;
     use crate::resources::mapdata::BoxColliderEntry;
-    use crate::testing::approx_eq_eps;
+    use crate::testing::approx_eq;
     use bevy_ecs::world::CommandQueue;
 
     #[test]
@@ -340,12 +340,12 @@ mod tests {
         queue.apply(&mut world);
 
         let collider = world.get::<BoxCollider>(entity).unwrap();
-        assert!(approx_eq_eps(collider.size.x, 32.0, f32::EPSILON));
-        assert!(approx_eq_eps(collider.size.y, 48.0, f32::EPSILON));
-        assert!(approx_eq_eps(collider.offset.x, 3.0, f32::EPSILON));
-        assert!(approx_eq_eps(collider.offset.y, 4.0, f32::EPSILON));
-        assert!(approx_eq_eps(collider.origin.x, 5.0, f32::EPSILON));
-        assert!(approx_eq_eps(collider.origin.y, 6.0, f32::EPSILON));
+        assert!(approx_eq(collider.size.x, 32.0));
+        assert!(approx_eq(collider.size.y, 48.0));
+        assert!(approx_eq(collider.offset.x, 3.0));
+        assert!(approx_eq(collider.offset.y, 4.0));
+        assert!(approx_eq(collider.origin.x, 5.0));
+        assert!(approx_eq(collider.origin.y, 6.0));
     }
 
     #[test]

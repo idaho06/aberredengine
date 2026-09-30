@@ -47,9 +47,7 @@ pub(crate) fn compose_transform(parent: Transform2D, local: Transform2D) -> Tran
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{approx_eq_eps, vec2_approx_eq_eps};
-
-    const EPSILON: f32 = 1e-4;
+    use crate::testing::{approx_eq, vec2_approx_eq};
 
     #[test]
     fn full_srt_composition() {
@@ -69,17 +67,9 @@ mod tests {
         // local.pos (10,0) scaled by parent.scale (2,2) -> (20,0)
         // rotated by 90deg -> (0,20)
         // translated by parent.pos (100,50) -> (100,70)
-        assert!(vec2_approx_eq_eps(
-            result.pos,
-            Vec2 { x: 100.0, y: 70.0 },
-            EPSILON
-        ));
-        assert!(approx_eq_eps(result.rot_degrees, 90.0, EPSILON));
-        assert!(vec2_approx_eq_eps(
-            result.scale,
-            Vec2 { x: 2.0, y: 2.0 },
-            EPSILON
-        ));
+        assert!(vec2_approx_eq(result.pos, Vec2 { x: 100.0, y: 70.0 },));
+        assert!(approx_eq(result.rot_degrees, 90.0));
+        assert!(vec2_approx_eq(result.scale, Vec2 { x: 2.0, y: 2.0 },));
     }
 
     #[test]
@@ -97,16 +87,8 @@ mod tests {
 
         let result = compose_transform(parent, local);
 
-        assert!(vec2_approx_eq_eps(
-            result.pos,
-            Vec2 { x: 120.0, y: 140.0 },
-            EPSILON
-        ));
-        assert!(approx_eq_eps(
-            result.rot_degrees,
-            local.rot_degrees,
-            EPSILON
-        ));
-        assert!(vec2_approx_eq_eps(result.scale, local.scale, EPSILON));
+        assert!(vec2_approx_eq(result.pos, Vec2 { x: 120.0, y: 140.0 },));
+        assert!(approx_eq(result.rot_degrees, local.rot_degrees,));
+        assert!(vec2_approx_eq(result.scale, local.scale));
     }
 }

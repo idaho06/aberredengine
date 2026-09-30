@@ -112,6 +112,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::approx_eq;
     use bevy_ecs::system::SystemState;
     use bevy_ecs::world::World;
 
@@ -257,8 +258,8 @@ mod tests {
         let result = resolve_world_pos(&positions, &global_transforms, e);
         assert!(result.is_some());
         let v = result.unwrap();
-        assert!((v.x - 5.0).abs() < f32::EPSILON);
-        assert!((v.y - 10.0).abs() < f32::EPSILON);
+        assert!(approx_eq(v.x, 5.0));
+        assert!(approx_eq(v.y, 10.0));
     }
 
     #[test]
@@ -285,8 +286,8 @@ mod tests {
         assert!(result.is_some());
         let v = result.unwrap();
         // Should prefer GlobalTransform2D over local MapPosition
-        assert!((v.x - 100.0).abs() < f32::EPSILON);
-        assert!((v.y - 200.0).abs() < f32::EPSILON);
+        assert!(approx_eq(v.x, 100.0));
+        assert!(approx_eq(v.y, 200.0));
     }
 
     // --- resolve_collider_rect tests ---
@@ -325,7 +326,7 @@ mod tests {
         let rect = resolve_collider_rect(&positions, &global_transforms, &box_colliders, e);
         assert!(rect.is_some());
         let r = rect.unwrap();
-        assert!((r.width - 30.0).abs() < f32::EPSILON);
-        assert!((r.height - 40.0).abs() < f32::EPSILON);
+        assert!(approx_eq(r.width, 30.0));
+        assert!(approx_eq(r.height, 40.0));
     }
 }

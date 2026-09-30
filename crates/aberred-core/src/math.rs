@@ -253,39 +253,37 @@ impl Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::approx_eq_eps;
+    use crate::testing::approx_eq;
     use std::mem::size_of;
-
-    const EPSILON: f32 = 1e-5;
 
     #[test]
     fn rotate_by_90_degrees() {
         let r = rotate(Vec2::new(10.0, 0.0), std::f32::consts::FRAC_PI_2);
-        assert!(approx_eq_eps(r.x, 0.0, EPSILON));
-        assert!(approx_eq_eps(r.y, 10.0, EPSILON));
+        assert!(approx_eq(r.x, 0.0));
+        assert!(approx_eq(r.y, 10.0));
     }
 
     #[test]
     fn rotate_by_zero_is_identity() {
         let v = Vec2::new(3.0, 4.0);
         let r = rotate(v, 0.0);
-        assert!(approx_eq_eps(r.x, v.x, EPSILON));
-        assert!(approx_eq_eps(r.y, v.y, EPSILON));
+        assert!(approx_eq(r.x, v.x));
+        assert!(approx_eq(r.y, v.y));
     }
 
     #[test]
     fn lerp_zero_stays() {
-        assert!(approx_eq_eps(lerp(10.0, 50.0, 0.0), 10.0, EPSILON));
+        assert!(approx_eq(lerp(10.0, 50.0, 0.0), 10.0));
     }
 
     #[test]
     fn lerp_one_reaches_target() {
-        assert!(approx_eq_eps(lerp(10.0, 50.0, 1.0), 50.0, EPSILON));
+        assert!(approx_eq(lerp(10.0, 50.0, 1.0), 50.0));
     }
 
     #[test]
     fn lerp_half_is_midpoint() {
-        assert!(approx_eq_eps(lerp(0.0, 100.0, 0.5), 50.0, EPSILON));
+        assert!(approx_eq(lerp(0.0, 100.0, 0.5), 50.0));
     }
 
     #[test]
@@ -293,8 +291,8 @@ mod tests {
         let a = Vec2::new(10.0, 20.0);
         let b = Vec2::new(50.0, 60.0);
         let r = lerp(a, b, 0.0);
-        assert!(approx_eq_eps(r.x, 10.0, EPSILON));
-        assert!(approx_eq_eps(r.y, 20.0, EPSILON));
+        assert!(approx_eq(r.x, 10.0));
+        assert!(approx_eq(r.y, 20.0));
     }
 
     #[test]
@@ -302,8 +300,8 @@ mod tests {
         let a = Vec2::new(10.0, 20.0);
         let b = Vec2::new(50.0, 60.0);
         let r = lerp(a, b, 1.0);
-        assert!(approx_eq_eps(r.x, 50.0, EPSILON));
-        assert!(approx_eq_eps(r.y, 60.0, EPSILON));
+        assert!(approx_eq(r.x, 50.0));
+        assert!(approx_eq(r.y, 60.0));
     }
 
     #[test]
@@ -311,8 +309,8 @@ mod tests {
         let a = Vec2::new(0.0, 0.0);
         let b = Vec2::new(100.0, 200.0);
         let r = lerp(a, b, 0.5);
-        assert!(approx_eq_eps(r.x, 50.0, EPSILON));
-        assert!(approx_eq_eps(r.y, 100.0, EPSILON));
+        assert!(approx_eq(r.x, 50.0));
+        assert!(approx_eq(r.y, 100.0));
     }
 
     #[test]

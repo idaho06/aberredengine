@@ -177,22 +177,20 @@ fn clamp_axis_to_bounds(target: f32, origin: f32, size: f32, half_viewport: f32)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::approx_eq_eps;
-
-    const EPSILON: f32 = 1e-5;
+    use crate::testing::approx_eq;
 
     // --- lerp_alpha tests ---
 
     #[test]
     fn linear_alpha_clamps_to_one() {
         let a = lerp_alpha(EasingCurve::Linear, 100.0, 1.0);
-        assert!(approx_eq_eps(a, 1.0, EPSILON));
+        assert!(approx_eq(a, 1.0));
     }
 
     #[test]
     fn linear_alpha_proportional() {
         let a = lerp_alpha(EasingCurve::Linear, 5.0, 0.1);
-        assert!(approx_eq_eps(a, 0.5, EPSILON));
+        assert!(approx_eq(a, 0.5));
     }
 
     #[test]
@@ -221,6 +219,6 @@ mod tests {
     fn ease_in_out_midpoint_near_half() {
         // smoothstep(0.5) = 0.5
         let a = lerp_alpha(EasingCurve::EaseInOut, 5.0, 0.1);
-        assert!(approx_eq_eps(a, 0.5, EPSILON));
+        assert!(approx_eq(a, 0.5));
     }
 }

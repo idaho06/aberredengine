@@ -68,6 +68,7 @@ impl EntityShader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::approx_eq;
 
     #[test]
     fn set_uniform_mutates_in_place_without_reallocating_key() {
@@ -77,14 +78,14 @@ mod tests {
         let first_key_ptr = Arc::as_ptr(shader.uniforms.keys().next().unwrap());
         assert!(matches!(
             shader.uniforms.get("uIntensity"),
-            Some(UniformValue::Float(v)) if (*v - 1.0).abs() < f32::EPSILON
+            Some(UniformValue::Float(v)) if approx_eq(*v, 1.0)
         ));
 
         shader.set_uniform("uIntensity", UniformValue::Float(2.0));
         assert_eq!(shader.uniforms.len(), 1);
         assert!(matches!(
             shader.uniforms.get("uIntensity"),
-            Some(UniformValue::Float(v)) if (*v - 2.0).abs() < f32::EPSILON
+            Some(UniformValue::Float(v)) if approx_eq(*v, 2.0)
         ));
         let second_key_ptr = Arc::as_ptr(shader.uniforms.keys().next().unwrap());
         assert_eq!(

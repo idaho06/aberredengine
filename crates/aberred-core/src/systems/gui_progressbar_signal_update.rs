@@ -35,6 +35,7 @@ pub fn gui_progressbar_signal_update_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
     use crate::components::guiprogressbar::GuiProgressBar;
@@ -54,7 +55,7 @@ mod tests {
         tick(&mut world, gui_progressbar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
-        assert!((bar.value - 40.0).abs() < f32::EPSILON);
+        assert!(approx_eq(bar.value, 40.0));
     }
 
     #[test]
@@ -69,7 +70,7 @@ mod tests {
         tick(&mut world, gui_progressbar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
-        assert!((bar.value - 0.75).abs() < f32::EPSILON);
+        assert!(approx_eq(bar.value, 0.75));
     }
 
     #[test]
@@ -82,7 +83,7 @@ mod tests {
         tick(&mut world, gui_progressbar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
-        assert!((bar.value - 100.0).abs() < f32::EPSILON);
+        assert!(approx_eq(bar.value, 100.0));
     }
 
     #[test]
@@ -94,7 +95,7 @@ mod tests {
         tick(&mut world, gui_progressbar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
-        assert!((bar.value - 50.0).abs() < f32::EPSILON);
+        assert!(approx_eq(bar.value, 50.0));
     }
 
     #[test]
@@ -107,6 +108,6 @@ mod tests {
         tick(&mut world, gui_progressbar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
-        assert!((bar.value - 50.0).abs() < f32::EPSILON);
+        assert!(approx_eq(bar.value, 50.0));
     }
 }

@@ -129,7 +129,7 @@ pub fn tween_system<T: TweenValue>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{EPSILON, approx_eq};
+    use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
     use crate::components::mapposition::MapPosition;
@@ -297,7 +297,7 @@ mod tests {
                 let t = i as f32 / 100.0;
                 let curr = ease(easing, t);
                 assert!(
-                    curr >= prev - EPSILON,
+                    curr >= prev || approx_eq(curr, prev),
                     "{:?} should be monotonic: ease({}) = {} < ease({}) = {}",
                     easing,
                     (i - 1) as f32 / 100.0,

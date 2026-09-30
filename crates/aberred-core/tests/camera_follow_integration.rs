@@ -16,9 +16,7 @@ use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurv
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::camera_follow::camera_follow_system;
-use aberred_core::testing::approx_eq_eps;
-
-const EPSILON: f32 = 1e-4;
+use aberred_core::testing::approx_eq;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,8 +76,8 @@ fn disabled_config_does_not_move_camera() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 0.0, EPSILON));
-    assert!(approx_eq_eps(t.y, 0.0, EPSILON));
+    assert!(approx_eq(t.x, 0.0));
+    assert!(approx_eq(t.y, 0.0));
 }
 
 #[test]
@@ -89,8 +87,8 @@ fn no_targets_does_not_move_camera() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 0.0, EPSILON));
-    assert!(approx_eq_eps(t.y, 0.0, EPSILON));
+    assert!(approx_eq(t.x, 0.0));
+    assert!(approx_eq(t.y, 0.0));
 }
 
 // ---------------------------------------------------------------------------
@@ -107,8 +105,8 @@ fn instant_snaps_to_target() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 200.0, EPSILON), "x: {}", t.x);
-    assert!(approx_eq_eps(t.y, 300.0, EPSILON), "y: {}", t.y);
+    assert!(approx_eq(t.x, 200.0), "x: {}", t.x);
+    assert!(approx_eq(t.y, 300.0), "y: {}", t.y);
 }
 
 #[test]
@@ -125,8 +123,8 @@ fn instant_with_offset() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 110.0, EPSILON), "x: {}", t.x);
-    assert!(approx_eq_eps(t.y, 80.0, EPSILON), "y: {}", t.y);
+    assert!(approx_eq(t.x, 110.0), "x: {}", t.x);
+    assert!(approx_eq(t.y, 80.0), "y: {}", t.y);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,8 +144,8 @@ fn highest_priority_wins() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 500.0, EPSILON), "x: {}", t.x);
-    assert!(approx_eq_eps(t.y, 500.0, EPSILON), "y: {}", t.y);
+    assert!(approx_eq(t.x, 500.0), "x: {}", t.x);
+    assert!(approx_eq(t.y, 500.0), "y: {}", t.y);
 }
 
 #[test]
@@ -179,16 +177,16 @@ fn equal_priority_deterministic() {
     tick(&mut world);
     let t2 = camera_target(&world);
 
-    assert!(approx_eq_eps(t1.x, expected_x, EPSILON), "x: {}", t1.x);
-    assert!(approx_eq_eps(t1.y, expected_y, EPSILON), "y: {}", t1.y);
+    assert!(approx_eq(t1.x, expected_x), "x: {}", t1.x);
+    assert!(approx_eq(t1.y, expected_y), "y: {}", t1.y);
     assert!(
-        approx_eq_eps(t1.x, t2.x, EPSILON),
+        approx_eq(t1.x, t2.x),
         "deterministic x: {} vs {}",
         t1.x,
         t2.x
     );
     assert!(
-        approx_eq_eps(t1.y, t2.y, EPSILON),
+        approx_eq(t1.y, t2.y),
         "deterministic y: {} vs {}",
         t1.y,
         t2.y
@@ -218,8 +216,8 @@ fn prefers_global_transform_over_map_position() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 77.0, EPSILON), "x: {}", t.x);
-    assert!(approx_eq_eps(t.y, 88.0, EPSILON), "y: {}", t.y);
+    assert!(approx_eq(t.x, 77.0), "x: {}", t.x);
+    assert!(approx_eq(t.y, 88.0), "y: {}", t.y);
 }
 
 #[test]
@@ -233,8 +231,8 @@ fn falls_back_to_map_position_without_global_transform() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(approx_eq_eps(t.x, 42.0, EPSILON), "x: {}", t.x);
-    assert!(approx_eq_eps(t.y, 13.0, EPSILON), "y: {}", t.y);
+    assert!(approx_eq(t.x, 42.0), "x: {}", t.x);
+    assert!(approx_eq(t.y, 13.0), "y: {}", t.y);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,16 +276,8 @@ fn lerp_converges_over_many_frames() {
     }
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq_eps(t.x, 100.0, EPSILON),
-        "x should converge: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, 100.0, EPSILON),
-        "y should converge: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 100.0), "x should converge: {}", t.x);
+    assert!(approx_eq(t.y, 100.0), "y should converge: {}", t.y);
 }
 
 #[test]
@@ -315,7 +305,7 @@ fn lerp_linear_easing_moves_at_constant_rate() {
     let ratio_actual = (x2 - x1) / x1;
     let ratio_expected = (100.0 - x1) / 100.0;
     assert!(
-        approx_eq_eps(ratio_actual, ratio_expected, EPSILON),
+        approx_eq(ratio_actual, ratio_expected),
         "linear ratio: {} vs {}",
         ratio_actual,
         ratio_expected
@@ -423,16 +413,8 @@ fn deadzone_holds_when_inside() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq_eps(t.x, 0.0, EPSILON),
-        "x should not move: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, 0.0, EPSILON),
-        "y should not move: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 0.0), "x should not move: {}", t.x);
+    assert!(approx_eq(t.y, 0.0), "y should not move: {}", t.y);
 }
 
 #[test]
@@ -476,7 +458,7 @@ fn deadzone_per_axis_independence() {
 
     let t = camera_target(&world);
     assert!(
-        approx_eq_eps(t.x, 0.0, EPSILON),
+        approx_eq(t.x, 0.0),
         "x should hold (inside deadzone): {}",
         t.x
     );
@@ -509,16 +491,8 @@ fn bounds_clamp_prevents_camera_leaving_world() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq_eps(t.x, 160.0, EPSILON),
-        "x clamped to half-viewport: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, 120.0, EPSILON),
-        "y clamped to half-viewport: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 160.0), "x clamped to half-viewport: {}", t.x);
+    assert!(approx_eq(t.y, 120.0), "y clamped to half-viewport: {}", t.y);
 }
 
 #[test]
@@ -542,16 +516,8 @@ fn bounds_clamp_far_edge() {
 
     let t = camera_target(&world);
     // 1000 - 160 = 840, 1000 - 120 = 880
-    assert!(
-        approx_eq_eps(t.x, 840.0, EPSILON),
-        "x clamped to far edge: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, 880.0, EPSILON),
-        "y clamped to far edge: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 840.0), "x clamped to far edge: {}", t.x);
+    assert!(approx_eq(t.y, 880.0), "y clamped to far edge: {}", t.y);
 }
 
 #[test]
@@ -586,8 +552,8 @@ fn bounds_clamp_respects_zoom() {
 
     let t = camera_target(&world);
     // half_vw = 160/2 = 80, half_vh = 120/2 = 60
-    assert!(approx_eq_eps(t.x, 80.0, EPSILON), "x with zoom: {}", t.x);
-    assert!(approx_eq_eps(t.y, 60.0, EPSILON), "y with zoom: {}", t.y);
+    assert!(approx_eq(t.x, 80.0), "x with zoom: {}", t.x);
+    assert!(approx_eq(t.y, 60.0), "y with zoom: {}", t.y);
 }
 
 #[test]
@@ -609,16 +575,8 @@ fn bounds_smaller_than_viewport_centers_camera() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq_eps(t.x, 60.0, EPSILON),
-        "x centered in narrow bounds: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, 60.0, EPSILON),
-        "y centered in short bounds: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 60.0), "x centered in narrow bounds: {}", t.x);
+    assert!(approx_eq(t.y, 60.0), "y centered in short bounds: {}", t.y);
 }
 
 #[test]
@@ -640,16 +598,8 @@ fn bounds_smaller_than_viewport_only_on_x_centers_that_axis() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq_eps(t.x, 60.0, EPSILON),
-        "x centered in narrow bounds: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, 140.0, EPSILON),
-        "y still clamps normally: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, 60.0), "x centered in narrow bounds: {}", t.x);
+    assert!(approx_eq(t.y, 140.0), "y still clamps normally: {}", t.y);
 }
 
 #[test]
@@ -672,15 +622,11 @@ fn zero_width_bounds_center_x() {
 
     let t = camera_target(&world);
     assert!(
-        approx_eq_eps(t.x, 25.0, EPSILON),
+        approx_eq(t.x, 25.0),
         "x centered in zero-width bounds: {}",
         t.x
     );
-    assert!(
-        approx_eq_eps(t.y, 140.0, EPSILON),
-        "y still clamps normally: {}",
-        t.y
-    );
+    assert!(approx_eq(t.y, 140.0), "y still clamps normally: {}", t.y);
 }
 
 #[test]
@@ -712,12 +658,12 @@ fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
 
     let t = camera_target(&world);
     assert!(
-        approx_eq_eps(t.x, 300.0, EPSILON),
+        approx_eq(t.x, 300.0),
         "x centered when zoomed far out: {}",
         t.x
     );
     assert!(
-        approx_eq_eps(t.y, 270.0, EPSILON),
+        approx_eq(t.y, 270.0),
         "y centered when zoomed far out: {}",
         t.y
     );
@@ -740,16 +686,8 @@ fn no_bounds_allows_any_position() {
     tick(&mut world);
 
     let t = camera_target(&world);
-    assert!(
-        approx_eq_eps(t.x, -99999.0, EPSILON),
-        "x unclamped: {}",
-        t.x
-    );
-    assert!(
-        approx_eq_eps(t.y, -99999.0, EPSILON),
-        "y unclamped: {}",
-        t.y
-    );
+    assert!(approx_eq(t.x, -99999.0), "x unclamped: {}", t.x);
+    assert!(approx_eq(t.y, -99999.0), "y unclamped: {}", t.y);
 }
 
 // ---------------------------------------------------------------------------

@@ -77,6 +77,7 @@ impl Camera2DRes {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::approx_eq;
 
     fn make_camera(target: Vec2, offset: Vec2, zoom: f32) -> Camera2DRes {
         Camera2DRes(Camera2D {
@@ -96,10 +97,10 @@ mod tests {
         );
         let screen = ScreenSize { w: 640, h: 360 };
         let r = cam.world_visible_rect(&screen);
-        assert!((r.x - -320.0).abs() < 1e-4);
-        assert!((r.y - -180.0).abs() < 1e-4);
-        assert!((r.width - 640.0).abs() < 1e-4);
-        assert!((r.height - 360.0).abs() < 1e-4);
+        assert!(approx_eq(r.x, -320.0));
+        assert!(approx_eq(r.y, -180.0));
+        assert!(approx_eq(r.width, 640.0));
+        assert!(approx_eq(r.height, 360.0));
     }
 
     #[test]
@@ -111,10 +112,10 @@ mod tests {
         );
         let screen = ScreenSize { w: 640, h: 360 };
         let r = cam.world_visible_rect(&screen);
-        assert!((r.x - -160.0).abs() < 1e-4);
-        assert!((r.y - -90.0).abs() < 1e-4);
-        assert!((r.width - 320.0).abs() < 1e-4);
-        assert!((r.height - 180.0).abs() < 1e-4);
+        assert!(approx_eq(r.x, -160.0));
+        assert!(approx_eq(r.y, -90.0));
+        assert!(approx_eq(r.width, 320.0));
+        assert!(approx_eq(r.height, 180.0));
     }
 
     #[test]
@@ -125,8 +126,8 @@ mod tests {
             1.0,
         );
         let snapped = cam.pixel_snapped();
-        assert!((snapped.target.x - 11.0).abs() < 1e-6);
-        assert!((snapped.target.y - -3.0).abs() < 1e-6);
+        assert!(approx_eq(snapped.target.x, 11.0));
+        assert!(approx_eq(snapped.target.y, -3.0));
     }
 
     #[test]
@@ -138,10 +139,10 @@ mod tests {
             zoom: 2.0,
         });
         let snapped = cam.pixel_snapped();
-        assert!((snapped.offset.x - 100.0).abs() < 1e-6);
-        assert!((snapped.offset.y - 200.0).abs() < 1e-6);
-        assert!((snapped.rotation - 45.0).abs() < 1e-6);
-        assert!((snapped.zoom - 2.0).abs() < 1e-6);
+        assert!(approx_eq(snapped.offset.x, 100.0));
+        assert!(approx_eq(snapped.offset.y, 200.0));
+        assert!(approx_eq(snapped.rotation, 45.0));
+        assert!(approx_eq(snapped.zoom, 2.0));
     }
 
     #[test]
@@ -155,10 +156,10 @@ mod tests {
         let snapped_rect = cam.world_visible_rect_snapped(&screen);
         let snapped_cam = Camera2DRes(cam.pixel_snapped());
         let expected = snapped_cam.world_visible_rect(&screen);
-        assert!((snapped_rect.x - expected.x).abs() < 1e-4);
-        assert!((snapped_rect.y - expected.y).abs() < 1e-4);
-        assert!((snapped_rect.width - expected.width).abs() < 1e-4);
-        assert!((snapped_rect.height - expected.height).abs() < 1e-4);
+        assert!(approx_eq(snapped_rect.x, expected.x));
+        assert!(approx_eq(snapped_rect.y, expected.y));
+        assert!(approx_eq(snapped_rect.width, expected.width));
+        assert!(approx_eq(snapped_rect.height, expected.height));
     }
 
     #[test]
