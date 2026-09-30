@@ -1,6 +1,6 @@
 //! Integration tests for the GUI child layout system (`gui_layout_system`).
 //!
-//! Mirrors the harness pattern in `aberred-lua/tests/hierarchy_integration.rs`.
+//! Mirrors the harness pattern in `tests/hierarchy.rs`.
 //!
 //! # Usage
 //!
