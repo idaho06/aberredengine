@@ -759,6 +759,57 @@ fn lua_conflict_names_the_first_user_hook_for_every_hook() {
     }
 }
 
+// --- load_config ---
+
+#[test]
+fn load_config_reads_the_file_at_config_path() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), "[window]\ntitle = From File\n").unwrap();
+    let config = EngineBuilder::new().config(file.path()).load_config().unwrap();
+    assert_eq!(config.window_title, "From File");
+}
+
+#[test]
+fn load_config_prefers_the_inline_string_over_the_file() {
+    let config = EngineBuilder::new()
+        .config("does/not/exist.ini")
+        .config_str("[window]\ntitle = Inline\n")
+        .load_config()
+        .unwrap();
+    assert_eq!(config.window_title, "Inline");
+}
+
+#[test]
+fn load_config_reports_a_missing_file_with_its_path() {
+    let err = EngineBuilder::new()
+        .config("does/not/exist.ini")
+        .load_config()
+        .unwrap_err();
+    assert!(
+        matches!(&err, EngineError::ConfigFile { path, .. } if path == &PathBuf::from("does/not/exist.ini")),
+        "{err}"
+    );
+}
+
+#[test]
+fn load_config_reports_an_unparsable_inline_string() {
+    let err = EngineBuilder::new()
+        .config_str("[window\ntitle = x\n")
+        .load_config()
+        .unwrap_err();
+    assert!(matches!(err, EngineError::ConfigEmbedded { .. }), "{err}");
+}
+
+#[test]
+fn title_override_replaces_the_configured_window_title() {
+    let config = EngineBuilder::new()
+        .config_str("[window]\ntitle = Inline\n")
+        .title("Override")
+        .load_config()
+        .unwrap();
+    assert_eq!(config.window_title, "Override");
+}
+
 #[test]
 fn test_validate_required_systems_reports_missing_entries() {
     let systems_store = SystemsStore::new();
