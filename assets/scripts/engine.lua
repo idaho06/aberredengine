@@ -1757,7 +1757,7 @@ function EntityBuilder:with_gui_progress_bar_reversed() end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_progress_bar_signal_binding(key) end
 
----Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.
+---Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top), keeping any :with_gui_progress_bar_reversed() so the two can be called in either order. Requires :with_gui_progress_bar() first.
 ---@return EntityBuilder
 function EntityBuilder:with_gui_progress_bar_vertical() end
 
@@ -2332,7 +2332,7 @@ function CollisionEntityBuilder:with_gui_progress_bar_reversed() end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_progress_bar_signal_binding(key) end
 
----Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.
+---Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top), keeping any :with_gui_progress_bar_reversed() so the two can be called in either order. Requires :with_gui_progress_bar() first.
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_progress_bar_vertical() end
 

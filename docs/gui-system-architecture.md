@@ -454,7 +454,7 @@ engine.spawn()
 ```
 
 Builder modifiers (all require `:with_gui_progress_bar()` first):
-- `:with_gui_progress_bar_vertical()` — sets direction to `Vertical`
+- `:with_gui_progress_bar_vertical()` — sets direction to `Vertical`, keeping an earlier `reversed()` (the two commute)
 - `:with_gui_progress_bar_reversed()` — flips `Horizontal`↔`HorizontalReversed` or `Vertical`↔`VerticalReversed`
 - `:with_gui_progress_bar_signal_binding(key)` — integer signal preferred, scalar fallback
 - `:with_gui_theme_key(key)` — override the default `"default"` theme

@@ -265,7 +265,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_progress_bar_vertical",
-        "Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top). Requires :with_gui_progress_bar() first.",
+        "Switch a GuiProgressBar to vertical fill direction (Vertical: fill grows bottom-to-top), keeping any :with_gui_progress_bar_reversed() so the two can be called in either order. Requires :with_gui_progress_bar() first.",
         [],
         |_, this: &mut LuaEntityBuilder, ()| {
             let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {
@@ -273,7 +273,14 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_gui_progress_bar_vertical() requires with_gui_progress_bar() first",
                 ));
             };
-            bar.direction = ProgressBarDirection::Vertical;
+            // Keep an earlier reversed() so the two modifiers commute.
+            bar.direction = match bar.direction {
+                ProgressBarDirection::Horizontal | ProgressBarDirection::Vertical => {
+                    ProgressBarDirection::Vertical
+                }
+                ProgressBarDirection::HorizontalReversed
+                | ProgressBarDirection::VerticalReversed => ProgressBarDirection::VerticalReversed,
+            };
             Ok(())
         }
     );
@@ -460,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn progress_bar_direction_reversed_toggles_and_vertical_overwrites() {
+    fn progress_bar_direction_reversed_toggles_and_commutes_with_vertical() {
         let dir = |chain: &str| {
             built(&format!(":with_gui_progress_bar(10, 2, 1, 5){chain}"))
                 .gui_progress_bar
@@ -491,10 +498,15 @@ mod tests {
             ),
             ProgressBarDirection::Vertical
         );
-        // vertical() sets the direction outright, so it must come before reversed().
+        // vertical() keeps an earlier reversed(), so call order does not matter.
         assert_eq!(
             dir(":with_gui_progress_bar_reversed():with_gui_progress_bar_vertical()"),
-            ProgressBarDirection::Vertical
+            ProgressBarDirection::VerticalReversed
+        );
+        assert_eq!(
+            dir(":with_gui_progress_bar_vertical():with_gui_progress_bar_vertical()"),
+            ProgressBarDirection::Vertical,
+            "vertical() is idempotent"
         );
     }
 
