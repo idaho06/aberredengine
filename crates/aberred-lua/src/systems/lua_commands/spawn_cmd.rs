@@ -1129,4 +1129,178 @@ mod tests {
         assert!(world.get::<LuaOnTweenFinished<ScreenPosition>>(e).is_none());
         assert!(world.get::<LuaOnTweenFinished<Rotation>>(e).is_none());
     }
+
+    #[test]
+    fn lua_spawn_inserts_signals_only_when_requested() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let bare = spawn_from_lua(&mut world, &mut signals, "engine.spawn():with_position(0, 0):build()");
+        assert!(world.get::<Signals>(bare).is_none());
+
+        let empty = spawn_from_lua(&mut world, &mut signals, "engine.spawn():with_signals():build()");
+        assert!(world.get::<Signals>(empty).is_some(), "with_signals() alone adds an empty bag");
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_signal_scalar('s', 1.5):with_signal_integer('i', 3)\
+             :with_signal_flag('f'):with_signal_string('n', 'bob')\
+             :with_signal_binding('score'):with_signal_binding_format('Score: {}'):build()",
+        );
+        let s = world.get::<Signals>(e).expect("any signal implies a Signals component");
+        assert_eq!((s.get_scalar("s"), s.get_integer("i")), (Some(1.5), Some(3)));
+        assert!(s.has_flag("f"));
+        assert_eq!(s.get_string("n").map(String::as_str), Some("bob"));
+        let binding = world.get::<SignalBinding>(e).unwrap();
+        assert_eq!(binding.signal_key, "score");
+        assert_eq!(binding.format.as_deref(), Some("Score: {}"));
+    }
+
+    #[test]
+    fn lua_spawn_applies_behavior_components() {
+        use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
+        use crate::components::luacollision::LuaCollisionRule;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn()\
+             :with_phase({ initial = 'idle', phases = { idle = { on_enter = 'idle_in' }, run = {} } })\
+             :with_lua_timer(0.5, 'tick'):with_lua_collision_rule('player', 'enemy', 'on_hit')\
+             :with_lua_setup('setup_fn'):with_on_animation_end('anim_done'):build()",
+        );
+
+        let phase = world.get::<LuaPhase>(e).unwrap();
+        assert_eq!(phase.current, "idle");
+        assert_eq!(phase.phases.len(), 2);
+        assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
+        let timer = world.get::<LuaTimer>(e).unwrap();
+        assert_eq!((timer.duration, &*timer.callback.name), (0.5, "tick"));
+        // The CLAUDE.md callback-type gotcha: must be queryable as LuaCollisionRule.
+        let rule = world
+            .query::<&LuaCollisionRule>()
+            .get(&world, e)
+            .expect("inserted as LuaCollisionRule");
+        assert_eq!(
+            (rule.group_a.as_str(), rule.group_b.as_str(), &*rule.callback.name),
+            ("player", "enemy", "on_hit")
+        );
+        assert_eq!(&*world.get::<LuaSetup>(e).unwrap().callback, "setup_fn");
+        assert_eq!(&*world.get::<LuaOnAnimationEnd>(e).unwrap().callback, "anim_done");
+    }
+
+    #[test]
+    fn lua_spawn_applies_text_grid_and_mouse_components() {
+        use aberred_core::components::gridlayout::GridLayout;
+        use aberred_core::components::inputcontrolled::MouseControlled;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_text('Hi', 'arcade', 12, 1, 2, 3, 4)\
+             :with_grid_layout('levels/l1.json', 'bricks', 3):with_mouse_controlled(true, false):build()",
+        );
+
+        let text = world.get::<DynamicText>(e).unwrap();
+        assert_eq!((&*text.text, &*text.font, text.font_size), ("Hi", "arcade", 12.0));
+        assert_eq!(text.color, Color::new(1, 2, 3, 4));
+        let grid = world.get::<GridLayout>(e).unwrap();
+        assert_eq!((grid.path.as_str(), grid.group.as_str(), grid.z_index), ("levels/l1.json", "bricks", 3.0));
+        assert!(!grid.spawned);
+        let mouse = world.get::<MouseControlled>(e).unwrap();
+        assert_eq!((mouse.follow_x, mouse.follow_y), (true, false));
+    }
+
+    #[test]
+    fn lua_spawn_builds_menu_with_resolved_cursor_and_actions() {
+        use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let cursor = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        signals.set_entity("cursor", cursor);
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='play', label='Play'}, {id='opts', label='Options'}, \
+                {id='quit', label='Quit'} }, 10, 20, 'arcade', 16, 24, true)\
+             :with_menu_colors(1, 2, 3, 4, 5, 6, 7, 8):with_menu_cursor('cursor')\
+             :with_menu_selection_sound('blip'):with_menu_callback('on_menu')\
+             :with_menu_visible_count(2)\
+             :with_menu_action_set_scene('play', 'level01')\
+             :with_menu_action_show_submenu('opts', 'options')\
+             :with_menu_action_quit('quit'):build()",
+        );
+
+        let menu = world.get::<Menu>(e).unwrap();
+        let ids: Vec<&str> = menu.items.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(ids, ["play", "opts", "quit"]);
+        assert_eq!(menu.items[1].label, "Options");
+        assert_eq!((menu.origin, menu.font.as_str()), (Vec2::new(10.0, 20.0), "arcade"));
+        assert_eq!((menu.font_size, menu.item_spacing, menu.use_screen_space), (16.0, 24.0, true));
+        assert_eq!(
+            (menu.normal_color, menu.selected_color),
+            (Color::new(1, 2, 3, 4), Color::new(5, 6, 7, 8))
+        );
+        assert_eq!(menu.cursor_entity, Some(cursor));
+        assert_eq!(menu.selection_change_sound.as_deref(), Some("blip"));
+        assert_eq!(menu.on_select_callback.as_deref(), Some("on_menu"));
+        assert_eq!(menu.visible_count, Some(2));
+
+        let actions = world.get::<MenuActions>(e).unwrap();
+        assert!(matches!(actions.get("play"), MenuAction::SetScene(s) if s == "level01"));
+        assert!(matches!(actions.get("opts"), MenuAction::ShowSubMenu(m) if m == "options"));
+        assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
+    }
+
+    #[test]
+    fn lua_spawn_menu_with_unregistered_cursor_key_has_no_cursor() {
+        use aberred_core::components::menu::Menu;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='a', label='A'} }, 0, 0, 'f', 16, 24, false)\
+             :with_menu_cursor('missing'):build()",
+        );
+        assert_eq!(world.get::<Menu>(e).unwrap().cursor_entity, None);
+    }
+
+    #[test]
+    fn lua_spawn_particle_emitter_resolves_registered_templates_only() {
+        use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let spark = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        signals.set_entity("spark", spark);
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_position(0, 0):with_particle_emitter({ \
+                templates = {'spark', 'missing'}, shape = {kind='rect', width=8, height=4}, \
+                offset = {x=1, y=2}, particles_per_emission = 3, emissions_per_second = 20, \
+                emissions_remaining = 5, arc = {30, 60}, speed = {10, 20}, ttl = {min=1, max=2} })\
+             :build()",
+        );
+
+        let emitter = world.get::<ParticleEmitter>(e).unwrap();
+        assert_eq!(emitter.templates, [spark], "unregistered template keys are dropped");
+        assert!(matches!(emitter.shape, EmitterShape::Rect { width: 8.0, height: 4.0 }));
+        assert_eq!(emitter.offset, Vec2::new(1.0, 2.0));
+        assert_eq!(
+            (emitter.particles_per_emission, emitter.emissions_per_second),
+            (3, 20.0)
+        );
+        assert_eq!(
+            (emitter.emissions_remaining, emitter.initial_emissions_remaining),
+            (5, 5)
+        );
+        assert_eq!((emitter.arc_degrees, emitter.speed_range), ((30.0, 60.0), (10.0, 20.0)));
+        assert!(matches!(emitter.ttl, TtlSpec::Range { min, max } if min == 1.0 && max == 2.0));
+        assert_eq!(emitter.time_since_emit, 0.0);
+    }
 }
