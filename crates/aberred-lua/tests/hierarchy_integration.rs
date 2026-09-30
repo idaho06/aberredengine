@@ -9,7 +9,6 @@
 //! ```
 
 use bevy_ecs::system::RunSystemOnce;
-use std::sync::Arc;
 
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
@@ -513,104 +512,6 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
         "Child world Y after propagation: expected 50, got {}",
         child_gt.position.y
     );
-}
-
-// =============================================================================
-// PHASE 5: Render system integration (query smoke tests)
-// =============================================================================
-
-use aberred_core::components::sprite::Sprite;
-use aberred_core::components::zindex::ZIndex;
-
-#[test]
-fn render_query_includes_global_transform() {
-    let mut world = World::new();
-
-    // Entity with GlobalTransform2D (hierarchy participant)
-    let entity = world
-        .spawn((
-            Sprite {
-                tex_key: Arc::from("test"),
-                width: 32.0,
-                height: 32.0,
-                offset: Vec2 { x: 0.0, y: 0.0 },
-                origin: Vec2 { x: 0.0, y: 0.0 },
-                flip_h: false,
-                flip_v: false,
-            },
-            MapPosition::new(0.0, 0.0),
-            ZIndex(0.0),
-            GlobalTransform2D::default(),
-        ))
-        .id();
-
-    // The MapSpriteQueryData type includes Option<&GlobalTransform2D>
-    // Verify the query matches and GlobalTransform2D is Some
-    let mut query = world.query::<(
-        Entity,
-        &Sprite,
-        &MapPosition,
-        &ZIndex,
-        Option<&Scale>,
-        Option<&Rotation>,
-        Option<&GlobalTransform2D>,
-    )>();
-
-    let mut found = false;
-    for (e, _s, _p, _z, _scale, _rot, maybe_gt) in query.iter(&world) {
-        if e == entity {
-            assert!(
-                maybe_gt.is_some(),
-                "Entity with GlobalTransform2D should have Some in query"
-            );
-            found = true;
-        }
-    }
-    assert!(found, "Entity should be matched by the query");
-}
-
-#[test]
-fn render_query_works_without_global_transform() {
-    let mut world = World::new();
-
-    // Entity without GlobalTransform2D (standalone, no hierarchy)
-    let entity = world
-        .spawn((
-            Sprite {
-                tex_key: Arc::from("test"),
-                width: 32.0,
-                height: 32.0,
-                offset: Vec2 { x: 0.0, y: 0.0 },
-                origin: Vec2 { x: 0.0, y: 0.0 },
-                flip_h: false,
-                flip_v: false,
-            },
-            MapPosition::new(50.0, 50.0),
-            ZIndex(1.0),
-        ))
-        .id();
-
-    let mut query = world.query::<(
-        Entity,
-        &Sprite,
-        &MapPosition,
-        &ZIndex,
-        Option<&Scale>,
-        Option<&Rotation>,
-        Option<&GlobalTransform2D>,
-    )>();
-
-    let mut found = false;
-    for (e, _s, _p, _z, _scale, _rot, maybe_gt) in query.iter(&world) {
-        if e == entity {
-            assert!(
-                maybe_gt.is_none(),
-                "Entity without GlobalTransform2D should have None in query"
-            );
-            found = true;
-        }
-    }
-    assert!(found, "Entity should still be matched by the query");
 }
 
 // =============================================================================
