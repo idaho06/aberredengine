@@ -18,12 +18,9 @@ use aberredengine::lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberredengine::lua::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::rigidbody::RigidBody;
-use aberredengine::core::components::rotation::Rotation;
-use aberredengine::core::components::scale::Scale;
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::timer::{Timer, TimerCallback};
 use aberredengine::core::components::ttl::Ttl;
-use aberredengine::core::components::tween::{Easing, LoopMode, Tween};
 use aberredengine::core::events::collision::CollisionEvent;
 #[cfg(feature = "lua")]
 use aberredengine::lua::events::luatimer::LuaTimerEvent;
@@ -56,7 +53,6 @@ use aberredengine::lua::systems::luatimer::{lua_timer_observer, update_lua_timer
 use aberredengine::core::systems::rust_collision::rust_collision_observer;
 use aberredengine::core::systems::time::update_world_time;
 use aberredengine::core::systems::timer::{timer_observer, update_timers};
-use aberredengine::core::systems::tween::tween_system;
 
 use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
 
@@ -221,157 +217,6 @@ fn collision_callback_error_still_drains_queued_commands() {
         .get::<Signals>(a)
         .expect("Missing Signals on entity A");
     assert!(signals.has_flag("hit"));
-}
-
-// =============================================================================
-// Tween System Tests
-// =============================================================================
-
-fn tick_tween_position(world: &mut World) {
-    world
-        .run_system_once(tween_system::<MapPosition>)
-        .expect("tween_system should run");
-}
-
-fn tick_tween_rotation(world: &mut World) {
-    world
-        .run_system_once(tween_system::<Rotation>)
-        .expect("tween_system should run");
-}
-
-fn tick_tween_scale(world: &mut World) {
-    world
-        .run_system_once(tween_system::<Scale>)
-        .expect("tween_system should run");
-}
-
-#[test]
-fn tween_position_interpolates_linearly() {
-    let mut world = make_world(0.5); // 0.5 second delta
-
-    let tween = Tween::new(
-        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vec2 { x: 100.0, y: 200.0 }),
-        1.0, // 1 second duration
-    );
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), tween)).id();
-
-    tick_tween_position(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!(approx_eq(pos.pos.x, 50.0)); // Halfway
-    assert!(approx_eq(pos.pos.y, 100.0));
-}
-
-#[test]
-fn tween_position_stops_at_end_with_once_mode() {
-    let mut world = make_world(1.0);
-
-    let tween = Tween::new(
-        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
-        0.5, // Half second duration
-    )
-    .with_loop_mode(LoopMode::Once);
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), tween)).id();
-
-    tick_tween_position(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    let tween = world.get::<Tween<MapPosition>>(entity).unwrap();
-    assert!(approx_eq(pos.pos.x, 100.0)); // At end
-    assert!(!tween.playing); // Stopped
-}
-
-#[test]
-fn tween_position_loops_with_loop_mode() {
-    let mut world = make_world(0.6);
-
-    let tween = Tween::new(
-        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
-        0.5,
-    )
-    .with_loop_mode(LoopMode::Loop);
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), tween)).id();
-
-    tick_tween_position(&mut world);
-
-    let tween = world.get::<Tween<MapPosition>>(entity).unwrap();
-    assert!(tween.playing); // Still playing
-    assert!(tween.time < 0.5); // Wrapped around
-}
-
-#[test]
-fn tween_position_pingpong_reverses() {
-    let mut world = make_world(0.6);
-
-    let tween = Tween::new(
-        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
-        0.5,
-    )
-    .with_loop_mode(LoopMode::PingPong);
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), tween)).id();
-
-    tick_tween_position(&mut world);
-
-    let tween = world.get::<Tween<MapPosition>>(entity).unwrap();
-    assert!(tween.playing);
-    assert!(!tween.forward); // Direction reversed
-}
-
-#[test]
-fn tween_rotation_interpolates() {
-    let mut world = make_world(0.5);
-
-    let tween = Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 180.0 }, 1.0);
-
-    let entity = world.spawn((Rotation { degrees: 0.0 }, tween)).id();
-
-    tick_tween_rotation(&mut world);
-
-    let rot = world.get::<Rotation>(entity).unwrap();
-    assert!(approx_eq(rot.degrees, 90.0)); // Halfway
-}
-
-#[test]
-fn tween_scale_interpolates() {
-    let mut world = make_world(0.5);
-
-    let tween = Tween::new(Scale::new(1.0, 1.0), Scale::new(2.0, 3.0), 1.0);
-
-    let entity = world.spawn((Scale::new(1.0, 1.0), tween)).id();
-
-    tick_tween_scale(&mut world);
-
-    let scale = world.get::<Scale>(entity).unwrap();
-    assert!(approx_eq(scale.scale.x, 1.5)); // Halfway
-    assert!(approx_eq(scale.scale.y, 2.0));
-}
-
-#[test]
-fn tween_position_with_quad_in_easing() {
-    let mut world = make_world(0.5);
-
-    let tween = Tween::new(
-        MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-        MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
-        1.0,
-    )
-    .with_easing(Easing::QuadIn);
-
-    let entity = world.spawn((MapPosition::new(0.0, 0.0), tween)).id();
-
-    tick_tween_position(&mut world);
-
-    let pos = world.get::<MapPosition>(entity).unwrap();
-    // QuadIn at t=0.5 gives 0.5^2 = 0.25
-    assert!(approx_eq(pos.pos.x, 25.0));
 }
 
 // =============================================================================

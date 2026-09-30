@@ -560,6 +560,57 @@ mod tests {
         assert!(!tween.forward);
     }
 
+    #[test]
+    fn tween_position_stops_at_end_with_once_mode() {
+        let (target, tween) = run_tween_once(
+            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            Tween::new(
+                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
+                0.5,
+            )
+            .with_loop_mode(LoopMode::Once),
+            1.0,
+        );
+
+        assert!(approx_eq(target.pos.x, 100.0)); // At end
+        assert!(!tween.playing); // Stopped
+    }
+
+    #[test]
+    fn tween_position_loops_with_loop_mode() {
+        let (_, tween) = run_tween_once(
+            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            Tween::new(
+                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
+                0.5,
+            )
+            .with_loop_mode(LoopMode::Loop),
+            0.6,
+        );
+
+        assert!(tween.playing); // Still playing
+        assert!(tween.time < 0.5); // Wrapped around
+    }
+
+    #[test]
+    fn tween_position_pingpong_reverses() {
+        let (_, tween) = run_tween_once(
+            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            Tween::new(
+                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
+                0.5,
+            )
+            .with_loop_mode(LoopMode::PingPong),
+            0.6,
+        );
+
+        assert!(tween.playing);
+        assert!(!tween.forward); // Direction reversed
+    }
+
     // ==================== TWEEN FINISHED EVENT TESTS ====================
 
     #[derive(Resource, Default)]
