@@ -60,6 +60,26 @@ mod tests {
     use super::*;
     use bevy_ecs::system::RunSystemOnce;
 
+    /// Number of `GameStateChangedEvent`s observed.
+    #[derive(Resource, Default)]
+    struct ChangedCount(u32);
+
+    /// World with `GameState`, the given `NextGameState`, and an observer
+    /// counting `GameStateChangedEvent` into `ChangedCount`.
+    fn world_with_next_state(next: NextGameState) -> World {
+        let mut world = World::new();
+        world.init_resource::<GameState>();
+        world.insert_resource(next);
+        world.init_resource::<ChangedCount>();
+        world.add_observer(
+            |_trigger: On<GameStateChangedEvent>, mut count: ResMut<ChangedCount>| {
+                count.0 += 1;
+            },
+        );
+        world.flush();
+        world
+    }
+
     /// Helper: run `check_pending_state` once.
     fn tick_check_pending_state(world: &mut World) {
         world
@@ -69,33 +89,26 @@ mod tests {
 
     #[test]
     fn check_pending_state_triggers_event_when_pending() {
-        let mut world = World::new();
-        world.init_resource::<GameState>();
-
-        // Set a pending state
         let mut next = NextGameState::new();
         next.set(GameStates::Playing);
-        world.insert_resource(next);
+        let mut world = world_with_next_state(next);
 
-        // Run the system – it calls commands.trigger(GameStateChangedEvent{})
         tick_check_pending_state(&mut world);
 
-        // After commands are flushed the event should have been triggered.
-        // We can't easily inspect triggered events without an observer, but we can
-        // verify the system didn't panic and the pending value is still there
-        // (the observer is responsible for clearing it, not check_pending_state).
+        assert_eq!(world.resource::<ChangedCount>().0, 1);
+        // Clearing the pending value is the observer's job, not this system's.
         let ns = world.resource::<NextGameState>();
         assert_eq!(*ns.get(), NextGameStates::Pending(GameStates::Playing));
     }
 
     #[test]
     fn check_pending_state_does_nothing_when_unchanged() {
-        let mut world = World::new();
-        world.init_resource::<GameState>();
-        world.init_resource::<NextGameState>(); // defaults to Unchanged
+        // NextGameState defaults to Unchanged.
+        let mut world = world_with_next_state(NextGameState::default());
 
         tick_check_pending_state(&mut world);
 
+        assert_eq!(world.resource::<ChangedCount>().0, 0);
         let ns = world.resource::<NextGameState>();
         assert_eq!(*ns.get(), NextGameStates::Unchanged);
     }
