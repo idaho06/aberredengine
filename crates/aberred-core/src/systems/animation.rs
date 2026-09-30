@@ -1150,6 +1150,292 @@ mod tests {
             "animation_ended should be cleared on first tick after restart",
         );
     }
+
+    // --- animation_controller system ---
+
+    fn make_animation_resource(
+        tex_key: &str,
+        position: (f32, f32),
+        displacement: (f32, f32),
+        frame_count: usize,
+        fps: f32,
+        looped: bool,
+    ) -> crate::resources::animationstore::AnimationResource {
+        crate::resources::animationstore::AnimationResource {
+            tex_key: std::sync::Arc::from(tex_key),
+            position: Vec2 {
+                x: position.0,
+                y: position.1,
+            },
+            horizontal_displacement: displacement.0,
+            vertical_displacement: displacement.1,
+            frame_count,
+            fps,
+            looped,
+        }
+    }
+
+    fn make_sprite(tex_key: &str) -> Sprite {
+        Sprite {
+            tex_key: std::sync::Arc::from(tex_key),
+            width: 64.0,
+            height: 64.0,
+            offset: Vec2 { x: 0.0, y: 0.0 },
+            origin: Vec2 { x: 0.0, y: 0.0 },
+            flip_h: false,
+            flip_v: false,
+        }
+    }
+
+    /// Minimal world for `animation_controller`: an empty `AnimationStore`.
+    fn world_with_empty_store() -> World {
+        let mut world = World::new();
+        world.insert_resource(AnimationStore::default());
+        world
+    }
+
+    fn tick_animation_controller(world: &mut World) {
+        world
+            .run_system_once(animation_controller)
+            .expect("animation_controller should run");
+    }
+
+    #[test]
+    fn animation_controller_switches_on_flag() {
+        let mut world = world_with_empty_store();
+
+        let controller = AnimationController::new("idle").with_rule(
+            Condition::HasFlag {
+                key: "moving".to_string(),
+            },
+            "walk",
+        );
+
+        let entity = world
+            .spawn((
+                Animation::new("idle"),
+                controller,
+                Signals::default().with_flag("moving"),
+            ))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let anim = world.get::<Animation>(entity).unwrap();
+        assert_eq!(anim.animation_key, "walk");
+    }
+
+    #[test]
+    fn animation_controller_uses_fallback_when_no_match() {
+        let mut world = world_with_empty_store();
+
+        let controller = AnimationController::new("idle").with_rule(
+            Condition::HasFlag {
+                key: "running".to_string(),
+            },
+            "run",
+        );
+
+        let entity = world
+            .spawn((
+                Animation::new("idle"),
+                controller,
+                Signals::default(), // No "running" flag
+            ))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let anim = world.get::<Animation>(entity).unwrap();
+        assert_eq!(anim.animation_key, "idle"); // Fallback
+    }
+
+    #[test]
+    fn animation_controller_resets_animation_on_switch() {
+        let mut world = world_with_empty_store();
+
+        let controller = AnimationController::new("idle").with_rule(
+            Condition::HasFlag {
+                key: "attack".to_string(),
+            },
+            "attack",
+        );
+
+        // Start with animation already advanced
+        let mut anim = Animation::new("idle");
+        anim.frame_index = 5;
+        anim.elapsed_time = 0.5;
+
+        let entity = world
+            .spawn((anim, controller, Signals::default().with_flag("attack")))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let anim = world.get::<Animation>(entity).unwrap();
+        assert_eq!(anim.animation_key, "attack");
+        assert_eq!(anim.frame_index, 0); // Reset
+        assert!(approx_eq(anim.elapsed_time, 0.0)); // Reset
+    }
+
+    #[test]
+    fn animation_controller_first_matching_rule_wins() {
+        let mut world = world_with_empty_store();
+
+        let controller = AnimationController::new("idle")
+            .with_rule(
+                Condition::HasFlag {
+                    key: "dead".to_string(),
+                },
+                "death",
+            )
+            .with_rule(
+                Condition::HasFlag {
+                    key: "moving".to_string(),
+                },
+                "walk",
+            );
+
+        // Both flags set, but "dead" rule comes first
+        let mut signals = Signals::default();
+        signals.set_flag("dead");
+        signals.set_flag("moving");
+
+        let entity = world
+            .spawn((Animation::new("idle"), controller, signals))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let anim = world.get::<Animation>(entity).unwrap();
+        assert_eq!(anim.animation_key, "death"); // First match wins
+    }
+
+    #[test]
+    fn animation_controller_syncs_sprite_tex_key_on_switch() {
+        // Verify that when the controller switches animation, Sprite.tex_key is
+        // updated to match the new animation's texture (the bug was that only
+        // Animation.animation_key was updated, leaving Sprite.tex_key stale).
+        let mut world = world_with_empty_store();
+
+        // Register two animations with distinct textures
+        let mut anim_store = AnimationStore {
+            animations: Default::default(),
+        };
+        anim_store.animations.insert(
+            "idle".to_string(),
+            make_animation_resource("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
+        );
+        anim_store.animations.insert(
+            "walk".to_string(),
+            make_animation_resource("sheet_walk", (0.0, 0.0), (64.0, 0.0), 8, 12.0, true),
+        );
+        world.insert_resource(anim_store);
+
+        let controller = AnimationController::new("idle").with_rule(
+            Condition::HasFlag {
+                key: "moving".to_string(),
+            },
+            "walk",
+        );
+
+        // Sprite starts on the idle sheet
+        let entity = world
+            .spawn((
+                Animation::new("idle"),
+                controller,
+                make_sprite("sheet_idle"),
+                Signals::default().with_flag("moving"),
+            ))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let anim = world.get::<Animation>(entity).unwrap();
+        let sprite = world.get::<Sprite>(entity).unwrap();
+
+        assert_eq!(anim.animation_key, "walk", "animation key should switch");
+        assert_eq!(
+            sprite.tex_key.as_ref(),
+            "sheet_walk",
+            "sprite tex_key must update to match the new animation's texture"
+        );
+    }
+
+    #[test]
+    fn animation_controller_does_not_change_sprite_tex_key_when_no_switch() {
+        // When the animation does not change, tex_key must remain untouched.
+        let mut world = world_with_empty_store();
+
+        let mut anim_store = AnimationStore {
+            animations: Default::default(),
+        };
+        anim_store.animations.insert(
+            "idle".to_string(),
+            make_animation_resource("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
+        );
+        world.insert_resource(anim_store);
+
+        let controller = AnimationController::new("idle"); // no rules → always fallback "idle"
+
+        let entity = world
+            .spawn((
+                Animation::new("idle"),
+                controller,
+                make_sprite("sheet_idle"),
+                Signals::default(), // no flags
+            ))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert_eq!(
+            sprite.tex_key.as_ref(),
+            "sheet_idle",
+            "tex_key must not change when animation stays the same"
+        );
+    }
+
+    #[test]
+    fn animation_controller_skips_tex_key_when_animation_not_in_store() {
+        // If the target animation key is not registered in AnimationStore, the
+        // controller still switches Animation.animation_key but leaves
+        // Sprite.tex_key unchanged — no panic.
+        let mut world = world_with_empty_store();
+        // AnimationStore is empty (inserted by world_with_empty_store) — "run" is not registered
+
+        let controller = AnimationController::new("idle").with_rule(
+            Condition::HasFlag {
+                key: "moving".to_string(),
+            },
+            "run",
+        );
+
+        let entity = world
+            .spawn((
+                Animation::new("idle"),
+                controller,
+                make_sprite("sheet_idle"),
+                Signals::default().with_flag("moving"),
+            ))
+            .id();
+
+        tick_animation_controller(&mut world);
+
+        let anim = world.get::<Animation>(entity).unwrap();
+        let sprite = world.get::<Sprite>(entity).unwrap();
+
+        assert_eq!(
+            anim.animation_key, "run",
+            "animation key should still switch"
+        );
+        assert_eq!(
+            sprite.tex_key.as_ref(),
+            "sheet_idle",
+            "tex_key must remain unchanged when animation is not in store"
+        );
+    }
 }
 
 /// Select the active animation track according to controller rules.
