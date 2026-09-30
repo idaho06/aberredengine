@@ -285,8 +285,11 @@ fn handle_cmd<B: AudioBackend>(world: &mut World, cmd: AudioCmd) {
             let removed = store::<B>(world).music.remove(&id);
             if let Some(music) = removed {
                 debug!(target: "audio", "unload id='{}'", id);
-                store::<B>(world).backend.unload_music(music);
+                // Same order as a reload: stop and drop the track (which
+                // caches `music`) before unloading the stream.
+                store::<B>(world).backend.stop_music(music);
                 despawn_music_track::<B>(world, &id);
+                store::<B>(world).backend.unload_music(music);
                 send(world, AudioMessage::MusicUnloaded { id });
             }
         }
@@ -739,15 +742,15 @@ mod tests {
     }
 
     #[test]
-    fn unload_music_unloads_without_stopping_and_drops_the_track() {
+    fn unload_music_stops_the_stream_before_unloading_and_drops_the_track() {
         let mut h = Harness::new();
         h.setup([load_music("theme"), play_music("theme", false)]);
 
         let replies = h.tick([AudioCmd::UnloadMusic { id: "theme".into() }]);
 
         assert_eq!(replies, [r#"MusicUnloaded { id: "theme" }"#]);
-        // Pinned as-is: no stop_music before the unload.
-        assert_eq!(h.take_calls(), ["unload_music(1)"]);
+        // Same order as a reload: stop, drop the track, then unload.
+        assert_eq!(h.take_calls(), ["stop_music(1)", "unload_music(1)"]);
         assert_eq!(h.tracks(), []);
         assert!(h.store().music.is_empty());
     }
