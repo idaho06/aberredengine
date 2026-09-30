@@ -879,6 +879,7 @@ mod tests {
     use super::*;
     use aberred_core::components::guiinteractable::GuiInteractable;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
+    use aberred_core::testing::approx_eq;
 
     #[test]
     fn resolve_entity_rejects_invalid_bits() {
@@ -950,7 +951,7 @@ mod tests {
         assert_eq!(shader.uniforms.len(), 1);
         assert!(matches!(
             shader.uniforms.get("uIntensity"),
-            Some(UniformValue::Float(v)) if (*v - 2.0).abs() < f32::EPSILON
+            Some(UniformValue::Float(v)) if approx_eq(*v, 2.0)
         ));
     }
 

@@ -32,8 +32,6 @@ use aberred_core::systems::propagate_transforms::{
 };
 use aberred_core::systems::stuckto::stuck_to_entity_system;
 
-const EPSILON: f32 = 1e-4;
-
 fn tick_propagate(world: &mut World) {
     world
         .run_system_once(propagate_transforms)
@@ -47,11 +45,11 @@ fn tick_propagate(world: &mut World) {
 #[test]
 fn globaltransform2d_default_values() {
     let gt = GlobalTransform2D::default();
-    assert!(approx_eq_eps(gt.position.x, 0.0, EPSILON));
-    assert!(approx_eq_eps(gt.position.y, 0.0, EPSILON));
-    assert!(approx_eq_eps(gt.rotation_degrees, 0.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.x, 1.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.y, 1.0, EPSILON));
+    assert!(approx_eq(gt.position.x, 0.0));
+    assert!(approx_eq(gt.position.y, 0.0));
+    assert!(approx_eq(gt.rotation_degrees, 0.0));
+    assert!(approx_eq(gt.scale.x, 1.0));
+    assert!(approx_eq(gt.scale.y, 1.0));
 }
 
 #[test]
@@ -75,7 +73,7 @@ fn propagate_root_entity_without_children() {
     // GlobalTransform2D stays at default because the root query requires &Children.
     let gt = world.get::<GlobalTransform2D>(root).unwrap();
     assert!(
-        approx_eq_eps(gt.position.x, 0.0, EPSILON),
+        approx_eq(gt.position.x, 0.0),
         "Standalone entity should not be processed by propagate_transforms"
     );
 }
@@ -103,18 +101,18 @@ fn propagate_single_child_position_only() {
 
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
-        approx_eq_eps(gt.position.x, 140.0, EPSILON),
+        approx_eq(gt.position.x, 140.0),
         "Child world X: expected 140, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 100.0, EPSILON),
+        approx_eq(gt.position.y, 100.0),
         "Child world Y: expected 100, got {}",
         gt.position.y
     );
-    assert!(approx_eq_eps(gt.rotation_degrees, 0.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.x, 1.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.y, 1.0, EPSILON));
+    assert!(approx_eq(gt.rotation_degrees, 0.0));
+    assert!(approx_eq(gt.scale.x, 1.0));
+    assert!(approx_eq(gt.scale.y, 1.0));
 }
 
 #[test]
@@ -143,17 +141,17 @@ fn propagate_child_inherits_parent_rotation() {
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     // Local offset (40, 0) rotated 90deg CW => (0, 40)
     assert!(
-        approx_eq_eps(gt.position.x, 100.0, EPSILON),
+        approx_eq(gt.position.x, 100.0),
         "Child world X: expected 100, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 140.0, EPSILON),
+        approx_eq(gt.position.y, 140.0),
         "Child world Y: expected 140, got {}",
         gt.position.y
     );
     assert!(
-        approx_eq_eps(gt.rotation_degrees, 90.0, EPSILON),
+        approx_eq(gt.rotation_degrees, 90.0),
         "Child world rotation: expected 90, got {}",
         gt.rotation_degrees
     );
@@ -185,17 +183,17 @@ fn propagate_child_inherits_parent_scale() {
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     // Offset (40, 0) scaled by (2, 2) => (80, 0)
     assert!(
-        approx_eq_eps(gt.position.x, 180.0, EPSILON),
+        approx_eq(gt.position.x, 180.0),
         "Child world X: expected 180, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 100.0, EPSILON),
+        approx_eq(gt.position.y, 100.0),
         "Child world Y: expected 100, got {}",
         gt.position.y
     );
-    assert!(approx_eq_eps(gt.scale.x, 2.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.y, 2.0, EPSILON));
+    assert!(approx_eq(gt.scale.x, 2.0));
+    assert!(approx_eq(gt.scale.y, 2.0));
 }
 
 #[test]
@@ -225,18 +223,18 @@ fn propagate_child_inherits_rotation_and_scale() {
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     // Offset (10, 0) scaled by (2, 1) => (20, 0), rotated 90deg => (0, 20)
     assert!(
-        approx_eq_eps(gt.position.x, 0.0, EPSILON),
+        approx_eq(gt.position.x, 0.0),
         "Child world X: expected 0, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 20.0, EPSILON),
+        approx_eq(gt.position.y, 20.0),
         "Child world Y: expected 20, got {}",
         gt.position.y
     );
-    assert!(approx_eq_eps(gt.rotation_degrees, 90.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.x, 2.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.y, 1.0, EPSILON));
+    assert!(approx_eq(gt.rotation_degrees, 90.0));
+    assert!(approx_eq(gt.scale.x, 2.0));
+    assert!(approx_eq(gt.scale.y, 1.0));
 }
 
 #[test]
@@ -269,7 +267,7 @@ fn propagate_chain_grandchild() {
     // Root: world pos = (100, 0)
     let root_gt = world.get::<GlobalTransform2D>(root).unwrap();
     assert!(
-        approx_eq_eps(root_gt.position.x, 100.0, EPSILON),
+        approx_eq(root_gt.position.x, 100.0),
         "Root X: expected 100, got {}",
         root_gt.position.x
     );
@@ -277,7 +275,7 @@ fn propagate_chain_grandchild() {
     // Child: world pos = (100 + 50, 0) = (150, 0)
     let child_gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
-        approx_eq_eps(child_gt.position.x, 150.0, EPSILON),
+        approx_eq(child_gt.position.x, 150.0),
         "Child X: expected 150, got {}",
         child_gt.position.x
     );
@@ -285,11 +283,11 @@ fn propagate_chain_grandchild() {
     // Grandchild: world pos = (150 + 10, 0) = (160, 0)
     let gc_gt = world.get::<GlobalTransform2D>(grandchild).unwrap();
     assert!(
-        approx_eq_eps(gc_gt.position.x, 160.0, EPSILON),
+        approx_eq(gc_gt.position.x, 160.0),
         "Grandchild X: expected 160, got {}",
         gc_gt.position.x
     );
-    assert!(approx_eq_eps(gc_gt.position.y, 0.0, EPSILON));
+    assert!(approx_eq(gc_gt.position.y, 0.0));
 }
 
 #[test]
@@ -319,7 +317,7 @@ fn propagate_entities_without_hierarchy_unchanged() {
     // GlobalTransform2D should remain at default (system doesn't process standalone entities)
     let gt = world.get::<GlobalTransform2D>(entity).unwrap();
     assert!(
-        approx_eq_eps(gt.position.x, 0.0, EPSILON),
+        approx_eq(gt.position.x, 0.0),
         "Standalone entity GT should not be updated"
     );
 }
@@ -350,18 +348,18 @@ fn propagate_root_with_children_gets_correct_gt() {
     // Root's GlobalTransform2D should reflect its own local values
     let gt = world.get::<GlobalTransform2D>(parent).unwrap();
     assert!(
-        approx_eq_eps(gt.position.x, 50.0, EPSILON),
+        approx_eq(gt.position.x, 50.0),
         "Root GT X: expected 50, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 25.0, EPSILON),
+        approx_eq(gt.position.y, 25.0),
         "Root GT Y: expected 25, got {}",
         gt.position.y
     );
-    assert!(approx_eq_eps(gt.rotation_degrees, 30.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.x, 3.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.y, 2.0, EPSILON));
+    assert!(approx_eq(gt.rotation_degrees, 30.0));
+    assert!(approx_eq(gt.scale.x, 3.0));
+    assert!(approx_eq(gt.scale.y, 2.0));
 }
 
 #[test]
@@ -393,16 +391,16 @@ fn propagate_child_with_own_rotation_and_scale() {
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     // Offset (10, 0) scaled by parent (2, 2) => (20, 0), parent rot=0 => (20, 0)
     assert!(
-        approx_eq_eps(gt.position.x, 20.0, EPSILON),
+        approx_eq(gt.position.x, 20.0),
         "Child X: expected 20, got {}",
         gt.position.x
     );
-    assert!(approx_eq_eps(gt.position.y, 0.0, EPSILON));
+    assert!(approx_eq(gt.position.y, 0.0));
     // World rotation = parent 0 + child 45 = 45
-    assert!(approx_eq_eps(gt.rotation_degrees, 45.0, EPSILON));
+    assert!(approx_eq(gt.rotation_degrees, 45.0));
     // World scale = parent (2,2) * child (0.5, 0.5) = (1.0, 1.0)
-    assert!(approx_eq_eps(gt.scale.x, 1.0, EPSILON));
-    assert!(approx_eq_eps(gt.scale.y, 1.0, EPSILON));
+    assert!(approx_eq(gt.scale.x, 1.0));
+    assert!(approx_eq(gt.scale.y, 1.0));
 }
 
 #[test]
@@ -437,7 +435,7 @@ fn propagate_inserts_missing_globaltransform2d_via_commands() {
 
     let child_gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
-        approx_eq_eps(child_gt.position.x, 110.0, EPSILON),
+        approx_eq(child_gt.position.x, 110.0),
         "Child world X after second tick: expected 110, got {}",
         child_gt.position.x
     );
@@ -545,12 +543,12 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     // Offset (40, 0) scaled by (2, 2) => (80, 0), rotated 90deg => (0, 80)
     // World pos = (100 + 0, 100 + 80) = (100, 180)
     assert!(
-        approx_eq_eps(gt.position.x, 100.0, EPSILON),
+        approx_eq(gt.position.x, 100.0),
         "Before RemoveParent, child world X: expected 100, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 180.0, EPSILON),
+        approx_eq(gt.position.y, 180.0),
         "Before RemoveParent, child world Y: expected 180, got {}",
         gt.position.y
     );
@@ -578,12 +576,12 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     // MapPosition should be snapped to the world position
     let pos = world.get::<MapPosition>(child).unwrap();
     assert!(
-        approx_eq_eps(pos.pos.x, 100.0, EPSILON),
+        approx_eq(pos.pos.x, 100.0),
         "After RemoveParent, child pos X: expected 100, got {}",
         pos.pos.x
     );
     assert!(
-        approx_eq_eps(pos.pos.y, 180.0, EPSILON),
+        approx_eq(pos.pos.y, 180.0),
         "After RemoveParent, child pos Y: expected 180, got {}",
         pos.pos.y
     );
@@ -591,7 +589,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     // Rotation should be snapped to world rotation
     let rot = world.get::<Rotation>(child).unwrap();
     assert!(
-        approx_eq_eps(rot.degrees, 90.0, EPSILON),
+        approx_eq(rot.degrees, 90.0),
         "After RemoveParent, child rotation: expected 90, got {}",
         rot.degrees
     );
@@ -599,7 +597,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
     // Scale should be snapped to world scale
     let scale = world.get::<Scale>(child).unwrap();
     assert!(
-        approx_eq_eps(scale.scale.x, 2.0, EPSILON),
+        approx_eq(scale.scale.x, 2.0),
         "After RemoveParent, child scale X: expected 2, got {}",
         scale.scale.x
     );
@@ -750,12 +748,12 @@ fn spawn_cmd_with_parent_applies_childof() {
         .get::<GlobalTransform2D>(child)
         .expect("Spawned child should have GlobalTransform2D");
     assert!(
-        approx_eq_eps(gt.position.x, 110.0, EPSILON),
+        approx_eq(gt.position.x, 110.0),
         "Child world X immediately after spawn: expected 110, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 50.0, EPSILON),
+        approx_eq(gt.position.y, 50.0),
         "Child world Y immediately after spawn: expected 50, got {}",
         gt.position.y
     );
@@ -763,7 +761,7 @@ fn spawn_cmd_with_parent_applies_childof() {
     // Child's local MapPosition should be unchanged
     let pos = world.get::<MapPosition>(child).unwrap();
     assert!(
-        approx_eq_eps(pos.pos.x, 10.0, EPSILON),
+        approx_eq(pos.pos.x, 10.0),
         "Child local pos X: expected 10, got {}",
         pos.pos.x
     );
@@ -773,12 +771,12 @@ fn spawn_cmd_with_parent_applies_childof() {
 
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
-        approx_eq_eps(gt.position.x, 110.0, EPSILON),
+        approx_eq(gt.position.x, 110.0),
         "Child world X after propagation: expected 110, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 50.0, EPSILON),
+        approx_eq(gt.position.y, 50.0),
         "Child world Y after propagation: expected 50, got {}",
         gt.position.y
     );
@@ -821,12 +819,12 @@ fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
         .get::<GlobalTransform2D>(child)
         .expect("Child should have GlobalTransform2D synthesized from parent local transform");
     assert!(
-        approx_eq_eps(gt.position.x, 110.0, EPSILON),
+        approx_eq(gt.position.x, 110.0),
         "Child world X immediately after spawn: expected 110, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 50.0, EPSILON),
+        approx_eq(gt.position.y, 50.0),
         "Child world Y immediately after spawn: expected 50, got {}",
         gt.position.y
     );
@@ -836,12 +834,12 @@ fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
 
     let gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
-        approx_eq_eps(gt.position.x, 110.0, EPSILON),
+        approx_eq(gt.position.x, 110.0),
         "Child world X after propagation: expected 110, got {}",
         gt.position.x
     );
     assert!(
-        approx_eq_eps(gt.position.y, 50.0, EPSILON),
+        approx_eq(gt.position.y, 50.0),
         "Child world Y after propagation: expected 50, got {}",
         gt.position.y
     );
@@ -900,24 +898,24 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
 
     let parent_gt = world.get::<GlobalTransform2D>(parent).unwrap();
     assert!(
-        approx_eq_eps(parent_gt.position.x, 110.0, EPSILON),
+        approx_eq(parent_gt.position.x, 110.0),
         "Parent world X after propagation: expected 110, got {}",
         parent_gt.position.x
     );
     assert!(
-        approx_eq_eps(parent_gt.position.y, 50.0, EPSILON),
+        approx_eq(parent_gt.position.y, 50.0),
         "Parent world Y after propagation: expected 50, got {}",
         parent_gt.position.y
     );
 
     let child_gt = world.get::<GlobalTransform2D>(child).unwrap();
     assert!(
-        approx_eq_eps(child_gt.position.x, 115.0, EPSILON),
+        approx_eq(child_gt.position.x, 115.0),
         "Child world X after propagation: expected 115, got {}",
         child_gt.position.x
     );
     assert!(
-        approx_eq_eps(child_gt.position.y, 50.0, EPSILON),
+        approx_eq(child_gt.position.y, 50.0),
         "Child world Y after propagation: expected 50, got {}",
         child_gt.position.y
     );
@@ -957,12 +955,12 @@ fn stuckto_skips_entities_with_childof() {
     // Position should NOT have been updated to target's position
     let pos = world.get::<MapPosition>(follower).unwrap();
     assert!(
-        approx_eq_eps(pos.pos.x, 10.0, EPSILON),
+        approx_eq(pos.pos.x, 10.0),
         "Follower with ChildOf should not be moved by StuckTo, got x={}",
         pos.pos.x
     );
     assert!(
-        approx_eq_eps(pos.pos.y, 10.0, EPSILON),
+        approx_eq(pos.pos.y, 10.0),
         "Follower with ChildOf should not be moved by StuckTo, got y={}",
         pos.pos.y
     );
@@ -985,12 +983,12 @@ fn stuckto_still_works_without_childof() {
     // Position should have been updated to target's position (follow_x and follow_y default to true)
     let pos = world.get::<MapPosition>(follower).unwrap();
     assert!(
-        approx_eq_eps(pos.pos.x, 200.0, EPSILON),
+        approx_eq(pos.pos.x, 200.0),
         "Follower without ChildOf should follow target, got x={}",
         pos.pos.x
     );
     assert!(
-        approx_eq_eps(pos.pos.y, 200.0, EPSILON),
+        approx_eq(pos.pos.y, 200.0),
         "Follower without ChildOf should follow target, got y={}",
         pos.pos.y
     );
@@ -1101,7 +1099,7 @@ fn render_query_works_without_global_transform() {
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::events::collision::CollisionEvent;
 use aberred_core::systems::collision_detector::collision_detector;
-use aberred_core::testing::approx_eq_eps;
+use aberred_core::testing::approx_eq;
 
 /// Resource to collect collision events via observer.
 #[derive(Resource, Default)]
@@ -1436,8 +1434,8 @@ fn entity_cmd_set_screen_position_updates_screen_position() {
     );
 
     let pos = world.get::<ScreenPosition>(entity).unwrap();
-    assert!((pos.pos.x - 42.0).abs() < EPSILON);
-    assert!((pos.pos.y - 77.0).abs() < EPSILON);
+    assert!(approx_eq(pos.pos.x, 42.0));
+    assert!(approx_eq(pos.pos.y, 77.0));
 }
 
 #[test]
@@ -1457,8 +1455,8 @@ fn entity_cmd_set_screen_position_no_op_on_map_entity() {
 
     // MapPosition unchanged
     let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!((pos.pos.x - 10.0).abs() < EPSILON);
-    assert!((pos.pos.y - 20.0).abs() < EPSILON);
+    assert!(approx_eq(pos.pos.x, 10.0));
+    assert!(approx_eq(pos.pos.y, 20.0));
 }
 
 // =============================================================================
@@ -1569,7 +1567,7 @@ fn cleanup_does_not_affect_entity_without_gt() {
     // MapPosition should still be there, and no GT should have appeared
     assert!(world.get::<GlobalTransform2D>(entity).is_none());
     let pos = world.get::<MapPosition>(entity).unwrap();
-    assert!(approx_eq_eps(pos.pos.x, 5.0, EPSILON));
+    assert!(approx_eq(pos.pos.x, 5.0));
 }
 
 #[test]
@@ -1658,7 +1656,7 @@ fn stale_gt_removed_after_child_despawn() {
     {
         let gt = world.get::<GlobalTransform2D>(player).unwrap();
         assert!(
-            approx_eq_eps(gt.position.x, 200.0, EPSILON),
+            approx_eq(gt.position.x, 200.0),
             "GT should be at 200 after move, got {}",
             gt.position.x
         );
@@ -1685,7 +1683,7 @@ fn stale_gt_removed_after_child_despawn() {
     {
         let gt = world.get::<GlobalTransform2D>(player).unwrap();
         assert!(
-            approx_eq_eps(gt.position.x, 200.0, EPSILON),
+            approx_eq(gt.position.x, 200.0),
             "GT should still be stale at 200 (bug condition), got {}",
             gt.position.x
         );
@@ -1708,12 +1706,12 @@ fn stale_gt_removed_after_child_despawn() {
     let resolved = resolve_world_pos(&positions, &global_transforms, player).unwrap();
 
     assert!(
-        approx_eq_eps(resolved.x, 300.0, EPSILON),
+        approx_eq(resolved.x, 300.0),
         "resolve_world_pos should return live MapPosition 300 after GT removal, got {}",
         resolved.x
     );
     assert!(
-        approx_eq_eps(resolved.y, 0.0, EPSILON),
+        approx_eq(resolved.y, 0.0),
         "resolve_world_pos y should be 0, got {}",
         resolved.y
     );
