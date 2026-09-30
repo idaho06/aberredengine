@@ -2155,7 +2155,7 @@ Animate position over time.
 
 Set easing function (requires `:with_tween_position()`).
 
-**Available Easings:** `"linear"`, `"quad_in"`, `"quad_out"`, `"quad_in_out"`, `"cubic_in"`, `"cubic_out"`, `"cubic_in_out"`
+**Available Easings:** `"linear"`, `"quad_in"`, `"quad_out"`, `"quad_in_out"`, `"cubic_in"`, `"cubic_out"`, `"cubic_in_out"` (any other name raises an error, as do unknown loop modes — for every `with_tween_*` builder and `engine.entity_insert_tween_*` call)
 
 ```lua
 :with_tween_position_easing("quad_in_out")

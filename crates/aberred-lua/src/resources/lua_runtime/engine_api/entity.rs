@@ -78,3 +78,53 @@ impl LuaRuntime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::resources::lua_runtime::LuaRuntime;
+
+    fn run_err(script: &str) -> String {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap_err().to_string()
+    }
+
+    #[test]
+    fn runtime_tween_inserts_reject_unknown_easing_and_loop_names() {
+        for prefix in ["", "collision_"] {
+            for (call, bad) in [
+                (
+                    "entity_insert_tween_position(1, 0, 0, 1, 1, 1, 'bouncy', 'once', false)",
+                    "Unknown easing 'bouncy'",
+                ),
+                (
+                    "entity_insert_tween_rotation(1, 0, 90, 1, 'linear', 'forever', false)",
+                    "Unknown loop mode 'forever'",
+                ),
+                (
+                    "entity_insert_tween_scale(1, 1, 1, 2, 2, 1, 'Quad_In', 'once', false)",
+                    "Unknown easing 'Quad_In'",
+                ),
+                (
+                    "entity_insert_tween_screen_position(1, 0, 0, 1, 1, 1, 'linear', 'pingpong', false)",
+                    "Unknown loop mode 'pingpong'",
+                ),
+            ] {
+                let err = run_err(&format!("engine.{prefix}{call}"));
+                assert!(err.contains(bad), "{prefix}{call}: {err}");
+            }
+        }
+    }
+
+    #[test]
+    fn runtime_tween_inserts_accept_documented_names() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "engine.entity_insert_tween_position(1, 0, 0, 1, 1, 1, 'cubic_in_out', 'ping_pong', false) \
+                 engine.collision_entity_insert_tween_rotation(1, 0, 90, 1, 'quad_out', 'loop', true, 'done')",
+            )
+            .exec()
+            .unwrap();
+    }
+}

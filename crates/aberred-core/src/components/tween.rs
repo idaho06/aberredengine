@@ -30,17 +30,28 @@ pub enum LoopMode {
     PingPong,
 }
 
+impl LoopMode {
+    /// Every name [`LoopMode::from_name`] accepts.
+    pub const NAMES: [&'static str; 3] = ["once", "loop", "ping_pong"];
+
+    /// Strict parse: `None` for anything not in [`LoopMode::NAMES`].
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "once" => Some(LoopMode::Once),
+            "loop" => Some(LoopMode::Loop),
+            "ping_pong" => Some(LoopMode::PingPong),
+            _ => None,
+        }
+    }
+}
+
 impl std::str::FromStr for LoopMode {
     type Err = std::convert::Infallible;
 
-    /// Parse a Lua string into a `LoopMode`. Unknown strings default to `Once`.
+    /// Lenient parse: unknown strings default to `Once`. Lua entry points validate with
+    /// [`LoopMode::from_name`] first, so a typo is an error there, not a silent `Once`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "once" => LoopMode::Once,
-            "loop" => LoopMode::Loop,
-            "ping_pong" => LoopMode::PingPong,
-            _ => LoopMode::Once,
-        })
+        Ok(Self::from_name(s).unwrap_or(LoopMode::Once))
     }
 }
 
@@ -66,21 +77,40 @@ pub enum Easing {
     CubicInOut,
 }
 
+impl Easing {
+    /// Every name [`Easing::from_name`] accepts.
+    pub const NAMES: [&'static str; 7] = [
+        "linear",
+        "quad_in",
+        "quad_out",
+        "quad_in_out",
+        "cubic_in",
+        "cubic_out",
+        "cubic_in_out",
+    ];
+
+    /// Strict parse: `None` for anything not in [`Easing::NAMES`].
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "linear" => Some(Easing::Linear),
+            "quad_in" => Some(Easing::QuadIn),
+            "quad_out" => Some(Easing::QuadOut),
+            "quad_in_out" => Some(Easing::QuadInOut),
+            "cubic_in" => Some(Easing::CubicIn),
+            "cubic_out" => Some(Easing::CubicOut),
+            "cubic_in_out" => Some(Easing::CubicInOut),
+            _ => None,
+        }
+    }
+}
+
 impl std::str::FromStr for Easing {
     type Err = std::convert::Infallible;
 
-    /// Parse a Lua string into an `Easing`. Unknown strings default to `Linear`.
+    /// Lenient parse: unknown strings default to `Linear`. Lua entry points validate with
+    /// [`Easing::from_name`] first, so a typo is an error there, not a silent `Linear`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "linear" => Easing::Linear,
-            "quad_in" => Easing::QuadIn,
-            "quad_out" => Easing::QuadOut,
-            "quad_in_out" => Easing::QuadInOut,
-            "cubic_in" => Easing::CubicIn,
-            "cubic_out" => Easing::CubicOut,
-            "cubic_in_out" => Easing::CubicInOut,
-            _ => Easing::Linear,
-        })
+        Ok(Self::from_name(s).unwrap_or(Easing::Linear))
     }
 }
 
@@ -282,6 +312,22 @@ mod tests {
         ] {
             let parsed: LoopMode = s.parse().unwrap();
             assert_eq!(format!("{parsed:?}"), format!("{expected:?}"), "{s:?}");
+        }
+    }
+
+    #[test]
+    fn from_name_accepts_exactly_the_listed_names() {
+        for name in Easing::NAMES {
+            assert!(Easing::from_name(name).is_some(), "{name}");
+        }
+        for name in LoopMode::NAMES {
+            assert!(LoopMode::from_name(name).is_some(), "{name}");
+        }
+        for bad in ["", "Linear", "quad_inn", "ease_in"] {
+            assert!(Easing::from_name(bad).is_none(), "{bad}");
+        }
+        for bad in ["", "Once", "pingpong", "repeat"] {
+            assert!(LoopMode::from_name(bad).is_none(), "{bad}");
         }
     }
 }

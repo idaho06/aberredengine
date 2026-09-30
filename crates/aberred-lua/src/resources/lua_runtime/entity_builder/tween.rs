@@ -42,7 +42,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_position_easing() requires with_tween_position() first",
                 ));
             };
-            tween.config.easing = easing;
+            tween.config.easing = checked_easing(easing)?;
             Ok(())
         }
     );
@@ -59,7 +59,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_position_loop() requires with_tween_position() first",
                 ));
             };
-            tween.config.loop_mode = loop_mode;
+            tween.config.loop_mode = checked_loop_mode(loop_mode)?;
             Ok(())
         }
     );
@@ -136,7 +136,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_screen_position_easing() requires with_tween_screen_position() first",
                 ));
             };
-            tween.config.easing = easing;
+            tween.config.easing = checked_easing(easing)?;
             Ok(())
         }
     );
@@ -153,7 +153,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_screen_position_loop() requires with_tween_screen_position() first",
                 ));
             };
-            tween.config.loop_mode = loop_mode;
+            tween.config.loop_mode = checked_loop_mode(loop_mode)?;
             Ok(())
         }
     );
@@ -220,7 +220,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_rotation_easing() requires with_tween_rotation() first",
                 ));
             };
-            tween.config.easing = easing;
+            tween.config.easing = checked_easing(easing)?;
             Ok(())
         }
     );
@@ -237,7 +237,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_rotation_loop() requires with_tween_rotation() first",
                 ));
             };
-            tween.config.loop_mode = loop_mode;
+            tween.config.loop_mode = checked_loop_mode(loop_mode)?;
             Ok(())
         }
     );
@@ -314,7 +314,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_scale_easing() requires with_tween_scale() first",
                 ));
             };
-            tween.config.easing = easing;
+            tween.config.easing = checked_easing(easing)?;
             Ok(())
         }
     );
@@ -331,7 +331,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_tween_scale_loop() requires with_tween_scale() first",
                 ));
             };
-            tween.config.loop_mode = loop_mode;
+            tween.config.loop_mode = checked_loop_mode(loop_mode)?;
             Ok(())
         }
     );
@@ -444,11 +444,20 @@ mod tests {
 
     #[test]
     fn tween_modifiers_only_touch_their_own_tween() {
-        // Every kind gets distinct modifier values; only `rotation` is set backwards.
+        // Distinct easing + callback per kind (only 3 loop modes exist, so one pair shares);
+        // only `rotation` is set backwards.
+        let values = |kind: &str| match kind {
+            "position" => ("quad_in", "loop"),
+            "screen_position" => ("quad_out", "ping_pong"),
+            "rotation" => ("cubic_in", "once"),
+            "scale" => ("cubic_out", "loop"),
+            _ => unreachable!(),
+        };
         let mut chain = String::from("engine.spawn()");
         for kind in KINDS {
+            let (easing, loop_mode) = values(kind);
             chain.push_str(&format!(
-                ":{}:with_tween_{kind}_easing('{kind}_ease'):with_tween_{kind}_loop('{kind}_loop')\
+                ":{}:with_tween_{kind}_easing('{easing}'):with_tween_{kind}_loop('{loop_mode}')\
                  :with_tween_{kind}_on_finished('{kind}_done')",
                 base_call(kind)
             ));
@@ -463,10 +472,38 @@ mod tests {
             ("scale", &cmd.tween_scale.as_ref().unwrap().config),
         ];
         for (kind, config) in configs {
-            assert_eq!(config.easing, format!("{kind}_ease"));
-            assert_eq!(config.loop_mode, format!("{kind}_loop"));
+            let (easing, loop_mode) = values(kind);
+            assert_eq!((config.easing.as_str(), config.loop_mode.as_str()), (easing, loop_mode), "{kind}");
             assert_eq!(config.callback, format!("{kind}_done"));
             assert_eq!(config.backwards, kind == "rotation", "{kind} backwards");
+        }
+    }
+
+    #[test]
+    fn tween_easing_and_loop_reject_unknown_names() {
+        for kind in KINDS {
+            let base = base_call(kind);
+            assert_runtime_error(
+                &format!("engine.spawn():{base}:with_tween_{kind}_easing('quad_inn')"),
+                "Unknown easing 'quad_inn'",
+            );
+            assert_runtime_error(
+                &format!("engine.spawn():{base}:with_tween_{kind}_loop('pingpong')"),
+                "Unknown loop mode 'pingpong'",
+            );
+        }
+        // Every documented name is still accepted.
+        for easing in ["linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"] {
+            built_spawn_cmd(&format!(
+                "engine.spawn():{}:with_tween_rotation_easing('{easing}'):build()",
+                base_call("rotation")
+            ));
+        }
+        for mode in ["once", "loop", "ping_pong"] {
+            built_spawn_cmd(&format!(
+                "engine.spawn():{}:with_tween_rotation_loop('{mode}'):build()",
+                base_call("rotation")
+            ));
         }
     }
 }

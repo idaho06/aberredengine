@@ -99,6 +99,32 @@ impl TweenConfig {
     }
 }
 
+/// Validates a Lua easing name, so a typo raises a Lua error instead of silently
+/// becoming `linear` when the tween is built.
+pub(crate) fn checked_easing(name: String) -> mlua::Result<String> {
+    use aberred_core::components::tween::Easing;
+    match Easing::from_name(&name) {
+        Some(_) => Ok(name),
+        None => Err(mlua::Error::runtime(format!(
+            "Unknown easing '{name}' (expected one of: {})",
+            Easing::NAMES.join(", ")
+        ))),
+    }
+}
+
+/// Validates a Lua loop-mode name, so a typo raises a Lua error instead of silently
+/// becoming `once` when the tween is built.
+pub(crate) fn checked_loop_mode(name: String) -> mlua::Result<String> {
+    use aberred_core::components::tween::LoopMode;
+    match LoopMode::from_name(&name) {
+        Some(_) => Ok(name),
+        None => Err(mlua::Error::runtime(format!(
+            "Unknown loop mode '{name}' (expected one of: {})",
+            LoopMode::NAMES.join(", ")
+        ))),
+    }
+}
+
 /// TweenPosition component data for spawning.
 #[derive(Debug, Clone)]
 pub struct TweenPositionData {
