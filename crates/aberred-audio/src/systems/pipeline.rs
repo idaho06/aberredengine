@@ -908,6 +908,128 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_unloads_everything_replies_twice_and_requests_exit() {
+        let mut h = Harness::new();
+        h.setup([
+            load_music("theme"),
+            play_music("theme", true),
+            load_fx("hit"),
+            play_fx("hit"),
+        ]);
+
+        let replies = h.tick([AudioCmd::Shutdown]);
+
+        assert_eq!(replies, ["MusicUnloadedAll", "FxUnloadedAll"]);
+        assert!(h.world.resource::<ShouldExit>().0);
+        assert_eq!(h.tracks(), []);
+        assert_eq!(h.fx_aliases(), []);
+        assert!(h.store().music.is_empty() && h.store().fx.is_empty());
+    }
+
+    #[test]
+    fn a_command_queued_before_disconnect_is_applied_before_exiting() {
+        let mut h = Harness::new();
+        h.tx_cmd.take().unwrap().send(load_music("theme")).unwrap();
+
+        let replies = h.tick([]);
+
+        assert_eq!(replies, [r#"MusicLoaded { id: "theme" }"#]);
+        assert!(h.world.resource::<ShouldExit>().0);
+    }
+
+    /// Sets how far `theme` (music handle 1) has played.
+    fn set_played(h: &mut Harness, seconds: f32) {
+        h.store().backend.played.insert(1, seconds);
+    }
+
+    #[test]
+    fn pump_music_only_ends_a_track_within_10ms_of_its_length() {
+        use crate::resources::backend::testing::MUSIC_LEN;
+        let mut h = Harness::new();
+        h.setup([load_music("theme"), play_music("theme", false)]);
+
+        set_played(&mut h, MUSIC_LEN - 0.02);
+        assert_eq!(h.tick([]), Vec::<String>::new());
+        assert_eq!(h.take_calls(), ["update_music(1)"]);
+
+        set_played(&mut h, MUSIC_LEN - 0.005);
+        assert_eq!(h.tick([]), [r#"MusicFinished { id: "theme" }"#]);
+        assert_eq!(h.take_calls(), ["update_music(1)", "stop_music(1)"]);
+        assert_eq!(h.tracks(), []);
+    }
+
+    #[test]
+    fn pump_music_restarts_a_looped_track_and_reports_it_started() {
+        use crate::resources::backend::testing::MUSIC_LEN;
+        let mut h = Harness::new();
+        h.setup([load_music("theme"), play_music("theme", true)]);
+        set_played(&mut h, MUSIC_LEN);
+
+        let replies = h.tick([]);
+
+        assert_eq!(replies, [r#"MusicPlayStarted { id: "theme" }"#]);
+        assert_eq!(
+            h.take_calls(),
+            [
+                "update_music(1)",
+                "stop_music(1)",
+                "seek_music(1, 0)",
+                "play_music(1)"
+            ]
+        );
+        assert_eq!(h.tracks(), [track("theme", true, false)]);
+    }
+
+    #[test]
+    fn pump_music_skips_paused_tracks() {
+        use crate::resources::backend::testing::MUSIC_LEN;
+        let mut h = Harness::new();
+        h.setup([
+            load_music("theme"),
+            play_music("theme", false),
+            AudioCmd::PauseMusic { id: "theme".into() },
+        ]);
+        set_played(&mut h, MUSIC_LEN);
+
+        assert_eq!(h.tick([]), Vec::<String>::new());
+        assert_eq!(h.take_calls(), Vec::<String>::new());
+        assert_eq!(h.tracks(), [track("theme", false, true)]);
+    }
+
+    #[test]
+    fn pump_fx_silently_unloads_only_finished_aliases() {
+        let mut h = Harness::new();
+        h.setup([load_fx("hit"), play_fx("hit"), play_fx("hit")]);
+        h.store().backend.finished.insert(2);
+
+        assert_eq!(h.tick([]), Vec::<String>::new());
+        assert_eq!(h.take_calls(), ["unload_sound_alias(2)"]);
+        assert_eq!(h.fx_aliases(), [(3, "hit".to_string())]);
+    }
+
+    #[test]
+    fn teardown_unloads_every_alias_stream_and_sound() {
+        let mut h = Harness::new();
+        h.setup([
+            load_music("theme"),
+            play_music("theme", false),
+            load_fx("hit"),
+            play_fx("hit"),
+        ]);
+
+        crate::systems::world::teardown::<RecordingBackend>(&mut h.world);
+
+        // Pinned as-is: tracks are despawned without a stop_music first.
+        assert_eq!(
+            h.take_calls(),
+            ["unload_sound_alias(3)", "unload_music(1)", "unload_sound(2)"]
+        );
+        assert_eq!(h.tracks(), []);
+        assert_eq!(h.fx_aliases(), []);
+        assert!(h.store().music.is_empty() && h.store().fx.is_empty());
+    }
+
+    #[test]
     fn drain_cmds_requests_exit_once_every_sender_is_gone() {
         let mut h = Harness::new();
         h.tick([]);
