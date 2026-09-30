@@ -68,7 +68,7 @@ use super::math::{resolve_sprite_tint, resolve_text_tint, shadow_color};
 use super::postprocess::{
     apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
-use super::sprite::draw_screen_sprite_item;
+use super::sprite::{draw_screen_sprite_item, sprite_src_rect};
 use super::text::draw_screen_text_item;
 
 pub(super) struct SpriteBufferItem {
@@ -463,18 +463,7 @@ pub fn render_system(
                 aberred_core::tracy::tracy_span!("render/draw_world_sprites");
                 for item in sprite_buffer.iter() {
                     if let Some(tex) = textures.get(&item.sprite.tex_key) {
-                        let mut src = Rectangle {
-                            x: item.sprite.offset.x,
-                            y: item.sprite.offset.y,
-                            width: item.sprite.width,
-                            height: item.sprite.height,
-                        };
-                        if item.sprite.flip_h {
-                            src.width = -src.width;
-                        }
-                        if item.sprite.flip_v {
-                            src.height = -src.height;
-                        }
+                        let src = sprite_src_rect(&item.sprite);
 
                         let geom = compute_sprite_geometry(
                             &item.resolved_pos,

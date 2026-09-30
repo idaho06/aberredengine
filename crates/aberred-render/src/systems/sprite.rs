@@ -2,6 +2,19 @@ use raylib::prelude::*;
 
 use super::math::{resolve_sprite_tint, shadow_color};
 use super::render::ScreenSpriteBufferItem;
+use aberred_core::components::sprite::Sprite;
+
+/// Source rect of a sprite's atlas cell for `draw_texture_pro`: a flip is a
+/// negative width/height, which is how raylib mirrors the sampled region.
+pub(super) fn sprite_src_rect(sprite: &Sprite) -> Rectangle {
+    let sign = |flip: bool| if flip { -1.0 } else { 1.0 };
+    Rectangle {
+        x: sprite.offset.x,
+        y: sprite.offset.y,
+        width: sprite.width * sign(sprite.flip_h),
+        height: sprite.height * sign(sprite.flip_v),
+    }
+}
 
 /// Draw one already-resolved screen-space sprite item (UI layer).
 pub(super) fn draw_screen_sprite_item(
@@ -13,18 +26,7 @@ pub(super) fn draw_screen_sprite_item(
     let sprite = &item.sprite;
     let pos = item.pos;
     if let Some(tex) = textures.get(&sprite.tex_key) {
-        let mut src = Rectangle {
-            x: sprite.offset.x,
-            y: sprite.offset.y,
-            width: sprite.width,
-            height: sprite.height,
-        };
-        if sprite.flip_h {
-            src.width = -src.width;
-        }
-        if sprite.flip_v {
-            src.height = -src.height;
-        }
+        let src = sprite_src_rect(sprite);
 
         let dest = Rectangle {
             x: pos.pos.x,
@@ -71,5 +73,35 @@ pub(super) fn draw_screen_sprite_item(
             pos.pos.y as i32 + 6,
             Color::PURPLE,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aberred_core::math::Vec2;
+
+    fn sprite(flip_h: bool, flip_v: bool) -> Sprite {
+        Sprite {
+            tex_key: std::sync::Arc::from("atlas"),
+            width: 16.0,
+            height: 24.0,
+            offset: Vec2::new(32.0, 48.0),
+            origin: Vec2::new(8.0, 12.0),
+            flip_h,
+            flip_v,
+        }
+    }
+
+    fn xywh(r: Rectangle) -> (f32, f32, f32, f32) {
+        (r.x, r.y, r.width, r.height)
+    }
+
+    #[test]
+    fn src_rect_is_the_atlas_cell_with_flips_as_negative_extents() {
+        assert_eq!(xywh(sprite_src_rect(&sprite(false, false))), (32.0, 48.0, 16.0, 24.0));
+        assert_eq!(xywh(sprite_src_rect(&sprite(true, false))), (32.0, 48.0, -16.0, 24.0));
+        assert_eq!(xywh(sprite_src_rect(&sprite(false, true))), (32.0, 48.0, 16.0, -24.0));
+        assert_eq!(xywh(sprite_src_rect(&sprite(true, true))), (32.0, 48.0, -16.0, -24.0));
     }
 }
