@@ -269,6 +269,24 @@ mod tests {
         assert_eq!(got, [7]);
     }
 
+    fn fire_pattern(skip: u32, calls: usize) -> Vec<bool> {
+        let mut countdown = TickCountdown::new(skip);
+        (0..calls).map(|_| countdown.due()).collect()
+    }
+
+    #[test]
+    fn tick_countdown_fires_first_then_every_skip_plus_one_calls() {
+        assert_eq!(
+            fire_pattern(2, 7),
+            [true, false, false, true, false, false, true]
+        );
+    }
+
+    #[test]
+    fn tick_countdown_with_zero_skip_fires_every_call() {
+        assert_eq!(fire_pattern(0, 4), [true; 4]);
+    }
+
     #[test]
     fn period_matches_hz() {
         let pacer = Pacer::new(240.0);
