@@ -19,6 +19,7 @@ use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::input::InputState;
 use aberred_core::protocol::raw_input::ImguiCaptureState;
 use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::gamestate::{GameState, GameStates};
 
 #[cfg(feature = "lua")]
 use aberred_core::systems::animation::animation_controller;
@@ -757,6 +758,134 @@ fn lua_conflict_names_the_first_user_hook_for_every_hook() {
             "{expected}: {err}"
         );
     }
+}
+
+// --- EngineBuilder setters ---
+
+#[derive(Resource, Default)]
+struct Ran(u32);
+
+fn bump_ran(mut ran: ResMut<Ran>) {
+    ran.0 += 1;
+}
+
+#[derive(Event)]
+struct Ping;
+
+#[test]
+fn first_user_hook_latches_the_first_on_hook_called() {
+    let builder = EngineBuilder::new()
+        .on_update(dummy_enter_play)
+        .on_enter_play(dummy_enter_play)
+        .on_switch_scene(dummy_switch_scene);
+    assert_eq!(builder.first_user_hook, Some("on_update"));
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn with_lua_does_not_count_as_a_user_hook() {
+    let builder = EngineBuilder::new().with_lua("main.lua");
+    assert_eq!(builder.first_user_hook, None);
+    let builder = builder.on_setup(dummy_setup);
+    assert_eq!(builder.first_user_hook, Some("on_setup"));
+}
+
+/// Runs `schedule` once outside and once inside `GameStates::Playing`,
+/// returning how often `bump_ran` fired in each.
+fn runs_outside_and_while_playing(mut schedule: Schedule) -> (u32, u32) {
+    let mut world = World::new();
+    world.init_resource::<Ran>();
+    world.init_resource::<GameState>();
+    schedule.run(&mut world);
+    let outside = world.resource::<Ran>().0;
+    world.resource_mut::<GameState>().set(GameStates::Playing);
+    schedule.run(&mut world);
+    (outside, world.resource::<Ran>().0 - outside)
+}
+
+#[test]
+fn on_update_runs_only_while_playing() {
+    let builder = EngineBuilder::new().on_update(bump_ran);
+    let mut schedule = Schedule::default();
+    (builder.update_hook.expect("on_update stores a registrar"))(&mut schedule);
+    assert_eq!(runs_outside_and_while_playing(schedule), (0, 1));
+}
+
+#[test]
+fn add_system_runs_only_while_playing() {
+    let mut builder = EngineBuilder::new().add_system(bump_ran);
+    assert_eq!(builder.extra_systems.len(), 1);
+    let mut schedule = Schedule::default();
+    for registrar in builder.extra_systems.drain(..) {
+        registrar(&mut schedule);
+    }
+    assert_eq!(runs_outside_and_while_playing(schedule), (0, 1));
+}
+
+#[test]
+fn schedule_registrars_are_applied_in_call_order() {
+    use std::sync::{Arc, Mutex};
+    let order = Arc::new(Mutex::new(Vec::new()));
+    let (a, b) = (order.clone(), order.clone());
+    let builder = EngineBuilder::new()
+        .configure_schedule(move |_| a.lock().unwrap().push("first"))
+        .add_system(bump_ran)
+        .configure_schedule(move |_| b.lock().unwrap().push("second"));
+    assert_eq!(builder.extra_systems.len(), 3);
+    let mut schedule = Schedule::default();
+    for registrar in builder.extra_systems {
+        registrar(&mut schedule);
+    }
+    assert_eq!(*order.lock().unwrap(), ["first", "second"]);
+}
+
+#[test]
+fn add_observer_spawns_a_persistent_observer() {
+    let builder = EngineBuilder::new().add_observer(|_: On<Ping>, mut ran: ResMut<Ran>| {
+        ran.0 += 1;
+    });
+    let mut world = World::new();
+    world.init_resource::<Ran>();
+    for registrar in builder.extra_observers {
+        registrar(&mut world);
+    }
+    world.trigger(Ping);
+    assert_eq!(world.resource::<Ran>().0, 1);
+    let persistent_observers = world
+        .query_filtered::<(), (With<Observer>, With<Persistent>)>()
+        .iter(&world)
+        .count();
+    assert_eq!(persistent_observers, 1);
+}
+
+#[test]
+fn scenes_keep_registration_order() {
+    let builder = EngineBuilder::new()
+        .add_scene("b", make_descriptor())
+        .add_scene("a", make_descriptor())
+        .initial_scene("a");
+    let names: Vec<&str> = builder.scenes.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["b", "a"]);
+    assert_eq!(builder.initial_scene.as_deref(), Some("a"));
+}
+
+#[test]
+fn plain_setters_store_their_arguments() {
+    let builder = EngineBuilder::new()
+        .config("game.ini")
+        .config_str("[window]")
+        .title("T")
+        .deterministic(42)
+        .record_replay("out.replay", "v1.2");
+    assert_eq!(builder.config_path, PathBuf::from("game.ini"));
+    assert_eq!(builder.config_str, Some("[window]"));
+    assert_eq!(builder.title_override.as_deref(), Some("T"));
+    assert_eq!(builder.deterministic_seed, Some(42));
+    assert_eq!(builder.record_replay_path, Some(PathBuf::from("out.replay")));
+    assert_eq!(builder.replay_game_version, "v1.2");
+
+    let builder = EngineBuilder::new().play_replay("in.replay");
+    assert_eq!(builder.play_replay_path, Some(PathBuf::from("in.replay")));
 }
 
 // --- load_config ---
