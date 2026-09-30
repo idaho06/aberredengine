@@ -50,8 +50,11 @@ pub struct LuaCollisionCallback {
 ///
 /// Use [`CollisionRule::new`] with a [`LuaCollisionCallback`] payload:
 ///
-/// ```ignore
-/// CollisionRule::new("ball", "brick", LuaCollisionCallback { name: "on_ball_brick".into() })
+/// ```
+/// # use aberred_core::components::collision::CollisionRule;
+/// # use aberred_lua::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
+/// let rule: LuaCollisionRule =
+///     CollisionRule::new("ball", "brick", LuaCollisionCallback { name: "on_ball_brick".into() });
 /// ```
 pub type LuaCollisionRule = CollisionRule<LuaCollisionCallback>;
 

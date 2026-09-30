@@ -105,8 +105,10 @@ impl SignalBinding {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// SignalBinding::new("score").with_format("Score: {}")
+    /// ```
+    /// # use aberred_core::components::signalbinding::SignalBinding;
+    /// let binding = SignalBinding::new("score").with_format("Score: {}");
+    /// assert_eq!(binding.format.as_deref(), Some("Score: {}"));
     /// ```
     pub fn with_format(mut self, format: impl ToString) -> Self {
         self.format = Some(format.to_string());

@@ -10,10 +10,10 @@
 //! `Animation.frame_index`, while other systems evaluate [`Condition`]s and
 //! update `AnimationController.current_key`.
 //!
-//! Example (pseudo-usage):
+//! Example:
 //!
-//! ```rust,ignore
-//! use aberredengine::components::animation::{Animation, AnimationController, Condition, CmpOp};
+//! ```
+//! use aberred_core::components::animation::{Animation, AnimationController, Condition, CmpOp};
 //!
 //! // Attach to an entity
 //! let anim = Animation::new("idle");

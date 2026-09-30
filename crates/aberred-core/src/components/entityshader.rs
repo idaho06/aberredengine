@@ -16,7 +16,9 @@ use crate::resources::uniformvalue::UniformValue;
 /// before drawing the entity's sprite or text.
 ///
 /// # Example
-/// ```ignore
+/// ```
+/// # use aberred_core::components::entityshader::EntityShader;
+/// # use aberred_core::resources::uniformvalue::UniformValue;
 /// // Apply an "inverse" shader to an entity
 /// let shader = EntityShader::new("inverse");
 ///

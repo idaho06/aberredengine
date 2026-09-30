@@ -7,7 +7,10 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```
+//! # use aberred_core::events::input::InputAction;
+//! # use aberred_core::resources::input_bindings::{InputBinding, InputBindings, Key};
+//! # let mut bindings = InputBindings::default();
 //! // Rebind Action1 from Space to Z
 //! bindings.rebind(InputAction::Action1, InputBinding::Keyboard(Key::KEY_Z));
 //!
@@ -16,6 +19,7 @@
 //!
 //! // Read bindings in the input polling system
 //! let keys = bindings.get_bindings(InputAction::Action1);
+//! # assert_eq!(keys.len(), 2);
 //! ```
 
 use bevy_ecs::prelude::*;
