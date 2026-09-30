@@ -317,3 +317,194 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         }
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
+    use super::*;
+
+    fn built(chain: &str) -> super::super::SpawnCmd {
+        built_spawn_cmd(&format!("engine.spawn(){chain}:build()"))
+    }
+
+    #[test]
+    fn gui_modifiers_require_their_base_method_first() {
+        for (call, msg) in [
+            ("with_gui_offset(1, 2)", "with_gui_offset() requires with_parent() first"),
+            (
+                "with_gui_button_disabled()",
+                "with_gui_button_disabled() requires with_gui_button() first",
+            ),
+            (
+                "with_gui_label_signal_binding('k')",
+                "with_gui_label_signal_binding() requires with_gui_label() first",
+            ),
+            (
+                "with_gui_label(10, 10, 't'):with_gui_label_signal_binding_format('{}')",
+                "with_gui_label_signal_binding_format() requires with_gui_label_signal_binding() first",
+            ),
+            (
+                "with_gui_theme_key('dark')",
+                "with_gui_theme_key() requires with_gui_window()/with_gui_button()/with_gui_label()/with_gui_progress_bar() first",
+            ),
+            (
+                "with_gui_image_hover_offset(1, 2)",
+                "with_gui_image_hover_offset() requires with_gui_image() first",
+            ),
+            (
+                "with_gui_image_pressed_offset(1, 2)",
+                "with_gui_image_pressed_offset() requires with_gui_image() first",
+            ),
+            (
+                "with_gui_image_disabled_offset(1, 2)",
+                "with_gui_image_disabled_offset() requires with_gui_image() first",
+            ),
+            (
+                "with_gui_progress_bar_vertical()",
+                "with_gui_progress_bar_vertical() requires with_gui_progress_bar() first",
+            ),
+            (
+                "with_gui_progress_bar_reversed()",
+                "with_gui_progress_bar_reversed() requires with_gui_progress_bar() first",
+            ),
+            (
+                "with_gui_progress_bar_signal_binding('k')",
+                "with_gui_progress_bar_signal_binding() requires with_gui_progress_bar() first",
+            ),
+        ] {
+            assert_runtime_error(&format!("engine.spawn():{call}"), msg);
+        }
+    }
+
+    #[test]
+    fn with_gui_offset_is_stored_after_with_parent() {
+        let cmd = built(":with_parent(7):with_gui_offset(3, 4)");
+        assert_eq!(cmd.parent, Some(7));
+        assert_eq!(cmd.gui_offset, Some((3.0, 4.0)));
+    }
+
+    #[test]
+    fn with_gui_button_sets_caption_callback_and_disabled() {
+        let btn = built(":with_gui_button(80, 20, 'Start', 'on_start')")
+            .gui_button
+            .unwrap();
+        assert_eq!(btn.size, Vec2::new(80.0, 20.0));
+        assert_eq!(btn.caption, "Start");
+        assert_eq!(&*btn.callback_name, "on_start");
+        assert!(!btn.disabled);
+
+        let btn = built(":with_gui_button(80, 20, '', 'cb'):with_gui_button_disabled()")
+            .gui_button
+            .unwrap();
+        assert!(btn.disabled);
+    }
+
+    #[test]
+    fn with_gui_label_signal_binding_keeps_caption_and_takes_format() {
+        let label = built(":with_gui_label(50, 10, 'HP: ?'):with_gui_label_signal_binding('hp')")
+            .gui_label
+            .unwrap();
+        assert_eq!(label.caption, "HP: ?");
+        assert_eq!(label.signal_binding, Some(("hp".to_string(), None)));
+
+        let label = built(
+            ":with_gui_label(50, 10, '')\
+             :with_gui_label_signal_binding('hp')\
+             :with_gui_label_signal_binding_format('HP: {}')",
+        )
+        .gui_label
+        .unwrap();
+        assert_eq!(
+            label.signal_binding,
+            Some(("hp".to_string(), Some("HP: {}".to_string())))
+        );
+    }
+
+    #[test]
+    fn with_gui_theme_key_applies_to_each_widget_kind() {
+        let cmd = built(":with_gui_window(100, 50):with_gui_theme_key('dark')");
+        assert_eq!(&*cmd.gui_window.unwrap().theme_key, "dark");
+        let cmd = built(":with_gui_button(10, 10, 'b', 'cb'):with_gui_theme_key('dark')");
+        assert_eq!(&*cmd.gui_button.unwrap().theme_key, "dark");
+        let cmd = built(":with_gui_label(10, 10, 'l'):with_gui_theme_key('dark')");
+        assert_eq!(&*cmd.gui_label.unwrap().theme_key, "dark");
+        let cmd = built(":with_gui_progress_bar(10, 2, 1, 5):with_gui_theme_key('dark')");
+        assert_eq!(&*cmd.gui_progress_bar.unwrap().theme_key, "dark");
+    }
+
+    #[test]
+    fn with_gui_image_sets_normal_and_per_state_offsets() {
+        let img = built(":with_gui_image(16, 16, 'atlas', 32, 0, 'on_icon')")
+            .gui_image
+            .unwrap();
+        assert_eq!(img.size, Vec2::new(16.0, 16.0));
+        assert_eq!(img.tex_key, "atlas");
+        assert_eq!(img.offset, Vec2::new(32.0, 0.0));
+        assert_eq!(&*img.callback_name, "on_icon");
+        assert_eq!(
+            (img.offset_hover, img.offset_pressed, img.offset_disabled),
+            (None, None, None)
+        );
+
+        let img = built(
+            ":with_gui_image(16, 16, 'atlas', 0, 0, '')\
+             :with_gui_image_hover_offset(16, 0)\
+             :with_gui_image_pressed_offset(32, 0)\
+             :with_gui_image_disabled_offset(48, 0)",
+        )
+        .gui_image
+        .unwrap();
+        assert_eq!(img.offset_hover, Some(Vec2::new(16.0, 0.0)));
+        assert_eq!(img.offset_pressed, Some(Vec2::new(32.0, 0.0)));
+        assert_eq!(img.offset_disabled, Some(Vec2::new(48.0, 0.0)));
+    }
+
+    #[test]
+    fn progress_bar_direction_reversed_toggles_and_vertical_overwrites() {
+        let dir = |chain: &str| {
+            built(&format!(":with_gui_progress_bar(10, 2, 1, 5){chain}"))
+                .gui_progress_bar
+                .unwrap()
+                .direction
+        };
+        assert_eq!(dir(""), ProgressBarDirection::Horizontal);
+        assert_eq!(
+            dir(":with_gui_progress_bar_reversed()"),
+            ProgressBarDirection::HorizontalReversed
+        );
+        assert_eq!(
+            dir(":with_gui_progress_bar_reversed():with_gui_progress_bar_reversed()"),
+            ProgressBarDirection::Horizontal
+        );
+        assert_eq!(
+            dir(":with_gui_progress_bar_vertical()"),
+            ProgressBarDirection::Vertical
+        );
+        assert_eq!(
+            dir(":with_gui_progress_bar_vertical():with_gui_progress_bar_reversed()"),
+            ProgressBarDirection::VerticalReversed
+        );
+        assert_eq!(
+            dir(
+                ":with_gui_progress_bar_vertical():with_gui_progress_bar_reversed()\
+                 :with_gui_progress_bar_reversed()"
+            ),
+            ProgressBarDirection::Vertical
+        );
+        // vertical() sets the direction outright, so it must come before reversed().
+        assert_eq!(
+            dir(":with_gui_progress_bar_reversed():with_gui_progress_bar_vertical()"),
+            ProgressBarDirection::Vertical
+        );
+    }
+
+    #[test]
+    fn with_gui_progress_bar_stores_value_max_and_signal_binding() {
+        let bar = built(":with_gui_progress_bar(100, 8, 30, 50):with_gui_progress_bar_signal_binding('hp')")
+            .gui_progress_bar
+            .unwrap();
+        assert_eq!(bar.size, Vec2::new(100.0, 8.0));
+        assert_eq!((bar.value, bar.max), (30.0, 50.0));
+        assert_eq!(bar.signal_binding.as_deref(), Some("hp"));
+    }
+}
