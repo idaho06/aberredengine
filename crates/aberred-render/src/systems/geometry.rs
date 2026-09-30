@@ -276,13 +276,8 @@ pub(super) fn draw_rotated_rect_lines(
 mod tests {
     use super::*;
     use aberred_core::math::Vec2;
+    use aberred_core::testing::approx_eq;
     use std::sync::Arc;
-
-    const EPSILON: f32 = 1e-6;
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < EPSILON
-    }
 
     fn make_sprite(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprite {
         Sprite {

@@ -17,5 +17,8 @@ raylib = { workspace = true, features = ["wayland", "noscreenshot"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 raylib = { workspace = true, features = ["noscreenshot"] }
 
+[dev-dependencies]
+aberred-core = { path = "../aberred-core", features = ["test-support"] }
+
 [features]
 tracy = ["dep:tracy-client"]
