@@ -2378,9 +2378,13 @@ Add a particle emitter that spawns particles by cloning templates.
 
 **TTL Configuration:**
 
-- `nil` - No TTL (particles live until manually despawned)
+- `nil` or `"none"` - No TTL (particles live until manually despawned)
 - `number` - Fixed TTL (e.g., `2.0` = all particles live 2 seconds)
 - `{min=N, max=N}` - Random TTL within range
+
+An unknown `shape` (anything but `"point"` or a table whose `type`/`kind` is `"rect"` or `"point"`),
+any other `ttl` value, or a negative/fractional `particles_per_emission`/`emissions_remaining`
+raises an error.
 
 **Example - Smoke Trail:**
 

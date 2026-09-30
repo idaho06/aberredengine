@@ -199,23 +199,36 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 data.template_keys = keys;
             }
 
-            if let Ok(shape_value) = table.get::<LuaValue>("shape") {
-                match shape_value {
-                    LuaValue::String(s) if s.to_string_lossy() == "point" => {
-                        data.shape = ParticleEmitterShapeData::Point;
-                    }
-                    LuaValue::Table(shape_table) => {
-                        let kind: String = shape_table
-                            .get("kind")
-                            .or_else(|_| shape_table.get("type"))
-                            .unwrap_or_default();
-                        if kind == "rect" {
+            match table.get::<LuaValue>("shape")? {
+                LuaValue::Nil => {}
+                LuaValue::String(s) if s.to_string_lossy() == "point" => {
+                    data.shape = ParticleEmitterShapeData::Point;
+                }
+                LuaValue::Table(shape_table) => {
+                    let kind: String = shape_table
+                        .get("kind")
+                        .or_else(|_| shape_table.get("type"))
+                        .unwrap_or_default();
+                    match kind.as_str() {
+                        "rect" => {
                             let width: f32 = shape_table.get("width").unwrap_or(0.0);
                             let height: f32 = shape_table.get("height").unwrap_or(0.0);
                             data.shape = ParticleEmitterShapeData::Rect { width, height };
                         }
+                        "point" => data.shape = ParticleEmitterShapeData::Point,
+                        _ => {
+                            return Err(LuaError::runtime(format!(
+                                "with_particle_emitter: unknown shape kind '{kind}' \
+                                 (expected 'point' or 'rect')"
+                            )));
+                        }
                     }
-                    _ => {}
+                }
+                other => {
+                    return Err(LuaError::runtime(format!(
+                        "with_particle_emitter: unknown shape {other:?} \
+                         (expected 'point' or {{kind='rect', width, height}})"
+                    )));
                 }
             }
 
@@ -224,13 +237,28 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 data.offset_y = offset_table.get("y").unwrap_or(0.0);
             }
 
-            if let Ok(v) = table.get::<u32>("particles_per_emission") {
+            // Read as f64: a direct u32 read would silently truncate 2.5 to 2.
+            let count = |field: &str| -> LuaResult<Option<u32>> {
+                let err = || {
+                    LuaError::runtime(format!(
+                        "with_particle_emitter: {field} must be a non-negative integer"
+                    ))
+                };
+                match table.get::<Option<f64>>(field).map_err(|_| err())? {
+                    None => Ok(None),
+                    Some(n) if n >= 0.0 && n.fract() == 0.0 && n <= u32::MAX as f64 => {
+                        Ok(Some(n as u32))
+                    }
+                    Some(_) => Err(err()),
+                }
+            };
+            if let Some(v) = count("particles_per_emission")? {
                 data.particles_per_emission = v;
             }
             if let Ok(v) = table.get::<f32>("emissions_per_second") {
                 data.emissions_per_second = v;
             }
-            if let Ok(v) = table.get::<u32>("emissions_remaining") {
+            if let Some(v) = count("emissions_remaining")? {
                 data.emissions_remaining = v;
             }
 
@@ -258,11 +286,11 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 }
             }
 
-            if let Ok(ttl_value) = table.get::<LuaValue>("ttl") {
-                match ttl_value {
-                    LuaValue::String(s) if s.to_string_lossy() == "none" => {
-                        data.ttl = ParticleTtlData::None;
-                    }
+            match table.get::<LuaValue>("ttl")? {
+                LuaValue::Nil => {}
+                LuaValue::String(s) if s.to_string_lossy() == "none" => {
+                    data.ttl = ParticleTtlData::None;
+                }
                     LuaValue::Number(n) => {
                         data.ttl = ParticleTtlData::Fixed((n as f32).max(0.0));
                     }
@@ -278,7 +306,11 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                             max: max.max(0.0),
                         };
                     }
-                    _ => {}
+                other => {
+                    return Err(LuaError::runtime(format!(
+                        "with_particle_emitter: unknown ttl {other:?} \
+                         (expected 'none', a number, or {{min, max}})"
+                    )));
                 }
             }
 
@@ -485,9 +517,28 @@ mod tests {
         ));
         let e = emitter("{ shape = 'point' }");
         assert!(matches!(e.shape, ParticleEmitterShapeData::Point));
-        // Unknown shapes keep the Point default rather than erroring.
-        let e = emitter("{ shape = {kind='circle', radius=4} }");
+        let e = emitter("{ shape = {kind='point'} }");
         assert!(matches!(e.shape, ParticleEmitterShapeData::Point));
+    }
+
+    #[test]
+    fn particle_emitter_rejects_unknown_shape() {
+        for shape in ["{kind='circle', radius=4}", "{width=2, height=3}", "'rect'", "42"] {
+            assert_runtime_error(
+                &format!("engine.spawn():with_particle_emitter({{ shape = {shape} }})"),
+                "with_particle_emitter: unknown shape",
+            );
+        }
+    }
+
+    #[test]
+    fn particle_emitter_rejects_unknown_ttl() {
+        for ttl in ["'forever'", "true"] {
+            assert_runtime_error(
+                &format!("engine.spawn():with_particle_emitter({{ ttl = {ttl} }})"),
+                "with_particle_emitter: unknown ttl",
+            );
+        }
     }
 
     #[test]
@@ -516,9 +567,17 @@ mod tests {
     }
 
     #[test]
-    fn particle_emitter_ignores_out_of_range_counts() {
-        // A negative count fails the u32 conversion and silently keeps the default.
-        let e = emitter("{ particles_per_emission = -1, emissions_remaining = -5 }");
+    fn particle_emitter_rejects_negative_or_fractional_counts() {
+        for field in ["particles_per_emission", "emissions_remaining"] {
+            for bad in ["-1", "2.5", "'three'"] {
+                assert_runtime_error(
+                    &format!("engine.spawn():with_particle_emitter({{ {field} = {bad} }})"),
+                    &format!("with_particle_emitter: {field} must be a non-negative integer"),
+                );
+            }
+        }
+        // Omitted counts still take the defaults.
+        let e = emitter("{}");
         assert_eq!((e.particles_per_emission, e.emissions_remaining), (1, 100));
     }
 }
