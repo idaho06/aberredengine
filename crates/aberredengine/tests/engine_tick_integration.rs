@@ -8,7 +8,7 @@ use bevy_ecs::system::SystemState;
 use aberredengine::core::math::Vec2;
 
 use aberredengine::core::components::boxcollider::BoxCollider;
-use aberredengine::core::components::collision::{BoxSides, CollisionCallback, CollisionRule};
+use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::group::Group;
 #[cfg(feature = "lua")]
 use aberredengine::lua::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
@@ -40,7 +40,6 @@ use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::resources::collision_rule_index::CollisionRuleIndex;
 use aberredengine::core::systems::collision_detector::collision_detector;
-use aberredengine::core::systems::GameCtx;
 use aberredengine::systems::collision_rule_index::rebuild_collision_rule_index;
 #[cfg(feature = "lua")]
 use aberredengine::lua::systems::lua_collision::lua_collision_observer;
@@ -559,70 +558,6 @@ fn meta_builder_methods_have_schema_refs() {
             assert(types[s], "schema type " .. s .. " not found in __meta.types")
         end
     "#).exec().unwrap();
-}
-
-// =============================================================================
-// CollisionRule<C> generic consistency — CollisionRule and LuaCollisionRule
-// must produce identical match_and_order results for the same group inputs.
-// =============================================================================
-
-fn dummy_callback(_a: Entity, _b: Entity, _sa: &BoxSides, _sb: &BoxSides, _ctx: &mut GameCtx) {}
-
-/// Build matching CollisionRule and LuaCollisionRule pairs with the same groups.
-#[cfg(feature = "lua")]
-fn make_matching_rules(ga: &str, gb: &str) -> (CollisionRule, LuaCollisionRule) {
-    let rust_rule = CollisionRule::new(ga, gb, dummy_callback as CollisionCallback);
-    let lua_rule = CollisionRule::new(ga, gb, LuaCollisionCallback { name: "cb".into() });
-    (rust_rule, lua_rule)
-}
-
-#[cfg(feature = "lua")]
-#[test]
-fn collision_rule_and_lua_rule_match_direct_groups_consistently() {
-    let (rust_rule, lua_rule) = make_matching_rules("ball", "brick");
-    let ent_a = Entity::from_bits(1);
-    let ent_b = Entity::from_bits(2);
-    assert_eq!(
-        rust_rule.match_and_order(ent_a, ent_b, "ball", "brick"),
-        lua_rule.match_and_order(ent_a, ent_b, "ball", "brick"),
-    );
-    assert_eq!(
-        lua_rule.match_and_order(ent_a, ent_b, "ball", "brick"),
-        Some((ent_a, ent_b))
-    );
-}
-
-#[cfg(feature = "lua")]
-#[test]
-fn collision_rule_and_lua_rule_reorder_entities_consistently_when_groups_swapped() {
-    let (rust_rule, lua_rule) = make_matching_rules("ball", "brick");
-    let ent_a = Entity::from_bits(1);
-    let ent_b = Entity::from_bits(2);
-    // Groups arrive swapped relative to the rule — both types must reorder identically.
-    assert_eq!(
-        rust_rule.match_and_order(ent_a, ent_b, "brick", "ball"),
-        lua_rule.match_and_order(ent_a, ent_b, "brick", "ball"),
-    );
-    assert_eq!(
-        lua_rule.match_and_order(ent_a, ent_b, "brick", "ball"),
-        Some((ent_b, ent_a))
-    );
-}
-
-#[cfg(feature = "lua")]
-#[test]
-fn collision_rule_and_lua_rule_both_return_none_for_non_matching_groups() {
-    let (rust_rule, lua_rule) = make_matching_rules("ball", "brick");
-    let ent_a = Entity::from_bits(1);
-    let ent_b = Entity::from_bits(2);
-    assert_eq!(
-        rust_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
-        lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
-    );
-    assert_eq!(
-        lua_rule.match_and_order(ent_a, ent_b, "player", "enemy"),
-        None
-    );
 }
 
 // =============================================================================
