@@ -5,23 +5,18 @@
 
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
 use aberredengine::core::events::menu::MenuSelectionEvent;
-use aberredengine::core::protocol::audio::AudioCmd;
-use aberredengine::core::resources::appstate::AppState;
-use aberredengine::core::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::core::resources::gameconfig::GameConfig;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
-use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
 use aberredengine::lua::resources::lua_runtime::LuaRuntime;
-use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
-use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::systems::menu::menu_selection_observer;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
+
+use aberredengine::core::testing::insert_game_ctx_resources;
 
 mod common;
 
@@ -29,19 +24,11 @@ mod common;
 /// `menu_selection_observer`.
 fn setup_world() -> World {
     let mut world = World::new();
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-    world.insert_resource(WorldTime::default());
+    insert_game_ctx_resources(&mut world);
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_resource(SystemsStore::new());
-    world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(TextureStore::default());
-    world.insert_resource(GameConfig::default());
-    world.init_resource::<PostProcessShader>();
-    world.insert_resource(CameraFollowConfig::default());
-    world.insert_resource(InputBindings::default());
-    common::insert_sim_rng(&mut world);
     #[cfg(feature = "lua")]
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world

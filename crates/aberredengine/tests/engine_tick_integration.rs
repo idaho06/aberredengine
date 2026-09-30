@@ -66,16 +66,13 @@ use aberredengine::core::systems::timer::{timer_observer, update_timers};
 use aberredengine::core::systems::ttl::ttl_system;
 use aberredengine::core::systems::tween::tween_system;
 
+use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
+
 mod common;
-
-const EPSILON: f32 = 1e-6;
-
-fn approx_eq(a: f32, b: f32) -> bool {
-    (a - b).abs() < EPSILON
-}
 
 fn make_world(delta: f32) -> World {
     let mut world = World::new();
+    insert_game_ctx_resources(&mut world);
     world.insert_resource(WorldTime {
         elapsed: 0.0,
         delta,
@@ -86,16 +83,9 @@ fn make_world(delta: f32) -> World {
     world.insert_resource(AnimationStore {
         animations: Default::default(),
     });
-    world.insert_resource(AppState::default());
-    world.init_resource::<Messages<AudioCmd>>();
     world.init_resource::<TextureStore>();
     world.init_resource::<TextureDimsStore>();
-    world.insert_resource(GameConfig::default());
-    world.init_resource::<PostProcessShader>();
-    world.insert_resource(CameraFollowConfig::default());
-    world.insert_resource(InputBindings::default());
     world.insert_resource(CollisionRuleIndex::default());
-    common::insert_sim_rng(&mut world);
     world
 }
 

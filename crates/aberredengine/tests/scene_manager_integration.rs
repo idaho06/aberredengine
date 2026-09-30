@@ -5,12 +5,8 @@
 //! `EngineBuilder` fire as expected.
 
 use aberredengine::core::resources::appstate::AppState;
-use aberredengine::core::resources::camerafollowconfig::CameraFollowConfig;
-use aberredengine::core::resources::gameconfig::GameConfig;
 use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
-use aberredengine::core::resources::input_bindings::InputBindings;
-use aberredengine::core::resources::postprocessshader::PostProcessShader;
 use aberredengine::render::resources::fontstore::FontStore;
 use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::scenemanager::SceneManager;
@@ -32,27 +28,22 @@ use aberredengine::core::components::persistent::Persistent;
 use aberredengine::core::protocol::audio::AudioCmd;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 
+use aberredengine::core::testing::insert_game_ctx_resources;
+
 mod common;
 
 /// Set up a minimal world with all resources needed by `GameCtx`,
 /// `scene_switch_system`, and `scene_update_system`.
 fn setup_world() -> World {
     let mut world = World::new();
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
+    insert_game_ctx_resources(&mut world);
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(TrackedGroups::default());
     world.insert_resource(TextureStore::default());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
-    world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(InputState::default());
-    world.insert_resource(GameConfig::default());
-    world.init_resource::<PostProcessShader>();
-    world.insert_resource(CameraFollowConfig::default());
-    world.insert_resource(InputBindings::default());
-    common::insert_sim_rng(&mut world);
     world
 }
 
