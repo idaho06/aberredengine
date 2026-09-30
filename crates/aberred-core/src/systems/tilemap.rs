@@ -255,6 +255,162 @@ mod tests {
         assert!(!tilemap.layers.is_empty());
     }
 
+    fn tilemap(tile_size: u32, layers: &[&[(u32, u32, u32)]]) -> Tilemap {
+        Tilemap {
+            tile_size,
+            map_width: 0,
+            map_height: 0,
+            layers: layers
+                .iter()
+                .enumerate()
+                .map(|(i, positions)| TileLayer {
+                    name: format!("layer{i}"),
+                    positions: positions
+                        .iter()
+                        .map(|&(x, y, id)| TilePosition { x, y, id })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+
+    fn run_spawn_tiles(world: &mut World, tex: (i32, i32), map: &Tilemap, parent: Option<Entity>) {
+        let mut state = bevy_ecs::system::SystemState::<Commands>::new(world);
+        {
+            let mut commands = state.get_mut(world).unwrap();
+            spawn_tiles(&mut commands, "atlas", tex.0, tex.1, map, parent);
+        }
+        state.apply(world);
+    }
+
+    fn in_group(world: &mut World, group: &str) -> Vec<(Entity, Sprite)> {
+        world
+            .query::<(Entity, &Group, &Sprite)>()
+            .iter(world)
+            .filter(|(_, g, _)| g.0 == group)
+            .map(|(e, _, s)| (e, s.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn spawn_tiles_creates_one_template_per_atlas_cell() {
+        let mut world = World::new();
+        // 64x32 atlas of 16px tiles -> 4 columns x 2 rows.
+        run_spawn_tiles(&mut world, (64, 32), &tilemap(16, &[]), None);
+
+        let mut offsets: Vec<Vec2> = in_group(&mut world, TILES_TEMPLATES_GROUP)
+            .into_iter()
+            .map(|(_, s)| s.offset)
+            .collect();
+        offsets.sort_by(|a, b| a.y.total_cmp(&b.y).then(a.x.total_cmp(&b.x)));
+        assert_eq!(offsets.len(), 8);
+        assert_eq!(offsets[5], Vec2::new(16.0, 16.0), "id 5 = row 1, col 1");
+        assert!(world.query::<&MapPosition>().iter(&world).next().is_none(), "templates have no position");
+    }
+
+    #[test]
+    fn spawn_tiles_places_tiles_by_coordinate_with_layer_zindex_and_parent() {
+        let mut world = World::new();
+        let root = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let map = tilemap(16, &[&[(0, 0, 0), (2, 1, 5)], &[(1, 0, 3)]]);
+        run_spawn_tiles(&mut world, (64, 32), &map, Some(root));
+
+        let mut tiles: Vec<(Vec2, f32, Vec2, Entity)> = world
+            .query::<(&Group, &MapPosition, &ZIndex, &Sprite, &ChildOf)>()
+            .iter(&world)
+            .filter(|(g, ..)| g.0 == TILES_GROUP)
+            .map(|(_, p, z, s, c)| (p.pos, z.0, s.offset, c.parent()))
+            .collect();
+        tiles.sort_by(|a, b| a.0.x.total_cmp(&b.0.x).then(a.0.y.total_cmp(&b.0.y)));
+        assert_eq!(
+            tiles,
+            vec![
+                // (world pos = tile coords * size, z: first layer lowest, atlas offset of id, parent)
+                (Vec2::new(0.0, 0.0), -2.0, Vec2::new(0.0, 0.0), root),
+                (Vec2::new(16.0, 0.0), -1.0, Vec2::new(48.0, 0.0), root),
+                (Vec2::new(32.0, 16.0), -2.0, Vec2::new(16.0, 16.0), root),
+            ]
+        );
+    }
+
+    #[test]
+    fn spawn_tiles_without_parent_adds_no_childof() {
+        let mut world = World::new();
+        run_spawn_tiles(&mut world, (32, 16), &tilemap(16, &[&[(0, 0, 1)]]), None);
+        let tiles = in_group(&mut world, TILES_GROUP);
+        assert_eq!(tiles.len(), 1);
+        assert!(world.get::<ChildOf>(tiles[0].0).is_none());
+    }
+
+    #[test]
+    fn spawn_tiles_skips_ids_outside_the_atlas() {
+        let mut world = World::new();
+        // 32x16 atlas -> 2 templates (ids 0..=1); id 2 is out of range.
+        run_spawn_tiles(&mut world, (32, 16), &tilemap(16, &[&[(0, 0, 1), (1, 0, 2)]]), None);
+        assert_eq!(in_group(&mut world, TILES_GROUP).len(), 1);
+    }
+
+    #[test]
+    fn atlas_smaller_than_a_tile_still_yields_one_template() {
+        let mut world = World::new();
+        run_spawn_tiles(&mut world, (8, 8), &tilemap(16, &[&[(0, 0, 0)]]), None);
+        assert_eq!(in_group(&mut world, TILES_TEMPLATES_GROUP).len(), 1);
+        assert_eq!(in_group(&mut world, TILES_GROUP).len(), 1);
+    }
+
+    fn run_system(world: &mut World) -> Vec<RenderAssetCmd> {
+        use bevy_ecs::message::Messages;
+        world.init_resource::<Messages<RenderAssetCmd>>();
+        let mut schedule = Schedule::default();
+        schedule.add_systems(tilemap_spawn_system);
+        schedule.run(world);
+        world.resource_mut::<Messages<RenderAssetCmd>>().drain().collect()
+    }
+
+    #[test]
+    fn system_requests_the_atlas_texture_and_parents_tiles_to_the_root() {
+        let mut world = World::new();
+        let root = world.spawn(TileMap::new(FIXTURE_DIR)).id();
+        let cmds = run_system(&mut world);
+
+        assert!(matches!(
+            cmds.as_slice(),
+            [RenderAssetCmd::TilemapTexture { key, png_path }]
+                if key == "sidescroller_test01" && png_path.ends_with("sidescroller_test01.png")
+        ));
+        assert_eq!(
+            world.get::<MapPosition>(root).unwrap().pos,
+            Vec2::ZERO,
+            "a root without MapPosition gets one at the origin"
+        );
+        let tiles = in_group(&mut world, TILES_GROUP);
+        assert!(!tiles.is_empty());
+        assert!(tiles
+            .iter()
+            .all(|(e, _)| world.get::<ChildOf>(*e).map(|c| c.parent()) == Some(root)));
+    }
+
+    #[test]
+    fn system_keeps_an_existing_root_position() {
+        let mut world = World::new();
+        let root = world
+            .spawn((TileMap::new(FIXTURE_DIR), MapPosition::new(100.0, 50.0)))
+            .id();
+        run_system(&mut world);
+        assert_eq!(world.get::<MapPosition>(root).unwrap().pos, Vec2::new(100.0, 50.0));
+    }
+
+    #[test]
+    fn system_with_missing_tilemap_spawns_and_requests_nothing() {
+        let mut world = World::new();
+        let root = world.spawn(TileMap::new("assets/tilemaps/does_not_exist")).id();
+        assert!(run_system(&mut world).is_empty());
+        // Entity counts are unreliable here (bevy registers resources/systems as entities).
+        assert!(in_group(&mut world, TILES_GROUP).is_empty());
+        assert!(in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty());
+        assert!(world.get::<MapPosition>(root).is_none(), "root left untouched");
+    }
+
     #[test]
     fn load_tilemap_data_reports_error_for_missing_directory() {
         let result = load_tilemap_data("assets/tilemaps/does_not_exist");
