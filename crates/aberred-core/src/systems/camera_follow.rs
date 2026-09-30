@@ -20,6 +20,12 @@ use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, Foll
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
 
+/// Zoom difference at or below which the camera stops lerping toward the
+/// target zoom. Must stay well above the float spacing at typical zoom
+/// levels (about 2.4e-7 near 2.0), or the lerp could never get close enough
+/// to stop. Changing it changes sim output, including recorded replays.
+const ZOOM_SETTLE_EPSILON: f32 = 1e-5;
+
 /// Advances the camera toward its target every frame.
 ///
 /// Scheduling: runs after `propagate_transforms` and before `render_system`.
@@ -131,7 +137,7 @@ pub fn camera_follow_system(
     camera.0.target = clamped;
 
     // --- 6. Apply zoom ---
-    if (camera.0.zoom - ct.zoom).abs() > 1e-5 {
+    if (camera.0.zoom - ct.zoom).abs() > ZOOM_SETTLE_EPSILON {
         let zoom_alpha = lerp_alpha(EasingCurve::EaseOut, config.zoom_lerp_speed, dt);
         camera.0.zoom = crate::math::lerp(camera.0.zoom, ct.zoom, zoom_alpha).max(f32::EPSILON);
     }
