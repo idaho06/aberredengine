@@ -1761,7 +1761,7 @@ function EntityBuilder:with_gui_progress_bar_signal_binding(key) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_progress_bar_vertical() end
 
----Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.
+---Set the theme lookup key (GuiThemeStore) on every GuiWindow/GuiButton/GuiLabel/GuiProgressBar already added to this entity (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.
 ---@param key string
 ---@return EntityBuilder
 function EntityBuilder:with_gui_theme_key(key) end
@@ -2336,7 +2336,7 @@ function CollisionEntityBuilder:with_gui_progress_bar_signal_binding(key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_progress_bar_vertical() end
 
----Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.
+---Set the theme lookup key (GuiThemeStore) on every GuiWindow/GuiButton/GuiLabel/GuiProgressBar already added to this entity (default "default"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.
 ---@param key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_theme_key(key) end

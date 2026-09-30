@@ -133,7 +133,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_theme_key",
-        "Set the theme lookup key (GuiThemeStore) for a GuiWindow/GuiButton/GuiLabel/GuiProgressBar (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.",
+        "Set the theme lookup key (GuiThemeStore) on every GuiWindow/GuiButton/GuiLabel/GuiProgressBar already added to this entity (default \"default\"). Requires one of :with_gui_window()/:with_gui_button()/:with_gui_label()/:with_gui_progress_bar() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let key: std::sync::Arc<str> = std::sync::Arc::from(key.as_str());
@@ -145,11 +145,12 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     false
                 }
             }
-            if !apply(&mut this.cmd.gui_window, &key)
-                && !apply(&mut this.cmd.gui_button, &key)
-                && !apply(&mut this.cmd.gui_label, &key)
-                && !apply(&mut this.cmd.gui_progress_bar, &key)
-            {
+            // Apply to every widget present; `|` (not `||`) so none is skipped.
+            let applied = apply(&mut this.cmd.gui_window, &key)
+                | apply(&mut this.cmd.gui_button, &key)
+                | apply(&mut this.cmd.gui_label, &key)
+                | apply(&mut this.cmd.gui_progress_bar, &key);
+            if !applied {
                 return Err(LuaError::runtime(
                     "with_gui_theme_key() requires with_gui_window()/with_gui_button()/with_gui_label()/with_gui_progress_bar() first",
                 ));
@@ -436,6 +437,17 @@ mod tests {
         let cmd = built(":with_gui_label(10, 10, 'l'):with_gui_theme_key('dark')");
         assert_eq!(&*cmd.gui_label.unwrap().theme_key, "dark");
         let cmd = built(":with_gui_progress_bar(10, 2, 1, 5):with_gui_theme_key('dark')");
+        assert_eq!(&*cmd.gui_progress_bar.unwrap().theme_key, "dark");
+    }
+
+    #[test]
+    fn with_gui_theme_key_applies_to_every_widget_on_the_entity() {
+        let cmd = built(
+            ":with_gui_window(100, 50):with_gui_label(10, 10, 'l'):with_gui_progress_bar(10, 2, 1, 5)\
+             :with_gui_theme_key('dark')",
+        );
+        assert_eq!(&*cmd.gui_window.unwrap().theme_key, "dark");
+        assert_eq!(&*cmd.gui_label.unwrap().theme_key, "dark");
         assert_eq!(&*cmd.gui_progress_bar.unwrap().theme_key, "dark");
     }
 
