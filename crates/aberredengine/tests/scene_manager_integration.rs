@@ -39,7 +39,6 @@ fn setup_world() -> World {
     insert_game_ctx_resources(&mut world);
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(TrackedGroups::default());
-    world.insert_resource(TextureStore::default());
     world.insert_resource(SystemsStore::new());
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());

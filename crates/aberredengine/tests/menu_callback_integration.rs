@@ -8,7 +8,6 @@ use aberredengine::core::events::menu::MenuSelectionEvent;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 #[cfg(feature = "lua")]
 use aberredengine::lua::resources::lua_runtime::LuaRuntime;
-use aberredengine::render::resources::texturestore::TextureStore;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
@@ -28,7 +27,6 @@ fn setup_world() -> World {
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_resource(SystemsStore::new());
-    world.insert_resource(TextureStore::default());
     #[cfg(feature = "lua")]
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new() failed in test"));
     world
