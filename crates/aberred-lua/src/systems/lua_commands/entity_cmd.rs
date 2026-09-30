@@ -896,6 +896,16 @@ mod tests {
     /// Run a single `EntityCmd` through `process_entity_commands` against a
     /// fresh `World`, applying the resulting ECS commands before returning.
     fn run_entity_cmd(world: &mut World, world_signals: &mut WorldSignals, cmd: EntityCmd) {
+        run_entity_cmds(world, world_signals, [cmd]);
+    }
+
+    /// Run a batch of `EntityCmd`s as ONE drained queue (one `Commands` flush), like a
+    /// single frame's drain.
+    fn run_entity_cmds(
+        world: &mut World,
+        world_signals: &mut WorldSignals,
+        cmds: impl IntoIterator<Item = EntityCmd>,
+    ) {
         use bevy_ecs::system::SystemState;
 
         let systems_store = SystemsStore::default();
@@ -908,7 +918,7 @@ mod tests {
                 .expect("Entity command test params should fetch");
             process_entity_commands(
                 &mut commands,
-                [cmd],
+                cmds,
                 world_signals,
                 &mut queries,
                 &systems_store,
@@ -973,6 +983,188 @@ mod tests {
 
         assert!(world.get_entity(entity).is_err());
         assert!(world_signals.get_entity("tpl").is_none());
+    }
+
+    /// Every command whose handler inserts/removes components on `id` (the
+    /// `with_entity_cmd` + `try_*` family), plus `SetParent` onto `parent`.
+    fn insert_remove_cmds_for(id: u64, parent: u64) -> Vec<EntityCmd> {
+        vec![
+            EntityCmd::InsertTweenPosition {
+                entity_id: id,
+                from_x: 0.0,
+                from_y: 0.0,
+                to_x: 1.0,
+                to_y: 1.0,
+                config: TweenConfig::new(1.0),
+            },
+            EntityCmd::InsertTweenRotation {
+                entity_id: id,
+                from: 0.0,
+                to: 1.0,
+                config: TweenConfig::new(1.0),
+            },
+            EntityCmd::InsertTweenScale {
+                entity_id: id,
+                from_x: 1.0,
+                from_y: 1.0,
+                to_x: 2.0,
+                to_y: 2.0,
+                config: TweenConfig::new(1.0),
+            },
+            EntityCmd::InsertTweenScreenPosition {
+                entity_id: id,
+                from_x: 0.0,
+                from_y: 0.0,
+                to_x: 1.0,
+                to_y: 1.0,
+                config: TweenConfig::new(1.0),
+            },
+            EntityCmd::RemoveTweenPosition { entity_id: id },
+            EntityCmd::RemoveTweenRotation { entity_id: id },
+            EntityCmd::RemoveTweenScale { entity_id: id },
+            EntityCmd::SetShader {
+                entity_id: id,
+                key: "wave".into(),
+            },
+            EntityCmd::RemoveShader { entity_id: id },
+            EntityCmd::SetTint {
+                entity_id: id,
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 4,
+            },
+            EntityCmd::RemoveTint { entity_id: id },
+            EntityCmd::SetShadow {
+                entity_id: id,
+                dx: 1.0,
+                dy: 1.0,
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 128,
+            },
+            EntityCmd::RemoveShadow { entity_id: id },
+            EntityCmd::RemoveScreenPosition { entity_id: id },
+            EntityCmd::SetRotation {
+                entity_id: id,
+                degrees: 45.0,
+            },
+            EntityCmd::SetScale {
+                entity_id: id,
+                sx: 2.0,
+                sy: 2.0,
+            },
+            EntityCmd::SetCameraTarget {
+                entity_id: id,
+                priority: Some(1),
+                zoom: None,
+            },
+            EntityCmd::RemoveCameraTarget { entity_id: id },
+            EntityCmd::SetParent {
+                entity_id: id,
+                parent_id: parent,
+            },
+            EntityCmd::RemoveParent { entity_id: id },
+            EntityCmd::InsertStuckTo {
+                entity_id: id,
+                target_id: parent,
+                follow_x: true,
+                follow_y: true,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                stored_vx: 0.0,
+                stored_vy: 0.0,
+            },
+            EntityCmd::ReleaseStuckTo { entity_id: id },
+            EntityCmd::InsertLuaTimer {
+                entity_id: id,
+                duration: 1.0,
+                callback: "cb".into(),
+            },
+            EntityCmd::RemoveLuaTimer { entity_id: id },
+            EntityCmd::InsertTtl {
+                entity_id: id,
+                seconds: 1.0,
+            },
+            EntityCmd::Despawn { entity_id: id },
+        ]
+    }
+
+    #[test]
+    fn insert_remove_cmds_after_same_batch_despawn_are_silent_noops() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let doomed = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+
+        let mut batch = vec![EntityCmd::Despawn {
+            entity_id: doomed.to_bits(),
+        }];
+        batch.extend(insert_remove_cmds_for(doomed.to_bits(), parent.to_bits()));
+        // Panics on apply if any handler uses a non-`try_` insert/remove/despawn.
+        run_entity_cmds(&mut world, &mut signals, batch);
+
+        assert!(world.get_entity(doomed).is_err(), "despawn still applied");
+        assert!(world.get_entity(parent).is_ok());
+        assert!(
+            world.get::<Children>(parent).is_none(),
+            "no ChildOf may point at the parent from the despawned entity"
+        );
+    }
+
+    #[test]
+    fn insert_remove_cmds_for_entity_despawned_in_a_prior_frame_are_skipped() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let doomed = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::Despawn {
+                entity_id: doomed.to_bits(),
+            },
+        );
+        assert!(world.get_entity(doomed).is_err());
+
+        let entities_before = world.entities().count_spawned();
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            insert_remove_cmds_for(doomed.to_bits(), parent.to_bits()),
+        );
+        assert!(world.get_entity(doomed).is_err(), "no command resurrects it");
+        assert_eq!(world.entities().count_spawned(), entities_before);
+    }
+
+    #[test]
+    fn set_parent_onto_parent_despawned_same_batch_leaves_child_unparented() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let child = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::Despawn {
+                    entity_id: parent.to_bits(),
+                },
+                EntityCmd::SetParent {
+                    entity_id: child.to_bits(),
+                    parent_id: parent.to_bits(),
+                },
+            ],
+        );
+
+        assert!(world.get_entity(parent).is_err());
+        assert!(world.get_entity(child).is_ok(), "child survives");
+        assert!(
+            world.get::<ChildOf>(child).is_none(),
+            "a ChildOf to a dead parent must not stick"
+        );
     }
 
     fn run_camera_target_cmd(world: &mut World, cmd: EntityCmd) {
