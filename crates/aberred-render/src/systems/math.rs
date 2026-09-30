@@ -184,13 +184,78 @@ mod tests {
         assert_eq!(c, back);
     }
 
+    fn rgba(c: raylib::prelude::Color) -> (u8, u8, u8, u8) {
+        (c.r, c.g, c.b, c.a)
+    }
+
     #[test]
-    fn texture_filter_to_ffi_maps_to_distinct_raylib_constants() {
-        use std::collections::HashSet;
-        let ffi_values: HashSet<i32> = TextureFilter::ALL
-            .iter()
-            .map(|f| texture_filter_to_ffi(*f))
-            .collect();
-        assert_eq!(ffi_values.len(), TextureFilter::ALL.len());
+    fn texture_filter_to_ffi_maps_each_filter_to_its_raylib_constant() {
+        use raylib::ffi::TextureFilter as F;
+        let expected = [
+            (TextureFilter::Nearest, F::TEXTURE_FILTER_POINT),
+            (TextureFilter::Bilinear, F::TEXTURE_FILTER_BILINEAR),
+            (TextureFilter::Trilinear, F::TEXTURE_FILTER_TRILINEAR),
+            (TextureFilter::Anisotropic4x, F::TEXTURE_FILTER_ANISOTROPIC_4X),
+            (TextureFilter::Anisotropic8x, F::TEXTURE_FILTER_ANISOTROPIC_8X),
+            (TextureFilter::Anisotropic16x, F::TEXTURE_FILTER_ANISOTROPIC_16X),
+        ];
+        assert_eq!(expected.len(), TextureFilter::ALL.len());
+        for (filter, ffi) in expected {
+            assert_eq!(texture_filter_to_ffi(filter), ffi as i32, "{filter:?}");
+        }
+    }
+
+    #[test]
+    fn conversions_to_raylib_keep_every_field_in_place() {
+        assert_eq!(rgba(color_to_raylib(Color::new(1, 2, 3, 4))), (1, 2, 3, 4));
+
+        let r = rect_to_raylib(Rect::new(1.0, 2.0, 3.0, 4.0));
+        assert_eq!((r.x, r.y, r.width, r.height), (1.0, 2.0, 3.0, 4.0));
+
+        let v = vec2_to_raylib(Vec2::new(5.0, 6.0));
+        assert_eq!((v.x, v.y), (5.0, 6.0));
+        assert_eq!(vec2_from_raylib(v), Vec2::new(5.0, 6.0));
+
+        // Field-by-field, not just a round trip: a symmetric target/offset
+        // swap would still round-trip.
+        let c = camera2d_to_raylib(Camera2D {
+            target: Vec2::new(1.0, 2.0),
+            offset: Vec2::new(3.0, 4.0),
+            rotation: 45.0,
+            zoom: 2.0,
+        });
+        assert_eq!((c.target.x, c.target.y), (1.0, 2.0));
+        assert_eq!((c.offset.x, c.offset.y), (3.0, 4.0));
+        assert_eq!((c.rotation, c.zoom), (45.0, 2.0));
+    }
+
+    #[test]
+    fn sprite_tint_replaces_white_and_text_tint_multiplies_the_base() {
+        let tint = Tint::new(255, 128, 0, 255);
+        assert_eq!(rgba(resolve_sprite_tint(None)), (255, 255, 255, 255));
+        assert_eq!(rgba(resolve_sprite_tint(Some(tint))), (255, 128, 0, 255));
+
+        let base = Color::new(200, 200, 200, 100);
+        assert_eq!(rgba(resolve_text_tint(None, base)), (200, 200, 200, 100));
+        assert_eq!(rgba(resolve_text_tint(Some(tint), base)), (200, 100, 0, 100));
+    }
+
+    #[test]
+    fn shadow_color_is_the_shadows_own_color() {
+        let shadow = Shadow::new(2.0, 3.0, 10, 20, 30, 40);
+        assert_eq!(rgba(shadow_color(shadow)), (10, 20, 30, 40));
+    }
+
+    #[test]
+    fn screen_to_world2d_raylib_projects_through_the_camera() {
+        let camera = Camera2D {
+            target: Vec2::new(100.0, 50.0),
+            offset: Vec2::new(10.0, 20.0),
+            rotation: 0.0,
+            zoom: 2.0,
+        };
+        let world = screen_to_world2d_raylib(raylib::prelude::Vector2::new(30.0, 40.0), &camera);
+        // (screen - offset) / zoom + target
+        assert_eq!((world.x, world.y), (110.0, 60.0));
     }
 }
