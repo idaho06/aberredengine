@@ -6,10 +6,15 @@
 use arrayvec::ArrayString;
 use std::fmt::Write as _;
 
+/// Capacity for a formatted number. `f32`'s `Display` never uses exponent notation, so its
+/// widest output is `-f32::MAX` at 40 chars (`i32::MIN` is 11). A buffer that is too small
+/// makes `write!` fail part-way and the text shows a truncated number.
+const NUM_BUF_LEN: usize = 48;
+
 /// Stack-allocated string for signal-to-text conversion.
-/// Uses a 32-byte ArrayString for numeric types (i32 / f32), borrowed &str for others.
+/// Uses a [`NUM_BUF_LEN`]-byte ArrayString for numeric types (i32 / f32), borrowed &str for others.
 enum SignalStr<'a> {
-    Stack(ArrayString<32>),
+    Stack(ArrayString<NUM_BUF_LEN>),
     Borrowed(&'a str),
 }
 
@@ -87,12 +92,12 @@ fn get_world_signal_as_str<'a>(
     signal_key: &str,
 ) -> Option<SignalStr<'a>> {
     if let Some(v) = world_signals.get_integer(signal_key) {
-        let mut buf = ArrayString::<32>::new();
+        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
         let _ = write!(buf, "{}", v);
         return Some(SignalStr::Stack(buf));
     }
     if let Some(v) = world_signals.get_scalar(signal_key) {
-        let mut buf = ArrayString::<32>::new();
+        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
         let _ = write!(buf, "{}", v);
         return Some(SignalStr::Stack(buf));
     }
@@ -111,12 +116,12 @@ fn get_world_signal_as_str<'a>(
 /// Returns `None` if the signal key is not found.
 fn get_entity_signal_as_str<'a>(signals: &'a Signals, signal_key: &str) -> Option<SignalStr<'a>> {
     if let Some(v) = signals.get_integer(signal_key) {
-        let mut buf = ArrayString::<32>::new();
+        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
         let _ = write!(buf, "{}", v);
         return Some(SignalStr::Stack(buf));
     }
     if let Some(v) = signals.get_scalar(signal_key) {
-        let mut buf = ArrayString::<32>::new();
+        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
         let _ = write!(buf, "{}", v);
         return Some(SignalStr::Stack(buf));
     }
@@ -254,6 +259,29 @@ mod tests {
         world.resource_mut::<WorldSignals>().set_integer("score", 2);
         schedule.run(&mut world);
         assert_eq!(world.resource::<ChangedCount>().0, after_first + 1);
+    }
+
+    #[test]
+    fn widest_numbers_are_displayed_in_full() {
+        let mut ws = WorldSignals::default();
+        ws.set_scalar("big", 1e35);
+        ws.set_scalar("most_negative", -f32::MAX);
+        ws.set_integer("min", i32::MIN);
+        let mut world = world_with(ws);
+        let mut entity_signals = Signals::default();
+        entity_signals.set_scalar("big", -f32::MAX);
+        let owner = world.spawn(entity_signals).id();
+
+        let big = text_entity(&mut world, SignalBinding::new("big"));
+        let neg = text_entity(&mut world, SignalBinding::new("most_negative"));
+        let min = text_entity(&mut world, SignalBinding::new("min"));
+        let from_entity = text_entity(&mut world, SignalBinding::new("big").with_source_entity(owner));
+        run(&mut world);
+
+        assert_eq!(text(&world, big), 1e35_f32.to_string());
+        assert_eq!(text(&world, neg), (-f32::MAX).to_string());
+        assert_eq!(text(&world, min), i32::MIN.to_string());
+        assert_eq!(text(&world, from_entity), (-f32::MAX).to_string());
     }
 
 }
