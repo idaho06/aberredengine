@@ -518,6 +518,17 @@ mod tests {
             tracks
         }
 
+        /// `(alias, source_id)` of every `PlayingFx`, sorted by alias.
+        fn fx_aliases(&mut self) -> Vec<(u32, String)> {
+            let mut q = self.world.query::<&PlayingFx<u32>>();
+            let mut aliases: Vec<_> = q
+                .iter(&self.world)
+                .map(|f| (f.alias, f.source_id.clone()))
+                .collect();
+            aliases.sort();
+            aliases
+        }
+
         /// Run `cmds` for their side effects, discarding replies and calls.
         fn setup(&mut self, cmds: impl IntoIterator<Item = AudioCmd>) {
             self.tick(cmds);
@@ -734,6 +745,166 @@ mod tests {
         assert_eq!(calls, ["unload_music(1)", "unload_music(2)"], "no stops");
         assert_eq!(h.tracks(), []);
         assert!(h.store().music.is_empty());
+    }
+
+    fn load_fx(id: &str) -> AudioCmd {
+        AudioCmd::LoadFx {
+            id: id.into(),
+            path: format!("{id}.wav"),
+        }
+    }
+
+    fn play_fx(id: &str) -> AudioCmd {
+        AudioCmd::PlayFx { id: id.into() }
+    }
+
+    #[test]
+    fn load_fx_stores_the_sound_and_replies_loaded() {
+        let mut h = Harness::new();
+        let replies = h.tick([load_fx("hit")]);
+        assert_eq!(replies, [r#"FxLoaded { id: "hit" }"#]);
+        assert_eq!(h.take_calls(), ["load_sound(hit.wav) -> 1"]);
+        assert_eq!(h.store().fx.get("hit"), Some(&1));
+    }
+
+    #[test]
+    fn fx_load_failures_reply_load_failed_and_store_nothing() {
+        let mut h = Harness::new();
+        h.store().backend.fail_paths.insert("bad.wav".into());
+
+        let replies = h.tick([
+            AudioCmd::LoadFx {
+                id: "nul".into(),
+                path: "a\0b.wav".into(),
+            },
+            load_fx("bad"),
+        ]);
+
+        assert_eq!(replies.len(), 2);
+        assert!(
+            replies[0].starts_with(r#"FxLoadFailed { id: "nul", error: "invalid path: "#),
+            "{}",
+            replies[0]
+        );
+        assert_eq!(replies[1], r#"FxLoadFailed { id: "bad", error: "failed to load" }"#);
+        assert_eq!(h.take_calls(), ["load_sound(bad.wav) -> None"]);
+        assert!(h.store().fx.is_empty());
+    }
+
+    #[test]
+    fn reloading_fx_drops_only_that_sounds_aliases_before_unloading_it() {
+        let mut h = Harness::new();
+        // hit = 1, jump = 2, their aliases 3 and 4.
+        h.setup([load_fx("hit"), load_fx("jump"), play_fx("hit"), play_fx("jump")]);
+
+        let replies = h.tick([load_fx("hit")]);
+
+        assert_eq!(replies, [r#"FxLoaded { id: "hit" }"#]);
+        assert_eq!(
+            h.take_calls(),
+            [
+                "load_sound(hit.wav) -> 5",
+                "stop_sound(3)",
+                "unload_sound_alias(3)",
+                "unload_sound(1)"
+            ]
+        );
+        assert_eq!(h.fx_aliases(), [(4, "jump".to_string())]);
+        assert_eq!(h.store().fx.get("hit"), Some(&5));
+    }
+
+    #[test]
+    fn play_fx_spawns_a_playing_alias_and_sends_no_reply() {
+        let mut h = Harness::new();
+        h.setup([load_fx("hit")]);
+
+        let replies = h.tick([
+            play_fx("hit"),
+            AudioCmd::PlayFxPitched {
+                id: "hit".into(),
+                pitch: 1.5,
+            },
+        ]);
+
+        assert_eq!(replies, Vec::<String>::new());
+        assert_eq!(
+            h.take_calls(),
+            [
+                "load_sound_alias(1) -> 2",
+                "play_sound(2)",
+                "load_sound_alias(1) -> 3",
+                "set_sound_pitch(3, 1.5)",
+                "play_sound(3)"
+            ],
+            "pitch is applied before playback starts"
+        );
+        assert_eq!(
+            h.fx_aliases(),
+            [(2, "hit".to_string()), (3, "hit".to_string())]
+        );
+    }
+
+    #[test]
+    fn play_fx_of_an_unloaded_sound_is_silent() {
+        let mut h = Harness::new();
+        let replies = h.tick([
+            play_fx("ghost"),
+            AudioCmd::PlayFxPitched {
+                id: "ghost".into(),
+                pitch: 2.0,
+            },
+        ]);
+        assert_eq!(replies, Vec::<String>::new());
+        assert_eq!(h.take_calls(), Vec::<String>::new());
+        assert_eq!(h.fx_aliases(), []);
+    }
+
+    #[test]
+    fn stop_all_fx_stops_aliases_but_keeps_sounds_loaded() {
+        let mut h = Harness::new();
+        h.setup([load_fx("hit"), play_fx("hit"), play_fx("hit")]);
+
+        let replies = h.tick([AudioCmd::StopAllFx]);
+
+        assert_eq!(replies, Vec::<String>::new());
+        let calls = h.take_calls();
+        for alias in [2, 3] {
+            let stop = calls.iter().position(|c| *c == format!("stop_sound({alias})"));
+            let unload = calls
+                .iter()
+                .position(|c| *c == format!("unload_sound_alias({alias})"));
+            assert!(stop.is_some() && stop < unload, "{calls:?}");
+        }
+        assert_eq!(calls.len(), 4, "{calls:?}");
+        assert_eq!(h.fx_aliases(), []);
+        assert_eq!(h.store().fx.get("hit"), Some(&1), "the sound stays loaded");
+    }
+
+    #[test]
+    fn unload_all_fx_unloads_aliases_without_stopping_then_every_sound() {
+        let mut h = Harness::new();
+        h.setup([load_fx("hit"), play_fx("hit")]);
+
+        let replies = h.tick([AudioCmd::UnloadAllFx]);
+
+        assert_eq!(replies, ["FxUnloadedAll"]);
+        assert_eq!(h.take_calls(), ["unload_sound_alias(2)", "unload_sound(1)"]);
+        assert_eq!(h.fx_aliases(), []);
+        assert!(h.store().fx.is_empty());
+    }
+
+    #[test]
+    fn unload_fx_by_id_is_a_no_op() {
+        let mut h = Harness::new();
+        h.setup([load_fx("hit"), play_fx("hit")]);
+
+        // Pinned as-is: per-id unload is ignored and FxUnloaded is never sent.
+        let replies = h.tick([AudioCmd::UnloadFx { id: "hit".into() }]);
+
+        assert_eq!(replies, Vec::<String>::new());
+        assert_eq!(h.take_calls(), Vec::<String>::new());
+        assert_eq!(h.fx_aliases(), [(2, "hit".to_string())]);
+        assert_eq!(h.store().fx.get("hit"), Some(&1));
     }
 
     #[test]
