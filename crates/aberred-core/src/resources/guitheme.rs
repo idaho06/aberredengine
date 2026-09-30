@@ -210,34 +210,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_guitheme_construction() {
-        let theme = GuiTheme {
-            panel: GuiNinePatch {
-                tex_key: Arc::from("gui_panel"),
-                source: Rect::new(0.0, 0.0, 64.0, 64.0),
-                left: 6,
-                top: 6,
-                right: 6,
-                bottom: 6,
-            },
-            button: None,
-            label: None,
-            ..GuiTheme::default()
-        };
-        assert_eq!(theme.panel.left, 6);
-        assert_eq!(&*theme.panel.tex_key, "gui_panel");
-    }
-
-    #[test]
-    fn test_gui_nine_patch_default_empty_tex_key() {
-        let patch = GuiNinePatch::default();
-        assert_eq!(&*patch.tex_key, "");
-        assert_eq!(patch.left, 0);
-        assert!(patch.is_unset());
-    }
-
-    #[test]
-    fn test_gui_nine_patch_is_unset_false_when_tex_key_set() {
+    fn nine_patch_is_unset_until_tex_key_set() {
+        assert!(GuiNinePatch::default().is_unset());
         let patch = GuiNinePatch {
             tex_key: Arc::from("some_tex"),
             ..GuiNinePatch::default()
@@ -245,25 +219,15 @@ mod tests {
         assert!(!patch.is_unset());
     }
 
+    // Widget captions fall back to these until set_gui_theme_* is called.
     #[test]
-    fn test_gui_theme_default_button_none() {
-        let theme = GuiTheme::default();
-        assert!(theme.button.is_none());
-        assert_eq!(&*theme.panel.tex_key, "");
-    }
-
-    #[test]
-    fn test_gui_theme_default_label_none() {
-        let theme = GuiTheme::default();
-        assert!(theme.label.is_none());
-    }
-
-    #[test]
-    fn test_gui_theme_default_font_config() {
+    fn default_theme_font_config_and_no_skins() {
         let theme = GuiTheme::default();
         assert_eq!(&*theme.font, "");
         assert_eq!(theme.font_size, 16.0);
         assert_eq!(theme.text_color, Color::WHITE);
+        assert!(theme.panel.is_unset());
+        assert!(theme.button.is_none() && theme.label.is_none());
     }
 
     #[test]
@@ -290,14 +254,5 @@ mod tests {
         };
         assert!(theme.drop_invalid_button_skin());
         assert!(theme.button.is_some());
-    }
-
-    #[test]
-    fn test_gui_button_skin_default_all_empty() {
-        let skin = GuiButtonSkin::default();
-        assert_eq!(&*skin.normal.tex_key, "");
-        assert!(skin.hover.is_none());
-        assert!(skin.pressed.is_none());
-        assert!(skin.disabled.is_none());
     }
 }

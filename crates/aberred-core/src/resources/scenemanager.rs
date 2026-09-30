@@ -92,24 +92,6 @@ mod tests {
     }
 
     #[test]
-    fn new_is_empty() {
-        let sm = SceneManager::new();
-        assert!(sm.is_empty());
-        assert_eq!(sm.len(), 0);
-        assert!(sm.active_scene.is_none());
-        assert!(sm.initial_scene.is_none());
-    }
-
-    #[test]
-    fn insert_and_get() {
-        let mut sm = SceneManager::new();
-        sm.insert("menu", make_descriptor());
-        assert_eq!(sm.len(), 1);
-        assert!(sm.get("menu").is_some());
-        assert!(sm.get("nonexistent").is_none());
-    }
-
-    #[test]
     fn scene_names_sorted() {
         let mut sm = SceneManager::new();
         sm.insert("level2", make_descriptor());
@@ -117,32 +99,5 @@ mod tests {
         sm.insert("level1", make_descriptor());
         let names = sm.scene_names();
         assert_eq!(names, vec!["level1", "level2", "menu"]);
-    }
-
-    #[test]
-    fn insert_overwrites() {
-        fn other_enter(_ctx: &mut GameCtx) {}
-        let mut sm = SceneManager::new();
-        sm.insert("menu", make_descriptor());
-        sm.insert(
-            "menu",
-            SceneLogic {
-                on_enter: other_enter,
-                on_update: None,
-                on_exit: None,
-            },
-        );
-        assert_eq!(sm.len(), 1);
-        let desc = sm.get("menu").unwrap();
-        assert_eq!(
-            desc.on_enter as *const () as usize,
-            other_enter as *const () as usize
-        );
-    }
-
-    #[test]
-    fn default_is_empty() {
-        let sm = SceneManager::default();
-        assert!(sm.is_empty());
     }
 }

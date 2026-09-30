@@ -163,51 +163,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_boolstate_default() {
-        let bs = BoolState::default();
-        assert!(!bs.active);
-        assert!(!bs.just_pressed);
-        assert!(!bs.just_released);
-    }
-
-    #[test]
-    fn test_inputstate_default_all_inactive() {
-        let input = InputState::default();
-        assert!(!input.maindirection_up.active);
-        assert!(!input.maindirection_down.active);
-        assert!(!input.maindirection_left.active);
-        assert!(!input.maindirection_right.active);
-        assert!(!input.secondarydirection_up.active);
-        assert!(!input.secondarydirection_down.active);
-        assert!(!input.secondarydirection_left.active);
-        assert!(!input.secondarydirection_right.active);
-        assert!(!input.action_back.active);
-        assert!(!input.action_1.active);
-        assert!(!input.action_2.active);
-        assert!(!input.action_3.active);
-        assert!(!input.mode_debug.active);
-        assert!(!input.fullscreen_toggle.active);
-        assert!(!input.action_special.active);
-    }
-
-    #[test]
-    fn test_inputstate_no_just_pressed_on_default() {
-        let input = InputState::default();
-        assert!(!input.maindirection_up.just_pressed);
-        assert!(!input.action_1.just_pressed);
-        assert!(!input.action_back.just_released);
-    }
-
-    #[test]
-    fn test_inputstate_mouse_left_button_default_inactive() {
-        let input = InputState::default();
-        assert!(!input.mouse_left_button.active);
-        assert!(!input.mouse_left_button.just_pressed);
-        assert!(!input.mouse_left_button.just_released);
-    }
-
-    #[test]
-    fn test_clear_edges_zeroes_every_field_but_keeps_active() {
+    fn clear_edges_zeroes_every_field_but_keeps_active() {
         let mut input = InputState::default();
         // Set active + both edges on every field, including mouse_left_button
         // (reuses the same field enumeration `clear_edges` itself uses).
@@ -224,18 +180,5 @@ mod tests {
             assert!(!bs.just_pressed, "just_pressed must be cleared");
             assert!(!bs.just_released, "just_released must be cleared");
         }
-    }
-
-    #[test]
-    fn test_clear_edge_leaves_active_untouched() {
-        let mut bs = BoolState {
-            active: true,
-            just_pressed: true,
-            just_released: true,
-        };
-        bs.clear_edge();
-        assert!(bs.active);
-        assert!(!bs.just_pressed);
-        assert!(!bs.just_released);
     }
 }

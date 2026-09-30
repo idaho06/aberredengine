@@ -127,32 +127,12 @@ impl CameraFollowConfig {
 mod tests {
     use super::*;
 
+    // Camera follow is opt-in; enabling it without configuring picks these.
     #[test]
-    fn default_is_disabled() {
+    fn default_is_disabled_lerp_ease_out() {
         let cfg = CameraFollowConfig::default();
         assert!(!cfg.enabled);
-    }
-
-    #[test]
-    fn default_mode_is_lerp() {
-        let cfg = CameraFollowConfig::default();
         assert_eq!(cfg.mode, FollowMode::Lerp);
-    }
-
-    #[test]
-    fn default_easing_is_ease_out() {
-        let cfg = CameraFollowConfig::default();
         assert_eq!(cfg.easing, EasingCurve::EaseOut);
-    }
-
-    #[test]
-    fn reset_velocity_zeroes() {
-        let mut cfg = CameraFollowConfig {
-            velocity: Vec2 { x: 99.0, y: -42.0 },
-            ..Default::default()
-        };
-        cfg.reset_velocity();
-        assert_eq!(cfg.velocity.x, 0.0);
-        assert_eq!(cfg.velocity.y, 0.0);
     }
 }

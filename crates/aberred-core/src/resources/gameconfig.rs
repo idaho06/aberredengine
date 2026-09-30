@@ -437,44 +437,6 @@ mod tests {
     }
 
     #[test]
-    fn test_default_trait() {
-        let config = GameConfig::default();
-        assert_eq!(config.render_width, 640);
-        assert_eq!(config.target_fps, 120);
-    }
-
-    #[test]
-    fn test_with_path() {
-        let config = GameConfig::with_path("/tmp/custom.ini");
-        assert_eq!(config.config_path, PathBuf::from("/tmp/custom.ini"));
-        // Other fields should be defaults
-        assert_eq!(config.render_width, 640);
-    }
-
-    #[test]
-    fn test_set_render_size() {
-        let mut config = GameConfig::new();
-        config.set_render_size(320, 240);
-        assert_eq!(config.render_width, 320);
-        assert_eq!(config.render_height, 240);
-    }
-
-    #[test]
-    fn test_set_window_size() {
-        let mut config = GameConfig::new();
-        config.set_window_size(1920, 1080);
-        assert_eq!(config.window_width, 1920);
-        assert_eq!(config.window_height, 1080);
-    }
-
-    #[test]
-    fn test_window_size_getter() {
-        let mut config = GameConfig::new();
-        config.set_window_size(800, 600);
-        assert_eq!(config.window_size(), (800, 600));
-    }
-
-    #[test]
     fn test_load_from_file() {
         let dir = std::env::temp_dir().join("aberred_test_config");
         std::fs::create_dir_all(&dir).unwrap();

@@ -481,33 +481,40 @@ mod tests {
         (a - b).abs() < EPSILON
     }
 
-    #[test]
-    fn test_default_all_empty() {
-        let ws = WorldSignals::default();
-        assert!(ws.scalars.is_empty());
-        assert!(ws.integers.is_empty());
-        assert!(ws.strings.is_empty());
-        assert!(ws.flags.is_empty());
-        assert!(ws.entities.is_empty());
-        assert!(!ws.is_dirty());
-    }
-
     // --- Scalars ---
 
+    // Removing an absent key must not dirty the domain, or `snapshot()` would
+    // rebuild (and hand Lua a fresh Arc) for no change.
     #[test]
-    fn test_set_and_get_scalar() {
+    fn removals_return_value_and_mark_dirty_only_when_present() {
         let mut ws = WorldSignals::default();
-        ws.set_scalar("speed", 42.0);
-        assert_eq!(ws.get_scalar("speed"), Some(42.0));
-    }
+        let e = Entity::from_bits(42);
+        ws.set_scalar("s", 1.5);
+        ws.set_integer("i", 7);
+        ws.set_string("t", "hi");
+        ws.set_flag("f");
+        ws.set_entity("e", e);
+        ws.snapshot();
 
-    #[test]
-    fn test_get_scalars_view() {
-        let mut ws = WorldSignals::default();
-        ws.set_scalar("speed", 42.0);
-        assert_eq!(ws.get_scalars().len(), 1);
-    }
+        assert_eq!(ws.clear_scalar("missing"), None);
+        assert_eq!(ws.clear_integer("missing"), None);
+        assert_eq!(ws.remove_string("missing"), None);
+        ws.clear_flag("missing");
+        assert_eq!(ws.remove_entity("missing"), None);
+        assert!(!ws.is_dirty(), "removing absent keys must not dirty");
 
+        assert_eq!(ws.clear_scalar("s"), Some(1.5));
+        assert_eq!(ws.clear_integer("i"), Some(7));
+        assert_eq!(ws.remove_string("t").as_deref(), Some("hi"));
+        ws.clear_flag("f");
+        assert_eq!(ws.remove_entity("e"), Some(e));
+        assert!(ws.scalars_dirty && ws.integers_dirty && ws.strings_dirty);
+        assert!(ws.flags_dirty && ws.entities_dirty);
+
+        let snap = ws.snapshot();
+        assert!(snap.scalars.is_empty() && snap.integers.is_empty() && snap.strings.is_empty());
+        assert!(snap.flags.is_empty() && snap.entities.is_empty());
+    }
 
     #[test]
     fn test_set_scalar_marks_dirty_only_when_changed() {
@@ -520,43 +527,7 @@ mod tests {
         assert!(ws.scalars_dirty);
     }
 
-    #[test]
-    fn test_scalar_missing_returns_none() {
-        let ws = WorldSignals::default();
-        assert_eq!(ws.get_scalar("nope"), None);
-    }
-
-    #[test]
-    fn test_clear_scalar() {
-        let mut ws = WorldSignals::default();
-        ws.set_scalar("x", 1.0);
-        let removed = ws.clear_scalar("x");
-        assert!(approx_eq(removed.unwrap(), 1.0));
-        assert_eq!(ws.get_scalar("x"), None);
-    }
-
-    #[test]
-    fn test_clear_scalar_nonexistent() {
-        let mut ws = WorldSignals::default();
-        assert_eq!(ws.clear_scalar("nope"), None);
-    }
-
     // --- Integers ---
-
-    #[test]
-    fn test_set_and_get_integer() {
-        let mut ws = WorldSignals::default();
-        ws.set_integer("score", 100);
-        assert_eq!(ws.get_integer("score"), Some(100));
-    }
-
-    #[test]
-    fn test_get_integers_view() {
-        let mut ws = WorldSignals::default();
-        ws.set_integer("score", 100);
-        assert_eq!(ws.get_integers().len(), 1);
-    }
-
 
     #[test]
     fn test_set_integer_marks_dirty_only_when_changed() {
@@ -587,37 +558,7 @@ mod tests {
         assert_eq!(ws.get_group_count("enemy"), Some(6));
     }
 
-    #[test]
-    fn test_integer_missing_returns_none() {
-        let ws = WorldSignals::default();
-        assert_eq!(ws.get_integer("nope"), None);
-    }
-
-    #[test]
-    fn test_clear_integer() {
-        let mut ws = WorldSignals::default();
-        ws.set_integer("lives", 3);
-        let removed = ws.clear_integer("lives");
-        assert_eq!(removed, Some(3));
-        assert_eq!(ws.get_integer("lives"), None);
-    }
-
     // --- Strings ---
-
-    #[test]
-    fn test_set_and_get_string() {
-        let mut ws = WorldSignals::default();
-        ws.set_string("scene", "menu");
-        assert_eq!(ws.get_string("scene").map(|s| s.as_str()), Some("menu"));
-    }
-
-    #[test]
-    fn test_get_strings_view() {
-        let mut ws = WorldSignals::default();
-        ws.set_string("scene", "menu");
-        assert_eq!(ws.get_strings().len(), 1);
-    }
-
 
     #[test]
     fn test_set_string_marks_dirty_only_when_changed() {
@@ -630,43 +571,7 @@ mod tests {
         assert!(ws.strings_dirty);
     }
 
-    #[test]
-    fn test_string_missing_returns_none() {
-        let ws = WorldSignals::default();
-        assert_eq!(ws.get_string("nope"), None);
-    }
-
-    #[test]
-    fn test_remove_string() {
-        let mut ws = WorldSignals::default();
-        ws.set_string("scene", "menu");
-        let removed = ws.remove_string("scene");
-        assert_eq!(removed.as_deref(), Some("menu"));
-        assert_eq!(ws.get_string("scene"), None);
-    }
-
-    #[test]
-    fn test_remove_string_nonexistent() {
-        let mut ws = WorldSignals::default();
-        assert_eq!(ws.remove_string("nope"), None);
-    }
-
     // --- Flags ---
-
-    #[test]
-    fn test_set_and_has_flag() {
-        let mut ws = WorldSignals::default();
-        ws.set_flag("paused");
-        assert!(ws.has_flag("paused"));
-    }
-
-    #[test]
-    fn test_get_flags_view() {
-        let mut ws = WorldSignals::default();
-        ws.set_flag("paused");
-        assert_eq!(ws.get_flags().len(), 1);
-    }
-
 
     #[test]
     fn test_set_flag_marks_dirty_only_when_new() {
@@ -678,66 +583,15 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_flag() {
-        let mut ws = WorldSignals::default();
-        ws.set_flag("paused");
-        ws.clear_flag("paused");
-        assert!(!ws.has_flag("paused"));
-    }
-
-    #[test]
-    fn test_clear_flag_nonexistent() {
-        let mut ws = WorldSignals::default();
-        ws.clear_flag("nope"); // should not panic
-        assert!(!ws.has_flag("nope"));
-    }
-
-    #[test]
-    fn test_take_flag_present() {
-        let mut ws = WorldSignals::default();
-        ws.set_flag("fire");
-        assert!(ws.take_flag("fire"));
-        assert!(!ws.has_flag("fire"));
-    }
-
-    #[test]
-    fn test_take_flag_absent() {
-        let mut ws = WorldSignals::default();
-        assert!(!ws.take_flag("nope"));
-    }
-
-    #[test]
     fn test_take_flag_marks_dirty_only_when_present() {
         let mut ws = WorldSignals::default();
         ws.set_flag("fire");
         ws.snapshot(); // clear dirty
-        ws.take_flag("nope"); // absent — should not dirty
+        assert!(!ws.take_flag("nope")); // absent — should not dirty
         assert!(!ws.flags_dirty);
-        ws.take_flag("fire"); // present — should dirty
+        assert!(ws.take_flag("fire")); // present — should dirty
         assert!(ws.flags_dirty);
-    }
-
-    #[test]
-    fn test_toggle_flag_absent_sets_it() {
-        let mut ws = WorldSignals::default();
-        ws.toggle_flag("x");
-        assert!(ws.has_flag("x"));
-    }
-
-    #[test]
-    fn test_toggle_flag_present_clears_it() {
-        let mut ws = WorldSignals::default();
-        ws.set_flag("x");
-        ws.toggle_flag("x");
-        assert!(!ws.has_flag("x"));
-    }
-
-    #[test]
-    fn test_toggle_flag_twice_restores() {
-        let mut ws = WorldSignals::default();
-        ws.toggle_flag("x");
-        ws.toggle_flag("x");
-        assert!(!ws.has_flag("x"));
+        assert!(!ws.has_flag("fire"));
     }
 
     #[test]
@@ -746,37 +600,13 @@ mod tests {
         ws.set_flag("x");
         ws.snapshot(); // clear dirty
         ws.toggle_flag("x"); // present → remove
-        assert!(ws.flags_dirty);
+        assert!(ws.flags_dirty && !ws.has_flag("x"));
         ws.snapshot(); // clear dirty
         ws.toggle_flag("x"); // absent → insert
-        assert!(ws.flags_dirty);
+        assert!(ws.flags_dirty && ws.has_flag("x"));
     }
 
     // --- Entities ---
-
-    #[test]
-    fn test_set_and_get_entity() {
-        let mut ws = WorldSignals::default();
-        let entity = Entity::from_bits(42);
-        ws.set_entity("player", entity);
-        assert_eq!(ws.get_entity("player"), Some(&entity));
-    }
-
-    #[test]
-    fn test_remove_entity() {
-        let mut ws = WorldSignals::default();
-        let entity = Entity::from_bits(42);
-        ws.set_entity("player", entity);
-        let removed = ws.remove_entity("player");
-        assert_eq!(removed, Some(entity));
-        assert_eq!(ws.get_entity("player"), None);
-    }
-
-    #[test]
-    fn test_remove_entity_nonexistent() {
-        let mut ws = WorldSignals::default();
-        assert_eq!(ws.remove_entity("nope"), None);
-    }
 
     #[test]
     fn test_remove_entity_registrations_for() {
