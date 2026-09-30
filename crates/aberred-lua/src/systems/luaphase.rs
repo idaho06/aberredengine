@@ -4,7 +4,7 @@
 //!
 //! - [`lua_phase_system`] – runs Lua callbacks for phase enter/update/exit
 //!
-//! Unlike the Rust-based [`phase`](super::phase) system, this system delegates
+//! Unlike the Rust-based [`phase`](aberred_core::systems::phase) system, this system delegates
 //! all callback logic to Lua scripts via named function references.
 //!
 //! # System Flow
@@ -31,7 +31,7 @@
 //! # Performance
 //!
 //! Context tables are pooled and reused across callbacks to reduce Lua GC pressure.
-//! See [`EntityCtxTables`](crate::resources::lua_runtime::EntityCtxTables) in runtime.rs.
+//! See `EntityCtxTables` in runtime.rs.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Local;

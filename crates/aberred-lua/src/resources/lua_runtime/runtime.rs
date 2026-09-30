@@ -240,7 +240,7 @@ pub(super) fn action_to_str(action: aberred_core::events::input::InputAction) ->
     }
 }
 
-/// Converts a canonical Lua action name string to an [`InputAction`].
+/// Converts a canonical Lua action name string to an [`InputAction`](aberred_core::events::input::InputAction).
 pub fn action_from_str(s: &str) -> Option<aberred_core::events::input::InputAction> {
     use aberred_core::events::input::InputAction;
     match s {

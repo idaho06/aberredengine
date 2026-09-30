@@ -5,7 +5,7 @@
 //! back to its Rust fn-pointer callback -- mirrors
 //! `aberred_core::systems::menu::menu_selection_observer`'s existing
 //! priority chain. The Lua-aware body lives in
-//! [`aberred_lua::systems::lua_gui_interactable_click`]. Under
+//! `aberred_lua::systems::lua_gui_interactable_click`. Under
 //! `#[cfg(not(feature = "lua"))]` this resolves to core's Rust-only variant
 //! instead.
 

@@ -58,7 +58,7 @@
 //! ```
 //!
 //! For scene-scoped (transient) observers — active only within one scene —
-//! spawn them from the scene's `on_enter` callback without [`Persistent`]:
+//! spawn them from the scene's `on_enter` callback without [`Persistent`](aberred_core::components::persistent::Persistent):
 //! ```rust,ignore
 //! fn my_scene_enter(ctx: &mut GameCtx) {
 //!     // Cleaned up automatically by clean_all_entities on scene switch
@@ -68,7 +68,7 @@
 //!
 //! # Module layout
 //!
-//! This module mirrors the shape of [`aberred_lua::resources::lua_runtime`]: one
+//! This module mirrors the shape of `aberred_lua::resources::lua_runtime`: one
 //! directory module with a single struct ([`EngineBuilder`]) whose `impl`
 //! block is split across sibling files by concern, plus a runtime-support
 //! file ([`logic_thread`]) and the test suite.
@@ -81,11 +81,11 @@
 //!   render thread's per-frame main loop.
 //! - [`validate`] — preflight validation of builder state before startup.
 //! - [`config`] — config-file loading and raylib window/log-level setup.
-//! - [`render_world`] — bootstrapping the render (main) thread's `World` and
-//!   its per-frame schedule (`build_render_schedule` lives here, alongside
-//!   `setup_render_world`, since `try_run` always calls the pair back to
-//!   back — see [`.claude/context/system-order.md`]'s RENDER schedule
-//!   section for what each step in that schedule does).
+//! - [`aberred_render::bootstrap`] (not a module here) — bootstrapping the
+//!   render (main) thread's `World` and its per-frame schedule
+//!   (`setup_render_world` + `build_render_schedule`, which `try_run` always
+//!   calls back to back — see `.claude/context/system-order.md`'s RENDER
+//!   schedule section for what each step in that schedule does).
 //! - [`logic_world`] — bootstrapping the logic thread's gameplay `World`,
 //!   registering hooks/scene systems, and spawning engine observers.
 //! - [`schedule`] — [`SimSet`] and construction of the logic thread's `sim`/
@@ -94,10 +94,10 @@
 //! - [`logic_thread`] — `LogicInit`, the logic thread's entry point, and its
 //!   `Pacer`-driven main loop.
 //!
-//! Unlike [`aberred_lua::resources::lua_runtime`]'s single flat re-export tier,
+//! Unlike `aberred_lua::resources::lua_runtime`'s single flat re-export tier,
 //! this module's public surface is intentionally two-tiered: a real `pub`
 //! external API ([`EngineBuilder`], [`SimSet`]) plus a `pub(crate)`,
-//! test-support-gated internal tier ([`LogicInit`], `run_sim_tick`, the
+//! test-support-gated internal tier (`LogicInit`, `run_sim_tick`, the
 //! registrar types) that only `src/test_support.rs` consumes — `lua_runtime`
 //! has no equivalent test-only internals to gate.
 

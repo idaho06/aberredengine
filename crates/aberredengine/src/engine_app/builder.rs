@@ -319,7 +319,7 @@ impl EngineBuilder {
     /// single-threaded schedule executor already apply to every game, so this
     /// is the engine switch that pins simulation randomness to a known seed.
     ///
-    /// Mutually exclusive with [`.with_lua()`](Self::with_lua) -- Lua is
+    /// Mutually exclusive with `.with_lua()` -- Lua is
     /// outside the deterministic envelope, so combining both is rejected at
     /// `.run()`/`.try_run()` time as
     /// [`EngineError::LuaConflictsWithDeterministic`](aberred_core::error::EngineError::LuaConflictsWithDeterministic).
