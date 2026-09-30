@@ -228,7 +228,8 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                         let key: String = table.get("key")?;
                         let min: f32 = table.get("min")?;
                         let max: f32 = table.get("max")?;
-                        let inclusive: bool = table.get("inclusive").unwrap_or(true);
+                        // Option<bool>: a plain bool would read an omitted field as false.
+                        let inclusive = table.get::<Option<bool>>("inclusive")?.unwrap_or(true);
                         Ok(AnimationConditionData::ScalarRange {
                             key,
                             min,
@@ -246,7 +247,8 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                         let key: String = table.get("key")?;
                         let min: i32 = table.get("min")?;
                         let max: i32 = table.get("max")?;
-                        let inclusive: bool = table.get("inclusive").unwrap_or(true);
+                        // Option<bool>: a plain bool would read an omitted field as false.
+                        let inclusive = table.get::<Option<bool>>("inclusive")?.unwrap_or(true);
                         Ok(AnimationConditionData::IntegerRange {
                             key,
                             min,
@@ -453,6 +455,18 @@ mod tests {
         assert!(matches!(
             sole_rule_condition("{type='integer_range', key='hp', min=1, max=3, inclusive=false}"),
             AnimationConditionData::IntegerRange { min: 1, max: 3, inclusive: false, .. }
+        ));
+    }
+
+    #[test]
+    fn animation_rule_ranges_default_to_inclusive_when_omitted() {
+        assert!(matches!(
+            sole_rule_condition("{type='scalar_range', key='vy', min=-1, max=1}"),
+            AnimationConditionData::ScalarRange { inclusive: true, .. }
+        ));
+        assert!(matches!(
+            sole_rule_condition("{type='integer_range', key='hp', min=1, max=3}"),
+            AnimationConditionData::IntegerRange { inclusive: true, .. }
         ));
     }
 

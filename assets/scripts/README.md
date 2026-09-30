@@ -1620,7 +1620,7 @@ Add rule to AnimationController (requires `:with_animation_controller()`).
     "run_anim"
 )
 
--- Range check
+-- Range check (`inclusive` is optional, default true)
 :with_animation_rule(
     { type = "scalar_range", key = "speed", min = 5.0, max = 50.0, inclusive = true },
     "walk_anim"
