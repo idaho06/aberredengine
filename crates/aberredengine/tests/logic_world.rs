@@ -20,10 +20,12 @@ use aberredengine::core::math::Color;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::protocol::render_logic::RenderMsg;
+use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::test_support::TestWorld;
@@ -321,5 +323,50 @@ fn add_observer_fires_on_triggered_event() {
             .resource::<WorldSignals>()
             .has_flag("observer_fired"),
         "observer registered via TestWorldBuilder::add_observer must fire on the triggered event"
+    );
+}
+
+const INTENT_PROBE_FLAG: &str = "test:intent_probe";
+
+/// What the `ScriptUpdate` probe saw on its most recent run.
+#[derive(Resource, Default)]
+struct IntentProbe(Option<bool>);
+
+fn record_intent_flag(signals: Res<WorldSignals>, mut probe: ResMut<IntentProbe>) {
+    probe.0 = Some(signals.has_flag(INTENT_PROBE_FLAG));
+}
+
+/// (h) `SignalIntents` timing: intents delivered with a tick's input are
+/// drained by `apply_signal_intents` in `SimSet::ApplyIntents`, the first set
+/// of the sim pipeline, so scene logic in `SimSet::ScriptUpdate` sees them on
+/// that same tick -- not one tick later.
+#[test]
+fn signal_intent_is_visible_to_script_update_on_its_delivery_tick() {
+    let mut tw = TestWorld::builder()
+        .add_system(record_intent_flag)
+        .build()
+        .expect("build should succeed");
+    tw.world.insert_resource(IntentProbe::default());
+    tw.tick_to_play(DT, 8);
+
+    tw.tick(1, DT);
+    assert_eq!(
+        tw.world.resource::<IntentProbe>().0,
+        Some(false),
+        "flag must be unset before the intent is delivered"
+    );
+
+    tw.apply_tick_input(
+        &TickInput {
+            intents: vec![SignalIntent::SetFlag(INTENT_PROBE_FLAG.into())],
+            ..Default::default()
+        },
+        DT,
+    );
+    assert_eq!(
+        tw.world.resource::<IntentProbe>().0,
+        Some(true),
+        "ScriptUpdate must see an intent on the tick it is delivered \
+         (ApplyIntents runs before ScriptUpdate)"
     );
 }
