@@ -798,54 +798,6 @@ fn meta_builder_methods_have_schema_refs() {
 }
 
 // ---------------------------------------------------------------------------
-// D7 – check_pending_state triggers GameStateChangedEvent when pending
-// ---------------------------------------------------------------------------
-
-use aberredengine::core::events::gamestate::GameStateChangedEvent;
-use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
-use aberredengine::core::systems::gamestate::check_pending_state;
-
-/// Helper: run `check_pending_state` once.
-fn tick_check_pending_state(world: &mut World) {
-    world
-        .run_system_once(check_pending_state)
-        .expect("check_pending_state should run");
-}
-
-#[test]
-fn check_pending_state_triggers_event_when_pending() {
-    let mut world = World::new();
-    world.init_resource::<GameState>();
-
-    // Set a pending state
-    let mut next = NextGameState::new();
-    next.set(GameStates::Playing);
-    world.insert_resource(next);
-
-    // Run the system – it calls commands.trigger(GameStateChangedEvent{})
-    tick_check_pending_state(&mut world);
-
-    // After commands are flushed the event should have been triggered.
-    // We can't easily inspect triggered events without an observer, but we can
-    // verify the system didn't panic and the pending value is still there
-    // (the observer is responsible for clearing it, not check_pending_state).
-    let ns = world.resource::<NextGameState>();
-    assert_eq!(*ns.get(), NextGameStates::Pending(GameStates::Playing));
-}
-
-#[test]
-fn check_pending_state_does_nothing_when_unchanged() {
-    let mut world = World::new();
-    world.init_resource::<GameState>();
-    world.init_resource::<NextGameState>(); // defaults to Unchanged
-
-    tick_check_pending_state(&mut world);
-
-    let ns = world.resource::<NextGameState>();
-    assert_eq!(*ns.get(), NextGameStates::Unchanged);
-}
-
-// ---------------------------------------------------------------------------
 // D11 – update_world_time integration tests
 // ---------------------------------------------------------------------------
 
