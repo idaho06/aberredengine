@@ -295,8 +295,13 @@ fn handle_cmd<B: AudioBackend>(world: &mut World, cmd: AudioCmd) {
         }
         AudioCmd::UnloadAllMusic => {
             debug!(target: "audio", "unload all");
+            // Same order as a single UnloadMusic: stop and drop every
+            // playing/paused track before any stream is unloaded.
+            for (entity, _, music, ..) in music_tracks::<B>(world) {
+                store::<B>(world).backend.stop_music(music);
+                world.despawn(entity);
+            }
             unload_all_music::<B>(world);
-            despawn_all::<MusicTrack<B::Music>>(world);
             send(world, AudioMessage::MusicUnloadedAll);
         }
         AudioCmd::LoadFx { id, path } => {
@@ -756,7 +761,7 @@ mod tests {
     }
 
     #[test]
-    fn unload_all_music_unloads_every_stream_and_always_replies() {
+    fn unload_all_music_stops_playing_streams_then_unloads_every_stream() {
         let mut h = Harness::new();
         assert_eq!(h.tick([AudioCmd::UnloadAllMusic]), ["MusicUnloadedAll"]);
 
@@ -765,8 +770,14 @@ mod tests {
 
         assert_eq!(replies, ["MusicUnloadedAll"]);
         let mut calls = h.take_calls();
+        assert_eq!(
+            calls.first().map(String::as_str),
+            Some("stop_music(1)"),
+            "only the playing stream is stopped, before any unload: {calls:?}"
+        );
+        calls.remove(0);
         calls.sort();
-        assert_eq!(calls, ["unload_music(1)", "unload_music(2)"], "no stops");
+        assert_eq!(calls, ["unload_music(1)", "unload_music(2)"]);
         assert_eq!(h.tracks(), []);
         assert!(h.store().music.is_empty());
     }
