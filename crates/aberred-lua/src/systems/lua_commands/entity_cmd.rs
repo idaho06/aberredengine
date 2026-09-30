@@ -920,9 +920,18 @@ mod tests {
         anim_store: &AnimationStore,
         cmds: impl IntoIterator<Item = EntityCmd>,
     ) {
-        use bevy_ecs::system::SystemState;
+        run_entity_cmds_in(world, world_signals, anim_store, &SystemsStore::default(), cmds);
+    }
 
-        let systems_store = SystemsStore::default();
+    /// [`run_entity_cmds`] with caller-provided `AnimationStore` and `SystemsStore`.
+    fn run_entity_cmds_in(
+        world: &mut World,
+        world_signals: &mut WorldSignals,
+        anim_store: &AnimationStore,
+        systems_store: &SystemsStore,
+        cmds: impl IntoIterator<Item = EntityCmd>,
+    ) {
+        use bevy_ecs::system::SystemState;
 
         let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(world);
         {
@@ -934,7 +943,7 @@ mod tests {
                 cmds,
                 world_signals,
                 &mut queries,
-                &systems_store,
+                systems_store,
                 anim_store,
             );
         }
@@ -1439,6 +1448,156 @@ mod tests {
         assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
         let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
         assert_eq!((sprite.flip_h, sprite.flip_v), (true, false));
+    }
+
+    #[test]
+    fn gui_progress_value_clamps_and_max_lowers_value() {
+        use aberred_core::components::guiprogressbar::GuiProgressBar;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(GuiProgressBar::new(100.0, 8.0, 5.0, 10.0)).id();
+        let id = e.to_bits();
+        let bar = |world: &World| {
+            let b = world.get::<GuiProgressBar>(e).unwrap();
+            (b.value, b.max)
+        };
+
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgress { entity_id: id, value: 25.0 });
+        assert_eq!(bar(&world), (10.0, 10.0), "value clamps to max");
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgress { entity_id: id, value: -3.0 });
+        assert_eq!(bar(&world), (0.0, 10.0), "value clamps to 0");
+
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgress { entity_id: id, value: 8.0 });
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgressMax { entity_id: id, max: 6.0 });
+        assert_eq!(bar(&world), (6.0, 6.0), "lowering max pulls value down");
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgressMax { entity_id: id, max: 20.0 });
+        assert_eq!(bar(&world), (6.0, 20.0), "raising max keeps value");
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgressMax { entity_id: id, max: -1.0 });
+        assert_eq!(bar(&world), (0.0, 0.0), "negative max clamps to 0");
+    }
+
+    #[test]
+    fn shader_uniform_cmds_set_each_type_and_clear() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(EntityShader::new("wave")).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::ShaderSetInt { entity_id: id, name: "mode".into(), value: 2 },
+                EntityCmd::ShaderSetVec2 { entity_id: id, name: "dir".into(), x: 1.0, y: 0.0 },
+                EntityCmd::ShaderSetVec4 {
+                    entity_id: id,
+                    name: "tint".into(),
+                    x: 1.0,
+                    y: 0.5,
+                    z: 0.25,
+                    w: 1.0,
+                },
+                EntityCmd::ShaderClearUniform { entity_id: id, name: "dir".into() },
+            ],
+        );
+        let uniforms = &world.get::<EntityShader>(e).unwrap().uniforms;
+        assert_eq!(uniforms.get("mode"), Some(&UniformValue::Int(2)));
+        assert_eq!(uniforms.get("dir"), None, "cleared individually");
+        assert_eq!(
+            uniforms.get("tint"),
+            Some(&UniformValue::Vec4 { x: 1.0, y: 0.5, z: 0.25, w: 1.0 })
+        );
+
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::ShaderClearUniforms { entity_id: id });
+        assert!(world.get::<EntityShader>(e).unwrap().uniforms.is_empty());
+    }
+
+    #[test]
+    fn release_stuckto_restores_stored_velocity_as_rigidbody() {
+        use aberred_core::components::rigidbody::RigidBody;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let e = world.spawn((MapPosition::new(0.0, 0.0), RigidBody::new())).id();
+        let id = e.to_bits();
+
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::InsertStuckTo {
+                entity_id: id,
+                target_id: target.to_bits(),
+                follow_x: true,
+                follow_y: false,
+                offset_x: 2.0,
+                offset_y: 0.0,
+                stored_vx: 5.0,
+                stored_vy: -1.0,
+            },
+        );
+        assert!(world.get::<RigidBody>(e).is_none(), "sticking removes the RigidBody");
+        let stuck = world.get::<StuckTo>(e).unwrap();
+        assert_eq!(stuck.target, target);
+        assert_eq!(stuck.stored_velocity, Some(Vec2::new(5.0, -1.0)));
+
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::ReleaseStuckTo { entity_id: id });
+        assert!(world.get::<StuckTo>(e).is_none());
+        assert_eq!(world.get::<RigidBody>(e).unwrap().velocity, Vec2::new(5.0, -1.0));
+    }
+
+    #[test]
+    fn release_stuckto_without_stored_velocity_adds_no_rigidbody() {
+        use aberred_core::components::rigidbody::RigidBody;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let e = world
+            .spawn(StuckTo {
+                target,
+                offset: Vec2::ZERO,
+                follow_x: true,
+                follow_y: true,
+                stored_velocity: None,
+            })
+            .id();
+
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::ReleaseStuckTo { entity_id: e.to_bits() });
+        assert!(world.get::<StuckTo>(e).is_none());
+        assert!(world.get::<RigidBody>(e).is_none());
+    }
+
+    #[derive(Resource, Default)]
+    struct MenuDespawnCalls(Vec<Entity>);
+
+    fn record_menu_despawn(In(entity): In<Entity>, mut calls: ResMut<MenuDespawnCalls>) {
+        calls.0.push(entity);
+    }
+
+    #[test]
+    fn menu_despawn_runs_the_registered_hook_with_the_entity() {
+        let mut world = World::new();
+        world.init_resource::<MenuDespawnCalls>();
+        let mut signals = WorldSignals::default();
+        let menu = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let mut systems_store = SystemsStore::default();
+        systems_store.insert_entity_system(
+            hook_keys::MENU_DESPAWN,
+            world.register_system(record_menu_despawn),
+        );
+
+        run_entity_cmds_in(
+            &mut world,
+            &mut signals,
+            &AnimationStore::default(),
+            &systems_store,
+            [EntityCmd::MenuDespawn { entity_id: menu.to_bits() }],
+        );
+        assert_eq!(world.resource::<MenuDespawnCalls>().0, [menu]);
+
+        // Without a registered hook the command is a no-op.
+        run_entity_cmd(&mut world, &mut signals, EntityCmd::MenuDespawn { entity_id: menu.to_bits() });
+        assert_eq!(world.resource::<MenuDespawnCalls>().0.len(), 1);
+        assert!(world.get_entity(menu).is_ok());
     }
 
     fn run_camera_target_cmd(world: &mut World, cmd: EntityCmd) {
