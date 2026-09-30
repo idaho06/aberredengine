@@ -49,7 +49,7 @@ use aberredengine::lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use aberredengine::lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
 
-use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
+use aberredengine::core::testing::insert_game_ctx_resources;
 
 mod common;
 
@@ -683,69 +683,6 @@ fn context_builder_nil_when_no_snapshots() {
     )
     .call::<()>(ctx)
     .expect("Lua nil assertions");
-}
-
-#[cfg(feature = "lua")]
-#[test]
-fn lua_phase_on_exit_sees_post_swap_phase_state() {
-    let mut world = make_world(0.25);
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-    world.insert_resource(SystemsStore::new());
-    world.insert_resource(InputState::default());
-    world.insert_resource(AnimationStore {
-        animations: Default::default(),
-    });
-
-    let lua_runtime = LuaRuntime::new().expect("Failed to init Lua runtime");
-    world.insert_non_send(lua_runtime);
-
-    {
-        let lua_runtime = world.non_send::<LuaRuntime>();
-        lua_runtime
-            .lua()
-            .load(
-                r#"
-                function moving_exit(ctx)
-                    engine.set_string("exit_phase_seen", ctx.phase)
-                    engine.set_scalar("exit_time_in_phase_seen", ctx.time_in_phase)
-                end
-                "#,
-            )
-            .exec()
-            .expect("Failed to load Lua phase callback");
-    }
-
-    let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbacks::default());
-    phases.insert(
-        "moving".into(),
-        PhaseCallbacks {
-            on_enter: None,
-            on_update: None,
-            on_exit: Some("moving_exit".into()),
-        },
-    );
-    phases.insert("attacking".into(), PhaseCallbacks::default());
-
-    let entity = world.spawn((LuaPhase::new("moving", phases),)).id();
-    world.get_mut::<LuaPhase>(entity).unwrap().next = Some("attacking".into());
-
-    tick_lua_phases(&mut world);
-
-    let world_signals = world.resource::<WorldSignals>();
-    assert_eq!(
-        world_signals
-            .get_string("exit_phase_seen")
-            .map(|s| s.as_str()),
-        Some("attacking")
-    );
-    assert!(approx_eq(
-        world_signals
-            .get_scalar("exit_time_in_phase_seen")
-            .expect("exit time signal"),
-        0.0
-    ));
 }
 
 // =============================================================================

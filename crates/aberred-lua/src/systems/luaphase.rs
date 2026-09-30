@@ -315,3 +315,88 @@ pub fn lua_phase_system(
         &animation_store,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::luaphase::PhaseCallbacks;
+    use aberred_core::testing::approx_eq;
+    use bevy_ecs::system::RunSystemOnce;
+
+    /// Minimal world for `lua_phase_system`: exactly the resources its
+    /// params read, plus a fresh `LuaRuntime`.
+    fn make_lua_phase_world(delta: f32) -> World {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta,
+            ..WorldTime::default()
+        });
+        world.insert_resource(InputState::default());
+        world.insert_resource(WorldSignals::default());
+        world.init_resource::<Messages<AudioCmd>>();
+        world.insert_resource(SystemsStore::new());
+        world.insert_resource(AnimationStore::default());
+        world.insert_non_send(LuaRuntime::new().expect("Failed to init Lua runtime"));
+        world
+    }
+
+    fn tick_lua_phases(world: &mut World) {
+        world
+            .run_system_once(lua_phase_system)
+            .expect("lua_phase_system should run");
+    }
+
+    /// `on_exit` fires after the phase swap: the callback's ctx already
+    /// reports the new phase and a reset `time_in_phase`.
+    #[test]
+    fn lua_phase_on_exit_sees_post_swap_phase_state() {
+        let mut world = make_lua_phase_world(0.25);
+
+        {
+            let lua_runtime = world.non_send::<LuaRuntime>();
+            lua_runtime
+                .lua()
+                .load(
+                    r#"
+                    function moving_exit(ctx)
+                        engine.set_string("exit_phase_seen", ctx.phase)
+                        engine.set_scalar("exit_time_in_phase_seen", ctx.time_in_phase)
+                    end
+                    "#,
+                )
+                .exec()
+                .expect("Failed to load Lua phase callback");
+        }
+
+        let mut phases = rustc_hash::FxHashMap::default();
+        phases.insert("idle".into(), PhaseCallbacks::default());
+        phases.insert(
+            "moving".into(),
+            PhaseCallbacks {
+                on_enter: None,
+                on_update: None,
+                on_exit: Some("moving_exit".into()),
+            },
+        );
+        phases.insert("attacking".into(), PhaseCallbacks::default());
+
+        let entity = world.spawn((LuaPhase::new("moving", phases),)).id();
+        world.get_mut::<LuaPhase>(entity).unwrap().next = Some("attacking".into());
+
+        tick_lua_phases(&mut world);
+
+        let world_signals = world.resource::<WorldSignals>();
+        assert_eq!(
+            world_signals
+                .get_string("exit_phase_seen")
+                .map(|s| s.as_str()),
+            Some("attacking")
+        );
+        assert!(approx_eq(
+            world_signals
+                .get_scalar("exit_time_in_phase_seen")
+                .expect("exit time signal"),
+            0.0
+        ));
+    }
+}
