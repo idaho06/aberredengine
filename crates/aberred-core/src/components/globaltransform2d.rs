@@ -33,3 +33,19 @@ impl Default for GlobalTransform2D {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::approx_eq;
+
+    #[test]
+    fn globaltransform2d_default_values() {
+        let gt = GlobalTransform2D::default();
+        assert!(approx_eq(gt.position.x, 0.0));
+        assert!(approx_eq(gt.position.y, 0.0));
+        assert!(approx_eq(gt.rotation_degrees, 0.0));
+        assert!(approx_eq(gt.scale.x, 1.0));
+        assert!(approx_eq(gt.scale.y, 1.0));
+    }
+}
