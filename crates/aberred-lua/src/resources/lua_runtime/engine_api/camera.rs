@@ -221,3 +221,151 @@ impl LuaRuntime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::resources::lua_runtime::LuaRuntime;
+    use crate::systems::lua_commands::{process_camera_command, process_camera_follow_command};
+    use aberred_core::math::{Rect, Vec2};
+    use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+    use aberred_core::resources::camerafollowconfig::{
+        CameraFollowConfig, EasingCurve, FollowMode,
+    };
+    use aberred_core::resources::screensize::ScreenSize;
+    use bevy_ecs::prelude::*;
+    use bevy_ecs::system::SystemState;
+
+    fn follow_config_after(script: &str, mut config: CameraFollowConfig) -> CameraFollowConfig {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        let mut cmds = Vec::new();
+        runtime.drain_camera_follow_commands_into(&mut cmds);
+        for cmd in cmds {
+            process_camera_follow_command(cmd, &mut config);
+        }
+        config
+    }
+
+    #[test]
+    fn set_camera_inserts_camera_resource_through_the_processor() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load("engine.set_camera(10, 20, 320, 180, 15, 2)")
+            .exec()
+            .unwrap();
+        let mut cmds = Vec::new();
+        runtime.drain_camera_commands_into(&mut cmds);
+
+        let mut world = World::new();
+        let mut state = SystemState::<Commands>::new(&mut world);
+        {
+            let mut commands = state.get_mut(&mut world).unwrap();
+            for cmd in cmds {
+                process_camera_command(&mut commands, cmd);
+            }
+        }
+        state.apply(&mut world);
+        let cam = world.resource::<Camera2DRes>().0;
+        assert_eq!((cam.target, cam.offset), (Vec2::new(10.0, 20.0), Vec2::new(320.0, 180.0)));
+        assert_eq!((cam.rotation, cam.zoom), (15.0, 2.0));
+    }
+
+    #[test]
+    fn camera_getters_read_the_cache_with_and_without_pixel_snap() {
+        let camera = Camera2DRes(Camera2D {
+            target: Vec2::new(10.4, 20.6),
+            offset: Vec2::new(320.0, 180.0),
+            rotation: 0.0,
+            zoom: 2.0,
+        });
+        let screen = ScreenSize { w: 640, h: 360 };
+        let read = |runtime: &LuaRuntime| -> ([f32; 6], [f32; 4]) {
+            let cam: mlua::Table = runtime.lua().load("return engine.get_camera()").eval().unwrap();
+            let rect: mlua::Table =
+                runtime.lua().load("return engine.get_camera_view_rect()").eval().unwrap();
+            let f = |t: &mlua::Table, k: &str| t.get::<f32>(k).unwrap();
+            (
+                ["target_x", "target_y", "offset_x", "offset_y", "rotation", "zoom"]
+                    .map(|k| f(&cam, k)),
+                ["x", "y", "w", "h"].map(|k| f(&rect, k)),
+            )
+        };
+
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.update_camera_cache(&camera, &screen, false);
+        let raw = camera.world_visible_rect(&screen);
+        assert_eq!(
+            read(&runtime),
+            (
+                [10.4, 20.6, 320.0, 180.0, 0.0, 2.0],
+                [raw.x, raw.y, raw.width, raw.height]
+            )
+        );
+
+        runtime.update_camera_cache(&camera, &screen, true);
+        let snapped = camera.world_visible_rect_snapped(&screen);
+        assert_eq!(
+            read(&runtime),
+            (
+                [10.0, 21.0, 320.0, 180.0, 0.0, 2.0],
+                [snapped.x, snapped.y, snapped.width, snapped.height]
+            ),
+            "pixel snap rounds the target and uses the snapped view rect"
+        );
+    }
+
+    #[test]
+    fn camera_follow_setters_update_the_config() {
+        let config = follow_config_after(
+            "engine.camera_follow_enable(true) engine.camera_follow_set_mode('smooth_damp') \
+             engine.camera_follow_set_easing('ease_in_out') engine.camera_follow_set_speed(7) \
+             engine.camera_follow_set_spring(20, 3) engine.camera_follow_set_offset(4, -2) \
+             engine.camera_follow_set_bounds(0, 0, 1000, 500) engine.camera_follow_set_zoom_speed(9)",
+            CameraFollowConfig::default(),
+        );
+        assert!(config.enabled);
+        assert_eq!(config.mode, FollowMode::SmoothDamp);
+        assert_eq!(config.easing, EasingCurve::EaseInOut);
+        assert_eq!(config.lerp_speed, 7.0);
+        assert_eq!((config.spring_stiffness, config.spring_damping), (20.0, 3.0));
+        assert_eq!(config.offset, Vec2::new(4.0, -2.0));
+        assert_eq!(
+            config.bounds,
+            Some(Rect { x: 0.0, y: 0.0, width: 1000.0, height: 500.0 })
+        );
+        assert_eq!(config.zoom_lerp_speed, 9.0);
+    }
+
+    #[test]
+    fn camera_follow_deadzone_clear_bounds_and_reset_velocity() {
+        let start = CameraFollowConfig {
+            bounds: Some(Rect { x: 1.0, y: 1.0, width: 2.0, height: 2.0 }),
+            velocity: Vec2::new(5.0, 5.0),
+            ..CameraFollowConfig::default()
+        };
+        let config = follow_config_after(
+            "engine.camera_follow_set_deadzone(40, 30) engine.camera_follow_clear_bounds() \
+             engine.camera_follow_reset_velocity()",
+            start,
+        );
+        assert_eq!(config.mode, FollowMode::Deadzone { half_w: 40.0, half_h: 30.0 });
+        assert_eq!(config.bounds, None);
+        assert_eq!(config.velocity, Vec2::ZERO);
+    }
+
+    #[test]
+    fn camera_follow_unknown_mode_or_easing_keeps_previous_value() {
+        let start = CameraFollowConfig {
+            mode: FollowMode::Instant,
+            easing: EasingCurve::Linear,
+            ..CameraFollowConfig::default()
+        };
+        let config = follow_config_after(
+            "engine.camera_follow_set_mode('teleport') engine.camera_follow_set_easing('bouncy')",
+            start,
+        );
+        assert_eq!(config.mode, FollowMode::Instant);
+        assert_eq!(config.easing, EasingCurve::Linear);
+    }
+}
