@@ -21,7 +21,7 @@
 //! ```
 //!
 //! **Pure Rust game:**
-//! ```rust,no_run,ignore
+//! ```rust,ignore
 //! use aberredengine::engine_app::EngineBuilder;
 //! use aberredengine::EngineError;
 //!
@@ -38,7 +38,7 @@
 //! ```
 //!
 //! **Multiple per-frame systems and custom observers:**
-//! ```rust,no_run,ignore
+//! ```rust,ignore
 //! use aberredengine::engine_app::EngineBuilder;
 //! use aberredengine::engine_app::SceneDescriptor;
 //! use aberredengine::EngineError;
@@ -59,7 +59,7 @@
 //!
 //! For scene-scoped (transient) observers — active only within one scene —
 //! spawn them from the scene's `on_enter` callback without [`Persistent`]:
-//! ```rust,no_run,ignore
+//! ```rust,ignore
 //! fn my_scene_enter(ctx: &mut GameCtx) {
 //!     // Cleaned up automatically by clean_all_entities on scene switch
 //!     ctx.commands.spawn(Observer::new(on_my_scene_event));
