@@ -227,6 +227,48 @@ fn write_stubs_creates_file() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+// Checked-in generated files must match what the generators produce today.
+
+fn scripts_path(file: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/scripts")
+        .join(file)
+}
+
+/// Panics naming the first differing line instead of dumping both files.
+fn assert_matches_checked_in(file: &str, generated: &str, regen_cmd: &str) {
+    let path = scripts_path(file);
+    let checked_in = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    if checked_in == generated {
+        return;
+    }
+    let first_diff = checked_in
+        .lines()
+        .zip(generated.lines())
+        .position(|(a, b)| a != b)
+        .unwrap_or_else(|| checked_in.lines().count().min(generated.lines().count()));
+    panic!(
+        "assets/scripts/{file} is out of date (first difference at line {}). \
+         Regenerate it with `{regen_cmd}`.",
+        first_diff + 1
+    );
+}
+
+#[test]
+fn engine_lua_stub_is_up_to_date() {
+    let rt = LuaRuntime::new().unwrap();
+    let content = stub_generator::generate_stubs(&rt).unwrap();
+    assert_matches_checked_in("engine.lua", &content, "cargo run -- --create-lua-stubs");
+}
+
+#[test]
+fn luarc_json_is_up_to_date() {
+    let rt = LuaRuntime::new().unwrap();
+    let content = aberred_lua::luarc_generator::generate_luarc(&rt, "engine.lua").unwrap();
+    assert_matches_checked_in(".luarc.json", &content, "cargo run -- --create-luarc");
+}
+
 // engine.__meta drift protection: the metadata tables that stub generation
 // reads must stay populated and schema-complete.
 
