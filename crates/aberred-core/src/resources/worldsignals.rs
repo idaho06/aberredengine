@@ -39,6 +39,14 @@ use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 
+/// Stack buffer size for a `"group_count:{name}"` key (no heap allocation per tick).
+const GROUP_KEY_BUF_LEN: usize = 64;
+
+/// Longest group name (in bytes) that fits a group-count key. Longer names are refused by
+/// [`TrackedGroups::add_group`](crate::resources::group::TrackedGroups::add_group) and
+/// ignored by [`WorldSignals::set_group_count`] / [`WorldSignals::get_group_count`].
+pub const MAX_GROUP_NAME_LEN: usize = GROUP_KEY_BUF_LEN - sk::GROUP_COUNT_PREFIX.len();
+
 /// Immutable snapshot of world signals for Lua read access.
 ///
 /// This struct is wrapped in `Arc` for cheap sharing with the Lua runtime.
@@ -183,10 +191,14 @@ impl WorldSignals {
     pub fn get_integers(&self) -> &FxHashMap<String, i32> {
         &self.integers
     }
-    /// Get a group count by group name. Returns `None` if not tracked.
+    /// Get a group count by group name. Returns `None` if not tracked, or if the name is
+    /// longer than [`MAX_GROUP_NAME_LEN`].
     pub fn get_group_count(&self, group_name: &str) -> Option<i32> {
         use std::fmt::Write;
-        let mut buf = arrayvec::ArrayString::<64>::new();
+        if group_name.len() > MAX_GROUP_NAME_LEN {
+            return None;
+        }
+        let mut buf = arrayvec::ArrayString::<GROUP_KEY_BUF_LEN>::new();
         let _ = write!(buf, "{}{}", sk::GROUP_COUNT_PREFIX, group_name);
         self.integers.get(buf.as_str()).copied()
     }
@@ -194,11 +206,15 @@ impl WorldSignals {
     /// Set a group count by the name of the group.
     ///
     /// Only updates if the value changed to avoid unnecessary dirty marking.
-    /// Uses a stack buffer to avoid heap allocation. Group names must not
-    /// exceed 51 characters (64 - 13 for "group_count:" prefix).
+    /// Uses a stack buffer to avoid heap allocation. Names longer than
+    /// [`MAX_GROUP_NAME_LEN`] bytes are ignored (a truncated key would make every long
+    /// name share one count); `TrackedGroups::add_group` already refused them with a warning.
     pub fn set_group_count(&mut self, group_name: &str, count: i32) {
         use std::fmt::Write;
-        let mut buf = arrayvec::ArrayString::<64>::new();
+        if group_name.len() > MAX_GROUP_NAME_LEN {
+            return;
+        }
+        let mut buf = arrayvec::ArrayString::<GROUP_KEY_BUF_LEN>::new();
         let _ = write!(buf, "{}{}", sk::GROUP_COUNT_PREFIX, group_name);
         let current = self.integers.get(buf.as_str()).copied();
         if current != Some(count) {
@@ -732,6 +748,25 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_group_count("enemy", 5);
         assert_eq!(ws.get_group_count("enemy"), Some(5));
+    }
+
+    #[test]
+    fn over_long_group_names_are_ignored_not_merged() {
+        let too_long_a = "a".repeat(MAX_GROUP_NAME_LEN + 1);
+        let too_long_b = "b".repeat(MAX_GROUP_NAME_LEN + 1);
+        let mut ws = WorldSignals::default();
+        ws.set_group_count(&too_long_a, 5);
+        assert_eq!(ws.get_group_count(&too_long_a), None, "over-long name is not stored");
+        assert_eq!(
+            ws.get_group_count(&too_long_b),
+            None,
+            "a different over-long name must not read another's count"
+        );
+        assert!(ws.get_integers().is_empty(), "no truncated key was written");
+
+        let at_limit = "c".repeat(MAX_GROUP_NAME_LEN);
+        ws.set_group_count(&at_limit, 7);
+        assert_eq!(ws.get_group_count(&at_limit), Some(7), "a name at the limit still works");
     }
 
     #[test]

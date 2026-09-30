@@ -42,6 +42,8 @@
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashSet;
 
+use crate::resources::worldsignals::MAX_GROUP_NAME_LEN;
+
 /// Resource that holds the set of group names to track for entity counting.
 ///
 /// Groups added here will have their entity counts published to
@@ -57,8 +59,19 @@ pub struct TrackedGroups {
 
 impl TrackedGroups {
     /// Adds a group name to the set of tracked groups.
+    ///
+    /// Names longer than [`MAX_GROUP_NAME_LEN`] bytes are refused with a warning: their
+    /// `"group_count:{name}"` key would not fit the no-allocation stack buffer.
     pub fn add_group(&mut self, group_name: impl Into<String>) {
-        self.groups.insert(group_name.into());
+        let group_name = group_name.into();
+        if group_name.len() > MAX_GROUP_NAME_LEN {
+            log::warn!(
+                "track_group: group name '{group_name}' is {} bytes; the maximum is {MAX_GROUP_NAME_LEN}. Not tracked.",
+                group_name.len()
+            );
+            return;
+        }
+        self.groups.insert(group_name);
     }
 
     /// Returns `true` if the given group name is being tracked.
@@ -79,5 +92,23 @@ impl TrackedGroups {
     /// Returns an iterator over all tracked group names.
     pub fn iter(&self) -> impl Iterator<Item = &String> {
         self.groups.iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    #[test]
+    fn add_group_refuses_names_longer_than_the_signal_key_allows() {
+        let mut tracked = TrackedGroups::default();
+        let too_long = "g".repeat(MAX_GROUP_NAME_LEN + 1);
+        tracked.add_group(too_long.clone());
+        assert!(!tracked.has_group(&too_long));
+
+        let at_limit = "g".repeat(MAX_GROUP_NAME_LEN);
+        tracked.add_group(at_limit.clone());
+        assert!(tracked.has_group(&at_limit));
     }
 }

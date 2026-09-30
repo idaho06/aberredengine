@@ -5032,7 +5032,8 @@ Entity groups can be tracked for counting.
 
 ### `engine.track_group(name)`
 
-Enable tracking for a group.
+Enable tracking for a group. Names longer than 52 bytes are refused with a warning and not
+tracked (the count's signal key lives in a fixed stack buffer).
 
 ```lua
 engine.track_group("ball")
