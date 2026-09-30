@@ -515,16 +515,10 @@ pub fn process_camera_follow_command(cmd: CameraFollowCmd, config: &mut CameraFo
         CameraFollowCmd::Enable { enabled } => {
             config.enabled = enabled;
         }
-        CameraFollowCmd::SetMode { mode } => match mode.as_str() {
-            "instant" => config.mode = FollowMode::Instant,
-            "lerp" => config.mode = FollowMode::Lerp,
-            "smooth_damp" => config.mode = FollowMode::SmoothDamp,
-            other => {
-                warn!(
-                    "Unknown camera follow mode '{}'; expected \"instant\", \"lerp\", or \"smooth_damp\"",
-                    other
-                );
-            }
+        // Names are validated at the Lua call site; the warn is a defensive fallback.
+        CameraFollowCmd::SetMode { mode } => match FollowMode::from_name(&mode) {
+            Some(m) => config.mode = m,
+            None => warn!("Unknown camera follow mode '{mode}'; ignoring"),
         },
         CameraFollowCmd::SetDeadzone { half_w, half_h } => {
             config.mode = FollowMode::Deadzone { half_w, half_h };

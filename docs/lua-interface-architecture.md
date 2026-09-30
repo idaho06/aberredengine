@@ -879,6 +879,11 @@ local rect = engine.get_camera_view_rect()     -- CameraViewRect: visible world-
 
 `Easing` (tween easing) implements `FromStr`: `"linear"`, `"quad_in"`, `"quad_out"`, `"quad_in_out"`, `"cubic_in"`, `"cubic_out"`, `"cubic_in_out"`.
 
+Lua entry points validate these names (and tween loop modes, and `camera_follow_set_mode`'s
+`"instant"`/`"lerp"`/`"smooth_damp"`) at the call site: an unknown name raises a Lua error listing
+the valid ones instead of silently falling back. The accepted lists are the core `NAMES` constants
+(`Easing::NAMES`, `LoopMode::NAMES`, `FollowMode::NAMES`, `EasingCurve::NAMES`).
+
 `LoopMode` implements `FromStr`: `"once"`, `"loop"`, `"ping_pong"`.
 
 ---

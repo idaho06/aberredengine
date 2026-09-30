@@ -100,7 +100,9 @@ impl LuaRuntime {
             "camera_follow_set_mode",
             camera_follow_commands,
             |mode| String,
-            CameraFollowCmd::SetMode { mode },
+            CameraFollowCmd::SetMode {
+                mode: checked_follow_mode(mode)?
+            },
             desc = "Set camera follow mode (\"instant\", \"lerp\", \"smooth_damp\")",
             cat = "camera",
             params = [("mode", "string")]
@@ -124,7 +126,9 @@ impl LuaRuntime {
             "camera_follow_set_easing",
             camera_follow_commands,
             |easing| String,
-            CameraFollowCmd::SetEasing { easing },
+            CameraFollowCmd::SetEasing {
+                easing: checked_follow_easing(easing)?
+            },
             desc = "Set camera follow easing curve (\"linear\", \"ease_out\", \"ease_in\", \"ease_in_out\")",
             cat = "camera",
             params = [("easing", "string")]
@@ -219,6 +223,31 @@ impl LuaRuntime {
             params = [("speed", "number")]
         );
         Ok(())
+    }
+}
+
+/// Rejects an unknown follow-mode name at the Lua call site (the processor would only warn).
+fn checked_follow_mode(name: String) -> LuaResult<String> {
+    use aberred_core::resources::camerafollowconfig::FollowMode;
+    match FollowMode::from_name(&name) {
+        Some(_) => Ok(name),
+        None => Err(LuaError::runtime(format!(
+            "Unknown camera follow mode '{name}' (expected one of: {}; use \
+             camera_follow_set_deadzone for deadzone)",
+            FollowMode::NAMES.join(", ")
+        ))),
+    }
+}
+
+/// Rejects an unknown follow-easing name at the Lua call site (the processor would only warn).
+fn checked_follow_easing(name: String) -> LuaResult<String> {
+    use aberred_core::resources::camerafollowconfig::EasingCurve;
+    match name.parse::<EasingCurve>() {
+        Ok(_) => Ok(name),
+        Err(()) => Err(LuaError::runtime(format!(
+            "Unknown camera follow easing '{name}' (expected one of: {})",
+            EasingCurve::NAMES.join(", ")
+        ))),
     }
 }
 
@@ -355,17 +384,26 @@ mod tests {
     }
 
     #[test]
-    fn camera_follow_unknown_mode_or_easing_keeps_previous_value() {
-        let start = CameraFollowConfig {
-            mode: FollowMode::Instant,
-            easing: EasingCurve::Linear,
-            ..CameraFollowConfig::default()
-        };
-        let config = follow_config_after(
-            "engine.camera_follow_set_mode('teleport') engine.camera_follow_set_easing('bouncy')",
-            start,
+    fn camera_follow_unknown_mode_or_easing_is_a_lua_error() {
+        for (call, msg) in [
+            ("engine.camera_follow_set_mode('teleport')", "Unknown camera follow mode 'teleport'"),
+            ("engine.camera_follow_set_mode('deadzone')", "Unknown camera follow mode 'deadzone'"),
+            ("engine.camera_follow_set_easing('bouncy')", "Unknown camera follow easing 'bouncy'"),
+        ] {
+            let runtime = LuaRuntime::new().unwrap();
+            let err = runtime.lua().load(call).exec().unwrap_err().to_string();
+            assert!(err.contains(msg), "{call}: {err}");
+            let mut cmds = Vec::new();
+            runtime.drain_camera_follow_commands_into(&mut cmds);
+            assert!(cmds.is_empty(), "{call}: nothing queued");
+        }
+        // Every documented name is still accepted.
+        follow_config_after(
+            "engine.camera_follow_set_mode('instant') engine.camera_follow_set_mode('lerp') \
+             engine.camera_follow_set_mode('smooth_damp') \
+             engine.camera_follow_set_easing('linear') engine.camera_follow_set_easing('ease_out') \
+             engine.camera_follow_set_easing('ease_in') engine.camera_follow_set_easing('ease_in_out')",
+            CameraFollowConfig::default(),
         );
-        assert_eq!(config.mode, FollowMode::Instant);
-        assert_eq!(config.easing, EasingCurve::Linear);
     }
 }

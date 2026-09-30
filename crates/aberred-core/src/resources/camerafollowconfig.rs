@@ -50,6 +50,27 @@ pub enum EasingCurve {
     EaseInOut,
 }
 
+impl FollowMode {
+    /// Every name [`FollowMode::from_name`] accepts. `Deadzone` has parameters, so it is set
+    /// through its own call rather than by name.
+    pub const NAMES: [&'static str; 3] = ["instant", "lerp", "smooth_damp"];
+
+    /// Parse a parameterless mode by name; `None` for anything not in [`FollowMode::NAMES`].
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "instant" => Some(FollowMode::Instant),
+            "lerp" => Some(FollowMode::Lerp),
+            "smooth_damp" => Some(FollowMode::SmoothDamp),
+            _ => None,
+        }
+    }
+}
+
+impl EasingCurve {
+    /// Every name the [`FromStr`](std::str::FromStr) impl accepts.
+    pub const NAMES: [&'static str; 4] = ["linear", "ease_out", "ease_in", "ease_in_out"];
+}
+
 impl std::str::FromStr for EasingCurve {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -134,5 +155,19 @@ mod tests {
         assert!(!cfg.enabled);
         assert_eq!(cfg.mode, FollowMode::Lerp);
         assert_eq!(cfg.easing, EasingCurve::EaseOut);
+    }
+
+    #[test]
+    fn name_lists_match_their_parsers() {
+        for name in FollowMode::NAMES {
+            assert!(FollowMode::from_name(name).is_some(), "{name}");
+        }
+        for bad in ["", "Lerp", "deadzone", "smooth"] {
+            assert!(FollowMode::from_name(bad).is_none(), "{bad}");
+        }
+        for name in EasingCurve::NAMES {
+            assert!(name.parse::<EasingCurve>().is_ok(), "{name}");
+        }
+        assert!("bouncy".parse::<EasingCurve>().is_err());
     }
 }
