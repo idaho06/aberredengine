@@ -575,14 +575,13 @@ mod tests {
         let rotated_height = view_max.y - view_min.y;
 
         // Original screen: 800x600, so rotated AABB should be ~600 wide and ~800 tall
-        // Use relaxed tolerance for trig floating point accumulation
         assert!(
-            (rotated_width - 600.0).abs() < 0.001,
+            approx_eq(rotated_width, 600.0),
             "Rotated width {} should be ~600",
             rotated_width,
         );
         assert!(
-            (rotated_height - 800.0).abs() < 0.001,
+            approx_eq(rotated_height, 800.0),
             "Rotated height {} should be ~800",
             rotated_height,
         );
