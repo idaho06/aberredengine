@@ -20,4 +20,6 @@ pub mod pacing;
 pub mod protocol;
 pub mod resources;
 pub mod systems;
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
 pub mod tracy;
