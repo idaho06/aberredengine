@@ -841,6 +841,17 @@ mod tests {
         );
     }
 
+    /// Drains swap the queue with `out`; a non-empty `out` would push stale commands back
+    /// into the queue to be replayed on the next drain.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "drain buffer must be empty")]
+    fn drain_into_non_empty_buffer_panics_in_debug() {
+        let runtime = LuaRuntime::new().unwrap();
+        let mut buf = vec![RenderCmd::ClearPostProcessUniforms];
+        runtime.drain_render_commands_into(&mut buf);
+    }
+
     #[test]
     fn pooled_input_table_updates_values() {
         let runtime = LuaRuntime::new().unwrap();

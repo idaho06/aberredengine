@@ -22,7 +22,15 @@ impl LuaRuntime {
     /// triples at word level — zero element copies. After the call, `out` holds
     /// the queue's previous content and the queue holds `out`'s previous (empty)
     /// buffer, retaining capacity for next frame's pushes.
+    ///
+    /// `out` MUST be empty: anything left in it would be swapped INTO the queue
+    /// and replayed on the next drain. Reuse a buffer only after emptying it
+    /// (`.drain(..)` or consuming it by value). Checked in debug builds.
     fn drain_queue_into<T>(&self, get: impl Fn(&LuaAppData) -> &RefCell<Vec<T>>, out: &mut Vec<T>) {
+        debug_assert!(
+            out.is_empty(),
+            "drain buffer must be empty; leftover commands would be replayed next drain"
+        );
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             std::mem::swap(out, &mut *get(&data).borrow_mut());
         }
