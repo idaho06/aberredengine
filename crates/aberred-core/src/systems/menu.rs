@@ -645,7 +645,7 @@ mod tests {
     use super::*;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
-    use crate::math::Vec2;
+    use crate::math::{Color, Vec2};
 
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
 
@@ -660,6 +660,176 @@ mod tests {
         world.insert_resource(FontMetricsWarnCache::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
         world
+    }
+
+    #[derive(Resource, Default)]
+    struct Selections(Vec<(Entity, String)>);
+
+    fn record_selection(trigger: On<MenuSelectionEvent>, mut s: ResMut<Selections>) {
+        let e = trigger.event();
+        s.0.push((e.menu, e.item_id.clone()));
+    }
+
+    /// Spawns `menu`, runs `menu_spawn_system`, and wires the input controller.
+    fn spawn_menu(menu: Menu) -> (World, Entity) {
+        let mut world = new_test_world();
+        world.insert_resource(Messages::<AudioCmd>::default());
+        world.init_resource::<Selections>();
+        world.add_observer(menu_controller_observer);
+        world.add_observer(record_selection);
+        let e = world.spawn(menu).id();
+        world.run_system_once(menu_spawn_system).unwrap();
+        (world, e)
+    }
+
+    fn press(world: &mut World, action: InputAction) {
+        world.trigger(InputEvent { action, pressed: true });
+        world.flush();
+    }
+
+    fn five_items() -> Menu {
+        Menu::new(
+            &[("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")],
+            Vec2::new(100.0, 50.0),
+            "test_font",
+            12.0,
+            10.0,
+            true,
+        )
+    }
+
+    fn item(world: &World, menu: Entity, i: usize) -> Entity {
+        world.get::<Menu>(menu).unwrap().items[i].entity.unwrap()
+    }
+
+    fn screen_pos(world: &World, e: Entity) -> Option<Vec2> {
+        world.get::<ScreenPosition>(e).map(|p| p.pos)
+    }
+
+    fn visible_items(world: &World, menu: Entity) -> Vec<Option<Vec2>> {
+        (0..world.get::<Menu>(menu).unwrap().items.len())
+            .map(|i| screen_pos(world, item(world, menu, i)))
+            .collect()
+    }
+
+    fn played_sounds(world: &mut World) -> usize {
+        world.resource_mut::<Messages<AudioCmd>>().drain().count()
+    }
+
+    #[test]
+    fn spawn_positions_only_the_visible_window_and_the_indicators() {
+        let (world, menu) = spawn_menu(five_items().with_visible_count(2));
+        assert_eq!(
+            visible_items(&world, menu),
+            [Some(Vec2::new(100.0, 50.0)), Some(Vec2::new(100.0, 60.0)), None, None, None]
+        );
+        let m = world.get::<Menu>(menu).unwrap();
+        let (top, bottom) = (m.top_indicator_entity.unwrap(), m.bottom_indicator_entity.unwrap());
+        assert_eq!(screen_pos(&world, top), None, "nothing above the first item");
+        assert_eq!(screen_pos(&world, bottom), Some(Vec2::new(100.0, 70.0)), "more items below");
+        for e in (0..5).map(|i| item(&world, menu, i)).chain([top, bottom]) {
+            assert_eq!(world.get::<ZIndex>(e).unwrap().0, MENU_Z_INDEX, "hidden ones too");
+            assert_eq!(world.get::<Group>(e).unwrap().0, format!("menu_{menu}"));
+        }
+        assert!(world.get::<Signals>(menu).unwrap().has_flag("waiting_selection"));
+        assert_eq!(world.get::<DynamicText>(item(&world, menu, 0)).unwrap().color, Color::YELLOW);
+        assert_eq!(world.get::<DynamicText>(item(&world, menu, 1)).unwrap().color, Color::WHITE);
+    }
+
+    #[test]
+    fn world_space_menu_uses_map_position() {
+        let mut menu = five_items();
+        menu.use_screen_space = false;
+        let (world, menu) = spawn_menu(menu);
+        let first = item(&world, menu, 0);
+        assert_eq!(world.get::<MapPosition>(first).unwrap().pos, Vec2::new(100.0, 50.0));
+        assert!(world.get::<ScreenPosition>(first).is_none());
+    }
+
+    #[test]
+    fn navigation_wraps_around_without_visible_count() {
+        let (mut world, menu) = spawn_menu(five_items());
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 4, "up from first wraps to last");
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0, "down from last wraps to first");
+    }
+
+    #[test]
+    fn scrolling_navigation_is_bounded_and_moves_the_window() {
+        let (mut world, menu) = spawn_menu(
+            five_items()
+                .with_visible_count(2)
+                .with_selection_sound("blip"),
+        );
+
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0, "no wrap at the top");
+        assert_eq!(played_sounds(&mut world), 0, "no change, no sound");
+
+        press(&mut world, InputAction::SecondaryDirectionDown); // index 1, still in window
+        press(&mut world, InputAction::SecondaryDirectionDown); // index 2, window scrolls to 1..=2
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!((m.selected_index, m.scroll_offset), (2, 1));
+        let (top, bottom) = (m.top_indicator_entity.unwrap(), m.bottom_indicator_entity.unwrap());
+        assert_eq!(
+            visible_items(&world, menu),
+            [None, Some(Vec2::new(100.0, 50.0)), Some(Vec2::new(100.0, 60.0)), None, None]
+        );
+        assert_eq!(screen_pos(&world, top), Some(Vec2::new(100.0, 40.0)), "items above now");
+        assert_eq!(screen_pos(&world, bottom), Some(Vec2::new(100.0, 70.0)));
+        assert_eq!(played_sounds(&mut world), 2, "one sound per selection change");
+
+        for _ in 0..5 {
+            press(&mut world, InputAction::SecondaryDirectionDown);
+        }
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!((m.selected_index, m.scroll_offset), (4, 3), "stops at the last item");
+        let bottom = m.bottom_indicator_entity.unwrap();
+        assert_eq!(screen_pos(&world, bottom), None, "nothing below the last item");
+    }
+
+    #[test]
+    fn selection_change_recolors_items_and_moves_the_cursor() {
+        let mut world = new_test_world();
+        let cursor = world.spawn_empty().id();
+        let menu_c = five_items().with_cursor(cursor);
+        // spawn_menu builds its own world, so wire this one by hand.
+        world.insert_resource(Messages::<AudioCmd>::default());
+        world.init_resource::<Selections>();
+        world.add_observer(menu_controller_observer);
+        let menu = world.spawn(menu_c).id();
+        world.run_system_once(menu_spawn_system).unwrap();
+        assert_eq!(screen_pos(&world, cursor), Some(Vec2::new(100.0, 50.0)));
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        let color = |w: &World, i| w.get::<DynamicText>(item(w, menu, i)).unwrap().color;
+        assert_eq!((color(&world, 0), color(&world, 1)), (Color::WHITE, Color::YELLOW));
+        assert_eq!(screen_pos(&world, cursor), Some(Vec2::new(100.0, 60.0)));
+    }
+
+    #[test]
+    fn confirming_deactivates_the_menu_and_triggers_selection_once() {
+        let (mut world, menu) = spawn_menu(five_items());
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        world.trigger(InputEvent {
+            action: InputAction::Action1,
+            pressed: false,
+        });
+        world.flush();
+        assert!(world.resource::<Selections>().0.is_empty(), "releases are ignored");
+
+        press(&mut world, InputAction::Action1);
+        assert_eq!(world.resource::<Selections>().0, [(menu, "b".to_string())]);
+        let signals = world.get::<Signals>(menu).unwrap();
+        assert!(!signals.has_flag("waiting_selection"));
+        assert_eq!(signals.get_string("selected_item").map(String::as_str), Some("b"));
+        assert!(!world.get::<Menu>(menu).unwrap().active);
+
+        press(&mut world, InputAction::Action2);
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        assert_eq!(world.resource::<Selections>().0.len(), 1, "an inactive menu ignores input");
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 1);
     }
 
     #[test]
