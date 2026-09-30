@@ -342,12 +342,15 @@ mod tests {
 
     /// Windowed parity check: `extract_font_metrics(...).measure_text(...)`
     /// must match raylib's real `ffi::MeasureTextEx` for a real loaded font.
-    /// Opens an actual window (needs a GL context), so this does NOT run in
-    /// CI — run manually (`cargo test --features lua -- --ignored
-    /// font_metrics_matches_raylib_measure_text_ex`) before landing any
-    /// change to `measure_text`/`extract_font_metrics`.
+    /// Opens an actual window (needs a GL context), so it never runs in
+    /// `just check`. It is the only parity check for
+    /// `FontMetrics::measure_text`: run it by hand on a machine with a
+    /// display before landing any change to `measure_text`/
+    /// `extract_font_metrics`:
+    ///
+    /// `cargo test -p aberred-render --lib -- --ignored font_metrics_matches_raylib_measure_text_ex`
     #[test]
-    #[ignore]
+    #[ignore = "opens a window; run by hand, see doc comment"]
     fn font_metrics_matches_raylib_measure_text_ex() {
         let (mut rl, thread) = raylib::init()
             .size(64, 64)
@@ -355,7 +358,14 @@ mod tests {
             .build();
 
         let font = rl
-            .load_font_ex(&thread, "assets/fonts/Arcade_Cabinet.ttf", 32, None)
+            .load_font_ex(
+                &thread,
+                // `cargo test` runs from this crate's root; the assets live
+                // at the workspace root.
+                concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/Arcade_Cabinet.ttf"),
+                32,
+                None,
+            )
             .expect("failed to load test font");
 
         let metrics = extract_font_metrics(&font);
