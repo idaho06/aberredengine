@@ -1436,6 +1436,178 @@ mod tests {
             "tex_key must remain unchanged when animation is not in store"
         );
     }
+
+    // --- animation system: row wrapping via TextureDimsStore ---
+    //
+    // The offset math itself is covered by the `frame_offset_*` tests above;
+    // these check that the system feeds the atlas width from
+    // `TextureDimsStore` into it, and falls back when the key is missing.
+
+    /// Minimal world for `animation`: fixed per-tick delta, empty stores.
+    fn world_for_animation(delta: f32) -> World {
+        let mut world = World::new();
+        world.insert_resource(WorldTime {
+            delta,
+            ..WorldTime::default()
+        });
+        world.insert_resource(AnimationStore::default());
+        world.insert_resource(TextureDimsStore::default());
+        world
+    }
+
+    fn tick_animation(world: &mut World) {
+        world
+            .run_system_once(animation)
+            .expect("animation should run");
+    }
+
+    fn tick_animation_n(world: &mut World, n: usize) {
+        for _ in 0..n {
+            tick_animation(world);
+        }
+    }
+
+    #[test]
+    fn animation_wraps_rows_with_vertical_displacement() {
+        // 256px wide texture, 64px frames, v_disp=64 → 4 frames per row.
+        // Animation has 12 frames spanning 3 rows.
+        let fps = 10.0;
+        let delta = 1.0 / fps;
+        let mut world = world_for_animation(delta);
+
+        let mut anim_store = AnimationStore {
+            animations: Default::default(),
+        };
+        anim_store.animations.insert(
+            "big".to_string(),
+            make_animation_resource("sheet", (0.0, 0.0), (64.0, 64.0), 12, fps, true),
+        );
+        world.insert_resource(anim_store);
+
+        // Record the atlas dims so the system can look up the width
+        // (animation reads TextureDimsStore, not the GPU TextureStore).
+        world
+            .resource_mut::<TextureDimsStore>()
+            .insert("sheet", 256, 256);
+
+        let entity = world
+            .spawn((
+                Animation {
+                    animation_key: "big".to_string(),
+                    frame_index: 0,
+                    elapsed_time: 0.0,
+                    finished: false,
+                },
+                make_sprite("sheet"),
+                MapPosition::new(0.0, 0.0),
+            ))
+            .id();
+
+        // Advance through all 12 frames, checking offsets at key points.
+        // frame 0 already set on first tick (will advance to frame 1)
+        // We need frame_index=0 first (initial state, before any tick).
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
+            "initial: ({}, {})",
+            sprite.offset.x,
+            sprite.offset.y
+        );
+
+        // Tick to frames 1..4 — frame 3 is last on row 0, frame 4 should wrap
+        tick_animation_n(&mut world, 4);
+        let anim = world.get::<Animation>(entity).unwrap();
+        assert_eq!(anim.frame_index, 4, "should be on frame 4");
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 64.0),
+            "frame 4: expected (0, 64), got ({}, {})",
+            sprite.offset.x,
+            sprite.offset.y
+        );
+
+        // Tick to frame 7 (last on row 1)
+        tick_animation_n(&mut world, 3);
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 64.0),
+            "frame 7: expected (192, 64), got ({}, {})",
+            sprite.offset.x,
+            sprite.offset.y
+        );
+
+        // Tick to frame 8 (first on row 2)
+        tick_animation(&mut world);
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 128.0),
+            "frame 8: expected (0, 128), got ({}, {})",
+            sprite.offset.x,
+            sprite.offset.y
+        );
+
+        // Tick to frame 11 (last frame)
+        tick_animation_n(&mut world, 3);
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 192.0) && approx_eq(sprite.offset.y, 128.0),
+            "frame 11: expected (192, 128), got ({}, {})",
+            sprite.offset.x,
+            sprite.offset.y
+        );
+
+        // Tick once more: looped animation wraps to frame 0
+        tick_animation(&mut world);
+        let anim = world.get::<Animation>(entity).unwrap();
+        assert_eq!(anim.frame_index, 0, "should loop back to frame 0");
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 0.0) && approx_eq(sprite.offset.y, 0.0),
+            "loop: expected (0, 0), got ({}, {})",
+            sprite.offset.x,
+            sprite.offset.y
+        );
+    }
+
+    #[test]
+    fn animation_vdisp_no_texture_falls_back_to_horizontal() {
+        // v_disp > 0 but no texture in store → fallback to horizontal-only (no crash).
+        let fps = 10.0;
+        let delta = 1.0 / fps;
+        let mut world = world_for_animation(delta);
+
+        let mut anim_store = AnimationStore {
+            animations: Default::default(),
+        };
+        anim_store.animations.insert(
+            "missing_tex".to_string(),
+            make_animation_resource("nonexistent", (0.0, 0.0), (64.0, 64.0), 8, fps, true),
+        );
+        world.insert_resource(anim_store);
+
+        let entity = world
+            .spawn((
+                Animation {
+                    animation_key: "missing_tex".to_string(),
+                    frame_index: 0,
+                    elapsed_time: 0.0,
+                    finished: false,
+                },
+                make_sprite("nonexistent"),
+                MapPosition::new(0.0, 0.0),
+            ))
+            .id();
+
+        // Advance 5 frames — should still work, just no wrapping
+        tick_animation_n(&mut world, 5);
+        let sprite = world.get::<Sprite>(entity).unwrap();
+        assert!(
+            approx_eq(sprite.offset.x, 320.0),
+            "frame 5: x={}",
+            sprite.offset.x
+        );
+        assert!(approx_eq(sprite.offset.y, 0.0), "frame 5: y should stay 0");
+    }
 }
 
 /// Select the active animation track according to controller rules.
