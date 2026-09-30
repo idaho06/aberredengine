@@ -86,3 +86,106 @@ pub fn update_group_counts_system(
         world_signals.set_group_count(name, *count);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_ecs::system::RunSystemOnce;
+
+    fn tick_group_counts(world: &mut World) {
+        world
+            .run_system_once(update_group_counts_system)
+            .expect("update_group_counts_system should run");
+    }
+
+    #[test]
+    fn group_counts_are_published_to_world_signals() {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+
+        let mut tracked = TrackedGroups::default();
+        tracked.add_group("enemy");
+        world.insert_resource(tracked);
+
+        world.spawn((Group::new("enemy"),));
+        world.spawn((Group::new("enemy"),));
+        world.spawn((Group::new("enemy"),));
+
+        tick_group_counts(&mut world);
+
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_group_count("enemy"), Some(3));
+    }
+
+    #[test]
+    fn group_counts_update_when_entities_despawn() {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+
+        let mut tracked = TrackedGroups::default();
+        tracked.add_group("ball");
+        world.insert_resource(tracked);
+
+        let ball1 = world.spawn((Group::new("ball"),)).id();
+        let ball2 = world.spawn((Group::new("ball"),)).id();
+
+        tick_group_counts(&mut world);
+
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_group_count("ball"), Some(2));
+
+        // Despawn one ball
+        world.despawn(ball1);
+
+        tick_group_counts(&mut world);
+
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_group_count("ball"), Some(1));
+
+        // Despawn the other
+        world.despawn(ball2);
+
+        tick_group_counts(&mut world);
+
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_group_count("ball"), Some(0));
+    }
+
+    #[test]
+    fn group_counts_zero_for_empty_tracked_groups() {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+
+        let mut tracked = TrackedGroups::default();
+        tracked.add_group("brick");
+        world.insert_resource(tracked);
+
+        // No bricks spawned
+
+        tick_group_counts(&mut world);
+
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_group_count("brick"), Some(0));
+    }
+
+    #[test]
+    fn group_counts_ignores_untracked_groups() {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+
+        let mut tracked = TrackedGroups::default();
+        tracked.add_group("player");
+        world.insert_resource(tracked);
+
+        world.spawn((Group::new("player"),));
+        world.spawn((Group::new("enemy"),)); // Not tracked
+        world.spawn((Group::new("bullet"),)); // Not tracked
+
+        tick_group_counts(&mut world);
+
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_group_count("player"), Some(1));
+        assert_eq!(signals.get_group_count("enemy"), None); // Not tracked
+        assert_eq!(signals.get_group_count("bullet"), None); // Not tracked
+    }
+}

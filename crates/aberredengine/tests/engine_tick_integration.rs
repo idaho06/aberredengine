@@ -35,7 +35,6 @@ use aberredengine::core::resources::animationstore::{AnimationResource, Animatio
 use aberredengine::core::resources::appstate::AppState;
 use aberredengine::core::resources::camerafollowconfig::CameraFollowConfig;
 use aberredengine::core::resources::gameconfig::GameConfig;
-use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::InputBindings;
 #[cfg(feature = "lua")]
@@ -51,7 +50,6 @@ use aberredengine::core::systems::animation::{animation, animation_controller};
 use aberredengine::core::resources::collision_rule_index::CollisionRuleIndex;
 use aberredengine::core::systems::collision_detector::collision_detector;
 use aberredengine::systems::collision_rule_index::rebuild_collision_rule_index;
-use aberredengine::core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberredengine::lua::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
@@ -226,111 +224,6 @@ fn collision_callback_error_still_drains_queued_commands() {
         .get::<Signals>(a)
         .expect("Missing Signals on entity A");
     assert!(signals.has_flag("hit"));
-}
-
-// =============================================================================
-// Group Counting System Tests
-// =============================================================================
-
-fn tick_group_counts(world: &mut World) {
-    world
-        .run_system_once(update_group_counts_system)
-        .expect("update_group_counts_system should run");
-}
-
-#[test]
-fn group_counts_are_published_to_world_signals() {
-    let mut world = make_world(0.0);
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-
-    let mut tracked = TrackedGroups::default();
-    tracked.add_group("enemy");
-    world.insert_resource(tracked);
-
-    world.spawn((Group::new("enemy"),));
-    world.spawn((Group::new("enemy"),));
-    world.spawn((Group::new("enemy"),));
-
-    tick_group_counts(&mut world);
-
-    let signals = world.resource::<WorldSignals>();
-    assert_eq!(signals.get_group_count("enemy"), Some(3));
-}
-
-#[test]
-fn group_counts_update_when_entities_despawn() {
-    let mut world = make_world(0.0);
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-
-    let mut tracked = TrackedGroups::default();
-    tracked.add_group("ball");
-    world.insert_resource(tracked);
-
-    let ball1 = world.spawn((Group::new("ball"),)).id();
-    let ball2 = world.spawn((Group::new("ball"),)).id();
-
-    tick_group_counts(&mut world);
-
-    let signals = world.resource::<WorldSignals>();
-    assert_eq!(signals.get_group_count("ball"), Some(2));
-
-    // Despawn one ball
-    world.despawn(ball1);
-
-    tick_group_counts(&mut world);
-
-    let signals = world.resource::<WorldSignals>();
-    assert_eq!(signals.get_group_count("ball"), Some(1));
-
-    // Despawn the other
-    world.despawn(ball2);
-
-    tick_group_counts(&mut world);
-
-    let signals = world.resource::<WorldSignals>();
-    assert_eq!(signals.get_group_count("ball"), Some(0));
-}
-
-#[test]
-fn group_counts_zero_for_empty_tracked_groups() {
-    let mut world = make_world(0.0);
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-
-    let mut tracked = TrackedGroups::default();
-    tracked.add_group("brick");
-    world.insert_resource(tracked);
-
-    // No bricks spawned
-
-    tick_group_counts(&mut world);
-
-    let signals = world.resource::<WorldSignals>();
-    assert_eq!(signals.get_group_count("brick"), Some(0));
-}
-
-#[test]
-fn group_counts_ignores_untracked_groups() {
-    let mut world = make_world(0.0);
-    world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-
-    let mut tracked = TrackedGroups::default();
-    tracked.add_group("player");
-    world.insert_resource(tracked);
-
-    world.spawn((Group::new("player"),));
-    world.spawn((Group::new("enemy"),)); // Not tracked
-    world.spawn((Group::new("bullet"),)); // Not tracked
-
-    tick_group_counts(&mut world);
-
-    let signals = world.resource::<WorldSignals>();
-    assert_eq!(signals.get_group_count("player"), Some(1));
-    assert_eq!(signals.get_group_count("enemy"), None); // Not tracked
-    assert_eq!(signals.get_group_count("bullet"), None); // Not tracked
 }
 
 // =============================================================================
