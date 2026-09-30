@@ -646,6 +646,8 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
     use crate::math::{Color, Vec2};
+    use crate::resources::gamestate::{GameStates, NextGameStates};
+    use crate::resources::worldsignals::WorldSignals;
 
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
 
@@ -830,6 +832,148 @@ mod tests {
         press(&mut world, InputAction::SecondaryDirectionDown);
         assert_eq!(world.resource::<Selections>().0.len(), 1, "an inactive menu ignores input");
         assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 1);
+    }
+
+    #[test]
+    fn menu_despawn_removes_all_menu_entities_and_label_textures() {
+        let mut world = new_test_world();
+        let cursor = world.spawn_empty().id();
+        let bystander = world.spawn_empty().id();
+        let menu = world
+            .spawn(
+                Menu::new(&[("play", "play"), ("quit", "quit")], Vec2::ZERO, "test_font", 12.0, 10.0, true)
+                    .with_dynamic_text(false)
+                    .with_cursor(cursor)
+                    .with_visible_count(1),
+            )
+            .id();
+        world.run_system_once(menu_spawn_system).unwrap();
+        let mut dims = TextureDimsStore::default();
+        dims.insert("menu_play", 10, 10);
+        dims.insert("menu_quit", 10, 10);
+        dims.insert("unrelated", 10, 10);
+        world.insert_resource(dims);
+        let m = world.get::<Menu>(menu).unwrap().clone();
+        let spawned: Vec<Entity> = m
+            .items
+            .iter()
+            .filter_map(|i| i.entity)
+            .chain([m.top_indicator_entity.unwrap(), m.bottom_indicator_entity.unwrap(), cursor, menu])
+            .collect();
+        world.resource_mut::<Messages<RenderAssetCmd>>().clear();
+
+        world.run_system_once_with(menu_despawn, menu).unwrap();
+
+        for e in spawned {
+            assert!(world.get_entity(e).is_err(), "{e:?} despawned");
+        }
+        assert!(world.get_entity(bystander).is_ok());
+        let dims = world.resource::<TextureDimsStore>();
+        assert!(dims.get("menu_play").is_none() && dims.get("menu_quit").is_none());
+        assert!(dims.get("unrelated").is_some());
+        let removed: Vec<String> = world
+            .resource_mut::<Messages<RenderAssetCmd>>()
+            .drain()
+            .filter_map(|c| match c {
+                RenderAssetCmd::RemoveTexture { key } => Some(key),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(removed, ["menu_play", "menu_quit"]);
+    }
+
+    #[test]
+    fn menu_despawn_of_a_non_menu_entity_does_nothing() {
+        let mut world = new_test_world();
+        world.insert_resource(TextureDimsStore::default());
+        let plain = world.spawn_empty().id();
+        world.run_system_once_with(menu_despawn, plain).unwrap();
+        assert!(world.get_entity(plain).is_ok());
+        assert_eq!(world.resource_mut::<Messages<RenderAssetCmd>>().drain().count(), 0);
+    }
+
+    fn record_rust_callback(_menu: Entity, id: &str, index: usize, ctx: &mut GameCtx) {
+        ctx.world_signals.set_string("rust_cb", format!("{id}:{index}"));
+    }
+
+    fn mark_switch_scene(mut ws: ResMut<WorldSignals>) {
+        ws.set_flag("switch_hook_ran");
+    }
+
+    /// World wired for `menu_selection_observer`, with a registered switch_scene hook.
+    fn selection_world() -> World {
+        let mut world = World::new();
+        crate::testing::insert_game_ctx_resources(&mut world);
+        world.init_resource::<NextGameState>();
+        let mut store = SystemsStore::default();
+        store.insert(hook_keys::SWITCH_SCENE, world.register_system(mark_switch_scene));
+        world.insert_resource(store);
+        world.add_observer(menu_selection_observer);
+        world
+    }
+
+    fn select(world: &mut World, menu: Entity, item: &str) {
+        world.trigger(MenuSelectionEvent { menu, item_id: item.to_string() });
+        world.flush();
+    }
+
+    fn actions() -> MenuActions {
+        MenuActions::new()
+            .with("play", MenuAction::SetScene("level01".into()))
+            .with("options", MenuAction::ShowSubMenu("options_menu".into()))
+            .with("quit", MenuAction::QuitGame)
+    }
+
+    fn three_items() -> Menu {
+        Menu::new(&[("play", "P"), ("options", "O"), ("quit", "Q")], Vec2::ZERO, "f", 12.0, 10.0, true)
+    }
+
+    #[test]
+    fn selection_prefers_the_rust_callback_over_menu_actions() {
+        let mut world = selection_world();
+        let menu = world
+            .spawn((three_items().with_on_rust_callback(record_rust_callback), actions()))
+            .id();
+        select(&mut world, menu, "options");
+        let ws = world.resource::<WorldSignals>();
+        assert_eq!(ws.get_string("rust_cb").map(String::as_str), Some("options:1"));
+        assert!(ws.get_string("show_submenu").is_none(), "MenuActions not consulted");
+    }
+
+    #[test]
+    fn selection_dispatches_each_menu_action() {
+        let mut world = selection_world();
+        let menu = world.spawn((three_items(), actions())).id();
+
+        select(&mut world, menu, "play");
+        let ws = world.resource::<WorldSignals>();
+        assert_eq!(ws.get_string(sk::SCENE).map(String::as_str), Some("level01"));
+        assert!(ws.has_flag("switch_hook_ran"), "switch_scene hook was run");
+
+        select(&mut world, menu, "options");
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string("show_submenu").map(String::as_str),
+            Some("options_menu")
+        );
+
+        assert_eq!(world.resource::<NextGameState>().get(), &NextGameStates::Unchanged);
+        select(&mut world, menu, "quit");
+        assert_eq!(
+            world.resource::<NextGameState>().get(),
+            &NextGameStates::Pending(GameStates::Quitting)
+        );
+    }
+
+    #[test]
+    fn selection_without_an_action_or_actions_component_is_a_noop() {
+        let mut world = selection_world();
+        let with_actions = world.spawn((three_items(), MenuActions::new())).id();
+        let without = world.spawn(three_items()).id();
+        select(&mut world, with_actions, "play");
+        select(&mut world, without, "play");
+        let ws = world.resource::<WorldSignals>();
+        assert!(ws.get_string(sk::SCENE).is_none() && !ws.has_flag("switch_hook_ran"));
+        assert_eq!(world.resource::<NextGameState>().get(), &NextGameStates::Unchanged);
     }
 
     #[test]
