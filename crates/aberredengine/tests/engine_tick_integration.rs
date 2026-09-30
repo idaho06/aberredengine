@@ -49,7 +49,6 @@ use aberredengine::lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use aberredengine::lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
 use aberredengine::core::systems::rust_collision::rust_collision_observer;
-use aberredengine::core::systems::time::update_world_time;
 
 use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
 
@@ -795,65 +794,6 @@ fn meta_builder_methods_have_schema_refs() {
             assert(types[s], "schema type " .. s .. " not found in __meta.types")
         end
     "#).exec().unwrap();
-}
-
-// ---------------------------------------------------------------------------
-// D11 – update_world_time integration tests
-// ---------------------------------------------------------------------------
-
-#[test]
-fn update_world_time_increments_elapsed_and_frame() {
-    let mut world = World::new();
-    world.insert_resource(WorldTime::default());
-
-    update_world_time(&mut world, 0.016);
-
-    let wt = world.resource::<WorldTime>();
-    assert!(approx_eq(wt.elapsed, 0.016));
-    assert!(approx_eq(wt.delta, 0.016));
-    assert_eq!(wt.frame_count, 1);
-}
-
-#[test]
-fn update_world_time_applies_time_scale() {
-    let mut world = World::new();
-    world.insert_resource(WorldTime::default().with_time_scale(0.5));
-
-    update_world_time(&mut world, 0.016);
-
-    let wt = world.resource::<WorldTime>();
-    assert!(approx_eq(wt.elapsed, 0.008));
-    assert!(approx_eq(wt.delta, 0.008));
-    assert_eq!(wt.frame_count, 1);
-}
-
-#[test]
-fn update_world_time_accumulates_over_multiple_frames() {
-    let mut world = World::new();
-    world.insert_resource(WorldTime::default());
-
-    update_world_time(&mut world, 0.01);
-    update_world_time(&mut world, 0.02);
-    update_world_time(&mut world, 0.03);
-
-    let wt = world.resource::<WorldTime>();
-    assert!(approx_eq(wt.elapsed, 0.06));
-    // delta should be last frame only
-    assert!(approx_eq(wt.delta, 0.03));
-    assert_eq!(wt.frame_count, 3);
-}
-
-#[test]
-fn update_world_time_zero_dt() {
-    let mut world = World::new();
-    world.insert_resource(WorldTime::default());
-
-    update_world_time(&mut world, 0.0);
-
-    let wt = world.resource::<WorldTime>();
-    assert!(approx_eq(wt.elapsed, 0.0));
-    assert!(approx_eq(wt.delta, 0.0));
-    assert_eq!(wt.frame_count, 1);
 }
 
 // =============================================================================

@@ -24,3 +24,64 @@ pub fn update_world_time(world: &mut World, dt: f32) {
     wt.delta = scaled_dt;
     wt.frame_count += 1;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::approx_eq;
+
+    #[test]
+    fn update_world_time_increments_elapsed_and_frame() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime::default());
+
+        update_world_time(&mut world, 0.016);
+
+        let wt = world.resource::<WorldTime>();
+        assert!(approx_eq(wt.elapsed, 0.016));
+        assert!(approx_eq(wt.delta, 0.016));
+        assert_eq!(wt.frame_count, 1);
+    }
+
+    #[test]
+    fn update_world_time_applies_time_scale() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime::default().with_time_scale(0.5));
+
+        update_world_time(&mut world, 0.016);
+
+        let wt = world.resource::<WorldTime>();
+        assert!(approx_eq(wt.elapsed, 0.008));
+        assert!(approx_eq(wt.delta, 0.008));
+        assert_eq!(wt.frame_count, 1);
+    }
+
+    #[test]
+    fn update_world_time_accumulates_over_multiple_frames() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime::default());
+
+        update_world_time(&mut world, 0.01);
+        update_world_time(&mut world, 0.02);
+        update_world_time(&mut world, 0.03);
+
+        let wt = world.resource::<WorldTime>();
+        assert!(approx_eq(wt.elapsed, 0.06));
+        // delta should be last frame only
+        assert!(approx_eq(wt.delta, 0.03));
+        assert_eq!(wt.frame_count, 3);
+    }
+
+    #[test]
+    fn update_world_time_zero_dt() {
+        let mut world = World::new();
+        world.insert_resource(WorldTime::default());
+
+        update_world_time(&mut world, 0.0);
+
+        let wt = world.resource::<WorldTime>();
+        assert!(approx_eq(wt.elapsed, 0.0));
+        assert!(approx_eq(wt.delta, 0.0));
+        assert_eq!(wt.frame_count, 1);
+    }
+}
