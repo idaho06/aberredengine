@@ -1614,7 +1614,7 @@ Add rule to AnimationController (requires `:with_animation_controller()`).
 **Scalar (Float) Conditions:**
 
 ```lua
--- Compare operators: "lt", "le", "gt", "ge", "eq", "ne"
+-- Compare operators: "lt", "le", "gt", "ge", "eq", "ne" (anything else raises an error)
 :with_animation_rule(
     { type = "scalar_cmp", key = "speed", op = "gt", value = 50.0 },
     "run_anim"

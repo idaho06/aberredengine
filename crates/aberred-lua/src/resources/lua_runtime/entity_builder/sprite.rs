@@ -207,6 +207,17 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         "Add animation rule to controller",
         [("condition_table", "table"), ("set_key", "string")],
         |_, this: &mut LuaEntityBuilder, (condition_table, set_key): (LuaTable, String)| {
+            /// Reads `op`, rejecting spellings `parse_cmp_op` would silently map to `eq`.
+            fn get_cmp_op(table: &LuaTable) -> LuaResult<String> {
+                let op: String = table.get("op")?;
+                match op.as_str() {
+                    "lt" | "le" | "gt" | "ge" | "eq" | "ne" => Ok(op),
+                    _ => Err(LuaError::runtime(format!(
+                        "Unknown comparison op: {op} (expected lt, le, gt, ge, eq or ne)"
+                    ))),
+                }
+            }
+
             fn parse_condition(table: &LuaTable) -> LuaResult<AnimationConditionData> {
                 let cond_type: String = table.get("type")?;
                 match cond_type.as_str() {
@@ -220,7 +231,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     }
                     "scalar_cmp" => {
                         let key: String = table.get("key")?;
-                        let op: String = table.get("op")?;
+                        let op = get_cmp_op(table)?;
                         let value: f32 = table.get("value")?;
                         Ok(AnimationConditionData::ScalarCmp { key, op, value })
                     }
@@ -239,7 +250,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     }
                     "integer_cmp" => {
                         let key: String = table.get("key")?;
-                        let op: String = table.get("op")?;
+                        let op = get_cmp_op(table)?;
                         let value: i32 = table.get("value")?;
                         Ok(AnimationConditionData::IntegerCmp { key, op, value })
                     }
@@ -443,6 +454,24 @@ mod tests {
             AnimationConditionData::IntegerCmp { key, op, value }
                 if key == "hp" && op == "le" && value == 3
         ));
+    }
+
+    #[test]
+    fn animation_rule_rejects_unknown_comparison_op() {
+        for rule in [
+            "{type='scalar_cmp', key='vx', op='>', value=1}",
+            "{type='integer_cmp', key='hp', op='lte', value=1}",
+        ] {
+            assert_runtime_error(
+                &format!(
+                    "engine.spawn():with_animation_controller('idle'):with_animation_rule({rule}, 'x')"
+                ),
+                "Unknown comparison op",
+            );
+        }
+        for op in ["lt", "le", "gt", "ge", "eq", "ne"] {
+            sole_rule_condition(&format!("{{type='integer_cmp', key='hp', op='{op}', value=1}}"));
+        }
     }
 
     #[test]

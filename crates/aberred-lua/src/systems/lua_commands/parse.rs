@@ -6,7 +6,8 @@
 use aberred_core::components::animation::{CmpOp, Condition};
 use crate::resources::lua_runtime::AnimationConditionData;
 
-/// Convert a comparison-operator string from Lua into `CmpOp`. Defaults to `Eq`.
+/// Convert a comparison-operator string from Lua into `CmpOp`. The entity builder rejects
+/// unknown spellings, so the `Eq` fallback is unreachable from Lua scripts.
 pub(super) fn parse_cmp_op(op: &str) -> CmpOp {
     match op {
         "lt" => CmpOp::Lt,
