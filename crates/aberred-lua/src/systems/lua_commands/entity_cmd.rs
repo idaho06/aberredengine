@@ -880,6 +880,7 @@ fn process_lifecycle_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aberred_core::components::animation::Animation;
     use aberred_core::components::guiinteractable::GuiInteractable;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
     use aberred_core::testing::approx_eq;
@@ -909,10 +910,19 @@ mod tests {
         world_signals: &mut WorldSignals,
         cmds: impl IntoIterator<Item = EntityCmd>,
     ) {
+        run_entity_cmds_with_store(world, world_signals, &AnimationStore::default(), cmds);
+    }
+
+    /// [`run_entity_cmds`] with a caller-provided `AnimationStore`.
+    fn run_entity_cmds_with_store(
+        world: &mut World,
+        world_signals: &mut WorldSignals,
+        anim_store: &AnimationStore,
+        cmds: impl IntoIterator<Item = EntityCmd>,
+    ) {
         use bevy_ecs::system::SystemState;
 
         let systems_store = SystemsStore::default();
-        let anim_store = AnimationStore::default();
 
         let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(world);
         {
@@ -925,7 +935,7 @@ mod tests {
                 world_signals,
                 &mut queries,
                 &systems_store,
-                &anim_store,
+                anim_store,
             );
         }
         system_state.apply(world);
@@ -1197,6 +1207,238 @@ mod tests {
             world.get::<GlobalTransform2D>(parent).is_none(),
             "SetParent on a dead child must not add GlobalTransform2D to the parent"
         );
+    }
+
+    fn test_sprite(tex_key: &str) -> aberred_core::components::sprite::Sprite {
+        aberred_core::components::sprite::Sprite {
+            tex_key: tex_key.into(),
+            width: 16.0,
+            height: 16.0,
+            offset: Vec2::ZERO,
+            origin: Vec2::ZERO,
+            flip_h: false,
+            flip_v: false,
+        }
+    }
+
+    #[test]
+    fn physics_cmds_mutate_the_rigidbody() {
+        use aberred_core::components::rigidbody::RigidBody;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(RigidBody::new()).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::SetVelocity { entity_id: id, vx: 3.0, vy: 4.0 },
+                EntityCmd::SetFriction { entity_id: id, friction: 0.5 },
+                EntityCmd::SetMaxSpeed { entity_id: id, max_speed: Some(9.0) },
+                EntityCmd::AddForce {
+                    entity_id: id,
+                    name: "gravity".into(),
+                    x: 0.0,
+                    y: 10.0,
+                    enabled: true,
+                },
+                EntityCmd::AddForce {
+                    entity_id: id,
+                    name: "wind".into(),
+                    x: 1.0,
+                    y: 0.0,
+                    enabled: true,
+                },
+                EntityCmd::RemoveForce { entity_id: id, name: "wind".into() },
+                EntityCmd::SetForceEnabled {
+                    entity_id: id,
+                    name: "gravity".into(),
+                    enabled: false,
+                },
+                EntityCmd::SetForceValue {
+                    entity_id: id,
+                    name: "gravity".into(),
+                    x: 0.0,
+                    y: 20.0,
+                },
+                EntityCmd::FreezeEntity { entity_id: id },
+            ],
+        );
+        let rb = world.get::<RigidBody>(e).unwrap();
+        assert_eq!(rb.velocity, Vec2::new(3.0, 4.0));
+        assert_eq!((rb.friction, rb.max_speed, rb.frozen), (0.5, Some(9.0), true));
+        assert_eq!(rb.forces.len(), 1, "wind removed");
+        let gravity = &rb.forces["gravity"];
+        assert_eq!((gravity.value, gravity.enabled), (Vec2::new(0.0, 20.0), false));
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::UnfreezeEntity { entity_id: id },
+                EntityCmd::SetSpeed { entity_id: id, speed: 10.0 },
+                EntityCmd::SetMaxSpeed { entity_id: id, max_speed: None },
+            ],
+        );
+        let rb = world.get::<RigidBody>(e).unwrap();
+        assert!(!rb.frozen);
+        assert!(
+            approx_eq(rb.velocity.x, 6.0) && approx_eq(rb.velocity.y, 8.0),
+            "SetSpeed keeps direction: {:?}",
+            rb.velocity
+        );
+        assert_eq!(rb.max_speed, None);
+    }
+
+    #[test]
+    fn query_mutation_cmds_never_insert_missing_components() {
+        use aberred_core::components::rigidbody::RigidBody;
+        use aberred_core::components::signals::Signals;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::SetVelocity { entity_id: id, vx: 1.0, vy: 1.0 },
+                EntityCmd::FreezeEntity { entity_id: id },
+                EntityCmd::SignalSetFlag { entity_id: id, flag: "f".into() },
+                EntityCmd::RestartAnimation { entity_id: id },
+                EntityCmd::SetSpriteFlip { entity_id: id, flip_h: true, flip_v: true },
+            ],
+        );
+        assert!(world.get::<RigidBody>(e).is_none());
+        assert!(world.get::<Signals>(e).is_none());
+        assert!(world.get::<Animation>(e).is_none());
+    }
+
+    #[test]
+    fn signal_cmds_set_clear_and_toggle_each_kind() {
+        use aberred_core::components::signals::Signals;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(Signals::default()).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::SignalSetFlag { entity_id: id, flag: "kept".into() },
+                EntityCmd::SignalSetFlag { entity_id: id, flag: "cleared".into() },
+                EntityCmd::SignalClearFlag { entity_id: id, flag: "cleared".into() },
+                EntityCmd::SignalToggleFlag { entity_id: id, flag: "toggled_on".into() },
+                EntityCmd::SignalSetScalar { entity_id: id, key: "s".into(), value: 1.5 },
+                EntityCmd::SignalSetScalar { entity_id: id, key: "s_gone".into(), value: 1.0 },
+                EntityCmd::SignalClearScalar { entity_id: id, key: "s_gone".into() },
+                EntityCmd::SignalSetInteger { entity_id: id, key: "i".into(), value: 7 },
+                EntityCmd::SignalSetInteger { entity_id: id, key: "i_gone".into(), value: 1 },
+                EntityCmd::SignalClearInteger { entity_id: id, key: "i_gone".into() },
+                EntityCmd::SignalSetString {
+                    entity_id: id,
+                    key: "name".into(),
+                    value: "bob".into(),
+                },
+                EntityCmd::SignalSetString {
+                    entity_id: id,
+                    key: "n_gone".into(),
+                    value: "x".into(),
+                },
+                EntityCmd::SignalClearString { entity_id: id, key: "n_gone".into() },
+            ],
+        );
+        let s = world.get::<Signals>(e).unwrap();
+        assert!(s.has_flag("kept") && !s.has_flag("cleared") && s.has_flag("toggled_on"));
+        assert_eq!((s.get_scalar("s"), s.get_scalar("s_gone")), (Some(1.5), None));
+        assert_eq!((s.get_integer("i"), s.get_integer("i_gone")), (Some(7), None));
+        assert_eq!(s.get_string("name").map(String::as_str), Some("bob"));
+        assert!(s.get_string("n_gone").is_none());
+
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SignalToggleFlag { entity_id: id, flag: "toggled_on".into() },
+        );
+        assert!(!world.get::<Signals>(e).unwrap().has_flag("toggled_on"));
+    }
+
+    #[test]
+    fn set_animation_resets_frame_and_syncs_sprite_texture_from_store() {
+        use aberred_core::resources::animationstore::AnimationResource;
+        let mut store = AnimationStore::default();
+        store.animations.insert(
+            "run".to_string(),
+            AnimationResource {
+                tex_key: "run_sheet".into(),
+                position: Vec2::ZERO,
+                horizontal_displacement: 16.0,
+                vertical_displacement: 0.0,
+                frame_count: 4,
+                fps: 10.0,
+                looped: true,
+            },
+        );
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let mut running = Animation::new("walk");
+        running.frame_index = 2;
+        running.elapsed_time = 0.3;
+        running.finished = true;
+        let e = world.spawn((running, test_sprite("walk_sheet"))).id();
+        let id = e.to_bits();
+
+        run_entity_cmds_with_store(
+            &mut world,
+            &mut signals,
+            &store,
+            [EntityCmd::SetAnimation { entity_id: id, animation_key: "run".into() }],
+        );
+        let anim = world.get::<Animation>(e).unwrap();
+        assert_eq!(anim.animation_key, "run");
+        assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
+        let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
+        assert_eq!(&*sprite.tex_key, "run_sheet");
+
+        // A key missing from the store still switches the animation but keeps the texture.
+        run_entity_cmds_with_store(
+            &mut world,
+            &mut signals,
+            &store,
+            [EntityCmd::SetAnimation { entity_id: id, animation_key: "unknown".into() }],
+        );
+        assert_eq!(world.get::<Animation>(e).unwrap().animation_key, "unknown");
+        let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
+        assert_eq!(&*sprite.tex_key, "run_sheet");
+    }
+
+    #[test]
+    fn restart_animation_and_sprite_flip() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let mut running = Animation::new("walk");
+        running.frame_index = 5;
+        running.elapsed_time = 1.0;
+        running.finished = true;
+        let e = world.spawn((running, test_sprite("sheet"))).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::RestartAnimation { entity_id: id },
+                EntityCmd::SetSpriteFlip { entity_id: id, flip_h: true, flip_v: false },
+            ],
+        );
+        let anim = world.get::<Animation>(e).unwrap();
+        assert_eq!(anim.animation_key, "walk");
+        assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
+        let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
+        assert_eq!((sprite.flip_h, sprite.flip_v), (true, false));
     }
 
     fn run_camera_target_cmd(world: &mut World, cmd: EntityCmd) {
