@@ -5,6 +5,7 @@ use crossbeam_channel::{bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
 use aberred_core::math::Vec2;
 
+use aberred_core::error::EngineError;
 use super::builder::EngineBuilder;
 use super::logic_thread::run_sim_tick;
 use super::logic_world::register_persistent_system;
@@ -627,6 +628,135 @@ fn test_initial_scene_without_scenes() {
         err.to_string()
             .contains(".initial_scene() was set but no scenes were registered")
     );
+}
+
+/// Mirrors `try_run`'s own call (`use_scene_manager = !scenes.is_empty()`)
+/// without continuing into config loading / window creation.
+fn validate(builder: &EngineBuilder) -> Result<(), EngineError> {
+    builder.validate_builder(!builder.scenes.is_empty())
+}
+
+#[test]
+fn record_and_play_replay_together_are_rejected() {
+    let err = validate(
+        &EngineBuilder::new()
+            .deterministic(1)
+            .record_replay("out.replay", "v1")
+            .play_replay("in.replay"),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EngineError::RecordAndPlayReplayConflict), "{err}");
+}
+
+#[test]
+fn recording_a_replay_requires_a_deterministic_seed() {
+    let err = validate(&EngineBuilder::new().record_replay("out.replay", "v1")).unwrap_err();
+    assert!(matches!(err, EngineError::RecordReplayRequiresDeterministic), "{err}");
+}
+
+#[test]
+fn playing_a_replay_rejects_an_explicit_seed() {
+    let err =
+        validate(&EngineBuilder::new().deterministic(1).play_replay("in.replay")).unwrap_err();
+    assert!(matches!(err, EngineError::PlayReplayConflictsWithDeterministic), "{err}");
+}
+
+#[test]
+fn valid_replay_and_scene_setups_pass_validation() {
+    validate(&EngineBuilder::new().deterministic(1).record_replay("out.replay", "v1")).unwrap();
+    validate(&EngineBuilder::new().play_replay("in.replay")).unwrap();
+    validate(&EngineBuilder::new().deterministic(1)).unwrap();
+    validate(
+        &EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .add_scene("level", make_descriptor())
+            .initial_scene("level"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn initial_scene_not_registered_lists_every_registered_scene() {
+    let err = validate(
+        &EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .add_scene("level", make_descriptor())
+            .initial_scene("credits"),
+    )
+    .unwrap_err();
+    match err {
+        EngineError::InitialSceneNotRegistered { name, registered } => {
+            assert_eq!(name, "credits");
+            assert_eq!(registered, "menu, level");
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn deterministic_seed_conflicts_with_lua() {
+    let err = validate(&EngineBuilder::new().with_lua("main.lua").deterministic(1)).unwrap_err();
+    assert!(matches!(err, EngineError::LuaConflictsWithDeterministic), "{err}");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn replay_record_or_play_conflicts_with_lua() {
+    let record = validate(
+        &EngineBuilder::new()
+            .with_lua("main.lua")
+            .record_replay("out.replay", "v1"),
+    )
+    .unwrap_err();
+    let play = validate(&EngineBuilder::new().with_lua("main.lua").play_replay("in.replay"))
+        .unwrap_err();
+    for err in [record, play] {
+        assert!(matches!(err, EngineError::LuaConflictsWithReplay), "{err}");
+    }
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn validation_reports_the_earliest_conflict_first() {
+    // lua + scenes + seed: the Lua/SceneManager conflict wins over the
+    // Lua/deterministic one.
+    let err = validate(
+        &EngineBuilder::new()
+            .with_lua("main.lua")
+            .deterministic(1)
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu"),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EngineError::LuaConflictsWithSceneManager), "{err}");
+
+    // record + play + lua: the record/play conflict wins over the Lua one.
+    let err = validate(
+        &EngineBuilder::new()
+            .with_lua("main.lua")
+            .record_replay("out.replay", "v1")
+            .play_replay("in.replay"),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EngineError::RecordAndPlayReplayConflict), "{err}");
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_conflict_names_the_first_user_hook_for_every_hook() {
+    let cases: [(EngineBuilder, &str); 3] = [
+        (EngineBuilder::new().on_enter_play(dummy_enter_play), "on_enter_play"),
+        (EngineBuilder::new().on_update(dummy_enter_play), "on_update"),
+        (EngineBuilder::new().on_switch_scene(dummy_switch_scene), "on_switch_scene"),
+    ];
+    for (builder, expected) in cases {
+        let err = validate(&builder.with_lua("main.lua")).unwrap_err();
+        assert!(
+            matches!(err, EngineError::LuaConflictsWithHooks { hook } if hook == expected),
+            "{expected}: {err}"
+        );
+    }
 }
 
 #[test]
