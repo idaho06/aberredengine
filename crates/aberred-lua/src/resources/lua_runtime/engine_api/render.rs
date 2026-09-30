@@ -497,3 +497,146 @@ impl LuaRuntime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::resources::lua_runtime::LuaRuntime;
+    use crate::systems::lua_commands::process_render_command;
+    use aberred_core::components::shadow::Shadow;
+    use aberred_core::math::{Color, Rect};
+    use aberred_core::resources::guitheme::{GuiNinePatch, GuiTheme, GuiThemeStore};
+    use aberred_core::resources::postprocessshader::PostProcessShader;
+    use aberred_core::resources::uniformvalue::UniformValue;
+
+    /// Runs `script`, then applies every queued render + GUI-theme command.
+    fn apply_script(script: &str) -> (PostProcessShader, GuiThemeStore) {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        // Drains swap the queue with `out`, so each needs its own empty buffer.
+        let (mut render, mut theme_cmds) = (Vec::new(), Vec::new());
+        runtime.drain_render_commands_into(&mut render);
+        runtime.drain_gui_theme_commands_into(&mut theme_cmds);
+        let mut post = PostProcessShader::default();
+        let mut themes = GuiThemeStore::default();
+        for cmd in render.into_iter().chain(theme_cmds) {
+            process_render_command(cmd, &mut post, &mut themes);
+        }
+        (post, themes)
+    }
+
+    fn theme<'a>(themes: &'a GuiThemeStore, key: &str) -> &'a GuiTheme {
+        themes.themes.get(key).expect("theme staged")
+    }
+
+    fn patch(p: &GuiNinePatch) -> (&str, Rect, [i32; 4]) {
+        (&p.tex_key, p.source, [p.left, p.top, p.right, p.bottom])
+    }
+
+    #[test]
+    fn post_process_shader_chain_keeps_order_and_nil_clears() {
+        let (post, _) = apply_script("engine.post_process_shader({'bloom', 'crt', 'vignette'})");
+        let keys: Vec<&str> = post.keys.iter().map(|k| &**k).collect();
+        assert_eq!(keys, ["bloom", "crt", "vignette"]);
+
+        let (post, _) =
+            apply_script("engine.post_process_shader({'bloom'}) engine.post_process_shader(nil)");
+        assert!(post.keys.is_empty());
+    }
+
+    #[test]
+    fn post_process_shader_rejects_empty_table_and_non_table() {
+        let runtime = LuaRuntime::new().unwrap();
+        for (script, msg) in [
+            (
+                "engine.post_process_shader({})",
+                "table must contain at least one shader ID",
+            ),
+            ("engine.post_process_shader('bloom')", "expected nil or table of shader IDs"),
+        ] {
+            let err = runtime.lua().load(script).exec().unwrap_err().to_string();
+            assert!(err.contains(msg), "{script}: {err}");
+        }
+    }
+
+    #[test]
+    fn post_process_uniforms_set_each_type_and_clear() {
+        let (post, _) = apply_script(
+            "engine.post_process_set_float('amp', 1.5) engine.post_process_set_int('mode', 2) \
+             engine.post_process_set_vec2('dir', 1, 0) engine.post_process_set_vec4('tint', 1, 0.5, 0.25, 1) \
+             engine.post_process_set_float('uTime', 9) engine.post_process_clear_uniform('dir')",
+        );
+        assert_eq!(post.uniforms.get("amp"), Some(&UniformValue::Float(1.5)));
+        assert_eq!(post.uniforms.get("mode"), Some(&UniformValue::Int(2)));
+        assert_eq!(post.uniforms.get("dir"), None);
+        assert_eq!(
+            post.uniforms.get("tint"),
+            Some(&UniformValue::Vec4 { x: 1.0, y: 0.5, z: 0.25, w: 1.0 })
+        );
+        assert_eq!(
+            post.uniforms.get("uTime"),
+            Some(&UniformValue::Float(9.0)),
+            "reserved names are stored (with a warning); the renderer overwrites them"
+        );
+
+        let (post, _) =
+            apply_script("engine.post_process_set_float('amp', 1) engine.post_process_clear_uniforms()");
+        assert!(post.uniforms.is_empty());
+    }
+
+    #[test]
+    fn gui_theme_label_font_and_shadows_set_their_fields() {
+        let (_, themes) = apply_script(
+            "engine.set_gui_theme_label('dark', 'ui', 1, 2, 3, 4, 5, 6, 7, 8) \
+             engine.set_gui_theme_font('dark', 'arcade', 18, 10, 20, 30, 40) \
+             engine.set_gui_theme_panel_shadow('dark', 2, 3, 0, 0, 0, 128) \
+             engine.set_gui_theme_text_shadow('dark', 1, 1, 9, 9, 9, 255)",
+        );
+        let t = theme(&themes, "dark");
+        assert_eq!(
+            patch(t.label.as_ref().unwrap()),
+            ("ui", Rect::new(1.0, 2.0, 3.0, 4.0), [5, 6, 7, 8])
+        );
+        assert_eq!((&*t.font, t.font_size), ("arcade", 18.0));
+        assert_eq!(t.text_color, Color::new(10, 20, 30, 40));
+        assert_eq!(t.panel_shadow, Some(Shadow::new(2.0, 3.0, 0, 0, 0, 128)));
+        assert_eq!(t.text_shadow, Some(Shadow::new(1.0, 1.0, 9, 9, 9, 255)));
+    }
+
+    #[test]
+    fn gui_theme_progress_bar_parts_and_unknown_part_ignored() {
+        let (_, themes) = apply_script(
+            "engine.set_gui_theme_progress_bar('hud', 'track', 'bar', 0, 0, 32, 8, 2, 2, 2, 2) \
+             engine.set_gui_theme_progress_bar('hud', 'fill', 'bar', 0, 8, 32, 8, 1, 1, 1, 1) \
+             engine.set_gui_theme_progress_bar('hud', 'glow', 'bar', 0, 16, 32, 8, 0, 0, 0, 0)",
+        );
+        let skin = theme(&themes, "hud").progress_bar.as_ref().unwrap();
+        assert_eq!(
+            patch(skin.track.as_ref().unwrap()),
+            ("bar", Rect::new(0.0, 0.0, 32.0, 8.0), [2, 2, 2, 2])
+        );
+        assert_eq!(patch(&skin.fill), ("bar", Rect::new(0.0, 8.0, 32.0, 8.0), [1, 1, 1, 1]));
+    }
+
+    #[test]
+    fn gui_theme_button_shadow_per_state_and_unknown_states_ignored() {
+        let (_, themes) = apply_script(
+            "engine.set_gui_theme_button_shadow('b', 'normal', 1, 1, 1, 1, 1, 1) \
+             engine.set_gui_theme_button_shadow('b', 'hover', 2, 2, 2, 2, 2, 2) \
+             engine.set_gui_theme_button_shadow('b', 'pressed', 3, 3, 3, 3, 3, 3) \
+             engine.set_gui_theme_button_shadow('b', 'disabled', 4, 4, 4, 4, 4, 4) \
+             engine.set_gui_theme_button_shadow('b', 'focused', 5, 5, 5, 5, 5, 5) \
+             engine.set_gui_theme_button('b', 'focused', 'ui', 0, 0, 1, 1, 0, 0, 0, 0)",
+        );
+        let skin = theme(&themes, "b").button.as_ref().unwrap();
+        let dx = |s: Option<Shadow>| s.map(|s| s.offset.x);
+        assert_eq!(
+            [dx(skin.shadow), dx(skin.hover_shadow), dx(skin.pressed_shadow), dx(skin.disabled_shadow)],
+            [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]
+        );
+        assert!(
+            skin.hover.is_none() && skin.pressed.is_none() && skin.disabled.is_none(),
+            "an unknown button state sets no patch"
+        );
+        assert!(skin.normal.tex_key.is_empty());
+    }
+}
