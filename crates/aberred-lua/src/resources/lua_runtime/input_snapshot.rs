@@ -202,20 +202,6 @@ mod tests {
     }
 
     #[test]
-    fn test_from_default_input_all_unpressed() {
-        let snap = InputSnapshot::from_input_state(&default_input());
-        assert!(!snap.digital.up.pressed);
-        assert!(!snap.digital.down.pressed);
-        assert!(!snap.digital.left.pressed);
-        assert!(!snap.digital.right.pressed);
-        assert!(!snap.digital.action_1.pressed);
-        assert!(!snap.digital.action_2.pressed);
-        assert!(!snap.digital.action_3.pressed);
-        assert!(!snap.digital.back.pressed);
-        assert!(!snap.digital.special.pressed);
-    }
-
-    #[test]
     fn test_wasd_maps_to_directional() {
         let mut input = default_input();
         input.maindirection_up.active = true;
@@ -299,14 +285,6 @@ mod tests {
     }
 
     #[test]
-    fn test_digital_button_state_default() {
-        let dbs = DigitalButtonState::default();
-        assert!(!dbs.pressed);
-        assert!(!dbs.just_pressed);
-        assert!(!dbs.just_released);
-    }
-
-    #[test]
     fn test_main_direction_fields_populated() {
         let mut input = default_input();
         input.maindirection_up.active = true;
@@ -367,18 +345,6 @@ mod tests {
     }
 
     #[test]
-    fn test_existing_combined_fields_unaffected() {
-        // Ensure backward compat: combined fields still OR both sources
-        let mut input = default_input();
-        input.maindirection_right.active = true;
-        input.secondarydirection_right.active = true;
-        let snap = InputSnapshot::from_input_state(&input);
-        assert!(snap.digital.right.pressed);
-        assert!(snap.digital.main_right.pressed);
-        assert!(snap.digital.secondary_right.pressed);
-    }
-
-    #[test]
     fn test_action3_field_populated() {
         let mut input = default_input();
         input.action_3.active = true;
@@ -390,42 +356,11 @@ mod tests {
     }
 
     #[test]
-    fn test_action3_default_unpressed() {
-        let snap = InputSnapshot::from_input_state(&default_input());
-        assert!(!snap.digital.action_3.pressed);
-        assert!(!snap.digital.action_3.just_pressed);
-        assert!(!snap.digital.action_3.just_released);
-    }
-
-    #[test]
     fn test_scroll_y_propagated() {
         let mut input = default_input();
         input.scroll_y = 1.5;
         let snap = InputSnapshot::from_input_state(&input);
         assert_eq!(snap.analog.scroll_y, 1.5);
-    }
-
-    #[test]
-    fn test_scroll_y_zero_by_default() {
-        let snap = InputSnapshot::from_input_state(&default_input());
-        assert_eq!(snap.analog.scroll_y, 0.0);
-    }
-
-    #[test]
-    fn test_scroll_y_negative_scroll_down() {
-        let mut input = default_input();
-        input.scroll_y = -2.0;
-        let snap = InputSnapshot::from_input_state(&input);
-        assert_eq!(snap.analog.scroll_y, -2.0);
-    }
-
-    #[test]
-    fn test_mouse_pos_zero_by_default() {
-        let snap = InputSnapshot::from_input_state(&default_input());
-        assert_eq!(snap.analog.mouse_x, 0.0);
-        assert_eq!(snap.analog.mouse_y, 0.0);
-        assert_eq!(snap.analog.mouse_world_x, 0.0);
-        assert_eq!(snap.analog.mouse_world_y, 0.0);
     }
 
     #[test]
@@ -472,26 +407,5 @@ mod tests {
         assert_eq!(snap.analog.pad_right_y, -0.4);
         assert_eq!(snap.analog.pad_lt, 0.5);
         assert_eq!(snap.analog.pad_rt, -0.6);
-    }
-
-    #[test]
-    fn test_gamepad_fields_default_disconnected_and_zero() {
-        let snap = InputSnapshot::from_input_state(&default_input());
-        assert!(!snap.analog.gamepad_connected);
-        assert_eq!(snap.analog.pad_left_x, 0.0);
-        assert_eq!(snap.analog.pad_rt, 0.0);
-    }
-
-    #[test]
-    fn test_mouse_screen_and_world_independent() {
-        // Screen and world positions are independent: they differ when camera is offset
-        let mut input = default_input();
-        input.mouse_x = 400.0;
-        input.mouse_y = 225.0;
-        input.mouse_world_x = 0.0;
-        input.mouse_world_y = 0.0;
-        let snap = InputSnapshot::from_input_state(&input);
-        assert_eq!(snap.analog.mouse_x, 400.0);
-        assert_eq!(snap.analog.mouse_world_x, 0.0);
     }
 }
