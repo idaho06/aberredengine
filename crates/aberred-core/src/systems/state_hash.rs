@@ -272,19 +272,186 @@ mod tests {
         world
     }
 
+    fn noop_timer(_: Entity, _: &mut crate::systems::GameCtx, _: &crate::resources::input::InputState) {}
+
+    /// A world with one entity carrying every component `hash_world_state` hashes, plus
+    /// populated WorldSignals, so each mutation below starts from the same full baseline.
+    fn full_world() -> (World, Entity) {
+        let mut world = minimal_world(7);
+        let mut rb = RigidBody::with_physics(0.5, Some(9.0));
+        rb.velocity = Vec2::new(1.0, 2.0);
+        rb.add_force_with_state("gravity", Vec2::new(0.0, 10.0), true);
+        let mut signals = Signals::default();
+        signals.set_scalar("s", 1.0);
+        signals.set_integer("i", 1);
+        signals.set_flag("f");
+        signals.set_string("n", "a");
+        let mut phases = rustc_hash::FxHashMap::default();
+        phases.insert("idle".to_string(), PhaseCallbackFns::default());
+        phases.insert("run".to_string(), PhaseCallbackFns::default());
+        let e = world
+            .spawn((
+                MapPosition::new(1.0, 2.0),
+                ScreenPosition::new(3.0, 4.0),
+                rb,
+                Rotation { degrees: 10.0 },
+                Scale::new(1.0, 1.0),
+                BoxCollider::new(8.0, 8.0),
+                signals,
+                Phase::new("idle", phases),
+                Timer::rust(1.0, noop_timer),
+                Ttl::new(5.0),
+                Animation::new("walk"),
+                GlobalTransform2D {
+                    position: Vec2::new(1.0, 2.0),
+                    rotation_degrees: 0.0,
+                    scale: Vec2::ONE,
+                },
+                Group::new("enemy"),
+            ))
+            .id();
+        world.entity_mut(e).insert((
+            Tween::new(MapPosition::new(0.0, 0.0), MapPosition::new(5.0, 5.0), 1.0),
+            Tween::new(ScreenPosition::new(0.0, 0.0), ScreenPosition::new(5.0, 5.0), 1.0),
+            Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 90.0 }, 1.0),
+            Tween::new(Scale::new(1.0, 1.0), Scale::new(2.0, 2.0), 1.0),
+        ));
+        let mut ws = world.resource_mut::<WorldSignals>();
+        ws.set_scalar("ws", 1.0);
+        ws.set_integer("wi", 1);
+        ws.set_string("wn", "a");
+        ws.set_flag("wf");
+        ws.set_entity("we", e);
+        (world, e)
+    }
+
     #[test]
-    fn hash_changes_when_map_position_moves() {
-        let mut world = minimal_world(1);
-        let entity = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let h1 = hash_world_state(&world);
-        world
-            .entity_mut(entity)
-            .get_mut::<MapPosition>()
-            .unwrap()
-            .pos
-            .x = 5.0;
-        let h2 = hash_world_state(&world);
-        assert_ne!(h1, h2);
+    fn every_hashed_field_changes_the_hash() {
+        type Mutation = fn(&mut World, Entity);
+        let mutations: &[(&str, Mutation)] = &[
+            ("MapPosition", |w, e| w.get_mut::<MapPosition>(e).unwrap().pos.x += 1.0),
+            ("ScreenPosition", |w, e| w.get_mut::<ScreenPosition>(e).unwrap().pos.y += 1.0),
+            ("RigidBody.velocity", |w, e| w.get_mut::<RigidBody>(e).unwrap().velocity.x += 1.0),
+            ("RigidBody.friction", |w, e| w.get_mut::<RigidBody>(e).unwrap().friction = 0.9),
+            ("RigidBody.max_speed", |w, e| w.get_mut::<RigidBody>(e).unwrap().max_speed = None),
+            ("RigidBody.frozen", |w, e| w.get_mut::<RigidBody>(e).unwrap().frozen = true),
+            ("RigidBody.force value", |w, e| {
+                w.get_mut::<RigidBody>(e).unwrap().set_force_value("gravity", Vec2::new(0.0, 11.0));
+            }),
+            ("RigidBody.force enabled", |w, e| {
+                w.get_mut::<RigidBody>(e).unwrap().set_force_enabled("gravity", false);
+            }),
+            ("Rotation", |w, e| w.get_mut::<Rotation>(e).unwrap().degrees += 1.0),
+            ("Scale", |w, e| w.get_mut::<Scale>(e).unwrap().scale.x += 1.0),
+            ("BoxCollider.size", |w, e| w.get_mut::<BoxCollider>(e).unwrap().size.x += 1.0),
+            ("BoxCollider.offset", |w, e| w.get_mut::<BoxCollider>(e).unwrap().offset.x += 1.0),
+            ("BoxCollider.origin", |w, e| w.get_mut::<BoxCollider>(e).unwrap().origin.x += 1.0),
+            ("Signals.scalar", |w, e| w.get_mut::<Signals>(e).unwrap().set_scalar("s", 2.0)),
+            ("Signals.integer", |w, e| w.get_mut::<Signals>(e).unwrap().set_integer("i", 2)),
+            ("Signals.flag", |w, e| w.get_mut::<Signals>(e).unwrap().set_flag("g")),
+            ("Signals.string", |w, e| w.get_mut::<Signals>(e).unwrap().set_string("n", "b")),
+            ("Phase.current", |w, e| {
+                w.get_mut::<Phase<PhaseCallbackFns>>(e).unwrap().current = "run".to_string();
+            }),
+            ("Phase.time_in_phase", |w, e| {
+                w.get_mut::<Phase<PhaseCallbackFns>>(e).unwrap().time_in_phase = 0.5;
+            }),
+            ("Timer.duration", |w, e| w.get_mut::<Timer<TimerCallback>>(e).unwrap().duration = 2.0),
+            ("Timer.elapsed", |w, e| w.get_mut::<Timer<TimerCallback>>(e).unwrap().elapsed = 0.5),
+            ("Ttl", |w, e| w.get_mut::<Ttl>(e).unwrap().remaining = 4.0),
+            ("Animation.key", |w, e| w.get_mut::<Animation>(e).unwrap().animation_key = "run".into()),
+            ("Animation.frame", |w, e| w.get_mut::<Animation>(e).unwrap().frame_index = 1),
+            ("Tween<MapPosition>.to", |w, e| {
+                w.get_mut::<Tween<MapPosition>>(e).unwrap().to = MapPosition::new(6.0, 5.0);
+            }),
+            ("Tween<MapPosition>.time", |w, e| w.get_mut::<Tween<MapPosition>>(e).unwrap().time = 0.1),
+            ("Tween<MapPosition>.playing", |w, e| {
+                w.get_mut::<Tween<MapPosition>>(e).unwrap().playing = false;
+            }),
+            ("Tween<MapPosition>.forward", |w, e| {
+                w.get_mut::<Tween<MapPosition>>(e).unwrap().forward = false;
+            }),
+            ("Tween<MapPosition>.easing", |w, e| {
+                w.get_mut::<Tween<MapPosition>>(e).unwrap().easing = Easing::CubicIn;
+            }),
+            ("Tween<MapPosition>.loop_mode", |w, e| {
+                w.get_mut::<Tween<MapPosition>>(e).unwrap().loop_mode = LoopMode::PingPong;
+            }),
+            ("Tween<ScreenPosition>.from", |w, e| {
+                w.get_mut::<Tween<ScreenPosition>>(e).unwrap().from = ScreenPosition::new(1.0, 0.0);
+            }),
+            ("Tween<Rotation>.duration", |w, e| w.get_mut::<Tween<Rotation>>(e).unwrap().duration = 2.0),
+            ("Tween<Scale>.to", |w, e| {
+                w.get_mut::<Tween<Scale>>(e).unwrap().to = Scale::new(3.0, 2.0);
+            }),
+            ("GlobalTransform2D.position", |w, e| {
+                w.get_mut::<GlobalTransform2D>(e).unwrap().position.x += 1.0;
+            }),
+            ("GlobalTransform2D.rotation", |w, e| {
+                w.get_mut::<GlobalTransform2D>(e).unwrap().rotation_degrees = 5.0;
+            }),
+            ("GlobalTransform2D.scale", |w, e| {
+                w.get_mut::<GlobalTransform2D>(e).unwrap().scale.x = 2.0;
+            }),
+            ("Group", |w, e| w.get_mut::<Group>(e).unwrap().0 = "ally".into()),
+            ("component removed", |w, e| {
+                w.entity_mut(e).remove::<Ttl>();
+            }),
+            ("extra entity", |w, _| {
+                w.spawn_empty();
+            }),
+            ("WorldSignals.scalar", |w, _| w.resource_mut::<WorldSignals>().set_scalar("ws", 2.0)),
+            ("WorldSignals.integer", |w, _| w.resource_mut::<WorldSignals>().set_integer("wi", 2)),
+            ("WorldSignals.string", |w, _| w.resource_mut::<WorldSignals>().set_string("wn", "b")),
+            ("WorldSignals.flag", |w, _| w.resource_mut::<WorldSignals>().set_flag("wg")),
+            ("WorldSignals.entity", |w, _| {
+                let other = w.spawn_empty().id();
+                w.resource_mut::<WorldSignals>().set_entity("we", other);
+                w.despawn(other);
+            }),
+            ("WorldTime.frame_count", |w, _| w.resource_mut::<WorldTime>().frame_count += 1),
+        ];
+
+        let (world, _) = full_world();
+        let baseline = hash_world_state(&world);
+        for (name, mutate) in mutations {
+            let (mut world, e) = full_world();
+            mutate(&mut world, e);
+            assert_ne!(hash_world_state(&world), baseline, "{name} must change the hash");
+        }
+    }
+
+    #[test]
+    fn hash_is_independent_of_hash_map_insertion_order() {
+        let keys: Vec<String> = (0..32).map(|i| format!("k{i}")).collect();
+        let build = |order: &[String]| {
+            let mut world = minimal_world(1);
+            let mut signals = Signals::default();
+            let mut ws = WorldSignals::default();
+            for k in order {
+                signals.set_scalar(k.clone(), 1.0);
+                signals.set_flag(k.clone());
+                ws.set_integer(k.clone(), 1);
+                ws.set_flag(k.clone());
+            }
+            world.insert_resource(ws);
+            world.spawn(signals);
+            hash_world_state(&world)
+        };
+        let reversed: Vec<String> = keys.iter().rev().cloned().collect();
+        assert_eq!(build(&keys), build(&reversed));
+    }
+
+    #[test]
+    fn string_boundaries_are_part_of_the_hash() {
+        let with_flags = |flags: &[&str]| {
+            let mut world = minimal_world(1);
+            for f in flags {
+                world.resource_mut::<WorldSignals>().set_flag(*f);
+            }
+            hash_world_state(&world)
+        };
+        assert_ne!(with_flags(&["ab", "c"]), with_flags(&["a", "bc"]));
     }
 
     #[test]
