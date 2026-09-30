@@ -712,6 +712,8 @@ mod tests {
     use super::*;
     use crate::resources::lua_runtime::{AnimationConditionData, AnimationRuleData};
     use aberred_core::components::animation::{CmpOp, Condition};
+    use aberred_core::components::tween::{Easing, LoopMode, Tween};
+    use aberred_core::resources::uniformvalue::UniformValue;
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -964,5 +966,167 @@ mod tests {
             &controller.rules[1].when,
             Condition::ScalarCmp { op: CmpOp::Gt, .. }
         ));
+    }
+
+    /// Runs `script` (one `engine.spawn()...:build()`) through the real Lua builder, feeds the
+    /// queued `SpawnCmd` through `process_spawn_command`, and returns the spawned entity.
+    fn spawn_from_lua(world: &mut World, world_signals: &mut WorldSignals, script: &str) -> Entity {
+        use crate::resources::lua_runtime::LuaRuntime;
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        let mut queued = Vec::new();
+        runtime.drain_spawn_commands_into(&mut queued);
+        assert_eq!(queued.len(), 1, "script must build exactly one entity");
+
+        let before: Vec<Entity> = world.query::<Entity>().iter(world).collect();
+        let mut system_state = SystemState::<Commands>::new(world);
+        {
+            let mut commands = system_state.get_mut(world).unwrap();
+            process_spawn_command(&mut commands, queued.pop().unwrap(), world_signals);
+        }
+        system_state.apply(world);
+        let spawned: Vec<Entity> = world
+            .query::<Entity>()
+            .iter(world)
+            .filter(|e| !before.contains(e))
+            .collect();
+        assert_eq!(spawned.len(), 1, "exactly one entity spawned");
+        spawned[0]
+    }
+
+    #[test]
+    fn lua_spawn_applies_transform_components() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let script = format!(
+            "engine.spawn():with_position(1, 2):with_screen_position(3, 4):with_rotation(45)\
+             :with_scale(2, 3):with_stuckto({}, true, false):with_stuckto_offset(5, 6)\
+             :with_stuckto_stored_velocity(7, 8):with_camera_target(4):build()",
+            target.to_bits()
+        );
+        let e = spawn_from_lua(&mut world, &mut signals, &script);
+
+        assert_eq!(world.get::<MapPosition>(e).unwrap().pos, Vec2::new(1.0, 2.0));
+        assert_eq!(world.get::<ScreenPosition>(e).unwrap().pos, Vec2::new(3.0, 4.0));
+        assert_eq!(world.get::<Rotation>(e).unwrap().degrees, 45.0);
+        assert_eq!(world.get::<Scale>(e).unwrap().scale, Vec2::new(2.0, 3.0));
+        let stuck = world.get::<StuckTo>(e).unwrap();
+        assert_eq!(stuck.target, target);
+        assert_eq!((stuck.follow_x, stuck.follow_y), (true, false));
+        assert_eq!(stuck.offset, Vec2::new(5.0, 6.0));
+        assert_eq!(stuck.stored_velocity, Some(Vec2::new(7.0, 8.0)));
+        let cam = world.get::<CameraTarget>(e).unwrap();
+        assert_eq!((cam.priority, cam.zoom), (4, 1.0), "zoom defaults to 1.0");
+    }
+
+    #[test]
+    fn lua_spawn_with_parent_inserts_childof_and_gui_offset() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let parent = world.spawn(MapPosition::new(10.0, 0.0)).id();
+        let script = format!(
+            "engine.spawn():with_position(1, 0):with_parent({}):with_gui_offset(3, 4)\
+             :with_camera_target(1, 2.5):build()",
+            parent.to_bits()
+        );
+        let e = spawn_from_lua(&mut world, &mut signals, &script);
+
+        assert_eq!(world.get::<ChildOf>(e).unwrap().parent(), parent);
+        assert_eq!(world.get::<GuiOffset>(e).unwrap().0, Vec2::new(3.0, 4.0));
+        assert_eq!(world.get::<CameraTarget>(e).unwrap().zoom, 2.5);
+    }
+
+    #[test]
+    fn lua_spawn_with_invalid_parent_or_stuckto_target_skips_them() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        // Entity bits with a zero index are rejected by resolve_entity.
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_position(1, 2):with_parent(0):with_stuckto(0, true, true):build()",
+        );
+        assert!(world.get::<ChildOf>(e).is_none());
+        assert!(world.get::<StuckTo>(e).is_none());
+        assert_eq!(world.get::<MapPosition>(e).unwrap().pos, Vec2::new(1.0, 2.0));
+    }
+
+    #[test]
+    fn lua_spawn_applies_physics_and_render_components() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_velocity(1, 2):with_friction(0.5):with_max_speed(9)\
+             :with_accel('gravity', 0, 10, false):with_frozen()\
+             :with_collider(20, 10, 5, 2):with_collider_offset(3, 4)\
+             :with_sprite('hero', 32, 48, 16, 24):with_sprite_offset(64, 0):with_sprite_flip(true, false)\
+             :with_zindex(7):with_shader('wave', { amp = 2 }):with_tint(1, 2, 3, 4)\
+             :with_shadow(2, 3, 5, 6, 7, 8):build()",
+        );
+
+        let rb = world.get::<RigidBody>(e).unwrap();
+        assert_eq!(rb.velocity, Vec2::new(1.0, 2.0));
+        assert_eq!((rb.friction, rb.max_speed, rb.frozen), (0.5, Some(9.0), true));
+        let gravity = &rb.forces["gravity"];
+        assert_eq!((gravity.value, gravity.enabled), (Vec2::new(0.0, 10.0), false));
+
+        let collider = world.get::<BoxCollider>(e).unwrap();
+        assert_eq!(
+            (collider.size, collider.origin, collider.offset),
+            (Vec2::new(20.0, 10.0), Vec2::new(5.0, 2.0), Vec2::new(3.0, 4.0))
+        );
+
+        let sprite = world.get::<Sprite>(e).unwrap();
+        assert_eq!(&*sprite.tex_key, "hero");
+        assert_eq!((sprite.width, sprite.height), (32.0, 48.0));
+        assert_eq!((sprite.origin, sprite.offset), (Vec2::new(16.0, 24.0), Vec2::new(64.0, 0.0)));
+        assert_eq!((sprite.flip_h, sprite.flip_v), (true, false));
+
+        assert_eq!(world.get::<ZIndex>(e).unwrap().0, 7.0);
+        let shader = world.get::<EntityShader>(e).unwrap();
+        assert_eq!(&*shader.shader_key, "wave");
+        assert_eq!(shader.uniforms.get("amp"), Some(&UniformValue::Float(2.0)));
+        assert_eq!(world.get::<Tint>(e).unwrap().color, Color::new(1, 2, 3, 4));
+        let shadow = world.get::<Shadow>(e).unwrap();
+        assert_eq!((shadow.offset, shadow.color), (Vec2::new(2.0, 3.0), Color::new(5, 6, 7, 8)));
+    }
+
+    #[test]
+    fn lua_spawn_applies_tweens_and_their_finished_callbacks() {
+        use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn()\
+             :with_tween_position(0, 0, 10, 20, 1):with_tween_position_easing('quad_in')\
+             :with_tween_position_loop('ping_pong'):with_tween_position_on_finished('pos_done')\
+             :with_tween_screen_position(1, 2, 3, 4, 2)\
+             :with_tween_rotation(0, 90, 3):with_tween_rotation_backwards()\
+             :with_tween_scale(1, 1, 2, 2, 4):with_tween_scale_on_finished('scale_done')\
+             :build()",
+        );
+
+        let pos = world.get::<Tween<MapPosition>>(e).unwrap();
+        assert_eq!((pos.from.pos, pos.to.pos), (Vec2::ZERO, Vec2::new(10.0, 20.0)));
+        assert_eq!(pos.duration, 1.0);
+        assert!(matches!(pos.easing, Easing::QuadIn));
+        assert!(matches!(pos.loop_mode, LoopMode::PingPong));
+        let screen = world.get::<Tween<ScreenPosition>>(e).unwrap();
+        assert_eq!((screen.from.pos, screen.to.pos), (Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0)));
+        let rot = world.get::<Tween<Rotation>>(e).unwrap();
+        assert_eq!((rot.from.degrees, rot.to.degrees, rot.duration), (0.0, 90.0, 3.0));
+        assert!(!rot.forward, "backwards tween starts reversed");
+        let scale = world.get::<Tween<Scale>>(e).unwrap();
+        assert_eq!(scale.to.scale, Vec2::new(2.0, 2.0));
+
+        assert_eq!(&*world.get::<LuaOnTweenFinished<MapPosition>>(e).unwrap().callback, "pos_done");
+        assert_eq!(&*world.get::<LuaOnTweenFinished<Scale>>(e).unwrap().callback, "scale_done");
+        assert!(world.get::<LuaOnTweenFinished<ScreenPosition>>(e).is_none());
+        assert!(world.get::<LuaOnTweenFinished<Rotation>>(e).is_none());
     }
 }
