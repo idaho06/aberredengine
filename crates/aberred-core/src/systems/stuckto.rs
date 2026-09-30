@@ -139,4 +139,41 @@ mod tests {
         assert!(approx_eq(pos.pos.x, 50.0)); // Unchanged
         assert!(approx_eq(pos.pos.y, 50.0));
     }
+
+    /// Hierarchy takes precedence: a `ChildOf` entity is positioned by
+    /// `propagate_transforms`, so `StuckTo` must leave it alone.
+    #[test]
+    fn stuckto_skips_entities_with_childof() {
+        let mut world = World::new();
+
+        // Target entity
+        let target = world.spawn((MapPosition::new(200.0, 200.0),)).id();
+
+        // Follower that has both StuckTo AND ChildOf — should be skipped by StuckTo system
+        let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
+
+        let follower = world
+            .spawn((
+                MapPosition::new(10.0, 10.0),
+                StuckTo::new(target),
+                ChildOf(parent),
+            ))
+            .id();
+
+        world.flush();
+        tick_stuckto(&mut world);
+
+        // Position should NOT have been updated to target's position
+        let pos = world.get::<MapPosition>(follower).unwrap();
+        assert!(
+            approx_eq(pos.pos.x, 10.0),
+            "Follower with ChildOf should not be moved by StuckTo, got x={}",
+            pos.pos.x
+        );
+        assert!(
+            approx_eq(pos.pos.y, 10.0),
+            "Follower with ChildOf should not be moved by StuckTo, got y={}",
+            pos.pos.y
+        );
+    }
 }
