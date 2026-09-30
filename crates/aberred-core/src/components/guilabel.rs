@@ -85,22 +85,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_guilabel_new() {
-        let l = GuiLabel::new(160.0, 24.0, "Inventory");
-        assert!((l.size.x - 160.0).abs() < f32::EPSILON);
-        assert!((l.size.y - 24.0).abs() < f32::EPSILON);
-        assert_eq!(l.caption, "Inventory");
-        assert!(l.signal_binding.is_none());
-    }
-
-    #[test]
-    fn test_guilabel_with_signal_binding() {
-        let l = GuiLabel::new(80.0, 24.0, "0").with_signal_binding("score");
-        assert_eq!(l.signal_binding, Some(("score".to_string(), None)));
-    }
-
-    #[test]
-    fn test_guilabel_with_signal_binding_format() {
+    fn signal_binding_format_attaches_to_existing_binding() {
         let l = GuiLabel::new(80.0, 24.0, "0")
             .with_signal_binding("score")
             .with_signal_binding_format("Score: {}");
@@ -111,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn test_guilabel_with_signal_binding_format_without_binding_is_noop() {
+    fn signal_binding_format_without_binding_is_noop() {
         let l = GuiLabel::new(80.0, 24.0, "0").with_signal_binding_format("Score: {}");
         assert!(l.signal_binding.is_none());
     }

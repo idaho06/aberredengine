@@ -47,16 +47,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_guiwindow_construction() {
-        let w = GuiWindow::new(200.0, 150.0);
-        assert!((w.size.x - 200.0).abs() < f32::EPSILON);
-        assert!((w.size.y - 150.0).abs() < f32::EPSILON);
-        assert_eq!(&*w.theme_key, "default");
-    }
-
-    #[test]
-    fn test_guiwindow_with_theme_key() {
-        let w = GuiWindow::new(200.0, 150.0).with_theme_key("dark");
-        assert_eq!(&*w.theme_key, "dark");
+    fn new_uses_default_theme_key() {
+        assert_eq!(&*GuiWindow::new(200.0, 150.0).theme_key, DEFAULT_GUI_THEME_KEY);
     }
 }

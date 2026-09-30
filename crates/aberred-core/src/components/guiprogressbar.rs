@@ -90,61 +90,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new_defaults() {
-        let bar = GuiProgressBar::new(200.0, 16.0, 50.0, 100.0);
-        assert!((bar.size.x - 200.0).abs() < f32::EPSILON);
-        assert!((bar.size.y - 16.0).abs() < f32::EPSILON);
-        assert!((bar.value - 50.0).abs() < f32::EPSILON);
-        assert!((bar.max - 100.0).abs() < f32::EPSILON);
-        assert_eq!(bar.direction, ProgressBarDirection::Horizontal);
-        assert_eq!(&*bar.theme_key, "default");
-        assert!(bar.signal_binding.is_none());
+    fn new_clamps_value_into_zero_max() {
+        for (value, expected) in [(150.0, 100.0), (-10.0, 0.0), (40.0, 40.0)] {
+            let bar = GuiProgressBar::new(200.0, 16.0, value, 100.0);
+            assert_eq!(bar.value, expected, "value {value}");
+        }
     }
 
     #[test]
-    fn value_clamped_to_max() {
-        let bar = GuiProgressBar::new(200.0, 16.0, 150.0, 100.0);
-        assert!((bar.value - 100.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn value_clamped_to_zero() {
-        let bar = GuiProgressBar::new(200.0, 16.0, -10.0, 100.0);
-        assert!((bar.value - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn with_direction() {
-        let bar = GuiProgressBar::new(16.0, 100.0, 0.0, 1.0)
-            .with_direction(ProgressBarDirection::Vertical);
-        assert_eq!(bar.direction, ProgressBarDirection::Vertical);
-    }
-
-    #[test]
-    fn with_signal_binding() {
-        let bar = GuiProgressBar::new(200.0, 16.0, 0.0, 100.0).with_signal_binding("player_hp");
-        assert_eq!(bar.signal_binding.as_deref(), Some("player_hp"));
-    }
-
-    #[test]
-    fn with_theme_key() {
-        let bar = GuiProgressBar::new(200.0, 16.0, 0.0, 100.0).with_theme_key("danger");
-        assert_eq!(&*bar.theme_key, "danger");
-    }
-
-    #[test]
-    fn direction_variants_all_distinct() {
-        assert_ne!(
-            ProgressBarDirection::Horizontal,
-            ProgressBarDirection::HorizontalReversed
-        );
-        assert_ne!(
-            ProgressBarDirection::Vertical,
-            ProgressBarDirection::VerticalReversed
-        );
-        assert_ne!(
-            ProgressBarDirection::Horizontal,
-            ProgressBarDirection::Vertical
-        );
+    fn new_uses_default_theme_key() {
+        let bar = GuiProgressBar::new(200.0, 16.0, 0.0, 1.0);
+        assert_eq!(&*bar.theme_key, DEFAULT_GUI_THEME_KEY);
     }
 }

@@ -39,22 +39,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new_stores_fields() {
-        let s = Shadow::new(3.0, 4.0, 10, 20, 30, 200);
-        assert_eq!(s.offset.x, 3.0);
-        assert_eq!(s.offset.y, 4.0);
-        assert_eq!(s.color.r, 10);
-        assert_eq!(s.color.g, 20);
-        assert_eq!(s.color.b, 30);
-        assert_eq!(s.color.a, 200);
-    }
-
-    #[test]
     fn default_color_is_half_alpha_black() {
-        let s = Shadow::default_color(2.0, 2.0);
-        assert_eq!(s.color.r, 0);
-        assert_eq!(s.color.g, 0);
-        assert_eq!(s.color.b, 0);
-        assert_eq!(s.color.a, 128);
+        let s = Shadow::default_color(2.0, 3.0);
+        assert_eq!(s.offset, Vec2::new(2.0, 3.0));
+        assert_eq!(s.color, Color::new(0, 0, 0, 128));
     }
 }

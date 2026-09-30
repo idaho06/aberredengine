@@ -54,58 +54,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new() {
-        let t = Tint::new(100, 150, 200, 255);
-        assert_eq!(t.color.r, 100);
-        assert_eq!(t.color.g, 150);
-        assert_eq!(t.color.b, 200);
-        assert_eq!(t.color.a, 255);
+    fn default_is_white() {
+        assert_eq!(Tint::default().color, Color::WHITE);
     }
 
     #[test]
-    fn test_default_is_white() {
-        let t = Tint::default();
-        assert_eq!(t.color.r, 255);
-        assert_eq!(t.color.g, 255);
-        assert_eq!(t.color.b, 255);
-        assert_eq!(t.color.a, 255);
-    }
-
-    #[test]
-    fn test_multiply_with_white_is_identity() {
-        let t = Tint::new(100, 150, 200, 255);
-        let result = t.multiply(Color::WHITE);
-        assert_eq!(result.r, 100);
-        assert_eq!(result.g, 150);
-        assert_eq!(result.b, 200);
-        assert_eq!(result.a, 255);
-    }
-
-    #[test]
-    fn test_multiply_with_black_zeroes_out() {
-        let t = Tint::new(100, 150, 200, 255);
-        let result = t.multiply(Color::new(0, 0, 0, 0));
-        assert_eq!(result.r, 0);
-        assert_eq!(result.g, 0);
-        assert_eq!(result.b, 0);
-        assert_eq!(result.a, 0);
-    }
-
-    #[test]
-    fn test_multiply_partial_values() {
-        let t = Tint::new(255, 255, 255, 255);
-        let result = t.multiply(Color::new(128, 64, 32, 255));
-        assert_eq!(result.r, 128);
-        assert_eq!(result.g, 64);
-        assert_eq!(result.b, 32);
-        assert_eq!(result.a, 255);
-    }
-
-    #[test]
-    fn test_copy_trait() {
-        let t = Tint::new(10, 20, 30, 40);
-        let t2 = t;
-        assert_eq!(t.color.r, 10);
-        assert_eq!(t2.color.r, 10);
+    fn multiply_is_componentwise_over_255() {
+        let cases = [
+            (Tint::new(100, 150, 200, 255), Color::WHITE, Color::new(100, 150, 200, 255)),
+            (Tint::new(100, 150, 200, 255), Color::new(0, 0, 0, 0), Color::new(0, 0, 0, 0)),
+            (Tint::default(), Color::new(128, 64, 32, 255), Color::new(128, 64, 32, 255)),
+            (Tint::new(128, 128, 128, 128), Color::new(128, 255, 0, 255), Color::new(64, 128, 0, 128)),
+        ];
+        for (tint, other, expected) in cases {
+            assert_eq!(tint.multiply(other), expected, "{tint:?} * {other:?}");
+        }
     }
 }

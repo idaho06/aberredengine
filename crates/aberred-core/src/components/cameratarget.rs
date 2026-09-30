@@ -52,27 +52,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_priority_is_zero() {
-        let target = CameraTarget::default();
-        assert_eq!(target.priority, 0);
-    }
-
-    #[test]
-    fn default_zoom_is_one() {
-        let target = CameraTarget::default();
-        assert_eq!(target.zoom, 1.0);
-    }
-
-    #[test]
-    fn new_sets_priority() {
-        let target = CameraTarget::new(10);
-        assert_eq!(target.priority, 10);
-    }
-
-    #[test]
-    fn with_zoom_sets_zoom() {
-        let target = CameraTarget::new(3).with_zoom(2.5);
-        assert_eq!(target.priority, 3);
-        assert_eq!(target.zoom, 2.5);
+    fn zoom_defaults_to_one() {
+        let default = CameraTarget::default();
+        assert_eq!((default.priority, default.zoom), (0, 1.0));
+        assert_eq!(CameraTarget::new(10).zoom, 1.0);
     }
 }

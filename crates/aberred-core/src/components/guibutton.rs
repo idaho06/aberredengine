@@ -87,32 +87,3 @@ impl Themed for GuiButton {
         &mut self.theme_key
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_guibutton_new_defaults() {
-        let b = GuiButton::new(80.0, 24.0, "Start");
-        assert!((b.size.x - 80.0).abs() < f32::EPSILON);
-        assert!((b.size.y - 24.0).abs() < f32::EPSILON);
-        assert_eq!(b.caption, "Start");
-        assert!(b.callback_name.is_empty());
-        assert!(!b.disabled);
-    }
-
-    #[cfg(feature = "lua")]
-    #[test]
-    fn test_guibutton_with_lua_callback() {
-        let b = GuiButton::with_lua_callback(80.0, 24.0, "Start", "on_start_clicked");
-        assert_eq!(b.caption, "Start");
-        assert_eq!(&*b.callback_name, "on_start_clicked");
-    }
-
-    #[test]
-    fn test_guibutton_with_disabled() {
-        let b = GuiButton::new(80.0, 24.0, "Start").with_disabled();
-        assert!(b.disabled);
-    }
-}

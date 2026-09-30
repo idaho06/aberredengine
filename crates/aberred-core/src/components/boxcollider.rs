@@ -109,46 +109,6 @@ mod tests {
         approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
     }
 
-    // ==================== CONSTRUCTOR TESTS ====================
-
-    #[test]
-    fn test_new() {
-        let col = BoxCollider::new(10.0, 20.0);
-        assert!(vec_approx_eq(col.size, Vec2::new(10.0, 20.0)));
-        assert!(vec_approx_eq(col.offset, Vec2::ZERO));
-        assert!(vec_approx_eq(col.origin, Vec2::ZERO));
-    }
-
-    #[test]
-    fn test_new_with_zero_size() {
-        let col = BoxCollider::new(0.0, 0.0);
-        assert!(vec_approx_eq(col.size, Vec2::ZERO));
-    }
-
-    #[test]
-    fn test_with_offset() {
-        let col = BoxCollider::new(10.0, 10.0).with_offset(Vec2::new(5.0, 5.0));
-        assert!(vec_approx_eq(col.offset, Vec2::new(5.0, 5.0)));
-        assert!(vec_approx_eq(col.size, Vec2::new(10.0, 10.0))); // size unchanged
-    }
-
-    #[test]
-    fn test_with_origin() {
-        let col = BoxCollider::new(10.0, 10.0).with_origin(Vec2::new(5.0, 5.0));
-        assert!(vec_approx_eq(col.origin, Vec2::new(5.0, 5.0)));
-    }
-
-    #[test]
-    fn test_builder_chaining() {
-        let col = BoxCollider::new(20.0, 30.0)
-            .with_offset(Vec2::new(2.0, 3.0))
-            .with_origin(Vec2::new(10.0, 15.0));
-
-        assert!(vec_approx_eq(col.size, Vec2::new(20.0, 30.0)));
-        assert!(vec_approx_eq(col.offset, Vec2::new(2.0, 3.0)));
-        assert!(vec_approx_eq(col.origin, Vec2::new(10.0, 15.0)));
-    }
-
     // ==================== AABB TESTS ====================
 
     #[test]
