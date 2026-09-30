@@ -506,6 +506,41 @@ mod tests {
         fn take_calls(&mut self) -> Vec<String> {
             std::mem::take(&mut self.store().backend.calls)
         }
+
+        /// `(id, looped, paused)` of every `MusicTrack`, sorted by id.
+        fn tracks(&mut self) -> Vec<(String, bool, bool)> {
+            let mut q = self.world.query::<&MusicTrack<u32>>();
+            let mut tracks: Vec<_> = q
+                .iter(&self.world)
+                .map(|t| (t.id.clone(), t.looped, t.paused))
+                .collect();
+            tracks.sort();
+            tracks
+        }
+
+        /// Run `cmds` for their side effects, discarding replies and calls.
+        fn setup(&mut self, cmds: impl IntoIterator<Item = AudioCmd>) {
+            self.tick(cmds);
+            self.take_calls();
+        }
+    }
+
+    fn load_music(id: &str) -> AudioCmd {
+        AudioCmd::LoadMusic {
+            id: id.into(),
+            path: format!("{id}.ogg"),
+        }
+    }
+
+    fn play_music(id: &str, looped: bool) -> AudioCmd {
+        AudioCmd::PlayMusic {
+            id: id.into(),
+            looped,
+        }
+    }
+
+    fn track(id: &str, looped: bool, paused: bool) -> (String, bool, bool) {
+        (id.into(), looped, paused)
     }
 
     #[test]
@@ -518,6 +553,187 @@ mod tests {
         assert_eq!(replies, [r#"MusicLoaded { id: "theme" }"#]);
         assert_eq!(h.take_calls(), ["load_music(theme.ogg) -> 1"]);
         assert_eq!(h.store().music.get("theme"), Some(&1));
+    }
+
+    #[test]
+    fn reloading_music_stops_and_unloads_the_old_stream_without_a_stopped_reply() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme"), play_music("theme", true)]);
+
+        let replies = h.tick([load_music("theme")]);
+
+        assert_eq!(replies, [r#"MusicLoaded { id: "theme" }"#]);
+        assert_eq!(
+            h.take_calls(),
+            ["load_music(theme.ogg) -> 2", "stop_music(1)", "unload_music(1)"]
+        );
+        assert_eq!(h.tracks(), [], "the old stream's track is gone");
+        assert_eq!(h.store().music.get("theme"), Some(&2));
+    }
+
+    #[test]
+    fn music_load_failures_reply_load_failed_and_store_nothing() {
+        let mut h = Harness::new();
+        h.store().backend.fail_paths.insert("bad.ogg".into());
+
+        let replies = h.tick([
+            AudioCmd::LoadMusic {
+                id: "nul".into(),
+                path: "a\0b.ogg".into(),
+            },
+            AudioCmd::LoadMusic {
+                id: "bad".into(),
+                path: "bad.ogg".into(),
+            },
+        ]);
+
+        assert_eq!(replies.len(), 2);
+        assert!(
+            replies[0].starts_with(r#"MusicLoadFailed { id: "nul", error: "invalid path: "#),
+            "{}",
+            replies[0]
+        );
+        assert_eq!(
+            replies[1],
+            r#"MusicLoadFailed { id: "bad", error: "failed to load" }"#
+        );
+        assert_eq!(h.take_calls(), ["load_music(bad.ogg) -> None"], "no FFI for a NUL path");
+        assert!(h.store().music.is_empty());
+    }
+
+    #[test]
+    fn play_music_rewinds_starts_and_replaces_the_track() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme")]);
+
+        let replies = h.tick([play_music("theme", true)]);
+        assert_eq!(replies, [r#"MusicPlayStarted { id: "theme" }"#]);
+        assert_eq!(
+            h.take_calls(),
+            ["seek_music(1, 0)", "play_music(1)", "update_music(1)"],
+            "rewind, start, then pumped in the same tick"
+        );
+        assert_eq!(h.tracks(), [track("theme", true, false)]);
+
+        h.tick([play_music("theme", false)]);
+        assert_eq!(h.tracks(), [track("theme", false, false)], "one track per id");
+    }
+
+    #[test]
+    fn by_id_music_commands_on_an_unknown_id_are_silent_no_ops() {
+        let mut h = Harness::new();
+        let replies = h.tick([
+            play_music("ghost", false),
+            AudioCmd::StopMusic { id: "ghost".into() },
+            AudioCmd::PauseMusic { id: "ghost".into() },
+            AudioCmd::ResumeMusic { id: "ghost".into() },
+            AudioCmd::VolumeMusic {
+                id: "ghost".into(),
+                vol: 0.5,
+            },
+            AudioCmd::UnloadMusic { id: "ghost".into() },
+        ]);
+        assert_eq!(replies, Vec::<String>::new());
+        assert_eq!(h.take_calls(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn stop_music_replies_stopped_even_when_the_stream_was_not_playing() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme")]);
+
+        let replies = h.tick([AudioCmd::StopMusic { id: "theme".into() }]);
+
+        assert_eq!(replies, [r#"MusicStopped { id: "theme" }"#]);
+        assert_eq!(h.take_calls(), ["stop_music(1)"]);
+    }
+
+    #[test]
+    fn stop_all_music_stops_only_playing_tracks_and_keeps_them_loaded() {
+        let mut h = Harness::new();
+        h.setup([load_music("a"), load_music("b"), play_music("a", false)]);
+
+        let replies = h.tick([AudioCmd::StopAllMusic]);
+
+        assert_eq!(replies, [r#"MusicStopped { id: "a" }"#]);
+        assert_eq!(h.take_calls(), ["stop_music(1)"]);
+        assert_eq!(h.tracks(), []);
+        assert_eq!(h.store().music.len(), 2);
+    }
+
+    #[test]
+    fn pause_and_resume_toggle_the_track_and_its_pumping() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme"), play_music("theme", false)]);
+
+        let replies = h.tick([AudioCmd::PauseMusic { id: "theme".into() }]);
+        // Pinned as-is: pause reuses the stop reply.
+        assert_eq!(replies, [r#"MusicStopped { id: "theme" }"#]);
+        assert_eq!(h.take_calls(), ["pause_music(1)"], "a paused track is not pumped");
+        assert_eq!(h.tracks(), [track("theme", false, true)]);
+
+        let replies = h.tick([AudioCmd::ResumeMusic { id: "theme".into() }]);
+        assert_eq!(replies, [r#"MusicPlayStarted { id: "theme" }"#]);
+        assert_eq!(h.take_calls(), ["resume_music(1)", "update_music(1)"]);
+        assert_eq!(h.tracks(), [track("theme", false, false)]);
+    }
+
+    #[test]
+    fn resume_on_a_never_played_stream_replies_started_but_creates_no_track() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme")]);
+
+        let replies = h.tick([AudioCmd::ResumeMusic { id: "theme".into() }]);
+
+        // Pinned as-is: the reply claims playback, but with no MusicTrack
+        // nothing ever pumps the stream.
+        assert_eq!(replies, [r#"MusicPlayStarted { id: "theme" }"#]);
+        assert_eq!(h.take_calls(), ["resume_music(1)"]);
+        assert_eq!(h.tracks(), []);
+    }
+
+    #[test]
+    fn volume_music_sets_the_volume_and_echoes_it() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme")]);
+
+        let replies = h.tick([AudioCmd::VolumeMusic {
+            id: "theme".into(),
+            vol: 0.5,
+        }]);
+
+        assert_eq!(replies, [r#"MusicVolumeChanged { id: "theme", vol: 0.5 }"#]);
+        assert_eq!(h.take_calls(), ["set_music_volume(1, 0.5)"]);
+    }
+
+    #[test]
+    fn unload_music_unloads_without_stopping_and_drops_the_track() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme"), play_music("theme", false)]);
+
+        let replies = h.tick([AudioCmd::UnloadMusic { id: "theme".into() }]);
+
+        assert_eq!(replies, [r#"MusicUnloaded { id: "theme" }"#]);
+        // Pinned as-is: no stop_music before the unload.
+        assert_eq!(h.take_calls(), ["unload_music(1)"]);
+        assert_eq!(h.tracks(), []);
+        assert!(h.store().music.is_empty());
+    }
+
+    #[test]
+    fn unload_all_music_unloads_every_stream_and_always_replies() {
+        let mut h = Harness::new();
+        assert_eq!(h.tick([AudioCmd::UnloadAllMusic]), ["MusicUnloadedAll"]);
+
+        h.setup([load_music("a"), load_music("b"), play_music("a", true)]);
+        let replies = h.tick([AudioCmd::UnloadAllMusic]);
+
+        assert_eq!(replies, ["MusicUnloadedAll"]);
+        let mut calls = h.take_calls();
+        calls.sort();
+        assert_eq!(calls, ["unload_music(1)", "unload_music(2)"], "no stops");
+        assert_eq!(h.tracks(), []);
+        assert!(h.store().music.is_empty());
     }
 
     #[test]
