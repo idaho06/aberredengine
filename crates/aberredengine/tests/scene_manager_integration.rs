@@ -28,7 +28,7 @@ use aberredengine::core::components::persistent::Persistent;
 use aberredengine::core::protocol::audio::AudioCmd;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 
-use aberredengine::core::testing::insert_game_ctx_resources;
+use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
 
 mod common;
 
@@ -236,7 +236,7 @@ fn on_update_called_with_dt() {
         let log = v.borrow();
         assert_eq!(log.len(), 1);
         assert_eq!(log[0].0, "menu");
-        assert!((log[0].1 - 0.016).abs() < f32::EPSILON);
+        assert!(approx_eq(log[0].1, 0.016));
     });
 }
 

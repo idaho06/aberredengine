@@ -20,9 +20,6 @@ use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
-/// Absolute tolerance for [`approx_eq_eps`].
-pub const EPSILON: f32 = 1e-6;
-
 /// Allowed error, in float steps (`f32::EPSILON` scaled to the compared
 /// values' magnitude), for [`approx_eq`] and [`vec2_approx_eq`]. The worst
 /// error measured across the test suite (2026-09-30) is 7.3 steps.
@@ -40,19 +37,9 @@ pub fn approx_eq(a: f32, b: f32) -> bool {
     (a - b).abs() <= ULPS * f32::EPSILON * scale
 }
 
-/// `|a - b| < eps` (strict).
-pub fn approx_eq_eps(a: f32, b: f32, eps: f32) -> bool {
-    (a - b).abs() < eps
-}
-
 /// [`approx_eq`] on both axes.
 pub fn vec2_approx_eq(a: Vec2, b: Vec2) -> bool {
     approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
-}
-
-/// Both axes within `eps` (strict, unlike glam's `abs_diff_eq`).
-pub fn vec2_approx_eq_eps(a: Vec2, b: Vec2, eps: f32) -> bool {
-    approx_eq_eps(a.x, b.x, eps) && approx_eq_eps(a.y, b.y, eps)
 }
 
 /// Insert the resources a `GameCtx` system param reads, with default values
@@ -75,15 +62,6 @@ mod tests {
     use super::*;
     use crate::systems::game_ctx::GameCtx;
     use bevy_ecs::system::RunSystemOnce;
-
-    #[test]
-    fn approx_eq_eps_is_strict() {
-        assert!(approx_eq_eps(0.0, 0.49, 0.5));
-        assert!(approx_eq_eps(0.49, 0.0, 0.5));
-        assert!(!approx_eq_eps(0.0, 0.5, 0.5));
-        assert!(vec2_approx_eq_eps(Vec2::ZERO, Vec2::new(0.49, -0.49), 0.5));
-        assert!(!vec2_approx_eq_eps(Vec2::ZERO, Vec2::new(0.0, 0.5), 0.5));
-    }
 
     #[test]
     fn approx_eq_tolerance_scales_with_magnitude() {
