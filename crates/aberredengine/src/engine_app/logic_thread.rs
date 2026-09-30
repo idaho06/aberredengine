@@ -624,6 +624,7 @@ mod tests {
 
     use aberred_core::components::mapposition::MapPosition;
     use aberred_core::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader};
+    use aberred_core::protocol::raw_input::{ImguiCaptureState, RawDeviceSnapshot};
     use aberred_core::resources::signal_intents::SignalIntent;
     use aberred_core::resources::sim_rng::SimRng;
     use aberred_core::resources::worldsignals::WorldSignals;
@@ -885,6 +886,114 @@ mod tests {
         );
         let replay = world.resource::<ReplayRuntimeState>();
         assert!(!replay.paused && !replay.fast_forward);
+    }
+
+    fn sample_with_window_w(window_w: i32) -> RawDeviceSnapshot {
+        RawDeviceSnapshot {
+            window_w,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn collect_replaces_stale_tick_input_with_this_ticks_facts() {
+        let (tx_input, rx_input) = crossbeam_channel::unbounded::<InputSample>();
+        let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
+        let newest_capture = ImguiCaptureState {
+            mouse: false,
+            keyboard: true,
+        };
+        for (w, capture) in [
+            (1, ImguiCaptureState { mouse: true, keyboard: false }),
+            (2, ImguiCaptureState::default()),
+            (3, newest_capture),
+        ] {
+            tx_input
+                .send(InputSample {
+                    raw: sample_with_window_w(w),
+                    capture,
+                })
+                .unwrap();
+        }
+        tx_logic.send(LogicMsg::ScreenSize { w: 320, h: 240 }).unwrap();
+        tx_logic
+            .send(LogicMsg::SignalIntents(vec![SignalIntent::SetFlag("new".into())]))
+            .unwrap();
+        tx_logic
+            .send(LogicMsg::TextureLoaded {
+                key: "late".into(),
+                width: 1,
+                height: 1,
+            })
+            .unwrap();
+
+        let mut world = world_with_state(GameStates::Playing);
+        world.insert_resource(WorldTime {
+            frame_count: 7,
+            ..Default::default()
+        });
+        let mut tick_input = TickInput {
+            tick: 99,
+            samples: vec![sample_with_window_w(-1)],
+            capture: Some(ImguiCaptureState::default()),
+            intents: vec![SignalIntent::SetFlag("stale".into())],
+            screen_size: Some((1, 1)),
+        };
+
+        collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world, true);
+
+        assert_eq!(tick_input.tick, 7);
+        let widths: Vec<i32> = tick_input.samples.iter().map(|s| s.window_w).collect();
+        assert_eq!(widths, [1, 2, 3], "samples in arrival order, stale ones gone");
+        assert_eq!(tick_input.capture, Some(newest_capture));
+        assert_eq!(tick_input.intents, [SignalIntent::SetFlag("new".into())]);
+        assert_eq!(tick_input.screen_size, Some((320, 240)));
+        assert!(
+            world.resource::<DeterminismTaint>().is_tainted(),
+            "the deterministic flag reaches the texture preload guard"
+        );
+    }
+
+    #[test]
+    fn apply_tick_input_sets_mirrors_and_appends_intents() {
+        let mut tw = crate::test_support::TestWorld::new();
+        let world = &mut tw.world;
+        world.resource_mut::<SignalIntents>().0 = vec![SignalIntent::SetFlag("queued".into())];
+        let capture = ImguiCaptureState {
+            mouse: true,
+            keyboard: true,
+        };
+
+        apply_tick_input(
+            world,
+            &TickInput {
+                tick: 0,
+                samples: vec![sample_with_window_w(100), sample_with_window_w(200)],
+                capture: Some(capture),
+                intents: vec![SignalIntent::SetFlag("tick".into())],
+                screen_size: Some((640, 360)),
+            },
+        );
+
+        let check = |world: &World| {
+            let screen = world.resource::<ScreenSize>();
+            assert_eq!((screen.w, screen.h), (640, 360));
+            assert_eq!(world.resource::<WindowSize>().w, 200, "newest sample wins");
+            assert_eq!(world.resource::<ImguiCaptureMirror>().0, capture);
+        };
+        check(world);
+        assert_eq!(
+            world.resource::<SignalIntents>().0,
+            [
+                SignalIntent::SetFlag("queued".into()),
+                SignalIntent::SetFlag("tick".into())
+            ]
+        );
+
+        // An empty tick changes none of the mirrors and queues nothing.
+        apply_tick_input(world, &TickInput::default());
+        check(world);
+        assert_eq!(world.resource::<SignalIntents>().0.len(), 2);
     }
 
     #[test]
