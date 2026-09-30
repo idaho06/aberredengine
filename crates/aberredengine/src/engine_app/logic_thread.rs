@@ -777,6 +777,116 @@ mod tests {
         assert!(world.resource::<FontMetricsStore>().0.contains_key("late"));
     }
 
+    /// World with every resource the world-applied `LogicMsg` arms touch.
+    fn drain_world() -> World {
+        let mut world = World::new();
+        world.init_resource::<FontMetricsStore>();
+        world.init_resource::<TextureDimsStore>();
+        world.init_resource::<DebugOverlayConfig>();
+        world.init_resource::<ReplayRuntimeState>();
+        world.init_resource::<GameState>();
+        world
+    }
+
+    fn drain_msgs(world: &mut World, msgs: Vec<LogicMsg>) -> DrainOutcome {
+        let (tx, rx) = crossbeam_channel::unbounded::<LogicMsg>();
+        for msg in msgs {
+            tx.send(msg).unwrap();
+        }
+        drain_logic_messages(None, &rx, world, false)
+    }
+
+    /// Asset bookkeeping, overlay config and replay control apply to the
+    /// world even with `out = None` (replay playback / paused), and a message
+    /// behind `Shutdown` in the same batch is still applied.
+    #[test]
+    fn world_applied_messages_land_without_a_tick_input() {
+        let mut world = drain_world();
+        {
+            let mut fonts = world.resource_mut::<FontMetricsStore>();
+            fonts.0.insert("old_f".into(), Default::default());
+            fonts.0.insert("gone_f".into(), Default::default());
+        }
+        {
+            let mut dims = world.resource_mut::<TextureDimsStore>();
+            dims.insert("old_t", 1, 2);
+            dims.insert("gone_t", 3, 4);
+        }
+        let overlay = DebugOverlayConfig {
+            show_collider_boxes: false,
+            ..Default::default()
+        };
+
+        let outcome = drain_msgs(
+            &mut world,
+            vec![
+                LogicMsg::FontLoaded {
+                    key: "new_f".into(),
+                    metrics: Default::default(),
+                },
+                LogicMsg::FontRemoved { key: "gone_f".into() },
+                LogicMsg::FontRenamed {
+                    old_key: "old_f".into(),
+                    new_key: "ren_f".into(),
+                },
+                LogicMsg::TextureLoaded {
+                    key: "new_t".into(),
+                    width: 5,
+                    height: 6,
+                },
+                LogicMsg::TextureRemoved { key: "gone_t".into() },
+                LogicMsg::TextureRenamed {
+                    old_key: "old_t".into(),
+                    new_key: "ren_t".into(),
+                },
+                LogicMsg::OverlayConfig(overlay.clone()),
+                LogicMsg::ReplayControl(ReplayControl::Pause),
+                LogicMsg::ReplayControl(ReplayControl::FastForward(true)),
+                LogicMsg::Shutdown,
+                LogicMsg::FontLoaded {
+                    key: "after_shutdown".into(),
+                    metrics: Default::default(),
+                },
+            ],
+        );
+
+        assert!(outcome.shutdown);
+        let mut fonts: Vec<&str> = world
+            .resource::<FontMetricsStore>()
+            .0
+            .keys()
+            .map(String::as_str)
+            .collect();
+        fonts.sort_unstable();
+        assert_eq!(fonts, ["after_shutdown", "new_f", "ren_f"]);
+        let dims = world.resource::<TextureDimsStore>();
+        assert_eq!(dims.get("new_t"), Some((5, 6)));
+        assert_eq!(dims.get("ren_t"), Some((1, 2)));
+        assert_eq!(dims.get("old_t"), None);
+        assert_eq!(dims.get("gone_t"), None);
+        assert_eq!(*world.resource::<DebugOverlayConfig>(), overlay);
+        let replay = world.resource::<ReplayRuntimeState>();
+        assert!(replay.paused && replay.fast_forward);
+    }
+
+    #[test]
+    fn replay_play_and_fast_forward_off_undo_pause_and_fast_forward() {
+        let mut world = drain_world();
+        *world.resource_mut::<ReplayRuntimeState>() = ReplayRuntimeState {
+            paused: true,
+            fast_forward: true,
+        };
+        drain_msgs(
+            &mut world,
+            vec![
+                LogicMsg::ReplayControl(ReplayControl::Play),
+                LogicMsg::ReplayControl(ReplayControl::FastForward(false)),
+            ],
+        );
+        let replay = world.resource::<ReplayRuntimeState>();
+        assert!(!replay.paused && !replay.fast_forward);
+    }
+
     #[test]
     fn finalize_recorder_hashes_live_world_in_end_entry() {
         let file = NamedTempFile::new().unwrap();
