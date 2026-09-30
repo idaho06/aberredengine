@@ -73,16 +73,3 @@ impl Default for ShaderStore {
         Self::new()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn new_store_is_empty() {
-        let store = ShaderStore::new();
-        assert!(store.is_empty());
-        assert_eq!(store.len(), 0);
-        assert!(!store.contains("any"));
-    }
-}

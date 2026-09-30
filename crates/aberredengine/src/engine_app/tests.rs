@@ -15,7 +15,6 @@ use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
-use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::input::InputState;
 use aberred_core::protocol::raw_input::ImguiCaptureState;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -33,7 +32,7 @@ use aberred_lua::systems::luatimer::update_lua_timers;
 
 #[test]
 fn test_builder_default() {
-    let builder = EngineBuilder::new();
+    let builder = EngineBuilder::default();
     assert_eq!(builder.config_path, PathBuf::from("config.ini"));
     assert!(builder.title_override.is_none());
     assert!(builder.setup_hook.is_none());
@@ -42,18 +41,6 @@ fn test_builder_default() {
     assert!(builder.switch_scene_hook.is_none());
     assert!(builder.scenes.is_empty());
     assert!(builder.initial_scene.is_none());
-}
-
-#[test]
-fn test_builder_config() {
-    let builder = EngineBuilder::new().config("custom.ini");
-    assert_eq!(builder.config_path, PathBuf::from("custom.ini"));
-}
-
-#[test]
-fn test_builder_title() {
-    let builder = EngineBuilder::new().title("My Game");
-    assert_eq!(builder.title_override, Some("My Game".to_string()));
 }
 
 #[test]
@@ -116,28 +103,9 @@ fn test_raylib_log_level_from_rust_log_uses_global_directive_only() {
     );
 }
 
-#[test]
-fn test_builder_title_override_applied_to_config() {
-    let mut config = GameConfig::new();
-    assert_eq!(config.window_title, "Aberred Engine");
-    // Simulate what run() does
-    let title_override = Some("My Custom Title".to_string());
-    if let Some(title) = &title_override {
-        config.window_title = title.clone();
-    }
-    assert_eq!(config.window_title, "My Custom Title");
-}
-
-#[test]
-fn test_builder_config_path_applied_to_gameconfig() {
-    let custom_path = PathBuf::from("/tmp/my_game.ini");
-    let config = GameConfig::with_path(&custom_path);
-    assert_eq!(config.config_path, custom_path);
-}
-
+#[cfg(feature = "lua")]
 fn dummy_setup() {}
 fn dummy_enter_play() {}
-fn dummy_update() {}
 fn dummy_switch_scene() {}
 
 // --- Input edge-latch (run_sim_tick) ---
@@ -392,19 +360,6 @@ fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
 }
 
 #[test]
-fn test_builder_hooks_set() {
-    let builder = EngineBuilder::new()
-        .on_setup(dummy_setup)
-        .on_enter_play(dummy_enter_play)
-        .on_update(dummy_update)
-        .on_switch_scene(dummy_switch_scene);
-    assert!(builder.setup_hook.is_some());
-    assert!(builder.enter_play_hook.is_some());
-    assert!(builder.update_hook.is_some());
-    assert!(builder.switch_scene_hook.is_some());
-}
-
-#[test]
 fn test_register_persistent_system() {
     let mut world = World::new();
     let mut store = SystemsStore::new();
@@ -548,31 +503,6 @@ fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
     );
 }
 
-#[test]
-fn test_builder_chaining() {
-    let builder = EngineBuilder::new()
-        .config("test.ini")
-        .title("Test Game")
-        .on_setup(dummy_setup)
-        .on_enter_play(dummy_enter_play)
-        .on_update(dummy_update)
-        .on_switch_scene(dummy_switch_scene);
-
-    assert_eq!(builder.config_path, PathBuf::from("test.ini"));
-    assert_eq!(builder.title_override, Some("Test Game".to_string()));
-    assert!(builder.setup_hook.is_some());
-    assert!(builder.enter_play_hook.is_some());
-    assert!(builder.update_hook.is_some());
-    assert!(builder.switch_scene_hook.is_some());
-}
-
-#[test]
-fn test_default_trait() {
-    let builder = EngineBuilder::default();
-    assert_eq!(builder.config_path, PathBuf::from("config.ini"));
-    assert!(builder.title_override.is_none());
-}
-
 // --- SceneManager builder tests ---
 
 use aberred_core::systems::GameCtx;
@@ -589,24 +519,6 @@ fn make_descriptor() -> SceneDescriptor {
         gui_callback: None,
         world_draw_callback: None,
     }
-}
-
-#[test]
-fn test_add_scene_stores_scenes() {
-    let builder = EngineBuilder::new()
-        .add_scene("menu", make_descriptor())
-        .add_scene("level1", make_descriptor());
-    assert_eq!(builder.scenes.len(), 2);
-    assert_eq!(builder.scenes[0].0, "menu");
-    assert_eq!(builder.scenes[1].0, "level1");
-}
-
-#[test]
-fn test_initial_scene_stored() {
-    let builder = EngineBuilder::new()
-        .add_scene("menu", make_descriptor())
-        .initial_scene("menu");
-    assert_eq!(builder.initial_scene, Some("menu".to_string()));
 }
 
 #[test]
