@@ -356,6 +356,40 @@ fn entity_ord_agrees_with_to_bits() {
     assert_eq!(by_ord, by_bits);
 }
 
+// `ChildOf` is used for lifecycle only in GUI widgets (`gui_layout.rs`,
+// `guioffset.rs`): despawning a parent must cascade-despawn its whole subtree.
+#[test]
+fn cascade_despawn_removes_children() {
+    let mut world = World::new();
+
+    let parent = world.spawn_empty().id();
+    let child = world.spawn(ChildOf(parent)).id();
+    let grandchild = world.spawn(ChildOf(child)).id();
+
+    world.flush();
+
+    // All three should exist
+    assert!(world.get_entity(parent).is_ok());
+    assert!(world.get_entity(child).is_ok());
+    assert!(world.get_entity(grandchild).is_ok());
+
+    // Despawning the parent cascades to child and grandchild.
+    world.despawn(parent);
+
+    assert!(
+        world.get_entity(parent).is_err(),
+        "Parent should be despawned"
+    );
+    assert!(
+        world.get_entity(child).is_err(),
+        "Child should be cascade-despawned"
+    );
+    assert!(
+        world.get_entity(grandchild).is_err(),
+        "Grandchild should be cascade-despawned"
+    );
+}
+
 // =============================================================================
 // Scene cleanup (`clean_all_entities` / `CleanableEntity`)
 // =============================================================================

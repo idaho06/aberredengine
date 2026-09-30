@@ -623,4 +623,136 @@ mod tests {
             child_gt.position.x
         );
     }
+
+    // --- cleanup_orphaned_global_transforms ---
+
+    #[test]
+    fn cleanup_removes_gt_from_entity_with_no_children_and_no_childof() {
+        let mut world = World::new();
+
+        // Entity with a GlobalTransform2D but no hierarchy relationship
+        let entity = world
+            .spawn((
+                MapPosition::new(10.0, 20.0),
+                GlobalTransform2D {
+                    position: Vec2 { x: 999.0, y: 999.0 },
+                    rotation_degrees: 0.0,
+                    scale: Vec2 { x: 1.0, y: 1.0 },
+                },
+            ))
+            .id();
+
+        // Run cleanup only (no hierarchy, so propagate_transforms does nothing)
+        world
+            .run_system_once(cleanup_orphaned_global_transforms)
+            .expect("cleanup_orphaned_global_transforms should run");
+
+        assert!(
+            world.get::<GlobalTransform2D>(entity).is_none(),
+            "GT should be removed from standalone entity with no Children and no ChildOf"
+        );
+    }
+
+    #[test]
+    fn cleanup_preserves_gt_on_current_hierarchy_root() {
+        let mut world = World::new();
+
+        // Parent with a child — has Children, so cleanup must leave its GT alone
+        let parent = world
+            .spawn((MapPosition::new(50.0, 0.0), GlobalTransform2D::default()))
+            .id();
+        world.spawn((MapPosition::new(0.0, 0.0), ChildOf(parent)));
+        world.flush(); // Bevy populates Children on parent
+
+        assert!(
+            world.get::<Children>(parent).is_some(),
+            "Parent should have Children after flush"
+        );
+
+        world
+            .run_system_once(cleanup_orphaned_global_transforms)
+            .expect("cleanup_orphaned_global_transforms should run");
+
+        assert!(
+            world.get::<GlobalTransform2D>(parent).is_some(),
+            "GT should be preserved on entity that still has Children"
+        );
+    }
+
+    #[test]
+    fn cleanup_preserves_gt_on_child_entity() {
+        let mut world = World::new();
+
+        // Child entity: has both ChildOf and GT — cleanup must not touch it
+        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let child = world
+            .spawn((
+                MapPosition::new(10.0, 0.0),
+                ChildOf(parent),
+                GlobalTransform2D::default(),
+            ))
+            .id();
+        world.flush();
+
+        world
+            .run_system_once(cleanup_orphaned_global_transforms)
+            .expect("cleanup_orphaned_global_transforms should run");
+
+        assert!(
+            world.get::<GlobalTransform2D>(child).is_some(),
+            "GT should be preserved on child entity (has ChildOf)"
+        );
+    }
+
+    #[test]
+    fn cleanup_does_not_affect_entity_without_gt() {
+        let mut world = World::new();
+
+        // Standalone entity with no GT — cleanup should leave it untouched
+        let entity = world.spawn(MapPosition::new(5.0, 5.0)).id();
+
+        world
+            .run_system_once(cleanup_orphaned_global_transforms)
+            .expect("cleanup_orphaned_global_transforms should run");
+
+        // MapPosition should still be there, and no GT should have appeared
+        assert!(world.get::<GlobalTransform2D>(entity).is_none());
+        let pos = world.get::<MapPosition>(entity).unwrap();
+        assert!(approx_eq(pos.pos.x, 5.0));
+    }
+
+    #[test]
+    fn cleanup_removes_all_orphaned_gt_entities() {
+        let mut world = World::new();
+
+        // Spawn three standalone entities each with a stale GT
+        let entities: Vec<Entity> = (0..3)
+            .map(|i| {
+                world
+                    .spawn((
+                        MapPosition::new(i as f32 * 10.0, 0.0),
+                        GlobalTransform2D {
+                            position: Vec2 {
+                                x: 999.0 + i as f32,
+                                y: 999.0,
+                            },
+                            rotation_degrees: 0.0,
+                            scale: Vec2 { x: 1.0, y: 1.0 },
+                        },
+                    ))
+                    .id()
+            })
+            .collect();
+
+        world
+            .run_system_once(cleanup_orphaned_global_transforms)
+            .expect("cleanup_orphaned_global_transforms should run");
+
+        for entity in &entities {
+            assert!(
+                world.get::<GlobalTransform2D>(*entity).is_none(),
+                "GT should be removed from all orphaned entities"
+            );
+        }
+    }
 }
