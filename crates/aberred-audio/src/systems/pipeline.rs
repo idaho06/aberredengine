@@ -12,7 +12,7 @@ use std::ffi::CString;
 
 use bevy_ecs::prelude::{Component, Entity, World};
 use bevy_ecs::world::Mut;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use crate::components::music_track::MusicTrack;
 use crate::components::playing_fx::PlayingFx;
@@ -261,6 +261,13 @@ fn handle_cmd<B: AudioBackend>(world: &mut World, cmd: AudioCmd) {
         }
         AudioCmd::ResumeMusic { id } => {
             if let Some(music) = music_handle::<B>(world, &id) {
+                // Only a playing/paused stream has a MusicTrack for
+                // `pump_music` to update; resuming one that was never played
+                // (or was stopped) would start a stream nothing pumps.
+                if find_music_track::<B>(world, &id).is_none() {
+                    warn!(target: "audio", "resume ignored id='{}' reason='not playing or paused'", id);
+                    return;
+                }
                 debug!(target: "audio", "resume id='{}'", id);
                 store::<B>(world).backend.resume_music(music);
                 set_music_track_paused::<B>(world, &id, false);
@@ -690,16 +697,30 @@ mod tests {
     }
 
     #[test]
-    fn resume_on_a_never_played_stream_replies_started_but_creates_no_track() {
+    fn resume_without_a_track_is_ignored() {
         let mut h = Harness::new();
-        h.setup([load_music("theme")]);
+        h.setup([
+            load_music("never_played"),
+            load_music("stopped"),
+            play_music("stopped", false),
+            AudioCmd::StopMusic {
+                id: "stopped".into(),
+            },
+        ]);
 
-        let replies = h.tick([AudioCmd::ResumeMusic { id: "theme".into() }]);
+        let replies = h.tick([
+            AudioCmd::ResumeMusic {
+                id: "never_played".into(),
+            },
+            AudioCmd::ResumeMusic {
+                id: "stopped".into(),
+            },
+        ]);
 
-        // Pinned as-is: the reply claims playback, but with no MusicTrack
-        // nothing ever pumps the stream.
-        assert_eq!(replies, [r#"MusicPlayStarted { id: "theme" }"#]);
-        assert_eq!(h.take_calls(), ["resume_music(1)"]);
+        // Nothing would ever pump such a stream, so claiming it started
+        // playing would be a lie.
+        assert_eq!(replies, Vec::<String>::new());
+        assert_eq!(h.take_calls(), Vec::<String>::new());
         assert_eq!(h.tracks(), []);
     }
 
