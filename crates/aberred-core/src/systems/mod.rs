@@ -6,11 +6,9 @@
 //! Submodules overview
 //! - [`animation`] – advance sprite animations and select tracks via rules
 //! - [`camera_follow`] – move the camera to track entities with `CameraTarget`
-//! - [`audio`] – dedicated audio thread and its own `bevy_ecs::World`
 //! - [`audio_bridge`] – logic-thread systems that shuttle `AudioCmd`/`AudioMessage` with the audio thread
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
 //! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
-//! - [`lua_collision`] – *(feature = "lua")* Lua-based collision observer and callback dispatch
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::worldsignals::WorldSignals)
@@ -22,21 +20,21 @@
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
 //! - [`inputsimplecontroller`] – translate input state into velocity on entities
 //! - [`inputaccelerationcontroller`] – translate input state into acceleration on entities
-//! - [`lua_commands`] – *(feature = "lua")* shared command processing for Lua-Rust communication
 //! - [`menu`] – menu spawning, input handling, and selection
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
-//! - [`lua_setup_entity`] – *(feature = "lua")* one-shot entity setup callback on `Added<LuaSetup>`
-//! - [`luaphase`] – *(feature = "lua")* process Lua phase state machine transitions and callbacks
 //! - [`phase`] – process Rust phase state machine transitions and callbacks
 //! - [`rust_collision`] – Rust-native collision observer and callback dispatch
 //! - [`scene_dispatch`] – scene switch and update systems for `SceneManager`-based games
-//! - [`render`] – draw world and debug overlays using Raylib
 //! - [`signal_intents`] – apply buffered `SignalIntent`s queued by render-side scene callbacks
 //! - [`signalbinding`] – update DynamicText components based on signal values
 //! - [`stuckto`] – keep entities attached to other entities
 //! - [`time`] – update simulation time and delta
 //! - [`tween`] – animate position, rotation, and scale over time
+//!
+//! The audio thread's systems live in `aberred-audio`, the render thread's in
+//! `aberred-render`, and the Lua-callback systems (`lua_collision`,
+//! `luaphase`, `lua_commands`, ...) in `aberred-lua`.
 
 pub use game_ctx::GameCtx;
 

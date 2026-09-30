@@ -9,7 +9,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::lua_collision`] – Lua-based collision observer
+//! - `aberred_lua::systems::lua_collision` – Lua-based collision observer
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
 //! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
 

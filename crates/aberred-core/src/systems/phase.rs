@@ -30,7 +30,7 @@
 //! # Related
 //!
 //! - [`crate::components::phase::Phase`] – the phase component
-//! - [`crate::systems::luaphase`] – Lua equivalent
+//! - `aberred_lua::systems::luaphase` – Lua equivalent
 
 use bevy_ecs::prelude::*;
 

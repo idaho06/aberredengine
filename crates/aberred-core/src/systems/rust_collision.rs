@@ -49,7 +49,7 @@ use crate::systems::collision::{compute_sides, find_matching_rule, resolve_colli
 ///
 /// When a [`CollisionEvent`] is triggered:
 ///
-/// 1. Looks up [`Group`] names for both entities (returns early if missing)
+/// 1. Looks up [`Group`](crate::components::group::Group) names for both entities (returns early if missing)
 /// 2. Looks up the [`CollisionRuleIndex`] bucket for the colliding pair's
 ///    groups and scans just those [`CollisionRule`] entities for a match
 ///    (deterministic lowest-`Entity`-first if more than one covers the pair)

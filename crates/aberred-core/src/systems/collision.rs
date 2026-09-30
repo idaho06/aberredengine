@@ -1,7 +1,7 @@
 //! Shared collision helpers used by both the Lua and Rust collision observers.
 //!
 //! This module contains system-level utility functions that de-duplicate logic
-//! common to [`lua_collision`](crate::systems::lua_collision) and
+//! common to `lua_collision` (`aberred-lua`) and
 //! [`rust_collision`](crate::systems::rust_collision).
 //!
 //! All functions are pure Rust with no Lua dependency and are always compiled
@@ -11,7 +11,7 @@
 //!
 //! - [`crate::systems::collision_detector`] – AABB detection system
 //! - [`crate::systems::rust_collision`] – Rust collision observer
-//! - [`crate::systems::lua_collision`] – Lua collision observer
+//! - `aberred_lua::systems::lua_collision` – Lua collision observer
 //! - [`crate::components::collision`] – collision types and side detection
 
 use bevy_ecs::prelude::*;
@@ -83,7 +83,7 @@ pub fn resolve_groups<'q>(
 /// any entity that despawned between this tick's index rebuild and now.
 ///
 /// Shared by [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer)
-/// and [`lua_collision_observer`](crate::systems::lua_collision::lua_collision_observer),
+/// and `lua_collision_observer` (`aberred-lua`),
 /// which otherwise duplicated this loop identically (generic over the rule's
 /// callback payload `C`, since the two observers query `CollisionRule` and
 /// `LuaCollisionRule = CollisionRule<LuaCollisionCallback>` respectively).

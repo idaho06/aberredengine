@@ -168,7 +168,7 @@ pub fn cleanup_orphaned_global_transforms(
 ///
 /// Queue it via [`EntityCommands::queue`] immediately after giving an entity
 /// its [`ChildOf`] component. It reads the parent's current
-/// [`GlobalTransform2D`] via [`world_scope`] and composes it with the child's
+/// [`GlobalTransform2D`] via [`world_scope`](bevy_ecs::world::EntityWorldMut::world_scope) and composes it with the child's
 /// local [`MapPosition`], [`Rotation`], and [`Scale`] to produce the correct
 /// world-space transform on the very first frame the entity exists — avoiding
 /// the one-frame flash at world origin caused by `GlobalTransform2D::default()`.

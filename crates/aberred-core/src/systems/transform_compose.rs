@@ -2,7 +2,7 @@
 //!
 //! Used by [`crate::systems::propagate_transforms`] for world-space hierarchy
 //! propagation. Operates on a plain, space-agnostic struct (not
-//! [`GlobalTransform2D`]) specifically so screen-space code with no notion of
+//! [`GlobalTransform2D`](crate::components::globaltransform2d::GlobalTransform2D)) specifically so screen-space code with no notion of
 //! `GlobalTransform2D` can reuse the same composition math without depending
 //! on a world-space component.
 

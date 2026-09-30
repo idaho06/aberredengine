@@ -48,7 +48,7 @@ pub fn quit_game(mut world_signals: ResMut<WorldSignals>, render_tx: Res<RenderT
     let _ = render_tx.0.send(RenderMsg::Quit);
 }
 
-/// Despawn all entities that are not marked [`Persistent`].
+/// Despawn all entities that are not marked [`Persistent`](crate::components::persistent::Persistent).
 pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, CleanableEntity>) {
     for entity in query.iter() {
         commands.entity(entity).try_despawn();

@@ -1,5 +1,5 @@
 //! Bridge systems that shuttle `AudioCmd`/`AudioMessage` between the LOGIC
-//! (sim) thread and the dedicated audio thread ([`crate::systems::audio`]).
+//! (sim) thread and the dedicated audio thread (`aberred-audio`).
 //!
 //! These four systems run on the logic thread, not the audio thread -- they
 //! never touch `AudioStore`/`PlayingFx`/`MusicTrack`, which are internal to

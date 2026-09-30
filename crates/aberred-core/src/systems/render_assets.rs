@@ -1,7 +1,7 @@
 //! Shared `RenderAssetCmd` message-queue aging, called from both the sim
 //! schedule's `SimSet::Bookkeeping` (logic world) and the render schedule
 //! (render world) -- unlike the actual GL loader
-//! ([`process_render_asset_cmds`](crate::systems::render::process_render_asset_cmds),
+//! (`process_render_asset_cmds` (`aberred-render`),
 //! render-thread-only), this function ages a `Messages<RenderAssetCmd>`
 //! queue that exists as a separate instance in each world, so it isn't
 //! itself thread-exclusive code.

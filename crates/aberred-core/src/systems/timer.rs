@@ -28,7 +28,7 @@
 //!
 //! - [`crate::components::timer::Timer`] – the timer component
 //! - [`crate::events::timer::TimerEvent`] – event emitted on expiration
-//! - [`crate::systems::luatimer`] – Lua equivalent
+//! - `aberred_lua::systems::luatimer` – Lua equivalent
 
 use bevy_ecs::prelude::*;
 

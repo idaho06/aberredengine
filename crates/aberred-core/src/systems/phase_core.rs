@@ -16,7 +16,7 @@ use crate::components::phase::Phase;
 /// `C` is the callback payload stored inside [`Phase<C>`]. In the Rust phase
 /// path this is [`PhaseCallbackFns`](crate::components::phase::PhaseCallbackFns),
 /// while the Lua phase path uses
-/// [`PhaseCallbacks`](crate::components::luaphase::PhaseCallbacks).
+/// `PhaseCallbacks` (`aberred_lua::components::luaphase`).
 ///
 /// [`call_enter`](Self::call_enter), [`call_update`](Self::call_update), and
 /// [`call_exit`](Self::call_exit) map directly to the three phase lifecycle

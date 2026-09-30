@@ -15,7 +15,7 @@ use crate::components::timer::Timer;
 ///
 /// `C` is the callback payload stored in [`Timer<C>`]. In the Rust timer path
 /// this is [`TimerCallback`](crate::components::timer::TimerCallback); in the Lua
-/// timer path it is [`LuaTimerCallback`](crate::components::luatimer::LuaTimerCallback).
+/// timer path it is `LuaTimerCallback` (`aberred_lua::components::luatimer`).
 /// [`on_fire`](Self::on_fire) is called once for each timer that elapses and is
 /// responsible for invoking or scheduling callback dispatch in whatever way that
 /// backend requires.

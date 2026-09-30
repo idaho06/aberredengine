@@ -25,7 +25,7 @@
 //! # Related
 //!
 //! - [`crate::resources::scenemanager::SceneManager`] — the registry resource
-//! - [`crate::engine_app::EngineBuilder::add_scene`] — builder method for registration
+//! - `aberredengine::EngineBuilder::add_scene` — builder method for registration
 
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
@@ -115,7 +115,7 @@ pub struct SceneLogic {
 /// Handles scene transitions for [`SceneManager`]-based games.
 ///
 /// This system is registered into [`SystemsStore`] under `"switch_scene"` when
-/// the developer uses [`EngineBuilder::add_scene`](crate::engine_app::EngineBuilder::add_scene).
+/// the developer uses `aberredengine::EngineBuilder::add_scene`.
 ///
 /// Flow:
 /// 1. Despawn all non-[`Persistent`] entities
@@ -208,7 +208,7 @@ pub fn scene_update_system(
 /// scene switch system when set.
 ///
 /// Added to the update schedule automatically when using
-/// [`EngineBuilder::add_scene()`](crate::engine_app::EngineBuilder::add_scene).
+/// `aberredengine::EngineBuilder::add_scene()`.
 pub fn scene_switch_poll(
     mut commands: Commands,
     mut world_signals: ResMut<WorldSignals>,
