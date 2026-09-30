@@ -1033,6 +1033,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn finalize_recorder_records_the_session_taint() {
+        let file = NamedTempFile::new().unwrap();
+        let recorder = ReplayRecorder::create(file.path(), &test_replay_header()).unwrap();
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+        world.insert_resource(WorldTime::default());
+        world.insert_resource(SimRng::from_seed(1));
+
+        finalize_recorder(&world, Some(recorder), true);
+
+        let ReplayEntry::End { tainted, .. } = read_replay_end(file.path()) else {
+            panic!("replay file must end with ReplayEntry::End");
+        };
+        assert!(tainted);
+    }
+
+    /// Without an active recorder nothing is hashed: an empty world (no
+    /// resources `hash_world_state` needs) must not be touched.
+    #[test]
+    fn finalize_without_a_recorder_does_nothing() {
+        finalize_recorder(&World::new(), None, true);
+    }
+
     fn world_with_state(state: GameStates) -> World {
         let mut world = World::new();
         let mut game_state = GameState::new();
