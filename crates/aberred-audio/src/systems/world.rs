@@ -59,10 +59,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
         music: FxHashMap::default(),
         fx: FxHashMap::default(),
     });
-    // Keep a clone of the receiver locally too (crossbeam `Receiver` is a
-    // cheap `Clone`) so the disconnect check doesn't need to reach back into
-    // the World's resource.
-    world.insert_resource(CmdReceiver(rx_cmd.clone()));
+    world.insert_resource(CmdReceiver(rx_cmd));
     world.insert_resource(MsgSender(tx_evt));
     world.insert_resource(ShouldExit::default());
 
@@ -96,9 +93,6 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
         }
 
         if world.resource::<ShouldExit>().0 {
-            break 'run;
-        }
-        if aberred_core::pacing::channel_disconnected(&rx_cmd) {
             break 'run;
         }
         world.clear_trackers();

@@ -12,15 +12,6 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError};
 
 use crate::protocol::stats::ThreadStats;
 
-/// True once every sender for `rx` has been dropped.
-///
-/// `Receiver::try_iter()` can't distinguish "nothing queued right now" from
-/// "channel disconnected" -- callers drain with `try_iter()` first, then
-/// call this once to detect the latter and exit their loop.
-pub fn channel_disconnected<T>(rx: &Receiver<T>) -> bool {
-    matches!(rx.try_recv(), Err(TryRecvError::Disconnected))
-}
-
 /// Drains every message currently queued on `rx` into `f` (non-blocking)
 /// and returns `true` once the channel is empty and every sender has been
 /// dropped. Disconnection is detected by the same `try_recv` that drains,
@@ -36,7 +27,7 @@ pub fn drain_channel<T>(rx: &Receiver<T>, mut f: impl FnMut(T)) -> bool {
     }
 }
 
-/// Sender-side counterpart to [`channel_disconnected`]: true when a
+/// Sender-side counterpart to [`drain_channel`]'s disconnect report: true when a
 /// `try_send` result means the receiver is gone, as opposed to the channel
 /// merely being momentarily full (expected, non-fatal backpressure on a
 /// bounded channel -- see `LogicBridge::tx_input`).

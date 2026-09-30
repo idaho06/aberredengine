@@ -18,12 +18,21 @@ use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::store::AudioStore;
 
 /// Drain all pending [`AudioCmd`]s non-blockingly and apply them to the
-/// audio world.
+/// audio world. Once every sender is gone (and nothing is left queued) it
+/// sets [`ShouldExit`] -- detected by the draining `try_recv` itself, so a
+/// command that lands mid-drain is still applied, never lost.
 pub fn drain_cmds(world: &mut World) {
     aberred_core::tracy::tracy_span!("audio_drain_cmds");
-    let cmds: Vec<AudioCmd> = world.resource::<CmdReceiver>().0.try_iter().collect();
+    let mut cmds: Vec<AudioCmd> = Vec::new();
+    let disconnected =
+        aberred_core::pacing::drain_channel(&world.resource::<CmdReceiver>().0, |cmd| {
+            cmds.push(cmd)
+        });
     for cmd in cmds {
         handle_cmd(world, cmd);
+    }
+    if disconnected {
+        world.resource_mut::<ShouldExit>().0 = true;
     }
 }
 
@@ -423,5 +432,27 @@ pub fn pump_fx(world: &mut World) {
             unsafe { ffi::UnloadSoundAlias(alias) };
             world.despawn(entity);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drain_cmds_requests_exit_once_every_sender_is_gone() {
+        let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioCmd>();
+        let (tx_evt, _rx_evt) = crossbeam_channel::unbounded::<AudioMessage>();
+        let mut world = World::new();
+        world.insert_resource(CmdReceiver(rx_cmd));
+        world.insert_resource(MsgSender(tx_evt));
+        world.insert_resource(ShouldExit(false));
+
+        drain_cmds(&mut world);
+        assert!(!world.resource::<ShouldExit>().0, "live sender: keep running");
+
+        drop(tx_cmd);
+        drain_cmds(&mut world);
+        assert!(world.resource::<ShouldExit>().0, "disconnected: exit");
     }
 }
