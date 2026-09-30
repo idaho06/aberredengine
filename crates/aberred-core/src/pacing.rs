@@ -21,6 +21,21 @@ pub fn channel_disconnected<T>(rx: &Receiver<T>) -> bool {
     matches!(rx.try_recv(), Err(TryRecvError::Disconnected))
 }
 
+/// Drains every message currently queued on `rx` into `f` (non-blocking)
+/// and returns `true` once the channel is empty and every sender has been
+/// dropped. Disconnection is detected by the same `try_recv` that drains,
+/// so a message that lands mid-drain is always delivered -- never consumed
+/// by a separate "is it disconnected?" probe and lost.
+pub fn drain_channel<T>(rx: &Receiver<T>, mut f: impl FnMut(T)) -> bool {
+    loop {
+        match rx.try_recv() {
+            Ok(msg) => f(msg),
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => return true,
+        }
+    }
+}
+
 /// Sender-side counterpart to [`channel_disconnected`]: true when a
 /// `try_send` result means the receiver is gone, as opposed to the channel
 /// merely being momentarily full (expected, non-fatal backpressure on a
@@ -241,6 +256,27 @@ impl StatsWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drain_delivers_every_queued_message_before_reporting_disconnect() {
+        let (tx, rx) = crossbeam_channel::unbounded::<u32>();
+        tx.send(1).unwrap();
+        tx.send(2).unwrap();
+        drop(tx);
+        let mut got = Vec::new();
+        assert!(drain_channel(&rx, |m| got.push(m)));
+        assert_eq!(got, [1, 2]);
+    }
+
+    #[test]
+    fn drain_with_a_live_sender_is_not_a_disconnect_and_loses_nothing() {
+        let (tx, rx) = crossbeam_channel::unbounded::<u32>();
+        let mut got = Vec::new();
+        assert!(!drain_channel(&rx, |m| got.push(m)));
+        tx.send(7).unwrap();
+        assert!(!drain_channel(&rx, |m| got.push(m)));
+        assert_eq!(got, [7]);
+    }
 
     #[test]
     fn period_matches_hz() {

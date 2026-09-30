@@ -169,14 +169,14 @@ fn guard_texture_preload(world: &mut World, key: &str, deterministic: bool) {
 /// `TextureLoaded` dims land in `TextureDimsStore` directly rather than via
 /// `out` — texture dims are not part of `TickInput`'s recorded envelope.
 ///
-/// Returns `true` if `LogicMsg::Shutdown` was seen this batch.
+/// Returns what [`drain_logic_messages`] saw on `rx_logic`.
 fn collect_tick_input_live(
     out: &mut TickInput,
     rx_input: &Receiver<InputSample>,
     rx_logic: &Receiver<LogicMsg>,
     world: &mut World,
     deterministic: bool,
-) -> bool {
+) -> DrainOutcome {
     // Read before update_world_time increments frame_count later this tick,
     // so `out.tick` describes "the tick about to run," 0-indexed.
     out.reset(world.resource::<WorldTime>().frame_count);
@@ -195,6 +195,17 @@ fn collect_tick_input_live(
     drain_logic_messages(Some(out), rx_logic, world, deterministic)
 }
 
+/// What one [`drain_logic_messages`] pass saw on `rx_logic`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct DrainOutcome {
+    /// `LogicMsg::Shutdown` was in the batch.
+    shutdown: bool,
+    /// Every sender is gone and nothing is left queued. Detected by the
+    /// draining `try_recv` itself (`pacing::drain_channel`), so no message
+    /// is ever lost to a separate disconnect probe.
+    disconnected: bool,
+}
+
 /// Applies every non-sim-visible `LogicMsg` (font/texture load/remove/
 /// rename, overlay config, replay playback control) directly to `world`,
 /// and folds sim-visible `ScreenSize`/`SignalIntent`s into `out`. Shared by
@@ -211,17 +222,18 @@ fn collect_tick_input_live(
 /// tick runs, so there is nothing for them to apply to). The non-sim-visible
 /// arms still run in both cases.
 ///
-/// Returns `true` if `LogicMsg::Shutdown` was seen.
+/// Returns whether `LogicMsg::Shutdown` was seen and whether the channel is
+/// disconnected.
 fn drain_logic_messages(
     mut out: Option<&mut TickInput>,
     rx_logic: &Receiver<LogicMsg>,
     world: &mut World,
     deterministic: bool,
-) -> bool {
+) -> DrainOutcome {
     // Drain everything currently queued (non-blocking -- the Pacer already
     // did the waiting).
-    let mut shutdown_requested = false;
-    for msg in rx_logic.try_iter() {
+    let mut shutdown = false;
+    let disconnected = aberred_core::pacing::drain_channel(rx_logic, |msg| {
         match msg {
             LogicMsg::ScreenSize { w, h } => {
                 if let Some(out) = out.as_deref_mut() {
@@ -268,7 +280,7 @@ fn drain_logic_messages(
                     out.intents.extend(intents);
                 }
             }
-            LogicMsg::Shutdown => shutdown_requested = true,
+            LogicMsg::Shutdown => shutdown = true,
             LogicMsg::ReplayControl(ReplayControl::Play) => {
                 world.resource_mut::<ReplayRuntimeState>().paused = false;
             }
@@ -279,8 +291,11 @@ fn drain_logic_messages(
                 world.resource_mut::<ReplayRuntimeState>().fast_forward = on;
             }
         }
+    });
+    DrainOutcome {
+        shutdown,
+        disconnected,
     }
-    shutdown_requested
 }
 
 /// Apply one [`TickInput`]'s sim-visible facts to `world`, ahead of that
@@ -429,12 +444,8 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             // live ScreenSize/SignalIntent to apply to -- collecting them
             // here would only pile them into `tick_input` for the next
             // `reset` to discard.
-            let shutdown_requested =
-                drain_logic_messages(None, &rx_logic, &mut world, deterministic);
-            if shutdown_requested {
-                break 'main;
-            }
-            if aberred_core::pacing::channel_disconnected(&rx_logic) {
+            let drained = drain_logic_messages(None, &rx_logic, &mut world, deterministic);
+            if drained.shutdown || drained.disconnected {
                 break 'main;
             }
             world.clear_trackers();
@@ -445,7 +456,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // loss-free, once this call returns -- that's what makes it the one
         // thing the recorder has to capture (it does, just below the break
         // checks) and the one thing apply_tick_input has to consume.
-        let shutdown_requested = match &mut source {
+        let drained = match &mut source {
             TickInputSource::Live => collect_tick_input_live(
                 &mut tick_input,
                 &rx_input,
@@ -478,7 +489,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             }
         };
 
-        if shutdown_requested {
+        if drained.shutdown {
             // Exits immediately (no sim/present work runs after it).
             // collect_tick_input_live stashed this batch's SignalIntents
             // into tick_input rather than the SignalIntents resource
@@ -494,7 +505,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             break 'main;
         }
 
-        if aberred_core::pacing::channel_disconnected(&rx_logic) {
+        if drained.disconnected {
             break 'main;
         }
 
@@ -666,9 +677,9 @@ mod tests {
     /// `SignalIntent` queued in the same batch as `Shutdown` must not be
     /// silently dropped. This test exercises the collect half directly
     /// (the smallest unit that can regress): a batch containing both a
-    /// `SignalIntents` message and `Shutdown` must report `shutdown_requested
-    /// == true` AND leave the intent recoverable in `tick_input.intents`
-    /// (i.e. NOT already lost by the time the caller decides to shut down).
+    /// `SignalIntents` message and `Shutdown` must report `shutdown` AND
+    /// leave the intent recoverable in `tick_input.intents` (i.e. NOT
+    /// already lost by the time the caller decides to shut down).
     #[test]
     fn shutdown_batch_preserves_signal_intents_in_tick_input() {
         let (tx_input, rx_input) = crossbeam_channel::unbounded::<InputSample>();
@@ -685,10 +696,10 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(WorldTime::default());
         let mut tick_input = TickInput::default();
-        let shutdown_requested =
+        let drained =
             collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world, false);
 
-        assert!(shutdown_requested);
+        assert!(drained.shutdown);
         assert_eq!(
             tick_input.intents,
             vec![SignalIntent::SetFlag("shutdown_batch_intent".into())],
@@ -723,14 +734,47 @@ mod tests {
         tick_input.samples.push(Default::default());
         let recorded = tick_input.clone();
 
-        let shutdown_requested = drain_logic_messages(None, &rx_logic, &mut world, false);
+        let drained = drain_logic_messages(None, &rx_logic, &mut world, false);
 
-        assert!(!shutdown_requested);
+        assert!(!drained.shutdown);
         assert_eq!(
             tick_input, recorded,
             "a live SignalIntent/ScreenSize must not reach the sim during \
              playback -- every sim-visible fact comes from the replay file"
         );
+    }
+
+    /// Render's shutdown sends `Shutdown` and then joins while still holding
+    /// its sender, so a drain must never let a separate disconnect probe eat
+    /// the last queued messages: they must be applied AND the disconnect
+    /// reported by the same pass.
+    #[test]
+    fn drain_applies_messages_queued_before_disconnect_and_reports_both() {
+        let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
+        let mut world = World::new();
+        world.init_resource::<FontMetricsStore>();
+
+        let first = drain_logic_messages(None, &rx_logic, &mut world, false);
+        assert_eq!(first, DrainOutcome::default());
+
+        tx_logic
+            .send(LogicMsg::FontLoaded {
+                key: "late".into(),
+                metrics: Default::default(),
+            })
+            .unwrap();
+        tx_logic.send(LogicMsg::Shutdown).unwrap();
+        drop(tx_logic);
+
+        let outcome = drain_logic_messages(None, &rx_logic, &mut world, false);
+        assert_eq!(
+            outcome,
+            DrainOutcome {
+                shutdown: true,
+                disconnected: true
+            }
+        );
+        assert!(world.resource::<FontMetricsStore>().0.contains_key("late"));
     }
 
     #[test]
