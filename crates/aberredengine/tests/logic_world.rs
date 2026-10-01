@@ -146,7 +146,8 @@ fn present_publishes_spawned_sprite_in_snapshot() {
 /// (d) Asset round-trip: queue a font load, assert it lands on
 /// `sent_to_render`; then fake the async metrics reply and assert
 /// `dynamictext_size_system` reacts on the very next tick (locks the async
-/// `FontMetricsStore` contract documented in CLAUDE.md).
+/// `FontMetricsStore` contract: metrics arrive after the load request, and
+/// text sizing picks them up once they land).
 #[test]
 fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     let mut tw = TestWorld::new();

@@ -671,9 +671,8 @@ mod tests {
         last.expect("replay file must end with a ReplayEntry::End")
     }
 
-    /// Regression test for the bug this refactor could have introduced:
-    /// once collect_tick_input_live stashes SignalIntents into `TickInput`
-    /// instead of writing them straight to the `SignalIntents` resource,
+    /// `collect_tick_input_live` stashes SignalIntents into `TickInput`
+    /// rather than writing them straight to the `SignalIntents` resource, so
     /// the shutdown branch in `logic_thread_main` must explicitly flush
     /// `tick_input.intents` before running `apply_signal_intents` -- a
     /// `SignalIntent` queued in the same batch as `Shutdown` must not be

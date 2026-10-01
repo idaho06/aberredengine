@@ -7,15 +7,15 @@
 //! interleaved across multiple ticks, plus a collision -- against two fresh
 //! `TestWorld`s and asserts the exact `Entity` ids allocated (not just
 //! component values, which could coincidentally match while ids diverge)
-//! are identical between the two runs. This is the actual nondeterminism
-//! source phase 02 fixes (pinning the sim schedule's executor to
-//! single-threaded removes cross-run `Commands`-application/entity-
-//! allocation-order jitter) -- a scenario that only spawns once in
+//! are identical between the two runs. Entity allocation order is the
+//! nondeterminism source the single-threaded sim executor removes (no
+//! cross-run `Commands`-application/entity-allocation-order jitter) -- a
+//! scenario that only spawns once in
 //! `on_setup` would pass trivially and prove nothing, since two runs of a
 //! single-threaded, already-deterministic executor always agree; the
 //! despawn-then-respawn step exercises entity slot/generation reuse
-//! specifically. Doubles as the precursor regression guard phase 05
-//! (replays) needs at larger scale.
+//! specifically. The replay tests below rely on the same guarantee at a
+//! larger scale.
 
 #![cfg(feature = "test-support")]
 
