@@ -16,6 +16,7 @@ use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::events::input::InputAction;
 use aberred_core::resources::input::InputState;
 use aberred_core::protocol::raw_input::ImguiCaptureState;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -115,7 +116,7 @@ fn dummy_switch_scene() {}
 // The paced loop runs exactly one `sim` tick per `Pacer` wakeup, so an
 // edge (just_pressed/just_released) fires exactly once, covered below.
 
-/// Counts how many times `InputState.action_1`/`mouse_left_button` were
+/// Counts how many times `Action1`/`mouse_left_button` were
 /// observed with an edge set, for asserting "fires exactly once".
 #[derive(Resource, Default)]
 struct EdgeFireCounts {
@@ -125,10 +126,10 @@ struct EdgeFireCounts {
 }
 
 fn count_edges_system(input: Res<InputState>, mut counts: ResMut<EdgeFireCounts>) {
-    if input.action_1.just_pressed {
+    if input.action(InputAction::Action1).just_pressed {
         counts.action_1_pressed += 1;
     }
-    if input.action_1.just_released {
+    if input.action(InputAction::Action1).just_released {
         counts.action_1_released += 1;
     }
     if input.mouse_left_button.just_pressed {
@@ -155,8 +156,8 @@ fn run_sim_tick_fires_edge_exactly_once_and_clears_it() {
     let (mut world, mut schedule) = build_edge_test_world();
     {
         let mut input = world.resource_mut::<InputState>();
-        input.action_1.active = true;
-        input.action_1.just_pressed = true;
+        input.action_mut(InputAction::Action1).active = true;
+        input.action_mut(InputAction::Action1).just_pressed = true;
         input.mouse_left_button.active = true;
         input.mouse_left_button.just_pressed = true;
     }
@@ -169,7 +170,7 @@ fn run_sim_tick_fires_edge_exactly_once_and_clears_it() {
 
     let input = world.resource::<InputState>();
     assert!(
-        input.action_1.active,
+        input.action(InputAction::Action1).active,
         "active/held state must never be cleared"
     );
     assert!(
@@ -177,7 +178,7 @@ fn run_sim_tick_fires_edge_exactly_once_and_clears_it() {
         "mouse active must be untouched"
     );
     assert!(
-        !input.action_1.just_pressed,
+        !input.action(InputAction::Action1).just_pressed,
         "edge must be consumed (cleared) after the tick sees it"
     );
     assert!(!input.mouse_left_button.just_pressed, "mouse edge consumed");
@@ -189,8 +190,8 @@ fn run_sim_tick_delivers_press_and_release_in_same_sample() {
     {
         // A fast tap within one render frame: both edges present at once.
         let mut input = world.resource_mut::<InputState>();
-        input.action_1.just_pressed = true;
-        input.action_1.just_released = true;
+        input.action_mut(InputAction::Action1).just_pressed = true;
+        input.action_mut(InputAction::Action1).just_released = true;
     }
 
     run_sim_tick(&mut world, &mut schedule);

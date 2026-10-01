@@ -24,14 +24,15 @@ use aberredengine::core::components::boxcollider::BoxCollider;
 use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::events::input::InputAction;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::tick_input::TickInput;
-use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
+use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 
 mod common;
@@ -255,7 +256,11 @@ fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
         DT,
     );
 
-    let up_active = tw.world.resource::<InputState>().maindirection_up.active;
+    let up_active = tw
+        .world
+        .resource::<InputState>()
+        .action(InputAction::MainDirectionUp)
+        .active;
     let flagged = tw
         .world
         .resource::<WorldSignals>()
@@ -316,7 +321,10 @@ fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
     // not observable from outside a completed call; only `active` (the held
     // state) survives to be checked here.
     assert!(
-        tw.world.resource::<InputState>().maindirection_up.active,
+        tw.world
+            .resource::<InputState>()
+            .action(InputAction::MainDirectionUp)
+            .active,
         "the pressed key must read active after the tick it lands"
     );
 
@@ -331,7 +339,10 @@ fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
         DT,
     );
 
-    let up = tw.world.resource::<InputState>().maindirection_up;
+    let up = *tw
+        .world
+        .resource::<InputState>()
+        .action(InputAction::MainDirectionUp);
     assert!(
         up.active,
         "an empty tick must hold the previous tick's active state, not reset it"

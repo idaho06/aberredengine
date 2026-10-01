@@ -9,6 +9,7 @@ use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
 use super::replay::{ReplayPlayer, ReplayRecorder};
 use aberred_core::error::EngineError;
+use aberred_core::events::input::InputAction;
 use aberred_core::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -524,7 +525,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         apply_tick_input(&mut world, &tick_input);
         if world
             .resource::<InputState>()
-            .fullscreen_toggle
+            .action(InputAction::ToggleFullscreen)
             .just_pressed
         {
             let tx_render = world.resource::<RenderTx>().0.clone();

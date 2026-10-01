@@ -15,19 +15,20 @@ use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::zindex::ZIndex;
-use aberredengine::engine_app::SimSet;
+use aberredengine::core::events::input::InputAction;
 use aberredengine::core::math::Color;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::protocol::render_logic::RenderMsg;
 use aberredengine::core::protocol::tick_input::TickInput;
-use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
+use aberredengine::engine_app::SimSet;
+use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::test_support::TestWorld;
 use rustc_hash::FxHashMap;
 
@@ -51,7 +52,7 @@ fn input_edge_fires_exactly_once_and_clears() {
     {
         let input = tw.world.resource::<InputState>();
         assert!(
-            input.action_1.just_pressed,
+            input.action(InputAction::Action1).just_pressed,
             "edge must be visible before the tick consumes it"
         );
     }
@@ -59,9 +60,12 @@ fn input_edge_fires_exactly_once_and_clears() {
     tw.tick(1, DT);
     {
         let input = tw.world.resource::<InputState>();
-        assert!(input.action_1.active, "held state must survive the tick");
         assert!(
-            !input.action_1.just_pressed,
+            input.action(InputAction::Action1).active,
+            "held state must survive the tick"
+        );
+        assert!(
+            !input.action(InputAction::Action1).just_pressed,
             "edge must be consumed (cleared) after one sim tick observes it"
         );
     }
@@ -69,8 +73,8 @@ fn input_edge_fires_exactly_once_and_clears() {
     // A second tick with no new input must not resurrect the edge.
     tw.tick(1, DT);
     let input = tw.world.resource::<InputState>();
-    assert!(!input.action_1.just_pressed);
-    assert!(input.action_1.active, "still held");
+    assert!(!input.action(InputAction::Action1).just_pressed);
+    assert!(input.action(InputAction::Action1).active, "still held");
 }
 
 fn collision_bump_flag(_a: Entity, _b: Entity, _sa: &BoxSides, _sb: &BoxSides, ctx: &mut GameCtx) {
