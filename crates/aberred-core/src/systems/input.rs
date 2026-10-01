@@ -132,7 +132,8 @@ fn resolve_mouse_left(state: &mut BoolState, prev: &RawDeviceSnapshot, sample: &
     state.apply_edge(was, now);
 }
 
-/// Resolve one raw sample's 14 bound actions + the raw left mouse button into
+/// Resolve one raw sample's bound actions (every `InputAction::ALL` entry)
+/// plus the raw left mouse button into
 /// `input`, diffed against `prev`.
 fn resolve_sample_into(
     input: &mut InputState,
@@ -141,29 +142,16 @@ fn resolve_sample_into(
     bindings: &InputBindings,
     deadzone: f32,
 ) {
-    macro_rules! resolve {
-        ($field:ident, $action:expr) => {
-            resolve_action(&mut input.$field, prev, sample, bindings, $action, deadzone)
-        };
+    for action in InputAction::ALL {
+        resolve_action(
+            input.action_mut(action),
+            prev,
+            sample,
+            bindings,
+            action,
+            deadzone,
+        );
     }
-    resolve!(maindirection_up, InputAction::MainDirectionUp);
-    resolve!(maindirection_down, InputAction::MainDirectionDown);
-    resolve!(maindirection_left, InputAction::MainDirectionLeft);
-    resolve!(maindirection_right, InputAction::MainDirectionRight);
-    resolve!(secondarydirection_up, InputAction::SecondaryDirectionUp);
-    resolve!(secondarydirection_down, InputAction::SecondaryDirectionDown);
-    resolve!(secondarydirection_left, InputAction::SecondaryDirectionLeft);
-    resolve!(
-        secondarydirection_right,
-        InputAction::SecondaryDirectionRight
-    );
-    resolve!(action_back, InputAction::Back);
-    resolve!(action_1, InputAction::Action1);
-    resolve!(action_2, InputAction::Action2);
-    resolve!(action_3, InputAction::Action3);
-    resolve!(action_special, InputAction::Special);
-    resolve!(mode_debug, InputAction::ToggleDebug);
-    resolve!(fullscreen_toggle, InputAction::ToggleFullscreen);
     resolve_mouse_left(&mut input.mouse_left_button, prev, sample);
 }
 
