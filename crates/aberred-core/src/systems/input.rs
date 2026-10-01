@@ -516,36 +516,18 @@ mod tests {
 
         let down = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         resolve_input_backlog(&mut world, &[down]);
-        assert!(
-            world
-                .resource::<InputState>()
-                .action(InputAction::Action1)
-                .just_pressed
-        );
-        assert!(
-            world
-                .resource::<InputState>()
-                .action(InputAction::Action1)
-                .active
-        );
+        let action_1 = *world.resource::<InputState>().action(InputAction::Action1);
+        assert!(action_1.just_pressed);
+        assert!(action_1.active);
 
         // Same key still down: no new edge (active stays true).
         let held = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         // Simulate the per-tick edge clear that `run_sim_tick` performs.
         world.resource_mut::<InputState>().clear_edges();
         resolve_input_backlog(&mut world, &[held]);
-        assert!(
-            !world
-                .resource::<InputState>()
-                .action(InputAction::Action1)
-                .just_pressed
-        );
-        assert!(
-            world
-                .resource::<InputState>()
-                .action(InputAction::Action1)
-                .active
-        );
+        let action_1 = *world.resource::<InputState>().action(InputAction::Action1);
+        assert!(!action_1.just_pressed);
+        assert!(action_1.active);
 
         // Key released.
         world.resource_mut::<InputState>().clear_edges();
@@ -602,12 +584,8 @@ mod tests {
         let mut z_down = raw();
         z_down.set_key(Key::KEY_Z.as_u32());
         resolve_input_backlog(&mut world, &[z_down]);
-        assert!(
-            world
-                .resource::<InputState>()
-                .action(InputAction::Action1)
-                .just_pressed
-        );
+        let action_1 = *world.resource::<InputState>().action(InputAction::Action1);
+        assert!(action_1.just_pressed);
         world.resource_mut::<InputState>().clear_edges();
 
         // Roll from Z to X within the same tick's backlog: Z+X both down,
@@ -846,12 +824,10 @@ mod tests {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let neutral = raw_with_gamepad(None, [0.0; 6]);
         resolve_input_backlog(&mut world, &[neutral]);
-        assert!(
-            !world
-                .resource::<InputState>()
-                .action(InputAction::MainDirectionRight)
-                .active
-        );
+        let right = *world
+            .resource::<InputState>()
+            .action(InputAction::MainDirectionRight);
+        assert!(!right.active);
 
         world.resource_mut::<InputState>().clear_edges();
         let mut axes = [0.0; 6];
