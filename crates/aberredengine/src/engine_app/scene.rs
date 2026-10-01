@@ -7,8 +7,10 @@
 //! into its two halves at [`EngineBuilder::add_scene`](super::EngineBuilder::add_scene)
 //! registration time, joined again by scene name.
 
+use aberred_core::systems::scene_dispatch::{
+    SceneEnterFn, SceneExitFn, SceneUpdateFn, WorldDrawCallback,
+};
 use aberred_render::resources::scene_table::GuiCallback;
-use aberred_core::systems::scene_dispatch::{SceneEnterFn, SceneExitFn, SceneUpdateFn, WorldDrawCallback};
 
 /// Describes the callbacks for a single scene.
 ///

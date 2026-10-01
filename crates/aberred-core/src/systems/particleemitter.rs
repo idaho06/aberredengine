@@ -19,9 +19,9 @@
 //! - Angles increase clockwise
 //! - Y+ is down (screen coordinates)
 
+use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 use fastrand::Rng;
-use crate::math::Vec2;
 
 use crate::components::emittedparticle::EmittedParticle;
 use crate::components::globaltransform2d::GlobalTransform2D;

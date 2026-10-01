@@ -12,8 +12,8 @@
 //!
 //! Diagonal movement is normalized to maintain consistent acceleration magnitude.
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::inputcontrolled::AccelerationControlled;
 use crate::components::rigidbody::RigidBody;

@@ -90,11 +90,7 @@ mod tests {
 
     #[test]
     fn view_rect_default_camera() {
-        let cam = make_camera(
-            Vec2 { x: 0.0, y: 0.0 },
-            Vec2 { x: 320.0, y: 180.0 },
-            1.0,
-        );
+        let cam = make_camera(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 320.0, y: 180.0 }, 1.0);
         let screen = ScreenSize { w: 640, h: 360 };
         let r = cam.world_visible_rect(&screen);
         assert!(approx_eq(r.x, -320.0));
@@ -105,11 +101,7 @@ mod tests {
 
     #[test]
     fn view_rect_zoom_2x() {
-        let cam = make_camera(
-            Vec2 { x: 0.0, y: 0.0 },
-            Vec2 { x: 320.0, y: 180.0 },
-            2.0,
-        );
+        let cam = make_camera(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 320.0, y: 180.0 }, 2.0);
         let screen = ScreenSize { w: 640, h: 360 };
         let r = cam.world_visible_rect(&screen);
         assert!(approx_eq(r.x, -160.0));
@@ -120,11 +112,7 @@ mod tests {
 
     #[test]
     fn pixel_snapped_rounds_target() {
-        let cam = make_camera(
-            Vec2 { x: 10.7, y: -3.2 },
-            Vec2 { x: 320.0, y: 180.0 },
-            1.0,
-        );
+        let cam = make_camera(Vec2 { x: 10.7, y: -3.2 }, Vec2 { x: 320.0, y: 180.0 }, 1.0);
         let snapped = cam.pixel_snapped();
         assert!(approx_eq(snapped.target.x, 11.0));
         assert!(approx_eq(snapped.target.y, -3.0));
@@ -147,11 +135,7 @@ mod tests {
 
     #[test]
     fn world_visible_rect_snapped_matches_snapped_camera() {
-        let cam = make_camera(
-            Vec2 { x: 10.7, y: -3.2 },
-            Vec2 { x: 320.0, y: 180.0 },
-            1.0,
-        );
+        let cam = make_camera(Vec2 { x: 10.7, y: -3.2 }, Vec2 { x: 320.0, y: 180.0 }, 1.0);
         let screen = ScreenSize { w: 640, h: 360 };
         let snapped_rect = cam.world_visible_rect_snapped(&screen);
         let snapped_cam = Camera2DRes(cam.pixel_snapped());
@@ -164,11 +148,7 @@ mod tests {
 
     #[test]
     fn view_rect_zoom_zero_no_panic() {
-        let cam = make_camera(
-            Vec2 { x: 0.0, y: 0.0 },
-            Vec2 { x: 320.0, y: 180.0 },
-            0.0,
-        );
+        let cam = make_camera(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 320.0, y: 180.0 }, 0.0);
         let screen = ScreenSize { w: 640, h: 360 };
         let r = cam.world_visible_rect(&screen);
         assert!(r.width.is_finite());

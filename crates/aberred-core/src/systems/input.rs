@@ -411,7 +411,13 @@ mod tests {
 
         // Extreme large zoom: world = screen / zoom.
         let cam = test_camera((0.0, 0.0), (0.0, 0.0), 1000.0, 0.0);
-        let world = screen_to_world2d(Vec2 { x: 1000.0, y: 2000.0 }, &cam);
+        let world = screen_to_world2d(
+            Vec2 {
+                x: 1000.0,
+                y: 2000.0,
+            },
+            &cam,
+        );
         assert!(approx_eq(world.x, 1.0), "x = {}", world.x);
         assert!(approx_eq(world.y, 2.0), "y = {}", world.y);
 
@@ -571,14 +577,8 @@ mod tests {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         {
             let mut bindings = world.resource_mut::<InputBindings>();
-            bindings.rebind(
-                InputAction::Action1,
-                InputBinding::Keyboard(Key::KEY_Z),
-            );
-            bindings.add_binding(
-                InputAction::Action1,
-                InputBinding::Keyboard(Key::KEY_X),
-            );
+            bindings.rebind(InputAction::Action1, InputBinding::Keyboard(Key::KEY_Z));
+            bindings.add_binding(InputAction::Action1, InputBinding::Keyboard(Key::KEY_X));
         }
 
         let mut z_down = raw();

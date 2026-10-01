@@ -1,16 +1,8 @@
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 
-use crate::logging::raylib_log_level_from_env;
-use aberred_core::components::persistent::Persistent;
-use aberred_core::error::EngineError;
 use crate::events::switchfullscreen::switch_fullscreen_observer;
-use aberred_core::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bridge};
-use aberred_core::protocol::render_assets::RenderAssetCmd;
-use aberred_core::protocol::snapshot::SnapshotConsumer;
-use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::guitheme::GuiThemeWarnCache;
+use crate::logging::raylib_log_level_from_env;
 use crate::resources::fontstore::FontStore;
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::mirrors::{
@@ -25,9 +17,6 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::sim_id_map::SimIdMap;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::thread_stats::RenderStats;
-use aberred_core::resources::screensize::ScreenSize;
-use aberred_core::resources::signal_intents::SignalIntents;
-use aberred_core::resources::windowsize::WindowSize;
 use crate::systems::apply_gameconfig_changes;
 use crate::systems::input::sample_and_send_input;
 use crate::systems::messages::pump_render_msgs;
@@ -36,6 +25,17 @@ use crate::systems::process_render_asset_cmds;
 use crate::systems::render_system;
 use crate::systems::snapshot::receive_snapshot;
 use crate::systems::window::refresh_window_size;
+use aberred_core::components::persistent::Persistent;
+use aberred_core::error::EngineError;
+use aberred_core::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bridge};
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::protocol::snapshot::SnapshotConsumer;
+use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::guitheme::GuiThemeWarnCache;
+use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::signal_intents::SignalIntents;
+use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 
 /// Build the render (main-thread) `World`: raylib window +

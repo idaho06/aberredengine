@@ -245,7 +245,13 @@ pub fn build_entity_context_pooled<'a>(
 
     // Scalar optionals
     set_opt!(tables.ctx, "group", snapshot.group, BIT_GROUP, mask);
-    set_opt!(tables.ctx, "rotation", snapshot.rotation, BIT_ROTATION, mask);
+    set_opt!(
+        tables.ctx,
+        "rotation",
+        snapshot.rotation,
+        BIT_ROTATION,
+        mask
+    );
     set_opt!(
         tables.ctx,
         "previous_phase",
@@ -269,11 +275,19 @@ pub fn build_entity_context_pooled<'a>(
     );
 
     // XY position subtables
-    set_opt!(tables.ctx, "pos", snapshot.map_pos, (x, y), BIT_POS, mask, {
-        tables.pos.raw_set("x", x)?;
-        tables.pos.raw_set("y", y)?;
-        tables.ctx.raw_set("pos", tables.pos.clone())?;
-    });
+    set_opt!(
+        tables.ctx,
+        "pos",
+        snapshot.map_pos,
+        (x, y),
+        BIT_POS,
+        mask,
+        {
+            tables.pos.raw_set("x", x)?;
+            tables.pos.raw_set("y", y)?;
+            tables.ctx.raw_set("pos", tables.pos.clone())?;
+        }
+    );
     set_opt!(
         tables.ctx,
         "screen_pos",
@@ -462,7 +476,9 @@ mod tests {
             strings: lua.create_table().unwrap(),
         };
         signals_table.set("flags", inner.flags.clone()).unwrap();
-        signals_table.set("integers", inner.integers.clone()).unwrap();
+        signals_table
+            .set("integers", inner.integers.clone())
+            .unwrap();
         signals_table.set("scalars", inner.scalars.clone()).unwrap();
         signals_table.set("strings", inner.strings.clone()).unwrap();
 
@@ -509,7 +525,9 @@ mod tests {
             strings: lua.create_table().unwrap(),
         };
         signals_table.set("flags", inner.flags.clone()).unwrap();
-        signals_table.set("integers", inner.integers.clone()).unwrap();
+        signals_table
+            .set("integers", inner.integers.clone())
+            .unwrap();
         signals_table.set("scalars", inner.scalars.clone()).unwrap();
         signals_table.set("strings", inner.strings.clone()).unwrap();
 

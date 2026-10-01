@@ -56,10 +56,7 @@ impl RuleBuckets {
     /// `aberredengine::systems::collision_rule_index::rebuild_collision_rule_index`
     /// calls this directly on `CollisionRuleIndex::lua`, since that variant
     /// (indexing `LuaCollisionRule`) cannot live in `aberred-core`.
-    pub fn rebuild<'a>(
-        &mut self,
-        rules: impl Iterator<Item = (Entity, &'a String, &'a String)>,
-    ) {
+    pub fn rebuild<'a>(&mut self, rules: impl Iterator<Item = (Entity, &'a String, &'a String)>) {
         self.0.clear();
         for (entity, group_a, group_b) in rules {
             let (lo, hi) = normalize_pair(group_a, group_b);
@@ -127,7 +124,10 @@ mod tests {
 
     #[test]
     fn normalize_pair_is_order_independent() {
-        assert_eq!(normalize_pair("ball", "brick"), normalize_pair("brick", "ball"));
+        assert_eq!(
+            normalize_pair("ball", "brick"),
+            normalize_pair("brick", "ball")
+        );
     }
 
     #[test]

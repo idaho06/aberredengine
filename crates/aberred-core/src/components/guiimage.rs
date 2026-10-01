@@ -18,8 +18,8 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 /// Clickable image slot. `gui_image_spawn_system` reacts on
 /// `Added<GuiImage>` to insert the co-located `GuiInteractable` + `Sprite`.

@@ -99,9 +99,21 @@ mod tests {
 
     #[test]
     fn src_rect_is_the_atlas_cell_with_flips_as_negative_extents() {
-        assert_eq!(xywh(sprite_src_rect(&sprite(false, false))), (32.0, 48.0, 16.0, 24.0));
-        assert_eq!(xywh(sprite_src_rect(&sprite(true, false))), (32.0, 48.0, -16.0, 24.0));
-        assert_eq!(xywh(sprite_src_rect(&sprite(false, true))), (32.0, 48.0, 16.0, -24.0));
-        assert_eq!(xywh(sprite_src_rect(&sprite(true, true))), (32.0, 48.0, -16.0, -24.0));
+        assert_eq!(
+            xywh(sprite_src_rect(&sprite(false, false))),
+            (32.0, 48.0, 16.0, 24.0)
+        );
+        assert_eq!(
+            xywh(sprite_src_rect(&sprite(true, false))),
+            (32.0, 48.0, -16.0, 24.0)
+        );
+        assert_eq!(
+            xywh(sprite_src_rect(&sprite(false, true))),
+            (32.0, 48.0, 16.0, -24.0)
+        );
+        assert_eq!(
+            xywh(sprite_src_rect(&sprite(true, true))),
+            (32.0, 48.0, -16.0, -24.0)
+        );
     }
 }

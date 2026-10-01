@@ -1,5 +1,5 @@
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 use crate::math::Color;
 

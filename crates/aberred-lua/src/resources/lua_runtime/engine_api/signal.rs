@@ -7,37 +7,62 @@ impl LuaRuntime {
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
 
-        register_getter!(engine, self.lua, meta_fns, "get_scalar",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_scalar",
             |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .and_then(|data| data.signal_snapshot.borrow().scalars.get(&*key).copied()))
             },
-            desc = "Get a world signal scalar value", cat = "signal",
-            params = [("key", "string")], returns = "number?");
+            desc = "Get a world signal scalar value",
+            cat = "signal",
+            params = [("key", "string")],
+            returns = "number?"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_integer",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_integer",
             |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .and_then(|data| data.signal_snapshot.borrow().integers.get(&*key).copied()))
             },
-            desc = "Get a world signal integer value", cat = "signal",
-            params = [("key", "string")], returns = "integer?");
+            desc = "Get a world signal integer value",
+            cat = "signal",
+            params = [("key", "string")],
+            returns = "integer?"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_string",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_string",
             |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .and_then(|data| data.signal_snapshot.borrow().strings.get(&*key).cloned()))
             },
-            desc = "Get a world signal string value", cat = "signal",
-            params = [("key", "string")], returns = "string?");
+            desc = "Get a world signal string value",
+            cat = "signal",
+            params = [("key", "string")],
+            returns = "string?"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "has_flag",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "has_flag",
             |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
@@ -45,10 +70,17 @@ impl LuaRuntime {
                     .map(|data| data.signal_snapshot.borrow().flags.contains(&*key))
                     .unwrap_or(false))
             },
-            desc = "Check if a world signal flag is set", cat = "signal",
-            params = [("key", "string")], returns = "boolean");
+            desc = "Check if a world signal flag is set",
+            cat = "signal",
+            params = [("key", "string")],
+            returns = "boolean"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_group_count",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_group_count",
             |lua, group: LuaString| {
                 let group = group.to_str()?;
                 Ok(lua.app_data_ref::<LuaAppData>().and_then(|data| {
@@ -59,20 +91,34 @@ impl LuaRuntime {
                         .copied()
                 }))
             },
-            desc = "Get the count of entities in a tracked group", cat = "signal",
-            params = [("group", "string")], returns = "integer?");
+            desc = "Get the count of entities in a tracked group",
+            cat = "signal",
+            params = [("group", "string")],
+            returns = "integer?"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_entity",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_entity",
             |lua, key: LuaString| {
                 let key = key.to_str()?;
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .and_then(|data| data.signal_snapshot.borrow().entities.get(&*key).copied()))
             },
-            desc = "Get a registered entity ID by key", cat = "signal",
-            params = [("key", "string")], returns = "integer?");
+            desc = "Get a registered entity ID by key",
+            cat = "signal",
+            params = [("key", "string")],
+            returns = "integer?"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_scalars",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_scalars",
             |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
@@ -83,10 +129,17 @@ impl LuaRuntime {
                 }
                 Ok(table)
             },
-            desc = "Get all world signal scalars as a snapshot table", cat = "signal",
-            params = [], returns = "table");
+            desc = "Get all world signal scalars as a snapshot table",
+            cat = "signal",
+            params = [],
+            returns = "table"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_integers",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_integers",
             |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
@@ -97,10 +150,17 @@ impl LuaRuntime {
                 }
                 Ok(table)
             },
-            desc = "Get all world signal integers as a snapshot table", cat = "signal",
-            params = [], returns = "table");
+            desc = "Get all world signal integers as a snapshot table",
+            cat = "signal",
+            params = [],
+            returns = "table"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_strings",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_strings",
             |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
@@ -111,10 +171,17 @@ impl LuaRuntime {
                 }
                 Ok(table)
             },
-            desc = "Get all world signal strings as a snapshot table", cat = "signal",
-            params = [], returns = "table");
+            desc = "Get all world signal strings as a snapshot table",
+            cat = "signal",
+            params = [],
+            returns = "table"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_flags",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_flags",
             |lua, ()| {
                 let table = lua.create_table()?;
                 if let Some(data) = lua.app_data_ref::<LuaAppData>() {
@@ -125,8 +192,11 @@ impl LuaRuntime {
                 }
                 Ok(table)
             },
-            desc = "Get all world signal flags as a snapshot array", cat = "signal",
-            params = [], returns = "table");
+            desc = "Get all world signal flags as a snapshot array",
+            cat = "signal",
+            params = [],
+            returns = "table"
+        );
 
         define_signal_cmd_twins!(
             engine,
@@ -197,7 +267,10 @@ mod tests {
     use rustc_hash::{FxHashMap, FxHashSet};
     use std::sync::Arc;
 
-    fn set_snapshot(runtime: &LuaRuntime, snapshot: aberred_core::resources::worldsignals::SignalSnapshot) {
+    fn set_snapshot(
+        runtime: &LuaRuntime,
+        snapshot: aberred_core::resources::worldsignals::SignalSnapshot,
+    ) {
         if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
             *data.signal_snapshot.borrow_mut() = Arc::new(snapshot);
         }

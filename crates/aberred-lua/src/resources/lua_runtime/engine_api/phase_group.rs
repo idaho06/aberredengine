@@ -50,7 +50,11 @@ impl LuaRuntime {
             params = []
         );
 
-        register_getter!(engine, self.lua, meta_fns, "has_tracked_group",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "has_tracked_group",
             |lua, name: LuaString| {
                 let name = name.to_str()?;
                 Ok(lua
@@ -58,8 +62,11 @@ impl LuaRuntime {
                     .map(|data| data.tracked_groups.borrow().contains(&*name))
                     .unwrap_or(false))
             },
-            desc = "Check if a group is being tracked", cat = "group",
-            params = [("name", "string")], returns = "boolean");
+            desc = "Check if a group is being tracked",
+            cat = "group",
+            params = [("name", "string")],
+            returns = "boolean"
+        );
 
         Ok(())
     }

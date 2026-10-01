@@ -756,7 +756,11 @@ mod tests {
         let too_long_b = "b".repeat(MAX_GROUP_NAME_LEN + 1);
         let mut ws = WorldSignals::default();
         ws.set_group_count(&too_long_a, 5);
-        assert_eq!(ws.get_group_count(&too_long_a), None, "over-long name is not stored");
+        assert_eq!(
+            ws.get_group_count(&too_long_a),
+            None,
+            "over-long name is not stored"
+        );
         assert_eq!(
             ws.get_group_count(&too_long_b),
             None,
@@ -766,7 +770,11 @@ mod tests {
 
         let at_limit = "c".repeat(MAX_GROUP_NAME_LEN);
         ws.set_group_count(&at_limit, 7);
-        assert_eq!(ws.get_group_count(&at_limit), Some(7), "a name at the limit still works");
+        assert_eq!(
+            ws.get_group_count(&at_limit),
+            Some(7),
+            "a name at the limit still works"
+        );
     }
 
     #[test]

@@ -563,7 +563,10 @@ mod tests {
                 "engine.post_process_shader({})",
                 "table must contain at least one shader ID",
             ),
-            ("engine.post_process_shader('bloom')", "expected nil or table of shader IDs"),
+            (
+                "engine.post_process_shader('bloom')",
+                "expected nil or table of shader IDs",
+            ),
         ] {
             let err = runtime.lua().load(script).exec().unwrap_err().to_string();
             assert!(err.contains(msg), "{script}: {err}");
@@ -582,7 +585,12 @@ mod tests {
         assert_eq!(post.uniforms.get("dir"), None);
         assert_eq!(
             post.uniforms.get("tint"),
-            Some(&UniformValue::Vec4 { x: 1.0, y: 0.5, z: 0.25, w: 1.0 })
+            Some(&UniformValue::Vec4 {
+                x: 1.0,
+                y: 0.5,
+                z: 0.25,
+                w: 1.0
+            })
         );
         assert_eq!(
             post.uniforms.get("uTime"),
@@ -590,8 +598,9 @@ mod tests {
             "reserved names are stored (with a warning); the renderer overwrites them"
         );
 
-        let (post, _) =
-            apply_script("engine.post_process_set_float('amp', 1) engine.post_process_clear_uniforms()");
+        let (post, _) = apply_script(
+            "engine.post_process_set_float('amp', 1) engine.post_process_clear_uniforms()",
+        );
         assert!(post.uniforms.is_empty());
     }
 
@@ -626,7 +635,10 @@ mod tests {
             patch(skin.track.as_ref().unwrap()),
             ("bar", Rect::new(0.0, 0.0, 32.0, 8.0), [2, 2, 2, 2])
         );
-        assert_eq!(patch(&skin.fill), ("bar", Rect::new(0.0, 8.0, 32.0, 8.0), [1, 1, 1, 1]));
+        assert_eq!(
+            patch(&skin.fill),
+            ("bar", Rect::new(0.0, 8.0, 32.0, 8.0), [1, 1, 1, 1])
+        );
     }
 
     #[test]
@@ -642,7 +654,12 @@ mod tests {
         let skin = theme(&themes, "b").button.as_ref().unwrap();
         let dx = |s: Option<Shadow>| s.map(|s| s.offset.x);
         assert_eq!(
-            [dx(skin.shadow), dx(skin.hover_shadow), dx(skin.pressed_shadow), dx(skin.disabled_shadow)],
+            [
+                dx(skin.shadow),
+                dx(skin.hover_shadow),
+                dx(skin.pressed_shadow),
+                dx(skin.disabled_shadow)
+            ],
             [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]
         );
         assert!(

@@ -39,27 +39,27 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::group::Group;
 use crate::components::luacollision::LuaCollisionRule;
 use crate::components::luaphase::LuaPhase;
+use crate::resources::lua_runtime::{
+    CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
+    populate_entity_signals, set_opt,
+};
+use crate::systems::lua_commands::{
+    DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
+    process_phase_command,
+};
+use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::group::Group;
 use aberred_core::components::signals::Signals;
 use aberred_core::events::collision::CollisionEvent;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
-use crate::resources::lua_runtime::{
-    CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
-    populate_entity_signals, set_opt,
-};
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::collision::{
     compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups, resolve_world_pos,
-};
-use crate::systems::lua_commands::{
-    DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
-    process_phase_command,
 };
 use log::{error, warn};
 
@@ -504,7 +504,10 @@ mod tests {
         assert_eq!(pos.get::<f32>("y").unwrap(), 2.0);
         for key in ["group", "vel", "rect", "signals"] {
             let value: mlua::Value = entity_table.get(key).unwrap();
-            assert!(matches!(value, mlua::Value::Nil), "expected {key} to be nil");
+            assert!(
+                matches!(value, mlua::Value::Nil),
+                "expected {key} to be nil"
+            );
         }
     }
 

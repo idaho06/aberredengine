@@ -431,7 +431,13 @@ mod tests {
         let mut cmds = Vec::new();
         let entities = {
             let mut commands = Commands::new(&mut queue, &world);
-            spawn_map(&mut commands, &mut animation_store, map, &mut world_signals, &mut cmds)
+            spawn_map(
+                &mut commands,
+                &mut animation_store,
+                map,
+                &mut world_signals,
+                &mut cmds,
+            )
         };
         queue.apply(&mut world);
         (world, entities, animation_store, world_signals)
@@ -457,7 +463,10 @@ mod tests {
         let anim = store.animations.get("walk").expect("registered");
         assert_eq!(&*anim.tex_key, "hero");
         assert_eq!(anim.position, Vec2::new(16.0, 32.0));
-        assert_eq!((anim.horizontal_displacement, anim.vertical_displacement), (16.0, 8.0));
+        assert_eq!(
+            (anim.horizontal_displacement, anim.vertical_displacement),
+            (16.0, 8.0)
+        );
         assert_eq!((anim.frame_count, anim.fps, anim.looped), (4, 12.0, true));
     }
 
@@ -511,26 +520,45 @@ mod tests {
         let (world, entities, _, signals) = run_spawn_map(&map);
         let (hero, other) = (entities[0], entities[1]);
 
-        assert_eq!(world.get::<MapPosition>(hero).unwrap().pos, Vec2::new(1.0, 2.0));
+        assert_eq!(
+            world.get::<MapPosition>(hero).unwrap().pos,
+            Vec2::new(1.0, 2.0)
+        );
         let s = world.get::<Sprite>(hero).unwrap();
         assert_eq!((&*s.tex_key, s.width, s.height), ("hero", 16.0, 24.0));
-        assert_eq!((s.offset, s.origin), (Vec2::new(32.0, 0.0), Vec2::new(8.0, 12.0)));
+        assert_eq!(
+            (s.offset, s.origin),
+            (Vec2::new(32.0, 0.0), Vec2::new(8.0, 12.0))
+        );
         assert_eq!((s.flip_h, s.flip_v), (true, false));
         assert_eq!(world.get::<Group>(hero).unwrap().0, "player");
         assert_eq!(world.get::<ZIndex>(hero).unwrap().0, 3.0);
         assert_eq!(world.get::<Rotation>(hero).unwrap().degrees, 45.0);
         assert_eq!(world.get::<Scale>(hero).unwrap().scale, Vec2::new(2.0, 3.0));
-        assert_eq!(world.get::<Tint>(hero).unwrap().color, Color::new(1, 2, 3, 4));
+        assert_eq!(
+            world.get::<Tint>(hero).unwrap().color,
+            Color::new(1, 2, 3, 4)
+        );
         let anim = world.get::<Animation>(hero).unwrap();
         assert_eq!((anim.animation_key.as_str(), anim.frame_index), ("walk", 0));
         assert_eq!(signals.get_entity("hero").copied(), Some(hero));
 
         let s = world.get::<Sprite>(other).unwrap();
-        assert_eq!((s.offset, s.origin), (Vec2::ZERO, Vec2::ZERO), "omitted offset/origin default to 0");
+        assert_eq!(
+            (s.offset, s.origin),
+            (Vec2::ZERO, Vec2::ZERO),
+            "omitted offset/origin default to 0"
+        );
         let text = world.get::<DynamicText>(other).unwrap();
-        assert_eq!((&*text.text, &*text.font, text.font_size), ("Score", "arcade", 12.0));
+        assert_eq!(
+            (&*text.text, &*text.font, text.font_size),
+            ("Score", "arcade", 12.0)
+        );
         assert_eq!(text.color, Color::new(5, 6, 7, 8));
-        assert_eq!(world.get::<TileMap>(other).unwrap().path, "assets/tilemaps/x");
+        assert_eq!(
+            world.get::<TileMap>(other).unwrap().path,
+            "assets/tilemaps/x"
+        );
         assert!(world.get::<MapPosition>(other).is_none());
         assert!(world.get::<Group>(other).is_none());
     }
@@ -542,7 +570,10 @@ mod tests {
         };
         let emitter = |ttl| ParticleEmitterEntry {
             template_keys: vec!["spark".into(), "missing".into()],
-            shape: ParticleEmitterShapeEntry::Rect { width: 8.0, height: 4.0 },
+            shape: ParticleEmitterShapeEntry::Rect {
+                width: 8.0,
+                height: 4.0,
+            },
             offset: None,
             particles_per_emission: 3,
             emissions_per_second: 20.0,
@@ -560,7 +591,10 @@ mod tests {
                     ..Default::default()
                 },
                 EntityDef {
-                    particle_emitter: Some(emitter(ParticleEmitterTtlEntry::Range { min: 1.0, max: 2.0 })),
+                    particle_emitter: Some(emitter(ParticleEmitterTtlEntry::Range {
+                        min: 1.0,
+                        max: 2.0,
+                    })),
                     ..Default::default()
                 },
                 EntityDef {
@@ -574,12 +608,32 @@ mod tests {
         let spark = entities[2];
 
         let e = world.get::<ParticleEmitter>(entities[0]).unwrap();
-        assert_eq!(e.templates, [spark], "later template resolved; unknown key dropped");
-        assert!(matches!(e.shape, EmitterShape::Rect { width: 8.0, height: 4.0 }));
+        assert_eq!(
+            e.templates,
+            [spark],
+            "later template resolved; unknown key dropped"
+        );
+        assert!(matches!(
+            e.shape,
+            EmitterShape::Rect {
+                width: 8.0,
+                height: 4.0
+            }
+        ));
         assert_eq!(e.offset, Vec2::ZERO);
-        assert_eq!((e.particles_per_emission, e.emissions_per_second), (3, 20.0));
-        assert_eq!((e.emissions_remaining, e.initial_emissions_remaining), (5, 5));
-        assert_eq!((e.arc_degrees, e.speed_range), ((10.0, 90.0), (100.0, 200.0)), "ranges normalized");
+        assert_eq!(
+            (e.particles_per_emission, e.emissions_per_second),
+            (3, 20.0)
+        );
+        assert_eq!(
+            (e.emissions_remaining, e.initial_emissions_remaining),
+            (5, 5)
+        );
+        assert_eq!(
+            (e.arc_degrees, e.speed_range),
+            ((10.0, 90.0), (100.0, 200.0)),
+            "ranges normalized"
+        );
         assert!(matches!(e.ttl, TtlSpec::Fixed(v) if v == 1.5));
         assert!(matches!(
             world.get::<ParticleEmitter>(entities[1]).unwrap().ttl,
@@ -614,13 +668,22 @@ mod tests {
         });
         world.flush();
 
-        let cmds: Vec<RenderAssetCmd> =
-            world.resource_mut::<Messages<RenderAssetCmd>>().drain().collect();
+        let cmds: Vec<RenderAssetCmd> = world
+            .resource_mut::<Messages<RenderAssetCmd>>()
+            .drain()
+            .collect();
         assert!(matches!(
             cmds.as_slice(),
             [RenderAssetCmd::Texture { id, filter: TextureFilter::Bilinear, .. }] if id == "tex"
         ));
-        let thing = world.resource::<WorldSignals>().get_entity("thing").copied().unwrap();
-        assert_eq!(world.get::<MapPosition>(thing).unwrap().pos, Vec2::new(4.0, 5.0));
+        let thing = world
+            .resource::<WorldSignals>()
+            .get_entity("thing")
+            .copied()
+            .unwrap();
+        assert_eq!(
+            world.get::<MapPosition>(thing).unwrap().pos,
+            Vec2::new(4.0, 5.0)
+        );
     }
 }

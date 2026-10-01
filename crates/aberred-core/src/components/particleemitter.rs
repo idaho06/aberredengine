@@ -49,8 +49,8 @@
 //! - [`crate::systems::particleemitter::particle_emitter_system`] – system that emits particles
 //! - [`crate::components::ttl::Ttl`] – time-to-live for automatic despawn
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 /// Shape of the emission area.
 #[derive(Debug, Clone, Default)]

@@ -5,10 +5,10 @@
 //! resources.
 
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
-use aberred_core::resources::gameconfig::GameConfig;
 use crate::resources::fullscreen::FullScreen;
 use crate::resources::mirrors::RenderGameConfig;
 use crate::resources::rendertarget::RenderTarget;
+use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::screensize::ScreenSize;
 use bevy_ecs::prelude::*;
 use log::{debug, error};

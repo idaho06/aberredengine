@@ -18,9 +18,9 @@
 //! GUI child layout is translate-only, so this is plain `Vec2` addition
 //! rather than `transform_compose`'s scale/rotate/translate composition.
 
+use crate::math::Vec2;
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
-use crate::math::Vec2;
 
 use crate::components::guioffset::GuiOffset;
 use crate::components::screenposition::ScreenPosition;

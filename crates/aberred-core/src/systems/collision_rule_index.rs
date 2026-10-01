@@ -93,7 +93,11 @@ mod tests {
     fn rebuild_populates_bucket_for_matching_pair_both_orders() {
         let mut world = build_world_with_rules();
         let e = world
-            .spawn(CollisionRule::rust("ball", "brick", dummy_callback as CollisionCallback))
+            .spawn(CollisionRule::rust(
+                "ball",
+                "brick",
+                dummy_callback as CollisionCallback,
+            ))
             .id();
         world.flush();
         run_rebuild(&mut world);
@@ -107,7 +111,11 @@ mod tests {
     fn rebuild_after_removal_empties_bucket() {
         let mut world = build_world_with_rules();
         let e = world
-            .spawn(CollisionRule::rust("ball", "brick", dummy_callback as CollisionCallback))
+            .spawn(CollisionRule::rust(
+                "ball",
+                "brick",
+                dummy_callback as CollisionCallback,
+            ))
             .id();
         world.flush();
         run_rebuild(&mut world);
@@ -134,10 +142,18 @@ mod tests {
         let mut world = build_world_with_rules();
         // Spawn in descending id order so an unsorted bucket would fail.
         let e2 = world
-            .spawn(CollisionRule::rust("a", "b", dummy_callback as CollisionCallback))
+            .spawn(CollisionRule::rust(
+                "a",
+                "b",
+                dummy_callback as CollisionCallback,
+            ))
             .id();
         let e1 = world
-            .spawn(CollisionRule::rust("a", "b", dummy_callback as CollisionCallback))
+            .spawn(CollisionRule::rust(
+                "a",
+                "b",
+                dummy_callback as CollisionCallback,
+            ))
             .id();
         world.flush();
         run_rebuild(&mut world);

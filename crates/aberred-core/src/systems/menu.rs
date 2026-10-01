@@ -20,6 +20,7 @@ use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::input::{InputAction, InputEvent};
 use crate::events::menu::MenuSelectionEvent;
+use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
@@ -32,7 +33,6 @@ use crate::resources::texturedims::TextureDimsStore;
 use crate::systems::GameCtx;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
-use crate::math::Vec2;
 
 /// Z-index applied to menu elements (world-space or screen-space) so they render
 /// above other entities at the default z=0. World-space and screen-space menus
@@ -647,11 +647,11 @@ pub fn dispatch_menu_action(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_ecs::message::Messages;
-    use bevy_ecs::system::RunSystemOnce;
     use crate::math::{Color, Vec2};
     use crate::resources::gamestate::{GameStates, NextGameStates};
     use crate::resources::worldsignals::WorldSignals;
+    use bevy_ecs::message::Messages;
+    use bevy_ecs::system::RunSystemOnce;
 
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
 
@@ -689,7 +689,10 @@ mod tests {
     }
 
     fn press(world: &mut World, action: InputAction) {
-        world.trigger(InputEvent { action, pressed: true });
+        world.trigger(InputEvent {
+            action,
+            pressed: true,
+        });
         world.flush();
     }
 
@@ -727,19 +730,57 @@ mod tests {
         let (world, menu) = spawn_menu(five_items().with_visible_count(2));
         assert_eq!(
             visible_items(&world, menu),
-            [Some(Vec2::new(100.0, 50.0)), Some(Vec2::new(100.0, 60.0)), None, None, None]
+            [
+                Some(Vec2::new(100.0, 50.0)),
+                Some(Vec2::new(100.0, 60.0)),
+                None,
+                None,
+                None
+            ]
         );
         let m = world.get::<Menu>(menu).unwrap();
-        let (top, bottom) = (m.top_indicator_entity.unwrap(), m.bottom_indicator_entity.unwrap());
-        assert_eq!(screen_pos(&world, top), None, "nothing above the first item");
-        assert_eq!(screen_pos(&world, bottom), Some(Vec2::new(100.0, 70.0)), "more items below");
+        let (top, bottom) = (
+            m.top_indicator_entity.unwrap(),
+            m.bottom_indicator_entity.unwrap(),
+        );
+        assert_eq!(
+            screen_pos(&world, top),
+            None,
+            "nothing above the first item"
+        );
+        assert_eq!(
+            screen_pos(&world, bottom),
+            Some(Vec2::new(100.0, 70.0)),
+            "more items below"
+        );
         for e in (0..5).map(|i| item(&world, menu, i)).chain([top, bottom]) {
-            assert_eq!(world.get::<ZIndex>(e).unwrap().0, MENU_Z_INDEX, "hidden ones too");
+            assert_eq!(
+                world.get::<ZIndex>(e).unwrap().0,
+                MENU_Z_INDEX,
+                "hidden ones too"
+            );
             assert_eq!(world.get::<Group>(e).unwrap().0, format!("menu_{menu}"));
         }
-        assert!(world.get::<Signals>(menu).unwrap().has_flag("waiting_selection"));
-        assert_eq!(world.get::<DynamicText>(item(&world, menu, 0)).unwrap().color, Color::YELLOW);
-        assert_eq!(world.get::<DynamicText>(item(&world, menu, 1)).unwrap().color, Color::WHITE);
+        assert!(
+            world
+                .get::<Signals>(menu)
+                .unwrap()
+                .has_flag("waiting_selection")
+        );
+        assert_eq!(
+            world
+                .get::<DynamicText>(item(&world, menu, 0))
+                .unwrap()
+                .color,
+            Color::YELLOW
+        );
+        assert_eq!(
+            world
+                .get::<DynamicText>(item(&world, menu, 1))
+                .unwrap()
+                .color,
+            Color::WHITE
+        );
     }
 
     #[test]
@@ -748,7 +789,10 @@ mod tests {
         menu.use_screen_space = false;
         let (world, menu) = spawn_menu(menu);
         let first = item(&world, menu, 0);
-        assert_eq!(world.get::<MapPosition>(first).unwrap().pos, Vec2::new(100.0, 50.0));
+        assert_eq!(
+            world.get::<MapPosition>(first).unwrap().pos,
+            Vec2::new(100.0, 50.0)
+        );
         assert!(world.get::<ScreenPosition>(first).is_none());
     }
 
@@ -756,9 +800,17 @@ mod tests {
     fn navigation_wraps_around_without_visible_count() {
         let (mut world, menu) = spawn_menu(five_items());
         press(&mut world, InputAction::SecondaryDirectionUp);
-        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 4, "up from first wraps to last");
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            4,
+            "up from first wraps to last"
+        );
         press(&mut world, InputAction::SecondaryDirectionDown);
-        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0, "down from last wraps to first");
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            0,
+            "down from last wraps to first"
+        );
     }
 
     #[test]
@@ -770,29 +822,58 @@ mod tests {
         );
 
         press(&mut world, InputAction::SecondaryDirectionUp);
-        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0, "no wrap at the top");
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            0,
+            "no wrap at the top"
+        );
         assert_eq!(played_sounds(&mut world), 0, "no change, no sound");
 
         press(&mut world, InputAction::SecondaryDirectionDown); // index 1, still in window
         press(&mut world, InputAction::SecondaryDirectionDown); // index 2, window scrolls to 1..=2
         let m = world.get::<Menu>(menu).unwrap();
         assert_eq!((m.selected_index, m.scroll_offset), (2, 1));
-        let (top, bottom) = (m.top_indicator_entity.unwrap(), m.bottom_indicator_entity.unwrap());
+        let (top, bottom) = (
+            m.top_indicator_entity.unwrap(),
+            m.bottom_indicator_entity.unwrap(),
+        );
         assert_eq!(
             visible_items(&world, menu),
-            [None, Some(Vec2::new(100.0, 50.0)), Some(Vec2::new(100.0, 60.0)), None, None]
+            [
+                None,
+                Some(Vec2::new(100.0, 50.0)),
+                Some(Vec2::new(100.0, 60.0)),
+                None,
+                None
+            ]
         );
-        assert_eq!(screen_pos(&world, top), Some(Vec2::new(100.0, 40.0)), "items above now");
+        assert_eq!(
+            screen_pos(&world, top),
+            Some(Vec2::new(100.0, 40.0)),
+            "items above now"
+        );
         assert_eq!(screen_pos(&world, bottom), Some(Vec2::new(100.0, 70.0)));
-        assert_eq!(played_sounds(&mut world), 2, "one sound per selection change");
+        assert_eq!(
+            played_sounds(&mut world),
+            2,
+            "one sound per selection change"
+        );
 
         for _ in 0..5 {
             press(&mut world, InputAction::SecondaryDirectionDown);
         }
         let m = world.get::<Menu>(menu).unwrap();
-        assert_eq!((m.selected_index, m.scroll_offset), (4, 3), "stops at the last item");
+        assert_eq!(
+            (m.selected_index, m.scroll_offset),
+            (4, 3),
+            "stops at the last item"
+        );
         let bottom = m.bottom_indicator_entity.unwrap();
-        assert_eq!(screen_pos(&world, bottom), None, "nothing below the last item");
+        assert_eq!(
+            screen_pos(&world, bottom),
+            None,
+            "nothing below the last item"
+        );
     }
 
     #[test]
@@ -810,7 +891,10 @@ mod tests {
 
         press(&mut world, InputAction::SecondaryDirectionDown);
         let color = |w: &World, i| w.get::<DynamicText>(item(w, menu, i)).unwrap().color;
-        assert_eq!((color(&world, 0), color(&world, 1)), (Color::WHITE, Color::YELLOW));
+        assert_eq!(
+            (color(&world, 0), color(&world, 1)),
+            (Color::WHITE, Color::YELLOW)
+        );
         assert_eq!(screen_pos(&world, cursor), Some(Vec2::new(100.0, 60.0)));
     }
 
@@ -823,18 +907,28 @@ mod tests {
             pressed: false,
         });
         world.flush();
-        assert!(world.resource::<Selections>().0.is_empty(), "releases are ignored");
+        assert!(
+            world.resource::<Selections>().0.is_empty(),
+            "releases are ignored"
+        );
 
         press(&mut world, InputAction::Action1);
         assert_eq!(world.resource::<Selections>().0, [(menu, "b".to_string())]);
         let signals = world.get::<Signals>(menu).unwrap();
         assert!(!signals.has_flag("waiting_selection"));
-        assert_eq!(signals.get_string("selected_item").map(String::as_str), Some("b"));
+        assert_eq!(
+            signals.get_string("selected_item").map(String::as_str),
+            Some("b")
+        );
         assert!(!world.get::<Menu>(menu).unwrap().active);
 
         press(&mut world, InputAction::Action2);
         press(&mut world, InputAction::SecondaryDirectionDown);
-        assert_eq!(world.resource::<Selections>().0.len(), 1, "an inactive menu ignores input");
+        assert_eq!(
+            world.resource::<Selections>().0.len(),
+            1,
+            "an inactive menu ignores input"
+        );
         assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 1);
     }
 
@@ -845,10 +939,17 @@ mod tests {
         let bystander = world.spawn_empty().id();
         let menu = world
             .spawn(
-                Menu::new(&[("play", "play"), ("quit", "quit")], Vec2::ZERO, "test_font", 12.0, 10.0, true)
-                    .with_dynamic_text(false)
-                    .with_cursor(cursor)
-                    .with_visible_count(1),
+                Menu::new(
+                    &[("play", "play"), ("quit", "quit")],
+                    Vec2::ZERO,
+                    "test_font",
+                    12.0,
+                    10.0,
+                    true,
+                )
+                .with_dynamic_text(false)
+                .with_cursor(cursor)
+                .with_visible_count(1),
             )
             .id();
         world.run_system_once(menu_spawn_system).unwrap();
@@ -862,7 +963,12 @@ mod tests {
             .items
             .iter()
             .filter_map(|i| i.entity)
-            .chain([m.top_indicator_entity.unwrap(), m.bottom_indicator_entity.unwrap(), cursor, menu])
+            .chain([
+                m.top_indicator_entity.unwrap(),
+                m.bottom_indicator_entity.unwrap(),
+                cursor,
+                menu,
+            ])
             .collect();
         world.resource_mut::<Messages<RenderAssetCmd>>().clear();
 
@@ -893,11 +999,18 @@ mod tests {
         let plain = world.spawn_empty().id();
         world.run_system_once_with(menu_despawn, plain).unwrap();
         assert!(world.get_entity(plain).is_ok());
-        assert_eq!(world.resource_mut::<Messages<RenderAssetCmd>>().drain().count(), 0);
+        assert_eq!(
+            world
+                .resource_mut::<Messages<RenderAssetCmd>>()
+                .drain()
+                .count(),
+            0
+        );
     }
 
     fn record_rust_callback(_menu: Entity, id: &str, index: usize, ctx: &mut GameCtx) {
-        ctx.world_signals.set_string("rust_cb", format!("{id}:{index}"));
+        ctx.world_signals
+            .set_string("rust_cb", format!("{id}:{index}"));
     }
 
     fn mark_switch_scene(mut ws: ResMut<WorldSignals>) {
@@ -910,14 +1023,20 @@ mod tests {
         crate::testing::insert_game_ctx_resources(&mut world);
         world.init_resource::<NextGameState>();
         let mut store = SystemsStore::default();
-        store.insert(hook_keys::SWITCH_SCENE, world.register_system(mark_switch_scene));
+        store.insert(
+            hook_keys::SWITCH_SCENE,
+            world.register_system(mark_switch_scene),
+        );
         world.insert_resource(store);
         world.add_observer(menu_selection_observer);
         world
     }
 
     fn select(world: &mut World, menu: Entity, item: &str) {
-        world.trigger(MenuSelectionEvent { menu, item_id: item.to_string() });
+        world.trigger(MenuSelectionEvent {
+            menu,
+            item_id: item.to_string(),
+        });
         world.flush();
     }
 
@@ -929,19 +1048,35 @@ mod tests {
     }
 
     fn three_items() -> Menu {
-        Menu::new(&[("play", "P"), ("options", "O"), ("quit", "Q")], Vec2::ZERO, "f", 12.0, 10.0, true)
+        Menu::new(
+            &[("play", "P"), ("options", "O"), ("quit", "Q")],
+            Vec2::ZERO,
+            "f",
+            12.0,
+            10.0,
+            true,
+        )
     }
 
     #[test]
     fn selection_prefers_the_rust_callback_over_menu_actions() {
         let mut world = selection_world();
         let menu = world
-            .spawn((three_items().with_on_rust_callback(record_rust_callback), actions()))
+            .spawn((
+                three_items().with_on_rust_callback(record_rust_callback),
+                actions(),
+            ))
             .id();
         select(&mut world, menu, "options");
         let ws = world.resource::<WorldSignals>();
-        assert_eq!(ws.get_string("rust_cb").map(String::as_str), Some("options:1"));
-        assert!(ws.get_string("show_submenu").is_none(), "MenuActions not consulted");
+        assert_eq!(
+            ws.get_string("rust_cb").map(String::as_str),
+            Some("options:1")
+        );
+        assert!(
+            ws.get_string("show_submenu").is_none(),
+            "MenuActions not consulted"
+        );
     }
 
     #[test]
@@ -951,16 +1086,25 @@ mod tests {
 
         select(&mut world, menu, "play");
         let ws = world.resource::<WorldSignals>();
-        assert_eq!(ws.get_string(sk::SCENE).map(String::as_str), Some("level01"));
+        assert_eq!(
+            ws.get_string(sk::SCENE).map(String::as_str),
+            Some("level01")
+        );
         assert!(ws.has_flag("switch_hook_ran"), "switch_scene hook was run");
 
         select(&mut world, menu, "options");
         assert_eq!(
-            world.resource::<WorldSignals>().get_string("show_submenu").map(String::as_str),
+            world
+                .resource::<WorldSignals>()
+                .get_string("show_submenu")
+                .map(String::as_str),
             Some("options_menu")
         );
 
-        assert_eq!(world.resource::<NextGameState>().get(), &NextGameStates::Unchanged);
+        assert_eq!(
+            world.resource::<NextGameState>().get(),
+            &NextGameStates::Unchanged
+        );
         select(&mut world, menu, "quit");
         assert_eq!(
             world.resource::<NextGameState>().get(),
@@ -977,7 +1121,10 @@ mod tests {
         select(&mut world, without, "play");
         let ws = world.resource::<WorldSignals>();
         assert!(ws.get_string(sk::SCENE).is_none() && !ws.has_flag("switch_hook_ran"));
-        assert_eq!(world.resource::<NextGameState>().get(), &NextGameStates::Unchanged);
+        assert_eq!(
+            world.resource::<NextGameState>().get(),
+            &NextGameStates::Unchanged
+        );
     }
 
     #[test]
@@ -993,7 +1140,10 @@ mod tests {
         select(&mut world, menu, "play");
 
         assert_eq!(
-            world.resource::<WorldSignals>().get_string(sk::SCENE).map(String::as_str),
+            world
+                .resource::<WorldSignals>()
+                .get_string(sk::SCENE)
+                .map(String::as_str),
             Some("level01"),
             "the requested scene is still recorded"
         );
@@ -1003,15 +1153,8 @@ mod tests {
     fn static_label_queues_rasterize_text_and_sizes_sprite() {
         let mut world = new_test_world();
         world.spawn(
-            Menu::new(
-                &[("ok", "ok")],
-                Vec2::ZERO,
-                "test_font",
-                20.0,
-                4.0,
-                false,
-            )
-            .with_dynamic_text(false),
+            Menu::new(&[("ok", "ok")], Vec2::ZERO, "test_font", 20.0, 4.0, false)
+                .with_dynamic_text(false),
         );
 
         world

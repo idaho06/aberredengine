@@ -90,7 +90,8 @@ pub trait WorldDraw {
 ///
 /// The [`SignalSnapshot`] param is read-only, mirroring the render-side
 /// `GuiCallback`, which likewise takes no live `&WorldSignals`.
-pub type WorldDrawCallback = fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
+pub type WorldDrawCallback =
+    fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
 
 // ---------------------------------------------------------------------------
 // SceneLogic

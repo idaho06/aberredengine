@@ -338,7 +338,10 @@ mod tests {
     #[test]
     fn gui_modifiers_require_their_base_method_first() {
         for (call, msg) in [
-            ("with_gui_offset(1, 2)", "with_gui_offset() requires with_parent() first"),
+            (
+                "with_gui_offset(1, 2)",
+                "with_gui_offset() requires with_parent() first",
+            ),
             (
                 "with_gui_button_disabled()",
                 "with_gui_button_disabled() requires with_gui_button() first",
@@ -524,9 +527,11 @@ mod tests {
 
     #[test]
     fn with_gui_progress_bar_stores_value_max_and_signal_binding() {
-        let bar = built(":with_gui_progress_bar(100, 8, 30, 50):with_gui_progress_bar_signal_binding('hp')")
-            .gui_progress_bar
-            .unwrap();
+        let bar = built(
+            ":with_gui_progress_bar(100, 8, 30, 50):with_gui_progress_bar_signal_binding('hp')",
+        )
+        .gui_progress_bar
+        .unwrap();
         assert_eq!(bar.size, Vec2::new(100.0, 8.0));
         assert_eq!((bar.value, bar.max), (30.0, 50.0));
         assert_eq!(bar.signal_binding.as_deref(), Some("hp"));

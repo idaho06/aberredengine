@@ -106,8 +106,8 @@ mod logic_world;
 mod registrar;
 mod replay;
 mod run;
-mod schedule;
 mod scene;
+mod schedule;
 #[cfg(test)]
 mod tests;
 mod validate;

@@ -591,7 +591,11 @@ mod tests {
         assert_eq!(replies, [r#"MusicLoaded { id: "theme" }"#]);
         assert_eq!(
             h.take_calls(),
-            ["load_music(theme.ogg) -> 2", "stop_music(1)", "unload_music(1)"]
+            [
+                "load_music(theme.ogg) -> 2",
+                "stop_music(1)",
+                "unload_music(1)"
+            ]
         );
         assert_eq!(h.tracks(), [], "the old stream's track is gone");
         assert_eq!(h.store().music.get("theme"), Some(&2));
@@ -623,7 +627,11 @@ mod tests {
             replies[1],
             r#"MusicLoadFailed { id: "bad", error: "failed to load" }"#
         );
-        assert_eq!(h.take_calls(), ["load_music(bad.ogg) -> None"], "no FFI for a NUL path");
+        assert_eq!(
+            h.take_calls(),
+            ["load_music(bad.ogg) -> None"],
+            "no FFI for a NUL path"
+        );
         assert!(h.store().music.is_empty());
     }
 
@@ -642,7 +650,11 @@ mod tests {
         assert_eq!(h.tracks(), [track("theme", true, false)]);
 
         h.tick([play_music("theme", false)]);
-        assert_eq!(h.tracks(), [track("theme", false, false)], "one track per id");
+        assert_eq!(
+            h.tracks(),
+            [track("theme", false, false)],
+            "one track per id"
+        );
     }
 
     #[test]
@@ -695,7 +707,11 @@ mod tests {
         let replies = h.tick([AudioCmd::PauseMusic { id: "theme".into() }]);
         // Pinned as-is: pause reuses the stop reply.
         assert_eq!(replies, [r#"MusicStopped { id: "theme" }"#]);
-        assert_eq!(h.take_calls(), ["pause_music(1)"], "a paused track is not pumped");
+        assert_eq!(
+            h.take_calls(),
+            ["pause_music(1)"],
+            "a paused track is not pumped"
+        );
         assert_eq!(h.tracks(), [track("theme", false, true)]);
 
         let replies = h.tick([AudioCmd::ResumeMusic { id: "theme".into() }]);
@@ -821,7 +837,10 @@ mod tests {
             "{}",
             replies[0]
         );
-        assert_eq!(replies[1], r#"FxLoadFailed { id: "bad", error: "failed to load" }"#);
+        assert_eq!(
+            replies[1],
+            r#"FxLoadFailed { id: "bad", error: "failed to load" }"#
+        );
         assert_eq!(h.take_calls(), ["load_sound(bad.wav) -> None"]);
         assert!(h.store().fx.is_empty());
     }
@@ -830,7 +849,12 @@ mod tests {
     fn reloading_fx_drops_only_that_sounds_aliases_before_unloading_it() {
         let mut h = Harness::new();
         // hit = 1, jump = 2, their aliases 3 and 4.
-        h.setup([load_fx("hit"), load_fx("jump"), play_fx("hit"), play_fx("jump")]);
+        h.setup([
+            load_fx("hit"),
+            load_fx("jump"),
+            play_fx("hit"),
+            play_fx("jump"),
+        ]);
 
         let replies = h.tick([load_fx("hit")]);
 
@@ -904,7 +928,9 @@ mod tests {
         assert_eq!(replies, Vec::<String>::new());
         let calls = h.take_calls();
         for alias in [2, 3] {
-            let stop = calls.iter().position(|c| *c == format!("stop_sound({alias})"));
+            let stop = calls
+                .iter()
+                .position(|c| *c == format!("stop_sound({alias})"));
             let unload = calls
                 .iter()
                 .position(|c| *c == format!("unload_sound_alias({alias})"));
@@ -1057,7 +1083,11 @@ mod tests {
         // Pinned as-is: tracks are despawned without a stop_music first.
         assert_eq!(
             h.take_calls(),
-            ["unload_sound_alias(3)", "unload_music(1)", "unload_sound(2)"]
+            [
+                "unload_sound_alias(3)",
+                "unload_music(1)",
+                "unload_sound(2)"
+            ]
         );
         assert_eq!(h.tracks(), []);
         assert_eq!(h.fx_aliases(), []);
@@ -1068,7 +1098,10 @@ mod tests {
     fn drain_cmds_requests_exit_once_every_sender_is_gone() {
         let mut h = Harness::new();
         h.tick([]);
-        assert!(!h.world.resource::<ShouldExit>().0, "live sender: keep running");
+        assert!(
+            !h.world.resource::<ShouldExit>().0,
+            "live sender: keep running"
+        );
 
         h.tx_cmd = None;
         h.tick([]);

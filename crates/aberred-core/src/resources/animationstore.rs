@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::Resource;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 
 /// Central registry of reusable animation definitions keyed by string IDs.

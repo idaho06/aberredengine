@@ -99,7 +99,6 @@ impl TrackedGroups {
 mod tests {
     use super::*;
 
-
     #[test]
     fn add_group_refuses_names_longer_than_the_signal_key_allows() {
         let mut tracked = TrackedGroups::default();

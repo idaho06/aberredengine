@@ -61,10 +61,26 @@ mod tests {
     #[test]
     fn multiply_is_componentwise_over_255() {
         let cases = [
-            (Tint::new(100, 150, 200, 255), Color::WHITE, Color::new(100, 150, 200, 255)),
-            (Tint::new(100, 150, 200, 255), Color::new(0, 0, 0, 0), Color::new(0, 0, 0, 0)),
-            (Tint::default(), Color::new(128, 64, 32, 255), Color::new(128, 64, 32, 255)),
-            (Tint::new(128, 128, 128, 128), Color::new(128, 255, 0, 255), Color::new(64, 128, 0, 128)),
+            (
+                Tint::new(100, 150, 200, 255),
+                Color::WHITE,
+                Color::new(100, 150, 200, 255),
+            ),
+            (
+                Tint::new(100, 150, 200, 255),
+                Color::new(0, 0, 0, 0),
+                Color::new(0, 0, 0, 0),
+            ),
+            (
+                Tint::default(),
+                Color::new(128, 64, 32, 255),
+                Color::new(128, 64, 32, 255),
+            ),
+            (
+                Tint::new(128, 128, 128, 128),
+                Color::new(128, 255, 0, 255),
+                Color::new(64, 128, 0, 128),
+            ),
         ];
         for (tint, other, expected) in cases {
             assert_eq!(tint.multiply(other), expected, "{tint:?} * {other:?}");

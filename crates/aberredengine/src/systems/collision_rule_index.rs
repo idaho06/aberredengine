@@ -7,7 +7,7 @@
 //! `#[cfg(not(feature = "lua"))]` this resolves to core's Rust-only variant
 //! instead.
 
-#[cfg(feature = "lua")]
-pub use aberred_lua::systems::lua_collision_rule_index::rebuild_collision_rule_index;
 #[cfg(not(feature = "lua"))]
 pub use aberred_core::systems::collision_rule_index::rebuild_collision_rule_index;
+#[cfg(feature = "lua")]
+pub use aberred_lua::systems::lua_collision_rule_index::rebuild_collision_rule_index;

@@ -185,8 +185,18 @@ mod tests {
     #[test]
     fn controller_starts_on_fallback_and_keeps_rule_order() {
         let ctrl = AnimationController::new("idle")
-            .with_rule(Condition::HasFlag { key: "running".into() }, "run")
-            .with_rule(Condition::LacksFlag { key: "grounded".into() }, "jump");
+            .with_rule(
+                Condition::HasFlag {
+                    key: "running".into(),
+                },
+                "run",
+            )
+            .with_rule(
+                Condition::LacksFlag {
+                    key: "grounded".into(),
+                },
+                "jump",
+            );
         assert_eq!(ctrl.current_key, "idle");
         assert_eq!(ctrl.fallback_key, "idle");
         let keys: Vec<_> = ctrl.rules.iter().map(|r| r.set_key.as_str()).collect();

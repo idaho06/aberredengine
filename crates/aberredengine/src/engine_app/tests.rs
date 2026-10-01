@@ -1,33 +1,33 @@
 use std::path::PathBuf;
 
+use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
-use aberred_core::math::Vec2;
 
-use aberred_core::error::EngineError;
 use super::builder::EngineBuilder;
 use super::logic_thread::run_sim_tick;
 use super::logic_world::register_persistent_system;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
+use aberred_core::error::EngineError;
+use aberred_core::events::input::InputAction;
+use aberred_core::protocol::raw_input::ImguiCaptureState;
 use aberred_core::protocol::raw_input::InputSample;
 use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
-use aberred_core::events::input::InputAction;
-use aberred_core::resources::input::InputState;
-use aberred_core::protocol::raw_input::ImguiCaptureState;
-use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::gamestate::{GameState, GameStates};
+use aberred_core::resources::input::InputState;
+use aberred_core::resources::systemsstore::SystemsStore;
 
 #[cfg(feature = "lua")]
 use aberred_core::systems::animation::animation_controller;
 #[cfg(feature = "lua")]
-use aberred_core::systems::phase::phase_system;
-#[cfg(feature = "lua")]
 use aberred_core::systems::group::update_group_counts_system;
+#[cfg(feature = "lua")]
+use aberred_core::systems::phase::phase_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
@@ -508,8 +508,8 @@ fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
 
 // --- SceneManager builder tests ---
 
-use aberred_core::systems::GameCtx;
 use super::scene::SceneDescriptor;
+use aberred_core::systems::GameCtx;
 
 fn dummy_scene_enter(_ctx: &mut GameCtx) {}
 fn dummy_scene_update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
@@ -647,25 +647,43 @@ fn record_and_play_replay_together_are_rejected() {
             .play_replay("in.replay"),
     )
     .unwrap_err();
-    assert!(matches!(err, EngineError::RecordAndPlayReplayConflict), "{err}");
+    assert!(
+        matches!(err, EngineError::RecordAndPlayReplayConflict),
+        "{err}"
+    );
 }
 
 #[test]
 fn recording_a_replay_requires_a_deterministic_seed() {
     let err = validate(&EngineBuilder::new().record_replay("out.replay", "v1")).unwrap_err();
-    assert!(matches!(err, EngineError::RecordReplayRequiresDeterministic), "{err}");
+    assert!(
+        matches!(err, EngineError::RecordReplayRequiresDeterministic),
+        "{err}"
+    );
 }
 
 #[test]
 fn playing_a_replay_rejects_an_explicit_seed() {
-    let err =
-        validate(&EngineBuilder::new().deterministic(1).play_replay("in.replay")).unwrap_err();
-    assert!(matches!(err, EngineError::PlayReplayConflictsWithDeterministic), "{err}");
+    let err = validate(
+        &EngineBuilder::new()
+            .deterministic(1)
+            .play_replay("in.replay"),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, EngineError::PlayReplayConflictsWithDeterministic),
+        "{err}"
+    );
 }
 
 #[test]
 fn valid_replay_and_scene_setups_pass_validation() {
-    validate(&EngineBuilder::new().deterministic(1).record_replay("out.replay", "v1")).unwrap();
+    validate(
+        &EngineBuilder::new()
+            .deterministic(1)
+            .record_replay("out.replay", "v1"),
+    )
+    .unwrap();
     validate(&EngineBuilder::new().play_replay("in.replay")).unwrap();
     validate(&EngineBuilder::new().deterministic(1)).unwrap();
     validate(
@@ -699,7 +717,10 @@ fn initial_scene_not_registered_lists_every_registered_scene() {
 #[test]
 fn deterministic_seed_conflicts_with_lua() {
     let err = validate(&EngineBuilder::new().with_lua("main.lua").deterministic(1)).unwrap_err();
-    assert!(matches!(err, EngineError::LuaConflictsWithDeterministic), "{err}");
+    assert!(
+        matches!(err, EngineError::LuaConflictsWithDeterministic),
+        "{err}"
+    );
 }
 
 #[cfg(feature = "lua")]
@@ -711,8 +732,12 @@ fn replay_record_or_play_conflicts_with_lua() {
             .record_replay("out.replay", "v1"),
     )
     .unwrap_err();
-    let play = validate(&EngineBuilder::new().with_lua("main.lua").play_replay("in.replay"))
-        .unwrap_err();
+    let play = validate(
+        &EngineBuilder::new()
+            .with_lua("main.lua")
+            .play_replay("in.replay"),
+    )
+    .unwrap_err();
     for err in [record, play] {
         assert!(matches!(err, EngineError::LuaConflictsWithReplay), "{err}");
     }
@@ -731,7 +756,10 @@ fn validation_reports_the_earliest_conflict_first() {
             .initial_scene("menu"),
     )
     .unwrap_err();
-    assert!(matches!(err, EngineError::LuaConflictsWithSceneManager), "{err}");
+    assert!(
+        matches!(err, EngineError::LuaConflictsWithSceneManager),
+        "{err}"
+    );
 
     // record + play + lua: the record/play conflict wins over the Lua one.
     let err = validate(
@@ -741,16 +769,28 @@ fn validation_reports_the_earliest_conflict_first() {
             .play_replay("in.replay"),
     )
     .unwrap_err();
-    assert!(matches!(err, EngineError::RecordAndPlayReplayConflict), "{err}");
+    assert!(
+        matches!(err, EngineError::RecordAndPlayReplayConflict),
+        "{err}"
+    );
 }
 
 #[cfg(feature = "lua")]
 #[test]
 fn lua_conflict_names_the_first_user_hook_for_every_hook() {
     let cases: [(EngineBuilder, &str); 3] = [
-        (EngineBuilder::new().on_enter_play(dummy_enter_play), "on_enter_play"),
-        (EngineBuilder::new().on_update(dummy_enter_play), "on_update"),
-        (EngineBuilder::new().on_switch_scene(dummy_switch_scene), "on_switch_scene"),
+        (
+            EngineBuilder::new().on_enter_play(dummy_enter_play),
+            "on_enter_play",
+        ),
+        (
+            EngineBuilder::new().on_update(dummy_enter_play),
+            "on_update",
+        ),
+        (
+            EngineBuilder::new().on_switch_scene(dummy_switch_scene),
+            "on_switch_scene",
+        ),
     ];
     for (builder, expected) in cases {
         let err = validate(&builder.with_lua("main.lua")).unwrap_err();
@@ -882,7 +922,10 @@ fn plain_setters_store_their_arguments() {
     assert_eq!(builder.config_str, Some("[window]"));
     assert_eq!(builder.title_override.as_deref(), Some("T"));
     assert_eq!(builder.deterministic_seed, Some(42));
-    assert_eq!(builder.record_replay_path, Some(PathBuf::from("out.replay")));
+    assert_eq!(
+        builder.record_replay_path,
+        Some(PathBuf::from("out.replay"))
+    );
     assert_eq!(builder.replay_game_version, "v1.2");
 
     let builder = EngineBuilder::new().play_replay("in.replay");
@@ -895,7 +938,10 @@ fn plain_setters_store_their_arguments() {
 fn load_config_reads_the_file_at_config_path() {
     let file = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(file.path(), "[window]\ntitle = From File\n").unwrap();
-    let config = EngineBuilder::new().config(file.path()).load_config().unwrap();
+    let config = EngineBuilder::new()
+        .config(file.path())
+        .load_config()
+        .unwrap();
     assert_eq!(config.window_title, "From File");
 }
 

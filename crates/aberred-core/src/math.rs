@@ -13,7 +13,10 @@ pub use glam::Vec2;
 /// (covers both scalar `f32` and `Vec2`).
 pub fn lerp<T>(a: T, b: T, t: f32) -> T
 where
-    T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::ops::Mul<f32, Output = T>,
+    T: Copy
+        + std::ops::Add<Output = T>
+        + std::ops::Sub<Output = T>
+        + std::ops::Mul<f32, Output = T>,
 {
     a + (b - a) * t
 }

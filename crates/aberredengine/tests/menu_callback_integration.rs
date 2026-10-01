@@ -6,11 +6,11 @@
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
 use aberredengine::core::events::menu::MenuSelectionEvent;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
-#[cfg(feature = "lua")]
-use aberredengine::lua::resources::lua_runtime::LuaRuntime;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
+#[cfg(feature = "lua")]
+use aberredengine::lua::resources::lua_runtime::LuaRuntime;
 use aberredengine::systems::menu::menu_selection_observer;
 use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;

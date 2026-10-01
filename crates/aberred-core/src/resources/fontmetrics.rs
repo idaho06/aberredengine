@@ -13,8 +13,8 @@
 //! `sola-raylib-sys` 6.2.0). Keep this implementation aligned with those C
 //! functions when the vendored raylib code changes.
 
-use bevy_ecs::prelude::Resource;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 
 /// raylib's default `textLineSpacing` (`rtext.c`'s static global, default

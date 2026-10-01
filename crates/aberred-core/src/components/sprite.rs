@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 #[derive(Component, Clone, Debug, PartialEq)]
 /// Describes how to render a textured quad for an entity.

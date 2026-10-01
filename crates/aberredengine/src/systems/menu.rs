@@ -8,7 +8,7 @@
 
 pub use aberred_core::systems::menu::{menu_controller_observer, menu_despawn, menu_spawn_system};
 
-#[cfg(feature = "lua")]
-pub use aberred_lua::systems::lua_menu::menu_selection_observer;
 #[cfg(not(feature = "lua"))]
 pub use aberred_core::systems::menu::menu_selection_observer;
+#[cfg(feature = "lua")]
+pub use aberred_lua::systems::lua_menu::menu_selection_observer;

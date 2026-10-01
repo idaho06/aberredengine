@@ -19,9 +19,9 @@
 
 use std::sync::Arc;
 
+use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 use log::{error, warn};
-use crate::math::Vec2;
 
 use crate::components::dynamictext::DynamicText;
 use crate::components::guibutton::GuiButton;
@@ -202,9 +202,9 @@ mod tests {
 
     use super::*;
     use crate::components::guiinteractable::GuiWidgetState;
-    use crate::math::Color;
     use crate::components::guiwindow::GuiWindow;
     use crate::components::screenposition::ScreenPosition;
+    use crate::math::Color;
     use crate::testing::approx_eq;
 
     fn tick<M>(world: &mut World, system: impl IntoSystem<(), (), M>) {

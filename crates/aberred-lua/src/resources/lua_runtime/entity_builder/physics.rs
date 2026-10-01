@@ -248,7 +248,14 @@ mod tests {
             .iter()
             .map(|f| format!("{}:{},{}:{}", f.name, f.x, f.y, f.enabled))
             .collect();
-        (rb.velocity_x, rb.velocity_y, rb.friction, rb.max_speed, rb.frozen, forces)
+        (
+            rb.velocity_x,
+            rb.velocity_y,
+            rb.friction,
+            rb.max_speed,
+            rb.frozen,
+            forces,
+        )
     }
 
     #[test]
@@ -259,10 +266,19 @@ mod tests {
         assert_eq!(rb_summary(&rb), (0.0, 0.0, 0.5, None, false, vec![]));
         let rb = built(":with_max_speed(200)").rigidbody.unwrap();
         assert_eq!(rb_summary(&rb), (0.0, 0.0, 0.0, Some(200.0), false, vec![]));
-        let rb = built(":with_accel('gravity', 0, 98, true)").rigidbody.unwrap();
+        let rb = built(":with_accel('gravity', 0, 98, true)")
+            .rigidbody
+            .unwrap();
         assert_eq!(
             rb_summary(&rb),
-            (0.0, 0.0, 0.0, None, false, vec!["gravity:0,98:true".to_string()])
+            (
+                0.0,
+                0.0,
+                0.0,
+                None,
+                false,
+                vec!["gravity:0,98:true".to_string()]
+            )
         );
         let rb = built(":with_frozen()").rigidbody.unwrap();
         assert_eq!(rb_summary(&rb), (0.0, 0.0, 0.0, None, true, vec![]));
@@ -289,7 +305,10 @@ mod tests {
             0.3,
             Some(50.0),
             true,
-            vec!["gravity:0,98:true".to_string(), "wind:5,0:false".to_string()],
+            vec![
+                "gravity:0,98:true".to_string(),
+                "wind:5,0:false".to_string(),
+            ],
         );
         assert_eq!(rb_summary(&forward), expected);
         assert_eq!(rb_summary(&reversed), expected);
@@ -297,9 +316,10 @@ mod tests {
 
     #[test]
     fn repeated_rigidbody_setters_last_call_wins() {
-        let rb = built(":with_velocity(1, 1):with_velocity(7, 8):with_friction(1):with_friction(2)")
-            .rigidbody
-            .unwrap();
+        let rb =
+            built(":with_velocity(1, 1):with_velocity(7, 8):with_friction(1):with_friction(2)")
+                .rigidbody
+                .unwrap();
         assert_eq!((rb.velocity_x, rb.velocity_y, rb.friction), (7.0, 8.0, 2.0));
     }
 
@@ -307,7 +327,9 @@ mod tests {
     fn collider_offset_defaults_zero_and_is_set_after_collider() {
         let c = built(":with_collider(20, 10, 5, 2)").collider.unwrap();
         assert_eq!(
-            (c.width, c.height, c.origin_x, c.origin_y, c.offset_x, c.offset_y),
+            (
+                c.width, c.height, c.origin_x, c.origin_y, c.offset_x, c.offset_y
+            ),
             (20.0, 10.0, 5.0, 2.0, 0.0, 0.0)
         );
         let c = built(":with_collider(20, 10, 5, 2):with_collider_offset(3, 4)")
@@ -325,7 +347,10 @@ mod tests {
         let s = built(":with_stuckto(42, true, false)").stuckto.unwrap();
         assert_eq!(s.target_entity_id, 42);
         assert_eq!((s.follow_x, s.follow_y), (true, false));
-        assert_eq!((s.offset_x, s.offset_y, s.stored_velocity), (0.0, 0.0, None));
+        assert_eq!(
+            (s.offset_x, s.offset_y, s.stored_velocity),
+            (0.0, 0.0, None)
+        );
 
         let s = built(":with_stuckto(42, true, true):with_stuckto_offset(0, -8):with_stuckto_stored_velocity(100, 0)")
             .stuckto

@@ -16,9 +16,9 @@ use aberred_core::components::guiimage::GuiImage;
 use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::math::Vec2;
 use mlua::MaybeSend;
 use mlua::prelude::*;
-use aberred_core::math::Vec2;
 
 mod behavior;
 mod gui;

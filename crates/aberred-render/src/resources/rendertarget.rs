@@ -4,8 +4,8 @@
 //! then scaled to fit the actual window size. This enables resolution-independent
 //! rendering with proper aspect ratio preservation.
 
-use aberred_core::resources::texturefilter::TextureFilter;
 use crate::systems::math::texture_filter_to_ffi;
+use aberred_core::resources::texturefilter::TextureFilter;
 use raylib::ffi;
 use raylib::prelude::*;
 

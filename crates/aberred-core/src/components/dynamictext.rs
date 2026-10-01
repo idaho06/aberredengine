@@ -39,8 +39,8 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 use crate::math::Color;
 
@@ -73,7 +73,12 @@ impl DynamicText {
     /// The `size` field is initialized to zero and will be calculated
     /// by [`dynamictext_size_system`](crate::systems::dynamictext_size::dynamictext_size_system)
     /// on the first frame.
-    pub fn new(content: impl Into<String>, font: impl Into<String>, font_size: f32, color: Color) -> Self {
+    pub fn new(
+        content: impl Into<String>,
+        font: impl Into<String>,
+        font_size: f32,
+        color: Color,
+    ) -> Self {
         let text: Arc<str> = Arc::from(content.into());
         Self {
             initial_text: Arc::clone(&text),

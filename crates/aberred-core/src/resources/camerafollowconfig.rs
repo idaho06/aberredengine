@@ -5,8 +5,8 @@
 //! inserted by the engine with `enabled: false` and can be activated and tuned
 //! at any time.
 
-use bevy_ecs::prelude::Resource;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Resource;
 
 use crate::math::Rect;
 

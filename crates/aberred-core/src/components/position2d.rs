@@ -10,8 +10,8 @@
 
 use std::marker::PhantomData;
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 /// Marker trait for a 2D coordinate space.
 ///

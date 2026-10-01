@@ -2,10 +2,10 @@
 
 use bevy_ecs::prelude::*;
 
-use aberred_core::protocol::endpoints::LogicBridge;
-use aberred_core::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
 use crate::resources::pending_imgui_capture::PendingImguiCapture;
 use crate::resources::quit_requested::QuitRequested;
+use aberred_core::protocol::endpoints::LogicBridge;
+use aberred_core::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
 use aberred_core::resources::windowsize::WindowSize;
 
 /// Highest raylib keyboard key code in use today (`KEY_KB_MENU`).
@@ -246,7 +246,9 @@ mod tests {
     fn connected_pads_report_buttons_1_to_17_and_all_axes_disconnected_read_zero() {
         let device = FakeDevice {
             connected: [0].into_iter().collect(),
-            pad_buttons: [(0, 0), (0, 1), (0, 17), (0, 18), (1, 1)].into_iter().collect(),
+            pad_buttons: [(0, 0), (0, 1), (0, 17), (0, 18), (1, 1)]
+                .into_iter()
+                .collect(),
             ..Default::default()
         };
 
@@ -267,7 +269,10 @@ mod tests {
     fn polling_ranges_match_raylibs_enums() {
         use raylib::ffi;
         assert_eq!(MAX_KEY_CODE, ffi::KeyboardKey::KEY_KB_MENU as u32);
-        assert_eq!(MOUSE_BUTTON_COUNT, ffi::MouseButton::MOUSE_BUTTON_BACK as u8 + 1);
+        assert_eq!(
+            MOUSE_BUTTON_COUNT,
+            ffi::MouseButton::MOUSE_BUTTON_BACK as u8 + 1
+        );
         assert_eq!(
             MAX_GAMEPAD_BUTTON,
             ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB as i32

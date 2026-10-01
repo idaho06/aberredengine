@@ -15,7 +15,11 @@ impl LuaRuntime {
             ""
         );
 
-        register_getter!(engine, self.lua, meta_fns, "get_camera",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_camera",
             |lua, ()| {
                 let (target_x, target_y, offset_x, offset_y, rotation, zoom) = lua
                     .app_data_ref::<LuaAppData>()
@@ -46,9 +50,15 @@ impl LuaRuntime {
              Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene. \
              Each call returns a new table; cache locally if reading multiple fields.",
             cat = "camera",
-            params = [], returns = "table");
+            params = [],
+            returns = "table"
+        );
 
-        register_getter!(engine, self.lua, meta_fns, "get_camera_view_rect",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_camera_view_rect",
             |lua, ()| {
                 let (x, y, w, h) = lua
                     .app_data_ref::<LuaAppData>()
@@ -72,7 +82,9 @@ impl LuaRuntime {
              on_setup / on_switch_scene. \
              Each call returns a new table; cache locally if reading multiple fields.",
             cat = "camera",
-            params = [], returns = "table");
+            params = [],
+            returns = "table"
+        );
 
         Ok(())
     }
@@ -296,7 +308,10 @@ mod tests {
         }
         state.apply(&mut world);
         let cam = world.resource::<Camera2DRes>().0;
-        assert_eq!((cam.target, cam.offset), (Vec2::new(10.0, 20.0), Vec2::new(320.0, 180.0)));
+        assert_eq!(
+            (cam.target, cam.offset),
+            (Vec2::new(10.0, 20.0), Vec2::new(320.0, 180.0))
+        );
         assert_eq!((cam.rotation, cam.zoom), (15.0, 2.0));
     }
 
@@ -310,13 +325,22 @@ mod tests {
         });
         let screen = ScreenSize { w: 640, h: 360 };
         let read = |runtime: &LuaRuntime| -> ([f32; 6], [f32; 4]) {
-            let cam: mlua::Table = runtime.lua().load("return engine.get_camera()").eval().unwrap();
-            let rect: mlua::Table =
-                runtime.lua().load("return engine.get_camera_view_rect()").eval().unwrap();
+            let cam: mlua::Table = runtime
+                .lua()
+                .load("return engine.get_camera()")
+                .eval()
+                .unwrap();
+            let rect: mlua::Table = runtime
+                .lua()
+                .load("return engine.get_camera_view_rect()")
+                .eval()
+                .unwrap();
             let f = |t: &mlua::Table, k: &str| t.get::<f32>(k).unwrap();
             (
-                ["target_x", "target_y", "offset_x", "offset_y", "rotation", "zoom"]
-                    .map(|k| f(&cam, k)),
+                [
+                    "target_x", "target_y", "offset_x", "offset_y", "rotation", "zoom",
+                ]
+                .map(|k| f(&cam, k)),
                 ["x", "y", "w", "h"].map(|k| f(&rect, k)),
             )
         };
@@ -357,11 +381,19 @@ mod tests {
         assert_eq!(config.mode, FollowMode::SmoothDamp);
         assert_eq!(config.easing, EasingCurve::EaseInOut);
         assert_eq!(config.lerp_speed, 7.0);
-        assert_eq!((config.spring_stiffness, config.spring_damping), (20.0, 3.0));
+        assert_eq!(
+            (config.spring_stiffness, config.spring_damping),
+            (20.0, 3.0)
+        );
         assert_eq!(config.offset, Vec2::new(4.0, -2.0));
         assert_eq!(
             config.bounds,
-            Some(Rect { x: 0.0, y: 0.0, width: 1000.0, height: 500.0 })
+            Some(Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 1000.0,
+                height: 500.0
+            })
         );
         assert_eq!(config.zoom_lerp_speed, 9.0);
     }
@@ -369,7 +401,12 @@ mod tests {
     #[test]
     fn camera_follow_deadzone_clear_bounds_and_reset_velocity() {
         let start = CameraFollowConfig {
-            bounds: Some(Rect { x: 1.0, y: 1.0, width: 2.0, height: 2.0 }),
+            bounds: Some(Rect {
+                x: 1.0,
+                y: 1.0,
+                width: 2.0,
+                height: 2.0,
+            }),
             velocity: Vec2::new(5.0, 5.0),
             ..CameraFollowConfig::default()
         };
@@ -378,7 +415,13 @@ mod tests {
              engine.camera_follow_reset_velocity()",
             start,
         );
-        assert_eq!(config.mode, FollowMode::Deadzone { half_w: 40.0, half_h: 30.0 });
+        assert_eq!(
+            config.mode,
+            FollowMode::Deadzone {
+                half_w: 40.0,
+                half_h: 30.0
+            }
+        );
         assert_eq!(config.bounds, None);
         assert_eq!(config.velocity, Vec2::ZERO);
     }
@@ -386,9 +429,18 @@ mod tests {
     #[test]
     fn camera_follow_unknown_mode_or_easing_is_a_lua_error() {
         for (call, msg) in [
-            ("engine.camera_follow_set_mode('teleport')", "Unknown camera follow mode 'teleport'"),
-            ("engine.camera_follow_set_mode('deadzone')", "Unknown camera follow mode 'deadzone'"),
-            ("engine.camera_follow_set_easing('bouncy')", "Unknown camera follow easing 'bouncy'"),
+            (
+                "engine.camera_follow_set_mode('teleport')",
+                "Unknown camera follow mode 'teleport'",
+            ),
+            (
+                "engine.camera_follow_set_mode('deadzone')",
+                "Unknown camera follow mode 'deadzone'",
+            ),
+            (
+                "engine.camera_follow_set_easing('bouncy')",
+                "Unknown camera follow easing 'bouncy'",
+            ),
         ] {
             let runtime = LuaRuntime::new().unwrap();
             let err = runtime.lua().load(call).exec().unwrap_err().to_string();

@@ -19,9 +19,13 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
 
-use super::math::{camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, vec2_from_raylib, vec2_to_raylib};
+use super::math::{
+    camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, vec2_from_raylib, vec2_to_raylib,
+};
+use crate::components::mirror::SimMirror;
+use crate::resources::fontstore::FontStore;
+use crate::resources::imgui_bridge::ImguiBridge;
 use aberred_core::components::dynamictext::DynamicText;
-use aberred_core::math::Vec2;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::guibutton::GuiButton;
 use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState};
@@ -29,7 +33,6 @@ use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use aberred_core::components::guiwindow::GuiWindow;
 use aberred_core::components::mapposition::MapPosition;
-use crate::components::mirror::SimMirror;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
@@ -37,10 +40,11 @@ use aberred_core::components::shadow::Shadow;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::zindex::ZIndex;
+use aberred_core::math::Vec2;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use aberred_core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache};
-use crate::resources::fontstore::FontStore;
-use crate::resources::imgui_bridge::ImguiBridge;
+use aberred_core::resources::guitheme::{
+    GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache,
+};
 use aberred_core::resources::signal_intents::SignalIntents;
 
 use super::mirror::MirrorQueries;
@@ -49,13 +53,13 @@ use crate::resources::mirrors::{
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
 use crate::resources::rendertarget::RenderTarget;
+use crate::resources::scene_table::GuiCallback;
 use crate::resources::scene_table::RenderSceneTable;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::thread_stats::RenderStats;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::windowsize::WindowSize;
-use crate::resources::scene_table::GuiCallback;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
@@ -1495,7 +1499,13 @@ mod screen_draw_buffer_tests {
     #[test]
     fn nan_z_index_sorts_last_without_panicking() {
         let mut buffer: Vec<ScreenDrawItem> = (0..40)
-            .map(|i| sprite_item(if i % 3 == 0 { f32::NAN } else { (40 - i) as f32 }))
+            .map(|i| {
+                sprite_item(if i % 3 == 0 {
+                    f32::NAN
+                } else {
+                    (40 - i) as f32
+                })
+            })
             .collect();
         buffer.push(text_item(0.0));
         let sorted = sort(buffer);
@@ -1710,7 +1720,10 @@ mod resolve_button_patch_tests {
         };
         let without = skin();
         for state in STATES {
-            assert_eq!(shadow_tag(&with_skin_shadow, state, Some(shadow(9.0))), Some(1.0));
+            assert_eq!(
+                shadow_tag(&with_skin_shadow, state, Some(shadow(9.0))),
+                Some(1.0)
+            );
             assert_eq!(shadow_tag(&without, state, Some(shadow(9.0))), Some(9.0));
             assert_eq!(shadow_tag(&without, state, None), None);
         }
@@ -1753,9 +1766,15 @@ mod progress_bar_rects_tests {
     fn fill_grows_from_the_directions_anchor_edge() {
         use ProgressBarDirection::*;
         assert_eq!(fill(25.0, 100.0, Horizontal), (10.0, 20.0, 25.0, 50.0));
-        assert_eq!(fill(25.0, 100.0, HorizontalReversed), (85.0, 20.0, 25.0, 50.0));
+        assert_eq!(
+            fill(25.0, 100.0, HorizontalReversed),
+            (85.0, 20.0, 25.0, 50.0)
+        );
         assert_eq!(fill(25.0, 100.0, Vertical), (10.0, 57.5, 100.0, 12.5));
-        assert_eq!(fill(25.0, 100.0, VerticalReversed), (10.0, 20.0, 100.0, 12.5));
+        assert_eq!(
+            fill(25.0, 100.0, VerticalReversed),
+            (10.0, 20.0, 100.0, 12.5)
+        );
     }
 
     #[test]

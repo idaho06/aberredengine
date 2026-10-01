@@ -90,7 +90,9 @@ fn messages_cleared_after_second_update() {
     let mut world = World::new();
     world.init_resource::<Messages<TestMessage>>();
 
-    world.resource_mut::<Messages<TestMessage>>().write(TestMessage);
+    world
+        .resource_mut::<Messages<TestMessage>>()
+        .write(TestMessage);
     world.resource_mut::<Messages<TestMessage>>().update();
     assert_eq!(message_count(&mut world), 1);
 
@@ -286,11 +288,16 @@ fn derived_system_param_via_system_state() {
 fn iter_combinations_mut_yields_each_unordered_pair_once() {
     let mut world = World::new();
     for x in 1..=3 {
-        world.spawn(Position { x: x as f32, y: 0.0 });
+        world.spawn(Position {
+            x: x as f32,
+            y: 0.0,
+        });
     }
 
     let mut state = SystemState::<Query<&mut Position>>::new(&mut world);
-    let mut query = state.get_mut(&mut world).expect("Position query should fetch");
+    let mut query = state
+        .get_mut(&mut world)
+        .expect("Position query should fetch");
 
     let mut pairs = Vec::new();
     let mut combos = query.iter_combinations_mut();

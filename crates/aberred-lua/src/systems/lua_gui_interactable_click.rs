@@ -53,10 +53,10 @@ pub fn gui_interactable_click_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::lua_runtime::LuaRuntime;
     use aberred_core::components::guiinteractable::GuiInteractable;
     use aberred_core::resources::worldsignals::WorldSignals;
     use aberred_core::testing::insert_game_ctx_resources;
-    use crate::resources::lua_runtime::LuaRuntime;
 
     fn setup_world() -> World {
         let mut world = World::new();

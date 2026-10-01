@@ -1,19 +1,19 @@
 use raylib::prelude::{Camera2D, Vector2};
 
+use crate::resources::fontstore::FontStore;
+use crate::resources::texturestore::TextureStore;
+use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
+use aberred_core::events::input::InputAction;
 use aberred_core::protocol::stats::ThreadStats;
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::events::input::InputAction;
 use aberred_core::resources::input::{BoolState, InputState};
-use crate::resources::fontstore::FontStore;
-use crate::resources::texturestore::TextureStore;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::thread_stats::SimStats;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldsignals::SignalSnapshot;
 use aberred_core::resources::worldtime::WorldTime;
-use ::imgui::{Condition, TreeNodeFlags, Ui as ImguiUi};
 
 /// Per-thread tick stats bundled for [`draw_performance_panel`] -- built
 /// once at the `render_system` call site from `DebugSnapshot`'s `sim_stats`/

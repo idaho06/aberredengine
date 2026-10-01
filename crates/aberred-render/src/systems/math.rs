@@ -161,9 +161,7 @@ pub(crate) fn texture_filter_to_ffi(filter: TextureFilter) -> i32 {
         TextureFilter::Trilinear => FfiTextureFilter::TEXTURE_FILTER_TRILINEAR as i32,
         TextureFilter::Anisotropic4x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_4X as i32,
         TextureFilter::Anisotropic8x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_8X as i32,
-        TextureFilter::Anisotropic16x => {
-            FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_16X as i32
-        }
+        TextureFilter::Anisotropic16x => FfiTextureFilter::TEXTURE_FILTER_ANISOTROPIC_16X as i32,
     }
 }
 
@@ -195,9 +193,18 @@ mod tests {
             (TextureFilter::Nearest, F::TEXTURE_FILTER_POINT),
             (TextureFilter::Bilinear, F::TEXTURE_FILTER_BILINEAR),
             (TextureFilter::Trilinear, F::TEXTURE_FILTER_TRILINEAR),
-            (TextureFilter::Anisotropic4x, F::TEXTURE_FILTER_ANISOTROPIC_4X),
-            (TextureFilter::Anisotropic8x, F::TEXTURE_FILTER_ANISOTROPIC_8X),
-            (TextureFilter::Anisotropic16x, F::TEXTURE_FILTER_ANISOTROPIC_16X),
+            (
+                TextureFilter::Anisotropic4x,
+                F::TEXTURE_FILTER_ANISOTROPIC_4X,
+            ),
+            (
+                TextureFilter::Anisotropic8x,
+                F::TEXTURE_FILTER_ANISOTROPIC_8X,
+            ),
+            (
+                TextureFilter::Anisotropic16x,
+                F::TEXTURE_FILTER_ANISOTROPIC_16X,
+            ),
         ];
         assert_eq!(expected.len(), TextureFilter::ALL.len());
         for (filter, ffi) in expected {
@@ -237,7 +244,10 @@ mod tests {
 
         let base = Color::new(200, 200, 200, 100);
         assert_eq!(rgba(resolve_text_tint(None, base)), (200, 200, 200, 100));
-        assert_eq!(rgba(resolve_text_tint(Some(tint), base)), (200, 100, 0, 100));
+        assert_eq!(
+            rgba(resolve_text_tint(Some(tint), base)),
+            (200, 100, 0, 100)
+        );
     }
 
     #[test]

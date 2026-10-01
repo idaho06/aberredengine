@@ -347,7 +347,10 @@ mod tests {
     #[test]
     fn sprite_modifiers_require_their_base_method_first() {
         for (call, msg) in [
-            ("with_sprite_flip(true, false)", "with_sprite_flip() requires with_sprite() first"),
+            (
+                "with_sprite_flip(true, false)",
+                "with_sprite_flip() requires with_sprite() first",
+            ),
             (
                 "with_animation_rule({type='has_flag', key='k'}, 'run')",
                 "with_animation_rule() requires with_animation_controller() first",
@@ -359,10 +362,18 @@ mod tests {
 
     #[test]
     fn with_sprite_defaults_offset_and_flip_until_set() {
-        let s = built(":with_sprite('hero', 32, 48, 16, 24)").sprite.unwrap();
+        let s = built(":with_sprite('hero', 32, 48, 16, 24)")
+            .sprite
+            .unwrap();
         assert_eq!(s.tex_key, "hero");
-        assert_eq!((s.width, s.height, s.origin_x, s.origin_y), (32.0, 48.0, 16.0, 24.0));
-        assert_eq!((s.offset_x, s.offset_y, s.flip_h, s.flip_v), (0.0, 0.0, false, false));
+        assert_eq!(
+            (s.width, s.height, s.origin_x, s.origin_y),
+            (32.0, 48.0, 16.0, 24.0)
+        );
+        assert_eq!(
+            (s.offset_x, s.offset_y, s.flip_h, s.flip_v),
+            (0.0, 0.0, false, false)
+        );
 
         let s = built(":with_sprite('hero', 32, 48, 16, 24):with_sprite_offset(64, 96):with_sprite_flip(false, true)")
             .sprite
@@ -379,7 +390,10 @@ mod tests {
              :with_shadow(2, -3, 9, 10, 11, 12)",
         );
         let t = cmd.text.unwrap();
-        assert_eq!((t.content.as_str(), t.font.as_str(), t.font_size), ("Score", "arcade", 12.0));
+        assert_eq!(
+            (t.content.as_str(), t.font.as_str(), t.font_size),
+            ("Score", "arcade", 12.0)
+        );
         assert_eq!((t.r, t.g, t.b, t.a), (1, 2, 3, 4));
         assert_eq!(cmd.tint, Some((5, 6, 7, 8)));
         assert_eq!(cmd.shadow, Some((2.0, -3.0, 9, 10, 11, 12)));
@@ -414,7 +428,12 @@ mod tests {
                 ("speed".to_string(), UniformValue::Float(0.5)),
                 (
                     "tint".to_string(),
-                    UniformValue::Vec4 { x: 1.0, y: 0.5, z: 0.25, w: 1.0 }
+                    UniformValue::Vec4 {
+                        x: 1.0,
+                        y: 0.5,
+                        z: 0.25,
+                        w: 1.0
+                    }
                 ),
             ]
         );
@@ -422,8 +441,14 @@ mod tests {
 
     #[test]
     fn with_shader_rejects_invalid_key_and_uniforms() {
-        assert_runtime_error("engine.spawn():with_shader()", "with_shader requires shader_key");
-        assert_runtime_error("engine.spawn():with_shader({})", "shader_key must be string");
+        assert_runtime_error(
+            "engine.spawn():with_shader()",
+            "with_shader requires shader_key",
+        );
+        assert_runtime_error(
+            "engine.spawn():with_shader({})",
+            "shader_key must be string",
+        );
         assert_runtime_error(
             "engine.spawn():with_shader('wave', { v = {1, 2, 3} })",
             "Uniform table must be array of length 2 (vec2) or 4 (vec4)",
@@ -470,7 +495,9 @@ mod tests {
             );
         }
         for op in ["lt", "le", "gt", "ge", "eq", "ne"] {
-            sole_rule_condition(&format!("{{type='integer_cmp', key='hp', op='{op}', value=1}}"));
+            sole_rule_condition(&format!(
+                "{{type='integer_cmp', key='hp', op='{op}', value=1}}"
+            ));
         }
     }
 
@@ -483,7 +510,12 @@ mod tests {
         ));
         assert!(matches!(
             sole_rule_condition("{type='integer_range', key='hp', min=1, max=3, inclusive=false}"),
-            AnimationConditionData::IntegerRange { min: 1, max: 3, inclusive: false, .. }
+            AnimationConditionData::IntegerRange {
+                min: 1,
+                max: 3,
+                inclusive: false,
+                ..
+            }
         ));
     }
 
@@ -491,11 +523,17 @@ mod tests {
     fn animation_rule_ranges_default_to_inclusive_when_omitted() {
         assert!(matches!(
             sole_rule_condition("{type='scalar_range', key='vy', min=-1, max=1}"),
-            AnimationConditionData::ScalarRange { inclusive: true, .. }
+            AnimationConditionData::ScalarRange {
+                inclusive: true,
+                ..
+            }
         ));
         assert!(matches!(
             sole_rule_condition("{type='integer_range', key='hp', min=1, max=3}"),
-            AnimationConditionData::IntegerRange { inclusive: true, .. }
+            AnimationConditionData::IntegerRange {
+                inclusive: true,
+                ..
+            }
         ));
     }
 
@@ -539,7 +577,11 @@ mod tests {
         .unwrap();
         assert_eq!(ctrl.fallback_key, "idle");
         let keys: Vec<&str> = ctrl.rules.iter().map(|r| r.set_key.as_str()).collect();
-        assert_eq!(keys, ["jump", "run"], "first-match-wins relies on call order");
+        assert_eq!(
+            keys,
+            ["jump", "run"],
+            "first-match-wins relies on call order"
+        );
     }
 
     #[test]

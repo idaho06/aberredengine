@@ -35,7 +35,11 @@ impl LuaRuntime {
             params = [("action", "string"), ("key", "string")]
         );
 
-        register_getter!(engine, self.lua, meta_fns, "get_binding",
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "get_binding",
             |lua, action: LuaString| {
                 let s = action.to_str()?;
                 let canonical = action_from_str(&s).map(InputAction::name).unwrap_or(&s);
@@ -43,8 +47,11 @@ impl LuaRuntime {
                     .app_data_ref::<LuaAppData>()
                     .and_then(|data| data.bindings_snapshot.borrow().get(canonical).cloned()))
             },
-            desc = "Get the first key binding for an action as a string (nil if unbound)", cat = "input",
-            params = [("action", "string")], returns = "string?");
+            desc = "Get the first key binding for an action as a string (nil if unbound)",
+            cat = "input",
+            params = [("action", "string")],
+            returns = "string?"
+        );
 
         Ok(())
     }
@@ -140,7 +147,10 @@ mod tests {
         apply_input_script("engine.add_binding('action_1', 'x')", &mut bindings);
         assert_eq!(
             bindings.get_bindings(InputAction::Action1),
-            [binding_from_str("z").unwrap(), binding_from_str("x").unwrap()]
+            [
+                binding_from_str("z").unwrap(),
+                binding_from_str("x").unwrap()
+            ]
         );
     }
 

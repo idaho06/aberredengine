@@ -10,8 +10,8 @@
 //! (`systems/gui_spawn.rs`) react on `Added<GuiButton>`/`Added<GuiImage>` to
 //! insert the co-located `GuiInteractable` one frame later.
 
-use bevy_ecs::prelude::{Component, Entity};
 use crate::math::Vec2;
+use bevy_ecs::prelude::{Component, Entity};
 
 use crate::systems::GameCtx;
 

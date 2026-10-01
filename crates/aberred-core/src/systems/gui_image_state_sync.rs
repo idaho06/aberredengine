@@ -9,8 +9,8 @@
 //! `Sprite` itself must be mutated post-spawn (no render-time indirection
 //! available for sprites the way `Panel` rendering has for buttons).
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::guiimage::GuiImage;
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};

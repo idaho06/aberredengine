@@ -18,8 +18,8 @@
 //! - [`crate::components::animation::AnimationController`] – rule-based animation selection
 //! - [`crate::resources::animationstore::AnimationStore`] – animation definitions
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::animation::{Animation, AnimationController, CmpOp, Condition};
 use crate::components::mapposition::MapPosition;

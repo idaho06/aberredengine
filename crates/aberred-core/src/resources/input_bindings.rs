@@ -344,10 +344,8 @@ impl Default for InputBindings {
         map[InputAction::Back.index()] = vec![k(Key::KEY_ESCAPE)];
         map[InputAction::Action1.index()] =
             vec![k(Key::KEY_SPACE), m(MouseButton::MOUSE_BUTTON_LEFT)];
-        map[InputAction::Action2.index()] = vec![
-            k(Key::KEY_ENTER),
-            m(MouseButton::MOUSE_BUTTON_RIGHT),
-        ];
+        map[InputAction::Action2.index()] =
+            vec![k(Key::KEY_ENTER), m(MouseButton::MOUSE_BUTTON_RIGHT)];
         map[InputAction::Action3.index()] = vec![m(MouseButton::MOUSE_BUTTON_MIDDLE)];
         map[InputAction::Special.index()] = vec![k(Key::KEY_F12)];
         map[InputAction::ToggleDebug.index()] = vec![k(Key::KEY_F11)];
@@ -877,10 +875,7 @@ mod tests {
     #[test]
     fn test_rebind_replaces_binding() {
         let mut b = InputBindings::default();
-        b.rebind(
-            InputAction::Action1,
-            InputBinding::Keyboard(Key::KEY_Z),
-        );
+        b.rebind(InputAction::Action1, InputBinding::Keyboard(Key::KEY_Z));
         let bl = b.get_bindings(InputAction::Action1);
         assert_eq!(bl.len(), 1);
         assert_eq!(bl[0], InputBinding::Keyboard(Key::KEY_Z));
@@ -889,10 +884,7 @@ mod tests {
     #[test]
     fn test_add_binding_appends() {
         let mut b = InputBindings::default();
-        b.add_binding(
-            InputAction::Action1,
-            InputBinding::Keyboard(Key::KEY_Z),
-        );
+        b.add_binding(InputAction::Action1, InputBinding::Keyboard(Key::KEY_Z));
         let bl = b.get_bindings(InputAction::Action1);
         // default: Space + MouseLeft + pad0 face_down, plus new Z appended last
         assert_eq!(bl[0], InputBinding::Keyboard(Key::KEY_SPACE));
@@ -900,10 +892,7 @@ mod tests {
             bl[1],
             InputBinding::MouseButton(MouseButton::MOUSE_BUTTON_LEFT)
         );
-        assert_eq!(
-            *bl.last().unwrap(),
-            InputBinding::Keyboard(Key::KEY_Z)
-        );
+        assert_eq!(*bl.last().unwrap(), InputBinding::Keyboard(Key::KEY_Z));
     }
 
     #[test]

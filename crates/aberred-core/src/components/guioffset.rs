@@ -7,8 +7,8 @@
 //! `ChildOf` itself is used for lifecycle only (cascade despawn), not
 //! positioning.
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 /// Position offset from a GUI entity's parent, resolved into `ScreenPosition`
 /// by `gui_layout_system`.

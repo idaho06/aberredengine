@@ -5,15 +5,15 @@
 
 use log::warn;
 
+use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
-use aberred_core::math::Vec2;
 
+use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guiinteractable::GuiWidgetState;
-use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -24,8 +24,8 @@ use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::tween::{Tween, TweenValue};
 
-use aberred_core::resources::animationstore::AnimationStore;
 use crate::resources::lua_runtime::{EntityCmd, TweenConfig, UniformValue};
+use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
@@ -730,7 +730,8 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             entity_id,
             parent_id,
         } => {
-            let (Some(child), Some(parent)) = (resolve_entity(entity_id), resolve_entity(parent_id))
+            let (Some(child), Some(parent)) =
+                (resolve_entity(entity_id), resolve_entity(parent_id))
             else {
                 return;
             };
@@ -880,9 +881,9 @@ fn process_lifecycle_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
     use aberred_core::components::animation::Animation;
     use aberred_core::components::guiinteractable::GuiInteractable;
-    use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
     use aberred_core::testing::approx_eq;
 
     #[test]
@@ -920,7 +921,13 @@ mod tests {
         anim_store: &AnimationStore,
         cmds: impl IntoIterator<Item = EntityCmd>,
     ) {
-        run_entity_cmds_in(world, world_signals, anim_store, &SystemsStore::default(), cmds);
+        run_entity_cmds_in(
+            world,
+            world_signals,
+            anim_store,
+            &SystemsStore::default(),
+            cmds,
+        );
     }
 
     /// [`run_entity_cmds`] with caller-provided `AnimationStore` and `SystemsStore`.
@@ -1156,7 +1163,10 @@ mod tests {
             &mut signals,
             insert_remove_cmds_for(doomed.to_bits(), parent.to_bits()),
         );
-        assert!(world.get_entity(doomed).is_err(), "no command resurrects it");
+        assert!(
+            world.get_entity(doomed).is_err(),
+            "no command resurrects it"
+        );
         assert_eq!(world.entities().count_spawned(), entities_before);
     }
 
@@ -1242,9 +1252,19 @@ mod tests {
             &mut world,
             &mut signals,
             [
-                EntityCmd::SetVelocity { entity_id: id, vx: 3.0, vy: 4.0 },
-                EntityCmd::SetFriction { entity_id: id, friction: 0.5 },
-                EntityCmd::SetMaxSpeed { entity_id: id, max_speed: Some(9.0) },
+                EntityCmd::SetVelocity {
+                    entity_id: id,
+                    vx: 3.0,
+                    vy: 4.0,
+                },
+                EntityCmd::SetFriction {
+                    entity_id: id,
+                    friction: 0.5,
+                },
+                EntityCmd::SetMaxSpeed {
+                    entity_id: id,
+                    max_speed: Some(9.0),
+                },
                 EntityCmd::AddForce {
                     entity_id: id,
                     name: "gravity".into(),
@@ -1259,7 +1279,10 @@ mod tests {
                     y: 0.0,
                     enabled: true,
                 },
-                EntityCmd::RemoveForce { entity_id: id, name: "wind".into() },
+                EntityCmd::RemoveForce {
+                    entity_id: id,
+                    name: "wind".into(),
+                },
                 EntityCmd::SetForceEnabled {
                     entity_id: id,
                     name: "gravity".into(),
@@ -1276,18 +1299,30 @@ mod tests {
         );
         let rb = world.get::<RigidBody>(e).unwrap();
         assert_eq!(rb.velocity, Vec2::new(3.0, 4.0));
-        assert_eq!((rb.friction, rb.max_speed, rb.frozen), (0.5, Some(9.0), true));
+        assert_eq!(
+            (rb.friction, rb.max_speed, rb.frozen),
+            (0.5, Some(9.0), true)
+        );
         assert_eq!(rb.forces.len(), 1, "wind removed");
         let gravity = &rb.forces["gravity"];
-        assert_eq!((gravity.value, gravity.enabled), (Vec2::new(0.0, 20.0), false));
+        assert_eq!(
+            (gravity.value, gravity.enabled),
+            (Vec2::new(0.0, 20.0), false)
+        );
 
         run_entity_cmds(
             &mut world,
             &mut signals,
             [
                 EntityCmd::UnfreezeEntity { entity_id: id },
-                EntityCmd::SetSpeed { entity_id: id, speed: 10.0 },
-                EntityCmd::SetMaxSpeed { entity_id: id, max_speed: None },
+                EntityCmd::SetSpeed {
+                    entity_id: id,
+                    speed: 10.0,
+                },
+                EntityCmd::SetMaxSpeed {
+                    entity_id: id,
+                    max_speed: None,
+                },
             ],
         );
         let rb = world.get::<RigidBody>(e).unwrap();
@@ -1313,11 +1348,22 @@ mod tests {
             &mut world,
             &mut signals,
             [
-                EntityCmd::SetVelocity { entity_id: id, vx: 1.0, vy: 1.0 },
+                EntityCmd::SetVelocity {
+                    entity_id: id,
+                    vx: 1.0,
+                    vy: 1.0,
+                },
                 EntityCmd::FreezeEntity { entity_id: id },
-                EntityCmd::SignalSetFlag { entity_id: id, flag: "f".into() },
+                EntityCmd::SignalSetFlag {
+                    entity_id: id,
+                    flag: "f".into(),
+                },
                 EntityCmd::RestartAnimation { entity_id: id },
-                EntityCmd::SetSpriteFlip { entity_id: id, flip_h: true, flip_v: true },
+                EntityCmd::SetSpriteFlip {
+                    entity_id: id,
+                    flip_h: true,
+                    flip_v: true,
+                },
             ],
         );
         assert!(world.get::<RigidBody>(e).is_none());
@@ -1337,16 +1383,50 @@ mod tests {
             &mut world,
             &mut signals,
             [
-                EntityCmd::SignalSetFlag { entity_id: id, flag: "kept".into() },
-                EntityCmd::SignalSetFlag { entity_id: id, flag: "cleared".into() },
-                EntityCmd::SignalClearFlag { entity_id: id, flag: "cleared".into() },
-                EntityCmd::SignalToggleFlag { entity_id: id, flag: "toggled_on".into() },
-                EntityCmd::SignalSetScalar { entity_id: id, key: "s".into(), value: 1.5 },
-                EntityCmd::SignalSetScalar { entity_id: id, key: "s_gone".into(), value: 1.0 },
-                EntityCmd::SignalClearScalar { entity_id: id, key: "s_gone".into() },
-                EntityCmd::SignalSetInteger { entity_id: id, key: "i".into(), value: 7 },
-                EntityCmd::SignalSetInteger { entity_id: id, key: "i_gone".into(), value: 1 },
-                EntityCmd::SignalClearInteger { entity_id: id, key: "i_gone".into() },
+                EntityCmd::SignalSetFlag {
+                    entity_id: id,
+                    flag: "kept".into(),
+                },
+                EntityCmd::SignalSetFlag {
+                    entity_id: id,
+                    flag: "cleared".into(),
+                },
+                EntityCmd::SignalClearFlag {
+                    entity_id: id,
+                    flag: "cleared".into(),
+                },
+                EntityCmd::SignalToggleFlag {
+                    entity_id: id,
+                    flag: "toggled_on".into(),
+                },
+                EntityCmd::SignalSetScalar {
+                    entity_id: id,
+                    key: "s".into(),
+                    value: 1.5,
+                },
+                EntityCmd::SignalSetScalar {
+                    entity_id: id,
+                    key: "s_gone".into(),
+                    value: 1.0,
+                },
+                EntityCmd::SignalClearScalar {
+                    entity_id: id,
+                    key: "s_gone".into(),
+                },
+                EntityCmd::SignalSetInteger {
+                    entity_id: id,
+                    key: "i".into(),
+                    value: 7,
+                },
+                EntityCmd::SignalSetInteger {
+                    entity_id: id,
+                    key: "i_gone".into(),
+                    value: 1,
+                },
+                EntityCmd::SignalClearInteger {
+                    entity_id: id,
+                    key: "i_gone".into(),
+                },
                 EntityCmd::SignalSetString {
                     entity_id: id,
                     key: "name".into(),
@@ -1357,20 +1437,32 @@ mod tests {
                     key: "n_gone".into(),
                     value: "x".into(),
                 },
-                EntityCmd::SignalClearString { entity_id: id, key: "n_gone".into() },
+                EntityCmd::SignalClearString {
+                    entity_id: id,
+                    key: "n_gone".into(),
+                },
             ],
         );
         let s = world.get::<Signals>(e).unwrap();
         assert!(s.has_flag("kept") && !s.has_flag("cleared") && s.has_flag("toggled_on"));
-        assert_eq!((s.get_scalar("s"), s.get_scalar("s_gone")), (Some(1.5), None));
-        assert_eq!((s.get_integer("i"), s.get_integer("i_gone")), (Some(7), None));
+        assert_eq!(
+            (s.get_scalar("s"), s.get_scalar("s_gone")),
+            (Some(1.5), None)
+        );
+        assert_eq!(
+            (s.get_integer("i"), s.get_integer("i_gone")),
+            (Some(7), None)
+        );
         assert_eq!(s.get_string("name").map(String::as_str), Some("bob"));
         assert!(s.get_string("n_gone").is_none());
 
         run_entity_cmd(
             &mut world,
             &mut signals,
-            EntityCmd::SignalToggleFlag { entity_id: id, flag: "toggled_on".into() },
+            EntityCmd::SignalToggleFlag {
+                entity_id: id,
+                flag: "toggled_on".into(),
+            },
         );
         assert!(!world.get::<Signals>(e).unwrap().has_flag("toggled_on"));
     }
@@ -1404,12 +1496,20 @@ mod tests {
             &mut world,
             &mut signals,
             &store,
-            [EntityCmd::SetAnimation { entity_id: id, animation_key: "run".into() }],
+            [EntityCmd::SetAnimation {
+                entity_id: id,
+                animation_key: "run".into(),
+            }],
         );
         let anim = world.get::<Animation>(e).unwrap();
         assert_eq!(anim.animation_key, "run");
-        assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
-        let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
+        assert_eq!(
+            (anim.frame_index, anim.elapsed_time, anim.finished),
+            (0, 0.0, false)
+        );
+        let sprite = world
+            .get::<aberred_core::components::sprite::Sprite>(e)
+            .unwrap();
         assert_eq!(&*sprite.tex_key, "run_sheet");
 
         // A key missing from the store still switches the animation but keeps the texture.
@@ -1417,10 +1517,15 @@ mod tests {
             &mut world,
             &mut signals,
             &store,
-            [EntityCmd::SetAnimation { entity_id: id, animation_key: "unknown".into() }],
+            [EntityCmd::SetAnimation {
+                entity_id: id,
+                animation_key: "unknown".into(),
+            }],
         );
         assert_eq!(world.get::<Animation>(e).unwrap().animation_key, "unknown");
-        let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
+        let sprite = world
+            .get::<aberred_core::components::sprite::Sprite>(e)
+            .unwrap();
         assert_eq!(&*sprite.tex_key, "run_sheet");
     }
 
@@ -1440,13 +1545,22 @@ mod tests {
             &mut signals,
             [
                 EntityCmd::RestartAnimation { entity_id: id },
-                EntityCmd::SetSpriteFlip { entity_id: id, flip_h: true, flip_v: false },
+                EntityCmd::SetSpriteFlip {
+                    entity_id: id,
+                    flip_h: true,
+                    flip_v: false,
+                },
             ],
         );
         let anim = world.get::<Animation>(e).unwrap();
         assert_eq!(anim.animation_key, "walk");
-        assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
-        let sprite = world.get::<aberred_core::components::sprite::Sprite>(e).unwrap();
+        assert_eq!(
+            (anim.frame_index, anim.elapsed_time, anim.finished),
+            (0, 0.0, false)
+        );
+        let sprite = world
+            .get::<aberred_core::components::sprite::Sprite>(e)
+            .unwrap();
         assert_eq!((sprite.flip_h, sprite.flip_v), (true, false));
     }
 
@@ -1462,17 +1576,59 @@ mod tests {
             (b.value, b.max)
         };
 
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgress { entity_id: id, value: 25.0 });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetGuiProgress {
+                entity_id: id,
+                value: 25.0,
+            },
+        );
         assert_eq!(bar(&world), (10.0, 10.0), "value clamps to max");
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgress { entity_id: id, value: -3.0 });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetGuiProgress {
+                entity_id: id,
+                value: -3.0,
+            },
+        );
         assert_eq!(bar(&world), (0.0, 10.0), "value clamps to 0");
 
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgress { entity_id: id, value: 8.0 });
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgressMax { entity_id: id, max: 6.0 });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetGuiProgress {
+                entity_id: id,
+                value: 8.0,
+            },
+        );
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetGuiProgressMax {
+                entity_id: id,
+                max: 6.0,
+            },
+        );
         assert_eq!(bar(&world), (6.0, 6.0), "lowering max pulls value down");
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgressMax { entity_id: id, max: 20.0 });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetGuiProgressMax {
+                entity_id: id,
+                max: 20.0,
+            },
+        );
         assert_eq!(bar(&world), (6.0, 20.0), "raising max keeps value");
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::SetGuiProgressMax { entity_id: id, max: -1.0 });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetGuiProgressMax {
+                entity_id: id,
+                max: -1.0,
+            },
+        );
         assert_eq!(bar(&world), (0.0, 0.0), "negative max clamps to 0");
     }
 
@@ -1487,8 +1643,17 @@ mod tests {
             &mut world,
             &mut signals,
             [
-                EntityCmd::ShaderSetInt { entity_id: id, name: "mode".into(), value: 2 },
-                EntityCmd::ShaderSetVec2 { entity_id: id, name: "dir".into(), x: 1.0, y: 0.0 },
+                EntityCmd::ShaderSetInt {
+                    entity_id: id,
+                    name: "mode".into(),
+                    value: 2,
+                },
+                EntityCmd::ShaderSetVec2 {
+                    entity_id: id,
+                    name: "dir".into(),
+                    x: 1.0,
+                    y: 0.0,
+                },
                 EntityCmd::ShaderSetVec4 {
                     entity_id: id,
                     name: "tint".into(),
@@ -1497,7 +1662,10 @@ mod tests {
                     z: 0.25,
                     w: 1.0,
                 },
-                EntityCmd::ShaderClearUniform { entity_id: id, name: "dir".into() },
+                EntityCmd::ShaderClearUniform {
+                    entity_id: id,
+                    name: "dir".into(),
+                },
             ],
         );
         let uniforms = &world.get::<EntityShader>(e).unwrap().uniforms;
@@ -1505,10 +1673,19 @@ mod tests {
         assert_eq!(uniforms.get("dir"), None, "cleared individually");
         assert_eq!(
             uniforms.get("tint"),
-            Some(&UniformValue::Vec4 { x: 1.0, y: 0.5, z: 0.25, w: 1.0 })
+            Some(&UniformValue::Vec4 {
+                x: 1.0,
+                y: 0.5,
+                z: 0.25,
+                w: 1.0
+            })
         );
 
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::ShaderClearUniforms { entity_id: id });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::ShaderClearUniforms { entity_id: id },
+        );
         assert!(world.get::<EntityShader>(e).unwrap().uniforms.is_empty());
     }
 
@@ -1518,7 +1695,9 @@ mod tests {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let e = world.spawn((MapPosition::new(0.0, 0.0), RigidBody::new())).id();
+        let e = world
+            .spawn((MapPosition::new(0.0, 0.0), RigidBody::new()))
+            .id();
         let id = e.to_bits();
 
         run_entity_cmd(
@@ -1535,14 +1714,24 @@ mod tests {
                 stored_vy: -1.0,
             },
         );
-        assert!(world.get::<RigidBody>(e).is_none(), "sticking removes the RigidBody");
+        assert!(
+            world.get::<RigidBody>(e).is_none(),
+            "sticking removes the RigidBody"
+        );
         let stuck = world.get::<StuckTo>(e).unwrap();
         assert_eq!(stuck.target, target);
         assert_eq!(stuck.stored_velocity, Some(Vec2::new(5.0, -1.0)));
 
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::ReleaseStuckTo { entity_id: id });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::ReleaseStuckTo { entity_id: id },
+        );
         assert!(world.get::<StuckTo>(e).is_none());
-        assert_eq!(world.get::<RigidBody>(e).unwrap().velocity, Vec2::new(5.0, -1.0));
+        assert_eq!(
+            world.get::<RigidBody>(e).unwrap().velocity,
+            Vec2::new(5.0, -1.0)
+        );
     }
 
     #[test]
@@ -1561,7 +1750,13 @@ mod tests {
             })
             .id();
 
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::ReleaseStuckTo { entity_id: e.to_bits() });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::ReleaseStuckTo {
+                entity_id: e.to_bits(),
+            },
+        );
         assert!(world.get::<StuckTo>(e).is_none());
         assert!(world.get::<RigidBody>(e).is_none());
     }
@@ -1590,12 +1785,20 @@ mod tests {
             &mut signals,
             &AnimationStore::default(),
             &systems_store,
-            [EntityCmd::MenuDespawn { entity_id: menu.to_bits() }],
+            [EntityCmd::MenuDespawn {
+                entity_id: menu.to_bits(),
+            }],
         );
         assert_eq!(world.resource::<MenuDespawnCalls>().0, [menu]);
 
         // Without a registered hook the command is a no-op.
-        run_entity_cmd(&mut world, &mut signals, EntityCmd::MenuDespawn { entity_id: menu.to_bits() });
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::MenuDespawn {
+                entity_id: menu.to_bits(),
+            },
+        );
         assert_eq!(world.resource::<MenuDespawnCalls>().0.len(), 1);
         assert!(world.get_entity(menu).is_ok());
     }

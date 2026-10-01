@@ -19,6 +19,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::math::vec2_to_raylib;
 
+use crate::components::mirror::{
+    MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapSprite,
+    MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
+};
+use crate::resources::sim_id_map::SimIdMap;
 use aberred_core::components::dynamictext::DynamicText;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
@@ -28,10 +33,6 @@ use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::guiwindow::GuiWindow;
 use aberred_core::components::mapposition::MapPosition;
-use crate::components::mirror::{
-    MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapSprite,
-    MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
-};
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
@@ -43,7 +44,6 @@ use aberred_core::resources::drawable_snapshot::{
     GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
     MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
 };
-use crate::resources::sim_id_map::SimIdMap;
 
 /// Implemented by every `DrawableSnapshot` entry type [`reconcile`] accepts,
 /// so the shared loop can extract the originating sim `Entity` without a

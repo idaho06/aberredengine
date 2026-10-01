@@ -40,11 +40,12 @@ use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 #[cfg(feature = "lua")]
 use std::path::PathBuf;
 
-use aberred_core::components::persistent::Persistent;
+use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     hook_registrar, run_sim_tick,
 };
+use aberred_core::components::persistent::Persistent;
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
@@ -57,7 +58,6 @@ use aberred_core::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::texturedims::TextureDimsStore;
 use aberred_core::systems::input::resolve_input_backlog;
-use crate::engine_app::SceneDescriptor;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.

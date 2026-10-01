@@ -277,9 +277,18 @@ mod tests {
             ("with_menu_colors(1,2,3,4,5,6,7,8)", "with_menu_colors"),
             ("with_menu_dynamic_text(true)", "with_menu_dynamic_text"),
             ("with_menu_cursor('c')", "with_menu_cursor"),
-            ("with_menu_selection_sound('s')", "with_menu_selection_sound"),
-            ("with_menu_action_set_scene('i', 's')", "with_menu_action_set_scene"),
-            ("with_menu_action_show_submenu('i', 'm')", "with_menu_action_show_submenu"),
+            (
+                "with_menu_selection_sound('s')",
+                "with_menu_selection_sound",
+            ),
+            (
+                "with_menu_action_set_scene('i', 's')",
+                "with_menu_action_set_scene",
+            ),
+            (
+                "with_menu_action_show_submenu('i', 'm')",
+                "with_menu_action_show_submenu",
+            ),
             ("with_menu_action_quit('i')", "with_menu_action_quit"),
             ("with_menu_callback('cb')", "with_menu_callback"),
             ("with_menu_visible_count(3)", "with_menu_visible_count"),
@@ -318,7 +327,11 @@ mod tests {
             .collect();
         assert_eq!(
             actions,
-            ["play:scene:level01", "options:submenu:options_menu", "quit:quit"]
+            [
+                "play:scene:level01",
+                "options:submenu:options_menu",
+                "quit:quit"
+            ]
         );
     }
 

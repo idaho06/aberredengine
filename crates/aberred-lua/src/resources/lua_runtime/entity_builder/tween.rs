@@ -422,7 +422,10 @@ mod tests {
         let p = cmd.tween_position.unwrap();
         assert_eq!((p.from_x, p.from_y, p.to_x, p.to_y), (1.0, 2.0, 3.0, 4.0));
         let sp = cmd.tween_screen_position.unwrap();
-        assert_eq!((sp.from_x, sp.from_y, sp.to_x, sp.to_y), (5.0, 6.0, 7.0, 8.0));
+        assert_eq!(
+            (sp.from_x, sp.from_y, sp.to_x, sp.to_y),
+            (5.0, 6.0, 7.0, 8.0)
+        );
         let r = cmd.tween_rotation.unwrap();
         assert_eq!((r.from, r.to), (0.0, 90.0));
         let s = cmd.tween_scale.unwrap();
@@ -467,13 +470,20 @@ mod tests {
 
         let configs: [(&str, &TweenConfig); 4] = [
             ("position", &cmd.tween_position.as_ref().unwrap().config),
-            ("screen_position", &cmd.tween_screen_position.as_ref().unwrap().config),
+            (
+                "screen_position",
+                &cmd.tween_screen_position.as_ref().unwrap().config,
+            ),
             ("rotation", &cmd.tween_rotation.as_ref().unwrap().config),
             ("scale", &cmd.tween_scale.as_ref().unwrap().config),
         ];
         for (kind, config) in configs {
             let (easing, loop_mode) = values(kind);
-            assert_eq!((config.easing.as_str(), config.loop_mode.as_str()), (easing, loop_mode), "{kind}");
+            assert_eq!(
+                (config.easing.as_str(), config.loop_mode.as_str()),
+                (easing, loop_mode),
+                "{kind}"
+            );
             assert_eq!(config.callback, format!("{kind}_done"));
             assert_eq!(config.backwards, kind == "rotation", "{kind} backwards");
         }
@@ -493,7 +503,15 @@ mod tests {
             );
         }
         // Every documented name is still accepted.
-        for easing in ["linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"] {
+        for easing in [
+            "linear",
+            "quad_in",
+            "quad_out",
+            "quad_in_out",
+            "cubic_in",
+            "cubic_out",
+            "cubic_in_out",
+        ] {
             built_spawn_cmd(&format!(
                 "engine.spawn():{}:with_tween_rotation_easing('{easing}'):build()",
                 base_call("rotation")

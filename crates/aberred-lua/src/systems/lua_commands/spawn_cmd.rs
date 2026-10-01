@@ -6,9 +6,12 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::*;
 use aberred_core::math::Vec2;
+use bevy_ecs::prelude::*;
 
+use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
+use crate::components::luasetup::LuaSetup;
+use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberred_core::components::animation::{Animation, AnimationController};
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::cameratarget::CameraTarget;
@@ -16,10 +19,6 @@ use aberred_core::components::dynamictext::DynamicText;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::group::Group;
 use aberred_core::components::guioffset::GuiOffset;
-use aberred_core::math::Color;
-use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
-use crate::components::luasetup::LuaSetup;
-use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::components::rigidbody::RigidBody;
@@ -35,6 +34,7 @@ use aberred_core::components::tilemap::TileMap;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::zindex::ZIndex;
+use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
@@ -468,8 +468,8 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         ));
     }
     if let Some(rule_data) = lua_collision_rule {
-        use aberred_core::components::collision::CollisionRule;
         use crate::components::luacollision::LuaCollisionCallback;
+        use aberred_core::components::collision::CollisionRule;
         entity_commands.insert(CollisionRule::new(
             rule_data.group_a,
             rule_data.group_b,
@@ -579,8 +579,8 @@ fn apply_particle_emitter(
         return;
     };
 
-    use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
     use crate::resources::lua_runtime::{ParticleEmitterShapeData, ParticleTtlData};
+    use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 
     // Resolve template keys to Entity IDs
     let mut templates = Vec::new();
@@ -776,7 +776,11 @@ mod tests {
     }
 
     /// Runs one `CloneCmd` of the entity registered as `"tpl"` and returns the new entity.
-    fn clone_tpl(world: &mut World, world_signals: &mut WorldSignals, overrides: SpawnCmd) -> Entity {
+    fn clone_tpl(
+        world: &mut World,
+        world_signals: &mut WorldSignals,
+        overrides: SpawnCmd,
+    ) -> Entity {
         let before: Vec<Entity> = world.query::<Entity>().iter(world).collect();
         let mut system_state = SystemState::<Commands>::new(world);
         {
@@ -819,14 +823,20 @@ mod tests {
             },
         );
 
-        assert_eq!(world.get::<MapPosition>(clone).unwrap().pos, Vec2::new(10.0, 20.0));
+        assert_eq!(
+            world.get::<MapPosition>(clone).unwrap().pos,
+            Vec2::new(10.0, 20.0)
+        );
         assert_eq!(world.get::<Group>(clone).unwrap().0, "boss");
         assert_eq!(
             world.get::<ZIndex>(clone).unwrap().0,
             3.0,
             "components without an override are cloned"
         );
-        assert_eq!(world.get::<MapPosition>(source).unwrap().pos, Vec2::new(1.0, 2.0));
+        assert_eq!(
+            world.get::<MapPosition>(source).unwrap().pos,
+            Vec2::new(1.0, 2.0)
+        );
         assert_eq!(world.get::<Group>(source).unwrap().0, "enemy");
     }
 
@@ -845,7 +855,10 @@ mod tests {
 
         let anim = world.get::<Animation>(clone).unwrap();
         assert_eq!(anim.animation_key, "walk");
-        assert_eq!((anim.frame_index, anim.elapsed_time, anim.finished), (0, 0.0, false));
+        assert_eq!(
+            (anim.frame_index, anim.elapsed_time, anim.finished),
+            (0, 0.0, false)
+        );
         let src = world.get::<Animation>(source).unwrap();
         assert_eq!((src.frame_index, src.finished), (3, true));
     }
@@ -959,9 +972,19 @@ mod tests {
             .single(&world)
             .expect("one controller spawned");
         assert_eq!(controller.fallback_key, "idle");
-        let keys: Vec<&str> = controller.rules.iter().map(|r| r.set_key.as_str()).collect();
-        assert_eq!(keys, ["jump", "run"], "rule order is first-match-wins order");
-        assert!(matches!(&controller.rules[0].when, Condition::HasFlag { key } if key == "jumping"));
+        let keys: Vec<&str> = controller
+            .rules
+            .iter()
+            .map(|r| r.set_key.as_str())
+            .collect();
+        assert_eq!(
+            keys,
+            ["jump", "run"],
+            "rule order is first-match-wins order"
+        );
+        assert!(
+            matches!(&controller.rules[0].when, Condition::HasFlag { key } if key == "jumping")
+        );
         assert!(matches!(
             &controller.rules[1].when,
             Condition::ScalarCmp { op: CmpOp::Gt, .. }
@@ -1007,8 +1030,14 @@ mod tests {
         );
         let e = spawn_from_lua(&mut world, &mut signals, &script);
 
-        assert_eq!(world.get::<MapPosition>(e).unwrap().pos, Vec2::new(1.0, 2.0));
-        assert_eq!(world.get::<ScreenPosition>(e).unwrap().pos, Vec2::new(3.0, 4.0));
+        assert_eq!(
+            world.get::<MapPosition>(e).unwrap().pos,
+            Vec2::new(1.0, 2.0)
+        );
+        assert_eq!(
+            world.get::<ScreenPosition>(e).unwrap().pos,
+            Vec2::new(3.0, 4.0)
+        );
         assert_eq!(world.get::<Rotation>(e).unwrap().degrees, 45.0);
         assert_eq!(world.get::<Scale>(e).unwrap().scale, Vec2::new(2.0, 3.0));
         let stuck = world.get::<StuckTo>(e).unwrap();
@@ -1049,7 +1078,10 @@ mod tests {
         );
         assert!(world.get::<ChildOf>(e).is_none());
         assert!(world.get::<StuckTo>(e).is_none());
-        assert_eq!(world.get::<MapPosition>(e).unwrap().pos, Vec2::new(1.0, 2.0));
+        assert_eq!(
+            world.get::<MapPosition>(e).unwrap().pos,
+            Vec2::new(1.0, 2.0)
+        );
     }
 
     #[test]
@@ -1069,20 +1101,33 @@ mod tests {
 
         let rb = world.get::<RigidBody>(e).unwrap();
         assert_eq!(rb.velocity, Vec2::new(1.0, 2.0));
-        assert_eq!((rb.friction, rb.max_speed, rb.frozen), (0.5, Some(9.0), true));
+        assert_eq!(
+            (rb.friction, rb.max_speed, rb.frozen),
+            (0.5, Some(9.0), true)
+        );
         let gravity = &rb.forces["gravity"];
-        assert_eq!((gravity.value, gravity.enabled), (Vec2::new(0.0, 10.0), false));
+        assert_eq!(
+            (gravity.value, gravity.enabled),
+            (Vec2::new(0.0, 10.0), false)
+        );
 
         let collider = world.get::<BoxCollider>(e).unwrap();
         assert_eq!(
             (collider.size, collider.origin, collider.offset),
-            (Vec2::new(20.0, 10.0), Vec2::new(5.0, 2.0), Vec2::new(3.0, 4.0))
+            (
+                Vec2::new(20.0, 10.0),
+                Vec2::new(5.0, 2.0),
+                Vec2::new(3.0, 4.0)
+            )
         );
 
         let sprite = world.get::<Sprite>(e).unwrap();
         assert_eq!(&*sprite.tex_key, "hero");
         assert_eq!((sprite.width, sprite.height), (32.0, 48.0));
-        assert_eq!((sprite.origin, sprite.offset), (Vec2::new(16.0, 24.0), Vec2::new(64.0, 0.0)));
+        assert_eq!(
+            (sprite.origin, sprite.offset),
+            (Vec2::new(16.0, 24.0), Vec2::new(64.0, 0.0))
+        );
         assert_eq!((sprite.flip_h, sprite.flip_v), (true, false));
 
         assert_eq!(world.get::<ZIndex>(e).unwrap().0, 7.0);
@@ -1091,7 +1136,10 @@ mod tests {
         assert_eq!(shader.uniforms.get("amp"), Some(&UniformValue::Float(2.0)));
         assert_eq!(world.get::<Tint>(e).unwrap().color, Color::new(1, 2, 3, 4));
         let shadow = world.get::<Shadow>(e).unwrap();
-        assert_eq!((shadow.offset, shadow.color), (Vec2::new(2.0, 3.0), Color::new(5, 6, 7, 8)));
+        assert_eq!(
+            (shadow.offset, shadow.color),
+            (Vec2::new(2.0, 3.0), Color::new(5, 6, 7, 8))
+        );
     }
 
     #[test]
@@ -1112,20 +1160,38 @@ mod tests {
         );
 
         let pos = world.get::<Tween<MapPosition>>(e).unwrap();
-        assert_eq!((pos.from.pos, pos.to.pos), (Vec2::ZERO, Vec2::new(10.0, 20.0)));
+        assert_eq!(
+            (pos.from.pos, pos.to.pos),
+            (Vec2::ZERO, Vec2::new(10.0, 20.0))
+        );
         assert_eq!(pos.duration, 1.0);
         assert!(matches!(pos.easing, Easing::QuadIn));
         assert!(matches!(pos.loop_mode, LoopMode::PingPong));
         let screen = world.get::<Tween<ScreenPosition>>(e).unwrap();
-        assert_eq!((screen.from.pos, screen.to.pos), (Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0)));
+        assert_eq!(
+            (screen.from.pos, screen.to.pos),
+            (Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0))
+        );
         let rot = world.get::<Tween<Rotation>>(e).unwrap();
-        assert_eq!((rot.from.degrees, rot.to.degrees, rot.duration), (0.0, 90.0, 3.0));
+        assert_eq!(
+            (rot.from.degrees, rot.to.degrees, rot.duration),
+            (0.0, 90.0, 3.0)
+        );
         assert!(!rot.forward, "backwards tween starts reversed");
         let scale = world.get::<Tween<Scale>>(e).unwrap();
         assert_eq!(scale.to.scale, Vec2::new(2.0, 2.0));
 
-        assert_eq!(&*world.get::<LuaOnTweenFinished<MapPosition>>(e).unwrap().callback, "pos_done");
-        assert_eq!(&*world.get::<LuaOnTweenFinished<Scale>>(e).unwrap().callback, "scale_done");
+        assert_eq!(
+            &*world
+                .get::<LuaOnTweenFinished<MapPosition>>(e)
+                .unwrap()
+                .callback,
+            "pos_done"
+        );
+        assert_eq!(
+            &*world.get::<LuaOnTweenFinished<Scale>>(e).unwrap().callback,
+            "scale_done"
+        );
         assert!(world.get::<LuaOnTweenFinished<ScreenPosition>>(e).is_none());
         assert!(world.get::<LuaOnTweenFinished<Rotation>>(e).is_none());
     }
@@ -1134,11 +1200,22 @@ mod tests {
     fn lua_spawn_inserts_signals_only_when_requested() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let bare = spawn_from_lua(&mut world, &mut signals, "engine.spawn():with_position(0, 0):build()");
+        let bare = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_position(0, 0):build()",
+        );
         assert!(world.get::<Signals>(bare).is_none());
 
-        let empty = spawn_from_lua(&mut world, &mut signals, "engine.spawn():with_signals():build()");
-        assert!(world.get::<Signals>(empty).is_some(), "with_signals() alone adds an empty bag");
+        let empty = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_signals():build()",
+        );
+        assert!(
+            world.get::<Signals>(empty).is_some(),
+            "with_signals() alone adds an empty bag"
+        );
 
         let e = spawn_from_lua(
             &mut world,
@@ -1147,8 +1224,13 @@ mod tests {
              :with_signal_flag('f'):with_signal_string('n', 'bob')\
              :with_signal_binding('score'):with_signal_binding_format('Score: {}'):build()",
         );
-        let s = world.get::<Signals>(e).expect("any signal implies a Signals component");
-        assert_eq!((s.get_scalar("s"), s.get_integer("i")), (Some(1.5), Some(3)));
+        let s = world
+            .get::<Signals>(e)
+            .expect("any signal implies a Signals component");
+        assert_eq!(
+            (s.get_scalar("s"), s.get_integer("i")),
+            (Some(1.5), Some(3))
+        );
         assert!(s.has_flag("f"));
         assert_eq!(s.get_string("n").map(String::as_str), Some("bob"));
         let binding = world.get::<SignalBinding>(e).unwrap();
@@ -1183,11 +1265,18 @@ mod tests {
             .get(&world, e)
             .expect("inserted as LuaCollisionRule");
         assert_eq!(
-            (rule.group_a.as_str(), rule.group_b.as_str(), &*rule.callback.name),
+            (
+                rule.group_a.as_str(),
+                rule.group_b.as_str(),
+                &*rule.callback.name
+            ),
             ("player", "enemy", "on_hit")
         );
         assert_eq!(&*world.get::<LuaSetup>(e).unwrap().callback, "setup_fn");
-        assert_eq!(&*world.get::<LuaOnAnimationEnd>(e).unwrap().callback, "anim_done");
+        assert_eq!(
+            &*world.get::<LuaOnAnimationEnd>(e).unwrap().callback,
+            "anim_done"
+        );
     }
 
     #[test]
@@ -1204,10 +1293,16 @@ mod tests {
         );
 
         let text = world.get::<DynamicText>(e).unwrap();
-        assert_eq!((&*text.text, &*text.font, text.font_size), ("Hi", "arcade", 12.0));
+        assert_eq!(
+            (&*text.text, &*text.font, text.font_size),
+            ("Hi", "arcade", 12.0)
+        );
         assert_eq!(text.color, Color::new(1, 2, 3, 4));
         let grid = world.get::<GridLayout>(e).unwrap();
-        assert_eq!((grid.path.as_str(), grid.group.as_str(), grid.z_index), ("levels/l1.json", "bricks", 3.0));
+        assert_eq!(
+            (grid.path.as_str(), grid.group.as_str(), grid.z_index),
+            ("levels/l1.json", "bricks", 3.0)
+        );
         assert!(!grid.spawned);
         let mouse = world.get::<MouseControlled>(e).unwrap();
         assert_eq!((mouse.follow_x, mouse.follow_y), (true, false));
@@ -1238,8 +1333,14 @@ mod tests {
         let ids: Vec<&str> = menu.items.iter().map(|i| i.id.as_str()).collect();
         assert_eq!(ids, ["play", "opts", "quit"]);
         assert_eq!(menu.items[1].label, "Options");
-        assert_eq!((menu.origin, menu.font.as_str()), (Vec2::new(10.0, 20.0), "arcade"));
-        assert_eq!((menu.font_size, menu.item_spacing, menu.use_screen_space), (16.0, 24.0, true));
+        assert_eq!(
+            (menu.origin, menu.font.as_str()),
+            (Vec2::new(10.0, 20.0), "arcade")
+        );
+        assert_eq!(
+            (menu.font_size, menu.item_spacing, menu.use_screen_space),
+            (16.0, 24.0, true)
+        );
         assert_eq!(
             (menu.normal_color, menu.selected_color),
             (Color::new(1, 2, 3, 4), Color::new(5, 6, 7, 8))
@@ -1288,18 +1389,34 @@ mod tests {
         );
 
         let emitter = world.get::<ParticleEmitter>(e).unwrap();
-        assert_eq!(emitter.templates, [spark], "unregistered template keys are dropped");
-        assert!(matches!(emitter.shape, EmitterShape::Rect { width: 8.0, height: 4.0 }));
+        assert_eq!(
+            emitter.templates,
+            [spark],
+            "unregistered template keys are dropped"
+        );
+        assert!(matches!(
+            emitter.shape,
+            EmitterShape::Rect {
+                width: 8.0,
+                height: 4.0
+            }
+        ));
         assert_eq!(emitter.offset, Vec2::new(1.0, 2.0));
         assert_eq!(
             (emitter.particles_per_emission, emitter.emissions_per_second),
             (3, 20.0)
         );
         assert_eq!(
-            (emitter.emissions_remaining, emitter.initial_emissions_remaining),
+            (
+                emitter.emissions_remaining,
+                emitter.initial_emissions_remaining
+            ),
             (5, 5)
         );
-        assert_eq!((emitter.arc_degrees, emitter.speed_range), ((30.0, 60.0), (10.0, 20.0)));
+        assert_eq!(
+            (emitter.arc_degrees, emitter.speed_range),
+            ((30.0, 60.0), (10.0, 20.0))
+        );
         assert!(matches!(emitter.ttl, TtlSpec::Range { min, max } if min == 1.0 && max == 2.0));
         assert_eq!(emitter.time_since_emit, 0.0);
     }

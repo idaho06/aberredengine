@@ -9,8 +9,8 @@
 //!
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
 
-use bevy_ecs::prelude::{Component, Entity};
 use crate::math::Vec2;
+use bevy_ecs::prelude::{Component, Entity};
 use rustc_hash::FxHashMap;
 
 use crate::math::Color;
@@ -226,7 +226,10 @@ mod tests {
             .collect();
         assert_eq!(
             items,
-            [("start", "Start Game", true, None), ("quit", "Quit", true, None)]
+            [
+                ("start", "Start Game", true, None),
+                ("quit", "Quit", true, None)
+            ]
         );
         assert!(menu.active);
         assert_eq!(menu.selected_index, 0);

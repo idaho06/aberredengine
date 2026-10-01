@@ -29,8 +29,8 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::gridlayout::{GridLayout, GridLayoutData, GridValue};
@@ -179,8 +179,8 @@ mod tests {
         assert_eq!(
             cells(&mut world),
             vec![
-                (Vec2::new(30.0, 28.0), "red".to_string()),   // row 0, col 0
-                (Vec2::new(70.0, 44.0), "red".to_string()),   // row 1, col 1
+                (Vec2::new(30.0, 28.0), "red".to_string()), // row 0, col 0
+                (Vec2::new(70.0, 44.0), "red".to_string()), // row 1, col 1
                 (Vec2::new(110.0, 28.0), "green".to_string()), // row 0, col 2
             ]
         );
@@ -190,7 +190,11 @@ mod tests {
         for (group, z, sprite, collider) in q.iter(&world) {
             assert_eq!((group.0.as_str(), z.0), ("bricks", 3.0));
             assert_eq!((sprite.width, sprite.height), (40.0, 16.0));
-            assert_eq!(sprite.origin, Vec2::new(20.0, 8.0), "sprite centered on the cell");
+            assert_eq!(
+                sprite.origin,
+                Vec2::new(20.0, 8.0),
+                "sprite centered on the cell"
+            );
             assert_eq!(collider.size, Vec2::new(40.0, 16.0));
             assert_eq!(collider.origin, Vec2::new(20.0, 8.0));
         }
@@ -210,7 +214,10 @@ mod tests {
         assert_eq!(red.get_string("kind").map(String::as_str), Some("brick"));
         assert!(red.has_flag("solid"));
         assert!(!red.has_flag("hidden"), "a false bool sets no flag");
-        let (_, green) = q.iter(&world).find(|(s, _)| &*s.tex_key == "green").unwrap();
+        let (_, green) = q
+            .iter(&world)
+            .find(|(s, _)| &*s.tex_key == "green")
+            .unwrap();
         assert!(green.get_integer("hp").is_none());
     }
 
@@ -242,7 +249,10 @@ mod tests {
         schedule().run(&mut world);
 
         assert!(cells(&mut world).is_empty());
-        assert!(world.get::<GridLayout>(missing).unwrap().spawned, "marked to prevent retry");
+        assert!(
+            world.get::<GridLayout>(missing).unwrap().spawned,
+            "marked to prevent retry"
+        );
         assert!(world.get::<GridLayout>(invalid).unwrap().spawned);
     }
 }

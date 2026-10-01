@@ -13,9 +13,9 @@
 
 use std::sync::Arc;
 
+use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
-use crate::math::Vec2;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
@@ -680,8 +680,8 @@ mod tests {
     use crate::components::guiinteractable::GuiWidgetState;
     use crate::components::guiprogressbar::ProgressBarDirection;
     use crate::math::Color;
-    use bevy_ecs::system::RunSystemOnce;
     use crate::math::Vec2;
+    use bevy_ecs::system::RunSystemOnce;
     use std::sync::Arc;
 
     fn new_test_world() -> World {
@@ -799,14 +799,19 @@ mod tests {
             (captured.position, captured.rotation_degrees, captured.scale),
             (gt.position, gt.rotation_degrees, gt.scale)
         );
-        assert!(sprite_gt(root_sprite).is_none(), "no GlobalTransform2D stays None");
+        assert!(
+            sprite_gt(root_sprite).is_none(),
+            "no GlobalTransform2D stays None"
+        );
 
         let text = snapshot
             .map_texts
             .iter()
             .find(|t| t.entity == child_text)
             .expect("text captured");
-        let captured = text.global_transform.expect("GlobalTransform2D captured on text");
+        let captured = text
+            .global_transform
+            .expect("GlobalTransform2D captured on text");
         assert_eq!(captured.position, gt.position);
     }
 

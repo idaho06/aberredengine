@@ -8,6 +8,7 @@ use crossbeam_channel::{Receiver, Sender};
 use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
 use super::replay::{ReplayPlayer, ReplayRecorder};
+use super::scene::SceneDescriptor;
 use aberred_core::error::EngineError;
 use aberred_core::events::input::InputAction;
 use aberred_core::pacing::{Pacer, StatsWindow, TickCountdown};
@@ -33,7 +34,6 @@ use aberred_core::resources::thread_stats::SimStats;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::input::resolve_input_backlog;
-use super::scene::SceneDescriptor;
 use aberred_core::systems::signal_intents::apply_signal_intents;
 use aberred_core::systems::state_hash::hash_world_state;
 use aberred_core::systems::time::update_world_time;
@@ -624,8 +624,10 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use aberred_core::components::mapposition::MapPosition;
-    use aberred_core::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader};
     use aberred_core::protocol::raw_input::{ImguiCaptureState, RawDeviceSnapshot};
+    use aberred_core::protocol::replay::{
+        REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader,
+    };
     use aberred_core::resources::signal_intents::SignalIntent;
     use aberred_core::resources::sim_rng::SimRng;
     use aberred_core::resources::worldsignals::WorldSignals;
@@ -825,7 +827,9 @@ mod tests {
                     key: "new_f".into(),
                     metrics: Default::default(),
                 },
-                LogicMsg::FontRemoved { key: "gone_f".into() },
+                LogicMsg::FontRemoved {
+                    key: "gone_f".into(),
+                },
                 LogicMsg::FontRenamed {
                     old_key: "old_f".into(),
                     new_key: "ren_f".into(),
@@ -835,7 +839,9 @@ mod tests {
                     width: 5,
                     height: 6,
                 },
-                LogicMsg::TextureRemoved { key: "gone_t".into() },
+                LogicMsg::TextureRemoved {
+                    key: "gone_t".into(),
+                },
                 LogicMsg::TextureRenamed {
                     old_key: "old_t".into(),
                     new_key: "ren_t".into(),
@@ -904,7 +910,13 @@ mod tests {
             keyboard: true,
         };
         for (w, capture) in [
-            (1, ImguiCaptureState { mouse: true, keyboard: false }),
+            (
+                1,
+                ImguiCaptureState {
+                    mouse: true,
+                    keyboard: false,
+                },
+            ),
             (2, ImguiCaptureState::default()),
             (3, newest_capture),
         ] {
@@ -915,9 +927,13 @@ mod tests {
                 })
                 .unwrap();
         }
-        tx_logic.send(LogicMsg::ScreenSize { w: 320, h: 240 }).unwrap();
         tx_logic
-            .send(LogicMsg::SignalIntents(vec![SignalIntent::SetFlag("new".into())]))
+            .send(LogicMsg::ScreenSize { w: 320, h: 240 })
+            .unwrap();
+        tx_logic
+            .send(LogicMsg::SignalIntents(vec![SignalIntent::SetFlag(
+                "new".into(),
+            )]))
             .unwrap();
         tx_logic
             .send(LogicMsg::TextureLoaded {
@@ -944,7 +960,11 @@ mod tests {
 
         assert_eq!(tick_input.tick, 7);
         let widths: Vec<i32> = tick_input.samples.iter().map(|s| s.window_w).collect();
-        assert_eq!(widths, [1, 2, 3], "samples in arrival order, stale ones gone");
+        assert_eq!(
+            widths,
+            [1, 2, 3],
+            "samples in arrival order, stale ones gone"
+        );
         assert_eq!(tick_input.capture, Some(newest_capture));
         assert_eq!(tick_input.intents, [SignalIntent::SetFlag("new".into())]);
         assert_eq!(tick_input.screen_size, Some((320, 240)));

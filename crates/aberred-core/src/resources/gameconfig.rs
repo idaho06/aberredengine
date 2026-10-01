@@ -346,7 +346,8 @@ impl GameConfig {
             .unwrap_or_else(|| default_snapshot_skip(self.sim_hz, self.target_fps) as i64);
         self.snapshot_skip = clamp_snapshot_skip(snapshot_skip, "simulation.snapshot_skip");
         if let Some(dz) = config.getfloat("input", "gamepad_deadzone").ok().flatten() {
-            self.gamepad_deadzone = clamp_gamepad_deadzone(dz as f32, self.gamepad_deadzone, "input.gamepad_deadzone");
+            self.gamepad_deadzone =
+                clamp_gamepad_deadzone(dz as f32, self.gamepad_deadzone, "input.gamepad_deadzone");
         }
         info!(
             "Loaded config: {}x{} render, {}x{} window, fps={}, vsync={}, fullscreen={}, title={}, sim_hz={}, audio_hz={}, snapshot_skip={}",

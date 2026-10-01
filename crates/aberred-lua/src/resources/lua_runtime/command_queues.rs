@@ -142,7 +142,10 @@ impl LuaRuntime {
     }
 
     /// Updates the cached game configuration snapshot that Lua can read.
-    pub fn update_gameconfig_cache(&self, config: &aberred_core::resources::gameconfig::GameConfig) {
+    pub fn update_gameconfig_cache(
+        &self,
+        config: &aberred_core::resources::gameconfig::GameConfig,
+    ) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             let mut snapshot = data.gameconfig_snapshot.borrow_mut();
             snapshot.fullscreen = config.fullscreen;

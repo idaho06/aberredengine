@@ -11,7 +11,9 @@ use aberred_core::pacing::StatsWindow;
 use aberred_core::protocol::endpoints::{LogicBridge, shutdown_logic};
 use aberred_core::protocol::raw_input::InputSample;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
-use aberred_core::protocol::replay::{REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest};
+use aberred_core::protocol::replay::{
+    REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest,
+};
 use aberred_core::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::gameconfig::default_render_fps;

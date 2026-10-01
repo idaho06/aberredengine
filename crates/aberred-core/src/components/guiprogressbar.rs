@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 use crate::components::gui_themed::Themed;
 use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;

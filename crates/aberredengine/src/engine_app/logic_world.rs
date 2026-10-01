@@ -4,6 +4,10 @@ use bevy_ecs::prelude::*;
 use super::builder::EngineBuilder;
 use super::logic_thread::LogicInit;
 use super::registrar::ObserverRegistrar;
+use crate::systems::gui_interactable_click::gui_interactable_click_observer;
+use crate::systems::mapspawn::spawn_map_observer;
+use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_selection_observer};
+use aberred_audio::systems::setup_audio;
 #[cfg(feature = "lua")]
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
@@ -17,10 +21,10 @@ use aberred_core::error::EngineError;
 use aberred_core::events::gamestate::GameStateChangedEvent;
 use aberred_core::events::gamestate::observe_gamestate_change_event;
 use aberred_core::events::switchdebug::switch_debug_observer;
+use aberred_core::math::Vec2;
+use aberred_core::protocol::endpoints::RenderTx;
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::endpoints::setup_audio_stub;
-use aberred_core::protocol::endpoints::RenderTx;
-use aberred_audio::systems::setup_audio;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::appstate::AppState;
@@ -41,7 +45,6 @@ use aberred_core::resources::input_bindings::InputBindings;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
 use aberred_core::resources::scenemanager::SceneManager;
-use aberred_core::systems::scene_dispatch::SceneLogic;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 use aberred_core::resources::sim_rng::SimRng;
@@ -53,12 +56,9 @@ use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
-use crate::systems::gui_interactable_click::gui_interactable_click_observer;
-use crate::systems::mapspawn::spawn_map_observer;
-use crate::systems::menu::{menu_controller_observer, menu_despawn, menu_selection_observer};
 use aberred_core::systems::rust_collision::rust_collision_observer;
+use aberred_core::systems::scene_dispatch::SceneLogic;
 use aberred_core::systems::scene_dispatch::{scene_enter_play, scene_switch_system};
-use aberred_core::math::Vec2;
 use aberred_core::systems::timer::timer_observer;
 
 #[cfg(feature = "lua")]
@@ -187,8 +187,7 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = init.lua_script {
-            let lua_runtime =
-                LuaRuntime::new().map_err(|e| EngineError::Lua(e.to_string()))?;
+            let lua_runtime = LuaRuntime::new().map_err(|e| EngineError::Lua(e.to_string()))?;
             let path_display = script_path.to_string_lossy();
             if let Err(e) = lua_runtime.run_script(&path_display) {
                 log::error!("Failed to load Lua script '{path_display}': {e}");

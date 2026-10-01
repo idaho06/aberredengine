@@ -142,12 +142,17 @@ mod tests {
 
     fn text_entity(world: &mut World, binding: SignalBinding) -> Entity {
         world
-            .spawn((DynamicText::new("placeholder", "font", 12.0, Color::WHITE), binding))
+            .spawn((
+                DynamicText::new("placeholder", "font", 12.0, Color::WHITE),
+                binding,
+            ))
             .id()
     }
 
     fn run(world: &mut World) {
-        world.run_system_once(update_world_signals_binding_system).unwrap();
+        world
+            .run_system_once(update_world_signals_binding_system)
+            .unwrap();
     }
 
     fn text(world: &World, e: Entity) -> String {
@@ -202,7 +207,10 @@ mod tests {
         let mut ws = WorldSignals::default();
         ws.set_integer("score", 42);
         let mut world = world_with(ws);
-        let e = text_entity(&mut world, SignalBinding::new("score").with_format("Score: {} ({})"));
+        let e = text_entity(
+            &mut world,
+            SignalBinding::new("score").with_format("Score: {} ({})"),
+        );
         run(&mut world);
         assert_eq!(text(&world, e), "Score: 42 (42)");
     }
@@ -210,7 +218,10 @@ mod tests {
     #[test]
     fn missing_key_leaves_text_unchanged() {
         let mut world = world_with(WorldSignals::default());
-        let e = text_entity(&mut world, SignalBinding::new("absent").with_format("X: {}"));
+        let e = text_entity(
+            &mut world,
+            SignalBinding::new("absent").with_format("X: {}"),
+        );
         run(&mut world);
         assert_eq!(text(&world, e), "placeholder");
     }
@@ -227,9 +238,18 @@ mod tests {
         let despawned = world.spawn(Signals::default()).id();
         world.despawn(despawned);
 
-        let bound = text_entity(&mut world, SignalBinding::new("hp").with_source_entity(owner));
-        let bare = text_entity(&mut world, SignalBinding::new("hp").with_source_entity(no_signals));
-        let dead = text_entity(&mut world, SignalBinding::new("hp").with_source_entity(despawned));
+        let bound = text_entity(
+            &mut world,
+            SignalBinding::new("hp").with_source_entity(owner),
+        );
+        let bare = text_entity(
+            &mut world,
+            SignalBinding::new("hp").with_source_entity(no_signals),
+        );
+        let dead = text_entity(
+            &mut world,
+            SignalBinding::new("hp").with_source_entity(despawned),
+        );
         run(&mut world);
         assert_eq!(text(&world, bound), "7", "entity value, not the world's 99");
         assert_eq!(text(&world, bare), "placeholder");
@@ -275,7 +295,10 @@ mod tests {
         let big = text_entity(&mut world, SignalBinding::new("big"));
         let neg = text_entity(&mut world, SignalBinding::new("most_negative"));
         let min = text_entity(&mut world, SignalBinding::new("min"));
-        let from_entity = text_entity(&mut world, SignalBinding::new("big").with_source_entity(owner));
+        let from_entity = text_entity(
+            &mut world,
+            SignalBinding::new("big").with_source_entity(owner),
+        );
         run(&mut world);
 
         assert_eq!(text(&world, big), 1e35_f32.to_string());
@@ -283,5 +306,4 @@ mod tests {
         assert_eq!(text(&world, min), i32::MIN.to_string());
         assert_eq!(text(&world, from_entity), (-f32::MAX).to_string());
     }
-
 }

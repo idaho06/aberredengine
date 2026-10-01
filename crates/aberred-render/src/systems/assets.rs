@@ -11,15 +11,15 @@
 use bevy_ecs::prelude::*;
 use log::{debug, error, warn};
 
-use aberred_core::protocol::endpoints::LogicTx;
-use aberred_core::protocol::render_assets::RenderAssetCmd;
-use aberred_core::protocol::render_logic::LogicMsg;
-use aberred_core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use crate::resources::fontstore::FontStore;
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::RaylibAccess;
 use crate::systems::math::color_to_raylib;
+use aberred_core::protocol::endpoints::LogicTx;
+use aberred_core::protocol::render_assets::RenderAssetCmd;
+use aberred_core::protocol::render_logic::LogicMsg;
+use aberred_core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use raylib::ffi;
 use raylib::prelude::Image;
 use rustc_hash::FxHashMap;
@@ -233,7 +233,15 @@ pub(crate) fn apply_render_asset_cmd(
                 );
                 return;
             };
-            match load_texture_from_text(rl, th, font, &text, font_size, spacing, color_to_raylib(color)) {
+            match load_texture_from_text(
+                rl,
+                th,
+                font,
+                &text,
+                font_size,
+                spacing,
+                color_to_raylib(color),
+            ) {
                 Some(tex) => {
                     let (width, height) = (tex.width, tex.height);
                     tex_store.insert(
@@ -362,7 +370,10 @@ mod tests {
                 &thread,
                 // `cargo test` runs from this crate's root; the assets live
                 // at the workspace root.
-                concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/Arcade_Cabinet.ttf"),
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../assets/fonts/Arcade_Cabinet.ttf"
+                ),
                 32,
                 None,
             )

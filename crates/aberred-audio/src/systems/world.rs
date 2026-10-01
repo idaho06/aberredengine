@@ -12,8 +12,8 @@ use aberred_core::pacing::{Pacer, StatsWindow};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 
 use crate::components::music_track::MusicTrack;
-use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::backend::{AudioBackend, RaylibBackend};
+use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::store::AudioStore;
 
 use super::pipeline::{
@@ -153,8 +153,7 @@ mod tests {
     fn build_world_runs_headless_and_exits_on_disconnect() {
         let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioCmd>();
         let (tx_evt, _rx_evt) = crossbeam_channel::unbounded::<AudioMessage>();
-        let (mut world, mut schedule) =
-            build_world(RecordingBackend::default(), rx_cmd, tx_evt);
+        let (mut world, mut schedule) = build_world(RecordingBackend::default(), rx_cmd, tx_evt);
 
         schedule.run(&mut world);
         assert!(!world.resource::<ShouldExit>().0);

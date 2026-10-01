@@ -43,7 +43,9 @@ use crate::components::collision::CollisionRule;
 use crate::events::collision::CollisionEvent;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::GameCtx;
-use crate::systems::collision::{compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups};
+use crate::systems::collision::{
+    compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups,
+};
 
 /// Observer that handles Rust collision rules.
 ///

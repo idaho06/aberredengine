@@ -5,11 +5,11 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};
+use super::scene::SceneDescriptor;
 use super::schedule::SimSet;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::systems::gamestate::state_is_playing;
-use super::scene::SceneDescriptor;
 
 /// Builder for bootstrapping the engine.
 ///

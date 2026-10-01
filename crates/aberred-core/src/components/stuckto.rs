@@ -47,8 +47,8 @@
 //! - [`crate::systems::stuckto::stuck_to_entity_system`] – the system that updates positions
 //! - [`super::timer::Timer`] – can be used to auto-remove `StuckTo` after a delay
 
-use bevy_ecs::prelude::{Component, Entity};
 use crate::math::Vec2;
+use bevy_ecs::prelude::{Component, Entity};
 
 /// Component that makes an entity follow another entity's position.
 ///

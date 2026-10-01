@@ -21,8 +21,8 @@
 //! - [`crate::components::collision::CollisionRule`] – defines collision handlers
 //! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 use crate::math::Rect;
 

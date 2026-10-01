@@ -11,8 +11,8 @@
 //! [`crate::systems::mousecontroller`] read these components to update
 //! entity positions or velocities.
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 /// Movement intent derived from player keyboard input.
 ///

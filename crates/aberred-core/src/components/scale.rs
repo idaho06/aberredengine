@@ -4,8 +4,8 @@
 //! rendering. Values greater than 1.0 enlarge the sprite; values less than 1.0
 //! shrink it. Negative values can be used to flip.
 
-use bevy_ecs::prelude::Component;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Component;
 
 /// 2D scale factor for sprite rendering.
 ///

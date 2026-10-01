@@ -6,8 +6,8 @@
 //! The [`propagate_transforms`](crate::systems::propagate_transforms::propagate_transforms)
 //! system computes the resulting world-space values and stores them here.
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 /// Computed world-space transform for hierarchical entities.
 ///

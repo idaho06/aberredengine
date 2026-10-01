@@ -1,4 +1,3 @@
-
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::stub_generator;
 
@@ -238,8 +237,8 @@ fn scripts_path(file: &str) -> std::path::PathBuf {
 /// Panics naming the first differing line instead of dumping both files.
 fn assert_matches_checked_in(file: &str, generated: &str, regen_cmd: &str) {
     let path = scripts_path(file);
-    let checked_in = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let checked_in =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     if checked_in == generated {
         return;
     }

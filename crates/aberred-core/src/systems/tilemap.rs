@@ -6,10 +6,10 @@
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use log::warn;
-use crate::math::Vec2;
 use serde::Deserialize;
 
 use crate::components::group::Group;
@@ -360,14 +360,24 @@ mod tests {
     fn spawn_tiles_skips_ids_outside_the_atlas() {
         let mut world = World::new();
         // 32x16 atlas -> 2 cells (ids 0..=1); id 2 is out of range.
-        run_spawn_tiles(&mut world, (32, 16), &tilemap(16, &[&[(0, 0, 1), (1, 0, 2)]]), None);
+        run_spawn_tiles(
+            &mut world,
+            (32, 16),
+            &tilemap(16, &[&[(0, 0, 1), (1, 0, 2)]]),
+            None,
+        );
         assert_eq!(in_group(&mut world, TILES_GROUP).len(), 1);
     }
 
     #[test]
     fn atlas_smaller_than_a_tile_still_yields_one_usable_cell() {
         let mut world = World::new();
-        run_spawn_tiles(&mut world, (8, 8), &tilemap(16, &[&[(0, 0, 0), (1, 0, 1)]]), None);
+        run_spawn_tiles(
+            &mut world,
+            (8, 8),
+            &tilemap(16, &[&[(0, 0, 0), (1, 0, 1)]]),
+            None,
+        );
         // Only id 0 exists in a sub-tile atlas; id 1 is out of range.
         assert_eq!(in_group(&mut world, TILES_GROUP).len(), 1);
     }
@@ -376,9 +386,21 @@ mod tests {
     fn spawn_tiles_leaves_no_template_entities_behind() {
         let mut world = World::new();
         let root = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        run_spawn_tiles(&mut world, (64, 32), &tilemap(16, &[&[(0, 0, 0), (1, 0, 5)]]), Some(root));
-        assert!(in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty(), "templates despawned");
-        assert_eq!(in_group(&mut world, TILES_GROUP).len(), 2, "tiles survive their templates");
+        run_spawn_tiles(
+            &mut world,
+            (64, 32),
+            &tilemap(16, &[&[(0, 0, 0), (1, 0, 5)]]),
+            Some(root),
+        );
+        assert!(
+            in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty(),
+            "templates despawned"
+        );
+        assert_eq!(
+            in_group(&mut world, TILES_GROUP).len(),
+            2,
+            "tiles survive their templates"
+        );
 
         world.entity_mut(root).despawn();
         assert!(
@@ -393,7 +415,10 @@ mod tests {
         let mut schedule = Schedule::default();
         schedule.add_systems(tilemap_spawn_system);
         schedule.run(world);
-        world.resource_mut::<Messages<RenderAssetCmd>>().drain().collect()
+        world
+            .resource_mut::<Messages<RenderAssetCmd>>()
+            .drain()
+            .collect()
     }
 
     #[test]
@@ -414,9 +439,11 @@ mod tests {
         );
         let tiles = in_group(&mut world, TILES_GROUP);
         assert!(!tiles.is_empty());
-        assert!(tiles
-            .iter()
-            .all(|(e, _)| world.get::<ChildOf>(*e).map(|c| c.parent()) == Some(root)));
+        assert!(
+            tiles
+                .iter()
+                .all(|(e, _)| world.get::<ChildOf>(*e).map(|c| c.parent()) == Some(root))
+        );
     }
 
     #[test]
@@ -426,18 +453,26 @@ mod tests {
             .spawn((TileMap::new(FIXTURE_DIR), MapPosition::new(100.0, 50.0)))
             .id();
         run_system(&mut world);
-        assert_eq!(world.get::<MapPosition>(root).unwrap().pos, Vec2::new(100.0, 50.0));
+        assert_eq!(
+            world.get::<MapPosition>(root).unwrap().pos,
+            Vec2::new(100.0, 50.0)
+        );
     }
 
     #[test]
     fn system_with_missing_tilemap_spawns_and_requests_nothing() {
         let mut world = World::new();
-        let root = world.spawn(TileMap::new("assets/tilemaps/does_not_exist")).id();
+        let root = world
+            .spawn(TileMap::new("assets/tilemaps/does_not_exist"))
+            .id();
         assert!(run_system(&mut world).is_empty());
         // Entity counts are unreliable here (bevy registers resources/systems as entities).
         assert!(in_group(&mut world, TILES_GROUP).is_empty());
         assert!(in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty());
-        assert!(world.get::<MapPosition>(root).is_none(), "root left untouched");
+        assert!(
+            world.get::<MapPosition>(root).is_none(),
+            "root left untouched"
+        );
     }
 
     #[test]
@@ -465,10 +500,9 @@ mod tests {
 
     #[test]
     fn read_png_dimensions_reads_valid_header() {
-        let file = std::fs::File::open(
-            "assets/tilemaps/sidescroller_test01/sidescroller_test01.png",
-        )
-        .expect("fixture PNG should exist");
+        let file =
+            std::fs::File::open("assets/tilemaps/sidescroller_test01/sidescroller_test01.png")
+                .expect("fixture PNG should exist");
         let (w, h) = read_png_dimensions(file, "fixture.png").expect("valid PNG header");
         assert_eq!((w, h), (192, 120));
     }

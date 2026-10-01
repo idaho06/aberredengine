@@ -3,9 +3,9 @@
 //! Tracks the actual window dimensions in pixels, which may differ from the
 //! game's render resolution. Updated each frame to handle window resizing.
 
-use bevy_ecs::prelude::Resource;
 use crate::math::Rect;
 use crate::math::Vec2;
+use bevy_ecs::prelude::Resource;
 
 /// Current window size in pixels.
 ///
@@ -77,12 +77,7 @@ impl WindowSize {
     ///
     /// # Returns
     /// Position in game/render-target coordinates (0..game_width, 0..game_height)
-    pub fn window_to_game_pos(
-        &self,
-        window_pos: Vec2,
-        game_width: u32,
-        game_height: u32,
-    ) -> Vec2 {
+    pub fn window_to_game_pos(&self, window_pos: Vec2, game_width: u32, game_height: u32) -> Vec2 {
         let letterbox = self.calculate_letterbox(game_width, game_height);
 
         // Transform from window space to game space
@@ -147,7 +142,10 @@ mod tests {
         );
 
         let pillarboxed = window(1000, 360);
-        assert_eq!(pillarboxed.window_to_game_pos(Vec2::new(180.0, 0.0), 640, 360), Vec2::ZERO);
+        assert_eq!(
+            pillarboxed.window_to_game_pos(Vec2::new(180.0, 0.0), 640, 360),
+            Vec2::ZERO
+        );
         assert_eq!(
             pillarboxed.window_to_game_pos(Vec2::new(500.0, 100.0), 640, 360),
             Vec2::new(320.0, 100.0)

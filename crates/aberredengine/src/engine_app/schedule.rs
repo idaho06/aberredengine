@@ -3,6 +3,8 @@ use bevy_ecs::schedule::SingleThreadedExecutor;
 
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
+use crate::systems::collision_rule_index::rebuild_collision_rule_index;
+use crate::systems::menu::menu_spawn_system;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -17,7 +19,6 @@ use aberred_core::systems::audio_bridge::{
 };
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
-use crate::systems::collision_rule_index::rebuild_collision_rule_index;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::gamestate::{check_pending_state, state_is_playing};
 use aberred_core::systems::gridlayout::gridlayout_spawn_system;
@@ -32,7 +33,6 @@ use aberred_core::systems::gui_spawn::{
 use aberred_core::systems::inputaccelerationcontroller::input_acceleration_controller;
 use aberred_core::systems::inputsimplecontroller::input_simple_controller;
 use aberred_core::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
-use crate::systems::menu::menu_spawn_system;
 use aberred_core::systems::mousecontroller::mouse_controller;
 use aberred_core::systems::movement::movement;
 use aberred_core::systems::particleemitter::particle_emitter_system;
@@ -40,7 +40,6 @@ use aberred_core::systems::phase::phase_system;
 use aberred_core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
-use aberred_render::systems::render_system;
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 use aberred_core::systems::scene_dispatch::{scene_switch_poll, scene_update_system};
 use aberred_core::systems::signal_intents::apply_signal_intents;
@@ -51,15 +50,16 @@ use aberred_core::systems::timer::update_timers;
 use aberred_core::systems::ttl::ttl_system;
 use aberred_core::systems::tween::tween_system;
 use aberred_core::systems::window::detect_window_resize;
+use aberred_render::systems::render_system;
 
+#[cfg(feature = "lua")]
+use crate::systems::mapspawn::process_lua_map_commands;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luatimer::update_lua_timers;
-#[cfg(feature = "lua")]
-use crate::systems::mapspawn::process_lua_map_commands;
 
 /// System sets partitioning the logic thread's `sim` schedule pipeline.
 /// [`EngineBuilder`]'s

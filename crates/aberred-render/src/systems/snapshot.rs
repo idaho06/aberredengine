@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 
-use aberred_core::protocol::snapshot::SnapshotConsumer;
 use crate::resources::mirrors::{
     RenderActiveScene, RenderAppState, RenderCamera, RenderCameraFollow, RenderDebugSnapshot,
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
+use aberred_core::protocol::snapshot::SnapshotConsumer;
 
 use super::math::camera2d_to_raylib;
 use super::mirror::{

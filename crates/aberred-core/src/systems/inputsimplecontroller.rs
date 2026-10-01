@@ -4,8 +4,8 @@
 //! applies directional velocities to entities with an
 //! [`InputControlled`]
 //! component. Diagonal movement is normalized to maintain constant speed.
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::rigidbody::RigidBody;

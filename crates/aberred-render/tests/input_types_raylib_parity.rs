@@ -24,7 +24,10 @@ use raylib::ffi;
 fn key_codes_match_raylib() {
     let pairs = [
         (Key::KEY_NULL.0, ffi::KeyboardKey::KEY_NULL as u16),
-        (Key::KEY_APOSTROPHE.0, ffi::KeyboardKey::KEY_APOSTROPHE as u16),
+        (
+            Key::KEY_APOSTROPHE.0,
+            ffi::KeyboardKey::KEY_APOSTROPHE as u16,
+        ),
         (Key::KEY_COMMA.0, ffi::KeyboardKey::KEY_COMMA as u16),
         (Key::KEY_MINUS.0, ffi::KeyboardKey::KEY_MINUS as u16),
         (Key::KEY_PERIOD.0, ffi::KeyboardKey::KEY_PERIOD as u16),
@@ -67,9 +70,15 @@ fn key_codes_match_raylib() {
         (Key::KEY_X.0, ffi::KeyboardKey::KEY_X as u16),
         (Key::KEY_Y.0, ffi::KeyboardKey::KEY_Y as u16),
         (Key::KEY_Z.0, ffi::KeyboardKey::KEY_Z as u16),
-        (Key::KEY_LEFT_BRACKET.0, ffi::KeyboardKey::KEY_LEFT_BRACKET as u16),
+        (
+            Key::KEY_LEFT_BRACKET.0,
+            ffi::KeyboardKey::KEY_LEFT_BRACKET as u16,
+        ),
         (Key::KEY_BACKSLASH.0, ffi::KeyboardKey::KEY_BACKSLASH as u16),
-        (Key::KEY_RIGHT_BRACKET.0, ffi::KeyboardKey::KEY_RIGHT_BRACKET as u16),
+        (
+            Key::KEY_RIGHT_BRACKET.0,
+            ffi::KeyboardKey::KEY_RIGHT_BRACKET as u16,
+        ),
         (Key::KEY_GRAVE.0, ffi::KeyboardKey::KEY_GRAVE as u16),
         (Key::KEY_SPACE.0, ffi::KeyboardKey::KEY_SPACE as u16),
         (Key::KEY_ESCAPE.0, ffi::KeyboardKey::KEY_ESCAPE as u16),
@@ -87,9 +96,15 @@ fn key_codes_match_raylib() {
         (Key::KEY_HOME.0, ffi::KeyboardKey::KEY_HOME as u16),
         (Key::KEY_END.0, ffi::KeyboardKey::KEY_END as u16),
         (Key::KEY_CAPS_LOCK.0, ffi::KeyboardKey::KEY_CAPS_LOCK as u16),
-        (Key::KEY_SCROLL_LOCK.0, ffi::KeyboardKey::KEY_SCROLL_LOCK as u16),
+        (
+            Key::KEY_SCROLL_LOCK.0,
+            ffi::KeyboardKey::KEY_SCROLL_LOCK as u16,
+        ),
         (Key::KEY_NUM_LOCK.0, ffi::KeyboardKey::KEY_NUM_LOCK as u16),
-        (Key::KEY_PRINT_SCREEN.0, ffi::KeyboardKey::KEY_PRINT_SCREEN as u16),
+        (
+            Key::KEY_PRINT_SCREEN.0,
+            ffi::KeyboardKey::KEY_PRINT_SCREEN as u16,
+        ),
         (Key::KEY_PAUSE.0, ffi::KeyboardKey::KEY_PAUSE as u16),
         (Key::KEY_F1.0, ffi::KeyboardKey::KEY_F1 as u16),
         (Key::KEY_F2.0, ffi::KeyboardKey::KEY_F2 as u16),
@@ -103,14 +118,32 @@ fn key_codes_match_raylib() {
         (Key::KEY_F10.0, ffi::KeyboardKey::KEY_F10 as u16),
         (Key::KEY_F11.0, ffi::KeyboardKey::KEY_F11 as u16),
         (Key::KEY_F12.0, ffi::KeyboardKey::KEY_F12 as u16),
-        (Key::KEY_LEFT_SHIFT.0, ffi::KeyboardKey::KEY_LEFT_SHIFT as u16),
-        (Key::KEY_LEFT_CONTROL.0, ffi::KeyboardKey::KEY_LEFT_CONTROL as u16),
+        (
+            Key::KEY_LEFT_SHIFT.0,
+            ffi::KeyboardKey::KEY_LEFT_SHIFT as u16,
+        ),
+        (
+            Key::KEY_LEFT_CONTROL.0,
+            ffi::KeyboardKey::KEY_LEFT_CONTROL as u16,
+        ),
         (Key::KEY_LEFT_ALT.0, ffi::KeyboardKey::KEY_LEFT_ALT as u16),
-        (Key::KEY_LEFT_SUPER.0, ffi::KeyboardKey::KEY_LEFT_SUPER as u16),
-        (Key::KEY_RIGHT_SHIFT.0, ffi::KeyboardKey::KEY_RIGHT_SHIFT as u16),
-        (Key::KEY_RIGHT_CONTROL.0, ffi::KeyboardKey::KEY_RIGHT_CONTROL as u16),
+        (
+            Key::KEY_LEFT_SUPER.0,
+            ffi::KeyboardKey::KEY_LEFT_SUPER as u16,
+        ),
+        (
+            Key::KEY_RIGHT_SHIFT.0,
+            ffi::KeyboardKey::KEY_RIGHT_SHIFT as u16,
+        ),
+        (
+            Key::KEY_RIGHT_CONTROL.0,
+            ffi::KeyboardKey::KEY_RIGHT_CONTROL as u16,
+        ),
         (Key::KEY_RIGHT_ALT.0, ffi::KeyboardKey::KEY_RIGHT_ALT as u16),
-        (Key::KEY_RIGHT_SUPER.0, ffi::KeyboardKey::KEY_RIGHT_SUPER as u16),
+        (
+            Key::KEY_RIGHT_SUPER.0,
+            ffi::KeyboardKey::KEY_RIGHT_SUPER as u16,
+        ),
         (Key::KEY_KB_MENU.0, ffi::KeyboardKey::KEY_KB_MENU as u16),
         (Key::KEY_KP_0.0, ffi::KeyboardKey::KEY_KP_0 as u16),
         (Key::KEY_KP_1.0, ffi::KeyboardKey::KEY_KP_1 as u16),
@@ -122,77 +155,194 @@ fn key_codes_match_raylib() {
         (Key::KEY_KP_7.0, ffi::KeyboardKey::KEY_KP_7 as u16),
         (Key::KEY_KP_8.0, ffi::KeyboardKey::KEY_KP_8 as u16),
         (Key::KEY_KP_9.0, ffi::KeyboardKey::KEY_KP_9 as u16),
-        (Key::KEY_KP_DECIMAL.0, ffi::KeyboardKey::KEY_KP_DECIMAL as u16),
+        (
+            Key::KEY_KP_DECIMAL.0,
+            ffi::KeyboardKey::KEY_KP_DECIMAL as u16,
+        ),
         (Key::KEY_KP_DIVIDE.0, ffi::KeyboardKey::KEY_KP_DIVIDE as u16),
-        (Key::KEY_KP_MULTIPLY.0, ffi::KeyboardKey::KEY_KP_MULTIPLY as u16),
-        (Key::KEY_KP_SUBTRACT.0, ffi::KeyboardKey::KEY_KP_SUBTRACT as u16),
+        (
+            Key::KEY_KP_MULTIPLY.0,
+            ffi::KeyboardKey::KEY_KP_MULTIPLY as u16,
+        ),
+        (
+            Key::KEY_KP_SUBTRACT.0,
+            ffi::KeyboardKey::KEY_KP_SUBTRACT as u16,
+        ),
         (Key::KEY_KP_ADD.0, ffi::KeyboardKey::KEY_KP_ADD as u16),
         (Key::KEY_KP_ENTER.0, ffi::KeyboardKey::KEY_KP_ENTER as u16),
         (Key::KEY_KP_EQUAL.0, ffi::KeyboardKey::KEY_KP_EQUAL as u16),
         (Key::KEY_BACK.0, ffi::KeyboardKey::KEY_BACK as u16),
         (Key::KEY_MENU.0, ffi::KeyboardKey::KEY_MENU as u16),
         (Key::KEY_VOLUME_UP.0, ffi::KeyboardKey::KEY_VOLUME_UP as u16),
-        (Key::KEY_VOLUME_DOWN.0, ffi::KeyboardKey::KEY_VOLUME_DOWN as u16),
+        (
+            Key::KEY_VOLUME_DOWN.0,
+            ffi::KeyboardKey::KEY_VOLUME_DOWN as u16,
+        ),
     ];
     for (engine, raylib) in pairs {
-        assert_eq!(engine, raylib, "Key code mismatch against raylib::ffi::KeyboardKey");
+        assert_eq!(
+            engine, raylib,
+            "Key code mismatch against raylib::ffi::KeyboardKey"
+        );
     }
 }
 
 #[test]
 fn mouse_button_codes_match_raylib() {
     let pairs = [
-        (MouseButton::MOUSE_BUTTON_LEFT.0, ffi::MouseButton::MOUSE_BUTTON_LEFT as u16),
-        (MouseButton::MOUSE_BUTTON_RIGHT.0, ffi::MouseButton::MOUSE_BUTTON_RIGHT as u16),
-        (MouseButton::MOUSE_BUTTON_MIDDLE.0, ffi::MouseButton::MOUSE_BUTTON_MIDDLE as u16),
-        (MouseButton::MOUSE_BUTTON_SIDE.0, ffi::MouseButton::MOUSE_BUTTON_SIDE as u16),
-        (MouseButton::MOUSE_BUTTON_EXTRA.0, ffi::MouseButton::MOUSE_BUTTON_EXTRA as u16),
-        (MouseButton::MOUSE_BUTTON_FORWARD.0, ffi::MouseButton::MOUSE_BUTTON_FORWARD as u16),
-        (MouseButton::MOUSE_BUTTON_BACK.0, ffi::MouseButton::MOUSE_BUTTON_BACK as u16),
+        (
+            MouseButton::MOUSE_BUTTON_LEFT.0,
+            ffi::MouseButton::MOUSE_BUTTON_LEFT as u16,
+        ),
+        (
+            MouseButton::MOUSE_BUTTON_RIGHT.0,
+            ffi::MouseButton::MOUSE_BUTTON_RIGHT as u16,
+        ),
+        (
+            MouseButton::MOUSE_BUTTON_MIDDLE.0,
+            ffi::MouseButton::MOUSE_BUTTON_MIDDLE as u16,
+        ),
+        (
+            MouseButton::MOUSE_BUTTON_SIDE.0,
+            ffi::MouseButton::MOUSE_BUTTON_SIDE as u16,
+        ),
+        (
+            MouseButton::MOUSE_BUTTON_EXTRA.0,
+            ffi::MouseButton::MOUSE_BUTTON_EXTRA as u16,
+        ),
+        (
+            MouseButton::MOUSE_BUTTON_FORWARD.0,
+            ffi::MouseButton::MOUSE_BUTTON_FORWARD as u16,
+        ),
+        (
+            MouseButton::MOUSE_BUTTON_BACK.0,
+            ffi::MouseButton::MOUSE_BUTTON_BACK as u16,
+        ),
     ];
     for (engine, raylib) in pairs {
-        assert_eq!(engine, raylib, "MouseButton code mismatch against raylib::ffi::MouseButton");
+        assert_eq!(
+            engine, raylib,
+            "MouseButton code mismatch against raylib::ffi::MouseButton"
+        );
     }
 }
 
 #[test]
 fn gamepad_button_codes_match_raylib() {
     let pairs = [
-        (GamepadButton::GAMEPAD_BUTTON_UNKNOWN.0, ffi::GamepadButton::GAMEPAD_BUTTON_UNKNOWN as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_RIGHT.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_RIGHT as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_DOWN.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_DOWN as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_LEFT.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_LEFT as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_UP.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_UP as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_1.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_1 as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_2.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_2 as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_1.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_1 as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_2.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_2 as u16),
-        (GamepadButton::GAMEPAD_BUTTON_MIDDLE_LEFT.0, ffi::GamepadButton::GAMEPAD_BUTTON_MIDDLE_LEFT as u16),
-        (GamepadButton::GAMEPAD_BUTTON_MIDDLE.0, ffi::GamepadButton::GAMEPAD_BUTTON_MIDDLE as u16),
-        (GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT.0, ffi::GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT as u16),
-        (GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB.0, ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB as u16),
-        (GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB.0, ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB as u16),
+        (
+            GamepadButton::GAMEPAD_BUTTON_UNKNOWN.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_UNKNOWN as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_UP as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_RIGHT.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_RIGHT as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_DOWN.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_DOWN as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_LEFT.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_FACE_LEFT as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_UP.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_UP as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_RIGHT as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_1.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_1 as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_2.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_2 as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_1.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_1 as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_2.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_2 as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_MIDDLE_LEFT.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_MIDDLE_LEFT as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_MIDDLE.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_MIDDLE as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB as u16,
+        ),
+        (
+            GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB.0,
+            ffi::GamepadButton::GAMEPAD_BUTTON_RIGHT_THUMB as u16,
+        ),
     ];
     for (engine, raylib) in pairs {
-        assert_eq!(engine, raylib, "GamepadButton code mismatch against raylib::ffi::GamepadButton");
+        assert_eq!(
+            engine, raylib,
+            "GamepadButton code mismatch against raylib::ffi::GamepadButton"
+        );
     }
 }
 
 #[test]
 fn gamepad_axis_codes_match_raylib() {
     let pairs = [
-        (GamepadAxis::GAMEPAD_AXIS_LEFT_X.0, ffi::GamepadAxis::GAMEPAD_AXIS_LEFT_X as u16),
-        (GamepadAxis::GAMEPAD_AXIS_LEFT_Y.0, ffi::GamepadAxis::GAMEPAD_AXIS_LEFT_Y as u16),
-        (GamepadAxis::GAMEPAD_AXIS_RIGHT_X.0, ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_X as u16),
-        (GamepadAxis::GAMEPAD_AXIS_RIGHT_Y.0, ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_Y as u16),
-        (GamepadAxis::GAMEPAD_AXIS_LEFT_TRIGGER.0, ffi::GamepadAxis::GAMEPAD_AXIS_LEFT_TRIGGER as u16),
-        (GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER.0, ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER as u16),
+        (
+            GamepadAxis::GAMEPAD_AXIS_LEFT_X.0,
+            ffi::GamepadAxis::GAMEPAD_AXIS_LEFT_X as u16,
+        ),
+        (
+            GamepadAxis::GAMEPAD_AXIS_LEFT_Y.0,
+            ffi::GamepadAxis::GAMEPAD_AXIS_LEFT_Y as u16,
+        ),
+        (
+            GamepadAxis::GAMEPAD_AXIS_RIGHT_X.0,
+            ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_X as u16,
+        ),
+        (
+            GamepadAxis::GAMEPAD_AXIS_RIGHT_Y.0,
+            ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_Y as u16,
+        ),
+        (
+            GamepadAxis::GAMEPAD_AXIS_LEFT_TRIGGER.0,
+            ffi::GamepadAxis::GAMEPAD_AXIS_LEFT_TRIGGER as u16,
+        ),
+        (
+            GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER.0,
+            ffi::GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER as u16,
+        ),
     ];
     for (engine, raylib) in pairs {
-        assert_eq!(engine, raylib, "GamepadAxis code mismatch against raylib::ffi::GamepadAxis");
+        assert_eq!(
+            engine, raylib,
+            "GamepadAxis code mismatch against raylib::ffi::GamepadAxis"
+        );
     }
 }

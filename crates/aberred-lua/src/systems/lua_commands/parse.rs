@@ -3,8 +3,8 @@
 //! Converts the Lua-side `AnimationConditionData` representation into the
 //! engine's native `Condition` type used by `AnimationController`.
 
-use aberred_core::components::animation::{CmpOp, Condition};
 use crate::resources::lua_runtime::AnimationConditionData;
+use aberred_core::components::animation::{CmpOp, Condition};
 
 /// Convert a comparison-operator string from Lua into `CmpOp`. The entity builder rejects
 /// unknown spellings, so the `Eq` fallback is unreachable from Lua scripts.
@@ -147,7 +147,9 @@ mod tests {
     #[test]
     fn convert_recurses_through_all_any_not_preserving_order() {
         let converted = convert_animation_condition(AnimationConditionData::All(vec![
-            AnimationConditionData::HasFlag { key: "first".into() },
+            AnimationConditionData::HasFlag {
+                key: "first".into(),
+            },
             AnimationConditionData::Any(vec![
                 AnimationConditionData::LacksFlag { key: "x".into() },
                 AnimationConditionData::HasFlag { key: "y".into() },

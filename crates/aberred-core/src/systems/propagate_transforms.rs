@@ -9,9 +9,9 @@
 //! tweens) and **before** collision detection and rendering so that downstream
 //! systems see up-to-date world positions.
 
+use crate::math::Vec2;
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
-use crate::math::Vec2;
 
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;

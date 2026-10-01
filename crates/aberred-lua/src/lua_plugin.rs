@@ -14,6 +14,10 @@
 //! - [`EntityProcessing`] – entity command queries + LuaPhase query
 
 use crate::components::luaphase::LuaPhase;
+use crate::resources::lua_runtime::{
+    AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
+    PhaseCmd, RenderCmd,
+};
 use aberred_core::components::persistent::{CleanableEntity, Persistent};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
@@ -26,18 +30,11 @@ use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::input_bindings::InputBindings;
-use crate::resources::lua_runtime::{
-    AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
-    PhaseCmd, RenderCmd,
-};
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::systemsstore::SystemsStore;
 
-use aberred_core::resources::signal_keys as sk;
-use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_core::resources::worldtime::WorldTime;
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, asset_cmd_to_audio_cmd,
     asset_cmd_to_render_asset_cmd, drain_and_process_effect_commands,
@@ -45,12 +42,15 @@ use crate::systems::lua_commands::{
     process_gameconfig_command, process_group_command, process_input_command,
     process_render_command, process_signal_command, translate_asset_command,
 };
+use aberred_core::math::Vec2;
+use aberred_core::resources::camera2d::Camera2D;
+use aberred_core::resources::signal_keys as sk;
+use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
 use mlua::prelude::LuaTable;
-use aberred_core::math::Vec2;
-use aberred_core::resources::camera2d::Camera2D;
 use rustc_hash::FxHashSet;
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
@@ -558,7 +558,9 @@ pub fn switch_scene(
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,
     mut audio_cmd_writer: MessageWriter<AudioCmd>,
-    mut render_asset_cmd_writer: MessageWriter<aberred_core::protocol::render_assets::RenderAssetCmd>,
+    mut render_asset_cmd_writer: MessageWriter<
+        aberred_core::protocol::render_assets::RenderAssetCmd,
+    >,
     mut buf: Local<Vec<AssetCmd>>,
 ) {
     lua_runtime.drain_asset_commands_into(&mut buf);
@@ -969,8 +971,9 @@ mod tests {
         // (that's covered by `TestWorld`, which builds the real sim
         // schedule -- crates/aberredengine/tests/logic_world.rs).
         let mut world = new_drain_test_world();
-        world
-            .insert_resource(Messages::<aberred_core::protocol::render_assets::RenderAssetCmd>::default());
+        world.insert_resource(Messages::<
+            aberred_core::protocol::render_assets::RenderAssetCmd,
+        >::default());
 
         {
             let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();

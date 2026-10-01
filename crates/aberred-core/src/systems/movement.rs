@@ -7,8 +7,8 @@
 //! Entities with `frozen = true` are skipped entirely, allowing external systems
 //! to control their position directly.
 
-use bevy_ecs::prelude::*;
 use crate::math::Vec2;
+use bevy_ecs::prelude::*;
 
 use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;

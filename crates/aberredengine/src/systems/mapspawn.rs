@@ -9,7 +9,7 @@
 //! core's Lua-free variant instead; `process_lua_map_commands` has no
 //! Rust-only counterpart and simply doesn't exist in that build.
 
-#[cfg(feature = "lua")]
-pub use aberred_lua::systems::lua_mapspawn::{process_lua_map_commands, spawn_map_observer};
 #[cfg(not(feature = "lua"))]
 pub use aberred_core::systems::mapspawn::spawn_map_observer;
+#[cfg(feature = "lua")]
+pub use aberred_lua::systems::lua_mapspawn::{process_lua_map_commands, spawn_map_observer};
