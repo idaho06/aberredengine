@@ -123,6 +123,29 @@ impl InputAction {
             | InputAction::Special => false,
         }
     }
+
+    /// Canonical name of this action: the string Lua passes to
+    /// `engine.rebind_action()` / `engine.get_binding()`, and the label the
+    /// F11 debug overlay's input panel shows.
+    pub const fn name(self) -> &'static str {
+        match self {
+            InputAction::MainDirectionUp => "main_up",
+            InputAction::MainDirectionDown => "main_down",
+            InputAction::MainDirectionLeft => "main_left",
+            InputAction::MainDirectionRight => "main_right",
+            InputAction::SecondaryDirectionUp => "secondary_up",
+            InputAction::SecondaryDirectionDown => "secondary_down",
+            InputAction::SecondaryDirectionLeft => "secondary_left",
+            InputAction::SecondaryDirectionRight => "secondary_right",
+            InputAction::Back => "back",
+            InputAction::Action1 => "action_1",
+            InputAction::Action2 => "action_2",
+            InputAction::Action3 => "action_3",
+            InputAction::Special => "special",
+            InputAction::ToggleDebug => "toggle_debug",
+            InputAction::ToggleFullscreen => "toggle_fullscreen",
+        }
+    }
 }
 
 /// Event emitted when an input action is pressed or released.
@@ -140,6 +163,30 @@ pub struct InputEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn name_is_the_canonical_lua_action_name() {
+        let expected: [(InputAction, &str); InputAction::COUNT] = [
+            (InputAction::MainDirectionUp, "main_up"),
+            (InputAction::MainDirectionDown, "main_down"),
+            (InputAction::MainDirectionLeft, "main_left"),
+            (InputAction::MainDirectionRight, "main_right"),
+            (InputAction::SecondaryDirectionUp, "secondary_up"),
+            (InputAction::SecondaryDirectionDown, "secondary_down"),
+            (InputAction::SecondaryDirectionLeft, "secondary_left"),
+            (InputAction::SecondaryDirectionRight, "secondary_right"),
+            (InputAction::Back, "back"),
+            (InputAction::Action1, "action_1"),
+            (InputAction::Action2, "action_2"),
+            (InputAction::Action3, "action_3"),
+            (InputAction::Special, "special"),
+            (InputAction::ToggleDebug, "toggle_debug"),
+            (InputAction::ToggleFullscreen, "toggle_fullscreen"),
+        ];
+        for (action, name) in expected {
+            assert_eq!(action.name(), name, "{action:?}");
+        }
+    }
 
     #[test]
     fn engine_toggles_are_exactly_toggle_debug_and_toggle_fullscreen() {
