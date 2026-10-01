@@ -669,7 +669,7 @@ asset_cmds.write(RenderAssetCmd::Texture {
 
 Keys (`id`) are arbitrary strings you'll reference later in `Sprite` components — you can spawn a `Sprite` referencing `"player"` in the very same tick that queued the load; it just won't have anything to draw until the render thread's GL upload lands (typically the next tick or two).
 
-**The load-then-use gap:** if your own logic-side code needs the texture's *dimensions* before the render thread has replied (e.g. to size a collider off a spritesheet), you can't just call `.insert()` and read it back synchronously anymore. Query `TextureDimsStore` instead, and tolerate `None` until the reply arrives:
+**The load-then-use gap:** if your own logic-side code needs the texture's *dimensions* before the render thread has replied (e.g. to size a collider off a spritesheet), you can't read it back synchronously: the texture store lives on the render thread. Query `TextureDimsStore` instead, and tolerate `None` until the reply arrives:
 
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
@@ -1912,7 +1912,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `WindowSize` | `Res` | OS window dimensions (`w`, `h`), has `calculate_letterbox()` and `window_to_game_pos()` |
 | `GameConfig` | `ResMut` | Loaded from `config.ini` — all render/window/simulation/audio settings |
 | `GameConfigDefaults` | `Res` | Read-only snapshot (`.0: GameConfig`) of `GameConfig` as loaded at startup, before any runtime mutation — use to restore a field to its loaded default (e.g. window title after a map override) without needing your own capture-resource |
-| `InputState` | `Res` | Input state — digital fields are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32` |
+| `InputState` | `Res` | Input state — bound actions via `input.action(InputAction::X)` and the raw `mouse_left_button` are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32`; pad 0 is `gamepad_connected` / `gamepad_axes` |
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions with `.set(GameStates::Playing)` |
@@ -2070,7 +2070,7 @@ fn inspector_gui(
 
 ### InputState key bindings
 
-Each bound action is a `BoolState { active, just_pressed, just_released }`, read with `input.action(InputAction::X)`. Hardware assignments live in `InputBindings`, not in `BoolState`. Analog fields are plain `f32`.
+Each bound action is a `BoolState { active, just_pressed, just_released }`, read with `input.action(InputAction::X)`. Hardware assignments live in `InputBindings`, not in `BoolState`. Mouse and scroll values are plain `f32`; pad 0 has its own fields (below).
 
 **Actions (`InputAction` → `BoolState`):**
 
@@ -2103,6 +2103,13 @@ Each bound action is a `BoolState { active, just_pressed, just_released }`, read
 | `mouse_y` | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
 | `mouse_world_x` | Cursor X in world-space (after camera transform, matches `MapPosition`). |
 | `mouse_world_y` | Cursor Y in world-space (after camera transform, matches `MapPosition`). |
+
+**Gamepad fields (pad 0):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gamepad_connected` | `bool` | Whether pad 0 is connected this tick. |
+| `gamepad_axes` | `[f32; 6]` | Raw axes `[LX, LY, RX, RY, LT, RT]`, newest sample wins; not deadzoned (the deadzone applies only to axis→button bindings). |
 
 ### InputBindings resource
 
