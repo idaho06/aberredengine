@@ -258,13 +258,12 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         //   that field unconditionally (`mouse_controller`) — freezing means
         //   such an entity simply stops following instead of snapping to a
         //   bogus position.
-        // - `mode_debug` (F11) and `fullscreen_toggle` (F10) are restored to
-        //   their real, unmasked edge state after the general keyboard mask:
+        // - Engine toggles (`InputAction::is_engine_toggle`: `mode_debug`/F11
+        //   and `fullscreen_toggle`/F10) are skipped by the keyboard mask:
         //   F11 is the debug overlay's own escape hatch and must always
         //   work, even while an imgui widget in that overlay holds keyboard
-        //   focus; F10 mirrors its pre-Phase-7d behavior, where fullscreen
-        //   was resolved entirely render-side and never interacted with
-        //   imgui capture at all.
+        //   focus; F10 is unrelated to debug-overlay focus, so imgui capture
+        //   never masks it either.
         // - Never suppresses `just_released`: a button masked mid-press must
         //   still deliver its release, or gameplay sees a "stuck held" input
         //   once imgui grabs focus mid-press.
@@ -288,13 +287,12 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         }
 
         if capture.keyboard {
-            let mode_debug_edge = input.mode_debug;
-            let fullscreen_edge = input.fullscreen_toggle;
-            for bs in input.keyboard_bool_fields_mut() {
-                bs.force_inactive();
+            // Engine toggles (F11/F10) are never masked -- see above.
+            for action in InputAction::ALL {
+                if !action.is_engine_toggle() {
+                    input.action_mut(action).force_inactive();
+                }
             }
-            input.mode_debug = mode_debug_edge;
-            input.fullscreen_toggle = fullscreen_edge;
         }
 
         // Emit InputEvents for every gameplay action's edges, in

@@ -167,31 +167,6 @@ impl InputState {
         ]
     }
 
-    /// All keyboard-sourced digital fields (everything [`bool_fields_mut`](Self::bool_fields_mut)
-    /// returns except `mouse_left_button`), as mutable references. Reused by
-    /// `resolve_input_backlog`'s imgui keyboard-capture masking so that list
-    /// isn't hand-duplicated in a second place -- see `bool_fields_mut`'s
-    /// doc comment for why a single enumerated source matters.
-    pub(crate) fn keyboard_bool_fields_mut(&mut self) -> [&mut BoolState; 15] {
-        [
-            &mut self.maindirection_up,
-            &mut self.maindirection_left,
-            &mut self.maindirection_down,
-            &mut self.maindirection_right,
-            &mut self.secondarydirection_up,
-            &mut self.secondarydirection_down,
-            &mut self.secondarydirection_left,
-            &mut self.secondarydirection_right,
-            &mut self.action_back,
-            &mut self.action_1,
-            &mut self.action_2,
-            &mut self.action_3,
-            &mut self.mode_debug,
-            &mut self.fullscreen_toggle,
-            &mut self.action_special,
-        ]
-    }
-
     /// Clear `just_pressed`/`just_released` on every digital field (including
     /// `mouse_left_button`), leaving `active` untouched. Called once per FIXED
     /// substep so an edge is delivered to exactly one substep regardless of
