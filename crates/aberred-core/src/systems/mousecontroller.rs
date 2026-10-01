@@ -41,11 +41,10 @@ mod tests {
     #[test]
     fn follows_mouse_world_position_per_axis() {
         let mut world = World::new();
-        world.insert_resource(InputState {
-            mouse_world_x: 320.0,
-            mouse_world_y: -48.0,
-            ..Default::default()
-        });
+        let mut input = InputState::default();
+        input.mouse_world_x = 320.0;
+        input.mouse_world_y = -48.0;
+        world.insert_resource(input);
 
         let both = world
             .spawn((

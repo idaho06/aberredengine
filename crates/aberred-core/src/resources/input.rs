@@ -22,29 +22,15 @@ pub struct BoolState {
     pub just_released: bool,
 }
 
-/// Resource capturing the per-frame keyboard state relevant to gameplay.
+/// Resource capturing the per-tick input state relevant to gameplay.
 ///
-/// Fields are grouped by purpose: main movement (WASD), secondary movement
-/// (arrow keys), and actions (escape/space/enter/F-keys).
+/// Bound actions are read by [`InputAction`] via [`action`](Self::action) /
+/// [`action_mut`](Self::action_mut); the raw mouse button, mouse coordinates,
+/// scroll and gamepad axes are plain fields.
 #[derive(Resource, Debug, Clone, Default)]
 pub struct InputState {
-    pub maindirection_up: BoolState,
-    pub maindirection_left: BoolState,
-    pub maindirection_down: BoolState,
-    pub maindirection_right: BoolState,
-    // Arrow keys
-    pub secondarydirection_up: BoolState,
-    pub secondarydirection_down: BoolState,
-    pub secondarydirection_left: BoolState,
-    pub secondarydirection_right: BoolState,
-    // Action special keys
-    pub action_back: BoolState,
-    pub action_1: BoolState,
-    pub action_2: BoolState,
-    pub action_3: BoolState,
-    pub mode_debug: BoolState,
-    pub fullscreen_toggle: BoolState,
-    pub action_special: BoolState,
+    /// One slot per bound action, indexed by [`InputAction::index`].
+    actions: [BoolState; InputAction::COUNT],
     /// Mouse wheel scroll delta this frame. Positive = up, negative = down.
     pub scroll_y: f32,
     /// Mouse X in game/render-target space (letterbox-corrected). Range: 0.0..render_width.
@@ -55,7 +41,7 @@ pub struct InputState {
     pub mouse_world_x: f32,
     /// Mouse Y in world-space (after camera transform). Matches MapPosition coordinates.
     pub mouse_world_y: f32,
-    /// Raw left mouse button state. Unlike action_1/action_2/etc., this is
+    /// Raw left mouse button state. Unlike the bound actions, this is
     /// NOT routed through InputBindings/InputAction rebinding — GUI hit
     /// testing always reacts to the literal left mouse button, same tier as
     /// mouse_x/mouse_y.
@@ -100,73 +86,27 @@ impl BoolState {
 }
 
 impl InputState {
-    /// The field bound to `action`. `mouse_left_button` is deliberately not
-    /// an action (it is never rebindable), so it has no `InputAction` here.
+    /// The state of `action`. `mouse_left_button` is deliberately not an
+    /// action (it is never rebindable), so it is a plain field instead.
     pub fn action(&self, action: InputAction) -> &BoolState {
-        match action {
-            InputAction::MainDirectionUp => &self.maindirection_up,
-            InputAction::MainDirectionDown => &self.maindirection_down,
-            InputAction::MainDirectionLeft => &self.maindirection_left,
-            InputAction::MainDirectionRight => &self.maindirection_right,
-            InputAction::SecondaryDirectionUp => &self.secondarydirection_up,
-            InputAction::SecondaryDirectionDown => &self.secondarydirection_down,
-            InputAction::SecondaryDirectionLeft => &self.secondarydirection_left,
-            InputAction::SecondaryDirectionRight => &self.secondarydirection_right,
-            InputAction::Back => &self.action_back,
-            InputAction::Action1 => &self.action_1,
-            InputAction::Action2 => &self.action_2,
-            InputAction::Action3 => &self.action_3,
-            InputAction::Special => &self.action_special,
-            InputAction::ToggleDebug => &self.mode_debug,
-            InputAction::ToggleFullscreen => &self.fullscreen_toggle,
-        }
+        &self.actions[action.index()]
     }
 
     /// Mutable counterpart of [`action`](Self::action).
     pub fn action_mut(&mut self, action: InputAction) -> &mut BoolState {
-        match action {
-            InputAction::MainDirectionUp => &mut self.maindirection_up,
-            InputAction::MainDirectionDown => &mut self.maindirection_down,
-            InputAction::MainDirectionLeft => &mut self.maindirection_left,
-            InputAction::MainDirectionRight => &mut self.maindirection_right,
-            InputAction::SecondaryDirectionUp => &mut self.secondarydirection_up,
-            InputAction::SecondaryDirectionDown => &mut self.secondarydirection_down,
-            InputAction::SecondaryDirectionLeft => &mut self.secondarydirection_left,
-            InputAction::SecondaryDirectionRight => &mut self.secondarydirection_right,
-            InputAction::Back => &mut self.action_back,
-            InputAction::Action1 => &mut self.action_1,
-            InputAction::Action2 => &mut self.action_2,
-            InputAction::Action3 => &mut self.action_3,
-            InputAction::Special => &mut self.action_special,
-            InputAction::ToggleDebug => &mut self.mode_debug,
-            InputAction::ToggleFullscreen => &mut self.fullscreen_toggle,
-        }
+        &mut self.actions[action.index()]
     }
 
-    /// All digital `BoolState` fields, including `mouse_left_button`, as
-    /// mutable references. Single source of truth for "every digital field"
-    /// so `clear_edges` enumerates the field list exactly once.
+    /// Every digital `BoolState` (all action slots, then
+    /// `mouse_left_button`) as mutable references, so `clear_edges`
+    /// enumerates them exactly once.
     ///
     /// An exhaustive destructure (no `..`): adding any field to `InputState`
-    /// fails to compile here until it is classified as digital (returned) or
+    /// fails to compile here until it is classified as digital (yielded) or
     /// not (`_`).
-    fn bool_fields_mut(&mut self) -> [&mut BoolState; 16] {
+    fn bool_fields_mut(&mut self) -> impl Iterator<Item = &mut BoolState> {
         let InputState {
-            maindirection_up,
-            maindirection_left,
-            maindirection_down,
-            maindirection_right,
-            secondarydirection_up,
-            secondarydirection_down,
-            secondarydirection_left,
-            secondarydirection_right,
-            action_back,
-            action_1,
-            action_2,
-            action_3,
-            mode_debug,
-            fullscreen_toggle,
-            action_special,
+            actions,
             scroll_y: _,
             mouse_x: _,
             mouse_y: _,
@@ -176,24 +116,7 @@ impl InputState {
             gamepad_connected: _,
             gamepad_axes: _,
         } = self;
-        [
-            maindirection_up,
-            maindirection_left,
-            maindirection_down,
-            maindirection_right,
-            secondarydirection_up,
-            secondarydirection_down,
-            secondarydirection_left,
-            secondarydirection_right,
-            action_back,
-            action_1,
-            action_2,
-            action_3,
-            mode_debug,
-            fullscreen_toggle,
-            action_special,
-            mouse_left_button,
-        ]
+        actions.iter_mut().chain(std::iter::once(mouse_left_button))
     }
 
     /// Clear `just_pressed`/`just_released` on every digital field (including
@@ -251,61 +174,6 @@ mod tests {
             !mouse.just_released,
             "mouse_left_button: just_released must be cleared"
         );
-    }
-
-    /// Every action paired with the field it must map to, written out
-    /// independently of `action`/`action_mut` so the test can catch a wrong
-    /// or aliased arm.
-    fn action_field_table() -> [(InputAction, fn(&InputState) -> &BoolState); InputAction::COUNT] {
-        [
-            (InputAction::MainDirectionUp, |s| &s.maindirection_up),
-            (InputAction::MainDirectionDown, |s| &s.maindirection_down),
-            (InputAction::MainDirectionLeft, |s| &s.maindirection_left),
-            (InputAction::MainDirectionRight, |s| &s.maindirection_right),
-            (InputAction::SecondaryDirectionUp, |s| {
-                &s.secondarydirection_up
-            }),
-            (InputAction::SecondaryDirectionDown, |s| {
-                &s.secondarydirection_down
-            }),
-            (InputAction::SecondaryDirectionLeft, |s| {
-                &s.secondarydirection_left
-            }),
-            (InputAction::SecondaryDirectionRight, |s| {
-                &s.secondarydirection_right
-            }),
-            (InputAction::Back, |s| &s.action_back),
-            (InputAction::Action1, |s| &s.action_1),
-            (InputAction::Action2, |s| &s.action_2),
-            (InputAction::Action3, |s| &s.action_3),
-            (InputAction::Special, |s| &s.action_special),
-            (InputAction::ToggleDebug, |s| &s.mode_debug),
-            (InputAction::ToggleFullscreen, |s| &s.fullscreen_toggle),
-        ]
-    }
-
-    #[test]
-    fn action_mut_maps_each_action_to_exactly_its_own_field() {
-        let table = action_field_table();
-        for (action, field) in table {
-            let mut input = InputState::default();
-            input.action_mut(action).active = true;
-
-            assert!(field(&input).active, "{action:?} must map to its own field");
-            assert!(
-                input.action(action).active,
-                "{action:?}: action() must read back"
-            );
-            let active = table.iter().filter(|(_, f)| f(&input).active).count();
-            assert_eq!(
-                active, 1,
-                "{action:?} must not alias another action's field"
-            );
-            assert!(
-                !input.mouse_left_button.active,
-                "{action:?} must not alias mouse_left_button"
-            );
-        }
     }
 
     #[test]
