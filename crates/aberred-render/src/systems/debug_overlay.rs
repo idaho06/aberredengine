@@ -4,7 +4,8 @@ use aberred_core::protocol::stats::ThreadStats;
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::input::InputState;
+use aberred_core::events::input::InputAction;
+use aberred_core::resources::input::{BoolState, InputState};
 use crate::resources::fontstore::FontStore;
 use crate::resources::texturestore::TextureStore;
 use aberred_core::resources::screensize::ScreenSize;
@@ -268,28 +269,22 @@ pub(super) fn draw_world_signals_panel(ui: &ImguiUi, signals: &SignalSnapshot) {
         });
 }
 
+/// One row per bound action (in `InputAction::ALL` order, labelled with
+/// [`InputAction::name`]) plus a final `"mouse_left"` row for the raw,
+/// non-rebindable left mouse button. A new action shows up here without any
+/// panel edit.
+fn input_panel_rows(input: &InputState) -> [(&'static str, BoolState); InputAction::COUNT + 1] {
+    std::array::from_fn(|i| match InputAction::ALL.get(i) {
+        Some(&action) => (action.name(), *input.action(action)),
+        None => ("mouse_left", input.mouse_left_button),
+    })
+}
+
 pub(super) fn draw_input_panel(ui: &ImguiUi, input_state: &InputState) {
     ui.window("Input")
         .collapsed(true, Condition::FirstUseEver)
         .build(|| {
-            let inputs: &[(&str, &aberred_core::resources::input::BoolState)] = &[
-                ("Up (WASD)", &input_state.maindirection_up),
-                ("Left (WASD)", &input_state.maindirection_left),
-                ("Down (WASD)", &input_state.maindirection_down),
-                ("Right (WASD)", &input_state.maindirection_right),
-                ("Up (Arrow)", &input_state.secondarydirection_up),
-                ("Down (Arrow)", &input_state.secondarydirection_down),
-                ("Left (Arrow)", &input_state.secondarydirection_left),
-                ("Right (Arrow)", &input_state.secondarydirection_right),
-                ("Back (Esc)", &input_state.action_back),
-                ("Action 1 (Space/LMB)", &input_state.action_1),
-                ("Action 2 (Enter/RMB)", &input_state.action_2),
-                ("Action 3 (MMB)", &input_state.action_3),
-                ("Debug (F11)", &input_state.mode_debug),
-                ("Fullscr (F10)", &input_state.fullscreen_toggle),
-                ("Special (F12)", &input_state.action_special),
-            ];
-            for (name, state) in inputs {
+            for (name, state) in input_panel_rows(input_state) {
                 if state.active {
                     ui.text_colored([0.0, 1.0, 0.0, 1.0], "[ON]");
                 } else {
@@ -366,4 +361,49 @@ pub(super) fn draw_mouse_config_panel(
                 ui.text(format!("Scene: {}", current));
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_same_state(got: BoolState, want: BoolState, row: &str) {
+        assert_eq!(got.active, want.active, "{row}: active");
+        assert_eq!(got.just_pressed, want.just_pressed, "{row}: just_pressed");
+        assert_eq!(
+            got.just_released, want.just_released,
+            "{row}: just_released"
+        );
+    }
+
+    #[test]
+    fn input_panel_rows_lists_every_action_in_order_then_mouse_left() {
+        // Vary each action's state (from its index bits) so a row carrying
+        // the wrong field's state is caught; the name check pins row order.
+        let mut input = InputState::default();
+        for (i, action) in InputAction::ALL.into_iter().enumerate() {
+            *input.action_mut(action) = BoolState {
+                active: i & 1 != 0,
+                just_pressed: i & 2 != 0,
+                just_released: i & 4 != 0,
+            };
+        }
+        input.mouse_left_button = BoolState {
+            active: true,
+            just_pressed: true,
+            just_released: false,
+        };
+
+        let rows = input_panel_rows(&input);
+
+        assert_eq!(rows.len(), InputAction::COUNT + 1);
+        for (i, action) in InputAction::ALL.into_iter().enumerate() {
+            let (name, state) = rows[i];
+            assert_eq!(name, action.name(), "row {i}");
+            assert_same_state(state, *input.action(action), name);
+        }
+        let (name, state) = rows[InputAction::COUNT];
+        assert_eq!(name, "mouse_left");
+        assert_same_state(state, input.mouse_left_button, name);
+    }
 }
