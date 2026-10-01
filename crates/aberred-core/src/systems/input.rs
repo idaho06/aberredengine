@@ -133,8 +133,7 @@ fn resolve_mouse_left(state: &mut BoolState, prev: &RawDeviceSnapshot, sample: &
 }
 
 /// Resolve one raw sample's bound actions (every `InputAction::ALL` entry)
-/// plus the raw left mouse button into
-/// `input`, diffed against `prev`.
+/// plus the raw left mouse button into `input`, diffed against `prev`.
 fn resolve_sample_into(
     input: &mut InputState,
     prev: &RawDeviceSnapshot,
@@ -296,8 +295,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         }
 
         // Emit InputEvents for every gameplay action's edges, in
-        // `InputAction::ALL` order. Engine toggles (F11/F10) are skipped:
-        // they are handled below / by the caller instead.
+        // `InputAction::ALL` order (engine toggles: see below).
         for action in InputAction::ALL {
             if action.is_engine_toggle() {
                 continue;
@@ -317,10 +315,9 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
             }
         }
 
-        // mode_debug doesn't emit InputEvent; it triggers its own dedicated
-        // event so existing observers don't need to change. fullscreen_toggle
-        // likewise triggers no InputEvent — the caller reads the resolved
-        // InputState directly and sends RenderMsg::ToggleFullscreen.
+        // Engine toggles emit no InputEvent: mode_debug triggers its own
+        // SwitchDebugEvent; fullscreen_toggle is read off the resolved
+        // InputState by the caller, which sends RenderMsg::ToggleFullscreen.
         if input.mode_debug.just_pressed {
             debug!("Debug mode key pressed");
             world.trigger(SwitchDebugEvent {});
