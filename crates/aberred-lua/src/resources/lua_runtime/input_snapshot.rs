@@ -195,13 +195,12 @@ impl InputSnapshot {
 mod tests {
     use super::*;
     use aberred_core::resources::input::BoolState;
-    use aberred_core::resources::input_bindings::Key;
 
     fn default_input() -> InputState {
         InputState::default()
     }
 
-    fn bool_state_pressed(_key: Key) -> BoolState {
+    fn bool_state_pressed() -> BoolState {
         BoolState {
             active: true,
             just_pressed: true,
@@ -232,10 +231,7 @@ mod tests {
     #[test]
     fn test_combined_wasd_and_arrows() {
         let mut input = default_input();
-        // Neither WASD nor arrow pressed
-        input.action_mut(InputAction::MainDirectionUp).active = false;
-        input.action_mut(InputAction::SecondaryDirectionUp).active = false;
-        input.action_mut(InputAction::MainDirectionUp).just_pressed = false;
+        // Neither WASD nor arrow held (defaults); only the arrow's edge fires.
         input
             .action_mut(InputAction::SecondaryDirectionUp)
             .just_pressed = true; // arrow just pressed
@@ -248,9 +244,6 @@ mod tests {
     fn test_wasd_or_arrows_pressed_means_combined_pressed() {
         let mut input = default_input();
         input.action_mut(InputAction::MainDirectionRight).active = true;
-        input
-            .action_mut(InputAction::SecondaryDirectionRight)
-            .active = false;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.right.pressed);
     }
@@ -258,7 +251,7 @@ mod tests {
     #[test]
     fn test_action_buttons_map_directly() {
         let mut input = default_input();
-        *input.action_mut(InputAction::Action1) = bool_state_pressed(Key::KEY_SPACE);
+        *input.action_mut(InputAction::Action1) = bool_state_pressed();
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.action_1.pressed);
         assert!(snap.digital.action_1.just_pressed);
