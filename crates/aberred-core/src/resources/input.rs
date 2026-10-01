@@ -145,25 +145,54 @@ impl InputState {
 
     /// All digital `BoolState` fields, including `mouse_left_button`, as
     /// mutable references. Single source of truth for "every digital field"
-    /// so `clear_edges` and its test enumerate the field list exactly once.
+    /// so `clear_edges` enumerates the field list exactly once.
+    ///
+    /// An exhaustive destructure (no `..`): adding any field to `InputState`
+    /// fails to compile here until it is classified as digital (returned) or
+    /// not (`_`).
     fn bool_fields_mut(&mut self) -> [&mut BoolState; 16] {
+        let InputState {
+            maindirection_up,
+            maindirection_left,
+            maindirection_down,
+            maindirection_right,
+            secondarydirection_up,
+            secondarydirection_down,
+            secondarydirection_left,
+            secondarydirection_right,
+            action_back,
+            action_1,
+            action_2,
+            action_3,
+            mode_debug,
+            fullscreen_toggle,
+            action_special,
+            scroll_y: _,
+            mouse_x: _,
+            mouse_y: _,
+            mouse_world_x: _,
+            mouse_world_y: _,
+            mouse_left_button,
+            gamepad_connected: _,
+            gamepad_axes: _,
+        } = self;
         [
-            &mut self.maindirection_up,
-            &mut self.maindirection_left,
-            &mut self.maindirection_down,
-            &mut self.maindirection_right,
-            &mut self.secondarydirection_up,
-            &mut self.secondarydirection_down,
-            &mut self.secondarydirection_left,
-            &mut self.secondarydirection_right,
-            &mut self.action_back,
-            &mut self.action_1,
-            &mut self.action_2,
-            &mut self.action_3,
-            &mut self.mode_debug,
-            &mut self.fullscreen_toggle,
-            &mut self.action_special,
-            &mut self.mouse_left_button,
+            maindirection_up,
+            maindirection_left,
+            maindirection_down,
+            maindirection_right,
+            secondarydirection_up,
+            secondarydirection_down,
+            secondarydirection_left,
+            secondarydirection_right,
+            action_back,
+            action_1,
+            action_2,
+            action_3,
+            mode_debug,
+            fullscreen_toggle,
+            action_special,
+            mouse_left_button,
         ]
     }
 
