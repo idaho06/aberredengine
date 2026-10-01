@@ -762,14 +762,14 @@ mod tests {
     }
 
     #[test]
-    fn resolve_emits_input_events_from_edges_in_field_order() {
+    fn resolve_emits_input_events_from_edges_in_action_order() {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let mut sample = raw();
         // action_1 pressed (Space), action_back released is impossible to
         // seed from a single raw snapshot (release needs a prior press) --
         // seed the prior press via a first sample, then release via a
-        // second, and confirm ordering follows struct field declaration
-        // order (action_back before action_1).
+        // second, and confirm ordering follows `InputAction::ALL` order
+        // (Back before Action1).
         sample.set_key(Key::KEY_ESCAPE.as_u32()); // action_back
         resolve_input_backlog(&mut world, &[sample]);
         world.resource_mut::<InputState>().clear_edges();
@@ -785,6 +785,31 @@ mod tests {
             vec![(InputAction::Back, false), (InputAction::Action1, true)]
         );
         assert_eq!(log.debug_switches, 0);
+    }
+
+    #[test]
+    fn resolve_emits_input_events_in_input_action_all_order() {
+        // Down and Left are declared in the opposite order on `InputState`
+        // (`maindirection_left` before `_down`), so this pins emission to
+        // `InputAction::ALL` order rather than struct field order. F11/F10
+        // are engine toggles: they never emit an `InputEvent`.
+        let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
+        let mut sample = raw();
+        sample.set_key(Key::KEY_S.as_u32()); // MainDirectionDown
+        sample.set_key(Key::KEY_A.as_u32()); // MainDirectionLeft
+        sample.set_key(Key::KEY_F11.as_u32()); // ToggleDebug
+        sample.set_key(Key::KEY_F10.as_u32()); // ToggleFullscreen
+        resolve_input_backlog(&mut world, &[sample]);
+
+        let log = world.resource::<EventLog>();
+        assert_eq!(
+            log.input_events,
+            vec![
+                (InputAction::MainDirectionDown, true),
+                (InputAction::MainDirectionLeft, true),
+            ]
+        );
+        assert_eq!(log.debug_switches, 1);
     }
 
     #[test]
