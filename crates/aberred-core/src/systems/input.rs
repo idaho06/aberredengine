@@ -297,49 +297,27 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
             input.fullscreen_toggle = fullscreen_edge;
         }
 
-        // Inline macro: emit InputEvents for one action's edges.
-        macro_rules! emit_action {
-            ($state:expr, $action:expr) => {{
-                if $state.just_pressed {
-                    world.trigger(InputEvent {
-                        action: $action,
-                        pressed: true,
-                    });
-                }
-                if $state.just_released {
-                    world.trigger(InputEvent {
-                        action: $action,
-                        pressed: false,
-                    });
-                }
-            }};
+        // Emit InputEvents for every gameplay action's edges, in
+        // `InputAction::ALL` order. Engine toggles (F11/F10) are skipped:
+        // they are handled below / by the caller instead.
+        for action in InputAction::ALL {
+            if action.is_engine_toggle() {
+                continue;
+            }
+            let state = *input.action(action);
+            if state.just_pressed {
+                world.trigger(InputEvent {
+                    action,
+                    pressed: true,
+                });
+            }
+            if state.just_released {
+                world.trigger(InputEvent {
+                    action,
+                    pressed: false,
+                });
+            }
         }
-
-        emit_action!(input.maindirection_up, InputAction::MainDirectionUp);
-        emit_action!(input.maindirection_down, InputAction::MainDirectionDown);
-        emit_action!(input.maindirection_left, InputAction::MainDirectionLeft);
-        emit_action!(input.maindirection_right, InputAction::MainDirectionRight);
-        emit_action!(
-            input.secondarydirection_up,
-            InputAction::SecondaryDirectionUp
-        );
-        emit_action!(
-            input.secondarydirection_down,
-            InputAction::SecondaryDirectionDown
-        );
-        emit_action!(
-            input.secondarydirection_left,
-            InputAction::SecondaryDirectionLeft
-        );
-        emit_action!(
-            input.secondarydirection_right,
-            InputAction::SecondaryDirectionRight
-        );
-        emit_action!(input.action_back, InputAction::Back);
-        emit_action!(input.action_1, InputAction::Action1);
-        emit_action!(input.action_2, InputAction::Action2);
-        emit_action!(input.action_3, InputAction::Action3);
-        emit_action!(input.action_special, InputAction::Special);
 
         // mode_debug doesn't emit InputEvent; it triggers its own dedicated
         // event so existing observers don't need to change. fullscreen_toggle
