@@ -269,7 +269,7 @@ mod tests {
         world.insert_resource(input);
 
         fn check_input(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
-            // Verify input is passed through — set a signal if action_1 is pressed
+            // Verify input is passed through — set a signal if Action1 is pressed
             if input.action(InputAction::Action1).active
                 && let Ok(mut signals) = ctx.signals.get_mut(entity)
             {
