@@ -51,7 +51,7 @@ use log::warn;
 /// Process a spawn command from Lua and create the corresponding entity.
 ///
 /// Creates a new entity and delegates all component insertion to
-/// [`apply_components`]. `GuiButton`/`GuiLabel`/`GuiImage` are inserted as
+/// `apply_components`. `GuiButton`/`GuiLabel`/`GuiImage` are inserted as
 /// plain components — their caption/`GuiInteractable`/`Sprite` companions
 /// are spawned by `gui_button_spawn_system`/`gui_label_spawn_system`/
 /// `gui_image_spawn_system` (`systems/gui_spawn.rs`) reacting on

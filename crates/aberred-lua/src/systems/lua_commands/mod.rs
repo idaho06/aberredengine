@@ -5,12 +5,12 @@
 //!
 //! # Sub-modules
 //!
-//! - [`context`] – [`build_entity_context`]: entity context table construction
-//! - [`dispatch`] – [`LuaDispatch`]: shared entity-callback dispatch flow
-//! - [`entity_cmd`] – [`process_entity_commands`]: runtime entity manipulation
-//! - [`processors`] – small per-command-domain `process_*` functions
-//! - [`spawn_cmd`] – [`process_spawn_command`], [`process_clone_command`]: entity creation
-//! - [`parse`] – animation condition conversion helpers
+//! - `context` – `build_entity_context`: entity context table construction
+//! - `dispatch` – [`LuaDispatch`]: shared entity-callback dispatch flow
+//! - `entity_cmd` – [`process_entity_commands`]: runtime entity manipulation
+//! - `processors` – small per-command-domain `process_*` functions
+//! - `spawn_cmd` – [`process_spawn_command`], [`process_clone_command`]: entity creation
+//! - `parse` – animation condition conversion helpers
 //!
 //! # SystemParam bundles
 //!
@@ -73,7 +73,7 @@ use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 
 /// Persistent per-frame buffers for the 6 effect command queues drained by
-/// [`drain_and_process_effect_commands`].
+/// `drain_and_process_effect_commands`.
 ///
 /// Hold one of these in a `Local<EffectCmdBufs>` on each Bevy system that
 /// calls the helper. The Vecs retain their heap capacity across frames so

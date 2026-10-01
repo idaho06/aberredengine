@@ -78,7 +78,7 @@ pub struct EntityProcessing<'w, 's> {
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
 }
 
-/// Persistent per-frame buffers for the command queues drained by [`drain_common_commands`].
+/// Persistent per-frame buffers for the command queues drained by `drain_common_commands`.
 ///
 /// Hold one of these in a `Local<CommonCmdBufs>` on each Bevy system that calls
 /// `drain_common_commands`. The Vecs retain heap capacity across frames.

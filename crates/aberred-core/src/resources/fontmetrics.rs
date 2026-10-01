@@ -43,7 +43,7 @@ pub struct FontMetrics {
     /// Keyed by Unicode codepoint (`GlyphInfo.value`), mirroring raylib's
     /// `font.glyphs[i].value`. The `'?'` fallback glyph (if present) lives
     /// here under its own codepoint (63) — no separate field needed, see
-    /// [`resolve_glyph`](Self::resolve_glyph).
+    /// `resolve_glyph`.
     pub glyphs: FxHashMap<i32, GlyphMetrics>,
     /// Metrics of the first glyph in the font's original array order —
     /// raylib's final fallback when the codepoint isn't found and no `'?'`
@@ -152,7 +152,7 @@ impl FontMetricsStore {
 /// key instead of every frame. Same warn-once-per-key shape as
 /// [`GuiThemeWarnCache`](crate::resources::guitheme::GuiThemeWarnCache),
 /// sharing its underlying bookkeeping via
-/// [`warn_once::first_seen`](crate::resources::warn_once::first_seen).
+/// `warn_once::first_seen`.
 #[derive(Resource, Default)]
 pub struct FontMetricsWarnCache(rustc_hash::FxHashSet<std::sync::Arc<str>>);
 

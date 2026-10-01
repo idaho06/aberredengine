@@ -11,7 +11,7 @@
 //!    and emits `CollisionEvent`s
 //! 2. `lua_collision_observer` looks up matching Lua collision rules by
 //!    [`Group`] names
-//! 3. For each match, calls [`call_lua_collision_callback`] with pooled context tables
+//! 3. For each match, calls `call_lua_collision_callback` with pooled context tables
 //!
 //! # Lua Collision Callbacks
 //!

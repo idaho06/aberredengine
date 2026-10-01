@@ -145,7 +145,7 @@ pub enum ReplayEntry {
 }
 
 /// Sim-visible `GameConfig` fields, hashed in this fixed order via
-/// [`ReplayHasher`]. Only fields that actually affect sim behavior belong
+/// `ReplayHasher`. Only fields that actually affect sim behavior belong
 /// here — e.g. `window_title`/`vsync`/`fullscreen` are render-only and
 /// excluded. `snapshot_skip` is excluded for the same reason (format
 /// version 2 → 3): it decimates PRESENT publishes, a render-facing output

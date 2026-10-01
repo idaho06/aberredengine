@@ -71,27 +71,27 @@
 //! This module mirrors the shape of `aberred_lua::resources::lua_runtime`: one
 //! directory module with a single struct ([`EngineBuilder`]) whose `impl`
 //! block is split across sibling files by concern, plus a runtime-support
-//! file ([`logic_thread`]) and the test suite.
+//! file (`logic_thread`) and the test suite.
 //!
-//! - [`builder`] — `struct EngineBuilder` and its fluent builder-pattern API.
-//! - [`registrar`] — the boxed-closure types (`HookRegistrar`/
+//! - `builder` — `struct EngineBuilder` and its fluent builder-pattern API.
+//! - `registrar` — the boxed-closure types (`HookRegistrar`/
 //!   `UpdateRegistrar`/`ObserverRegistrar`) and `hook_registrar`, used to
 //!   defer system registration until the `World` exists.
-//! - [`run`] — `run`/`try_run` (the builder's terminal methods) and the
+//! - `run` — `run`/`try_run` (the builder's terminal methods) and the
 //!   render thread's per-frame main loop.
-//! - [`validate`] — preflight validation of builder state before startup.
-//! - [`config`] — config-file loading and raylib window/log-level setup.
+//! - `validate` — preflight validation of builder state before startup.
+//! - `config` — config-file loading and raylib window/log-level setup.
 //! - [`aberred_render::bootstrap`] (not a module here) — bootstrapping the
 //!   render (main) thread's `World` and its per-frame schedule
 //!   (`setup_render_world` + `build_render_schedule`, which `try_run` always
 //!   calls back to back — see `.claude/context/system-order.md`'s RENDER
 //!   schedule section for what each step in that schedule does).
-//! - [`logic_world`] — bootstrapping the logic thread's gameplay `World`,
+//! - `logic_world` — bootstrapping the logic thread's gameplay `World`,
 //!   registering hooks/scene systems, and spawning engine observers.
-//! - [`schedule`] — [`SimSet`] and construction of the logic thread's `sim`/
+//! - `schedule` — [`SimSet`] and construction of the logic thread's `sim`/
 //!   `present` schedules (see `.claude/context/system-order.md`'s Sim/PRESENT
 //!   schedule sections).
-//! - [`logic_thread`] — `LogicInit`, the logic thread's entry point, and its
+//! - `logic_thread` — `LogicInit`, the logic thread's entry point, and its
 //!   `Pacer`-driven main loop.
 //!
 //! Unlike `aberred_lua::resources::lua_runtime`'s single flat re-export tier,

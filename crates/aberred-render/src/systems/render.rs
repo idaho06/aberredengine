@@ -324,7 +324,7 @@ fn needs_imgui(debug_active: bool, has_gui_callback: bool) -> bool {
 /// `NonSendMut<ImguiBridge>`, `NonSendMut<ShaderStore>`, and `NonSend<FontStore>`,
 /// all of which require a live raylib/GL window context that the integration
 /// test suite never starts. Its extractable pure decision logic (e.g.
-/// [`needs_imgui`]) is unit-tested directly instead.
+/// `needs_imgui`) is unit-tested directly instead.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn render_system(
     mut raylib: super::RaylibAccess,

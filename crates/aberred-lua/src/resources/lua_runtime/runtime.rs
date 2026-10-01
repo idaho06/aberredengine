@@ -96,7 +96,7 @@ crate::lua_queues! {app_data_struct {
 
 /// Pooled inner tables for one entity's `signals` ctx field
 /// (`flags`/`integers`/`scalars`/`strings`), reused in place via
-/// `mlua::Table::clear()` across callbacks. See [`populate_entity_signals`](super::context::populate_entity_signals).
+/// `mlua::Table::clear()` across callbacks. See `populate_entity_signals`.
 #[derive(Clone)]
 pub struct SignalsCtxTables {
     pub flags: LuaTable,
@@ -524,7 +524,7 @@ impl LuaRuntime {
     }
 
     /// Resolves the pooled Lua input table for `frame_count`: reuses it as-is
-    /// via [`input_table_for_frame`](Self::input_table_for_frame) if an earlier
+    /// via `input_table_for_frame` if an earlier
     /// call site already refreshed it this tick, otherwise builds an
     /// `InputSnapshot` from `input` and goes through
     /// [`update_input_table`](Self::update_input_table). The entry point every

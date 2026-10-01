@@ -71,7 +71,7 @@ fn clone_entry_value<T: Any + Send + Sync + Clone>(
 /// # Part of `DrawableSnapshot`
 ///
 /// The render/logic thread split snapshots render-relevant state into
-/// `DrawableSnapshot`, which carries a cloned `AppState`. Each stored [`Entry`]
+/// `DrawableSnapshot`, which carries a cloned `AppState`. Each stored `Entry`
 /// carries its own clone function captured at insert time, which is what makes `AppState`
 /// itself `Clone` and imposes the breaking `T: Clone` bound on [`insert`](AppState::insert).
 /// A `generation` counter, bumped by [`insert`](AppState::insert), [`get_mut`](AppState::get_mut),

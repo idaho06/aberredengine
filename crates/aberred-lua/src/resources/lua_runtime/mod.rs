@@ -7,13 +7,13 @@
 //!
 //! The module is split into focused submodules:
 //!
-//! - [`commands`] - Command enums for Lua-Rust communication
-//! - [`spawn_data`] - Component data structures for entity spawning
-//! - [`entity_builder`] - Fluent builder interface for entity construction
-//! - [`runtime`] - Core `LuaRuntime` struct, struct definitions, and utility methods
-//! - [`engine_api`] - `engine` table API registration (all `register_*_api` methods)
-//! - [`command_queues`] - Command queue draining and cache update methods
-//! - [`stub_meta`] - `engine.__meta` stub metadata for IDE/tooling support
+//! - `commands` - Command enums for Lua-Rust communication
+//! - `spawn_data` - Component data structures for entity spawning
+//! - `entity_builder` - Fluent builder interface for entity construction
+//! - `runtime` - Core `LuaRuntime` struct, struct definitions, and utility methods
+//! - `engine_api` - `engine` table API registration (all `register_*_api` methods)
+//! - `command_queues` - Command queue draining and cache update methods
+//! - `stub_meta` - `engine.__meta` stub metadata for IDE/tooling support
 //!
 //! # Example
 //!
