@@ -37,26 +37,31 @@ pub enum InputAction {
     SecondaryDirectionRight = 7,
     /// Back/cancel action (default: Escape).
     Back = 8,
-    /// Primary action button (default: Space).
+    /// Primary action button (default: Space, left mouse button).
     Action1 = 9,
-    /// Secondary action button (default: Enter).
+    /// Secondary action button (default: Enter, right mouse button).
     Action2 = 10,
     /// Tertiary action button (default: mouse middle button).
     Action3 = 11,
     /// Special function (default: F12).
     Special = 12,
-    /// Toggle debug overlays (default: F11). Still triggers [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent) internally.
+    /// Toggle debug overlays (default: F11). Triggers
+    /// [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent)
+    /// instead of an [`InputEvent`].
     ToggleDebug = 13,
-    /// Toggle fullscreen mode (default: F10). Still triggers `SwitchFullScreenEvent` (render world, `aberred-render`) internally.
+    /// Toggle fullscreen mode (default: F10). Emits no [`InputEvent`]: the
+    /// logic loop sends `RenderMsg::ToggleFullscreen`, which triggers
+    /// `SwitchFullScreenEvent` in the render world (`aberred-render`).
     ToggleFullscreen = 14,
 }
 
 impl InputAction {
-    /// Total number of variants -- the size of the flat array
-    /// [`InputBindings`](crate::resources::input_bindings::InputBindings) indexes
-    /// with [`index`](Self::index) instead of hashing a `HashMap` key on
-    /// every lookup (this enum's bindings are read up to 15 times per
-    /// backlogged input sample, every sim tick -- default 240Hz).
+    /// Total number of variants -- the size of the per-action arrays that
+    /// [`InputBindings`](crate::resources::input_bindings::InputBindings) and
+    /// [`InputState`](crate::resources::input::InputState) index with
+    /// [`index`](Self::index), rather than hashing a `HashMap` key on every
+    /// lookup (every action's bindings are looked up twice per backlogged
+    /// input sample, every sim tick -- default 240Hz).
     pub const COUNT: usize = 15;
 
     /// Every variant, in the same order as [`Self::index`] assigns slots.

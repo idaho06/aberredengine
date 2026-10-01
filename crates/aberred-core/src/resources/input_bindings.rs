@@ -261,8 +261,8 @@ pub enum InputBinding {
 
 /// Runtime-configurable map from logical [`InputAction`]s to hardware bindings.
 ///
-/// Stored as an ECS [`Resource`].  The input polling system reads this each
-/// frame instead of the now-removed `key_binding` field on `BoolState`.
+/// Stored as an ECS [`Resource`] in the logic world; `resolve_input_backlog`
+/// reads it for every raw input sample.
 ///
 /// Supports multiple bindings per action so that, for example, both W and
 /// the Up arrow key can map to the same movement action.

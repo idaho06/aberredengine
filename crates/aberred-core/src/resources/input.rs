@@ -1,24 +1,25 @@
-//! Per-frame keyboard input resource.
+//! Per-tick resolved input resource.
 //!
-//! Captures the subset of keyboard state the game cares about and exposes it
-//! to systems via the [`InputState`] resource.  The hardware keys that trigger
-//! each action are stored separately in
+//! [`InputState`] holds the input the game reads each sim tick: bound actions,
+//! the raw left mouse button, mouse position and scroll, and pad 0's analog
+//! axes. The hardware inputs that trigger each action are stored separately in
 //! [`InputBindings`](crate::resources::input_bindings::InputBindings).
 use bevy_ecs::prelude::*;
 
 use crate::events::input::InputAction;
 
 #[derive(Debug, Clone, Copy, Default)]
-/// Transient boolean key state for a single logical action.
+/// Held/edge state of one digital input (a bound action or the raw left
+/// mouse button).
 ///
-/// Tracks whether the action is active this frame, was just pressed, or was
-/// just released.  Hardware key assignments live in `InputBindings`, not here.
+/// Tracks whether the input is held this tick, was just pressed, or was just
+/// released. Hardware assignments live in `InputBindings`, not here.
 pub struct BoolState {
-    /// Whether the action is currently active/held this frame.
+    /// Whether the input is held this tick.
     pub active: bool,
-    /// Whether the action was just pressed this frame.
+    /// Whether the input was just pressed this tick.
     pub just_pressed: bool,
-    /// Whether the action was just released this frame.
+    /// Whether the input was just released this tick.
     pub just_released: bool,
 }
 
@@ -31,7 +32,7 @@ pub struct BoolState {
 pub struct InputState {
     /// One slot per bound action, indexed by [`InputAction::index`].
     actions: [BoolState; InputAction::COUNT],
-    /// Mouse wheel scroll delta this frame. Positive = up, negative = down.
+    /// Mouse wheel scroll delta this tick. Positive = up, negative = down.
     pub scroll_y: f32,
     /// Mouse X in game/render-target space (letterbox-corrected). Range: 0.0..render_width.
     pub mouse_x: f32,
@@ -46,7 +47,7 @@ pub struct InputState {
     /// testing always reacts to the literal left mouse button, same tier as
     /// mouse_x/mouse_y.
     pub mouse_left_button: BoolState,
-    /// Whether pad 0 is connected this tick. Pad-0-only for now; see
+    /// Whether pad 0 is connected this tick. Only pad 0 is surfaced; see
     /// `gamepad_axes`.
     pub gamepad_connected: bool,
     /// Pad 0's raw analog axis values (`[LX, LY, RX, RY, LT, RT]`, matching

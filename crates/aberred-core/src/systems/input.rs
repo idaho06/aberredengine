@@ -4,16 +4,17 @@
 //!
 //! - Raw device sampling (whole keyboard + mouse held state into a
 //!   [`RawDeviceSnapshot`], with NO binding resolution and NO edges) is
-//!   render-thread-only and lives in `crate::systems::render::input` — the
-//!   only input code that touches the `RaylibHandle`.
+//!   render-thread-only and lives in `aberred-render`'s `systems/input.rs`
+//!   (`sample_raw_device_snapshot`) — the only input code that touches the
+//!   `RaylibHandle`.
 //! - [`resolve_input_backlog`] — resolves a sim tick's queued
 //!   [`RawDeviceSnapshot`]s against [`InputBindings`] and
 //!   [`PrevRawSnapshot`], sequentially (oldest to newest, see its doc comment
 //!   for why this can't be a merge-then-diff-once pass), into [`InputState`],
 //!   then applies imgui capture masking and emits [`InputEvent`]/
 //!   [`SwitchDebugEvent`] once against the tick's final resolved state.
-//!   Logic-side work: no raylib handle involved. Called directly by the
-//!   logic thread's loop, not as a scheduled system (there's no fixed set of
+//!   Logic-side work: no raylib handle involved. Called directly from the
+//!   logic thread's `apply_tick_input`, not as a scheduled system (there's no fixed set of
 //!   `Res`/`ResMut` params that would fit a backlog of variable length).
 
 use bevy_ecs::prelude::*;
@@ -58,10 +59,9 @@ fn apply_deadzone(v: f32, deadzone: f32) -> f32 {
 /// `world = target + R(-rotation) * (screen - offset) / zoom` relationship
 /// across a spread of cameras (identity, offset-only, zoom != 1,
 /// rotation != 0 incl. negative, negative target, extreme zoom) — see this
-/// module's `screen_to_world2d_broad_spread` test. That relationship is the
-/// same one the pre-existing `screen_to_world2d_identity_camera` /
-/// `_target_offset_zoom` / `_rotation` tests already validated against the
-/// old raylib-FFI implementation this function replaces.
+/// module's `screen_to_world2d_broad_spread` test; the
+/// `screen_to_world2d_identity_camera` / `_target_offset_zoom` / `_rotation`
+/// tests check the same relationship on specific cameras.
 pub fn screen_to_world2d(position: Vec2, camera: &Camera2D) -> Vec2 {
     let camera_matrix = Mat3::from_translation(camera.offset)
         * Mat3::from_angle(camera.rotation.to_radians())
@@ -161,8 +161,8 @@ fn resolve_sample_into(
 ///
 /// **Why sequential per-sample resolution, not merge-then-diff-once:** edge
 /// computation is a *diff* against the previous raw state, not a merge of
-/// already-resolved edges. Diffing two *raw* snapshots directly
-/// lose any transition in between: e.g. a key going down, up, then down again
+/// already-resolved edges. Diffing only the first and last *raw* snapshots
+/// loses any transition in between: e.g. a key going down, up, then down again
 /// across 3 backlogged samples must fire two separate `just_pressed` edges,
 /// but a first-vs-last diff would see "still down" and report none. Each
 /// sample is therefore resolved against the immediately preceding one
@@ -192,7 +192,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
     let capture = world.resource::<ImguiCaptureMirror>().0;
     let camera = world.resource::<Camera2DRes>().0;
     // Set by the caller from this backlog's newest sample just before
-    // calling (`logic_thread_main`), so it's already the right value to
+    // calling (`apply_tick_input`), so it's already the right value to
     // letterbox-correct the mouse position against — no need to rebuild a
     // second `WindowSize` from `samples.last()` here.
     let window_size = *world.resource::<WindowSize>();
