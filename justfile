@@ -12,7 +12,7 @@ check: && doc-links
     cargo test --no-default-features --features test-support
     cargo clippy --workspace --all-targets
     cargo clippy --workspace --all-targets --no-default-features
-    cargo clippy --workspace --all-targets --features tracy
+    cargo clippy --workspace --lib --bins --features tracy  # no test code is tracy-gated
 
 # Every intra-doc link must resolve, in both feature configs (links into
 # `aberred-lua` break only when it isn't compiled). The exported parameter
