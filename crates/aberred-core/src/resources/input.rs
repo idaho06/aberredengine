@@ -197,9 +197,9 @@ impl InputState {
     }
 
     /// Clear `just_pressed`/`just_released` on every digital field (including
-    /// `mouse_left_button`), leaving `active` untouched. Called once per FIXED
-    /// substep so an edge is delivered to exactly one substep regardless of
-    /// how many substeps run in a given render frame.
+    /// `mouse_left_button`), leaving `active` untouched. Called once per sim
+    /// tick, right after `sim.run`, so an edge is delivered to exactly one
+    /// tick.
     pub fn clear_edges(&mut self) {
         for bs in self.bool_fields_mut() {
             bs.clear_edge();
@@ -229,15 +229,28 @@ mod tests {
 
         input.clear_edges();
 
-        let fields = InputAction::ALL
-            .into_iter()
-            .map(|a| (format!("{a:?}"), *input.action(a)))
-            .chain([("mouse_left_button".to_string(), input.mouse_left_button)]);
-        for (name, bs) in fields {
-            assert!(bs.active, "{name}: active must be untouched by clear_edges");
-            assert!(!bs.just_pressed, "{name}: just_pressed must be cleared");
-            assert!(!bs.just_released, "{name}: just_released must be cleared");
+        for action in InputAction::ALL {
+            let bs = input.action(action);
+            assert!(
+                bs.active,
+                "{action:?}: active must be untouched by clear_edges"
+            );
+            assert!(!bs.just_pressed, "{action:?}: just_pressed must be cleared");
+            assert!(
+                !bs.just_released,
+                "{action:?}: just_released must be cleared"
+            );
         }
+        let mouse = input.mouse_left_button;
+        assert!(mouse.active, "mouse_left_button: active must be untouched");
+        assert!(
+            !mouse.just_pressed,
+            "mouse_left_button: just_pressed must be cleared"
+        );
+        assert!(
+            !mouse.just_released,
+            "mouse_left_button: just_released must be cleared"
+        );
     }
 
     /// Every action paired with the field it must map to, written out
@@ -283,14 +296,11 @@ mod tests {
                 input.action(action).active,
                 "{action:?}: action() must read back"
             );
-            for (other, other_field) in table {
-                if other != action {
-                    assert!(
-                        !other_field(&input).active,
-                        "{action:?} must not alias {other:?}'s field"
-                    );
-                }
-            }
+            let active = table.iter().filter(|(_, f)| f(&input).active).count();
+            assert_eq!(
+                active, 1,
+                "{action:?} must not alias another action's field"
+            );
             assert!(
                 !input.mouse_left_button.active,
                 "{action:?} must not alias mouse_left_button"
