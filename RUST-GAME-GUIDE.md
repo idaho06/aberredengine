@@ -2102,7 +2102,7 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 | `set_entity` | `(&mut self, key: impl Into<String>, entity: Entity)` |
 | `get_entity` | `(&self, key: &str) -> Option<&Entity>` |
 | `remove_entity` | `(&mut self, key: &str) -> Option<Entity>` |
-| `remove_entity_registrations_for` | `(&mut self, entity: Entity)` — removes every entity-keyed registration pointing at `entity`, regardless of key. Called automatically when an `EntityCmd::Despawn` is processed, so a stale registration can never resolve to a dead entity. |
+| `remove_entity_registrations_for` | `(&mut self, entity: Entity)` — removes every entity-keyed registration pointing at `entity`, regardless of key. You rarely need it: at the end of every sim tick the engine drops registrations whose entity has been despawned, however it was despawned (`commands.entity(e).despawn()`, `Ttl`, a scene switch), so a registration never resolves to a dead entity past the tick that despawned it. Call it yourself only when a later system in the *same* tick must already see the key gone. |
 | `clear_non_persistent_entities` | `(&mut self, persistent_entities: &FxHashSet<Entity>)` — drops every registered entity not present in `persistent_entities`. Called automatically by `scene_switch_system` on every scene transition; call it yourself only if you build custom scene-transition logic outside `.add_scene()`. |
 
 **Group counts** (stored as integers with `"group_count:"` prefix):

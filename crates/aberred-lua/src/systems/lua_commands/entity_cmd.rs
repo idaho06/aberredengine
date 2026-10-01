@@ -855,6 +855,9 @@ fn process_lifecycle_cmd(
         }
         EntityCmd::Despawn { entity_id } => {
             if let Some(entity) = resolve_entity(entity_id) {
+                // Immediate removal, so a later command in this same drained batch
+                // (e.g. a clone of the key) already sees it gone; the engine's
+                // end-of-tick prune_dead_entity_registrations covers every other despawn.
                 world_signals.remove_entity_registrations_for(entity);
                 with_entity_cmds(commands, entity, |ec| {
                     ec.try_despawn();

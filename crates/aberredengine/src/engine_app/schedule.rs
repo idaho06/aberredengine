@@ -20,6 +20,7 @@ use aberred_core::systems::audio_bridge::{
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
+use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
 use aberred_core::systems::gamestate::{check_pending_state, state_is_playing};
 use aberred_core::systems::gridlayout::gridlayout_spawn_system;
 use aberred_core::systems::group::update_group_counts_system;
@@ -473,6 +474,25 @@ impl EngineBuilder {
                 .after(update_world_signals_binding_system)
                 .in_set(SimSet::Bookkeeping),
         );
+
+        // Prunes WorldSignals entity registrations of despawned entities, for
+        // Rust and Lua despawns alike. Ordered after every Bookkeeping system
+        // that can despawn (Lua's update/scene switch and command drains), so
+        // the edges' sync points apply this tick's despawns first and neither
+        // the snapshot nor the next tick sees a registration of a dead entity.
+        #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
+        let mut prune_config = prune_dead_entity_registrations
+            .after(update_world_signals_binding_system)
+            .after(dynamictext_size_system)
+            .in_set(SimSet::Bookkeeping);
+        #[cfg(feature = "lua")]
+        if has_lua {
+            prune_config = prune_config
+                .after(aberred_lua::lua_plugin::update)
+                .after(process_lua_map_commands)
+                .after(aberred_lua::lua_plugin::process_lua_asset_commands);
+        }
+        sim.add_systems(prune_config);
 
         // Forwards RenderAssetCmd to the render thread (the GL drain itself,
         // process_render_asset_cmds, lives on the render schedule). This

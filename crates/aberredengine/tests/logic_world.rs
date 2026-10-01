@@ -375,3 +375,43 @@ fn signal_intent_is_visible_to_script_update_on_its_delivery_tick() {
          (ApplyIntents runs before ScriptUpdate)"
     );
 }
+
+const DOOMED_KEY: &str = "test:doomed";
+
+fn despawn_doomed(mut commands: Commands, signals: Res<WorldSignals>) {
+    if let Some(&entity) = signals.get_entity(DOOMED_KEY) {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// A plain Rust despawn (no Lua `EntityCmd`) must not leave a `WorldSignals`
+/// registration resolving to a dead entity past the end of the tick.
+#[test]
+fn rust_despawn_prunes_world_signals_registration_same_tick() {
+    let mut tw = TestWorld::builder()
+        .add_system(despawn_doomed)
+        .build()
+        .expect("build should succeed");
+    tw.tick_to_play(DT, 8);
+
+    let doomed = tw.world.spawn(MapPosition::new(0.0, 0.0)).id();
+    let survivor = tw.world.spawn(MapPosition::new(0.0, 0.0)).id();
+    {
+        let mut signals = tw.world.resource_mut::<WorldSignals>();
+        signals.set_entity(DOOMED_KEY, doomed);
+        signals.set_entity("test:survivor", survivor);
+    }
+
+    tw.tick(1, DT);
+
+    assert!(
+        tw.world.get_entity(doomed).is_err(),
+        "despawn must have applied"
+    );
+    let signals = tw.world.resource::<WorldSignals>();
+    assert!(
+        signals.get_entity(DOOMED_KEY).is_none(),
+        "registration of an entity despawned this tick must be pruned by tick end"
+    );
+    assert_eq!(signals.get_entity("test:survivor"), Some(&survivor));
+}

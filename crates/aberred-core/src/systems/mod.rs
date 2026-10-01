@@ -45,6 +45,7 @@ pub mod collision;
 pub mod collision_detector;
 pub mod collision_rule_index;
 pub mod dynamictext_size;
+pub mod entity_registrations;
 pub mod game_ctx;
 pub mod gamestate;
 pub mod gridlayout;

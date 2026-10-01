@@ -362,8 +362,11 @@ impl WorldSignals {
 
     /// Remove all entity registrations pointing at `entity`.
     ///
-    /// Called when an entity is despawned so stale registry entries (used by
-    /// `engine.clone`) don't outlive the entity they reference.
+    /// Lua's `EntityCmd::Despawn` calls this immediately, so a later command in
+    /// the same drained batch (e.g. `engine.clone` of that key) already sees the
+    /// key gone. Every other despawn is covered by
+    /// [`remove_dead_entity_registrations`](Self::remove_dead_entity_registrations),
+    /// which the engine runs at the end of each sim tick.
     pub fn remove_entity_registrations_for(&mut self, entity: Entity) {
         if self.entities.is_empty() {
             return;
@@ -373,6 +376,24 @@ impl WorldSignals {
         if self.entities.len() != before {
             self.entities_dirty = true;
         }
+    }
+
+    /// Remove every entity registration whose [`Entity`] fails `is_alive`.
+    ///
+    /// Returns `true` if anything was removed. Backs the engine's per-tick
+    /// `prune_dead_entity_registrations` sweep, so a registration never
+    /// resolves to a despawned entity, whichever code path despawned it.
+    pub fn remove_dead_entity_registrations(&mut self, is_alive: impl Fn(Entity) -> bool) -> bool {
+        if self.entities.is_empty() {
+            return false;
+        }
+        let before = self.entities.len();
+        self.entities.retain(|_, e| is_alive(*e));
+        let removed = self.entities.len() != before;
+        if removed {
+            self.entities_dirty = true;
+        }
+        removed
     }
 
     /// Remove all entity registrations whose [`Entity`] is not in `persistent_entities`.
@@ -653,6 +674,39 @@ mod tests {
         ws.remove_entity_registrations_for(entity_a);
 
         assert_eq!(ws.get_entity("cursor"), Some(&entity_b));
+        assert!(!ws.entities_dirty);
+    }
+
+    #[test]
+    fn test_remove_dead_entity_registrations_drops_dead_keeps_live() {
+        let mut ws = WorldSignals::default();
+        let dead = Entity::from_bits(1);
+        let live = Entity::from_bits(2);
+        ws.set_entity("enemy", dead);
+        ws.set_entity("enemy_alias", dead);
+        ws.set_entity("player", live);
+        ws.entities_dirty = false;
+
+        let removed = ws.remove_dead_entity_registrations(|e| e == live);
+
+        assert!(removed);
+        assert!(ws.get_entity("enemy").is_none());
+        assert!(ws.get_entity("enemy_alias").is_none());
+        assert_eq!(ws.get_entity("player"), Some(&live));
+        assert!(ws.entities_dirty);
+    }
+
+    #[test]
+    fn test_remove_dead_entity_registrations_all_live_is_clean() {
+        let mut ws = WorldSignals::default();
+        let live = Entity::from_bits(2);
+        ws.set_entity("player", live);
+        ws.entities_dirty = false;
+
+        let removed = ws.remove_dead_entity_registrations(|_| true);
+
+        assert!(!removed);
+        assert_eq!(ws.get_entity("player"), Some(&live));
         assert!(!ws.entities_dirty);
     }
 
