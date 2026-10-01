@@ -17,6 +17,7 @@ use crate::math::Vec2;
 
 use crate::components::inputcontrolled::AccelerationControlled;
 use crate::components::rigidbody::RigidBody;
+use crate::events::input::InputAction;
 use crate::resources::input::InputState;
 
 /// The force name used by the input acceleration controller.
@@ -31,27 +32,29 @@ pub fn input_acceleration_controller(
     mut query: Query<(&AccelerationControlled, &mut RigidBody)>,
     input_state: Res<InputState>,
 ) {
+    let up = input_state.action(InputAction::MainDirectionUp).active;
+    let down = input_state.action(InputAction::MainDirectionDown).active;
+    let left = input_state.action(InputAction::MainDirectionLeft).active;
+    let right = input_state.action(InputAction::MainDirectionRight).active;
     for (accel_controlled, mut rigidbody) in query.iter_mut() {
         // Calculate acceleration from input
         let mut acceleration = Vec2 { x: 0.0, y: 0.0 };
 
-        if input_state.maindirection_up.active {
+        if up {
             acceleration += accel_controlled.up_acceleration;
         }
-        if input_state.maindirection_down.active {
+        if down {
             acceleration += accel_controlled.down_acceleration;
         }
-        if input_state.maindirection_left.active {
+        if left {
             acceleration += accel_controlled.left_acceleration;
         }
-        if input_state.maindirection_right.active {
+        if right {
             acceleration += accel_controlled.right_acceleration;
         }
 
         // Normalize diagonal acceleration to maintain consistent magnitude
-        if (input_state.maindirection_up.active || input_state.maindirection_down.active)
-            && (input_state.maindirection_left.active || input_state.maindirection_right.active)
-        {
+        if (up || down) && (left || right) {
             acceleration.x *= std::f32::consts::FRAC_1_SQRT_2;
             acceleration.y *= std::f32::consts::FRAC_1_SQRT_2;
         }
