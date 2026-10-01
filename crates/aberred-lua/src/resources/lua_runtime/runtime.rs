@@ -215,31 +215,6 @@ pub struct LuaRuntime {
     input_ctx_tables: InputCtxTables,
 }
 
-/// Converts an [`InputAction`] to its canonical Lua-facing string name.
-///
-/// These strings are what Lua passes to `engine.rebind_action()` and
-/// `engine.get_binding()`.
-pub(super) fn action_to_str(action: aberred_core::events::input::InputAction) -> &'static str {
-    use aberred_core::events::input::InputAction;
-    match action {
-        InputAction::MainDirectionUp => "main_up",
-        InputAction::MainDirectionDown => "main_down",
-        InputAction::MainDirectionLeft => "main_left",
-        InputAction::MainDirectionRight => "main_right",
-        InputAction::SecondaryDirectionUp => "secondary_up",
-        InputAction::SecondaryDirectionDown => "secondary_down",
-        InputAction::SecondaryDirectionLeft => "secondary_left",
-        InputAction::SecondaryDirectionRight => "secondary_right",
-        InputAction::Back => "back",
-        InputAction::Action1 => "action_1",
-        InputAction::Action2 => "action_2",
-        InputAction::Action3 => "action_3",
-        InputAction::Special => "special",
-        InputAction::ToggleDebug => "toggle_debug",
-        InputAction::ToggleFullscreen => "toggle_fullscreen",
-    }
-}
-
 /// Converts a canonical Lua action name string to an [`InputAction`](aberred_core::events::input::InputAction).
 pub fn action_from_str(s: &str) -> Option<aberred_core::events::input::InputAction> {
     use aberred_core::events::input::InputAction;

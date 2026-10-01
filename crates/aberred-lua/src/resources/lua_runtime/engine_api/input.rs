@@ -1,6 +1,6 @@
 use super::*;
 use crate::resources::lua_runtime::action_from_str;
-use crate::resources::lua_runtime::runtime::action_to_str;
+use aberred_core::events::input::InputAction;
 
 impl LuaRuntime {
     /// Registers the input rebinding API in the `engine` table.
@@ -38,7 +38,7 @@ impl LuaRuntime {
         register_getter!(engine, self.lua, meta_fns, "get_binding",
             |lua, action: LuaString| {
                 let s = action.to_str()?;
-                let canonical = action_from_str(&s).map(action_to_str).unwrap_or(&s);
+                let canonical = action_from_str(&s).map(InputAction::name).unwrap_or(&s);
                 Ok(lua
                     .app_data_ref::<LuaAppData>()
                     .and_then(|data| data.bindings_snapshot.borrow().get(canonical).cloned()))

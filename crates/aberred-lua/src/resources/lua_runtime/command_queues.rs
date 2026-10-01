@@ -4,7 +4,7 @@
 //! to process queued commands and update read-only caches.
 
 use super::commands::*;
-use super::runtime::{LuaAppData, LuaRuntime, action_to_str};
+use super::runtime::{LuaAppData, LuaRuntime};
 use super::spawn_data::*;
 use aberred_core::resources::worldsignals::SignalSnapshot;
 use rustc_hash::FxHashSet;
@@ -74,7 +74,7 @@ impl LuaRuntime {
             for (action, bl) in bindings.iter() {
                 if let Some(first) = bl.first() {
                     let key_str = binding_to_str(*first);
-                    let action_str = action_to_str(action).to_string();
+                    let action_str = action.name().to_string();
                     snap.insert(action_str, key_str.to_string());
                 }
             }
