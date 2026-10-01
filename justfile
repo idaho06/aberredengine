@@ -14,10 +14,11 @@ check: && doc-links
     cargo clippy --workspace --all-targets --no-default-features
     cargo clippy --workspace --lib --bins --features tracy  # no test code is tracy-gated
 
-# Every intra-doc link must resolve, in both feature configs (links into
-# `aberred-lua` break only when it isn't compiled). The exported parameter
-# sets RUSTDOCFLAGS for this recipe on every platform's shell.
-doc-links $RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links":
+# Every rustdoc warning is fatal, in both feature configs: intra-doc links must
+# resolve (links into `aberred-lua` break only when it isn't compiled), must not
+# point at private items, and must not carry redundant explicit targets. The
+# exported parameter sets RUSTDOCFLAGS for this recipe on every platform's shell.
+doc-links $RUSTDOCFLAGS="-D warnings":
     cargo doc --workspace --no-deps
     cargo doc --workspace --no-deps --no-default-features
 
