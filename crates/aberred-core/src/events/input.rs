@@ -96,6 +96,33 @@ impl InputAction {
             InputAction::ToggleFullscreen => 14,
         }
     }
+
+    /// Whether this is an engine-level toggle (F11 debug overlay, F10
+    /// fullscreen) rather than a gameplay action. Engine toggles never emit
+    /// an [`InputEvent`] (debug triggers its own `SwitchDebugEvent`;
+    /// fullscreen is read straight off the resolved `InputState` by the logic
+    /// loop) and are never masked by imgui keyboard capture, so F11 can
+    /// always close the overlay that holds focus.
+    ///
+    /// An exhaustive match (no `_` arm), so a new variant must be classified.
+    pub const fn is_engine_toggle(self) -> bool {
+        match self {
+            InputAction::ToggleDebug | InputAction::ToggleFullscreen => true,
+            InputAction::MainDirectionUp
+            | InputAction::MainDirectionDown
+            | InputAction::MainDirectionLeft
+            | InputAction::MainDirectionRight
+            | InputAction::SecondaryDirectionUp
+            | InputAction::SecondaryDirectionDown
+            | InputAction::SecondaryDirectionLeft
+            | InputAction::SecondaryDirectionRight
+            | InputAction::Back
+            | InputAction::Action1
+            | InputAction::Action2
+            | InputAction::Action3
+            | InputAction::Special => false,
+        }
+    }
 }
 
 /// Event emitted when an input action is pressed or released.
@@ -108,4 +135,21 @@ pub struct InputEvent {
     pub action: InputAction,
     /// Whether the action was pressed (true) or released (false).
     pub pressed: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn engine_toggles_are_exactly_toggle_debug_and_toggle_fullscreen() {
+        let toggles: Vec<InputAction> = InputAction::ALL
+            .into_iter()
+            .filter(|a| a.is_engine_toggle())
+            .collect();
+        assert_eq!(
+            toggles,
+            vec![InputAction::ToggleDebug, InputAction::ToggleFullscreen]
+        );
+    }
 }
