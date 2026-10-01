@@ -382,6 +382,11 @@ fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
 }
 ```
 
+To pick an action at runtime (e.g. from a rebinding menu), look it up by
+`InputAction` instead of naming the field:
+`input.action(InputAction::Action1).just_pressed`
+(`aberredengine::core::events::input::InputAction`).
+
 ### Game lifecycle
 
 ```
