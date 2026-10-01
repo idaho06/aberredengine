@@ -184,21 +184,30 @@ mod tests {
 
     #[test]
     fn clear_edges_zeroes_every_field_but_keeps_active() {
+        // Set and check every digital field independently of
+        // `bool_fields_mut` (the list `clear_edges` itself walks), so a field
+        // missing from that list fails here instead of passing vacuously.
         let mut input = InputState::default();
-        // Set active + both edges on every field, including mouse_left_button
-        // (reuses the same field enumeration `clear_edges` itself uses).
-        for bs in input.bool_fields_mut() {
-            bs.active = true;
-            bs.just_pressed = true;
-            bs.just_released = true;
+        let all_on = BoolState {
+            active: true,
+            just_pressed: true,
+            just_released: true,
+        };
+        for action in InputAction::ALL {
+            *input.action_mut(action) = all_on;
         }
+        input.mouse_left_button = all_on;
 
         input.clear_edges();
 
-        for bs in input.bool_fields_mut() {
-            assert!(bs.active, "active must be untouched by clear_edges");
-            assert!(!bs.just_pressed, "just_pressed must be cleared");
-            assert!(!bs.just_released, "just_released must be cleared");
+        let fields = InputAction::ALL
+            .into_iter()
+            .map(|a| (format!("{a:?}"), *input.action(a)))
+            .chain([("mouse_left_button".to_string(), input.mouse_left_button)]);
+        for (name, bs) in fields {
+            assert!(bs.active, "{name}: active must be untouched by clear_edges");
+            assert!(!bs.just_pressed, "{name}: just_pressed must be cleared");
+            assert!(!bs.just_released, "{name}: just_released must be cleared");
         }
     }
 
