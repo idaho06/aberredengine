@@ -1,7 +1,7 @@
 //! Lua-based collision rule component.
 //!
 //! [`LuaCollisionRule`] is the Lua-flavoured alias of the shared generic
-//! [`CollisionRule`](aberred_core::components::collision::CollisionRule) component, using a Lua
+//! [`CollisionRule`] component, using a Lua
 //! callback function name instead of a Rust function pointer.
 //!
 //! # Example

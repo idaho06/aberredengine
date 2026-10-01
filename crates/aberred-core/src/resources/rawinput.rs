@@ -2,7 +2,7 @@
 //!
 //! Binding resolution and `just_pressed`/`just_released` edge detection both
 //! happen on the logic thread: the render thread ships raw, unresolved
-//! [`RawDeviceSnapshot`](crate::protocol::raw_input::RawDeviceSnapshot)s
+//! [`RawDeviceSnapshot`]s
 //! over a dedicated bounded channel, and
 //! [`resolve_input_backlog`](crate::systems::input::resolve_input_backlog)
 //! diffs each one against [`PrevRawSnapshot`] to compute edges.

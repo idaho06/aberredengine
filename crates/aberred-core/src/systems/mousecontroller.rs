@@ -1,8 +1,8 @@
 //! Mouse controller system.
 //!
 //! Updates entity positions to follow the mouse cursor. Entities with a
-//! [`MouseControlled`](crate::components::inputcontrolled::MouseControlled)
-//! component will have their [`MapPosition`](crate::components::mapposition::MapPosition)
+//! [`MouseControlled`]
+//! component will have their [`MapPosition`]
 //! updated based on the mouse's world-space position.
 
 use crate::components::inputcontrolled::MouseControlled;

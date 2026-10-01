@@ -1,4 +1,4 @@
-//! Lua-aware [`CollisionRuleIndex`](aberred_core::resources::collision_rule_index::CollisionRuleIndex)
+//! Lua-aware [`CollisionRuleIndex`]
 //! rebuild.
 //!
 //! Shadows `aberred_core::systems::collision_rule_index::rebuild_collision_rule_index`

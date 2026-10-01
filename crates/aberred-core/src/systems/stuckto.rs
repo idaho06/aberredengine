@@ -11,7 +11,7 @@
 //!
 //! # Related
 //!
-//! - [`StuckTo`](crate::components::stuckto::StuckTo) – the attachment component
+//! - [`StuckTo`] – the attachment component
 //! - [`Timer`](crate::components::timer::Timer) – can auto-remove `StuckTo` after a delay
 
 use bevy_ecs::hierarchy::ChildOf;

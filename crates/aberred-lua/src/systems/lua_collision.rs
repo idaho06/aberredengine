@@ -2,15 +2,15 @@
 //!
 //! This module provides the Lua-specific collision handling:
 //!
-//! - [`lua_collision_observer`] – receives [`CollisionEvent`](aberred_core::events::collision::CollisionEvent)s
-//!   and dispatches to [`LuaCollisionRule`](crate::components::luacollision::LuaCollisionRule) callbacks
+//! - [`lua_collision_observer`] – receives [`CollisionEvent`]s
+//!   and dispatches to [`LuaCollisionRule`] callbacks
 //!
 //! # Collision Flow
 //!
 //! 1. [`collision_detector`](aberred_core::systems::collision_detector::collision_detector) detects overlaps
 //!    and emits `CollisionEvent`s
 //! 2. `lua_collision_observer` looks up matching Lua collision rules by
-//!    [`Group`](aberred_core::components::group::Group) names
+//!    [`Group`] names
 //! 3. For each match, calls [`call_lua_collision_callback`] with pooled context tables
 //!
 //! # Lua Collision Callbacks

@@ -3,8 +3,8 @@
 //! This module provides a shared [`Tween<T>`] component for smoothly animating
 //! entity properties over time:
 //! - `Tween<MapPosition>` – animate [`MapPosition`](super::mapposition::MapPosition)
-//! - `Tween<Rotation>` – animate [`Rotation`](super::rotation::Rotation)
-//! - `Tween<Scale>` – animate [`Scale`](super::scale::Scale)
+//! - `Tween<Rotation>` – animate [`Rotation`]
+//! - `Tween<Scale>` – animate [`Scale`]
 //!
 //! Each tween supports multiple [`Easing`] functions and [`LoopMode`] settings.
 //! See [`crate::systems::tween`] for the update systems.

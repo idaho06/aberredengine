@@ -1,10 +1,10 @@
 //! Rust-based phase state machine system.
 //!
-//! This module provides the system for processing [`Phase`](crate::components::phase::Phase) components:
+//! This module provides the system for processing [`Phase`] components:
 //!
 //! - [`phase_system`] – runs Rust callbacks for phase enter/update/exit
 //!
-//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
+//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
 //!
 //! # System Flow
 //!

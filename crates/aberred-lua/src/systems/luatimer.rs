@@ -1,6 +1,6 @@
 //! Lua timer systems.
 //!
-//! This module provides systems for processing [`LuaTimer`](crate::components::luatimer::LuaTimer) components:
+//! This module provides systems for processing [`LuaTimer`] components:
 //!
 //! - [`update_lua_timers`] – updates timer elapsed time and emits events when they expire
 //! - [`lua_timer_observer`] – observer that calls Lua functions when timer events fire
@@ -54,8 +54,8 @@ impl<'a, 'w, 's> TimerRunner<LuaTimerCallback> for LuaTimerRunner<'a, 'w, 's> {
 
 /// Update all Lua timer components and emit events when they expire.
 ///
-/// Accumulates delta time on each [`LuaTimer`](crate::components::luatimer::LuaTimer)
-/// and triggers a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when
+/// Accumulates delta time on each [`LuaTimer`]
+/// and triggers a [`LuaTimerEvent`] when
 /// `elapsed >= duration`. The timer resets by subtracting duration, allowing for
 /// consistent periodic timing.
 pub fn update_lua_timers(

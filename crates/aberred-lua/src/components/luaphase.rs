@@ -1,7 +1,7 @@
 //! Lua-based phase state machine component.
 //!
 //! [`LuaPhase`] is the Lua-flavoured alias of the shared generic
-//! [`Phase`](aberred_core::components::phase::Phase) component, using callback function names
+//! [`Phase`] component, using callback function names
 //! instead of Rust function pointers.
 //!
 //! # How It Works
@@ -57,7 +57,7 @@ pub struct PhaseCallbacks {
 
 /// Lua-based phase state machine component.
 ///
-/// Unlike the default Rust [`Phase`](aberred_core::components::phase::Phase) component which
+/// Unlike the default Rust [`Phase`] component which
 /// stores function pointers, this alias stores callback function names that
 /// are looked up and called in the Lua runtime.
 pub type LuaPhase = Phase<PhaseCallbacks>;

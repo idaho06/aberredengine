@@ -1,6 +1,6 @@
 //! Computed world-space transform for entities in a hierarchy.
 //!
-//! When an entity has a [`ChildOf`](bevy_ecs::hierarchy::ChildOf) parent, its
+//! When an entity has a [`ChildOf`] parent, its
 //! [`MapPosition`](super::mapposition::MapPosition), [`Rotation`](super::rotation::Rotation),
 //! and [`Scale`](super::scale::Scale) are interpreted as local to the parent.
 //! The [`propagate_transforms`](crate::systems::propagate_transforms::propagate_transforms)

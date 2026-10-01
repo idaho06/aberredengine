@@ -1,7 +1,7 @@
 //! Game state systems.
 //!
 //! - [`check_pending_state`] monitors [`NextGameState`] and triggers a
-//!   [`GameStateChangedEvent`](crate::events::gamestate::GameStateChangedEvent)
+//!   [`GameStateChangedEvent`]
 //!   when a transition is requested.
 //! - [`state_is_playing`] helper for run conditions that returns true when the
 //!   current state is [`GameStates::Playing`].

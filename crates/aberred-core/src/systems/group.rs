@@ -23,9 +23,9 @@
 //!
 //! # Related
 //!
-//! - [`TrackedGroups`](crate::resources::group::TrackedGroups) – configures which groups to count
-//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) – where counts are published
-//! - [`Group`](crate::components::group::Group) – the group tag component
+//! - [`TrackedGroups`] – configures which groups to count
+//! - [`WorldSignals`] – where counts are published
+//! - [`Group`] – the group tag component
 
 use crate::components::group::Group;
 use crate::resources::group::TrackedGroups;

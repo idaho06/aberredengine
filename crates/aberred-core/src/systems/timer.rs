@@ -1,11 +1,11 @@
 //! Rust timer systems.
 //!
-//! This module provides systems for processing [`Timer`](crate::components::timer::Timer) components:
+//! This module provides systems for processing [`Timer`] components:
 //!
 //! - [`update_timers`] – updates timer elapsed time and emits events when they expire
 //! - [`timer_observer`] – observer that calls Rust callbacks when timer events fire
 //!
-//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
+//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
 //!
 //! # System Flow
 //!
@@ -55,8 +55,8 @@ impl<'a, 'w, 's> TimerRunner<TimerCallback> for RustTimerRunner<'a, 'w, 's> {
 
 /// Update all Rust timer components and emit events when they expire.
 ///
-/// Accumulates delta time on each [`Timer`](crate::components::timer::Timer)
-/// and triggers a [`TimerEvent`](crate::events::timer::TimerEvent) when
+/// Accumulates delta time on each [`Timer`]
+/// and triggers a [`TimerEvent`] when
 /// `elapsed >= duration`. The timer resets by subtracting duration, allowing for
 /// consistent periodic timing.
 pub fn update_timers(
@@ -73,7 +73,7 @@ pub fn update_timers(
 
 /// Observer that handles Rust timer events by calling the callback function.
 ///
-/// When a [`TimerEvent`](crate::events::timer::TimerEvent) is triggered:
+/// When a [`TimerEvent`] is triggered:
 ///
 /// 1. Extracts the entity and callback from the event
 /// 2. Calls the callback with `(entity, &mut GameCtx, &InputState)`

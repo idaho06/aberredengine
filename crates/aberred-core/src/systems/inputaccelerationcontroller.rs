@@ -1,8 +1,8 @@
 //! Acceleration-based input controller.
 //!
-//! Reads the shared [`InputState`](crate::resources::input::InputState) and
+//! Reads the shared [`InputState`] and
 //! applies directional accelerations to entities with an
-//! [`AccelerationControlled`](crate::components::inputcontrolled::AccelerationControlled)
+//! [`AccelerationControlled`]
 //! component. Unlike the simple velocity controller, this provides smooth,
 //! physics-like movement with momentum and gradual speed changes.
 //!

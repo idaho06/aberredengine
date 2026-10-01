@@ -1,6 +1,6 @@
 //! Time update system.
 //!
-//! Updates the shared [`WorldTime`](crate::resources::worldtime::WorldTime)
+//! Updates the shared [`WorldTime`]
 //! resource once per frame, applying `time_scale` to the provided delta.
 use bevy_ecs::prelude::*;
 

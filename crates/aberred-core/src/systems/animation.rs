@@ -3,13 +3,13 @@
 //! - [`animation`] advances animations based on elapsed time and updates the
 //!   visible sprite frame. It also emits optional signals as frames change.
 //! - [`animation_controller`] selects which animation should be active based
-//!   on a set of rule conditions evaluated against entity [`Signals`](crate::components::signals::Signals).
+//!   on a set of rule conditions evaluated against entity [`Signals`].
 //!
 //! # Animation Flow
 //!
-//! 1. Animation data is defined in [`AnimationStore`](crate::resources::animationstore::AnimationStore)
-//! 2. Entities have an [`Animation`](crate::components::animation::Animation) component pointing to a key
-//! 3. The `animation` system advances frames based on `fps` and updates [`Sprite`](crate::components::sprite::Sprite) offset
+//! 1. Animation data is defined in [`AnimationStore`]
+//! 2. Entities have an [`Animation`] component pointing to a key
+//! 3. The `animation` system advances frames based on `fps` and updates [`Sprite`] offset
 //! 4. The `animation_controller` system evaluates rules against signals to switch animations
 //!
 //! # Related
@@ -40,7 +40,7 @@ use crate::resources::worldtime::WorldTime;
 /// - Optionally writes signal flags/scalars for transitions.
 /// - When `vertical_displacement > 0`, wraps frames to the next row when
 ///   the computed x offset exceeds the texture width.
-/// - Triggers [`AnimationFinishedEvent`](crate::events::animation::AnimationFinishedEvent)
+/// - Triggers [`AnimationFinishedEvent`]
 ///   exactly once on the frame a non-looped animation first reaches its last frame.
 pub fn animation(
     mut query: Query<

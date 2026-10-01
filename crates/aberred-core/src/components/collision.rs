@@ -57,7 +57,7 @@ use crate::systems::GameCtx;
 ///
 /// Receives the two matched entities (ordered to match `group_a` and `group_b`),
 /// the colliding sides for each entity, and a mutable reference to
-/// [`GameCtx`](crate::systems::GameCtx) providing full ECS query/resource access.
+/// [`GameCtx`] providing full ECS query/resource access.
 pub type CollisionCallback =
     for<'w, 's> fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx<'w, 's>);
 

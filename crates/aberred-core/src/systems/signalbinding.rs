@@ -1,7 +1,7 @@
 //! Signal binding system for reactive UI updates.
 //!
-//! This module provides the system that synchronizes [`DynamicText`](crate::components::dynamictext::DynamicText)
-//! components with signal values based on their [`SignalBinding`](crate::components::signalbinding::SignalBinding).
+//! This module provides the system that synchronizes [`DynamicText`]
+//! components with signal values based on their [`SignalBinding`].
 
 use arrayvec::ArrayString;
 use std::fmt::Write as _;
@@ -34,7 +34,7 @@ use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::change_detection::DetectChangesMut;
 use bevy_ecs::prelude::*;
 
-/// Updates [`DynamicText`](crate::components::dynamictext::DynamicText) content based on signal bindings.
+/// Updates [`DynamicText`] content based on signal bindings.
 ///
 /// This system queries all entities with both `DynamicText` and `SignalBinding` components,
 /// reads the corresponding signal value (from either `WorldSignals` or an entity's `Signals`),

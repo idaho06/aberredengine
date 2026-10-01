@@ -1,8 +1,8 @@
 //! Simple input-to-velocity controller.
 //!
-//! Reads the shared [`InputState`](crate::resources::input::InputState) and
+//! Reads the shared [`InputState`] and
 //! applies directional velocities to entities with an
-//! [`InputControlled`](crate::components::inputcontrolled::InputControlled)
+//! [`InputControlled`]
 //! component. Diagonal movement is normalized to maintain constant speed.
 use bevy_ecs::prelude::*;
 use crate::math::Vec2;

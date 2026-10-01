@@ -57,7 +57,7 @@ pub struct LogicTx(pub Sender<LogicMsg>);
 pub struct RenderTx(pub Sender<RenderMsg>);
 
 /// Gracefully stop the logic thread and join it (mirrors
-/// [`shutdown_audio`](crate::protocol::endpoints::shutdown_audio)).
+/// [`shutdown_audio`]).
 ///
 /// If the bridge resource exists, sends [`LogicMsg::Shutdown`], waits for the
 /// thread to exit (it runs `shutdown_audio` and drops `LuaRuntime` on its own

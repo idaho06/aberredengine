@@ -1,6 +1,6 @@
 //! Scene registry resource for Rust-native scene management.
 //!
-//! [`SceneManager`] holds a registry of [`SceneLogic`](crate::systems::scene_dispatch::SceneLogic)s keyed by scene
+//! [`SceneManager`] holds a registry of [`SceneLogic`]s keyed by scene
 //! name, plus the name of the currently active scene and the initial scene.
 //!
 //! This resource is inserted automatically by `aberredengine::EngineBuilder`

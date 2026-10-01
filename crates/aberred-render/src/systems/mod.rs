@@ -12,7 +12,7 @@
 //! - [`snapshot`] – reads the newest `DrawableSnapshot` and reconciles mirror entities
 //! - [`output`] – ships render-owned mirror diffs back to the logic thread
 //! - [`gameconfig`] – applies `GameConfig` changes to the live raylib window
-//! - [`assets`] – the render-thread GL asset loader ([`process_render_asset_cmds`](assets::process_render_asset_cmds))
+//! - [`assets`] – the render-thread GL asset loader ([`process_render_asset_cmds`])
 //! - [`raylib_access`] – bundled [`RaylibHandle`](raylib::RaylibHandle)/[`RaylibThread`](raylib::RaylibThread) `SystemParam`
 
 mod assets;

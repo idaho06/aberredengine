@@ -114,7 +114,7 @@ impl Pacer {
     /// This is the sleeping
     /// counterpart to the pre-`f02581c` `Pacer::due()` (deleted when PRESENT
     /// decimation moved to the wall-clock-agnostic
-    /// [`TickCountdown`](TickCountdown)); `due()`'s deadline-carry + snap
+    /// [`TickCountdown`]); `due()`'s deadline-carry + snap
     /// arithmetic is reused here, but `due()` itself never slept (it was a
     /// non-blocking decimator check inside an already-paced loop) --
     /// `tick_fixed` paces the loop itself, so it must sleep too.

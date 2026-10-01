@@ -2,10 +2,10 @@
 //!
 //! This module provides the Rust-native collision handling:
 //!
-//! - [`rust_collision_observer`] – receives [`CollisionEvent`](crate::events::collision::CollisionEvent)s
-//!   and dispatches to [`CollisionRule`](crate::components::collision::CollisionRule) callbacks
+//! - [`rust_collision_observer`] – receives [`CollisionEvent`]s
+//!   and dispatches to [`CollisionRule`] callbacks
 //!
-//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
+//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
 //!
 //! # Collision Flow
 //!

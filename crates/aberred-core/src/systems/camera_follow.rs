@@ -1,10 +1,10 @@
 //! Camera-follow system.
 //!
-//! Moves [`Camera2DRes`](crate::resources::camera2d::Camera2DRes) to track
+//! Moves [`Camera2DRes`] to track
 //! the highest-priority entity carrying
-//! [`CameraTarget`](crate::components::cameratarget::CameraTarget).
+//! [`CameraTarget`].
 //!
-//! Supports four follow modes ([`FollowMode`](crate::resources::camerafollowconfig::FollowMode)):
+//! Supports four follow modes ([`FollowMode`]):
 //! **Instant**, **Lerp** (with configurable easing), **SmoothDamp** (spring-
 //! damper), and **Deadzone** (hold-then-catch-up). Optional world-bounds
 //! clamping keeps the viewport inside a defined rectangle.

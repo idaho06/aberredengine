@@ -7,7 +7,7 @@
 //!
 //! Each frame:
 //!
-//! 1. `ttl_system` iterates all entities with [`Ttl`](crate::components::ttl::Ttl)
+//! 1. `ttl_system` iterates all entities with [`Ttl`]
 //! 2. Decrements `remaining` by `delta * time_scale`
 //! 3. When `remaining <= 0`, despawns the entity
 //!
@@ -24,7 +24,7 @@ use crate::resources::worldtime::WorldTime;
 /// Decrements TTL and despawns entities when it reaches zero.
 ///
 /// This system runs each frame and:
-/// - Subtracts `delta * time_scale` from all [`Ttl`](crate::components::ttl::Ttl) components
+/// - Subtracts `delta * time_scale` from all [`Ttl`] components
 /// - Despawns any entity whose TTL reaches zero or below
 ///
 /// # Performance

@@ -12,7 +12,7 @@
 //!    - When `elapsed >= duration`, emits `TimerEvent` and resets
 //! 3. The `timer_observer` receives the event:
 //!    - Calls the Rust callback with `(entity, &mut GameCtx, &InputState)`
-//!    - The callback has full ECS access through [`GameCtx`](crate::systems::GameCtx)
+//!    - The callback has full ECS access through [`GameCtx`]
 //!
 //! # Callback Signature and Usage
 //!
@@ -53,7 +53,7 @@ use crate::systems::GameCtx;
 
 /// Callback type for Rust timers.
 ///
-/// Receives the entity that owns the timer, a mutable reference to [`GameCtx`](crate::systems::GameCtx)
+/// Receives the entity that owns the timer, a mutable reference to [`GameCtx`]
 /// providing full ECS query/resource access, and the current input state.
 pub type TimerCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState);
 

@@ -6,7 +6,7 @@
 //! - [`menu_controller_observer`] – handles input to navigate and select items
 //! - [`menu_selection_observer`] – performs actions when items are selected
 //!
-//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
+//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
 
 use std::sync::Arc;
 
@@ -537,7 +537,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 /// Priority chain: Rust callback → [`MenuActions`].
 ///
 /// If the menu has an `on_rust_callback`, invokes it with the menu entity, item ID,
-/// item index, and full ECS access via [`GameCtx`](crate::systems::GameCtx).
+/// item index, and full ECS access via [`GameCtx`].
 ///
 /// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch

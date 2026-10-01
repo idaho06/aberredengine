@@ -1,6 +1,6 @@
 //! Scene dispatch systems for Rust-native scene management.
 //!
-//! This module provides systems and types for the [`SceneManager`](crate::resources::scenemanager::SceneManager)
+//! This module provides systems and types for the [`SceneManager`]
 //! pattern — an optional higher-level alternative to the raw `.on_switch_scene()` hook.
 //!
 //! - [`SceneLogic`] — per-scene logic callbacks (`on_enter`, `on_update`, `on_exit`);
@@ -12,7 +12,7 @@
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
 //!
-//! Callbacks receive `&mut `[`GameCtx`](crate::systems::GameCtx) for full ECS access.
+//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
 //!
 //! # Callback Signatures
 //!

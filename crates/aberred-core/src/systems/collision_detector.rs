@@ -1,7 +1,7 @@
 //! Collision detection system.
 //!
 //! This module provides the [`collision_detector`] system which performs pairwise
-//! AABB overlap checks and emits [`CollisionEvent`](crate::events::collision::CollisionEvent)
+//! AABB overlap checks and emits [`CollisionEvent`]
 //! for each detected collision.
 //!
 //! This system is pure Rust with no Lua dependency and is shared by both
