@@ -125,6 +125,7 @@ mod tests {
     use super::*;
     use crate::components::phase::PhaseCallbackFns;
     use crate::components::signals::Signals;
+    use crate::events::input::InputAction;
     use crate::protocol::audio::AudioCmd;
     use crate::resources::worldsignals::WorldSignals;
     use crate::resources::worldtime::WorldTime;
@@ -591,8 +592,8 @@ mod tests {
         let mut world = make_phase_world(0.016);
 
         let mut input = InputState::default();
-        input.action_1.active = true;
-        input.action_1.just_pressed = true;
+        input.action_mut(InputAction::Action1).active = true;
+        input.action_mut(InputAction::Action1).just_pressed = true;
         world.insert_resource(input);
 
         fn update_fn(
@@ -601,7 +602,7 @@ mod tests {
             input: &InputState,
             _dt: f32,
         ) -> Option<String> {
-            if input.action_1.active
+            if input.action(InputAction::Action1).active
                 && let Ok(mut signals) = ctx.signals.get_mut(entity)
             {
                 signals.set_flag("input_received");

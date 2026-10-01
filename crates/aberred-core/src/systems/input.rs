@@ -176,8 +176,8 @@ fn resolve_sample_into(
 /// never double-fires `just_pressed`, since `active` (any-bound-down) stays
 /// `true` across the handoff.
 ///
-/// Also resolves `fullscreen_toggle` (F10) as an ordinary bound action — the
-/// caller reads `InputState.fullscreen_toggle.just_pressed` after this
+/// Also resolves `ToggleFullscreen` (F10) as an ordinary bound action — the
+/// caller reads its `just_pressed` from the resolved `InputState` after this
 /// returns and sends `RenderMsg::ToggleFullscreen` itself, keeping this
 /// function free of channel sends.
 pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
@@ -257,8 +257,8 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
         //   that field unconditionally (`mouse_controller`) — freezing means
         //   such an entity simply stops following instead of snapping to a
         //   bogus position.
-        // - Engine toggles (`InputAction::is_engine_toggle`: `mode_debug`/F11
-        //   and `fullscreen_toggle`/F10) are skipped by the keyboard mask:
+        // - Engine toggles (`InputAction::is_engine_toggle`: `ToggleDebug`/F11
+        //   and `ToggleFullscreen`/F10) are skipped by the keyboard mask:
         //   F11 is the debug overlay's own escape hatch and must always
         //   work, even while an imgui widget in that overlay holds keyboard
         //   focus; F10 is unrelated to debug-overlay focus, so imgui capture
@@ -315,10 +315,10 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
             }
         }
 
-        // Engine toggles emit no InputEvent: mode_debug triggers its own
-        // SwitchDebugEvent; fullscreen_toggle is read off the resolved
+        // Engine toggles emit no InputEvent: ToggleDebug triggers its own
+        // SwitchDebugEvent; ToggleFullscreen is read off the resolved
         // InputState by the caller, which sends RenderMsg::ToggleFullscreen.
-        if input.mode_debug.just_pressed {
+        if input.action(InputAction::ToggleDebug).just_pressed {
             debug!("Debug mode key pressed");
             world.trigger(SwitchDebugEvent {});
         }
@@ -491,8 +491,8 @@ mod tests {
         let input = world.resource::<InputState>();
         assert_eq!(input.mouse_x, 500.0);
         assert_eq!(input.scroll_y, 1.5);
-        assert!(input.action_1.active);
-        assert!(input.action_1.just_pressed);
+        assert!(input.action(InputAction::Action1).active);
+        assert!(input.action(InputAction::Action1).just_pressed);
         assert!(approx_eq(input.mouse_world_x, 150.0));
         assert!(approx_eq(input.mouse_world_y, 50.0));
     }
@@ -516,24 +516,44 @@ mod tests {
 
         let down = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         resolve_input_backlog(&mut world, &[down]);
-        assert!(world.resource::<InputState>().action_1.just_pressed);
-        assert!(world.resource::<InputState>().action_1.active);
+        assert!(
+            world
+                .resource::<InputState>()
+                .action(InputAction::Action1)
+                .just_pressed
+        );
+        assert!(
+            world
+                .resource::<InputState>()
+                .action(InputAction::Action1)
+                .active
+        );
 
         // Same key still down: no new edge (active stays true).
         let held = raw_with_key_down(Key::KEY_SPACE, (0.0, 0.0));
         // Simulate the per-tick edge clear that `run_sim_tick` performs.
         world.resource_mut::<InputState>().clear_edges();
         resolve_input_backlog(&mut world, &[held]);
-        assert!(!world.resource::<InputState>().action_1.just_pressed);
-        assert!(world.resource::<InputState>().action_1.active);
+        assert!(
+            !world
+                .resource::<InputState>()
+                .action(InputAction::Action1)
+                .just_pressed
+        );
+        assert!(
+            world
+                .resource::<InputState>()
+                .action(InputAction::Action1)
+                .active
+        );
 
         // Key released.
         world.resource_mut::<InputState>().clear_edges();
         let up = raw();
         resolve_input_backlog(&mut world, &[up]);
         let input = world.resource::<InputState>();
-        assert!(input.action_1.just_released);
-        assert!(!input.action_1.active);
+        assert!(input.action(InputAction::Action1).just_released);
+        assert!(!input.action(InputAction::Action1).active);
     }
 
     #[test]
@@ -551,14 +571,14 @@ mod tests {
 
         let input = world.resource::<InputState>();
         assert!(
-            input.action_1.just_pressed,
+            input.action(InputAction::Action1).just_pressed,
             "press edge must survive the intermediate transition"
         );
         assert!(
-            input.action_1.just_released,
+            input.action(InputAction::Action1).just_released,
             "release edge must survive the intermediate transition"
         );
-        assert!(!input.action_1.active);
+        assert!(!input.action(InputAction::Action1).active);
     }
 
     #[test]
@@ -582,7 +602,12 @@ mod tests {
         let mut z_down = raw();
         z_down.set_key(Key::KEY_Z.as_u32());
         resolve_input_backlog(&mut world, &[z_down]);
-        assert!(world.resource::<InputState>().action_1.just_pressed);
+        assert!(
+            world
+                .resource::<InputState>()
+                .action(InputAction::Action1)
+                .just_pressed
+        );
         world.resource_mut::<InputState>().clear_edges();
 
         // Roll from Z to X within the same tick's backlog: Z+X both down,
@@ -598,11 +623,11 @@ mod tests {
 
         let input = world.resource::<InputState>();
         assert!(
-            !input.action_1.just_pressed,
+            !input.action(InputAction::Action1).just_pressed,
             "rolling handoff between two bound keys must not double-fire just_pressed"
         );
         assert!(
-            input.action_1.active,
+            input.action(InputAction::Action1).active,
             "action must still read active through the handoff"
         );
     }
@@ -651,7 +676,8 @@ mod tests {
 
         let input = world.resource::<InputState>();
         assert!(
-            !input.action_1.active && !input.action_1.just_pressed,
+            !input.action(InputAction::Action1).active
+                && !input.action(InputAction::Action1).just_pressed,
             "keyboard-sourced action must be masked while imgui has keyboard capture"
         );
     }
@@ -711,11 +737,12 @@ mod tests {
 
         let input = world.resource::<InputState>();
         assert!(
-            input.mode_debug.active && input.mode_debug.just_pressed,
+            input.action(InputAction::ToggleDebug).active
+                && input.action(InputAction::ToggleDebug).just_pressed,
             "F11 must never be masked -- it's the debug overlay's own escape hatch"
         );
         assert!(
-            input.fullscreen_toggle.just_pressed,
+            input.action(InputAction::ToggleFullscreen).just_pressed,
             "F10 must never be masked -- fullscreen toggling is unrelated to imgui capture"
         );
         let log = world.resource::<EventLog>();
@@ -802,15 +829,15 @@ mod tests {
         );
         resolve_input_backlog(&mut world, &[down]);
         let input = world.resource::<InputState>();
-        assert!(input.action_1.just_pressed);
-        assert!(input.action_1.active);
+        assert!(input.action(InputAction::Action1).just_pressed);
+        assert!(input.action(InputAction::Action1).active);
 
         world.resource_mut::<InputState>().clear_edges();
         let up = raw_with_gamepad(None, [0.0; 6]);
         resolve_input_backlog(&mut world, &[up]);
         let input = world.resource::<InputState>();
-        assert!(input.action_1.just_released);
-        assert!(!input.action_1.active);
+        assert!(input.action(InputAction::Action1).just_released);
+        assert!(!input.action(InputAction::Action1).active);
     }
 
     #[test]
@@ -820,7 +847,12 @@ mod tests {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let neutral = raw_with_gamepad(None, [0.0; 6]);
         resolve_input_backlog(&mut world, &[neutral]);
-        assert!(!world.resource::<InputState>().maindirection_right.active);
+        assert!(
+            !world
+                .resource::<InputState>()
+                .action(InputAction::MainDirectionRight)
+                .active
+        );
 
         world.resource_mut::<InputState>().clear_edges();
         let mut axes = [0.0; 6];
@@ -828,15 +860,15 @@ mod tests {
         let pushed_right = raw_with_gamepad(None, axes);
         resolve_input_backlog(&mut world, &[pushed_right]);
         let input = world.resource::<InputState>();
-        assert!(input.maindirection_right.just_pressed);
-        assert!(input.maindirection_right.active);
+        assert!(input.action(InputAction::MainDirectionRight).just_pressed);
+        assert!(input.action(InputAction::MainDirectionRight).active);
 
         world.resource_mut::<InputState>().clear_edges();
         let back_to_neutral = raw_with_gamepad(None, [0.0; 6]);
         resolve_input_backlog(&mut world, &[back_to_neutral]);
         let input = world.resource::<InputState>();
-        assert!(input.maindirection_right.just_released);
-        assert!(!input.maindirection_right.active);
+        assert!(input.action(InputAction::MainDirectionRight).just_released);
+        assert!(!input.action(InputAction::MainDirectionRight).active);
     }
 
     #[test]
@@ -848,8 +880,8 @@ mod tests {
         let sample = raw_with_gamepad(None, axes);
         resolve_input_backlog(&mut world, &[sample]);
         let input = world.resource::<InputState>();
-        assert!(!input.maindirection_right.active);
-        assert!(!input.maindirection_left.active);
+        assert!(!input.action(InputAction::MainDirectionRight).active);
+        assert!(!input.action(InputAction::MainDirectionLeft).active);
     }
 
     #[test]
@@ -866,9 +898,9 @@ mod tests {
 
         resolve_input_backlog(&mut world, &[connected_and_pressed, disconnected]);
         let input = world.resource::<InputState>();
-        assert!(input.action_1.just_pressed);
-        assert!(input.action_1.just_released);
-        assert!(!input.action_1.active);
+        assert!(input.action(InputAction::Action1).just_pressed);
+        assert!(input.action(InputAction::Action1).just_released);
+        assert!(!input.action(InputAction::Action1).active);
         assert!(!input.gamepad_connected);
         assert_eq!(input.gamepad_axes, [0.0; 6]);
     }

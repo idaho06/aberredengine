@@ -87,6 +87,7 @@ pub fn timer_observer(trigger: On<TimerEvent>, input: Res<InputState>, mut ctx: 
 mod tests {
     use super::*;
     use crate::components::signals::Signals;
+    use crate::events::input::InputAction;
     use crate::protocol::audio::AudioCmd;
     use crate::resources::worldsignals::WorldSignals;
     use crate::testing::{approx_eq, insert_game_ctx_resources};
@@ -263,13 +264,13 @@ mod tests {
         let mut world = world_with_delta(1.0);
 
         let mut input = InputState::default();
-        input.action_1.active = true;
-        input.action_1.just_pressed = true;
+        input.action_mut(InputAction::Action1).active = true;
+        input.action_mut(InputAction::Action1).just_pressed = true;
         world.insert_resource(input);
 
         fn check_input(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
             // Verify input is passed through — set a signal if action_1 is pressed
-            if input.action_1.active
+            if input.action(InputAction::Action1).active
                 && let Ok(mut signals) = ctx.signals.get_mut(entity)
             {
                 signals.set_flag("input_received");
