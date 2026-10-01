@@ -157,9 +157,8 @@ impl EngineBuilder {
     /// `present` (decimated to `[simulation] snapshot_skip` sim ticks, not run
     /// once per received input sample -- package the tick's
     /// fully-settled state into a `DrawableSnapshot` and publish it into the
-    /// `SnapshotPublisher` triple buffer; nothing else). See
-    /// `.claude/context/system-order.md` for the rationale behind the split
-    /// and the full list of which system lives where.
+    /// `SnapshotPublisher` triple buffer; nothing else). Each [`SimSet`]
+    /// variant's docs list the systems that run in it.
     ///
     /// `sim`'s internal ordering is expressed via [`SimSet`]
     /// rather than per-system `.after()`/`.before()` edges: one

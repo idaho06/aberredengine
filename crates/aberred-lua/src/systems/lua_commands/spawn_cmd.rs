@@ -1177,7 +1177,7 @@ mod tests {
         assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
         let timer = world.get::<LuaTimer>(e).unwrap();
         assert_eq!((timer.duration, &*timer.callback.name), (0.5, "tick"));
-        // The CLAUDE.md callback-type gotcha: must be queryable as LuaCollisionRule.
+        // Must be queryable as LuaCollisionRule, not the Rust-callback CollisionRule.
         let rule = world
             .query::<&LuaCollisionRule>()
             .get(&world, e)

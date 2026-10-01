@@ -84,13 +84,11 @@
 //! - [`aberred_render::bootstrap`] (not a module here) — bootstrapping the
 //!   render (main) thread's `World` and its per-frame schedule
 //!   (`setup_render_world` + `build_render_schedule`, which `try_run` always
-//!   calls back to back — see `.claude/context/system-order.md`'s RENDER
-//!   schedule section for what each step in that schedule does).
+//!   calls back to back).
 //! - `logic_world` — bootstrapping the logic thread's gameplay `World`,
 //!   registering hooks/scene systems, and spawning engine observers.
 //! - `schedule` — [`SimSet`] and construction of the logic thread's `sim`/
-//!   `present` schedules (see `.claude/context/system-order.md`'s Sim/PRESENT
-//!   schedule sections).
+//!   `present` schedules.
 //! - `logic_thread` — `LogicInit`, the logic thread's entry point, and its
 //!   `Pacer`-driven main loop.
 //!

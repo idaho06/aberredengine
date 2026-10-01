@@ -1015,7 +1015,7 @@ mod tests {
             ),
             (AudioLuaCmd::UnloadMusic { id: s("m") }, r#"UnloadMusic { id: "m" }"#),
             (AudioLuaCmd::UnloadAllMusic, "UnloadAllMusic"),
-            // Stop keeps loaded FX; unload frees them (CLAUDE.md "Audio stop vs. unload").
+            // Stop keeps loaded FX; unload frees them.
             (AudioLuaCmd::StopAllSounds, "StopAllFx"),
             (AudioLuaCmd::UnloadSound { id: s("fx") }, r#"UnloadFx { id: "fx" }"#),
             (AudioLuaCmd::UnloadAllSounds, "UnloadAllFx"),

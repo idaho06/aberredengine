@@ -125,8 +125,7 @@ impl EngineBuilder {
     ///
     /// Runs once per sim tick (`[simulation] hz` in `config.ini`),
     /// in [`SimSet::ScriptUpdate`]. Treat it as idempotent/edge-triggered the
-    /// same way Lua's `on_update_<scene>` must be
-    /// (`.claude/context/system-order.md`): gate one-shot effects on an edge,
+    /// same way Lua's `on_update_<scene>` must be: gate one-shot effects on an edge,
     /// not on "runs once per visible frame" -- the sim ticks faster than the
     /// render thread. The system is added with `.run_if(state_is_playing)`.
     pub fn on_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
