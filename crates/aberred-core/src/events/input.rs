@@ -12,38 +12,43 @@ use bevy_ecs::prelude::*;
 /// Enumeration of logical input actions.
 ///
 /// These abstract the physical keys into gameplay-meaningful actions.
+///
+/// Each discriminant is the action's slot index ([`index`](Self::index)).
+/// They are explicit so reordering variants never changes another
+/// variant's slot, and a duplicate value is a compile error (E0081).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum InputAction {
     /// Primary direction: up (default: W key).
-    MainDirectionUp,
+    MainDirectionUp = 0,
     /// Primary direction: down (default: S key).
-    MainDirectionDown,
+    MainDirectionDown = 1,
     /// Primary direction: left (default: A key).
-    MainDirectionLeft,
+    MainDirectionLeft = 2,
     /// Primary direction: right (default: D key).
-    MainDirectionRight,
+    MainDirectionRight = 3,
     /// Secondary direction: up (default: Up arrow).
-    SecondaryDirectionUp,
+    SecondaryDirectionUp = 4,
     /// Secondary direction: down (default: Down arrow).
-    SecondaryDirectionDown,
+    SecondaryDirectionDown = 5,
     /// Secondary direction: left (default: Left arrow).
-    SecondaryDirectionLeft,
+    SecondaryDirectionLeft = 6,
     /// Secondary direction: right (default: Right arrow).
-    SecondaryDirectionRight,
+    SecondaryDirectionRight = 7,
     /// Back/cancel action (default: Escape).
-    Back,
+    Back = 8,
     /// Primary action button (default: Space).
-    Action1,
+    Action1 = 9,
     /// Secondary action button (default: Enter).
-    Action2,
+    Action2 = 10,
     /// Tertiary action button (default: mouse middle button).
-    Action3,
+    Action3 = 11,
     /// Special function (default: F12).
-    Special,
+    Special = 12,
     /// Toggle debug overlays (default: F11). Still triggers [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent) internally.
-    ToggleDebug,
+    ToggleDebug = 13,
     /// Toggle fullscreen mode (default: F10). Still triggers `SwitchFullScreenEvent` (render world, `aberred-render`) internally.
-    ToggleFullscreen,
+    ToggleFullscreen = 14,
 }
 
 impl InputAction {
@@ -73,28 +78,11 @@ impl InputAction {
         InputAction::ToggleFullscreen,
     ];
 
-    /// Slot index into `InputBindings`'s flat `[Vec<InputBinding>; COUNT]`
-    /// array. A manual match (not `as usize` on the enum's discriminant) so
-    /// adding/reordering a variant can't silently change another variant's
-    /// index without a compiler-visible diff.
+    /// Slot index of this action, in `0..COUNT`: the explicit discriminant.
+    /// `InputBindings` and `InputState` store one slot per action at this
+    /// index.
     pub const fn index(self) -> usize {
-        match self {
-            InputAction::MainDirectionUp => 0,
-            InputAction::MainDirectionDown => 1,
-            InputAction::MainDirectionLeft => 2,
-            InputAction::MainDirectionRight => 3,
-            InputAction::SecondaryDirectionUp => 4,
-            InputAction::SecondaryDirectionDown => 5,
-            InputAction::SecondaryDirectionLeft => 6,
-            InputAction::SecondaryDirectionRight => 7,
-            InputAction::Back => 8,
-            InputAction::Action1 => 9,
-            InputAction::Action2 => 10,
-            InputAction::Action3 => 11,
-            InputAction::Special => 12,
-            InputAction::ToggleDebug => 13,
-            InputAction::ToggleFullscreen => 14,
-        }
+        self as usize
     }
 
     /// Whether this is an engine-level toggle (F11 debug overlay, F10

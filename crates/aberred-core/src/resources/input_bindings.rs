@@ -727,10 +727,10 @@ mod tests {
 
     #[test]
     fn test_input_action_index_is_a_bijection_onto_0_count() {
-        // Every ALL entry must map to a distinct index < COUNT -- catches
-        // copy-paste errors in InputAction::index's manual match (e.g. two
-        // variants accidentally sharing a slot, silently corrupting both
-        // actions' bindings).
+        // Every ALL entry must map to a distinct index < COUNT. Duplicate
+        // discriminants are already a compile error; this catches an
+        // out-of-range one (or a variant missing from ALL), which would
+        // index past the per-action arrays.
         let mut seen = [false; InputAction::COUNT];
         for action in InputAction::ALL {
             let i = action.index();
