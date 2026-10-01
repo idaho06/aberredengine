@@ -110,9 +110,9 @@ impl SignalsCtxTables {
     /// `parent` once. The wiring is permanent for the pool's lifetime —
     /// `populate_entity_signals` only ever mutates these tables' contents,
     /// never re-assigns them. This depends on the same "never write to
-    /// ctx/its subtables" Lua contract as `CtxOccupancy` (see CLAUDE.md's
-    /// "Lua ctx pooling" gotcha): a script that clobbers `ctx.signals.flags`
-    /// would previously self-heal on the next call, and now won't.
+    /// ctx/its subtables" Lua contract as `CtxOccupancy`: a script that
+    /// replaces `ctx.signals.flags` breaks the wiring, and the next call does
+    /// not restore it.
     fn create(lua: &Lua, parent: &LuaTable) -> LuaResult<Self> {
         let tables = Self {
             flags: lua.create_table()?,

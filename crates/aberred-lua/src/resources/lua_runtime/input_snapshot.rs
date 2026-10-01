@@ -7,10 +7,11 @@
 //!
 //! The input is organized into two categories:
 //! - `digital` - Boolean button states (pressed/just_pressed/just_released)
-//! - `analog` - Float axis values for mouse/scroll input: wheel delta, and
-//!   cursor position in both game-space and world-space
+//! - `analog` - Mouse and gamepad values: wheel delta, cursor position in
+//!   both game-space and world-space, and pad 0's connection flag and raw
+//!   stick/trigger axes
 //!
-//! This structure mirrors the Lua table that will be passed to callbacks:
+//! This structure mirrors the Lua table passed to callbacks:
 //! ```lua
 //! input.digital.up.pressed
 //! input.digital.action_1.just_released
