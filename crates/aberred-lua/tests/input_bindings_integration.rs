@@ -50,6 +50,20 @@ fn test_action_from_str_all_valid_names() {
 }
 
 #[test]
+fn test_action_from_str_round_trips_every_canonical_name() {
+    // `InputAction::name()` (core) is what Lua's `get_binding`/rebind replies
+    // emit; `action_from_str` must accept every one of them back.
+    for action in InputAction::ALL {
+        assert_eq!(
+            action_from_str(action.name()),
+            Some(action),
+            "{action:?} name {:?} does not round-trip",
+            action.name()
+        );
+    }
+}
+
+#[test]
 fn test_action_from_str_unknown_returns_none() {
     assert!(action_from_str("not_an_action").is_none());
     assert!(action_from_str("").is_none());
