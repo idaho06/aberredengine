@@ -5,8 +5,9 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 default: check
 
-# Full gate: every test feature combination, clippy (incl. tracy), then doc links; stops on first failure.
+# Full gate: rustfmt, every test feature combination, clippy (incl. tracy), then doc links; stops on first failure.
 check: && doc-links
+    cargo fmt --all --check
     cargo test
     cargo test --features test-support
     cargo test --no-default-features --features test-support
