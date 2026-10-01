@@ -5,13 +5,14 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 default: check
 
-# Full gate: every test feature combination, clippy, then doc links; stops on first failure.
+# Full gate: every test feature combination, clippy (incl. tracy), then doc links; stops on first failure.
 check: && doc-links
     cargo test
     cargo test --features test-support
     cargo test --no-default-features --features test-support
     cargo clippy --workspace --all-targets
     cargo clippy --workspace --all-targets --no-default-features
+    cargo clippy --workspace --all-targets --features tracy
 
 # Every intra-doc link must resolve, in both feature configs (links into
 # `aberred-lua` break only when it isn't compiled). The exported parameter
