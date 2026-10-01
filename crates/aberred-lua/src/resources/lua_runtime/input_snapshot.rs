@@ -17,6 +17,7 @@
 //! input.analog.mouse_world_x
 //! ```
 
+use aberred_core::events::input::InputAction;
 use aberred_core::resources::input::InputState;
 
 /// State of a single digital input button.
@@ -45,8 +46,10 @@ impl DigitalButtonState {
 /// and mirrored in [`DigitalInputs`] / `InputCtxTables` (runtime.rs). Each row:
 ///   (field_name, mapping)
 /// where mapping is one of:
-///   combined(main_field, secondary_field) — OR of two `InputState` BoolStates
-///   direct(input_state_field)             — 1:1 from an `InputState` BoolState
+///   combined(MainAction, SecondaryAction) — OR of two `InputAction` states
+///   direct(Action)                        — 1:1 from one `InputAction` state
+///   raw(input_state_field)                — 1:1 from a non-action `InputState`
+///                                           field (`mouse_left_button`)
 ///
 /// `for_each_digital_button!(my_cb)` expands to a single
 /// `my_cb!{ (field, mapping), (field, mapping), ... }` call carrying every
@@ -58,26 +61,26 @@ impl DigitalButtonState {
 macro_rules! for_each_digital_button {
     ($cb:ident) => {
         $cb! {
-            (up,              combined(maindirection_up,    secondarydirection_up)),
-            (down,            combined(maindirection_down,  secondarydirection_down)),
-            (left,            combined(maindirection_left,  secondarydirection_left)),
-            (right,           combined(maindirection_right, secondarydirection_right)),
-            (action_1,        direct(action_1)),
-            (action_2,        direct(action_2)),
-            (action_3,        direct(action_3)),
-            (back,            direct(action_back)),
-            (special,         direct(action_special)),
-            (main_up,         direct(maindirection_up)),
-            (main_down,       direct(maindirection_down)),
-            (main_left,       direct(maindirection_left)),
-            (main_right,      direct(maindirection_right)),
-            (secondary_up,    direct(secondarydirection_up)),
-            (secondary_down,  direct(secondarydirection_down)),
-            (secondary_left,  direct(secondarydirection_left)),
-            (secondary_right, direct(secondarydirection_right)),
-            (debug,           direct(mode_debug)),
-            (fullscreen,      direct(fullscreen_toggle)),
-            (mouse_left,      direct(mouse_left_button)),
+            (up,              combined(MainDirectionUp,    SecondaryDirectionUp)),
+            (down,            combined(MainDirectionDown,  SecondaryDirectionDown)),
+            (left,            combined(MainDirectionLeft,  SecondaryDirectionLeft)),
+            (right,           combined(MainDirectionRight, SecondaryDirectionRight)),
+            (action_1,        direct(Action1)),
+            (action_2,        direct(Action2)),
+            (action_3,        direct(Action3)),
+            (back,            direct(Back)),
+            (special,         direct(Special)),
+            (main_up,         direct(MainDirectionUp)),
+            (main_down,       direct(MainDirectionDown)),
+            (main_left,       direct(MainDirectionLeft)),
+            (main_right,      direct(MainDirectionRight)),
+            (secondary_up,    direct(SecondaryDirectionUp)),
+            (secondary_down,  direct(SecondaryDirectionDown)),
+            (secondary_left,  direct(SecondaryDirectionLeft)),
+            (secondary_right, direct(SecondaryDirectionRight)),
+            (debug,           direct(ToggleDebug)),
+            (fullscreen,      direct(ToggleFullscreen)),
+            (mouse_left,      raw(mouse_left_button)),
         }
     };
 }
@@ -143,15 +146,20 @@ impl InputSnapshot {
     /// inputs into unified directional inputs (up/down/left/right).
     pub fn from_input_state(input: &InputState) -> Self {
         macro_rules! digital_value {
-            (combined($main:ident, $secondary:ident)) => {
+            (combined($main:ident, $secondary:ident)) => {{
+                let main = input.action(InputAction::$main);
+                let secondary = input.action(InputAction::$secondary);
                 DigitalButtonState {
-                    pressed: input.$main.active || input.$secondary.active,
-                    just_pressed: input.$main.just_pressed || input.$secondary.just_pressed,
-                    just_released: input.$main.just_released || input.$secondary.just_released,
+                    pressed: main.active || secondary.active,
+                    just_pressed: main.just_pressed || secondary.just_pressed,
+                    just_released: main.just_released || secondary.just_released,
                 }
+            }};
+            (direct($action:ident)) => {
+                DigitalButtonState::from_bool_state(input.action(InputAction::$action))
             };
-            (direct($src:ident)) => {
-                DigitalButtonState::from_bool_state(&input.$src)
+            (raw($field:ident)) => {
+                DigitalButtonState::from_bool_state(&input.$field)
             };
         }
         macro_rules! digital_from_input {
@@ -204,8 +212,8 @@ mod tests {
     #[test]
     fn test_wasd_maps_to_directional() {
         let mut input = default_input();
-        input.maindirection_up.active = true;
-        input.maindirection_up.just_pressed = true;
+        input.action_mut(InputAction::MainDirectionUp).active = true;
+        input.action_mut(InputAction::MainDirectionUp).just_pressed = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.up.pressed);
         assert!(snap.digital.up.just_pressed);
@@ -215,7 +223,7 @@ mod tests {
     #[test]
     fn test_arrows_maps_to_directional() {
         let mut input = default_input();
-        input.secondarydirection_left.active = true;
+        input.action_mut(InputAction::SecondaryDirectionLeft).active = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.left.pressed);
         assert!(!snap.digital.right.pressed);
@@ -225,10 +233,12 @@ mod tests {
     fn test_combined_wasd_and_arrows() {
         let mut input = default_input();
         // Neither WASD nor arrow pressed
-        input.maindirection_up.active = false;
-        input.secondarydirection_up.active = false;
-        input.maindirection_up.just_pressed = false;
-        input.secondarydirection_up.just_pressed = true; // arrow just pressed
+        input.action_mut(InputAction::MainDirectionUp).active = false;
+        input.action_mut(InputAction::SecondaryDirectionUp).active = false;
+        input.action_mut(InputAction::MainDirectionUp).just_pressed = false;
+        input
+            .action_mut(InputAction::SecondaryDirectionUp)
+            .just_pressed = true; // arrow just pressed
         let snap = InputSnapshot::from_input_state(&input);
         assert!(!snap.digital.up.pressed);
         assert!(snap.digital.up.just_pressed); // OR of both
@@ -237,8 +247,10 @@ mod tests {
     #[test]
     fn test_wasd_or_arrows_pressed_means_combined_pressed() {
         let mut input = default_input();
-        input.maindirection_right.active = true;
-        input.secondarydirection_right.active = false;
+        input.action_mut(InputAction::MainDirectionRight).active = true;
+        input
+            .action_mut(InputAction::SecondaryDirectionRight)
+            .active = false;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.right.pressed);
     }
@@ -246,7 +258,7 @@ mod tests {
     #[test]
     fn test_action_buttons_map_directly() {
         let mut input = default_input();
-        input.action_1 = bool_state_pressed(Key::KEY_SPACE);
+        *input.action_mut(InputAction::Action1) = bool_state_pressed(Key::KEY_SPACE);
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.action_1.pressed);
         assert!(snap.digital.action_1.just_pressed);
@@ -256,7 +268,7 @@ mod tests {
     #[test]
     fn test_back_maps_from_action_back() {
         let mut input = default_input();
-        input.action_back.active = true;
+        input.action_mut(InputAction::Back).active = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.back.pressed);
     }
@@ -264,8 +276,8 @@ mod tests {
     #[test]
     fn test_special_maps_from_action_special() {
         let mut input = default_input();
-        input.action_special.active = true;
-        input.action_special.just_released = true;
+        input.action_mut(InputAction::Special).active = true;
+        input.action_mut(InputAction::Special).just_released = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.special.pressed);
         assert!(snap.digital.special.just_released);
@@ -287,9 +299,9 @@ mod tests {
     #[test]
     fn test_main_direction_fields_populated() {
         let mut input = default_input();
-        input.maindirection_up.active = true;
-        input.maindirection_up.just_pressed = true;
-        input.maindirection_left.active = true;
+        input.action_mut(InputAction::MainDirectionUp).active = true;
+        input.action_mut(InputAction::MainDirectionUp).just_pressed = true;
+        input.action_mut(InputAction::MainDirectionLeft).active = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.main_up.pressed);
         assert!(snap.digital.main_up.just_pressed);
@@ -301,9 +313,13 @@ mod tests {
     #[test]
     fn test_secondary_direction_fields_populated() {
         let mut input = default_input();
-        input.secondarydirection_down.active = true;
-        input.secondarydirection_right.active = true;
-        input.secondarydirection_right.just_released = true;
+        input.action_mut(InputAction::SecondaryDirectionDown).active = true;
+        input
+            .action_mut(InputAction::SecondaryDirectionRight)
+            .active = true;
+        input
+            .action_mut(InputAction::SecondaryDirectionRight)
+            .just_released = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(!snap.digital.secondary_up.pressed);
         assert!(snap.digital.secondary_down.pressed);
@@ -316,7 +332,7 @@ mod tests {
     fn test_raw_and_combined_independent() {
         // Only arrow up pressed — combined up is true, main_up is false
         let mut input = default_input();
-        input.secondarydirection_up.active = true;
+        input.action_mut(InputAction::SecondaryDirectionUp).active = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.up.pressed); // combined
         assert!(!snap.digital.main_up.pressed); // WASD raw — not pressed
@@ -326,8 +342,8 @@ mod tests {
     #[test]
     fn test_debug_field_populated() {
         let mut input = default_input();
-        input.mode_debug.active = true;
-        input.mode_debug.just_pressed = true;
+        input.action_mut(InputAction::ToggleDebug).active = true;
+        input.action_mut(InputAction::ToggleDebug).just_pressed = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.debug.pressed);
         assert!(snap.digital.debug.just_pressed);
@@ -336,8 +352,10 @@ mod tests {
     #[test]
     fn test_fullscreen_field_populated() {
         let mut input = default_input();
-        input.fullscreen_toggle.active = true;
-        input.fullscreen_toggle.just_released = true;
+        input.action_mut(InputAction::ToggleFullscreen).active = true;
+        input
+            .action_mut(InputAction::ToggleFullscreen)
+            .just_released = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.fullscreen.pressed);
         assert!(snap.digital.fullscreen.just_released);
@@ -347,8 +365,8 @@ mod tests {
     #[test]
     fn test_action3_field_populated() {
         let mut input = default_input();
-        input.action_3.active = true;
-        input.action_3.just_pressed = true;
+        input.action_mut(InputAction::Action3).active = true;
+        input.action_mut(InputAction::Action3).just_pressed = true;
         let snap = InputSnapshot::from_input_state(&input);
         assert!(snap.digital.action_3.pressed);
         assert!(snap.digital.action_3.just_pressed);
