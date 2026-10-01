@@ -37,15 +37,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-aberredengine = { path = "../aberredengine", default-features = false }
+aberredengine = { path = "../aberredengine/crates/aberredengine", default-features = false }
 ```
 
 For a git dependency:
 
 ```toml
 [dependencies]
-aberredengine = { git = "https://github.com/user/aberredengine.git", default-features = false }
+aberredengine = { git = "https://github.com/idaho06/aberredengine.git", default-features = false }
 ```
+
+Cargo finds the `aberredengine` package by name inside the repository's workspace. Add `branch = "..."`, `tag = "..."` or `rev = "..."` to pin a specific revision.
+
+The `path` form must point at the facade crate (`crates/aberredengine`), not the repository root: the root `Cargo.toml` is a virtual workspace manifest with no `[package]`.
 
 Setting `default-features = false` disables the `lua` feature flag. This removes all mlua/LuaJIT dependencies, the Lua runtime, and all Lua-specific components and systems. Your binary will have zero Lua overhead.
 
@@ -70,7 +74,7 @@ my_game/
 
 ### config.ini
 
-The engine reads `config.ini` at startup for window and rendering settings. The file must exist at startup, but individual missing or invalid keys fall back to safe defaults.
+The engine reads `config.ini` at startup for window and rendering settings. The file must exist at startup, but individual missing keys fall back to safe defaults. Out-of-range numbers are clamped with a warning; values that fail to parse (e.g. `hz = abc`, `vsync = no`) silently keep their defaults, with no warning.
 
 > **Alternative:** Use `EngineBuilder::config_str(content)` to supply the INI content as a `&'static str` instead of a file. This is useful for tests or games that embed their configuration. When `.config_str()` is called, the file at `.config()` path is not read.
 
@@ -269,6 +273,8 @@ fn editor_gui(
 }
 
 fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+    // Every insert bumps AppState's generation, so the snapshot clones it again.
+    // A real game inserts only when the value changes (see the AppState API section).
     ctx.app_state.insert(EditorPanelState {
         active_tool: "place".to_string(),
     });
@@ -398,7 +404,28 @@ Setup ──→ Playing ──→ Quitting
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
 3. **Scene switches** — When `WorldSignals` has the `"switch_scene"` flag set, the engine calls the `switch_scene` hook (or the SceneManager's exit→enter sequence).
-4. **Quitting** — When `WorldSignals` has the `"quit_game"` flag set or the window is closed, the engine shuts down.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)` or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down.
+
+> **The `"quit_game"` flag does not quit a Rust game on its own.** Only the Lua plugin polls `sk::QUIT_GAME`. In a pure-Rust game, `GameCtx` has no `NextGameState`, so scene, timer, phase, collision and menu callbacks cannot change the game state directly. To quit from one of them, set the flag and register a small poll system:
+>
+> ```rust
+> use aberredengine::bevy_ecs::prelude::*;
+> use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
+> use aberredengine::core::resources::signal_keys as sk;
+> use aberredengine::core::resources::worldsignals::WorldSignals;
+>
+> fn quit_on_flag(mut signals: ResMut<WorldSignals>, mut next_state: ResMut<NextGameState>) {
+>     if signals.take_flag(sk::QUIT_GAME) {
+>         next_state.set(GameStates::Quitting);
+>     }
+> }
+>
+> EngineBuilder::new()
+>     .add_system(quit_on_flag)
+>     // …
+> ```
+>
+> Register it with `.add_system()`, not `.configure_schedule()`: `.add_system()` adds `run_if(state_is_playing)`. Entering `Quitting` sets the `"quit_game"` flag again, and the run condition keeps the poll from reacting to it.
 
 ### Builder method reference
 
@@ -416,6 +443,7 @@ Setup ──→ Playing ──→ Quitting
 | `.add_system(system)` | Add an extra per-sim-tick system. Same auto-constraints as `.on_update()` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
+| `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`. Listed here because the conflict rules below refer to it; a pure-Rust game never calls it. |
 | `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#determinism-and-replay) below. |
 | `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
 | `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
@@ -477,6 +505,7 @@ For systems that need custom ordering relative to engine systems, or that must r
 ```rust
 use aberredengine::core::systems::movement::movement;
 use aberredengine::core::systems::camera_follow::camera_follow_system;
+use aberredengine::core::systems::gamestate::state_is_playing;
 
 EngineBuilder::new()
     .configure_schedule(|schedule| {
@@ -563,7 +592,7 @@ use aberredengine::bevy_ecs::observer::Observer;
 
 fn editor_enter(ctx: &mut GameCtx) {
     // This observer lives only until the next scene switch.
-    // clean_all_entities (called on scene transition) despawns it automatically.
+    // The scene switch despawns every non-Persistent entity, this observer included.
     ctx.commands.spawn(Observer::new(on_tile_selected));
 }
 
@@ -624,6 +653,7 @@ use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource};
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::protocol::audio::AudioCmd;
+use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
 use std::sync::Arc;
 
 fn setup(
@@ -764,6 +794,23 @@ To remove a previously-loaded font (dropping its GPU handle and `FontStore` meta
 
 To rename an already-loaded font's key in place (no reload, no glyph-atlas regeneration), use `RenderAssetCmd::RenameFont { old_key, new_key }`. It reports `LogicMsg::FontRenamed { old_key, new_key }`, which moves the `FontMetricsStore` entry to the new key automatically. No-ops with a warning if `old_key` isn't loaded.
 
+To bake a string into a texture once (static labels that never change), use `RenderAssetCmd::RasterizeText`. The render thread draws `text` with the already-loaded font `font_key` into a new `Nearest`-filtered texture stored under `key`, then replies `LogicMsg::TextureLoaded`, so `TextureDimsStore` gets the label's pixel size:
+
+```rust
+use aberredengine::core::math::Color;
+
+asset_cmds.write(RenderAssetCmd::RasterizeText {
+    key: "title_label".to_string(),
+    font_key: "arcade".to_string(),
+    text: "PRESS START".to_string(),
+    font_size: 32.0,
+    spacing: 1.0,
+    color: Color::new(255, 255, 255, 255),
+});
+```
+
+Queue it only after the font has loaded (wait for its `FontMetricsStore` entry): if `font_key` is missing on the render thread, the command logs a warning and is dropped. Draw the result with a `Sprite` whose `tex_key` is `key`, and free it with `RenderAssetCmd::RemoveTexture` when done. The engine's menus use this command for their static labels.
+
 ### Audio (sounds and music)
 
 Audio is loaded asynchronously via the `MessageWriter<AudioCmd>` channel. The audio thread processes commands in the background:
@@ -872,7 +919,7 @@ Move the whole tilemap at runtime by updating the root entity's `MapPosition`:
 commands.entity(tilemap_root).insert(MapPosition::new(new_x, new_y));
 ```
 
-From **Lua**, use the entity builder:
+> **Lua builds only:** a Lua game spawns the same tilemap through the entity builder. A pure-Rust game ignores this snippet.
 
 ```lua
 engine.spawn()
@@ -881,7 +928,36 @@ engine.spawn()
     :build()
 ```
 
-The texture is stored in `TextureStore` keyed by path stem and deduplicated — two `TileMap` entities pointing to the same directory share one GPU texture. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative). Use `Group("tiles")` in collision rules to match tile entities.
+The texture is stored in `TextureStore` keyed by path stem and deduplicated — two `TileMap` entities pointing to the same directory share one GPU texture. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
+
+Tile entities carry only `Group`, `Sprite`, `MapPosition`, `ZIndex` and `ChildOf` — **no `BoxCollider`**. Collision detection needs a `BoxCollider` on both entities, so a `CollisionRule` on `"tiles"` never fires until your game adds colliders. One way is a system that gives every newly spawned tile a sprite-sized collider:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::group::Group;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::systems::tilemap::TILES_GROUP;
+
+fn add_tile_colliders(
+    mut commands: Commands,
+    tiles: Query<(Entity, &Group, &Sprite), (Added<Group>, Without<BoxCollider>)>,
+) {
+    for (entity, group, sprite) in &tiles {
+        if group.0 == TILES_GROUP {
+            commands
+                .entity(entity)
+                .insert(BoxCollider::new(sprite.width, sprite.height));
+        }
+    }
+}
+
+EngineBuilder::new()
+    .add_system(add_tile_colliders)
+    // …
+```
+
+Filter further (by layer `ZIndex`, or by the tile's `Sprite.offset` in the atlas) if only some tiles should be solid.
 
 > **Note:** `load_tilemap_data` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
@@ -890,7 +966,7 @@ The texture is stored in `TextureStore` keyed by path stem and deduplicated — 
 `Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
-use aberredengine::core::resources::camera2d::Camera2D;
+use aberredengine::core::resources::camera2d::{Camera2D, Camera2DRes};
 use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::math::Vec2;
 
@@ -1081,7 +1157,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `GuiImage` | `GuiImage::new(width, height, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see §7.7 |
-| `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.6 |
+| `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.7 |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
 
 ### Tween components in Rust
@@ -1206,6 +1282,8 @@ When the `scene_switch_system` runs, it performs these steps in order:
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
 8. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
 
+> **Warning:** the target name is not validated up front. If no scene is registered under that name, steps 1–5 have already run (the old scene's entities are queued for despawn and its `on_exit` has fired) when the system logs "No scene registered" and returns. The game is left with an empty world and the active scene unchanged. Double-check scene names, and prefer constants over repeated string literals.
+
 ### 6.2 Triggering scene transitions
 
 Scene transitions work by running the `scene_switch_system` as a one-shot system via `commands.run_system()`. The system is registered in `SystemsStore` under the key `"switch_scene"` when you use `EngineBuilder::add_scene()`.
@@ -1270,19 +1348,32 @@ ctx.commands.spawn((
 
 `TrackedGroups` (`aberred-core/src/resources/group.rs`) is a resource holding a set of group names to count. The engine's `update_group_counts_system` publishes entity counts for each tracked group to `WorldSignals` every sim tick.
 
+`GameCtx` has no `TrackedGroups` field, so scene callbacks cannot register groups. Use a system with `ResMut<TrackedGroups>` instead. Because a scene switch wipes the tracked set, an idempotent system that re-adds missing groups every tick covers every scene:
+
 ```rust
-// In your scene's on_enter callback:
-fn enter(ctx: &mut GameCtx) {
-    // Assume tracked_groups is accessed via a separate system or passed in
-    // For scene callbacks, use world_signals directly to read counts
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::resources::group::TrackedGroups;
+
+fn track_groups(mut tracked: ResMut<TrackedGroups>) {
+    for name in ["enemies", "bricks"] {
+        if !tracked.has_group(name) {
+            tracked.add_group(name);
+        }
+    }
 }
+
+EngineBuilder::new()
+    .add_system(track_groups)
+    // …
 ```
+
+Scene callbacks then read the counts through `ctx.world_signals.get_group_count("enemies")`.
 
 Key behaviors:
 
 - `TrackedGroups::add_group("enemies")` registers a group for counting
 - The engine publishes `"group_count:enemies"` to `WorldSignals` each sim tick
-- **Cleared on scene switch** — group tracking is wiped by `scene_switch_system`. Re-register groups in your scene's `on_enter` callback
+- **Cleared on scene switch** — group tracking is wiped by `scene_switch_system`. Re-register groups after every switch (the system above does this automatically)
 - Bind a `SignalBinding::new("group_count:enemies")` to auto-display the count in UI text
 
 ### 6.5 Per-sim-tick scene updates
@@ -1432,11 +1523,13 @@ phases.insert("falling".to_string(), PhaseCallbackFns {
 | `next` | `Option<String>` | Set to request a transition |
 | `time_in_phase` | `f32` | Seconds since entering current phase |
 
-**External transitions:** Set `phase.next = Some("new_phase".to_string())` from outside the phase system to request a transition. The `phase_system` processes this on the next frame.
+**External transitions:** Set `phase.next = Some("new_phase".to_string())` from outside the phase system to request a transition. The `phase_system` processes this on its next run, which is the next sim tick.
 
 **Example callbacks:**
 
 ```rust
+use aberredengine::core::events::input::InputAction;
+
 fn idle_enter(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
     None // stay in idle
 }
@@ -1490,6 +1583,7 @@ fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f
 **Callback signature:**
 
 ```rust
+use aberredengine::core::components::collision::BoxSides;
 use aberredengine::core::systems::GameCtx;
 
 type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
@@ -1527,6 +1621,8 @@ ctx.commands.spawn((
 **Example callback — ball/brick collision with side-based reflection:**
 
 ```rust
+use aberredengine::core::components::collision::BoxSides;
+
 fn ball_brick_collision(
     ball: Entity,
     brick: Entity,
@@ -1618,6 +1714,8 @@ fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &m
             ctx.world_signals.set_flag(sk::SWITCH_SCENE);
         }
         "quit" => {
+            // Quits only with a flag-poll system registered — see "Game lifecycle" in §3.
+            // A plain `MenuAction::QuitGame` item quits without one.
             ctx.world_signals.set_flag(sk::QUIT_GAME);
         }
         _ => {}
@@ -1699,7 +1797,7 @@ EngineBuilder::new()
     // …
 ```
 
-**Lua consumers:** attach `LuaOnAnimationEnd::new("fn_name")` to the entity (or use `:with_on_animation_end("fn_name")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
+**Lua consumers (Lua builds only):** attach `LuaOnAnimationEnd::new("fn_name")` to the entity (or use `:with_on_animation_end("fn_name")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
 
 ### 7.6 Tween Finished Event
 
@@ -1737,7 +1835,7 @@ EngineBuilder::new()
     // …
 ```
 
-**Lua consumers:** attach `LuaOnTweenFinished<T>::new("fn_name")` to the entity (or use the matching
+**Lua consumers (Lua builds only):** attach `LuaOnTweenFinished<T>::new("fn_name")` to the entity (or use the matching
 `:with_tween_{position,rotation,scale,screen_position}_on_finished("fn_name")` builder method). The Lua
 callback signature is `fn(ctx, input)` — the same as the animation-finished and timer/phase callbacks.
 
@@ -1772,8 +1870,9 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 > **Important:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they
 > add — they will not overwrite one you pre-spawned. **To get a Rust callback, you must spawn
 > `GuiInteractable::rust(...)` yourself in the same bundle as `GuiButton`/`GuiImage`.** If you only spawn
-> `GuiButton`/`GuiImage` alone, the inserted default `GuiInteractable` has no Rust callback wired — only the
-> Lua `callback_name`-based dispatch path, which no-ops with no matching Lua function present.
+> `GuiButton`/`GuiImage` alone, the inserted default `GuiInteractable` has no Rust callback wired. It only
+> carries the Lua dispatch name: the spawn system copies the widget's `callback_name` (if non-empty) into
+> `GuiInteractable.on_click_callback`, which no-ops with no matching Lua function present.
 
 **Theming:** Themes are stored in `GuiThemeStore` — a `FxHashMap<Arc<str>, GuiTheme>` pre-inserted by the engine. Each widget carries a `theme_key: Arc<str>` (default `"default"`) that is resolved against `GuiThemeStore` at render time. Set up themes in your setup system before spawning any widgets:
 
@@ -2032,6 +2131,13 @@ The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"
 
 Use `AppState` for richer GUI/editor snapshots and view-models that do not belong in the Lua-visible signal bus. If you need two values of the same underlying type, wrap them in newtypes.
 
+**How render-side callbacks see it:** the live `AppState` exists only in the logic world. Render-thread callbacks (`gui_callback`, `world_draw_callback`) receive a cloned, read-only copy carried in the snapshot. A `generation` counter decides when that copy is refreshed:
+
+- `insert` and `get_mut` always bump `generation` (`get_mut` even if you don't end up writing); `remove` bumps it only when a value was removed; `get` never does.
+- The snapshot clones `AppState` again only when `generation` has changed since the last publish. Inserting every tick (as the §3 editor example does for brevity) therefore forces a full clone on every snapshot — insert or `get_mut` only when the value actually changes.
+- Nothing a render-side callback does to its copy reaches the logic world. Send changes back through `SignalIntents` instead.
+- For state that both sides must share mutably (e.g. an editor cache), store an `Arc<Mutex<T>>` (or `Arc<RwLock<T>>`): cloning it copies the pointer, so both sides see the same data. A bare `Mutex<T>` is not `Clone` and cannot be inserted.
+
 ```rust
 use aberredengine::imgui;
 use aberredengine::core::resources::appstate::AppState;
@@ -2116,7 +2222,8 @@ Each bound action is a `BoolState { active, just_pressed, just_released }`, read
 `InputBindings` (`aberred-core/src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. W and Up arrow both trigger `main_up`).
 
 ```rust
-use aberredengine::core::resources::input_bindings::{InputBindings, InputBinding, InputAction};
+use aberredengine::core::events::input::InputAction;
+use aberredengine::core::resources::input_bindings::{InputBindings, InputBinding};
 
 // InputBinding variants:
 InputBinding::Keyboard(Key)                                              // a keyboard key
@@ -2163,7 +2270,7 @@ Section 2 showed the basics. This is the complete reference.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hz` | `f64` | `240` | Logic thread's sim tick rate — see [Threading Model](#threading-model-what-your-code-can-access). Read once at startup; a runtime `GameConfig` change has no effect. Clamped to `[15, 1000]`, out-of-range values warn and clamp rather than error. |
-| `snapshot_skip` | `u32` | `round(hz / effective_fps) - 1`, `effective_fps` = `[window] target_fps` if set else `60` | Number of sim ticks the PRESENT schedule skips between publishes of render state to the render thread — `0` publishes every tick, `N` publishes every `N+1`th tick (effective rate `hz / (N+1)`). Re-resolved from `hz`/`target_fps` whenever this key isn't set explicitly. Clamped to `[0, 1000]`. |
+| `snapshot_skip` | `u32` | `round(hz / effective_fps) - 1`, `effective_fps` = `[window] target_fps` (default `120`, so the default skip is `1`), or `60` when `target_fps = 0` | Number of sim ticks the PRESENT schedule skips between publishes of render state to the render thread — `0` publishes every tick, `N` publishes every `N+1`th tick (effective rate `hz / (N+1)`). Re-resolved from `hz`/`target_fps` whenever this key isn't set explicitly. Clamped to `[0, 1000]`. |
 
 **`[audio]` section:**
 
@@ -2183,8 +2290,9 @@ Section 2 showed the basics. This is the complete reference.
 - **Missing file** -> startup error from `EngineBuilder::try_run()`
 - **Unreadable or malformed INI** -> startup error from `EngineBuilder::try_run()`
 - **Missing key** -> default for that key
-- **Invalid value** -> numeric fields (`simulation.hz`, `audio.hz`, `simulation.snapshot_skip`, `input.gamepad_deadzone`) warn and clamp to the nearest valid bound; `render_target_filter` warns and falls back to its default (`nearest`)
-- **Booleans** — case-insensitive: `true`/`false`, `yes`/`no`, `on`/`off`
+- **Out-of-range value** -> numeric fields (`simulation.hz`, `audio.hz`, `simulation.snapshot_skip`, `input.gamepad_deadzone`) warn and clamp to the nearest valid bound; `render_target_filter` warns and falls back to its default (`nearest`)
+- **Unparseable value** -> a present key whose value does not parse as its type (e.g. `hz = abc`, `vsync = no`) **silently** keeps its default — no warning is logged
+- **Booleans** — only `true`/`false`, case-insensitive (`TRUE`, `False`). `yes`/`no`, `on`/`off` and `1`/`0` do not parse, so the key keeps its default
 - **`background_color`** — comma-separated `R,G,B` integers (e.g., `80,80,80`)
 
 If you want the engine defaults with no custom settings, commit an otherwise empty `config.ini` file and only add keys you want to override.
@@ -2261,7 +2369,7 @@ Working directory matters — `config.ini` and `assets/` are loaded relative to 
 
 ```toml
 # Disable Lua (pure Rust)
-aberredengine = { path = "../aberredengine", default-features = false }
+aberredengine = { path = "../aberredengine/crates/aberredengine", default-features = false }
 ```
 
 Disabling Lua removes: mlua dependency, LuaJIT compilation, all Lua-specific systems. Faster builds, smaller binary.
