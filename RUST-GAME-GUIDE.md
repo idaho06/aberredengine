@@ -373,19 +373,19 @@ Each hook is a standard Bevy ECS system — it receives queries and resources as
 ```rust
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::events::input::InputAction;
 use aberredengine::core::resources::input::InputState;
 
 fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
-    if input.action_1.just_pressed {
+    if input.action(InputAction::Action1).just_pressed {
         // ...
     }
 }
 ```
 
-To pick an action at runtime (e.g. from a rebinding menu), look it up by
-`InputAction` instead of naming the field:
-`input.action(InputAction::Action1).just_pressed`
-(`aberredengine::core::events::input::InputAction`).
+Bound actions are looked up by `InputAction` (`input.action(..)`, or
+`input.action_mut(..)` in tests). The raw `mouse_left_button`, the mouse
+coordinates, `scroll_y` and the gamepad axes are plain fields.
 
 ### Game lifecycle
 
@@ -1442,7 +1442,7 @@ fn idle_enter(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Optio
 }
 
 fn idle_update(entity: Entity, ctx: &mut GameCtx, input: &InputState, _dt: f32) -> Option<String> {
-    if input.action_1.just_pressed {
+    if input.action(InputAction::Action1).just_pressed {
         // Apply jump velocity
         if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
             rb.velocity.y = -400.0;
@@ -2070,27 +2070,29 @@ fn inspector_gui(
 
 ### InputState key bindings
 
-Each digital field is a `BoolState { active, just_pressed, just_released }`. Hardware assignments live in `InputBindings`, not in `BoolState`. Analog fields are plain `f32`.
+Each bound action is a `BoolState { active, just_pressed, just_released }`, read with `input.action(InputAction::X)`. Hardware assignments live in `InputBindings`, not in `BoolState`. Analog fields are plain `f32`.
 
-**Digital fields (`BoolState`):**
+**Actions (`InputAction` → `BoolState`):**
 
-| Field | Default binding | Description |
-|-------|-----------------|-------------|
-| `maindirection_up` | W | WASD up |
-| `maindirection_down` | S | WASD down |
-| `maindirection_left` | A | WASD left |
-| `maindirection_right` | D | WASD right |
-| `secondarydirection_up` | Up arrow | Alternative up |
-| `secondarydirection_down` | Down arrow | Alternative down |
-| `secondarydirection_left` | Left arrow | Alternative left |
-| `secondarydirection_right` | Right arrow | Alternative right |
-| `action_1` | Space, mouse left | Primary action |
-| `action_2` | Enter, mouse right | Secondary action |
-| `action_3` | Mouse middle | Tertiary action (no keyboard default) |
-| `action_back` | Escape | Back/cancel |
-| `action_special` | F12 | Special action |
-| `mode_debug` | F11 | Debug toggle |
-| `fullscreen_toggle` | F10 | Fullscreen toggle |
+| `InputAction` | Default binding | Description |
+|---------------|-----------------|-------------|
+| `MainDirectionUp` | W | WASD up |
+| `MainDirectionDown` | S | WASD down |
+| `MainDirectionLeft` | A | WASD left |
+| `MainDirectionRight` | D | WASD right |
+| `SecondaryDirectionUp` | Up arrow | Alternative up |
+| `SecondaryDirectionDown` | Down arrow | Alternative down |
+| `SecondaryDirectionLeft` | Left arrow | Alternative left |
+| `SecondaryDirectionRight` | Right arrow | Alternative right |
+| `Action1` | Space, mouse left | Primary action |
+| `Action2` | Enter, mouse right | Secondary action |
+| `Action3` | Mouse middle | Tertiary action (no keyboard default) |
+| `Back` | Escape | Back/cancel |
+| `Special` | F12 | Special action |
+| `ToggleDebug` | F11 | Debug toggle |
+| `ToggleFullscreen` | F10 | Fullscreen toggle |
+
+**Raw digital field:** `mouse_left_button` (`BoolState`) is the literal left mouse button, not routed through `InputBindings`; GUI hit-testing reads it.
 
 **Analog fields (`f32`):**
 
