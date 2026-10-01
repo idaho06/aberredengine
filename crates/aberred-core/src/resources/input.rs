@@ -307,4 +307,25 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn action_slots_are_independent() {
+        // Uses only the public lookup, so it is independent of how
+        // `InputState` stores its actions.
+        for action in InputAction::ALL {
+            let mut input = InputState::default();
+            input.action_mut(action).active = true;
+
+            assert!(input.action(action).active, "{action:?} must read back");
+            let active = InputAction::ALL
+                .into_iter()
+                .filter(|&a| input.action(a).active)
+                .count();
+            assert_eq!(active, 1, "{action:?} must not share a slot");
+            assert!(
+                !input.mouse_left_button.active,
+                "{action:?} must not alias mouse_left_button"
+            );
+        }
+    }
 }
