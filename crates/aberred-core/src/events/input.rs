@@ -165,6 +165,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn all_lists_variants_in_index_order() {
+        // `ALL`'s doc promises `index()` order; `InputState` and
+        // `InputBindings` both store per-action slots by `index()`, and
+        // `ALL`-ordered loops (event emission, the F11 panel) rely on it.
+        for (i, action) in InputAction::ALL.into_iter().enumerate() {
+            assert_eq!(action.index(), i, "{action:?} is out of order in ALL");
+        }
+    }
+
+    #[test]
     fn name_is_the_canonical_lua_action_name() {
         let expected: [(InputAction, &str); InputAction::COUNT] = [
             (InputAction::MainDirectionUp, "main_up"),
