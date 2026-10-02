@@ -2056,7 +2056,8 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 | Resource | Access | Purpose |
 |----------|--------|---------|
 | `DebugMode` | marker resource | Presence enables debug overlays |
-| `FullScreen` | marker resource (render-thread-only) | Presence enables fullscreen |
+
+Fullscreen is not a resource your game can insert: the engine's `FullScreen` marker lives only in the render world. To start fullscreen, set `fullscreen = true` under `[window]` in `config.ini` (see [Section 9](#9-the-configini-file)). At runtime, F10 toggles it by default (the `ToggleFullscreen` action).
 
 ### WorldSignals API
 
