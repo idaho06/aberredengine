@@ -122,7 +122,7 @@ The engine runs **three separate ECS worlds on three threads**: render (the main
 
 - **Every hook and callback you write — `on_setup`, `on_enter_play`, `on_update`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why their signatures look different from everything else (read-only signal snapshots instead of live, mutable `WorldSignals` — see below).
-- **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. Requesting one from a logic-side system panics when the engine initializes its schedule. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
+- **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
 ### Approach A — SceneManager (recommended for multi-scene games)
 
@@ -454,7 +454,7 @@ Setup ──→ Playing ──→ Quitting
 
 ### Custom systems and observers
 
-These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). None of them can take `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>`; that always panics at schedule-init time regardless of which of these methods registered the system.
+These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). None of them can take `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>`; such a system panics the first time it runs, whichever of these methods registered it.
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
@@ -644,7 +644,7 @@ This is useful for automated testing (replay a fixed input script, assert on the
 
 ## 4. Loading Assets
 
-The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading Model](#threading-model-what-your-code-can-access)). That means it **cannot** take `RaylibAccess`, `NonSendMut<FontStore>`, `NonSendMut<ShaderStore>`, or `ResMut<TextureStore>` — those resources exist only in the render world, on the render thread. Requesting any of them from `setup()` (or any other logic-side system) panics when the engine builds its schedule.
+The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading Model](#threading-model-what-your-code-can-access)). That means it **cannot** take `RaylibAccess`, `NonSendMut<FontStore>`, `NonSendMut<ShaderStore>`, or `ResMut<TextureStore>` — those resources exist only in the render world, on the render thread. Requesting any of them from `setup()` (or any other logic-side system) panics the first time that system runs.
 
 Instead, texture/font/shader loading is **queued** from the logic thread and **performed** on the render thread: take `MessageWriter<RenderAssetCmd>` and write a `RenderAssetCmd` variant. The render thread's `process_render_asset_cmds` system drains the queue, does the actual GL load, and reports back — so the load itself is asynchronous relative to the tick that requested it.
 
@@ -1997,7 +1997,7 @@ register it once with `EngineBuilder::add_observer`; it fires for any `GuiIntera
 
 All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources. Scene callbacks access most of these through `GameCtx` fields.
 
-**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup`/`on_update`/scene callbacks/custom systems can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — requesting these from logic-side code panics at schedule-init time, full stop, regardless of `Res`/`NonSend`).
+**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup`/`on_update`/scene callbacks/custom systems can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
 
 ### Logic-thread resources (Send) — what your game code can use
 
@@ -2029,7 +2029,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 ### Render-thread-only resources — inaccessible from your game code
 
-These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup`/`on_update`/scene-callback/`.add_system()`/`.configure_schedule()` system panics at schedule-init time — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
+These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup`/`on_update`/scene-callback/`.add_system()`/`.configure_schedule()` system panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
 
 | Resource | Access (render-side only) | Purpose |
 |----------|---------------------------|---------|
